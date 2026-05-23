@@ -1293,6 +1293,7 @@ const assertPageCreateSourceContracts = () => {
   const source = fs.readFileSync(new URL('../src/routes/pages.new.tsx', import.meta.url), 'utf8');
   const mediaApiSource = fs.readFileSync(new URL('../src/lib/mediaApi.ts', import.meta.url), 'utf8');
   const chromeSource = fs.readFileSync(new URL('../src/lib/editorTemplateChrome.ts', import.meta.url), 'utf8');
+  const pageCreateSubmitKeepsValidationReachable = /data-testid="page-create-submit-button"[\s\S]{0,500}disabled=\{isPageCreateBusy \|\| !canEditPages\}/.test(source);
   assert(
     source.includes('&& selectedSite') &&
       source.includes("if (!selectedSite) return 'Select a target site before creating this page.';"),
@@ -1319,6 +1320,34 @@ const assertPageCreateSourceContracts = () => {
       source.includes('{ allowDuringRouteCheck: true }') &&
       source.includes('disabled={templateSelectionDisabled}'),
     'Page create template selection must stay available during route checks while create, preview, mutation, and permission locks still apply.',
+  );
+  assert(
+    source.includes('const [pageCreateFormSubmitted, setPageCreateFormSubmitted] = useState(false);') &&
+      source.includes('const pageTargetSiteInlineError = pageCreateFormSubmitted && !selectedSite') &&
+      source.includes('const pageTitleInlineError = pageCreateFormSubmitted && !formData.title.trim()') &&
+      source.includes('const pageCanonicalInlineError = pageCreateFormSubmitted && !canonicalValid') &&
+      source.includes('const pageJsonLdInlineError = pageCreateFormSubmitted && !jsonLdValid') &&
+      source.includes('const pageScheduleInlineError = pageCreateFormSubmitted && scheduleValidationMessage') &&
+      source.includes('setPageCreateFormSubmitted(true);') &&
+      source.includes('<form onSubmit={handleSubmit} noValidate') &&
+      source.includes('data-testid="page-create-site-input"') &&
+      source.includes('data-testid="page-create-site-error"') &&
+      source.includes('data-testid="page-create-title-input"') &&
+      source.includes('aria-describedby={pageTitleInlineError ?') &&
+      source.includes('data-testid="page-create-title-error"') &&
+      source.includes('data-testid="page-create-navigation-label-input"') &&
+      source.includes('data-testid="page-create-navigation-label-error"') &&
+      source.includes('data-testid="page-create-parent-input"') &&
+      source.includes('data-testid="page-create-parent-error"') &&
+      source.includes('data-testid="page-create-canonical-input"') &&
+      source.includes('data-testid="page-create-canonical-error"') &&
+      source.includes('data-testid="page-create-json-ld-input"') &&
+      source.includes('data-testid="page-create-json-ld-error"') &&
+      source.includes('data-testid="page-create-dataset-error"') &&
+      source.includes('data-testid="page-create-schedule-input"') &&
+      source.includes('data-testid="page-create-schedule-error"') &&
+      pageCreateSubmitKeepsValidationReachable,
+    'Page create must expose inline target/title/navigation/SEO/dataset/schedule validation while keeping the create action reachable',
   );
   assert(
     source.includes('const loadPageCreatePermissions = useCallback(() => {') &&
@@ -1351,6 +1380,21 @@ const assertPageCreateSourceContracts = () => {
       source.includes('search.frontendTemplate') &&
       source.includes('designTemplate: normalizedFrontendDesignTemplateSearch(search)'),
     'Page create route must accept designTemplate, frontendDesignTemplateId, and frontendTemplate aliases for custom frontend template handoffs',
+  );
+  assert(
+    source.includes('extractFrontendTemplateDesignSerialization') &&
+      source.includes('const frontendTemplateDesignState = selectedFrontendTemplate') &&
+      source.includes('...(templateDesignState?.options || {})') &&
+      source.includes('frontendDesignCustomJs: frontendTemplateDesignState?.provenance.customJS') &&
+      source.includes('frontendDesignContentDocument: frontendTemplateDesignState?.provenance.contentDocument') &&
+      source.includes('frontendDesignThemeTokenRefs: frontendTemplateDesignState?.provenance.themeTokenRefs') &&
+      source.includes('frontendDesignAssets: frontendTemplateDesignState?.provenance.assets') &&
+      source.includes('frontendDesignAnimations: frontendTemplateDesignState?.provenance.animations') &&
+      source.includes('frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions') &&
+      source.includes('frontendDesignDataBindings: frontendTemplateDesignState?.provenance.dataBindings') &&
+      source.includes('frontendDesignEditableMap: frontendTemplateDesignState?.provenance.editableMap') &&
+      source.includes('frontendDesignMetadata: frontendTemplateDesignState?.provenance.metadata'),
+    'Page create frontend template seeding must preserve custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance',
   );
   assert(
     source.includes("schemaVersion: 'backy.page-create-dataset-readiness.v1'") &&
@@ -2089,6 +2133,7 @@ const loginAdminApi = async () => {
   let response = await login();
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_PAGE_CREATE_SMOKE_MFA_CODE
+    || process.env.BACKY_EDITOR_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
     || process.env.BACKY_ADMIN_2FA_CODE;
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
@@ -2217,6 +2262,41 @@ const smokeFrontendDesignContract = () => ({
       routePattern: '/smoke-contract',
       description: 'Frontend contract template used by the page create smoke.',
       canvasSize: { width: 1280, height: 960 },
+      content: {
+        customJS: 'window.__backySmokePageTemplate = true;',
+        themeTokenRefs: {
+          primary: 'tokens.colors.primary',
+          surface: 'tokens.colors.surface',
+        },
+        assets: {
+          media: [{ id: 'media-smoke-page-hero', role: 'hero-image', source: 'custom-frontend' }],
+          fonts: [{ id: 'font-smoke-page-heading', family: 'Inter', source: 'custom-frontend' }],
+        },
+        animations: [
+          { id: 'hero-enter-animation', target: 'page.title', timeline: ['hero-enter'], easing: 'ease-out' },
+        ],
+        interactions: {
+          timeline: [{ id: 'hero-enter', target: 'page.title', animation: 'fade-up' }],
+        },
+        dataBindings: {
+          datasets: [{ id: 'current-page', source: 'page', mode: 'current' }],
+          bindings: [{ elementId: `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-heading`, source: 'page.title', target: 'props.content' }],
+        },
+        editableMap: {
+          'page.hero.title': {
+            elementId: `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-heading`,
+            field: 'props.content',
+            label: 'Hero title',
+          },
+        },
+        seo: {
+          titleTemplate: '{title} | Smoke Frontend',
+        },
+        metadata: {
+          animationTimeline: [{ id: 'hero-enter', duration: 420, easing: 'ease-out' }],
+          editableSurface: 'page-create-smoke',
+        },
+      },
       bindingHints: [
         { role: 'page.title', binding: 'page.title' },
         { role: 'page.description', binding: 'page.description' },
@@ -3559,6 +3639,13 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
   assert(page.meta?.frontendDesignTemplateName === FRONTEND_DESIGN_TEMPLATE_NAME, `Created page did not store frontend template name: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.frontendDesignSource?.type === 'custom-frontend', `Created page did not store frontend design source: ${JSON.stringify(page.meta)}`);
   assert(Array.isArray(page.meta?.frontendDesignBindingHints) && page.meta.frontendDesignBindingHints.length === 2, `Created page did not store frontend binding hints: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignCustomJs?.includes('__backySmokePageTemplate'), `Created page did not store frontend custom JS provenance: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignThemeTokenRefs?.primary === 'tokens.colors.primary', `Created page did not store frontend theme token refs: ${JSON.stringify(page.meta)}`);
+  assert(Array.isArray(page.meta?.frontendDesignAssets) && page.meta.frontendDesignAssets[0]?.media?.[0]?.id === 'media-smoke-page-hero', `Created page did not store frontend asset provenance: ${JSON.stringify(page.meta)}`);
+  assert(Array.isArray(page.meta?.frontendDesignAnimations) && page.meta.frontendDesignAnimations[0]?.target === 'page.title', `Created page did not store frontend animation provenance: ${JSON.stringify(page.meta)}`);
+  assert(Array.isArray(page.meta?.frontendDesignInteractions) && page.meta.frontendDesignInteractions[0]?.timeline?.[0]?.animation === 'fade-up', `Created page did not store frontend interaction provenance: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignEditableMap?.['page.hero.title']?.field === 'props.content', `Created page did not store frontend editable map provenance: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignMetadata?.editableSurface === 'page-create-smoke', `Created page did not store frontend design metadata: ${JSON.stringify(page.meta)}`);
 
   const content = normalizeCreatedContent(page.content);
   const elements = Array.isArray(content.elements) ? content.elements : [];
@@ -3578,6 +3665,15 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
   assert(contentDocument?.kind === 'page', `Frontend template contentDocument kind mismatch: ${JSON.stringify(contentDocument)}`);
   assert(contentDocument?.slug === page.slug, `Frontend template contentDocument slug mismatch: ${JSON.stringify({ slug: page.slug, contentDocumentSlug: contentDocument?.slug })}`);
   assert(typeof content.customCSS === 'string' && content.customCSS.includes('--backy-smoke-primary'), `Frontend template custom CSS was not persisted: ${JSON.stringify(content.customCSS)}`);
+  assert(typeof content.customJS === 'string' && content.customJS.includes('__backySmokePageTemplate'), `Frontend template custom JS was not persisted: ${JSON.stringify(content.customJS)}`);
+  assert(contentDocument?.metadata?.customJS?.includes('__backySmokePageTemplate'), `Frontend template contentDocument custom JS missing: ${JSON.stringify(contentDocument?.metadata)}`);
+  assert(contentDocument?.themeTokenRefs?.primary === 'tokens.colors.primary', `Frontend template theme token refs missing: ${JSON.stringify(contentDocument?.themeTokenRefs)}`);
+  assert(contentDocument?.assets?.media?.[0]?.id === 'media-smoke-page-hero', `Frontend template asset manifest missing: ${JSON.stringify(contentDocument?.assets)}`);
+  assert(contentDocument?.interactions?.timeline?.[0]?.animation === 'fade-up', `Frontend template interaction manifest missing: ${JSON.stringify(contentDocument?.interactions)}`);
+  assert(contentDocument?.dataBindings?.datasets?.[0]?.source === 'page', `Frontend template data bindings missing: ${JSON.stringify(contentDocument?.dataBindings)}`);
+  assert(contentDocument?.editableMap?.['page.hero.title']?.field === 'props.content', `Frontend template editable map missing: ${JSON.stringify(contentDocument?.editableMap)}`);
+  assert(contentDocument?.seo?.titleTemplate === '{title} | Smoke Frontend', `Frontend template SEO manifest missing: ${JSON.stringify(contentDocument?.seo)}`);
+  assert(contentDocument?.metadata?.animationTimeline?.[0]?.id === 'hero-enter', `Frontend template animation metadata missing: ${JSON.stringify(contentDocument?.metadata)}`);
 
   return {
     pageId,
@@ -3587,6 +3683,7 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
       frontendDesignTemplateName: page.meta?.frontendDesignTemplateName,
       frontendDesignSourceType: page.meta?.frontendDesignSource?.type,
       bindingHintCount: page.meta?.frontendDesignBindingHints?.length || 0,
+      hasDesignState: Boolean(page.meta?.frontendDesignCustomJs && page.meta?.frontendDesignEditableMap),
     },
     content: {
       rootElementCount: elements.length,
@@ -3595,6 +3692,8 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
       wrapperId: wrapper.id,
       heading: heading?.props?.content,
       customCssStored: typeof content.customCSS === 'string',
+      customJsStored: typeof content.customJS === 'string',
+      editableMapKeys: Object.keys(contentDocument?.editableMap || {}),
     },
   };
 };
@@ -4019,7 +4118,8 @@ const createPageFromUi = async (client) => {
     clicked = await evaluate(client, `(() => {
       const button = document.querySelector('[data-testid="page-create-submit-button"]');
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
-      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      const canSubmit = button?.getAttribute('data-can-submit') === 'true';
+      if (!(button instanceof HTMLButtonElement) || button.disabled || !canSubmit) {
         return {
           ok: false,
           label: button?.textContent || null,
@@ -4341,6 +4441,16 @@ const main = async () => {
     });
 
     await setViewport(client, { width: 1440, height: 1100 });
+    if (process.env.BACKY_PAGE_CREATE_FRONTEND_TEMPLATE_ONLY === '1') {
+      const frontendDesignTemplateBackend = await createFrontendDesignTemplateBackend(client, createdPageIds);
+      console.log(JSON.stringify({
+        ok: true,
+        focused: 'frontend-design-template',
+        frontendDesignTemplateBackend,
+      }, null, 2));
+      return;
+    }
+
     const initialRender = await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);
     const slugSync = await assertSlugCanSyncFromTitle(client);
     await navigateToPageCreate(client, slug, title, navLabel, seo, parentPage.id);

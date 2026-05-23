@@ -35,6 +35,67 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Users route must use the shared EmptyState component');
   assert(source.includes('title="No user audit events yet"'), 'Users audit panel must keep the empty audit title visible');
   assert(source.includes('Create, update, import, delete, or review users to populate this access timeline.'), 'Users audit empty state must explain which actions populate the timeline');
+  assert(!source.includes('window.confirm'), 'Users route must not use browser confirm dialogs for account mutations or import rollback');
+  assert(!source.includes('title="Next controls"') && !source.includes('Backlog for parity'), 'Users route must not expose stale backlog panels in the product UI');
+  assert(
+      !source.includes('remain future work') &&
+      !source.includes('not complete yet') &&
+      !source.includes('not yet public member APIs') &&
+      !source.includes('credentialed member auth is not wired yet') &&
+      !source.includes('Supabase/Auth integration is complete'),
+    'Users membership panel must not expose stale future-work copy for current member-page workflows.',
+  );
+  assert(
+    source.includes('data-testid="users-access-workflows-panel"') &&
+      source.includes('data-testid="users-access-open-detail"') &&
+      source.includes('data-testid="users-access-invite"') &&
+      source.includes('data-testid="users-access-delivery-settings"') &&
+      source.includes('data-testid="users-access-teams"') &&
+      source.includes('data-testid="users-access-permissions"'),
+    'Users route must expose actionable access workflow controls instead of a static backlog list.',
+  );
+  assert(
+    source.includes("template: 'member-login'") &&
+      source.includes("template: 'member-account'") &&
+      source.includes('Seed an email-based access page') &&
+      source.includes('Seed an editable account page') &&
+      source.includes('Registration capture and member page shells are available through Backy content systems') &&
+      source.includes('Use Supabase Auth settings to enforce credentialed sessions on the seeded member pages.'),
+    'Users membership handoff must route authors to member login/account page templates and provider-gated auth settings.',
+  );
+  assert(
+    source.includes("const MEMBER_ACCESS_HANDOFF_SCHEMA_VERSION = 'backy.member-access-handoff.v1'") &&
+      source.includes('editableRegions: MEMBERSHIP_EDITABLE_REGIONS') &&
+      source.includes('dataBindings: MEMBERSHIP_DATA_BINDINGS') &&
+      source.includes('actionBindings: MEMBERSHIP_ACTION_BINDINGS') &&
+      source.includes("providerFamily: 'supabase-auth-or-compatible'") &&
+      source.includes('data-testid="users-member-access-handoff"') &&
+      source.includes('Copy member handoff') &&
+      source.includes('private admin user records') &&
+      source.includes('auth provider secrets'),
+    'Users membership handoff must expose a versioned custom frontend member-access contract with bindings, actions, provider gate, and privacy boundaries.',
+  );
+  assert(
+    source.includes('aria-labelledby="users-import-rollback-confirm-title"') &&
+      source.includes('aria-describedby="users-import-rollback-confirm-description"') &&
+      source.includes('data-testid="users-import-rollback-confirm-dialog"') &&
+      source.includes('data-testid="users-import-rollback-confirm"') &&
+      source.includes('aria-label="Confirm user import rollback"'),
+    'Users import rollback must expose an accessible in-app confirmation dialog with testable actions.',
+  );
+  assert(
+    source.includes('const USER_IMPORT_REQUIRED_COLUMNS = [') &&
+      source.includes('validateUserImportCsvFile') &&
+      source.includes('parseUserImportCsvRows') &&
+      source.includes('data-testid="users-import-inline-error"') &&
+      source.includes('role="alert"') &&
+      source.includes('data-testid="users-import-preview-button"') &&
+      source.includes('data-testid="users-import-button"') &&
+      source.includes("aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}") &&
+      source.includes('Upload a .csv file exported from the Backy users template.') &&
+      source.includes('Users import CSV is missing required columns:'),
+    'Users import controls must preflight CSV files with inline errors before backend mutation.',
+  );
   assert(detailSource.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'User detail route must use the shared EmptyState component');
   assert(detailSource.includes('title="No active admin sessions"'), 'User detail sessions empty state must keep the shared title visible');
   assert(detailSource.includes('title="No invite link generated"'), 'User detail invite empty state must keep the shared title visible');
@@ -1846,11 +1907,36 @@ const rollbackLatestUsersImport = async (client, email, restoredName) => {
   const clickResult = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="users-import-rollback-button"]');
     if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'button-missing' };
-    window.confirm = () => true;
     button.click();
     return { ok: true };
   })()`);
   assert(clickResult.ok, `Unable to click users import rollback: ${JSON.stringify(clickResult)}`);
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const dialog = document.querySelector('[data-testid="users-import-rollback-confirm-dialog"]');
+      const confirm = document.querySelector('[data-testid="users-import-rollback-confirm"]');
+      const text = dialog?.textContent || '';
+      return {
+        ready: Boolean(dialog) &&
+          confirm instanceof HTMLButtonElement &&
+          text.includes('Roll back imported users?') &&
+          text.includes('created') &&
+          text.includes('updated'),
+        text: text.slice(0, 900),
+      };
+    })()`);
+    if (state.ready) break;
+    if (attempt === 79) throw new Error(`Users import rollback confirmation did not open: ${JSON.stringify(state)}`);
+    await sleep(250);
+  }
+  const confirmResult = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="users-import-rollback-confirm"]');
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'confirm-missing' };
+    if (button.disabled) return { ok: false, reason: 'confirm-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(confirmResult.ok, `Unable to confirm users import rollback: ${JSON.stringify(confirmResult)}`);
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const body = document.body?.innerText || '';
@@ -1881,10 +1967,15 @@ const assertLayout = async (client, expectedName) => {
       document.body?.innerText?.includes('Member auth boundary') &&
       document.body?.innerText?.includes('Credentialed member login') &&
       document.body?.innerText?.includes('Self-service member portal'),
+    hasMemberAccessHandoff: Boolean(document.querySelector('[data-testid="users-member-access-handoff"]')) &&
+      document.body?.innerText?.includes('backy.member-access-handoff.v1') &&
+      document.body?.innerText?.includes('Copy member handoff') &&
+      document.body?.innerText?.includes('Editable regions') &&
+      document.body?.innerText?.includes('Data bindings'),
     hasActivity: document.body?.innerText?.includes('Access activity') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Users page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasDirectory && layout.hasApi && layout.hasMembership && layout.hasMemberAuthBoundary && layout.hasActivity, `Users page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.hasDirectory && layout.hasApi && layout.hasMembership && layout.hasMemberAuthBoundary && layout.hasMemberAccessHandoff && layout.hasActivity, `Users page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 

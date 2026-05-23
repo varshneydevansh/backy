@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getMediaById, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { toPublicMediaAsset } from '@/lib/publicMediaResource';
@@ -48,17 +48,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const media = await repositories.media.getById(site.id, mediaId);
+      const [media, folders, cacheRevision] = await Promise.all([
+        repositories.media.getById(site.id, mediaId),
+        repositories.media.listFolders(site.id),
+        repositories.cacheInvalidations.latestRevision({
+          siteId: site.id,
+          scope: 'media',
+        }),
+      ]);
 
       if (!media || media.visibility !== 'public' || isMediaQuarantined(media)) {
         return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
       }
-      const cacheRevision = await repositories.cacheInvalidations.latestRevision({
-        siteId: site.id,
-        scope: 'media',
-      }) || undefined;
 
-      const mediaWithVariants = toPublicMediaAsset(site.id, media);
+      const mediaWithVariants = toPublicMediaAsset(site.id, media, folders);
 
       return publicContractJson({
         success: true,
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         request,
         cache: 'discovery',
         siteId: site.id,
-        cacheRevision,
+        cacheRevision: cacheRevision || undefined,
       });
     }
 
@@ -88,7 +91,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media not found', requestId);
     }
 
-    const mediaWithVariants = toPublicMediaAsset(site.id, media);
+    const folders = listMediaFolders(site.id);
+    const mediaWithVariants = toPublicMediaAsset(site.id, media, folders);
 
     return publicContractJson({
       success: true,

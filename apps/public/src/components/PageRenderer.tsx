@@ -11,7 +11,13 @@
 
 'use client';
 
-import type { BackyContentDocument } from '@backy-cms/core';
+import {
+  buildBackyThemeCssVariables,
+  buildBackyThemeTokenReferences,
+  buildBackyThemeTokenRefStyle,
+  buildBackyThemeTokens,
+  type BackyContentDocument,
+} from '@backy-cms/core';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 // ============================================================================
@@ -85,8 +91,10 @@ export interface CanvasElement {
   dataBindings?: Array<Record<string, unknown>>;
   styles?: React.CSSProperties;
   responsive?: Partial<Record<RenderBreakpoint, ResponsiveElementOverride>>;
+  tokenRefs?: Record<string, string>;
   children?: CanvasElement[];
   animation?: AnimationConfig;
+  metadata?: Record<string, unknown>;
 }
 
 type RenderBreakpoint = 'desktop' | 'tablet' | 'mobile';
@@ -108,6 +116,7 @@ interface ResponsiveElementOverride {
   locked?: boolean;
   props?: Record<string, unknown>;
   styles?: React.CSSProperties;
+  tokenRefs?: Record<string, string>;
 }
 
 /** Animation configuration for GSAP */
@@ -125,6 +134,7 @@ export interface AnimationConfig {
     end?: string;
     scrub?: boolean;
   };
+  tokenRefs?: Record<string, string>;
 }
 
 /** Page content structure */
@@ -149,11 +159,16 @@ export interface ThemeConfig {
     }>;
   };
   spacing?: Record<string, string | number>;
+  motion?: {
+    duration?: Record<string, string>;
+    easing?: Record<string, string>;
+  };
   customCSS?: string;
 }
 
 export interface FontAsset {
   id: string;
+  mediaId?: string;
   family: string;
   source: 'system' | 'google' | 'uploaded' | 'external';
   url?: string;
@@ -162,6 +177,22 @@ export interface FontAsset {
   fallbackStack?: string;
   display?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional' | string;
   cssFamily?: string;
+  assetIds?: string[];
+  variants?: FontAssetVariant[];
+}
+
+export interface FontAssetVariant {
+  id: string;
+  mediaId?: string;
+  family?: string;
+  weight?: string | number;
+  style?: 'normal' | 'italic' | 'oblique' | string;
+  display?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional' | string;
+  url: string;
+  mimeType?: string;
+  originalName?: string;
+  folderId?: string | null;
+  tags?: string[];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -172,9 +203,127 @@ const cssString = (value: string) => value.replace(/["\\]/g, '');
 
 const cssUrl = (value: string) => value.replace(/["\\()\n\r]/g, '');
 
+const FONT_WEIGHT_KEYWORDS = new Set(['normal', 'bold', 'lighter', 'bolder']);
+const FONT_STYLE_VALUES = new Set(['normal', 'italic', 'oblique']);
+const FONT_DISPLAY_VALUES = new Set(['auto', 'block', 'swap', 'fallback', 'optional']);
+
+const cssFontWeight = (value: string | number | undefined, fallback: string | number = '400') => {
+  const raw = value ?? fallback;
+  const normalized = String(raw).trim().toLowerCase();
+  if (FONT_WEIGHT_KEYWORDS.has(normalized)) {
+    return normalized;
+  }
+  if (/^\d{1,4}$/.test(normalized)) {
+    const numeric = Number(normalized);
+    if (numeric >= 1 && numeric <= 1000) {
+      return String(numeric);
+    }
+  }
+  return '400';
+};
+
+const cssFontStyle = (value: string | undefined, fallback = 'normal') => {
+  const normalized = String(value || fallback).trim().toLowerCase();
+  return FONT_STYLE_VALUES.has(normalized) ? normalized : 'normal';
+};
+
+const cssFontDisplay = (value: string | undefined, fallback = 'swap') => {
+  const normalized = String(value || fallback).trim().toLowerCase();
+  return FONT_DISPLAY_VALUES.has(normalized) ? normalized : 'swap';
+};
+
 const spacingTokenValue = (value: string | number) => (
   typeof value === 'number' ? `${value}px` : value
 );
+
+const themeSpacingNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+};
+
+const themeForTokenCompiler = (theme: ThemeConfig | undefined) => {
+  const spacing: { unit?: number; scale?: number } = {};
+  const unit = themeSpacingNumber(theme?.spacing?.unit);
+  const scale = themeSpacingNumber(theme?.spacing?.scale);
+  if (unit !== undefined) spacing.unit = unit;
+  if (scale !== undefined) spacing.scale = scale;
+
+  return {
+    colors: theme?.colors,
+    fonts: theme?.fonts,
+    motion: theme?.motion,
+    ...(Object.keys(spacing).length > 0 ? { spacing } : {}),
+    customCSS: theme?.customCSS || '',
+  };
+};
+
+const DEFAULT_RENDERER_ANIMATION_DURATION_SECONDS = 0.6;
+
+const stringRecord = (value: unknown): Record<string, string> | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(value).filter((entry): entry is [string, string] => (
+    typeof entry[1] === 'string' && entry[1].trim().length > 0
+  ));
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
+
+const finiteAnimationNumber = (value: unknown): number | undefined => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+);
+
+const animationFromRecord = (animation: unknown): AnimationConfig | undefined => {
+  if (!isRecord(animation)) {
+    return undefined;
+  }
+
+  const type = typeof animation.type === 'string' && animation.type.trim()
+    ? animation.type.trim()
+    : '';
+  if (!type) {
+    return undefined;
+  }
+
+  const tokenRefs = stringRecord(animation.tokenRefs);
+  const duration = finiteAnimationNumber(animation.duration)
+    ?? (tokenRefs?.duration || tokenRefs?.['animation.duration']
+      ? DEFAULT_RENDERER_ANIMATION_DURATION_SECONDS
+      : undefined);
+
+  return {
+    type,
+    duration: duration ?? DEFAULT_RENDERER_ANIMATION_DURATION_SECONDS,
+    delay: finiteAnimationNumber(animation.delay),
+    easing: typeof animation.easing === 'string' ? animation.easing : undefined,
+    direction: animation.direction === 'left' || animation.direction === 'right' || animation.direction === 'up' || animation.direction === 'down'
+      ? animation.direction
+      : undefined,
+    trigger: animation.trigger === 'load' || animation.trigger === 'scroll' || animation.trigger === 'hover'
+      ? animation.trigger
+      : undefined,
+    from: isRecord(animation.from) ? animation.from : undefined,
+    to: isRecord(animation.to) ? animation.to : undefined,
+    scrollTrigger: isRecord(animation.scrollTrigger)
+      ? {
+          start: typeof animation.scrollTrigger.start === 'string' ? animation.scrollTrigger.start : undefined,
+          end: typeof animation.scrollTrigger.end === 'string' ? animation.scrollTrigger.end : undefined,
+          scrub: typeof animation.scrollTrigger.scrub === 'boolean' ? animation.scrollTrigger.scrub : undefined,
+        }
+      : undefined,
+    tokenRefs,
+  };
+};
 
 const animationFromMetadata = (element: CanvasElement): AnimationConfig | undefined => {
   const elementRecord = element as unknown as Record<string, unknown>;
@@ -189,31 +338,13 @@ const animationFromMetadata = (element: CanvasElement): AnimationConfig | undefi
     return undefined;
   }
 
-  const type = typeof animation?.type === 'string' ? animation.type : null;
-  const duration = typeof animation?.duration === 'number' ? animation.duration : null;
-
-  if (!type || duration === null) {
-    return undefined;
-  }
-
-  return {
-    type,
-    duration,
-    delay: typeof animation.delay === 'number' ? animation.delay : undefined,
-    easing: typeof animation.easing === 'string' ? animation.easing : undefined,
-    direction: animation.direction === 'left' || animation.direction === 'right' || animation.direction === 'up' || animation.direction === 'down'
-      ? animation.direction
-      : undefined,
-    trigger: animation.trigger === 'load' || animation.trigger === 'scroll' || animation.trigger === 'hover'
-      ? animation.trigger
-      : undefined,
-  };
+  return animationFromRecord(animation);
 };
 
 const toRenderableElements = (elements: CanvasElement[]): CanvasElement[] => (
   elements.map((element) => ({
     ...element,
-    animation: element.animation || animationFromMetadata(element),
+    animation: animationFromRecord(element.animation) || animationFromMetadata(element),
     children: element.children ? toRenderableElements(element.children) : undefined,
   }))
 );
@@ -229,6 +360,75 @@ export const resolveRendererBreakpoint = (width: number): RenderBreakpoint => {
 };
 
 const RESPONSIVE_LAYOUT_FIELDS = ['x', 'y', 'width', 'height', 'rotation', 'zIndex', 'visible', 'locked'] as const;
+
+const resolveThemeTokenReferenceValue = (
+  tokenReference: string | undefined,
+  tokenReferences: Record<string, string>,
+  cssVariables: Record<string, string>,
+): string | undefined => {
+  if (!tokenReference) {
+    return undefined;
+  }
+
+  const resolved = tokenReferences[tokenReference] || tokenReference;
+  const cssVariableMatch = resolved.match(/^var\(\s*(--[a-zA-Z0-9_-]+)\s*(?:,\s*([^)]+))?\)$/);
+  if (!cssVariableMatch) {
+    return resolved;
+  }
+
+  const [, variableName, fallback] = cssVariableMatch;
+  return cssVariables[variableName] || fallback?.trim() || resolved;
+};
+
+const cssDurationToSeconds = (value: string | undefined): number | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  const parsed = Number.parseFloat(trimmed);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  if (trimmed.endsWith('ms')) {
+    return parsed / 1000;
+  }
+
+  if (trimmed.endsWith('s')) {
+    return parsed;
+  }
+
+  return parsed;
+};
+
+export const resolveRendererAnimationTokenRefs = (
+  animation: AnimationConfig | undefined,
+  tokenReferences: Record<string, string>,
+  cssVariables: Record<string, string>,
+): AnimationConfig | undefined => {
+  if (!animation?.tokenRefs) {
+    return animation;
+  }
+
+  const durationValue = resolveThemeTokenReferenceValue(
+    animation.tokenRefs.duration || animation.tokenRefs['animation.duration'],
+    tokenReferences,
+    cssVariables,
+  );
+  const easingValue = resolveThemeTokenReferenceValue(
+    animation.tokenRefs.easing || animation.tokenRefs['animation.easing'],
+    tokenReferences,
+    cssVariables,
+  );
+  const duration = cssDurationToSeconds(durationValue);
+
+  return {
+    ...animation,
+    ...(duration !== undefined ? { duration } : {}),
+    ...(easingValue ? { easing: easingValue } : {}),
+  };
+};
 
 export const applyResponsiveOverride = (
   element: CanvasElement,
@@ -255,6 +455,7 @@ export const applyResponsiveOverride = (
     }, {}),
     props: override.props ? { ...element.props, ...override.props } : element.props,
     styles: override.styles ? { ...(element.styles || {}), ...override.styles } : element.styles,
+    tokenRefs: override.tokenRefs ? { ...(element.tokenRefs || {}), ...override.tokenRefs } : element.tokenRefs,
     ...(children ? { children } : {}),
   };
 };
@@ -263,6 +464,41 @@ export const applyResponsiveOverrides = (
   elements: CanvasElement[],
   breakpoint: RenderBreakpoint,
 ): CanvasElement[] => elements.map((element) => applyResponsiveOverride(element, breakpoint));
+
+const applyThemeTokenRefsToElement = (
+  element: CanvasElement,
+  tokenReferences: Record<string, string>,
+  cssVariables: Record<string, string>,
+): CanvasElement => {
+  const tokenStyle = buildBackyThemeTokenRefStyle(element.tokenRefs, tokenReferences) as React.CSSProperties;
+  const animation = resolveRendererAnimationTokenRefs(element.animation, tokenReferences, cssVariables);
+  const children = element.children?.map((child) => applyThemeTokenRefsToElement(child, tokenReferences, cssVariables));
+  const animationChanged = animation !== element.animation;
+
+  if (Object.keys(tokenStyle).length === 0 && !animationChanged) {
+    return children ? { ...element, children } : element;
+  }
+
+  return {
+    ...element,
+    props: {
+      ...element.props,
+      ...tokenStyle,
+    },
+    styles: {
+      ...(element.styles || {}),
+      ...tokenStyle,
+    },
+    ...(animationChanged ? { animation } : {}),
+    ...(children ? { children } : {}),
+  };
+};
+
+const applyThemeTokenRefsToElements = (
+  elements: CanvasElement[],
+  tokenReferences: Record<string, string>,
+  cssVariables: Record<string, string>,
+) => elements.map((element) => applyThemeTokenRefsToElement(element, tokenReferences, cssVariables));
 
 interface CommentItem {
   id: string;
@@ -857,13 +1093,15 @@ function getAppearanceStyle(props: Record<string, unknown>): React.CSSProperties
 }
 
 function getFieldControlStyle(props: Record<string, unknown>): React.CSSProperties {
+  const fieldBorderColor = getNameClass(props.fieldBorderColor) || getNameClass(props.borderColor) || '#d1d5db';
+
   return {
     padding: getLength(props.padding, '12px 16px'),
-    border: getNameClass(props.border) || `${getLength(props.borderWidth, '1px')} ${getNameClass(props.borderStyle) || 'solid'} ${getNameClass(props.borderColor) || '#d1d5db'}`,
-    borderRadius: getLength(props.borderRadius, '8px'),
+    border: getNameClass(props.fieldBorder) || getNameClass(props.border) || `${getLength(props.borderWidth, '1px')} ${getNameClass(props.borderStyle) || 'solid'} ${fieldBorderColor}`,
+    borderRadius: getLength(props.fieldBorderRadius ?? props.borderRadius, '8px'),
     fontSize: getLength(props.fontSize, '16px'),
     color: getNameClass(props.color),
-    backgroundColor: getNameClass(props.backgroundColor) || '#ffffff',
+    backgroundColor: getNameClass(props.fieldBackgroundColor) || getNameClass(props.backgroundColor) || '#ffffff',
     boxShadow: getNameClass(props.boxShadow) || undefined,
     margin: getLength(props.margin),
   };
@@ -1246,6 +1484,43 @@ function getNameClass(value: unknown): string {
 
   return '';
 }
+
+function getFirstNameClassFromList(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return '';
+  }
+
+  for (const item of value) {
+    const text = getNameClass(item).trim();
+    if (text) {
+      return text;
+    }
+  }
+
+  return '';
+}
+
+const fileDownloadDataAttributes = (props: Record<string, unknown>): Record<string, string | undefined> => {
+  const fileMediaId = getNameClass(props.fileMediaId)
+    || getNameClass(props.fileId)
+    || getNameClass(props.downloadMediaId)
+    || getFirstNameClassFromList(props.fileIds)
+    || getFirstNameClassFromList(props.fileMediaIds)
+    || getFirstNameClassFromList(props.downloadMediaIds);
+  const fileMediaVisibility = getNameClass(props.fileMediaVisibility);
+  const signedUrlRequired = getBooleanWithFallback(props.fileSignedUrlRequired, false) ||
+    fileMediaVisibility === 'private';
+
+  return {
+    'data-backy-file-id': fileMediaId || undefined,
+    'data-backy-file-media-id': fileMediaId || undefined,
+    'data-backy-file-media-name': getNameClass(props.fileMediaName) || undefined,
+    'data-backy-file-media-type': getNameClass(props.fileMediaType) || undefined,
+    'data-backy-file-media-visibility': fileMediaVisibility || undefined,
+    'data-backy-file-signed-url-required': signedUrlRequired ? 'true' : undefined,
+    'data-backy-file-signed-url-endpoint': getNameClass(props.fileSignedUrlEndpoint) || undefined,
+  };
+};
 
 const getSlateText = (node: unknown): string => {
   if (Array.isArray(node)) {
@@ -1971,6 +2246,7 @@ function ButtonElement({ element }: ElementRendererProps) {
         download={getBooleanWithFallback(props.download, false) ? '' : undefined}
         title={title}
         aria-label={ariaLabel}
+        {...fileDownloadDataAttributes(props)}
         style={buttonStyles}
       >
         {buttonText}
@@ -3189,8 +3465,10 @@ function LinkElement({ element, siteId, pageId, postId }: ElementRendererProps) 
       href={getNameClass(props.href) || '#'}
       target={target}
       rel={rel}
+      download={getBooleanWithFallback(props.download, false) ? '' : undefined}
       title={title}
       aria-label={ariaLabel}
+      {...fileDownloadDataAttributes(props)}
       style={{
         ...styles,
         ...getTypographyStyle(props as Record<string, unknown>),
@@ -4789,11 +5067,11 @@ export function ElementRenderer({ element, isPreview, siteId, pageId, postId, re
     return null;
   }
 
-  if ((boundElement.props.hidden as boolean) === true) {
+  if (getBooleanWithFallback(boundElement.props.hidden, false)) {
     return null;
   }
 
-  if (boundElement.visible === false) {
+  if (!getBooleanWithFallback(boundElement.visible, true)) {
     return null;
   }
 
@@ -4901,6 +5179,19 @@ export function PageRenderer({
     () => applyResponsiveOverrides(sourceElements, activeBreakpoint),
     [activeBreakpoint, sourceElements],
   );
+  const themeTokenContract = useMemo(() => buildBackyThemeTokens(themeForTokenCompiler(theme)), [theme]);
+  const backyThemeVars = useMemo(
+    () => buildBackyThemeCssVariables(themeTokenContract),
+    [themeTokenContract],
+  );
+  const themeTokenReferences = useMemo(
+    () => buildBackyThemeTokenReferences(themeTokenContract),
+    [themeTokenContract],
+  );
+  const themedElements = useMemo(
+    () => applyThemeTokenRefsToElements(elements, themeTokenReferences, backyThemeVars),
+    [backyThemeVars, elements, themeTokenReferences],
+  );
   const activeCanvasSize = activeBreakpoint === 'desktop'
     ? canvasSize
     : RENDER_BREAKPOINT_CANVAS_SIZE[activeBreakpoint];
@@ -4970,30 +5261,35 @@ export function PageRenderer({
     willChange: 'transform',
   };
 
-  const themeVars: React.CSSProperties = {};
+  const legacyThemeVars: React.CSSProperties = {};
   if (theme?.colors) {
     Object.entries(theme.colors).forEach(([key, value]) => {
-      (themeVars as Record<string, string>)[`--color-${key}`] = value;
+      (legacyThemeVars as Record<string, string>)[`--color-${key}`] = value;
     });
   }
 
   if (theme?.fonts) {
     if (theme.fonts.heading) {
-      (themeVars as Record<string, string>)['--font-heading'] = theme.fonts.heading;
+      (legacyThemeVars as Record<string, string>)['--font-heading'] = theme.fonts.heading;
     }
     if (theme.fonts.body) {
-      (themeVars as Record<string, string>)['--font-body'] = theme.fonts.body;
+      (legacyThemeVars as Record<string, string>)['--font-body'] = theme.fonts.body;
     }
     if (theme.fonts.mono) {
-      (themeVars as Record<string, string>)['--font-mono'] = theme.fonts.mono;
+      (legacyThemeVars as Record<string, string>)['--font-mono'] = theme.fonts.mono;
     }
   }
 
   if (theme?.spacing) {
     Object.entries(theme.spacing).forEach(([key, value]) => {
-      (themeVars as Record<string, string>)[`--spacing-${key}`] = spacingTokenValue(value);
+      (legacyThemeVars as Record<string, string>)[`--spacing-${key}`] = spacingTokenValue(value);
     });
   }
+
+  const themeVars: React.CSSProperties = {
+    ...legacyThemeVars,
+    ...backyThemeVars,
+  };
 
   const themeFontAssets: FontAsset[] = (theme?.fonts?.custom || [])
     .filter((font) => typeof font.name === 'string' && font.name.trim() && typeof font.url === 'string' && font.url.trim())
@@ -5009,30 +5305,44 @@ export function PageRenderer({
     }));
 
   const fontCssRules = [...themeFontAssets, ...fontAssets]
-    .filter((font) => font.family && font.url)
+    .filter((font) => font.family && (font.url || font.variants?.some((variant) => variant.url)))
     .reduce<{ imports: string[]; faces: string[] }>((rules, font) => {
-      const family = cssString(font.family);
-      const weight = font.weights?.[0] || '400';
-      const style = font.styles?.[0] || 'normal';
-      const display = font.display || 'swap';
-      const url = cssUrl(font.url || '');
+      const variants = font.variants?.length
+        ? font.variants
+        : [{
+            id: font.id,
+            mediaId: font.mediaId,
+            family: font.family,
+            weight: font.weights?.[0] || '400',
+            style: font.styles?.[0] || 'normal',
+            display: font.display || 'swap',
+            url: font.url || '',
+          }];
 
-      if (!url) {
-        return rules;
-      }
+      variants.forEach((variant) => {
+        const family = cssString(variant.family || font.family);
+        const weight = cssFontWeight(variant.weight, font.weights?.[0] || '400');
+        const style = cssFontStyle(variant.style, font.styles?.[0] || 'normal');
+        const display = cssFontDisplay(variant.display, font.display || 'swap');
+        const url = cssUrl(variant.url || font.url || '');
 
-      if (font.source === 'google' || /\.css($|\?)/i.test(url)) {
-        rules.imports.push(`@import url("${url}");`);
-        return rules;
-      }
+        if (!url) {
+          return;
+        }
 
-      rules.faces.push(`@font-face {
+        if (font.source === 'google' || /\.css($|\?)/i.test(url)) {
+          rules.imports.push(`@import url("${url}");`);
+          return;
+        }
+
+        rules.faces.push(`@font-face {
         font-family: "${family}";
         src: url("${url}");
         font-style: ${style};
         font-weight: ${weight};
         font-display: ${display};
       }`);
+      });
       return rules;
     }, { imports: [], faces: [] });
   const fontFaceCss = [...fontCssRules.imports, ...fontCssRules.faces].join('\n');
@@ -5084,8 +5394,8 @@ export function PageRenderer({
       >
         <div className="backy-canvas-frame" style={canvasFrameStyle} data-backy-canvas-scale={scale.toFixed(3)}>
           <div className="backy-canvas" style={canvasStyle} data-backy-active-breakpoint={activeBreakpoint}>
-            {elements.map((element) => (
-              element.visible === false ? null : (
+            {themedElements.map((element) => (
+              !getBooleanWithFallback(element.visible, true) ? null : (
                 <ElementRenderer
                   key={element.id}
                   element={element}

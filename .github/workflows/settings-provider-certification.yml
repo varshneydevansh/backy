@@ -53,11 +53,30 @@ on:
           - resend
           - smtp
           - local-outbox
+      certify_public_api_cors:
+        description: Run custom frontend Public API/CORS origin certification.
+        required: true
+        type: boolean
+        default: true
+      public_api_origin:
+        description: Optional expected custom frontend origin for CORS certification.
+        required: false
+        type: string
+      settings_certification_site_id:
+        description: Site id or slug whose site-scoped Settings API handoff should be certified.
+        required: true
+        type: string
+        default: site-demo
       certify_commerce:
         description: Also run the commerce provider certification gate from this Settings provider gate.
         required: true
         type: boolean
         default: true
+      commerce_certification_site_id:
+        description: Site id or slug whose product/order admin API handoffs should be certified by the nested Commerce gate.
+        required: true
+        type: string
+        default: site-demo
       payment_provider:
         description: Expected payment/refund provider for nested Commerce certification.
         required: true
@@ -161,7 +180,12 @@ jobs:
       BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID: ${{ inputs.vercel_team_id }}
       BACKY_SETTINGS_CERTIFY_NOTIFICATION: ${{ inputs.certify_notification && '1' || '0' }}
       BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER: ${{ inputs.notification_provider }}
+      BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS: ${{ inputs.certify_public_api_cors && '1' || '0' }}
+      BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN: ${{ inputs.public_api_origin }}
+      BACKY_SETTINGS_CERTIFY_SITE_ID: ${{ inputs.settings_certification_site_id }}
+      BACKY_CORS_ALLOWED_ORIGINS: ${{ inputs.public_api_origin || vars.BACKY_CORS_ALLOWED_ORIGINS }}
       BACKY_SETTINGS_CERTIFICATION_BASE_URL: ${{ vars.BACKY_SETTINGS_CERTIFICATION_BASE_URL }}
+      BACKY_SETTINGS_CERTIFICATION_OUTPUT: artifacts/backy-settings-provider-certification.json
       BACKY_ADMIN_API_KEY: ${{ secrets.BACKY_ADMIN_API_KEY }}
       BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY: ${{ secrets.BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY }}
       BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY: ${{ secrets.BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY }}
@@ -323,6 +347,7 @@ jobs:
       BACKY_MAGENTO_API_BASE_URL: ${{ vars.BACKY_MAGENTO_API_BASE_URL }}
       MAGENTO_API_BASE_URL: ${{ vars.MAGENTO_API_BASE_URL }}
       BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED: ${{ inputs.certify_commerce && '1' || '0' }}
+      BACKY_COMMERCE_CERTIFY_SITE_ID: ${{ inputs.commerce_certification_site_id }}
       BACKY_COMMERCE_CERTIFY_PAYMENT: ${{ inputs.certify_commerce && '1' || '0' }}
       BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER: ${{ inputs.payment_provider }}
       BACKY_COMMERCE_CERTIFY_TAX: ${{ inputs.certify_commerce && '1' || '0' }}
@@ -338,6 +363,7 @@ jobs:
       BACKY_COMMERCE_CERTIFY_WEBHOOKS: ${{ inputs.certify_commerce && '1' || '0' }}
       BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER: ${{ inputs.webhook_provider }}
       BACKY_COMMERCE_CERTIFICATION_BASE_URL: ${{ vars.BACKY_COMMERCE_CERTIFICATION_BASE_URL || vars.BACKY_SETTINGS_CERTIFICATION_BASE_URL }}
+      BACKY_COMMERCE_CERTIFICATION_OUTPUT: artifacts/backy-commerce-provider-certification.json
 
     steps:
       - name: Checkout
@@ -373,13 +399,19 @@ jobs:
             echo ""
             echo "| Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |"
             echo "| --- | --- | --- | --- | --- | --- |"
-            echo "| /settings and Settings admin APIs | npm run ci:settings-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $settings_external; admin key configured: $settings_admin_key_configured |"
-            echo "| /products and /orders | npm run ci:commerce-provider-certification | ${{ inputs.certify_commerce }} | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
+            echo "| /settings | npm run ci:settings-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $settings_external; admin key configured: $settings_admin_key_configured |"
+            echo "| Settings admin APIs | npm run ci:settings-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $settings_external; admin key configured: $settings_admin_key_configured |"
+            echo "| /products | npm run ci:commerce-provider-certification | ${{ inputs.certify_commerce }} | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
+            echo "| /orders | npm run ci:commerce-provider-certification | ${{ inputs.certify_commerce }} | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
             echo ""
             echo "| Selector | Value |"
             echo "| --- | --- |"
             echo "| storage_provider | ${{ inputs.storage_provider }} |"
             echo "| notification_provider | ${{ inputs.notification_provider }} |"
+            echo "| certify_public_api_cors | ${{ inputs.certify_public_api_cors }} |"
+            echo "| public_api_origin | ${{ inputs.public_api_origin || vars.BACKY_CORS_ALLOWED_ORIGINS }} |"
+            echo "| settings_certification_site_id | ${{ inputs.settings_certification_site_id }} |"
+            echo "| commerce_certification_site_id | ${{ inputs.commerce_certification_site_id }} |"
             echo "| payment_provider | ${{ inputs.payment_provider }} |"
             echo "| tax_provider | ${{ inputs.tax_provider }} |"
             echo "| shipping_provider | ${{ inputs.shipping_provider }} |"
@@ -392,6 +424,23 @@ jobs:
       - name: Run Settings provider certification
         run: npm run ci:settings-provider-certification
 
+      - name: Upload Settings provider certification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: backy-settings-provider-certification-evidence
+          path: artifacts/backy-settings-provider-certification.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Run Commerce provider certification from Settings provider gate
         if: ${{ inputs.certify_commerce }}
         run: npm run ci:commerce-provider-certification
+
+      - name: Upload Commerce provider certification evidence from Settings gate
+        if: ${{ inputs.certify_commerce }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: backy-commerce-provider-certification-evidence
+          path: artifacts/backy-commerce-provider-certification.json
+          if-no-files-found: error
+          retention-days: 30

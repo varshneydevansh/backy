@@ -63,6 +63,23 @@ const assertSitesRouteSourceContract = () => {
       createSource.includes('Review users'),
     'Site create permission state must expose retryable permission recovery and user-access handoff',
   );
+  assert(
+    createSource.includes('buildSiteCreateInlineErrors') &&
+      createSource.includes('const [siteCreateSubmitted, setSiteCreateSubmitted] = useState(false);') &&
+      createSource.includes('data-testid="site-create-form"') &&
+      createSource.includes('noValidate') &&
+      createSource.includes('data-testid="site-create-inline-error"') &&
+      createSource.includes('data-testid="site-create-name-error"') &&
+      createSource.includes('data-testid="site-create-slug-error"') &&
+      createSource.includes('data-testid="site-create-custom-domain-error"') &&
+      createSource.includes('data-testid="site-create-billing-email-error"') &&
+      createSource.includes('data-testid="site-create-template-import-url-error"') &&
+      createSource.includes('aria-invalid={Boolean(showSiteCreateInlineErrors') &&
+      createSource.includes('aria-describedby={showSiteCreateInlineErrors') &&
+      createSource.includes("setError('Fix site creation fields before creating.')") &&
+      createSource.includes('const canSubmit = canCreateSites && canSeedStarterPages;'),
+    'Site create form must keep the create action reachable for permitted users and show source-guarded inline validation before backend mutation',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

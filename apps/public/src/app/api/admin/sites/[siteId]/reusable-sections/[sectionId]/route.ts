@@ -25,6 +25,7 @@ import {
   reusableSectionConflict,
   reusableSectionVersionFromMetadata,
 } from "@/lib/reusableSectionVersions";
+import { normalizeReusableSectionInputFromDirectFrontendDesignEnvelope } from "@/lib/frontendDesignContract";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 import type { BackyJsonObject, Site } from "@backy-cms/core";
 
@@ -275,7 +276,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const body = await parseJsonBody(request);
+      const body = normalizeReusableSectionInputFromDirectFrontendDesignEnvelope(
+        await parseJsonBody(request),
+      );
       const nextSlug = body.slug === undefined ? "" : normalizeSlug(body.slug);
 
       if (body.slug !== undefined && !nextSlug) {
@@ -448,7 +451,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const body = await parseJsonBody(request);
+    const body = normalizeReusableSectionInputFromDirectFrontendDesignEnvelope(
+      await parseJsonBody(request),
+    );
     const nextSlug = body.slug === undefined ? "" : normalizeSlug(body.slug);
 
     if (body.slug !== undefined && !nextSlug) {

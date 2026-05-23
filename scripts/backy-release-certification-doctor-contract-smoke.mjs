@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const runDoctor = (env) => new Promise((resolve) => {
   const child = spawn(process.execPath, ['scripts/backy-release-certification-doctor.mjs'], {
@@ -63,6 +66,277 @@ const assertProviderAliasReady = async ({ label, env }) => {
   return json;
 };
 
+const artifactTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backy-release-doctor-'));
+const settingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification.json');
+const staleSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-stale.json');
+const untargetedSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-untargeted.json');
+const leakedSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-leaked-secret.json');
+const forbiddenFieldSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-forbidden-field.json');
+const commerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification.json');
+const staleCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-stale.json');
+const untargetedCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-untargeted.json');
+fs.writeFileSync(settingsArtifactPath, JSON.stringify({
+  ok: true,
+  contract: 'backy.settings-provider-certification.v1',
+  artifact: {
+    schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    outputPathConfigured: true,
+    fileName: 'backy-settings-provider-certification.json',
+    secretHandling: 'Certification artifacts contain provider names, booleans, scenario counts, target mode, and non-secret result summaries only; admin keys, external target URLs, provider credentials, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
+  },
+  required: true,
+  target: { mode: 'local', externalBaseUrlConfigured: false },
+  requestedProviders: { storage: 's3', notification: 'resend', publicApiOrigin: 'https://app.example.test' },
+  certified: ['storage', 'notification', 'publicApiCors'],
+  apiHandoffs: {
+    settingsAdminApi: {
+      status: 'certified',
+      providerSchema: 'backy.settings-provider-certification-handoff.v1',
+      scenarioEvidenceSchema: 'backy.settings-provider-certification-evidence.v1',
+      scenarioStatus: 'ready',
+      scenarioCoverage: { covered: 8, total: 8, missing: [] },
+      evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
+      evidencePacketStatus: 'evidence-complete',
+      targetSiteId: 'site-demo',
+      settingsSiteSelectorEnv: 'BACKY_SETTINGS_CERTIFY_SITE_ID',
+      commerceSiteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      commandPreviewTargetInputsIncludeSettingsSiteSelector: true,
+      commandPreviewTargetInputsIncludeCommerceSiteSelector: true,
+      completionStatusSchema: 'backy.completion-status.v1',
+      surfaceRunbookCount: 4,
+    },
+    siteScopedSettingsApi: {
+      status: 'certified',
+      requestedSiteId: 'site-demo',
+      resolvedSiteId: 'site-demo',
+      settingsSchema: 'backy.site-settings-scope.v1',
+      source: 'admin-site-settings-api',
+      mediaStorageSchema: 'backy.media-storage-handoff.v1',
+      frontendDatabaseSchema: 'backy.frontend-database-certification.v1',
+      frontendDatabaseEvidenceSchema: 'backy.frontend-database-certification-evidence.v1',
+    },
+  },
+  results: {},
+}, null, 2));
+fs.writeFileSync(staleSettingsArtifactPath, JSON.stringify({
+  ok: true,
+  contract: 'backy.settings-provider-certification.v1',
+  artifact: {
+    schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    outputPathConfigured: true,
+    fileName: 'backy-settings-provider-certification.json',
+    secretHandling: 'Certification artifacts contain provider names, booleans, scenario counts, target mode, and non-secret result summaries only; admin keys, external target URLs, provider credentials, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
+  },
+  required: true,
+  target: { mode: 'local', externalBaseUrlConfigured: false },
+  requestedProviders: { storage: 's3', notification: 'resend', publicApiOrigin: 'https://app.example.test' },
+  certified: ['storage', 'notification', 'publicApiCors'],
+  results: {},
+}, null, 2));
+fs.writeFileSync(untargetedSettingsArtifactPath, JSON.stringify({
+  ok: true,
+  contract: 'backy.settings-provider-certification.v1',
+  artifact: {
+    schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    outputPathConfigured: true,
+    fileName: 'backy-settings-provider-certification.json',
+    secretHandling: 'Certification artifacts contain provider names, booleans, scenario counts, target mode, and non-secret result summaries only; admin keys, external target URLs, provider credentials, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
+  },
+  required: true,
+  target: { mode: 'local', externalBaseUrlConfigured: false },
+  requestedProviders: { storage: 's3', notification: 'resend', publicApiOrigin: 'https://app.example.test' },
+  certified: ['storage', 'notification', 'publicApiCors'],
+  apiHandoffs: {
+    settingsAdminApi: {
+      status: 'certified',
+      providerSchema: 'backy.settings-provider-certification-handoff.v1',
+      scenarioEvidenceSchema: 'backy.settings-provider-certification-evidence.v1',
+      scenarioStatus: 'ready',
+      scenarioCoverage: { covered: 8, total: 8, missing: [] },
+      evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
+      evidencePacketStatus: 'evidence-complete',
+      completionStatusSchema: 'backy.completion-status.v1',
+      surfaceRunbookCount: 4,
+    },
+    siteScopedSettingsApi: {
+      status: 'certified',
+      requestedSiteId: 'site-demo',
+      resolvedSiteId: 'site-demo',
+      settingsSchema: 'backy.site-settings-scope.v1',
+      source: 'admin-site-settings-api',
+      mediaStorageSchema: 'backy.media-storage-handoff.v1',
+      frontendDatabaseSchema: 'backy.frontend-database-certification.v1',
+      frontendDatabaseEvidenceSchema: 'backy.frontend-database-certification-evidence.v1',
+    },
+  },
+  results: {},
+}, null, 2));
+fs.writeFileSync(leakedSettingsArtifactPath, JSON.stringify({
+  ok: true,
+  contract: 'backy.settings-provider-certification.v1',
+  artifact: {
+    schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    outputPathConfigured: true,
+    fileName: 'backy-settings-provider-certification.json',
+    secretHandling: 'Certification artifacts contain provider names, booleans, scenario counts, target mode, and non-secret result summaries only; admin keys, external target URLs, provider credentials, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
+  },
+  required: true,
+  target: { mode: 'local', externalBaseUrlConfigured: false },
+  requestedProviders: { storage: 's3', notification: 'resend', publicApiOrigin: 'https://app.example.test' },
+  certified: ['storage', 'notification', 'publicApiCors'],
+  apiHandoffs: {
+    settingsAdminApi: {
+      status: 'certified',
+      providerSchema: 'backy.settings-provider-certification-handoff.v1',
+      scenarioEvidenceSchema: 'backy.settings-provider-certification-evidence.v1',
+      scenarioStatus: 'ready',
+      evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
+      evidencePacketStatus: 'evidence-complete',
+      targetSiteId: 'site-demo',
+      settingsSiteSelectorEnv: 'BACKY_SETTINGS_CERTIFY_SITE_ID',
+      commerceSiteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      commandPreviewTargetInputsIncludeSettingsSiteSelector: true,
+      commandPreviewTargetInputsIncludeCommerceSiteSelector: true,
+      completionStatusSchema: 'backy.completion-status.v1',
+    },
+    siteScopedSettingsApi: {
+      status: 'certified',
+      requestedSiteId: 'site-demo',
+      resolvedSiteId: 'site-demo',
+      settingsSchema: 'backy.site-settings-scope.v1',
+      source: 'admin-site-settings-api',
+      mediaStorageSchema: 'backy.media-storage-handoff.v1',
+      frontendDatabaseSchema: 'backy.frontend-database-certification.v1',
+      frontendDatabaseEvidenceSchema: 'backy.frontend-database-certification-evidence.v1',
+    },
+  },
+  results: {
+    leakedCredential: 'backy-release-doctor-redacted-secret',
+  },
+}, null, 2));
+const forbiddenFieldSettingsArtifactPayload = JSON.parse(fs.readFileSync(settingsArtifactPath, 'utf8'));
+forbiddenFieldSettingsArtifactPayload.target.externalBaseUrl = 'https://backy-admin.example.test';
+forbiddenFieldSettingsArtifactPayload.results.webhookBody = '{"event":"should-not-be-in-artifact"}';
+forbiddenFieldSettingsArtifactPayload.results.providerSummary = 'https://user:password@backy-admin.example.test/provider';
+fs.writeFileSync(forbiddenFieldSettingsArtifactPath, JSON.stringify(forbiddenFieldSettingsArtifactPayload, null, 2));
+fs.writeFileSync(commerceArtifactPath, JSON.stringify({
+  ok: true,
+  contract: 'backy.commerce-provider-certification.v1',
+  artifact: {
+    schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+    outputPathConfigured: true,
+    fileName: 'backy-commerce-provider-certification.json',
+    secretHandling: 'Certification artifacts contain provider names, readiness booleans, target mode, non-secret runtime selections, and diagnostic counts only; admin keys, external target URLs, provider credentials, payment references, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
+  },
+  required: true,
+  target: { mode: 'local', externalBaseUrlConfigured: false },
+  requested: { payment: true, tax: true, shipping: true },
+  readiness: { payment: true, tax: true, shipping: true },
+  requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
+  runtime: { missing: [] },
+  diagnostics: { groups: 1, commerceGroup: 1 },
+  apiHandoffs: {
+    siteId: 'site-demo',
+    publicApis: {
+      status: 'certified',
+      manifestProviderSchema: 'backy.commerce-provider-certification-handoff.v1',
+      runtimeProviderSchema: 'backy.commerce-provider-certification-handoff.v1',
+      catalogSchema: 'backy.commerce-catalog.v1',
+      catalogProviderSchema: 'backy.commerce-provider-certification-handoff.v1',
+      catalogProductCount: 1,
+      orderContractSchema: 'backy.commerce-orders.v1',
+      orderProviderSchema: 'backy.commerce-provider-certification-handoff.v1',
+    },
+    product: {
+      status: 'certified',
+      productId: 'product_demo',
+      providerSchema: 'backy.commerce-provider-certification-handoff.v1',
+      productEvidenceSchema: 'backy.product-provider-certification-evidence.v1',
+      packetSchema: 'backy.commerce-provider-certification-evidence-packet.v1',
+      targetSiteId: 'site-demo',
+      siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      commandPreviewTargetInputsIncludeSiteSelector: true,
+      storefrontSchema: 'backy.product-storefront-handoff.v1',
+      designReadinessStatus: 'ready',
+    },
+    orders: {
+      status: 'certified',
+      analyticsSchema: 'backy.order-analytics.v1',
+      providerSchema: 'backy.commerce-provider-certification-handoff.v1',
+      orderEvidenceSchema: 'backy.order-provider-certification-evidence.v1',
+      packetSchema: 'backy.order-provider-certification-evidence-packet.v1',
+      targetSiteId: 'site-demo',
+      siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      commandPreviewTargetInputsIncludeSiteSelector: true,
+      orderCount: 3,
+    },
+  },
+}, null, 2));
+fs.writeFileSync(staleCommerceArtifactPath, JSON.stringify({
+  ok: true,
+  contract: 'backy.commerce-provider-certification.v1',
+  artifact: {
+    schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+    outputPathConfigured: true,
+    fileName: 'backy-commerce-provider-certification.json',
+    secretHandling: 'Certification artifacts contain provider names, readiness booleans, target mode, non-secret runtime selections, and diagnostic counts only; admin keys, external target URLs, provider credentials, payment references, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
+  },
+  required: true,
+  target: { mode: 'local', externalBaseUrlConfigured: false },
+  requested: { payment: true, tax: true, shipping: true },
+  readiness: { payment: true, tax: true, shipping: true },
+  requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
+  runtime: { missing: [] },
+  diagnostics: { groups: 1, commerceGroup: 1 },
+}, null, 2));
+fs.writeFileSync(untargetedCommerceArtifactPath, JSON.stringify({
+  ok: true,
+  contract: 'backy.commerce-provider-certification.v1',
+  artifact: {
+    schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+    outputPathConfigured: true,
+    fileName: 'backy-commerce-provider-certification.json',
+    secretHandling: 'Certification artifacts contain provider names, readiness booleans, target mode, non-secret runtime selections, and diagnostic counts only; admin keys, external target URLs, provider credentials, payment references, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
+  },
+  required: true,
+  target: { mode: 'local', externalBaseUrlConfigured: false },
+  requested: { payment: true, tax: true, shipping: true },
+  readiness: { payment: true, tax: true, shipping: true },
+  requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
+  runtime: { missing: [] },
+  diagnostics: { groups: 1, commerceGroup: 1 },
+  apiHandoffs: {
+    siteId: 'site-demo',
+    publicApis: {
+      status: 'certified',
+      manifestProviderSchema: 'backy.commerce-provider-certification-handoff.v1',
+      runtimeProviderSchema: 'backy.commerce-provider-certification-handoff.v1',
+      catalogSchema: 'backy.commerce-catalog.v1',
+      catalogProviderSchema: 'backy.commerce-provider-certification-handoff.v1',
+      catalogProductCount: 1,
+      orderContractSchema: 'backy.commerce-orders.v1',
+      orderProviderSchema: 'backy.commerce-provider-certification-handoff.v1',
+    },
+    product: {
+      status: 'certified',
+      productId: 'product_demo',
+      providerSchema: 'backy.commerce-provider-certification-handoff.v1',
+      productEvidenceSchema: 'backy.product-provider-certification-evidence.v1',
+      packetSchema: 'backy.commerce-provider-certification-evidence-packet.v1',
+      storefrontSchema: 'backy.product-storefront-handoff.v1',
+      designReadinessStatus: 'ready',
+    },
+    orders: {
+      status: 'certified',
+      analyticsSchema: 'backy.order-analytics.v1',
+      providerSchema: 'backy.commerce-provider-certification-handoff.v1',
+      orderEvidenceSchema: 'backy.order-provider-certification-evidence.v1',
+      packetSchema: 'backy.order-provider-certification-evidence-packet.v1',
+      orderCount: 3,
+    },
+  },
+}, null, 2));
+
 const normal = await runDoctor({});
 assert(normal.code === 0, `Doctor default mode should exit 0, got ${normal.code}: ${normal.stderr}`);
 const normalJson = parseJson(normal, 'default doctor');
@@ -72,35 +346,40 @@ assert(
   Array.isArray(normalJson.partialGateMap) && normalJson.partialGateMap.length === 4,
   'Doctor default mode should expose the current Partial-to-gate map.',
 );
-for (const { row, gate, preflight, workflow, requiredInputFamily, disposableGuard, mockGate, doctorRequiredEnv } of [
+for (const { row, gate, preflight, workflow, requiredInputFamily, sourceOnlyGuard, mockGate, doctorRequiredEnv } of [
   {
-    row: '/forms',
-    gate: 'npm run ci:forms-postgres',
-    preflight: 'npm run test:forms-postgres-preflight-contract',
-    disposableGuard: 'npm run test:forms-postgres-disposable-guard',
-    workflow: '.github/workflows/forms-postgres-contract.yml',
-    requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL',
-  },
-  {
-    row: 'Frontend manifest/OpenAPI/SDK APIs',
-    gate: 'npm run ci:sdk-postgres-smoke',
-    preflight: 'npm run test:sdk-postgres-preflight-contract',
-    disposableGuard: 'npm run test:sdk-postgres-disposable-guard',
-    workflow: '.github/workflows/sdk-postgres-smoke.yml',
-    requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL',
-  },
-  {
-    row: '/settings and Settings admin APIs',
+    row: '/settings',
     gate: 'npm run ci:settings-provider-certification',
     preflight: 'npm run test:settings-provider-certification-preflight-contract',
+    sourceOnlyGuard: 'npm run test:settings-source-only',
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
     workflow: '.github/workflows/settings-provider-certification.yml',
-    requiredInputFamily: 'storage, Vercel, notification',
+    requiredInputFamily: 'storage, Vercel, notification, custom frontend CORS',
   },
   {
-    row: '/products and /orders',
+    row: 'Settings admin APIs',
+    gate: 'npm run ci:settings-provider-certification',
+    preflight: 'npm run test:settings-provider-certification-preflight-contract',
+    sourceOnlyGuard: 'npm run test:settings-source-only',
+    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+    workflow: '.github/workflows/settings-provider-certification.yml',
+    requiredInputFamily: 'storage, Vercel, notification, custom frontend CORS',
+  },
+  {
+    row: '/products',
     gate: 'npm run ci:commerce-provider-certification',
     preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+    sourceOnlyGuard: 'npm run test:commerce-source-only',
+    mockGate: 'npm run ci:commerce-provider-smoke',
+    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+    workflow: '.github/workflows/commerce-provider-certification.yml',
+    requiredInputFamily: 'payment, tax, shipping',
+  },
+  {
+    row: '/orders',
+    gate: 'npm run ci:commerce-provider-certification',
+    preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+    sourceOnlyGuard: 'npm run test:orders-source-only',
     mockGate: 'npm run ci:commerce-provider-smoke',
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
     workflow: '.github/workflows/commerce-provider-certification.yml',
@@ -113,10 +392,8 @@ for (const { row, gate, preflight, workflow, requiredInputFamily, disposableGuar
   assert(entry.preflight === preflight, `Doctor Partial-to-gate map for ${row} should use ${preflight}.`);
   assert(entry.aggregatePreflight === 'npm run test:partial-gate-preflights', `Doctor Partial-to-gate map for ${row} should expose the aggregate Partial preflight.`);
   assert(entry.adminSourceGuard === 'npm run test:admin-contract-source', `Doctor Partial-to-gate map for ${row} should expose the admin source guard.`);
+  assert(entry.sourceOnlyGuard === sourceOnlyGuard, `Doctor Partial-to-gate map for ${row} should expose ${sourceOnlyGuard}.`);
   assert(entry.workflow === workflow, `Doctor Partial-to-gate map for ${row} should use ${workflow}.`);
-  if (disposableGuard) {
-    assert(entry.disposableGuard === disposableGuard, `Doctor Partial-to-gate map for ${row} should use ${disposableGuard}.`);
-  }
   if (mockGate) {
     assert(entry.mockGate === mockGate, `Doctor Partial-to-gate map for ${row} should use ${mockGate}.`);
   }
@@ -127,7 +404,250 @@ for (const { row, gate, preflight, workflow, requiredInputFamily, disposableGuar
     typeof entry.requiredInputFamily === 'string' && entry.requiredInputFamily.includes(requiredInputFamily),
     `Doctor Partial-to-gate map for ${row} should document ${requiredInputFamily} input requirements.`,
   );
+  if (row === '/settings' || row === 'Settings admin APIs') {
+    assert(
+      entry.artifactPathEnv === 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT' &&
+        entry.artifactRequiredEnv.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+        entry.artifactSchemaVersion === 'backy.settings-provider-certification-artifact.v1',
+      `Doctor Partial-to-gate map for ${row} should document Settings artifact verification inputs.`,
+    );
+  } else {
+    assert(
+      entry.artifactPathEnv === 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT' &&
+        entry.artifactRequiredEnv.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+        entry.artifactSchemaVersion === 'backy.commerce-provider-certification-artifact.v1',
+      `Doctor Partial-to-gate map for ${row} should document Commerce artifact verification inputs.`,
+    );
+  }
 }
+assert(
+  normalJson.certificationArtifacts?.settings?.configured === false &&
+    normalJson.certificationArtifacts?.settings?.ready === false &&
+    normalJson.certificationArtifacts?.commerce?.configured === false &&
+    normalJson.certificationArtifacts?.commerce?.ready === false,
+  'Doctor default mode should expose optional certification artifact verification state without requiring artifacts.',
+);
+assert(
+  Array.isArray(normalJson.certifiedGates) && normalJson.certifiedGates.length === 2,
+  'Doctor default mode should expose certified database gates separately from current Partial rows.',
+);
+for (const { row, gate, preflight, disposableGuard, workflow } of [
+  {
+    row: '/forms',
+    gate: 'npm run ci:forms-postgres',
+    preflight: 'npm run test:forms-postgres-preflight-contract',
+    disposableGuard: 'npm run test:forms-postgres-disposable-guard',
+    workflow: '.github/workflows/forms-postgres-contract.yml',
+  },
+  {
+    row: 'Frontend manifest/OpenAPI/SDK APIs',
+    gate: 'npm run ci:sdk-postgres-smoke',
+    preflight: 'npm run test:sdk-postgres-preflight-contract',
+    disposableGuard: 'npm run test:sdk-postgres-disposable-guard',
+    workflow: '.github/workflows/sdk-postgres-smoke.yml',
+  },
+]) {
+  const entry = normalJson.certifiedGates.find((item) => item.row === row);
+  assert(entry, `Doctor certified gate map missing ${row}.`);
+  assert(entry.gate === gate, `Doctor certified gate map for ${row} should use ${gate}.`);
+  assert(entry.preflight === preflight, `Doctor certified gate map for ${row} should use ${preflight}.`);
+  assert(entry.disposableGuard === disposableGuard, `Doctor certified gate map for ${row} should use ${disposableGuard}.`);
+  assert(entry.workflow === workflow, `Doctor certified gate map for ${row} should use ${workflow}.`);
+  assert(entry.status === 'certified-regression', `Doctor certified gate map for ${row} should be marked as certified regression.`);
+  assert(entry.certifiedOn === '2026-05-21', `Doctor certified gate map for ${row} should carry the certification date.`);
+}
+
+const missingCertificationArtifacts = await runDoctor({
+  BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED: '1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  missingCertificationArtifacts.code === 1,
+  `Doctor artifact-required mode should exit 1 without artifact paths, got ${missingCertificationArtifacts.code}.`,
+);
+const missingCertificationArtifactsJson = parseJson(missingCertificationArtifacts, 'missing certification artifacts doctor');
+assert(missingCertificationArtifactsJson.ok === false, 'Doctor artifact-required mode should report ok=false.');
+assert(
+  missingCertificationArtifactsJson.failures.includes('Settings certification artifact') &&
+    missingCertificationArtifactsJson.failures.includes('Commerce certification artifact'),
+  `Doctor artifact-required mode should report missing Settings and Commerce artifacts. Actual failures: ${JSON.stringify(missingCertificationArtifactsJson.failures)}`,
+);
+
+const validCertificationArtifacts = await runDoctor({
+  BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED: '1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: settingsArtifactPath,
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: commerceArtifactPath,
+});
+assert(
+  validCertificationArtifacts.code === 0,
+  `Doctor artifact-required mode should accept valid redacted artifacts, got ${validCertificationArtifacts.code}.`,
+);
+const validCertificationArtifactsJson = parseJson(validCertificationArtifacts, 'valid certification artifacts doctor');
+assert(validCertificationArtifactsJson.ok === true, 'Doctor valid artifact mode should report ok=true.');
+assert(
+  validCertificationArtifactsJson.certificationArtifacts.settings.ready === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.schemaReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.noSecretBoundaryReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.noRawSecretValuesReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.noForbiddenArtifactFieldsReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsApiHandoffSchemaReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsApiHandoffReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsApiHandoffSiteTargetReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsApiHandoffTargetSiteId === 'site-demo' &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.siteSettingsApiHandoffReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.siteSettingsApiHandoffSiteId === 'site-demo' &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsApiHandoffSettingsSiteSelectorEnv === 'BACKY_SETTINGS_CERTIFY_SITE_ID' &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsApiHandoffCommerceSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsScenarioEvidenceReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsEvidencePacketReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsCompletionStatusReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.ready === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.schemaReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.noSecretBoundaryReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.noRawSecretValuesReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.noForbiddenArtifactFieldsReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.apiHandoffReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.publicCommerceApiHandoffReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.productApiHandoffSchemaReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.productApiHandoffReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.productApiHandoffSiteTargetReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.productApiHandoffTargetSiteId === 'site-demo' &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.orderApiHandoffSchemaReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.orderApiHandoffReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.orderApiHandoffSiteTargetReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.orderApiHandoffTargetSiteId === 'site-demo' &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.apiHandoffSiteId === 'site-demo' &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.commerceApiHandoffSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+  'Doctor valid artifact mode should expose schema, no-secret, and API-handoff readiness for both artifacts.',
+);
+
+const staleSettingsArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: staleSettingsArtifactPath,
+});
+assert(
+  staleSettingsArtifact.code === 1,
+  `Doctor should reject a Settings artifact that lacks admin API handoff evidence, got ${staleSettingsArtifact.code}.`,
+);
+const staleSettingsArtifactJson = parseJson(staleSettingsArtifact, 'stale settings certification artifact doctor');
+assert(
+    staleSettingsArtifactJson.failures.includes('Settings certification artifact') &&
+    staleSettingsArtifactJson.certificationArtifacts.settings.settingsApiHandoffReady === false &&
+    staleSettingsArtifactJson.certificationArtifacts.settings.siteSettingsApiHandoffReady === false &&
+    staleSettingsArtifactJson.certificationArtifacts.settings.settingsScenarioEvidenceReady === false &&
+    staleSettingsArtifactJson.certificationArtifacts.settings.settingsEvidencePacketReady === false,
+  'Doctor should report missing Settings admin API handoff evidence.',
+);
+
+const untargetedSettingsArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: untargetedSettingsArtifactPath,
+});
+assert(
+  untargetedSettingsArtifact.code === 1,
+  `Doctor should reject a Settings artifact whose operator evidence packet is not site-targeted, got ${untargetedSettingsArtifact.code}.`,
+);
+const untargetedSettingsArtifactJson = parseJson(untargetedSettingsArtifact, 'untargeted settings certification artifact doctor');
+assert(
+  untargetedSettingsArtifactJson.failures.includes('Settings certification artifact') &&
+    untargetedSettingsArtifactJson.certificationArtifacts.settings.settingsApiHandoffSchemaReady === true &&
+    untargetedSettingsArtifactJson.certificationArtifacts.settings.siteSettingsApiHandoffReady === true &&
+    untargetedSettingsArtifactJson.certificationArtifacts.settings.settingsApiHandoffSiteTargetReady === false &&
+    untargetedSettingsArtifactJson.certificationArtifacts.settings.settingsApiHandoffReady === false,
+  'Doctor should reject Settings artifacts when schema handoffs exist but lack BACKY_SETTINGS_CERTIFY_SITE_ID/BACKY_COMMERCE_CERTIFY_SITE_ID target proof.',
+);
+
+const leakedSettingsArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: leakedSettingsArtifactPath,
+});
+assert(
+  leakedSettingsArtifact.code === 1,
+  `Doctor should reject a Settings artifact that contains raw secret-like values, got ${leakedSettingsArtifact.code}.`,
+);
+const leakedSettingsArtifactJson = parseJson(leakedSettingsArtifact, 'leaked settings certification artifact doctor');
+assert(
+  leakedSettingsArtifactJson.failures.includes('Settings certification artifact') &&
+    leakedSettingsArtifactJson.certificationArtifacts.settings.noRawSecretValuesReady === false &&
+    leakedSettingsArtifactJson.certificationArtifacts.settings.settingsApiHandoffReady === true &&
+    leakedSettingsArtifactJson.certificationArtifacts.settings.siteSettingsApiHandoffReady === true,
+  'Doctor should report raw secret-like value failures without hiding that the Settings API handoff itself was present.',
+);
+
+const forbiddenFieldSettingsArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: forbiddenFieldSettingsArtifactPath,
+});
+assert(
+  forbiddenFieldSettingsArtifact.code === 1,
+  `Doctor should reject a Settings artifact that contains forbidden sensitive artifact fields, got ${forbiddenFieldSettingsArtifact.code}.`,
+);
+const forbiddenFieldSettingsArtifactJson = parseJson(forbiddenFieldSettingsArtifact, 'forbidden-field settings certification artifact doctor');
+assert(
+  forbiddenFieldSettingsArtifactJson.failures.includes('Settings certification artifact') &&
+    forbiddenFieldSettingsArtifactJson.certificationArtifacts.settings.noRawSecretValuesReady === true &&
+    forbiddenFieldSettingsArtifactJson.certificationArtifacts.settings.noForbiddenArtifactFieldsReady === false &&
+    forbiddenFieldSettingsArtifactJson.certificationArtifacts.settings.forbiddenArtifactFields.includes('target.externalBaseUrl') &&
+    forbiddenFieldSettingsArtifactJson.certificationArtifacts.settings.forbiddenArtifactFields.includes('results.webhookBody') &&
+    forbiddenFieldSettingsArtifactJson.certificationArtifacts.settings.forbiddenArtifactFields.includes('results.providerSummary') &&
+    forbiddenFieldSettingsArtifactJson.certificationArtifacts.settings.settingsApiHandoffReady === true,
+  'Doctor should reject forbidden Settings artifact field names without requiring raw secret-looking values.',
+);
+
+const staleCommerceArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: staleCommerceArtifactPath,
+});
+assert(
+  staleCommerceArtifact.code === 1,
+  `Doctor should reject a Commerce artifact that lacks product/order API handoff evidence, got ${staleCommerceArtifact.code}.`,
+);
+const staleCommerceArtifactJson = parseJson(staleCommerceArtifact, 'stale commerce certification artifact doctor');
+assert(
+  staleCommerceArtifactJson.failures.includes('Commerce certification artifact') &&
+    staleCommerceArtifactJson.certificationArtifacts.commerce.apiHandoffReady === false &&
+    staleCommerceArtifactJson.certificationArtifacts.commerce.publicCommerceApiHandoffReady === false &&
+    staleCommerceArtifactJson.certificationArtifacts.commerce.productApiHandoffReady === false &&
+    staleCommerceArtifactJson.certificationArtifacts.commerce.orderApiHandoffReady === false,
+  'Doctor should report missing Commerce product/order API-handoff evidence.',
+);
+
+const untargetedCommerceArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: untargetedCommerceArtifactPath,
+});
+assert(
+  untargetedCommerceArtifact.code === 1,
+  `Doctor should reject a Commerce artifact whose product/order evidence packets are not site-targeted, got ${untargetedCommerceArtifact.code}.`,
+);
+const untargetedCommerceArtifactJson = parseJson(untargetedCommerceArtifact, 'untargeted commerce certification artifact doctor');
+assert(
+  untargetedCommerceArtifactJson.failures.includes('Commerce certification artifact') &&
+    untargetedCommerceArtifactJson.certificationArtifacts.commerce.publicCommerceApiHandoffReady === true &&
+    untargetedCommerceArtifactJson.certificationArtifacts.commerce.productApiHandoffSchemaReady === true &&
+    untargetedCommerceArtifactJson.certificationArtifacts.commerce.orderApiHandoffSchemaReady === true &&
+    untargetedCommerceArtifactJson.certificationArtifacts.commerce.productApiHandoffSiteTargetReady === false &&
+    untargetedCommerceArtifactJson.certificationArtifacts.commerce.orderApiHandoffSiteTargetReady === false &&
+    untargetedCommerceArtifactJson.certificationArtifacts.commerce.productApiHandoffReady === false &&
+    untargetedCommerceArtifactJson.certificationArtifacts.commerce.orderApiHandoffReady === false,
+  'Doctor should reject Commerce artifacts when Products/Orders schema handoffs exist but lack BACKY_COMMERCE_CERTIFY_SITE_ID target proof.',
+);
+
+const invalidCertificationArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: commerceArtifactPath,
+});
+assert(
+  invalidCertificationArtifact.code === 1,
+  `Doctor should reject a configured artifact with the wrong schema, got ${invalidCertificationArtifact.code}.`,
+);
+const invalidCertificationArtifactJson = parseJson(invalidCertificationArtifact, 'invalid certification artifact doctor');
+assert(
+  invalidCertificationArtifactJson.failures.includes('Settings certification artifact') &&
+    invalidCertificationArtifactJson.certificationArtifacts.settings.contractReady === false,
+  'Doctor should report configured artifact schema failures in the Settings artifact verifier.',
+);
 
 const missingDatabase = await runDoctor({
   BACKY_RELEASE_CERTIFY_DATABASE: '1',
@@ -558,6 +1078,32 @@ const httpAliasNotification = await runDoctor({
 assert(
   httpAliasNotification.code === 0,
   `Doctor HTTP notification mode should accept transactional webhook URL alias, got ${httpAliasNotification.code}.`,
+);
+
+const missingPublicApiCors = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS: '1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+});
+assert(
+  missingPublicApiCors.code === 1,
+  `Doctor Public API/CORS mode should exit 1 without an origin, got ${missingPublicApiCors.code}.`,
+);
+const missingPublicApiCorsJson = parseJson(missingPublicApiCors, 'missing Public API/CORS doctor');
+assert(
+  missingPublicApiCorsJson.failures.includes('Public API CORS origin'),
+  'Doctor Public API/CORS mode should report missing origin failure.',
+);
+
+const publicApiCorsAlias = await runDoctor({
+  BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS: '1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_CORS_ALLOWED_ORIGINS: 'https://app.example.test',
+});
+assert(
+  publicApiCorsAlias.code === 0,
+  `Doctor Public API/CORS mode should accept BACKY_CORS_ALLOWED_ORIGINS, got ${publicApiCorsAlias.code}.`,
 );
 
 const missingVercelSecrets = await runDoctor({
@@ -1043,6 +1589,8 @@ await assertProviderAliasReady({
     RAZORPAY_KEY_SECRET: 'razorpay_alias_secret',
   },
 });
+
+fs.rmSync(artifactTempDir, { recursive: true, force: true });
 
 console.log(JSON.stringify({
   ok: true,

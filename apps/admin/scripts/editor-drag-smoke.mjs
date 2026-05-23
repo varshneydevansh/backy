@@ -98,6 +98,28 @@ const FORM_BUILDER_FIELD = {
   required: true,
 };
 const FORM_SCHEMA_FIELDS_WITH_BUILDER = [...FORM_SCHEMA_FIELDS, FORM_BUILDER_FIELD];
+const FORM_APPEARANCE_SPEC = {
+  labelColor: '#0f172a',
+  helpTextColor: '#7c2d12',
+  fieldBackgroundColor: '#f0fdfa',
+  fieldBorderColor: '#0f766e',
+  fieldBorderRadius: 10,
+  submitBackgroundColor: '#f59e0b',
+  submitColor: '#111827',
+  submitBorderRadius: 14,
+};
+const hexToRgbString = (hex) => {
+  const normalized = hex.replace('#', '');
+  const expanded = normalized.length === 3
+    ? normalized.split('').map((char) => `${char}${char}`).join('')
+    : normalized;
+  const value = Number.parseInt(expanded, 16);
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+
+  return `rgb(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255})`;
+};
 const createSmokeUploadImageFile = () => {
   const filename = `backy-editor-upload-smoke-${Date.now().toString(36)}.png`;
   const filePath = path.join(os.tmpdir(), filename);
@@ -194,10 +216,36 @@ const assert = (condition, message) => {
   }
 };
 
+const catalogItemsMissingResponsiveDefaults = (catalogSource) => (
+  catalogSource
+    .split(/\n  \{\n/)
+    .slice(1)
+    .map((chunk) => `  {\n${chunk.split(/\n  \},?\n/)[0]}\n  }`)
+    .map((itemSource) => {
+      const id = itemSource.match(/\bid:\s*'([^']+)'/)?.[1] || '';
+      const type = itemSource.match(/\btype:\s*'([^']+)'/)?.[1] || '';
+      const name = itemSource.match(/\bname:\s*'([^']+)'/)?.[1] || '';
+      return {
+        id,
+        type,
+        name,
+        hasDefaultSize: itemSource.includes('defaultSize:'),
+        hasResponsive: itemSource.includes('defaultResponsive:'),
+      };
+    })
+    .filter((item) => (
+      item.hasDefaultSize &&
+      !item.hasResponsive
+    ))
+    .map((item) => `${item.id || item.type}:${item.name || 'Unnamed'}`)
+);
+
 const assertPageEditorFallbackIsReadOnly = () => {
   const source = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
   const visualDiffSource = fs.readFileSync(new URL('../src/components/editor/RevisionCanvasVisualDiff.tsx', import.meta.url), 'utf8');
   const revisionMetadataSource = fs.readFileSync(new URL('../src/lib/revisionMetadata.ts', import.meta.url), 'utf8');
+  const pageRevisionRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/pages/[pageId]/revisions/route.ts', import.meta.url), 'utf8');
+  const revisionBranchMetadataSource = fs.readFileSync(new URL('../../public/src/lib/contentRevisionBranchMetadata.ts', import.meta.url), 'utf8');
   assert(source.includes('isUsingLocalPageCopy'), 'Page editor must track backend-load fallback state');
   assert(source.includes('localPageCopyDisabledMessage'), 'Page editor must explain that local fallback copies are read-only');
   assert(source.includes('canEdit={canEditPage && !isUsingLocalPageCopy}'), 'Page editor canvas editing must be disabled for local fallback copies');
@@ -216,7 +264,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('details: PageRevisionDiffDetail[]') && source.includes('data-testid={`page-editor-revision-diff-details-${revision.id}`}') && source.includes('Snapshot </span>'), 'Page editor revision cards must show field-level diff details, not only summary text');
   assert(source.includes('compareCanvasRevisionElements') && source.includes('elementDiff: CanvasRevisionElementDiff') && source.includes('data-testid={`page-editor-revision-element-diff-${revision.id}`}'), 'Page editor revision cards must show canvas element/property diffs');
   assert(source.includes('<details className="pl-2"') && source.includes('change.properties.map((property)') && source.includes('changed propert{change.propertyChangeCount === 1'), 'Page editor revision cards must drill into changed element properties');
-  assert(source.includes('RevisionCanvasVisualDiff') && source.includes('testId={`page-editor-revision-visual-diff-${revision.id}`}') && source.includes('currentElements={editorElements}'), 'Page editor revision cards must show side-by-side visual canvas diffs');
+  assert(source.includes('RevisionCanvasVisualDiff') && source.includes('testId={`page-editor-revision-visual-diff-${revision.id}`}') && source.includes('currentElements={currentCanvasElements}'), 'Page editor revision cards must show side-by-side visual canvas diffs against the live edited canvas');
   assert(visualDiffSource.includes('Visual diff focus') && visualDiffSource.includes('changeIndexById') && visualDiffSource.includes('data-testid={`${testId}-focus`}'), 'Shared revision visual diff must show numbered changed-element focus markers');
   assert(source.includes('renderedPixelDiff: RevisionCanvasPixelComparison') && source.includes('getRevisionCanvasPixelComparison') && source.includes('pixelComparison={revisionDiff.renderedPixelDiff}'), 'Page editor revision diffs must include rendered pixel comparison metadata in cards and handoff manifests');
   assert(visualDiffSource.includes('Rendered pixel comparison') && visualDiffSource.includes('data-testid={`${testId}-pixel-comparison`}') && visualDiffSource.includes('data-changed-pixels') && visualDiffSource.includes('changedPixelRatio'), 'Shared revision visual diff must expose sampled rendered-pixel comparison metrics');
@@ -233,11 +281,64 @@ const assertPageEditorFallbackIsReadOnly = () => {
       source.includes('data-testid="page-editor-copy-revision-branch-graph"') &&
       source.includes('data-testid="page-editor-revision-branch-edges"') &&
       source.includes('restoreTargetId') &&
-      source.includes('branchRole'),
-    'Page editor revision graph must expose branch-aware rollback graph lanes, inferred restore edges, copyable graph JSON, and handoff metadata.',
+      source.includes('branchRole') &&
+      source.includes('revision.branchMetadata?.schemaVersion === \'backy.content-revision-branch-metadata.v1\'') &&
+      source.includes('revision-api-branch-metadata') &&
+      source.includes('explicit-api-metadata') &&
+      source.includes('parentRevisionId: revision.parentRevisionId') &&
+      source.includes('operation: revision.operation') &&
+      source.includes('restoreTargetRevisionId: revision.restoreTargetRevisionId') &&
+      source.includes('branchMetadata,') &&
+      pageRevisionRouteSource.includes('withContentRevisionBranchMetadata(result.items, \'admin-page-revisions-api\')') &&
+      pageRevisionRouteSource.includes('withContentRevisionBranchMetadata(payload.revisions, \'admin-page-revisions-api\')') &&
+      revisionBranchMetadataSource.includes('backy.content-revision-branch-metadata.v1') &&
+      revisionBranchMetadataSource.includes('CONTENT_REVISION_RESTORE_TARGET_PATTERN') &&
+      revisionBranchMetadataSource.includes('persisted-revision-lineage') &&
+      revisionBranchMetadataSource.includes('parentRevisionId') &&
+      revisionBranchMetadataSource.includes('restoreTargetRevisionId') &&
+      revisionBranchMetadataSource.includes('persistedFields'),
+    'Page editor revision graph must consume persisted backend branch metadata, expose rollback graph lanes, copyable graph JSON, and handoff metadata.',
   );
-  assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="page-editor-restore-impact"') && source.includes('data-testid="page-editor-confirm-restore"') && source.includes('Current </span>'), 'Page editor restore confirmation must preview restore impact before rollback');
-  assert(source.includes('data-testid={`page-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Page editor revisions must expose actor/action metadata in cards and handoff summaries');
+	  assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="page-editor-restore-impact"') && source.includes('data-testid="page-editor-confirm-restore"') && source.includes('Current </span>'), 'Page editor restore confirmation must preview restore impact before rollback');
+	  assert(source.includes('data-testid={`page-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('operation') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Page editor revisions must expose persisted operation plus actor/action metadata in cards and handoff summaries');
+	  assert(
+	    source.includes("schemaVersion: 'backy.page-publish-impact.v1'") &&
+	      source.includes('const getPageRelationParentId') &&
+	      source.includes('directChildPages') &&
+	      source.includes('descendantPages') &&
+	      source.includes('navigationPlacement') &&
+	      source.includes('publishImpact: pagePublishImpact') &&
+	      source.includes('data-testid="page-editor-publish-impact"') &&
+	      source.includes('data-testid="page-editor-copy-publish-impact"') &&
+	      source.includes('data-testid="page-editor-publish-impact-children"') &&
+	      source.includes('includesCanvasContent: false'),
+	    'Page editor publish panel must expose a copyable relation/navigation publish-impact handoff before status changes',
+	  );
+	  assert(
+	    source.includes('canvasElementsToBackyContentDocument') &&
+      source.includes('const [currentCanvasElements, setCurrentCanvasElements] = useState<CanvasElement[]>(editorElements);') &&
+      source.includes('const [currentCanvasSize, setCurrentCanvasSize] = useState<CanvasSize>(initialCanvasSize);') &&
+      source.includes('setCurrentCanvasElements(editorElements);') &&
+      source.includes('setCurrentCanvasSize(initialCanvasSize);') &&
+      source.includes('onChange={(elements, _settings, size) => {') &&
+      source.includes('setCurrentCanvasElements(elements);') &&
+      source.includes('setCurrentCanvasSize(size);') &&
+      source.includes("schemaVersion: 'backy.custom-frontend-design-envelope.v1'") &&
+      source.includes('source: initialContentDocument ?') &&
+      source.includes('contentDocumentSummary: {') &&
+      source.includes('contentDocument: currentDesignDocument') &&
+      source.includes('elements: currentCanvasElements') &&
+      source.includes('canvasSize: currentCanvasSize') &&
+      source.includes('customCSS: initialCustomCSS ||') &&
+      source.includes('customJS: initialCustomJS ||') &&
+      source.includes('themeTokenRefCount: recordKeyCount(currentDesignDocument.themeTokenRefs)') &&
+      source.includes('assetCount: arrayCount(currentDesignDocument.assets?.media) + arrayCount(currentDesignDocument.assets?.fonts)') &&
+      source.includes('animationTimelineCount: arrayCount(currentDesignDocument.metadata?.animations)') &&
+      source.includes('dataBindingDatasetCount: arrayCount(currentDesignDocument.dataBindings?.datasets)') &&
+      source.includes('editableFieldCount: recordKeyCount(currentDesignDocument.editableMap)') &&
+      source.includes('editorComposition: currentDesignDocument.metadata?.editorComposition || null'),
+    'Page editor handoff manifest must expose the stored custom frontend design envelope and editor composition metadata for custom frontends',
+  );
 };
 
 const assertCanvasEditorShortcutSource = () => {
@@ -284,6 +385,10 @@ const assertCanvasEditorShortcutSource = () => {
   assert(smokeSource.includes('testEditorShellPanelShortcuts') && smokeSource.includes("await pressKey(client, 'b')") && smokeSource.includes("await pressKey(client, 'i')") && smokeSource.includes("await pressKey(client, 'l')") && smokeSource.includes("await pressKey(client, 'f')"), 'Editor shortcuts browser smoke must exercise shell panel and focus shortcuts');
   assert(source.includes('data-testid="editor-toggle-selection-visibility"') && source.includes('handleSelectedVisibilityToggle') && source.includes('selectedLayersAreHidden'), 'Editor toolbar must expose selected-layer visibility toggle');
   assert(source.includes('data-testid="editor-toggle-selection-lock"') && source.includes('handleSelectedLockToggle') && source.includes('selectedLayersAreLocked'), 'Editor toolbar must expose selected-layer lock toggle');
+  assert(source.includes('const parseEditorBoolean =') && source.includes('const isLayerHidden =') && source.includes('const isLayerLocked ='), 'Editor layer visibility and lock checks must normalize boolean-like persisted values');
+  assert(source.includes('normalizeResponsiveFieldValue') && source.includes('parseEditorBoolean(value, true)') && source.includes('parseEditorBoolean(value, false)'), 'Editor responsive visible/locked overrides must normalize boolean-like persisted values');
+  assert(source.includes('selectedActiveElements.every(isLayerHidden)') && source.includes('selectedActiveElements.every(isLayerLocked)'), 'Editor selected-layer state toggles must use normalized hidden/locked helpers');
+  assert(layersPanelSource.includes('const parseLayerBoolean =') && layersPanelSource.includes('isHidden={isLayerHidden(element)}') && layersPanelSource.includes('canReorder={!disabled && !isLayerLocked(element)}'), 'Layers panel must normalize boolean-like visible/locked values for row state and reorder guards');
   assert(source.includes('data-testid="editor-inspector-selection-state-actions"') && source.includes('data-testid="editor-inspector-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-toggle-selection-lock"'), 'Editor multi-selection inspector must expose local selected-layer visibility and lock toggles');
   assert(source.includes('data-testid="editor-inspector-single-selection-state-actions"') && source.includes('data-testid="editor-inspector-single-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-single-toggle-selection-lock"'), 'Editor single-selection inspector must expose local selected-layer visibility and lock toggles');
   assert(source.includes("selectedIds.length > 1 ? 'selected layers' : 'selected layer'"), 'Editor selected-layer toolbar actions must label multi-selection states');
@@ -338,8 +443,37 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-inspector-layer-name"') && source.includes('handleLayerRename(selectedElement.id') && source.includes('placeholder={selectedElementTypeLabel'), 'Editor inspector must expose a selected-layer name editor');
   assert(source.includes('data-testid="editor-group-selection"') && source.includes('data-testid="editor-inspector-group-selection"') && source.includes('aria-keyshortcuts="Control+G Meta+G"'), 'Editor group actions must expose Cmd/Ctrl+G through aria-keyshortcuts');
   assert(source.includes('data-testid="editor-ungroup-selection"') && source.includes('data-testid="editor-inspector-single-ungroup-selection"') && source.includes('aria-keyshortcuts="Shift+Control+G Shift+Meta+G"'), 'Editor ungroup actions must expose Shift+Cmd/Ctrl+G through aria-keyshortcuts');
-  assert(source.includes('backy.editor-composition-readiness.v1') && source.includes('data-testid="editor-composition-readiness"') && source.includes('data-testid="editor-composition-metrics"'), 'Editor inspector must expose a composition readiness contract for grouped and nested canvas trees');
+  assert(
+    source.includes('backy.editor-composition-readiness.v1') &&
+      source.includes('data-testid="editor-composition-readiness"') &&
+      source.includes('data-testid="editor-composition-metrics"') &&
+      source.includes('data-testid="editor-composition-design-state-metrics"') &&
+      source.includes('animatedLayers') &&
+      source.includes('EDITOR_ACTION_PROP_KEYS') &&
+      source.includes('actionLayers') &&
+      source.includes('dataBoundLayers') &&
+      source.includes('assetBoundLayers') &&
+      source.includes('interactiveLayers') &&
+      source.includes('data-design-state-layers={editorCompositionReadiness.metrics.designStateLayerCount}'),
+    'Editor inspector must expose a composition readiness contract for grouped, animated, data-bound, asset-bound, and interactive canvas trees',
+  );
   assert(source.includes('backy.editor-composition-action-plan.v1') && source.includes('copyEditorCompositionPlan') && source.includes('data-testid="editor-copy-composition-plan"'), 'Editor inspector must expose a copyable composition action plan for custom frontend and operator handoff');
+  assert(
+    source.includes('backy.editor-command-registry.v1') &&
+      source.includes('type EditorCommandRegistryItem') &&
+      source.includes('commandRegistry: editorCommandRegistry') &&
+      source.includes('copyEditorCommandRegistry') &&
+      source.includes('data-testid="editor-command-registry"') &&
+      source.includes('data-testid="editor-copy-command-registry"') &&
+      source.includes('data-command-ids={editorCompositionReadiness.commandRegistry.commands.map((command) => command.id).join(\' \')}') &&
+      source.includes("id: 'group-selection'") &&
+      source.includes("testId: 'editor-group-selection'") &&
+      source.includes("id: 'ungroup-selection'") &&
+      source.includes("id: 'paste-selection'") &&
+      source.includes("id: 'toggle-grid'") &&
+      source.includes("id: 'save-page'"),
+    'Editor inspector must expose a copyable command registry with stable ids, shortcuts, test ids, target scopes, and action state for custom admin/frontends',
+  );
   assert(smokeSource.includes('testRichTextSelectionPreservedAcrossPropertyPanelFocus') && smokeSource.includes('focusPropertyControlByTestId') && smokeSource.includes('Property-panel focus did not move away from the canvas editor'), 'Editor rich-text smoke must prove selected text survives focus movement into right-panel controls');
   assert(activeEditorSource.includes('rootChildren[currentListIndex] = adjacentListClone;') && activeEditorSource.includes('rootChildren[adjacentListIndex] = currentListClone;'), 'Rich-text list move controls must swap root-adjacent single-item lists in both directions');
   assert(activeEditorSource.includes('(!Range.isCollapsed(storedRange) && Range.isCollapsed(incomingSelection))'), 'Active editor reactivation must preserve valid stored caret/table selections when no live incoming selection is available');
@@ -386,10 +520,52 @@ const assertCanvasEditorShortcutSource = () => {
 
 const assertPropertyPanelColorControlsSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
+  const animationBuilderSource = fs.readFileSync(new URL('../src/components/editor/AnimationBuilder.tsx', import.meta.url), 'utf8');
+  const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  const pageEditorSource = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
+  const pageRendererSource = fs.readFileSync(new URL('../../../apps/public/src/components/PageRenderer.tsx', import.meta.url), 'utf8');
   assert(source.includes('const EDITOR_COLOR_SWATCHES = ['), 'Editor property panel must define reusable quick color swatches');
   assert(source.includes('normalizeHexColorInputValue') && source.includes('data-testid={testId ? `${testId}-picker` : undefined}'), 'Editor color inputs must keep native color pickers valid for typed CSS values');
   assert(source.includes('data-testid={testId ? `${testId}-swatches` : undefined}') && source.includes('`${testId}-swatch-${swatch.slice(1)}`'), 'Editor color inputs must expose testable quick swatch buttons');
   assert(source.includes("onClick={() => onChange('transparent')}") && source.includes('`${testId}-transparent`'), 'Editor color inputs must expose a transparent swatch for reset/clear styling');
+  assert(source.includes('const THEME_TOKEN_TARGETS: ThemeTokenTarget[] = [') && source.includes("targetPath: 'styles.color'") && source.includes("targetPath: 'styles.backgroundColor'"), 'Editor property panel must expose theme-token binding targets for element styles');
+  assert(source.includes('data-testid="editor-theme-token-bindings"') && source.includes('data-token-ref-path="tokenRefs"') && source.includes('themeTokenSelectTestId'), 'Editor property panel must expose stable tokenRefs binding controls');
+  assert(source.includes('nextTokenRefs[target.targetPath] = tokenPath') && source.includes('props: nextProps') && source.includes('tokenRefs: Object.keys(nextTokenRefs).length > 0 ? nextTokenRefs : undefined'), 'Editor theme token bindings must persist tokenRefs while mirroring CSS variable values into element props');
+  assert(source.includes('data-testid="editor-animation-token-bindings"') && source.includes('data-token-ref-path="animation.tokenRefs"') && source.includes('editor-animation-token-select-duration') && source.includes('editor-animation-token-select-easing'), 'Editor animation panel must expose stable motion token binding controls');
+  assert(source.includes('updateAnimationTokenRef') && source.includes('nextTokenRefs[target] = tokenPath') && source.includes('parseCssDurationToSeconds'), 'Editor animation token bindings must persist duration/easing token refs while resolving usable animation values');
+  assert(
+    source.includes('testId="editor-form-field-background-color"') &&
+      source.includes('testId="editor-form-field-border-color"') &&
+      source.includes('testId="editor-form-field-border-radius"') &&
+      source.includes('testId="editor-form-submit-background-color"') &&
+      source.includes('testId="editor-form-submit-color"') &&
+      source.includes('testId="editor-form-submit-border-radius"') &&
+      source.includes('onChange={(value) => onChange({ fieldBackgroundColor: value })}') &&
+      source.includes('onChange={(value) => onChange({ submitBackgroundColor: value })}'),
+    'Editor form property panel must expose field and submit appearance controls that persist onto form props',
+  );
+  assert(
+    pageRendererSource.includes('props.fieldBackgroundColor') &&
+      pageRendererSource.includes('props.fieldBorderColor') &&
+      pageRendererSource.includes('props.fieldBorderRadius ?? props.borderRadius') &&
+      pageRendererSource.includes('props.submitBackgroundColor') &&
+      pageRendererSource.includes('props.submitColor') &&
+      pageRendererSource.includes('props.submitBorderRadius || props.borderRadius'),
+    'Public page renderer must honor form field and submit appearance props from the editor',
+  );
+  assert(
+    animationBuilderSource.includes('parseCustomAnimationObject') &&
+      animationBuilderSource.includes('data-testid="editor-animation-custom-props"') &&
+      animationBuilderSource.includes('data-testid="editor-animation-custom-from"') &&
+      animationBuilderSource.includes('data-testid="editor-animation-custom-to"') &&
+      animationBuilderSource.includes('data-testid="editor-animation-custom-defaults"') &&
+      animationBuilderSource.includes('updateConfig(target ===') &&
+      animationBuilderSource.includes('Use a JSON object'),
+    'Editor animation builder must expose custom GSAP from/to JSON controls instead of a dead Custom option',
+  );
+  assert(editorSource.includes('buildBackyThemeCssVariables') && editorSource.includes('editorThemeCssVariables') && editorSource.includes('theme={theme}'), 'Canvas editor must inject compiled theme CSS variables and pass site theme into the property panel');
+  assert(editorSource.includes("key === 'tokenRefs'") && editorSource.includes('override.tokenRefs') && editorSource.includes('delete nextOverride.tokenRefs'), 'Canvas editor responsive style overrides must preserve and reset per-breakpoint tokenRefs');
+  assert(pageEditorSource.includes('theme={selectedSite?.theme}'), 'Page editor route must pass the active site theme into the canvas editor');
 };
 
 const assertEditorInteractiveSandboxPreviewSource = () => {
@@ -443,7 +619,13 @@ const assertInteractiveRegistryVersionPinningSource = () => {
   assert(source.includes('applyInteractiveBindingPreset') && source.includes('dataBindingTargetPath'), 'Interactive binding preset picker must persist the selected target path into element props');
   assert(source.includes('editor-interactive-control-schema-preview'), 'Interactive registry inspector must render schema-driven control previews');
   assert(source.includes('updateInteractiveControlValue') && source.includes('controls: nextControls'), 'Interactive registry controls must persist edited control values');
-  assert(source.includes('[controlKey]: value'), 'Interactive registry controls must mirror edited values into element props for renderers');
+  assert(source.includes('normalizeInteractiveControlValue(control, value)') && source.includes('[controlKey]: normalizedValue'), 'Interactive registry controls must normalize edited values before mirroring them into element props for renderers');
+  assert(source.includes('parseBooleanSetting(rawValue, false)') && !source.includes('checked={Boolean(rawValue)}'), 'Interactive toggle controls must normalize saved boolean-like values instead of treating string false as enabled');
+  assert(source.includes('normalizeHexColorInputValue(stringValue') && source.includes("controlType === 'color'") && source.includes('normalizeHexColorInputValue(e.target.value)'), 'Interactive color controls must normalize registry values before writing them back');
+  assert(source.includes('normalizeInteractiveNumericControlValue') && source.includes('getInteractiveNumericBound') && source.includes("controlType === 'range' || controlType === 'number'"), 'Interactive range and number controls must clamp numeric values to registry bounds');
+  assert(source.includes('type InteractiveControlOption') && source.includes('rawValue: unknown') && source.includes('getInteractiveControlOptionValue'), 'Interactive select/radio controls must preserve typed option values instead of flattening registry values to strings');
+  assert(source.includes("'select', 'radio'") && source.includes('data-testid={`editor-interactive-control-radio-${controlKey}`}'), 'Interactive registry controls must render radio option groups when a component declares a radio control');
+  assert(source.includes("'textarea', 'json', 'code'") && source.includes('formatInteractiveJsonControlValue') && source.includes('normalizeInteractiveJsonControlValue'), 'Interactive registry controls must support textarea/code/JSON controls with JSON object parsing');
 
   const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
   assert(editorSource.includes('/api/sites/:siteId/interactive-components/:componentKey/:version/sandbox'), 'Interactive publish readiness must require the Backy-owned sandbox route');
@@ -453,11 +635,23 @@ const assertInteractiveRegistryVersionPinningSource = () => {
   for (const componentKey of ['backy.figure.rounds', 'backy.figure.timeline', 'backy.simulation.parameter', 'backy.data.explorer', 'backy.canvas.sandboxed']) {
     assert(catalogSource.includes(componentKey), `Editor component catalog must include ${componentKey}`);
   }
+  assert(catalogSource.includes("id: 'interactive-figure-rounds'") && catalogSource.includes('mobile: { width: 335, height: 280 }'), 'Interactive self-correction figure preset must carry mobile responsive geometry');
+  assert(catalogSource.includes("id: 'interactive-figure-stepper'") && catalogSource.includes('mobile: { width: 335, height: 300 }'), 'Interactive stepper preset must carry mobile responsive geometry');
+  assert(catalogSource.includes("id: 'interactive-figure-line-chart'") && catalogSource.includes('mobile: { width: 335, height: 300 }'), 'Interactive line-chart preset must carry mobile responsive geometry');
+  assert(catalogSource.includes("id: 'interactive-figure-timeline'") && catalogSource.includes('tablet: { width: 640, height: 340 }') && catalogSource.includes('mobile: { width: 335, height: 320 }'), 'Interactive timeline preset must carry tablet/mobile responsive geometry');
+  assert(catalogSource.includes("id: 'interactive-simulation-parameter'") && catalogSource.includes('mobile: { width: 335, height: 390 }'), 'Interactive simulation preset must carry mobile responsive geometry');
+  assert(catalogSource.includes("id: 'interactive-data-explorer'") && catalogSource.includes('tablet: { width: 680, height: 420 }') && catalogSource.includes('mobile: { width: 335, height: 420 }'), 'Interactive data explorer preset must carry tablet/mobile responsive geometry');
+  assert(catalogSource.includes("id: 'sandboxed-canvas-animation'") && catalogSource.includes('mobile: { width: 335, height: 360 }'), 'Sandboxed canvas animation preset must carry mobile responsive geometry');
+  assert(catalogSource.includes("id: 'sandboxed-code-component'") && catalogSource.includes('mobile: { width: 335, height: 300 }'), 'Sandboxed code component preset must carry mobile responsive geometry');
+  assert(catalogSource.includes("key: 'accentColor'") && catalogSource.includes("type: 'color'"), 'Sandboxed canvas preset must expose a color control for custom component styling');
+  assert(catalogSource.includes("key: 'caption'") && catalogSource.includes("type: 'textarea'"), 'Sandboxed canvas preset must expose a textarea control for accessible fallback copy');
+  assert(catalogSource.includes("key: 'runtimeConfig'") && catalogSource.includes("type: 'json'"), 'Sandboxed canvas preset must expose a JSON control for structured runtime config');
 
   const registrySource = fs.readFileSync(new URL('../../../apps/public/src/lib/interactiveComponentRegistry.ts', import.meta.url), 'utf8');
   assert(registrySource.includes('dependencyPolicy') && registrySource.includes('compatibility'), 'Public interactive registry must expose dependency policy and compatibility metadata');
   assert(registrySource.includes('dataBindingPresets') && registrySource.includes('signedSandboxDependencyPolicy'), 'Public interactive registry must expose binding presets and sandbox dependency policy presets');
   assert(registrySource.includes('backy.figure.rounds') && registrySource.includes('self-correction'), 'Public interactive registry must expose the communication-round/self-correction figure preset');
+  assert(registrySource.includes("key: 'accentColor'") && registrySource.includes("type: 'color'") && registrySource.includes("key: 'runtimeConfig'") && registrySource.includes("type: 'json'"), 'Public interactive registry must advertise rich sandbox control types for custom editor clients');
 };
 
 const assertComponentLibraryEmptyStateSource = () => {
@@ -476,8 +670,27 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(source.includes("{ id: 'content', name: 'Content'") && source.includes("case 'BookmarkPlus':"), 'Editor component library must expose a content category and icon mapping for blog/content presets');
   assert(typeSource.includes("defaultResponsive?: CanvasElement['responsive']") && typeSource.includes("responsive?: CanvasElement['responsive']"), 'Editor component presets must type root and child responsive override defaults');
   assert(typeSource.includes('export interface ComponentBindingSlot') && typeSource.includes('bindingSlots?: ComponentBindingSlot[]') && typeSource.includes('defaultBindingSlots?: ComponentBindingSlot[]'), 'Editor component presets must type binding-slot metadata for root and child preset fields');
-  assert(catalogSource.includes('const cloneDefaultResponsive =') && catalogSource.includes('responsive: cloneDefaultResponsive(child.responsive)') && catalogSource.includes('responsive: cloneDefaultResponsive(item.defaultResponsive)'), 'Editor catalog must clone responsive defaults for composed presets');
-  assert(catalogSource.includes('const cloneDefaultBindingSlots =') && catalogSource.includes('bindingSlots: cloneDefaultBindingSlots(child.bindingSlots)') && catalogSource.includes('bindingSlots: cloneDefaultBindingSlots(item.defaultBindingSlots)'), 'Editor catalog must clone binding-slot metadata for composed presets');
+  assert(catalogSource.includes('const cloneDefaultResponsive =') && catalogSource.includes('responsive: cloneDefaultResponsive(child.responsive)') && catalogSource.includes('responsive: mergeResponsiveDefaults(item.defaultResponsive, overrideResponsive)'), 'Editor catalog must clone and merge responsive defaults for composed presets');
+  const responsiveCatalogGaps = catalogItemsMissingResponsiveDefaults(catalogSource);
+  assert(responsiveCatalogGaps.length === 0, `Editor catalog items with defaultSize must define defaultResponsive: ${responsiveCatalogGaps.join(', ')}`);
+  assert(
+    catalogSource.includes('const mergeResponsiveDefaults = (') &&
+      catalogSource.includes('const responsive = mergeResponsiveDefaults(definition?.defaultResponsive, overrides.responsive)') &&
+      catalogSource.includes('const props = mergeUnknownRecord(') &&
+      catalogSource.includes('const styles = mergeCssProperties(definition ? cloneDefaultStyles(definition.defaultStyles) : undefined, overrides.styles)') &&
+      catalogSource.includes('const bindingSlots = overrides.bindingSlots') &&
+      catalogSource.includes(': definition ? cloneDefaultBindingSlots(definition.defaultBindingSlots) : undefined'),
+    'Programmatic createCanvasElement calls must preserve merged catalog props, styles, binding slots, and responsive defaults before explicit overrides',
+  );
+  assert(
+    catalogSource.includes('props: mergeUnknownRecord(cloneDefaultProps(item.defaultProps || {}), overrideProps) || {}') &&
+      catalogSource.includes('styles: mergeCssProperties(cloneDefaultStyles(item.defaultStyles), overrideStyles)') &&
+      catalogSource.includes('responsive: mergeResponsiveDefaults(item.defaultResponsive, overrideResponsive)') &&
+      catalogSource.includes('bindingSlots: overrideBindingSlots') &&
+      catalogSource.includes('children: overrideChildren ?? item.defaultChildren?.map'),
+    'Library item insertion must merge item defaults with caller overrides without wiping responsive, prop, style, binding-slot, or child defaults',
+  );
+  assert(catalogSource.includes('const cloneDefaultBindingSlots =') && catalogSource.includes('bindingSlots: cloneDefaultBindingSlots(child.bindingSlots)') && catalogSource.includes('bindingSlots: overrideBindingSlots') && catalogSource.includes(': cloneDefaultBindingSlots(item.defaultBindingSlots)'), 'Editor catalog must clone and merge binding-slot metadata for composed presets');
   assert(propertyPanelSource.includes('function PresetBindingSlotsPanel') && propertyPanelSource.includes('data-testid="editor-data-binding-slots"') && propertyPanelSource.includes('applyBindingSlot') && propertyPanelSource.includes('bindingSlotFieldCandidates'), 'Editor Data panel must render preset binding slots and apply matching fields as real data bindings');
   assert(propertyPanelSource.includes('applyChildBindingSlots') && propertyPanelSource.includes('data-testid="editor-data-apply-child-binding-slots"') && propertyPanelSource.includes('VIRTUAL_COLLECTION_FIELD_PATHS'), 'Editor Data panel must apply descendant preset binding slots and support record URL/slug fields for composed sections');
   assert(propertyPanelSource.includes('const applyAllBindingSlots = () =>') && propertyPanelSource.includes('bindableSlotsForElement(nextElement, activeSlotCollection, collections)') && propertyPanelSource.includes('data-testid="editor-data-apply-all-binding-slots"'), 'Editor Data panel must bulk-apply matching root, descendant, and child binding slots from composed presets');
@@ -505,6 +718,13 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(catalogSource.includes("id: 'post-card-title'") && catalogSource.includes("fieldKey: 'title'") && catalogSource.includes("targetPath: 'props.content'"), 'Blog post card preset must expose binding slots for title content');
   assert(catalogSource.includes("id: 'latest-posts-records'") && catalogSource.includes("sourceKind: 'blog'") && catalogSource.includes("targetPath: 'children.Latest post repeater.props.collectionId'") && catalogSource.includes("id: 'latest-posts-category-field'"), 'Latest posts preset must expose collection and meta binding-slot metadata');
   assert(catalogSource.includes('defaultResponsive:') && catalogSource.includes('mobile: { width: 375, height: 870 }') && catalogSource.includes("mobile: { x: 20, y: 205, width: 335, height: 520, props: { columns: 1, limit: 3, gap: 14 } }"), 'Latest posts preset must include mobile responsive section and repeater geometry');
+  assert(catalogSource.includes("id: 'hero-section'") && catalogSource.includes('tablet: { width: 768, height: 620 }') && catalogSource.includes('mobile: { width: 375, height: 700 }') && catalogSource.includes('mobile: { x: 20, y: 420, width: 335, height: 230 }') && catalogSource.includes('mobile: { x: 16, y: 16, width: 303, height: 132 }'), 'Hero section preset must include root, media frame, and nested media responsive geometry');
+  assert(catalogSource.includes("id: 'feature-grid-section'") && catalogSource.includes('tablet: { width: 768, height: 650 }') && catalogSource.includes('mobile: { width: 375, height: 850 }') && catalogSource.includes('y: 270 + index * 180') && catalogSource.includes('mobile: { x: 18, y: 68, width: 295, height: 66, props: { fontSize: 13 } }'), 'Feature grid preset must include root, card, and nested text responsive geometry');
+  assert(catalogSource.includes("id: 'lead-capture-form'") && catalogSource.includes('tablet: { width: 400, height: 440 }') && catalogSource.includes('mobile: { width: 335, height: 455 }') && catalogSource.includes('mobile: { x: 18, y: 226, width: 299, height: 108 }') && catalogSource.includes('mobile: { x: 18, y: 360, width: 180, height: 48 }'), 'Lead capture form preset must include root and child field responsive geometry');
+  assert(catalogSource.includes("id: 'member-registration-form'") && catalogSource.includes('tablet: { width: 400, height: 570 }') && catalogSource.includes('mobile: { width: 335, height: 625 }') && catalogSource.includes('mobile: { x: 18, y: 394, width: 299, height: 70 }') && catalogSource.includes('mobile: { x: 18, y: 505, width: 190, height: 50 }'), 'Member registration form preset must include root, consent, and submit responsive geometry');
+  assert(catalogSource.includes("type: 'embed'") && catalogSource.includes('tablet: { width: 380, height: 280 }') && catalogSource.includes('mobile: { width: 335, height: 260 }'), 'Embed block preset must include tablet/mobile responsive geometry');
+  assert(catalogSource.includes("type: 'html'") && catalogSource.includes('tablet: { width: 340, height: 180 }') && catalogSource.includes('mobile: { width: 335, height: 190 }'), 'HTML block preset must include tablet/mobile responsive geometry');
+  assert(catalogSource.includes("type: 'table'") && catalogSource.includes('tablet: { width: 380, height: 240 }') && catalogSource.includes('mobile: { width: 335, height: 260 }'), 'Table block preset must include tablet/mobile responsive geometry');
   assert(catalogSource.includes("name: 'Category repeater'") && catalogSource.includes("datasetId: 'dataset_category_list'") && catalogSource.includes("targetPath: 'children.Category repeater.props.collectionId'") && catalogSource.includes("id: 'category-list-title-field'"), 'Category list preset must use a collection-ready taxonomy repeater with root and field binding slots');
   assert(catalogSource.includes("name: 'Related content repeater'") && catalogSource.includes("datasetId: 'dataset_related_content'") && catalogSource.includes("targetPath: 'children.Related content repeater.props.collectionId'") && catalogSource.includes("id: 'related-content-image-field'") && catalogSource.includes("id: 'related-content-category-field'"), 'Related content preset must use a collection-ready repeater with root and field binding slots');
   assert(catalogSource.includes("contentRole: 'related-content'") && catalogSource.includes('mobile: { width: 375, height: 950 }'), 'Related content preset must include mobile responsive geometry');
@@ -512,11 +732,103 @@ const assertComponentLibraryEmptyStateSource = () => {
 
 const assertMediaLibraryModalEmptyStateSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/MediaLibraryModal.tsx', import.meta.url), 'utf8');
+  const propertyPanelSource = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
+  const canvasSource = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
+  const canvasEditorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  const pageRendererSource = fs.readFileSync(new URL('../../../apps/public/src/components/PageRenderer.tsx', import.meta.url), 'utf8');
+  const contentMigrationSource = fs.readFileSync(new URL('../../../packages/core/src/content-migrations.ts', import.meta.url), 'utf8');
+  const sdkSource = fs.readFileSync(new URL('../../../packages/sdk-js/src/index.ts', import.meta.url), 'utf8');
+  const backyStoreSource = fs.readFileSync(new URL('../../../apps/public/src/lib/backyStore.ts', import.meta.url), 'utf8');
+  const repositoryMediaReferenceSource = fs.readFileSync(new URL('../../../apps/public/src/lib/repositoryMediaReferenceSync.ts', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor media library modal must use the shared EmptyState component');
   assert(source.includes('title="No media matches this view"'), 'Editor media library modal empty state must keep the shared title visible');
   assert(source.includes('Upload assets to this site or clear filters to attach existing files.'), 'Editor media library modal empty state must explain how to recover from filters');
-  assert(source.includes('disabled={Boolean(selectingMediaId) || isPrivateAsset}'), 'Editor media library modal must disable private assets at the button level');
+  assert(source.includes('allowPrivateSelection?: boolean'), 'Editor media library modal must expose an explicit private-selection opt-in prop');
+  assert(source.includes('allowPrivateSelection = false'), 'Editor media library modal must default private selection to disabled');
+  assert(source.includes("item.visibility === 'private' && !allowPrivateSelection"), 'Editor media library modal must keep the private asset insertion guard unless the caller opts in');
+  assert(source.includes('privateSelectionDisabled') && source.includes('data-media-private-select-allowed'), 'Editor media library modal must expose private selection enabled/disabled state for smoke coverage');
   assert(source.includes('Private media cannot be inserted directly into public editor fields.'), 'Editor media library modal must keep the private asset insertion guard visible');
+  assert(
+    source.includes('data-media-folder-path={folderPath}') &&
+      source.includes('data-media-folder-segments={folderSegments.join') &&
+      source.includes('data-media-organization-schema={item.organization?.schemaVersion ||') &&
+      propertyPanelSource.includes('const mediaOrganizationProps = (media: MediaAsset)') &&
+      propertyPanelSource.includes('mediaOrganization: media.organization') &&
+      propertyPanelSource.includes('mediaFolderPath: media.organization.folderPath') &&
+      propertyPanelSource.includes('imageMediaOrganization: media.organization') &&
+      propertyPanelSource.includes('fontMediaOrganization: font.organization'),
+    'Editor media picker selections must preserve versioned media organization breadcrumbs in element props for custom frontend handoff',
+  );
+  assert(
+    propertyPanelSource.includes("| 'downloadFile'") &&
+      propertyPanelSource.includes("setMediaAllowedTypes('file')") &&
+      propertyPanelSource.includes("setMediaUploadFilter('file')") &&
+      propertyPanelSource.includes('buildMediaDownloadHref') &&
+      propertyPanelSource.includes("'disposition', 'attachment'") &&
+      propertyPanelSource.includes('fileDownloadIdentityProps') &&
+      propertyPanelSource.includes('fileIds: [media.id]') &&
+      propertyPanelSource.includes('fileMediaId: media.id') &&
+      propertyPanelSource.includes('fileMediaIds: [media.id]') &&
+      propertyPanelSource.includes('downloadMediaId: media.id') &&
+      propertyPanelSource.includes('downloadMediaIds: [media.id]') &&
+      propertyPanelSource.includes("fileSignedUrlRequired: (media.visibility || 'public') === 'private'") &&
+      propertyPanelSource.includes('fileSignedUrlEndpoint: mediaContext?.siteId') &&
+      propertyPanelSource.includes('...cleanMediaStrings(props.fileIds)') &&
+      propertyPanelSource.includes('data-testid={`editor-${prefix}-download-media`}') &&
+      propertyPanelSource.includes("allowPrivateSelection={mediaField === 'downloadFile'}") &&
+      propertyPanelSource.includes('downloadFileAssetIdsFromProps(element.props)'),
+    'Editor buttons and links must open a file picker for download actions and persist stable downloadable media identity props, including signed-delivery metadata for private files',
+  );
+  assert(
+    canvasSource.includes("case 'link'") &&
+      canvasSource.includes("download={getBooleanWithFallback(p.download, false) ? '' : undefined}") &&
+      canvasSource.includes('fileDownloadDataAttributes(p)') &&
+      canvasSource.includes('const isCanvasElementHidden =') &&
+      canvasSource.includes('const isCanvasElementLocked =') &&
+      canvasSource.includes('const isHidden = isCanvasElementHidden(element)') &&
+      canvasSource.includes("'data-backy-file-id': fileMediaId || undefined") &&
+      canvasSource.includes('firstTextFromList(props.fileIds)') &&
+      canvasSource.includes('getBooleanWithFallback(props.fileSignedUrlRequired, false)') &&
+      pageRendererSource.includes('function LinkElement') &&
+      pageRendererSource.includes("download={getBooleanWithFallback(props.download, false) ? '' : undefined}") &&
+      pageRendererSource.includes('fileDownloadDataAttributes(props)') &&
+      pageRendererSource.includes("'data-backy-file-signed-url-required'"),
+    'Editor preview and public renderer must honor download-enabled link elements and expose signed-download metadata',
+  );
+  for (const sourceText of [propertyPanelSource, canvasEditorSource, contentMigrationSource, sdkSource, backyStoreSource, repositoryMediaReferenceSource]) {
+    assert(
+      sourceText.includes('fileIds') &&
+        sourceText.includes('fileMediaIds') &&
+        sourceText.includes('downloadMediaIds') &&
+        sourceText.includes('fileMediaId') &&
+        sourceText.includes('downloadMediaId'),
+      'Downloadable file media ids and plural aliases must be collected as asset references across editor, core, SDK, and repository sync paths',
+    );
+  }
+};
+
+const assertPageSettingsModalValidationSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/PageSettingsModal.tsx', import.meta.url), 'utf8');
+  assert(source.includes('const [settingsSubmitted, setSettingsSubmitted] = useState(false);'), 'Page settings modal must track attempted saves for reachable inline validation');
+  assert(source.includes('const [jsonLdInlineError, setJsonLdInlineError] = useState<string | null>(null);'), 'Page settings modal must expose JSON-LD field-level validation');
+  assert(source.includes('setSettingsSubmitted(true);'), 'Page settings Save must stay reachable and trigger custom validation on submit');
+  assert(source.includes('aria-invalid={Boolean(titleInlineError)}') && source.includes("aria-describedby={titleInlineError ? 'page-settings-title-error' : undefined}"), 'Page settings title field must expose inline validation semantics');
+  assert(source.includes('aria-invalid={Boolean(slugInlineError)}') && source.includes("aria-describedby={slugInlineError ? 'page-settings-slug-error' : undefined}"), 'Page settings slug field must expose inline validation semantics');
+  assert(source.includes('data-testid="page-settings-scheduled-at-error"'), 'Page settings scheduled publish date must show a field-level validation error');
+  assert(source.includes('data-testid="page-settings-json-ld-error"'), 'Page settings JSON-LD must show a field-level validation error');
+  assert(source.includes('disabled={isSavingSettings || !canEdit}'), 'Page settings Save must not be disabled by editable validation errors');
+  assert(!source.includes('disabled={Boolean(settingsValidation) || isSavingSettings || !canEdit}'), 'Page settings Save must not use disabled-only settings validation');
+};
+
+const assertCanvasReusableSectionValidationSource = () => {
+  const source = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  assert(source.includes('const [reusableSectionDraftSubmitted, setReusableSectionDraftSubmitted] = useState(false);'), 'Canvas reusable section dialog must track attempted saves for reachable inline validation');
+  assert(source.includes('const reusableSectionDraftNameInlineError = reusableSectionDraftSubmitted'), 'Canvas reusable section dialog must derive field-level name validation after submit');
+  assert(source.includes("setEditorNotice('Fix required reusable section fields before saving.');"), 'Canvas reusable section dialog must block blank names with focused validation copy');
+  assert(source.includes('data-testid="editor-reusable-section-name-input"') && source.includes('data-testid="editor-reusable-section-name-error"'), 'Canvas reusable section dialog must expose stable name validation test ids');
+  assert(source.includes('aria-invalid={Boolean(reusableSectionDraftNameInlineError)}') && source.includes("aria-describedby={reusableSectionDraftNameInlineError ? 'editor-reusable-section-name-error' : undefined}"), 'Canvas reusable section name input must expose inline validation semantics');
+  assert(source.includes('data-testid="editor-reusable-section-save"') && source.includes('disabled={isSavingReusableSection}'), 'Canvas reusable section Save must remain reachable while validation is user-correctable');
+  assert(!source.includes('disabled={isSavingReusableSection || reusableSectionDraft.name.trim().length === 0}'), 'Canvas reusable section Save must not hide blank-name validation behind disabled-only state');
 };
 
 const requestApi = async (endpoint, options = {}) => {
@@ -4189,16 +4501,23 @@ const readEditorCompositionReadiness = async (client, label) => {
   const state = await evaluate(client, `(() => {
     const card = document.querySelector('[data-testid="editor-composition-readiness"]');
     const metrics = document.querySelector('[data-testid="editor-composition-metrics"]');
+    const designMetrics = document.querySelector('[data-testid="editor-composition-design-state-metrics"]');
     const copyButton = document.querySelector('[data-testid="editor-copy-composition-plan"]');
     return {
       label: ${JSON.stringify(label)},
       hasCard: Boolean(card),
       hasMetrics: Boolean(metrics),
+      hasDesignMetrics: Boolean(designMetrics),
       schema: card?.getAttribute('data-composition-schema') || '',
       actionPlanSchema: card?.getAttribute('data-action-plan-schema') || '',
       totalLayers: Number(card?.getAttribute('data-total-layers') || 0),
       groupLayers: Number(card?.getAttribute('data-group-layers') || 0),
       nestedLayers: Number(card?.getAttribute('data-nested-layers') || 0),
+      animatedLayers: Number(card?.getAttribute('data-animated-layers') || 0),
+      dataBoundLayers: Number(card?.getAttribute('data-data-bound-layers') || 0),
+      assetBoundLayers: Number(card?.getAttribute('data-asset-bound-layers') || 0),
+      interactiveLayers: Number(card?.getAttribute('data-interactive-layers') || 0),
+      designStateLayers: Number(card?.getAttribute('data-design-state-layers') || 0),
       selectedLayers: Number(card?.getAttribute('data-selected-layers') || 0),
       text: card?.textContent || '',
       copyTitle: copyButton?.getAttribute('title') || '',
@@ -4209,11 +4528,13 @@ const readEditorCompositionReadiness = async (client, label) => {
 
   assert(state.hasCard, `Editor composition readiness card missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.hasMetrics, `Editor composition metrics missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.hasDesignMetrics, `Editor composition design-state metrics missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.schema === 'backy.editor-composition-readiness.v1', `Editor composition readiness schema mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.actionPlanSchema === 'backy.editor-composition-action-plan.v1', `Editor composition action-plan schema mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyDisabled === false, `Editor composition copy plan button disabled during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyTitle === 'Copy editor composition action plan', `Editor composition copy title mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyLabel === 'Copy editor composition action plan', `Editor composition copy label mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.designStateLayers >= state.animatedLayers + state.dataBoundLayers + state.assetBoundLayers + state.interactiveLayers, `Editor composition design-state layer aggregate drifted during ${label}: ${JSON.stringify(state)}`);
 
   return state;
 };
@@ -12635,6 +12956,8 @@ const waitForUploadedMediaItem = async (client, filename) => {
         scope: item.getAttribute('data-media-scope') || '',
         scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
         folderId: item.getAttribute('data-media-folder-id') || '',
+        folderPath: item.getAttribute('data-media-folder-path') || '',
+        organizationSchema: item.getAttribute('data-media-organization-schema') || '',
       }));
       const uploadZone = document.querySelector('[data-testid="media-upload-dropzone"]');
       return {
@@ -12711,6 +13034,8 @@ const clickMediaLibraryItemByName = async (client, filename) => {
         scope: item.getAttribute('data-media-scope') || '',
         scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
         folderId: item.getAttribute('data-media-folder-id') || '',
+        folderPath: item.getAttribute('data-media-folder-path') || '',
+        organizationSchema: item.getAttribute('data-media-organization-schema') || '',
         insertPreset: item.getAttribute('data-insert-preset') || '',
         imageObjectFit: item.getAttribute('data-image-object-fit') || '',
         imageFocalX: item.getAttribute('data-image-focal-x') || '',
@@ -12871,94 +13196,121 @@ const waitForFontFamilyValue = async (client, expectedFontFamily) => {
 };
 
 const waitForPersistedImageMediaSelection = async (pageId, selectedMedia) => {
-  let lastProps = null;
+  let lastState = null;
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
     const element = findCanvasElement(payload.data?.page?.content?.elements || [], 'smoke-image');
     const props = element?.props || {};
-    lastProps = props;
+    const assetIds = Array.isArray(element?.assetIds) ? element.assetIds : [];
+    lastState = { props, assetIds };
 
     if (
       props.src === selectedMedia.url &&
       props.mediaId === selectedMedia.id &&
+      props.mediaName === selectedMedia.name &&
+      props.mediaType === selectedMedia.type &&
+      (props.mediaFolderId || '') === (selectedMedia.folderId || '') &&
+      (props.mediaFolderPath || '') === (selectedMedia.folderPath || '') &&
+      (props.mediaOrganization?.folderPath || '') === (selectedMedia.folderPath || '') &&
+      props.mediaInsertPreset === selectedMedia.insertPreset &&
+      props.imageInsertPreset === selectedMedia.insertPreset &&
+      assetIds.includes(selectedMedia.id) &&
       props.mediaScope === selectedMedia.scope &&
       (props.mediaScopeTargetId || '') === (selectedMedia.scopeTargetId || '')
     ) {
-      return props;
+      return lastState;
     }
 
     await sleep(250);
   }
 
-  throw new Error(`Persisted uploaded media selection mismatch: ${JSON.stringify({ selectedMedia, lastProps })}`);
+  throw new Error(`Persisted uploaded media selection mismatch: ${JSON.stringify({ selectedMedia, lastState })}`);
 };
 
 const waitForPersistedVideoMediaSelection = async (pageId, selectedMedia) => {
-  let lastProps = null;
+  let lastState = null;
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
     const element = findCanvasElement(payload.data?.page?.content?.elements || [], 'smoke-video');
     const props = element?.props || {};
-    lastProps = props;
+    const assetIds = Array.isArray(element?.assetIds) ? element.assetIds : [];
+    lastState = { props, assetIds };
 
     if (
       props.src === selectedMedia.url &&
       props.mediaId === selectedMedia.id &&
+      props.mediaName === selectedMedia.name &&
+      props.mediaType === selectedMedia.type &&
+      assetIds.includes(selectedMedia.id) &&
       props.mediaScope === selectedMedia.scope &&
       (props.mediaScopeTargetId || '') === (selectedMedia.scopeTargetId || '')
     ) {
-      return props;
+      return lastState;
     }
 
     await sleep(250);
   }
 
-  throw new Error(`Persisted uploaded video media selection mismatch: ${JSON.stringify({ selectedMedia, lastProps })}`);
+  throw new Error(`Persisted uploaded video media selection mismatch: ${JSON.stringify({ selectedMedia, lastState })}`);
 };
 
 const waitForPersistedEmbedMediaSelection = async (pageId, selectedMedia) => {
-  let lastProps = null;
+  let lastState = null;
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
     const element = findCanvasElement(payload.data?.page?.content?.elements || [], 'smoke-embed');
     const props = element?.props || {};
-    lastProps = props;
+    const assetIds = Array.isArray(element?.assetIds) ? element.assetIds : [];
+    lastState = { props, assetIds };
 
     if (
       props.src === selectedMedia.url &&
       props.mediaId === selectedMedia.id &&
+      props.mediaName === selectedMedia.name &&
+      props.mediaType === selectedMedia.type &&
+      assetIds.includes(selectedMedia.id) &&
       props.mediaScope === selectedMedia.scope &&
       (props.mediaScopeTargetId || '') === (selectedMedia.scopeTargetId || '')
     ) {
-      return props;
+      return lastState;
     }
 
     await sleep(250);
   }
 
-  throw new Error(`Persisted uploaded embed media selection mismatch: ${JSON.stringify({ selectedMedia, lastProps })}`);
+  throw new Error(`Persisted uploaded embed media selection mismatch: ${JSON.stringify({ selectedMedia, lastState })}`);
 };
 
-const waitForPersistedHeadingFontFamily = async (pageId, expectedFontFamily) => {
-  let lastProps = null;
+const waitForPersistedHeadingFontFamily = async (pageId, selectedMedia, expectedFontFamily) => {
+  let lastState = null;
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
     const element = findCanvasElement(payload.data?.page?.content?.elements || [], 'smoke-heading');
     const props = element?.props || {};
-    lastProps = props;
+    const assetIds = Array.isArray(element?.assetIds) ? element.assetIds : [];
+    lastState = { props, assetIds };
 
-    if (props.fontFamily === expectedFontFamily) {
-      return props;
+    if (
+      props.fontFamily === expectedFontFamily &&
+      props.fontMediaId === selectedMedia.id &&
+      props.fontMediaName === selectedMedia.name &&
+      props.fontSource === 'media-library' &&
+      props.fontRegistration?.mediaId === selectedMedia.id &&
+      props.fontRegistration?.weight === '700' &&
+      props.fontRegistration?.display === 'optional' &&
+      assetIds.includes(selectedMedia.id)
+    ) {
+      return lastState;
     }
 
     await sleep(250);
   }
 
-  throw new Error(`Persisted uploaded font family mismatch: ${JSON.stringify({ expectedFontFamily, lastProps })}`);
+  throw new Error(`Persisted uploaded font family mismatch: ${JSON.stringify({ selectedMedia, expectedFontFamily, lastState })}`);
 };
 
 const testMediaUploadModalControls = async (client, pageId) => {
@@ -13067,6 +13419,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
         uploaded.hasNestedFolderToggle &&
         uploaded.folderFilter === createdImageFolder.match.value &&
         uploaded.item.folderId === createdImageFolder.match.value &&
+        uploaded.item.folderPath === imageUploadFolderName &&
         uploaded.insertPreset === 'square' &&
         uploaded.uploadProgressTotal === 1 &&
         uploaded.uploadProgressCompleted === 1 &&
@@ -13121,10 +13474,15 @@ const testMediaUploadModalControls = async (client, pageId) => {
     const savedStatus = await waitForEditorMutationReady(client, 'after media upload smoke save');
     const persisted = await waitForPersistedImageMediaSelection(pageId, selected);
     assert(
-      persisted.objectFit === 'contain' &&
-        persisted.objectPosition === '28% 72%' &&
-        persisted.imageFocalPoint?.x === 28 &&
-        persisted.imageFocalPoint?.y === 72,
+      persisted.props.objectFit === 'contain' &&
+        persisted.props.objectPosition === '28% 72%' &&
+        persisted.props.imageFocalPoint?.x === 28 &&
+        persisted.props.imageFocalPoint?.y === 72 &&
+        persisted.props.imageInsertPreset === 'square' &&
+        persisted.props.mediaFolderId === selected.folderId &&
+        persisted.props.mediaFolderPath === selected.folderPath &&
+        persisted.props.mediaOrganization?.folderPath === selected.folderPath &&
+        persisted.assetIds.includes(selected.id),
       `Image picker insertion controls were not persisted into image props: ${JSON.stringify(persisted)}`,
     );
 
@@ -13252,7 +13610,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
     const fontFamily = await waitForFontFamilyValue(client, fontUploadFile.fontFamily);
     await clickSave(client);
     const fontSavedStatus = await waitForEditorMutationReady(client, 'after font media upload smoke save');
-    const fontPersisted = await waitForPersistedHeadingFontFamily(pageId, fontUploadFile.fontFamily);
+    const fontPersisted = await waitForPersistedHeadingFontFamily(pageId, fontSelected, fontUploadFile.fontFamily);
 
     return {
       image: {
@@ -14421,6 +14779,14 @@ const testFormBehaviorControls = async (client, collectionId) => {
   await setCheckboxByTestId(client, 'editor-form-builder-required', true);
   await clickControlByTestId(client, 'editor-form-builder-add-field');
   await setFormControlByTestId(client, 'editor-form-submit-label', 'Send lead');
+  await setFormControlByTestId(client, 'editor-form-label-color', FORM_APPEARANCE_SPEC.labelColor);
+  await setFormControlByTestId(client, 'editor-form-help-color', FORM_APPEARANCE_SPEC.helpTextColor);
+  await setFormControlByTestId(client, 'editor-form-field-background-color', FORM_APPEARANCE_SPEC.fieldBackgroundColor);
+  await setFormControlByTestId(client, 'editor-form-field-border-color', FORM_APPEARANCE_SPEC.fieldBorderColor);
+  await setFormControlByTestId(client, 'editor-form-field-border-radius', FORM_APPEARANCE_SPEC.fieldBorderRadius);
+  await setFormControlByTestId(client, 'editor-form-submit-background-color', FORM_APPEARANCE_SPEC.submitBackgroundColor);
+  await setFormControlByTestId(client, 'editor-form-submit-color', FORM_APPEARANCE_SPEC.submitColor);
+  await setFormControlByTestId(client, 'editor-form-submit-border-radius', FORM_APPEARANCE_SPEC.submitBorderRadius);
   await setCheckboxByTestId(client, 'editor-form-active', true);
   await setFormControlByTestId(client, 'editor-form-audience', 'authenticated');
   await setFormControlByTestId(client, 'editor-form-action-url', '/api/custom-lead-submit');
@@ -14455,12 +14821,16 @@ const testFormBehaviorControls = async (client, collectionId) => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
     const checked = (testId) => Boolean(document.querySelector('[data-testid="' + testId + '"]')?.checked);
     const form = document.querySelector('[data-element-id="smoke-form"]');
+    const computed = (selector, property) => {
+      const element = document.querySelector(selector);
+      return element ? window.getComputedStyle(element).getPropertyValue(property) : '';
+    };
     return {
       title: value('editor-form-title'),
       formId: value('editor-form-id'),
-      active: checked('editor-form-active'),
-      audience: value('editor-form-audience'),
-      actionUrl: value('editor-form-action-url'),
+	      active: checked('editor-form-active'),
+	      audience: value('editor-form-audience'),
+	      actionUrl: value('editor-form-action-url'),
       method: value('editor-form-method'),
       successMessage: value('editor-form-success-message'),
       successRedirectUrl: value('editor-form-success-redirect-url'),
@@ -14474,22 +14844,38 @@ const testFormBehaviorControls = async (client, collectionId) => {
       contactShareEnabled: checked('editor-form-contact-share-enabled'),
       contactShareNameField: value('editor-form-contact-share-name-field'),
       contactShareEmailField: value('editor-form-contact-share-email-field'),
-      contactSharePhoneField: value('editor-form-contact-share-phone-field'),
-      contactShareNotesField: value('editor-form-contact-share-notes-field'),
-      contactShareDedupeByEmail: checked('editor-form-contact-share-dedupe-by-email'),
-      collectionWriteEnabled: checked('editor-form-collection-write-enabled'),
+	      contactSharePhoneField: value('editor-form-contact-share-phone-field'),
+	      contactShareNotesField: value('editor-form-contact-share-notes-field'),
+	      contactShareDedupeByEmail: checked('editor-form-contact-share-dedupe-by-email'),
+	      collectionWriteEnabled: checked('editor-form-collection-write-enabled'),
       collectionWriteCollectionId: value('editor-form-collection-write-collection'),
       collectionWriteSlugField: value('editor-form-collection-write-slug-field'),
       collectionWriteFieldMap: value('editor-form-collection-write-field-map'),
       fieldsJson: value('editor-form-fields'),
       builderKeys: Array.from(document.querySelectorAll('[data-testid="editor-form-builder-field"]')).map((node) => node.getAttribute('data-field-key')),
       submitLabel: value('editor-form-submit-label'),
+      labelColor: value('editor-form-label-color'),
+      helpTextColor: value('editor-form-help-color'),
+      fieldBackgroundColor: value('editor-form-field-background-color'),
+      fieldBorderColor: value('editor-form-field-border-color'),
+      fieldBorderRadius: value('editor-form-field-border-radius'),
+      submitBackgroundColor: value('editor-form-submit-background-color'),
+      submitColor: value('editor-form-submit-color'),
+      submitBorderRadius: value('editor-form-submit-border-radius'),
+      previewLabelColor: computed('label[for="smoke-form-full_name"]', 'color'),
+      previewHelpColor: computed('[data-testid="editor-form-schema-field"][data-field-key="message"] p', 'color'),
+      previewFieldBackgroundColor: computed('[data-testid="editor-form-schema-field-full_name"]', 'background-color'),
+      previewFieldBorderColor: computed('[data-testid="editor-form-schema-field-full_name"]', 'border-color'),
+      previewFieldBorderRadius: computed('[data-testid="editor-form-schema-field-full_name"]', 'border-radius'),
+      previewSubmitBackgroundColor: computed('[data-testid="editor-form-schema-submit"]', 'background-color'),
+      previewSubmitColor: computed('[data-testid="editor-form-schema-submit"]', 'color'),
+      previewSubmitBorderRadius: computed('[data-testid="editor-form-schema-submit"]', 'border-radius'),
       previewText: form?.textContent || '',
       schemaCount: Number(document.querySelector('[data-testid="editor-form-schema"]')?.getAttribute('data-form-field-count') || '0'),
       schemaKeys: Array.from(document.querySelectorAll('[data-testid="editor-form-schema-field"]')).map((node) => node.getAttribute('data-field-key')),
-      fullNameRequired: document.querySelector('[data-testid="editor-form-schema-field-full_name"]')?.hasAttribute('required') || false,
-      fullNameMinLength: document.querySelector('[data-testid="editor-form-schema-field-full_name"]')?.getAttribute('minlength') || '',
-      emailType: document.querySelector('[data-testid="editor-form-schema-field-email"]')?.getAttribute('type') || '',
+	      fullNameRequired: document.querySelector('[data-testid="editor-form-schema-field-full_name"]')?.hasAttribute('required') || false,
+	      fullNameMinLength: document.querySelector('[data-testid="editor-form-schema-field-full_name"]')?.getAttribute('minlength') || '',
+	      emailType: document.querySelector('[data-testid="editor-form-schema-field-email"]')?.getAttribute('type') || '',
       messageMaxLength: document.querySelector('[data-testid="editor-form-schema-field-message"]')?.getAttribute('maxlength') || '',
       planOptions: Array.from(document.querySelectorAll('[data-testid="editor-form-schema-field-plan"] option')).map((option) => option.value),
       companyRequired: document.querySelector('[data-testid="editor-form-schema-field-company"]')?.hasAttribute('required') || false,
@@ -14508,6 +14894,28 @@ const testFormBehaviorControls = async (client, collectionId) => {
   assert(state.schemaCount === FORM_SCHEMA_FIELDS_WITH_BUILDER.length, `Form schema count mismatch: ${JSON.stringify(state)}`);
   assert(JSON.stringify(state.schemaKeys) === JSON.stringify(FORM_SCHEMA_FIELDS_WITH_BUILDER.map((field) => field.key)), `Form schema keys mismatch: ${JSON.stringify(state)}`);
   assert(state.builderKeys.includes(FORM_BUILDER_FIELD.key), `Form builder field list mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.labelColor === FORM_APPEARANCE_SPEC.labelColor &&
+      state.helpTextColor === FORM_APPEARANCE_SPEC.helpTextColor &&
+      state.fieldBackgroundColor === FORM_APPEARANCE_SPEC.fieldBackgroundColor &&
+      state.fieldBorderColor === FORM_APPEARANCE_SPEC.fieldBorderColor &&
+      Number(state.fieldBorderRadius) === FORM_APPEARANCE_SPEC.fieldBorderRadius &&
+      state.submitBackgroundColor === FORM_APPEARANCE_SPEC.submitBackgroundColor &&
+      state.submitColor === FORM_APPEARANCE_SPEC.submitColor &&
+      Number(state.submitBorderRadius) === FORM_APPEARANCE_SPEC.submitBorderRadius,
+    `Form appearance controls mismatch: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.previewLabelColor === hexToRgbString(FORM_APPEARANCE_SPEC.labelColor) &&
+      state.previewHelpColor === hexToRgbString(FORM_APPEARANCE_SPEC.helpTextColor) &&
+      state.previewFieldBackgroundColor === hexToRgbString(FORM_APPEARANCE_SPEC.fieldBackgroundColor) &&
+      state.previewFieldBorderColor === hexToRgbString(FORM_APPEARANCE_SPEC.fieldBorderColor) &&
+      state.previewFieldBorderRadius === `${FORM_APPEARANCE_SPEC.fieldBorderRadius}px` &&
+      state.previewSubmitBackgroundColor === hexToRgbString(FORM_APPEARANCE_SPEC.submitBackgroundColor) &&
+      state.previewSubmitColor === hexToRgbString(FORM_APPEARANCE_SPEC.submitColor) &&
+      state.previewSubmitBorderRadius === `${FORM_APPEARANCE_SPEC.submitBorderRadius}px`,
+    `Form appearance preview mismatch: ${JSON.stringify(state)}`,
+  );
   assert(state.fullNameRequired === true && state.fullNameMinLength === '2', `Form name validation mismatch: ${JSON.stringify(state)}`);
   assert(state.emailType === 'email', `Form email field mismatch: ${JSON.stringify(state)}`);
   assert(state.messageMaxLength === '240', `Form message validation mismatch: ${JSON.stringify(state)}`);
@@ -14565,6 +14973,17 @@ const assertPersistedFormBehavior = async (pageId, collectionId) => {
   assert(props.formId === 'smoke-lead-capture', `Persisted form id mismatch: ${JSON.stringify(props)}`);
   assert(JSON.stringify(props.fields) === JSON.stringify(FORM_SCHEMA_FIELDS_WITH_BUILDER), `Persisted form fields mismatch: ${JSON.stringify(props)}`);
   assert(props.submitLabel === 'Send lead', `Persisted form submit label mismatch: ${JSON.stringify(props)}`);
+  assert(
+    props.labelColor === FORM_APPEARANCE_SPEC.labelColor &&
+      props.helpTextColor === FORM_APPEARANCE_SPEC.helpTextColor &&
+      props.fieldBackgroundColor === FORM_APPEARANCE_SPEC.fieldBackgroundColor &&
+      props.fieldBorderColor === FORM_APPEARANCE_SPEC.fieldBorderColor &&
+      props.fieldBorderRadius === FORM_APPEARANCE_SPEC.fieldBorderRadius &&
+      props.submitBackgroundColor === FORM_APPEARANCE_SPEC.submitBackgroundColor &&
+      props.submitColor === FORM_APPEARANCE_SPEC.submitColor &&
+      props.submitBorderRadius === FORM_APPEARANCE_SPEC.submitBorderRadius,
+    `Persisted form appearance mismatch: ${JSON.stringify(props)}`,
+  );
   assert(props.formActive !== false, `Persisted form active mismatch: ${JSON.stringify(props)}`);
   assert(props.formAudience === 'authenticated', `Persisted form audience mismatch: ${JSON.stringify(props)}`);
   assert(props.actionUrl === '/api/custom-lead-submit', `Persisted form action URL mismatch: ${JSON.stringify(props)}`);
@@ -15638,6 +16057,8 @@ const main = async () => {
   assertInteractiveRegistryVersionPinningSource();
   assertComponentLibraryEmptyStateSource();
   assertMediaLibraryModalEmptyStateSource();
+  assertPageSettingsModalValidationSource();
+  assertCanvasReusableSectionValidationSource();
   if (process.env.BACKY_EDITOR_SOURCE_ONLY === '1') {
     return;
   }

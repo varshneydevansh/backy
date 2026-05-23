@@ -487,6 +487,16 @@ interface CollectionAuthoredDynamicTemplate {
     height: number;
   };
   customCSS?: string;
+  customJS?: string;
+  themeTokenRefs?: Record<string, string>;
+  assets?: unknown[] | Record<string, unknown>;
+  animations?: unknown[] | Record<string, unknown>;
+  interactions?: unknown[] | Record<string, unknown>;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  contentDocument?: Record<string, unknown>;
   elements: unknown[];
 }
 
@@ -510,6 +520,9 @@ interface CollectionAuthoredDynamicTemplateDiff {
   pageChanged: boolean;
   canvasSizeChanged: boolean;
   customCssChanged: boolean;
+  customJsChanged: boolean;
+  designStateChanged: boolean;
+  designStateChangeLabels: string[];
 }
 
 interface CollectionDynamicTemplatesForm {
@@ -1031,6 +1044,66 @@ const parseRecordValue = (field: CollectionField, value: string): unknown => {
   return value;
 };
 
+const validateRecordFieldValue = (field: CollectionField, value: string): string | null => {
+  const label = field.label || field.key;
+  const trimmed = value.trim();
+  const listValue = () => parseCollectionListValue(value);
+
+  if (field.required) {
+    if (field.type === 'boolean') {
+      return null;
+    }
+    if (field.type === 'tags' || field.type === 'multiReference' || isCollectionMultiFileField(field)) {
+      if (listValue().length === 0) {
+        return `${label} is required.`;
+      }
+    } else if (!trimmed) {
+      return `${label} is required.`;
+    }
+  }
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (field.type === 'number' && !Number.isFinite(Number(trimmed))) {
+    return `${label} must be a valid number.`;
+  }
+
+  if ((field.type === 'date' || field.type === 'datetime') && Number.isNaN(new Date(trimmed).getTime())) {
+    return `${label} must be a valid ${field.type === 'date' ? 'date' : 'date and time'}.`;
+  }
+
+  if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return `${label} must be a valid email address.`;
+  }
+
+  if (field.type === 'url') {
+    try {
+      new URL(trimmed);
+    } catch {
+      return `${label} must be a valid URL.`;
+    }
+  }
+
+  if (field.type === 'json') {
+    try {
+      JSON.parse(trimmed);
+    } catch {
+      return `${label} must be valid JSON.`;
+    }
+  }
+
+  if (isCollectionMultiFileField(field)) {
+    const maxItems = collectionFileMaxItems(field);
+    if (maxItems && listValue().length > maxItems) {
+      return `${label} allows at most ${maxItems} file${maxItems === 1 ? '' : 's'}.`;
+    }
+  }
+
+  return null;
+};
+
 const formatDateTimeLocalValue = (value: string | null | undefined): string => {
   if (!value) return '';
   const date = new Date(value);
@@ -1082,6 +1155,28 @@ const cloneTemplateFields = (fields: CollectionField[]) => (
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const cloneJsonRecord = (value: unknown): Record<string, unknown> | undefined => {
+  if (!isPlainRecord(value)) return undefined;
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+};
+
+const cloneJsonArray = (value: unknown): unknown[] | undefined => (
+  Array.isArray(value) ? JSON.parse(JSON.stringify(value)) as unknown[] : undefined
+);
+
+const cloneJsonArrayOrRecord = (value: unknown): unknown[] | Record<string, unknown> | undefined => (
+  cloneJsonArray(value) || cloneJsonRecord(value)
+);
+
+const optionalStringRecordFromRecord = (record: Record<string, unknown> | undefined, key: string): Record<string, string> | undefined => {
+  const value = record?.[key];
+  if (!isPlainRecord(value)) return undefined;
+  const entries = Object.entries(value).filter((entry): entry is [string, string] => (
+    typeof entry[1] === 'string' && entry[1].trim().length > 0
+  ));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
 
 const optionalStringFromRecord = (record: Record<string, unknown> | undefined, key: string): string | undefined => {
   const value = record?.[key];
@@ -1171,6 +1266,9 @@ const normalizeAuthoredDynamicTemplate = (value: unknown): CollectionAuthoredDyn
   const pageTitle = optionalStringFromRecord(value, 'pageTitle') || '';
   const pageSlug = optionalStringFromRecord(value, 'pageSlug') || '';
   const capturedAt = optionalStringFromRecord(value, 'capturedAt') || '';
+  const contentDocument = cloneJsonRecord(value.contentDocument);
+  const metadata = cloneJsonRecord(value.metadata)
+    || cloneJsonRecord(contentDocument?.metadata);
 
   return {
     pageId,
@@ -1179,6 +1277,16 @@ const normalizeAuthoredDynamicTemplate = (value: unknown): CollectionAuthoredDyn
     capturedAt,
     ...(normalizeCanvasSize(value.canvasSize) ? { canvasSize: normalizeCanvasSize(value.canvasSize) } : {}),
     ...(optionalStringFromRecord(value, 'customCSS') ? { customCSS: optionalStringFromRecord(value, 'customCSS') } : {}),
+    ...(optionalStringFromRecord(value, 'customJS') ? { customJS: optionalStringFromRecord(value, 'customJS') } : {}),
+    ...(optionalStringRecordFromRecord(value, 'themeTokenRefs') ? { themeTokenRefs: optionalStringRecordFromRecord(value, 'themeTokenRefs') } : {}),
+    ...(cloneJsonArrayOrRecord(value.assets) ? { assets: cloneJsonArrayOrRecord(value.assets) } : {}),
+    ...(cloneJsonArrayOrRecord(value.animations) ? { animations: cloneJsonArrayOrRecord(value.animations) } : {}),
+    ...(cloneJsonArrayOrRecord(value.interactions) ? { interactions: cloneJsonArrayOrRecord(value.interactions) } : {}),
+    ...(cloneJsonRecord(value.dataBindings) ? { dataBindings: cloneJsonRecord(value.dataBindings) } : {}),
+    ...(cloneJsonRecord(value.editableMap) ? { editableMap: cloneJsonRecord(value.editableMap) } : {}),
+    ...(cloneJsonRecord(value.seo) ? { seo: cloneJsonRecord(value.seo) } : {}),
+    ...(metadata ? { metadata } : {}),
+    ...(contentDocument ? { contentDocument } : {}),
     elements: value.elements,
   };
 };
@@ -1263,6 +1371,18 @@ const templatePageLabel = (template: CollectionAuthoredDynamicTemplate) => (
   template.pageTitle || template.pageSlug || template.pageId || 'Untitled page'
 );
 
+const templateDesignStateEntries = (template: CollectionAuthoredDynamicTemplate) => ({
+  'Theme tokens': template.themeTokenRefs || {},
+  Assets: template.assets || {},
+  Animations: template.animations || [],
+  Interactions: template.interactions || {},
+  'Data bindings': template.dataBindings || {},
+  'Editable map': template.editableMap || {},
+  SEO: template.seo || {},
+  Metadata: template.metadata || {},
+  'Content document': template.contentDocument || {},
+});
+
 const compareAuthoredDynamicTemplates = (
   active: CollectionAuthoredDynamicTemplate,
   version: CollectionAuthoredDynamicTemplateVersion,
@@ -1288,10 +1408,20 @@ const compareAuthoredDynamicTemplates = (
   const pageChanged = active.pageId !== version.pageId;
   const canvasSizeChanged = activeSize !== versionSize;
   const customCssChanged = (active.customCSS || '') !== (version.customCSS || '');
+  const customJsChanged = (active.customJS || '') !== (version.customJS || '');
+  const activeDesignState = templateDesignStateEntries(active);
+  const versionDesignState = templateDesignStateEntries(version);
+  const designStateChangeLabels = Object.keys(activeDesignState).filter((label) => (
+    stableTemplateValue(activeDesignState[label as keyof typeof activeDesignState])
+      !== stableTemplateValue(versionDesignState[label as keyof typeof versionDesignState])
+  ));
+  const designStateChanged = designStateChangeLabels.length > 0;
   const totalChanges = addedRootIds.length + removedRootIds.length + changedRootIds.length
     + (pageChanged ? 1 : 0)
     + (canvasSizeChanged ? 1 : 0)
-    + (customCssChanged ? 1 : 0);
+    + (customCssChanged ? 1 : 0)
+    + (customJsChanged ? 1 : 0)
+    + (designStateChanged ? 1 : 0);
 
   return {
     summary: totalChanges > 0
@@ -1309,6 +1439,9 @@ const compareAuthoredDynamicTemplates = (
     pageChanged,
     canvasSizeChanged,
     customCssChanged,
+    customJsChanged,
+    designStateChanged,
+    designStateChangeLabels,
   };
 };
 
@@ -1316,6 +1449,20 @@ const summarizeTemplateRootIds = (ids: string[]) => {
   if (ids.length === 0) return 'None';
   const visible = ids.slice(0, 4).join(', ');
   return ids.length > 4 ? `${visible}, +${ids.length - 4} more` : visible;
+};
+
+const authoredDynamicTemplateDesignStateSummary = (template: CollectionAuthoredDynamicTemplate): string => {
+  const assetGroups = template.assets ? Object.keys(template.assets).length : 0;
+  const bindingGroups = template.dataBindings ? Object.keys(template.dataBindings).length : 0;
+  const editableTargets = template.editableMap ? Object.keys(template.editableMap).length : 0;
+  return [
+    `${template.elements.length} root elements`,
+    `${template.animations?.length || 0} animations`,
+    `${assetGroups} asset groups`,
+    `${bindingGroups} binding groups`,
+    `${editableTargets} editable targets`,
+    template.contentDocument ? 'content document' : 'no content document',
+  ].join(' · ');
 };
 
 const parsePageContentRecord = (page: Page): Record<string, unknown> | null => {
@@ -1353,6 +1500,32 @@ const authoredDynamicTemplateFromPage = (page: Page): CollectionAuthoredDynamicT
       ? { canvasSize: normalizeCanvasSize(content.canvasSize) || normalizeCanvasSize(metadata.canvasSize) }
       : {}),
     ...(optionalStringFromRecord(content, 'customCSS') ? { customCSS: optionalStringFromRecord(content, 'customCSS') } : {}),
+    ...(optionalStringFromRecord(content, 'customJS') || optionalStringFromRecord(metadata, 'customJS')
+      ? { customJS: optionalStringFromRecord(content, 'customJS') || optionalStringFromRecord(metadata, 'customJS') }
+      : {}),
+    ...(optionalStringRecordFromRecord(content, 'themeTokenRefs') || optionalStringRecordFromRecord(contentDocument, 'themeTokenRefs') || optionalStringRecordFromRecord(metadata, 'themeTokenRefs')
+      ? { themeTokenRefs: optionalStringRecordFromRecord(content, 'themeTokenRefs') || optionalStringRecordFromRecord(contentDocument, 'themeTokenRefs') || optionalStringRecordFromRecord(metadata, 'themeTokenRefs') }
+      : {}),
+    ...(cloneJsonArrayOrRecord(content.assets) || cloneJsonArrayOrRecord(contentDocument.assets) || cloneJsonArrayOrRecord(metadata.assets)
+      ? { assets: cloneJsonArrayOrRecord(content.assets) || cloneJsonArrayOrRecord(contentDocument.assets) || cloneJsonArrayOrRecord(metadata.assets) }
+      : {}),
+    ...(cloneJsonArrayOrRecord(content.animations) || cloneJsonArrayOrRecord(contentDocument.animations) || cloneJsonArrayOrRecord(metadata.animations)
+      ? { animations: cloneJsonArrayOrRecord(content.animations) || cloneJsonArrayOrRecord(contentDocument.animations) || cloneJsonArrayOrRecord(metadata.animations) }
+      : {}),
+    ...(cloneJsonArrayOrRecord(content.interactions) || cloneJsonArrayOrRecord(contentDocument.interactions) || cloneJsonArrayOrRecord(metadata.interactions)
+      ? { interactions: cloneJsonArrayOrRecord(content.interactions) || cloneJsonArrayOrRecord(contentDocument.interactions) || cloneJsonArrayOrRecord(metadata.interactions) }
+      : {}),
+    ...(cloneJsonRecord(content.dataBindings) || cloneJsonRecord(contentDocument.dataBindings) || cloneJsonRecord(metadata.dataBindings)
+      ? { dataBindings: cloneJsonRecord(content.dataBindings) || cloneJsonRecord(contentDocument.dataBindings) || cloneJsonRecord(metadata.dataBindings) }
+      : {}),
+    ...(cloneJsonRecord(content.editableMap) || cloneJsonRecord(contentDocument.editableMap) || cloneJsonRecord(metadata.editableMap)
+      ? { editableMap: cloneJsonRecord(content.editableMap) || cloneJsonRecord(contentDocument.editableMap) || cloneJsonRecord(metadata.editableMap) }
+      : {}),
+    ...(cloneJsonRecord(content.seo) || cloneJsonRecord(contentDocument.seo) || cloneJsonRecord(metadata.seo)
+      ? { seo: cloneJsonRecord(content.seo) || cloneJsonRecord(contentDocument.seo) || cloneJsonRecord(metadata.seo) }
+      : {}),
+    ...(cloneJsonRecord(metadata) ? { metadata: cloneJsonRecord(metadata) } : {}),
+    ...(cloneJsonRecord(contentDocument) ? { contentDocument: cloneJsonRecord(contentDocument) } : {}),
     elements: JSON.parse(JSON.stringify(elements)),
   };
 };
@@ -1652,6 +1825,7 @@ function CollectionsPage() {
     scheduledAt: '',
     values: {} as Record<string, string>,
   });
+  const [recordFormSubmitted, setRecordFormSubmitted] = useState(false);
   const [recordFilters, setRecordFilters] = useState({
     search: routeSearch.search || '',
     status: (routeSearch.status || '') as RecordStatusFilter,
@@ -1814,7 +1988,22 @@ function CollectionsPage() {
   const recordMutationDisabled = isCollectionsBusy || !canEditCollections;
   const recordExportDisabled = isCollectionsBusy || !canExportCollections;
   const destructiveActionDisabled = isCollectionsBusy || !canDeleteCollections;
-  const scheduledRecordMissingTime = recordForm.status === 'scheduled' && !recordForm.scheduledAt;
+  const recordScheduledInlineError = recordFormSubmitted && recordForm.status === 'scheduled' && !recordForm.scheduledAt
+    ? 'Choose a publish date before scheduling this collection record.'
+    : null;
+  const recordFieldInlineErrors = useMemo(() => {
+    if (!activeCollection || !recordFormSubmitted) {
+      return {};
+    }
+
+    return activeCollection.fields.reduce<Record<string, string>>((errors, field) => {
+      const fieldError = validateRecordFieldValue(field, recordForm.values[field.key] || '');
+      if (fieldError) {
+        errors[field.key] = fieldError;
+      }
+      return errors;
+    }, {});
+  }, [activeCollection, recordForm.values, recordFormSubmitted]);
   const viewPermissionTitle = canViewCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.view');
   const editPermissionTitle = canEditCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.edit');
   const exportPermissionTitle = canExportCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.export');
@@ -2544,6 +2733,7 @@ function CollectionsPage() {
     setSelectedRecordId(null);
     setSelectedRecordIds([]);
     setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
+    setRecordFormSubmitted(false);
     updateCollectionsRouteSearch({ recordId: undefined });
     setError(null);
     setValidationDetails([]);
@@ -2882,6 +3072,7 @@ function CollectionsPage() {
       fields: [createStarterField()],
     });
     setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
+    setRecordFormSubmitted(false);
   };
 
   const updateCollectionNameInput = (value: string) => {
@@ -3148,6 +3339,7 @@ function CollectionsPage() {
       fields: cloneTemplateFields(template.fields),
     });
     setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
+    setRecordFormSubmitted(false);
     setError(null);
     setValidationDetails([]);
     setNotice(`${template.name} template loaded. Review fields, then save the schema.`);
@@ -3236,6 +3428,7 @@ function CollectionsPage() {
       fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
     });
     setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
+    setRecordFormSubmitted(false);
     updateCollectionsRouteSearch({
       collectionId: collection.id,
       recordId: preserveRouteState ? routeSearch.recordId : undefined,
@@ -3468,6 +3661,7 @@ function CollectionsPage() {
   useEffect(() => {
     if (!selectedRecord || !activeCollection) {
       setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
+      setRecordFormSubmitted(false);
       return;
     }
 
@@ -3479,6 +3673,7 @@ function CollectionsPage() {
         activeCollection.fields.map((field) => [field.key, formatRecordFormValue(field, selectedRecord.values[field.key])]),
       ),
     });
+    setRecordFormSubmitted(false);
   }, [activeCollection, selectedRecord]);
 
   useEffect(() => {
@@ -3733,6 +3928,16 @@ function CollectionsPage() {
       capturedAt: version.capturedAt,
       ...(version.canvasSize ? { canvasSize: version.canvasSize } : {}),
       ...(version.customCSS ? { customCSS: version.customCSS } : {}),
+      ...(version.customJS ? { customJS: version.customJS } : {}),
+      ...(version.themeTokenRefs ? { themeTokenRefs: version.themeTokenRefs } : {}),
+      ...(version.assets ? { assets: version.assets } : {}),
+      ...(version.animations ? { animations: version.animations } : {}),
+      ...(version.interactions ? { interactions: version.interactions } : {}),
+      ...(version.dataBindings ? { dataBindings: version.dataBindings } : {}),
+      ...(version.editableMap ? { editableMap: version.editableMap } : {}),
+      ...(version.seo ? { seo: version.seo } : {}),
+      ...(version.metadata ? { metadata: version.metadata } : {}),
+      ...(version.contentDocument ? { contentDocument: version.contentDocument } : {}),
       elements: version.elements,
     };
 
@@ -3876,13 +4081,22 @@ function CollectionsPage() {
       showPermissionDenied('collections.edit', 'save collection records');
       return;
     }
+    setRecordFormSubmitted(true);
 
     const scheduledAt = recordForm.status === 'scheduled'
       ? toScheduledAtPayload(recordForm.scheduledAt)
       : null;
-    if (recordForm.status === 'scheduled' && !scheduledAt) {
-      setError('Choose a publish date before scheduling this collection record.');
-      setValidationDetails([]);
+    const inlineValidationDetails = [
+      ...(recordForm.status === 'scheduled' && !scheduledAt
+        ? ['Choose a publish date before scheduling this collection record.']
+        : []),
+      ...activeCollection.fields
+        .map((field) => validateRecordFieldValue(field, recordForm.values[field.key] || ''))
+        .filter((fieldError): fieldError is string => Boolean(fieldError)),
+    ];
+    if (inlineValidationDetails.length > 0) {
+      setError('Fix collection record fields before saving.');
+      setValidationDetails(inlineValidationDetails);
       setNotice(null);
       return;
     }
@@ -3919,6 +4133,7 @@ function CollectionsPage() {
         setSelectedRecordId(saved.id);
         updateCollectionsRouteSearch({ recordId: saved.id });
       }
+      setRecordFormSubmitted(false);
       setNotice(`Collection record ${selectedRecordId ? 'updated' : 'created'}.`);
       if (activeCollection) {
         void loadRecords(activeCollection.id);
@@ -6189,7 +6404,7 @@ function CollectionsPage() {
                       </div>
                       <p className="text-xs text-cyan-900/80">
                         {collectionForm.dynamicTemplates.list.authoredCanvas
-                          ? `Captured ${collectionForm.dynamicTemplates.list.authoredPageTitle || 'page'} with ${collectionForm.dynamicTemplates.list.authoredCanvas.elements.length} root elements.`
+                          ? `Captured ${collectionForm.dynamicTemplates.list.authoredPageTitle || 'page'} with ${authoredDynamicTemplateDesignStateSummary(collectionForm.dynamicTemplates.list.authoredCanvas)}.`
                           : pagesError || (isPagesLoading ? 'Loading pages...' : 'No authored list canvas captured.')}
                       </p>
                       <div className="space-y-2 border-t border-cyan-200 pt-2" data-testid="collections-list-template-history">
@@ -6200,7 +6415,7 @@ function CollectionsPage() {
                               <div key={version.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-200 bg-white/80 px-3 py-2 text-xs">
                                 <span className="min-w-0">
                                   <span className="block font-medium text-cyan-950">Version {version.version} · {version.pageTitle || 'Untitled page'}</span>
-                                  <span className="block text-cyan-900/75">{formatDate(version.capturedAt)} · {version.elementCount} root elements</span>
+                                  <span className="block text-cyan-900/75">{formatDate(version.capturedAt)} · {authoredDynamicTemplateDesignStateSummary(version)}</span>
                                 </span>
                                 <button
                                   type="button"
@@ -6351,7 +6566,7 @@ function CollectionsPage() {
                       </div>
                       <p className="text-xs text-cyan-900/80">
                         {collectionForm.dynamicTemplates.item.authoredCanvas
-                          ? `Captured ${collectionForm.dynamicTemplates.item.authoredPageTitle || 'page'} with ${collectionForm.dynamicTemplates.item.authoredCanvas.elements.length} root elements.`
+                          ? `Captured ${collectionForm.dynamicTemplates.item.authoredPageTitle || 'page'} with ${authoredDynamicTemplateDesignStateSummary(collectionForm.dynamicTemplates.item.authoredCanvas)}.`
                           : pagesError || (isPagesLoading ? 'Loading pages...' : 'No authored item canvas captured.')}
                       </p>
                       <div className="space-y-2 border-t border-cyan-200 pt-2" data-testid="collections-item-template-history">
@@ -6362,7 +6577,7 @@ function CollectionsPage() {
                               <div key={version.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-cyan-200 bg-white/80 px-3 py-2 text-xs">
                                 <span className="min-w-0">
                                   <span className="block font-medium text-cyan-950">Version {version.version} · {version.pageTitle || 'Untitled page'}</span>
-                                  <span className="block text-cyan-900/75">{formatDate(version.capturedAt)} · {version.elementCount} root elements</span>
+                                  <span className="block text-cyan-900/75">{formatDate(version.capturedAt)} · {authoredDynamicTemplateDesignStateSummary(version)}</span>
                                 </span>
                                 <button
                                   type="button"
@@ -6986,15 +7201,16 @@ function CollectionsPage() {
                   </div>
                 </div>
 
-                <form id="collections-record-editor" onSubmit={handleRecordSubmit} className="p-4 scroll-mt-24" data-testid="collections-record-editor">
+                <form id="collections-record-editor" onSubmit={handleRecordSubmit} className="p-4 scroll-mt-24" data-testid="collections-record-editor" noValidate>
                   <fieldset disabled={recordMutationDisabled} className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold">{selectedRecord ? 'Edit record' : 'Create record'}</h3>
                     <button
                       type="submit"
-                      disabled={recordMutationDisabled || scheduledRecordMissingTime}
-                      title={scheduledRecordMissingTime ? 'Choose a publish date before scheduling this record.' : editPermissionTitle}
+                      disabled={recordMutationDisabled}
+                      title={editPermissionTitle}
                       className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      data-testid="collections-record-save-button"
                     >
                       <Save className="h-4 w-4" />
                       {isSavingRecord ? 'Saving...' : 'Save'}
@@ -7047,10 +7263,24 @@ function CollectionsPage() {
                           ...prev,
                           scheduledAt: event.target.value,
                         }))}
-                        className="w-full rounded-lg border bg-background px-3 py-2"
-                        required
+                        className={cn(
+                          'w-full rounded-lg border bg-background px-3 py-2',
+                          recordScheduledInlineError && 'border-destructive focus-visible:outline-destructive',
+                        )}
+                        aria-required="true"
+                        aria-invalid={Boolean(recordScheduledInlineError)}
+                        aria-describedby={recordScheduledInlineError ? 'collections-record-scheduled-at-error' : undefined}
                         data-testid="collections-record-scheduled-at"
                       />
+                      {recordScheduledInlineError ? (
+                        <span
+                          id="collections-record-scheduled-at-error"
+                          className="block text-xs font-medium text-destructive"
+                          data-testid="collections-record-scheduled-at-error"
+                        >
+                          {recordScheduledInlineError}
+                        </span>
+                      ) : null}
                     </label>
                   )}
 
@@ -7066,6 +7296,7 @@ function CollectionsPage() {
                       onOpenMediaPicker={setMediaPickerField}
                       canViewMedia={canViewMedia}
                       mediaViewPermissionTitle={mediaViewPermissionTitle}
+                      inlineError={recordFieldInlineErrors[field.key] || null}
                       onChange={(value) => updateRecordFormValue(setRecordForm, field.key, value)}
                     />
                   ))}
@@ -7469,6 +7700,7 @@ function CollectionRecordFieldEditor({
   onOpenMediaPicker,
   canViewMedia,
   mediaViewPermissionTitle,
+  inlineError,
   onChange,
 }: {
   field: CollectionField;
@@ -7480,6 +7712,7 @@ function CollectionRecordFieldEditor({
   onOpenMediaPicker: (field: CollectionField) => void;
   canViewMedia: boolean;
   mediaViewPermissionTitle?: string;
+  inlineError?: string | null;
   onChange: (value: string) => void;
 }) {
   const selectedValues = value.split(',').map((item) => item.trim()).filter(Boolean);
@@ -7494,7 +7727,28 @@ function CollectionRecordFieldEditor({
     ? records
     : targetReferenceState?.records || [];
   const optionIds = new Set(referenceOptions.map((record) => record.id));
-  const inputClassName = 'w-full rounded-lg border bg-background px-3 py-2';
+  const fieldErrorId = inlineError ? `collections-record-field-error-${field.key}` : undefined;
+  const errorProps = {
+    'aria-invalid': Boolean(inlineError),
+    'aria-describedby': fieldErrorId,
+  };
+  const requiredProps = field.required ? { 'aria-required': true } : {};
+  const inputClassName = cn(
+    'w-full rounded-lg border bg-background px-3 py-2',
+    inlineError && 'border-destructive focus-visible:outline-destructive',
+  );
+  const tallInputClassName = cn(
+    'min-h-24 w-full rounded-lg border bg-background px-3 py-2',
+    inlineError && 'border-destructive focus-visible:outline-destructive',
+  );
+  const compactMonoTextareaClassName = cn(
+    'min-h-20 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm',
+    inlineError && 'border-destructive focus-visible:outline-destructive',
+  );
+  const monoTextareaClassName = cn(
+    'min-h-24 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm',
+    inlineError && 'border-destructive focus-visible:outline-destructive',
+  );
 
   return (
     <div className="space-y-1 text-sm">
@@ -7504,12 +7758,12 @@ function CollectionRecordFieldEditor({
       </span>
       {field.helpText ? <span className="block text-xs leading-4 text-muted-foreground">{field.helpText}</span> : null}
       {field.type === 'boolean' ? (
-        <select value={value || 'false'} onChange={(event) => onChange(event.target.value)} className={inputClassName}>
+        <select value={value || 'false'} onChange={(event) => onChange(event.target.value)} className={inputClassName} {...errorProps} {...requiredProps}>
           <option value="true">True</option>
           <option value="false">False</option>
         </select>
       ) : field.type === 'select' && field.options?.length ? (
-        <select value={value} onChange={(event) => onChange(event.target.value)} className={inputClassName} required={field.required}>
+        <select value={value} onChange={(event) => onChange(event.target.value)} className={inputClassName} {...errorProps} {...requiredProps}>
           <option value="">Choose {field.label}</option>
           {field.options.map((option) => (
             <option key={option} value={option}>{option}</option>
@@ -7520,8 +7774,9 @@ function CollectionRecordFieldEditor({
           multiple
           value={selectedValues}
           onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value).join(', '))}
-          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
-          required={field.required}
+          className={tallInputClassName}
+          {...errorProps}
+          {...requiredProps}
         >
           {field.options.map((option) => (
             <option key={option} value={option}>{option}</option>
@@ -7533,7 +7788,8 @@ function CollectionRecordFieldEditor({
             value={optionIds.has(value) ? value : ''}
             onChange={(event) => onChange(event.target.value)}
             className={inputClassName}
-            required={field.required && !value}
+            {...errorProps}
+            {...requiredProps}
             data-testid={`collections-record-reference-picker-${field.key}`}
             disabled={Boolean(targetReferenceState?.loading)}
           >
@@ -7549,7 +7805,8 @@ function CollectionRecordFieldEditor({
             value={value}
             onChange={(event) => onChange(event.target.value)}
             className={inputClassName}
-            required={field.required}
+            {...errorProps}
+            {...requiredProps}
             placeholder={`Or paste ${targetCollection.name} record ID`}
             data-testid={`collections-record-reference-manual-${field.key}`}
           />
@@ -7560,8 +7817,9 @@ function CollectionRecordFieldEditor({
             multiple
             value={selectedValues.filter((item) => optionIds.has(item))}
             onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value).join(', '))}
-            className="min-h-24 w-full rounded-lg border bg-background px-3 py-2"
-            required={field.required && selectedValues.length === 0}
+            className={tallInputClassName}
+            {...errorProps}
+            {...requiredProps}
             data-testid={`collections-record-reference-picker-${field.key}`}
             disabled={Boolean(targetReferenceState?.loading)}
           >
@@ -7572,8 +7830,9 @@ function CollectionRecordFieldEditor({
           <textarea
             value={value}
             onChange={(event) => onChange(event.target.value)}
-            className="min-h-20 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
-            required={field.required}
+            className={compactMonoTextareaClassName}
+            {...errorProps}
+            {...requiredProps}
             placeholder={`${targetCollection.name} record IDs separated by commas`}
             data-testid={`collections-record-reference-manual-${field.key}`}
           />
@@ -7582,8 +7841,9 @@ function CollectionRecordFieldEditor({
         <textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
-          required={field.required}
+          className={monoTextareaClassName}
+          {...errorProps}
+          {...requiredProps}
           placeholder={field.type === 'json' ? '{"key":"value"}' : field.type === 'multiReference' ? 'record-id-1, record-id-2' : undefined}
         />
       ) : field.type === 'image' || field.type === 'video' || field.type === 'file' ? (
@@ -7593,8 +7853,9 @@ function CollectionRecordFieldEditor({
               <textarea
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
-                className="min-h-20 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
-                required={field.required}
+                className={compactMonoTextareaClassName}
+                {...errorProps}
+                {...requiredProps}
                 placeholder="Backy media IDs or external URLs, one per line"
                 data-testid={`collections-record-field-${field.key}`}
               />
@@ -7604,7 +7865,8 @@ function CollectionRecordFieldEditor({
                 value={value}
                 onChange={(event) => onChange(event.target.value)}
                 className={inputClassName}
-                required={field.required}
+                {...errorProps}
+                {...requiredProps}
                 placeholder="Backy media ID or external URL"
                 data-testid={`collections-record-field-${field.key}`}
               />
@@ -7634,9 +7896,19 @@ function CollectionRecordFieldEditor({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className={inputClassName}
-          required={field.required}
+          {...errorProps}
+          {...requiredProps}
         />
       )}
+      {inlineError ? (
+        <span
+          id={fieldErrorId}
+          className="block text-xs font-medium text-destructive"
+          data-testid={`collections-record-field-error-${field.key}`}
+        >
+          {inlineError}
+        </span>
+      ) : null}
       {RELATION_FIELD_TYPES.includes(field.type) && targetReferenceState?.error ? (
         <span className="block text-xs leading-4 text-amber-600">
           {targetReferenceState.error}
@@ -7744,6 +8016,12 @@ function AuthoredTemplateComparePanel({
             <DiffFlag label="Page" changed={diff.pageChanged} detail={`${diff.versionPageLabel} -> ${diff.activePageLabel}`} />
             <DiffFlag label="Canvas size" changed={diff.canvasSizeChanged} detail={diff.canvasSizeChanged ? 'Changed' : 'Unchanged'} />
             <DiffFlag label="Custom CSS" changed={diff.customCssChanged} detail={diff.customCssChanged ? 'Changed' : 'Unchanged'} />
+            <DiffFlag label="Custom JS" changed={diff.customJsChanged} detail={diff.customJsChanged ? 'Changed' : 'Unchanged'} />
+            <DiffFlag
+              label="Design state"
+              changed={diff.designStateChanged}
+              detail={diff.designStateChanged ? summarizeTemplateRootIds(diff.designStateChangeLabels) : 'Unchanged'}
+            />
           </div>
         </div>
       ) : (

@@ -1,4 +1,5 @@
 type CommerceRecordStatus = 'draft' | 'published' | 'scheduled' | 'archived';
+type CommerceDesignArrayOrRecord = unknown[] | Record<string, unknown>;
 
 export interface CommerceSourceCollection {
   permissions: {
@@ -71,6 +72,18 @@ export interface CommerceProduct {
     tokens?: Record<string, unknown>;
     chrome?: Record<string, unknown>;
     customCss?: string;
+    customJs?: string;
+    contentDocument?: Record<string, unknown>;
+    elements?: unknown[];
+    canvasSize?: Record<string, unknown>;
+    themeTokenRefs?: Record<string, unknown>;
+    assets?: CommerceDesignArrayOrRecord;
+    animations?: CommerceDesignArrayOrRecord;
+    interactions?: CommerceDesignArrayOrRecord;
+    dataBindings?: Record<string, unknown>;
+    editableMap?: Record<string, unknown>;
+    seo?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
     frontendDesignTemplateId?: string;
     frontendDesignTemplateName?: string;
     frontendDesignSource?: Record<string, unknown>;
@@ -79,12 +92,46 @@ export interface CommerceProduct {
     frontendDesignTokens?: Record<string, unknown>;
     frontendDesignChrome?: Record<string, unknown>;
     frontendDesignCustomCss?: string;
+    frontendDesignCustomJs?: string;
+    frontendDesignContentDocument?: Record<string, unknown>;
+    frontendDesignElements?: unknown[];
+    frontendDesignCanvasSize?: Record<string, unknown>;
+    frontendDesignThemeTokenRefs?: Record<string, unknown>;
+    frontendDesignAssets?: CommerceDesignArrayOrRecord;
+    frontendDesignAnimations?: CommerceDesignArrayOrRecord;
+    frontendDesignInteractions?: CommerceDesignArrayOrRecord;
+    frontendDesignDataBindings?: Record<string, unknown>;
+    frontendDesignEditableMap?: Record<string, unknown>;
+    frontendDesignSeo?: Record<string, unknown>;
+    frontendDesignMetadata?: Record<string, unknown>;
   };
+  designReadiness: CommerceProductDesignReadiness;
   links: {
     storefrontPath: string;
   };
   updatedAt: string;
   publishedAt: string | null;
+}
+
+export interface CommerceProductDesignReadiness {
+  schemaVersion: 'backy.product-design-readiness.v1';
+  status: 'ready' | 'attention' | 'blocked';
+  templateId: string | null;
+  hasDesign: boolean;
+  hasContentDocument: boolean;
+  hasEditableMap: boolean;
+  hasDataBindings: boolean;
+  counts: {
+    elements: number;
+    animations: number;
+    assets: number;
+    bindingHints: number;
+  };
+  missing: string[];
+  detail: string;
+  nextAction: string;
+  evidence: string[];
+  secretHandling: string;
 }
 
 export interface CommerceProductVariant {
@@ -230,6 +277,7 @@ const COMMERCE_PRODUCT_VALUE_KEYS = {
   inventoryPolicy: 'inventorypolicy',
   productType: 'producttype',
   downloadUrl: 'downloadurl',
+  downloadMediaId: 'downloadmediaid',
   checkoutUrl: 'checkouturl',
   subscriptionEnabled: 'subscriptionenabled',
   subscriptionInterval: 'subscriptioninterval',
@@ -280,9 +328,10 @@ const quoteCommerceEnvTemplateValue = (value: string): string => (
   /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteCommerceShellValue(value)
 );
 
-const buildCommerceProviderCertificationEnvEntries = (): Array<[string, string]> => [
+const buildCommerceProviderCertificationEnvEntries = (siteId = 'site-demo'): Array<[string, string]> => [
   ['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1'],
   ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', '1'],
+  ['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId || 'site-demo'],
   ['BACKY_COMMERCE_CERTIFY_PAYMENT', '1'],
   ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', 'auto'],
   ['BACKY_COMMERCE_CERTIFY_TAX', '1'],
@@ -299,8 +348,8 @@ const buildCommerceProviderCertificationEnvEntries = (): Array<[string, string]>
   ['BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER', 'auto'],
 ];
 
-const buildCommerceProviderCertificationCommand = (): string => {
-  const envEntries = buildCommerceProviderCertificationEnvEntries();
+const buildCommerceProviderCertificationCommand = (siteId = 'site-demo'): string => {
+  const envEntries = buildCommerceProviderCertificationEnvEntries(siteId);
 
   return [
     ...envEntries.map(([key, value]) => `export ${key}=${quoteCommerceShellValue(value)}`),
@@ -310,8 +359,8 @@ const buildCommerceProviderCertificationCommand = (): string => {
   ].join('\n');
 };
 
-const buildCommerceProviderCertificationEnvTemplate = (): string => {
-  const envEntries = buildCommerceProviderCertificationEnvEntries();
+const buildCommerceProviderCertificationEnvTemplate = (siteId = 'site-demo'): string => {
+  const envEntries = buildCommerceProviderCertificationEnvEntries(siteId);
 
   return [
     '# Backy commerce provider certification environment',
@@ -320,9 +369,11 @@ const buildCommerceProviderCertificationEnvTemplate = (): string => {
   ].join('\n');
 };
 
-const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE: CommerceStorefrontContract['providerCertification']['operatorCommandTemplate'] = {
-  command: buildCommerceProviderCertificationCommand(),
-  envTemplate: buildCommerceProviderCertificationEnvTemplate(),
+const buildCommerceProviderCertificationOperatorCommandTemplate = (
+  siteId = 'site-demo',
+): CommerceStorefrontContract['providerCertification']['operatorCommandTemplate'] => ({
+  command: buildCommerceProviderCertificationCommand(siteId),
+  envTemplate: buildCommerceProviderCertificationEnvTemplate(siteId),
   envTemplateSchemaVersion: 'backy.commerce-provider-certification-env-template.v1',
   providerChoices: {
     payment: ['auto', 'stripe', 'paypal', 'paddle', 'square', 'adyen', 'mollie', 'razorpay'],
@@ -335,6 +386,7 @@ const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE: CommerceStorefr
   },
   requiredInputs: [
     'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1',
+    'BACKY_COMMERCE_CERTIFY_SITE_ID',
     'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_TAX_PROVIDER',
     'BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER',
@@ -354,10 +406,13 @@ const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE: CommerceStorefr
   ],
   targetInputs: [
     'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'BACKY_COMMERCE_CERTIFY_SITE_ID',
     'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
   ],
   secretHandling: 'Provider credential values stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
-};
+});
+
+const COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = buildCommerceProviderCertificationOperatorCommandTemplate();
 
 const commerceProviderCertificationRuntime = (): CommerceStorefrontContract['providerCertification']['runtime'] => {
   const paymentConfigured =
@@ -497,19 +552,22 @@ const normalizeEventAllowlist = (value: unknown): string[] => {
     .slice(0, 24);
 };
 
-const commerceProviderCertification = (): CommerceStorefrontContract['providerCertification'] => ({
+const commerceProviderCertification = (siteId = 'site-demo'): CommerceStorefrontContract['providerCertification'] => {
+  const operatorCommandTemplate = buildCommerceProviderCertificationOperatorCommandTemplate(siteId);
+
+  return {
   schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
   status: 'external-live-provider-gate',
   localMockGate: 'ci:commerce-provider-smoke',
   liveCertificationGate: 'ci:commerce-provider-certification',
   requiredFor: 'live-commerce-provider-launch',
   secretHandling: 'Provider credentials stay in server environment/configuration; storefront contracts expose only non-secret readiness gates and provider-family requirements.',
-  operatorCommandTemplate: COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+  operatorCommandTemplate,
   operatorEnvTemplate: {
     schemaVersion: 'backy.commerce-provider-certification-env-template.v1',
     format: 'shell-env',
     fileName: '.env.backy-commerce-provider-certification',
-    body: COMMERCE_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+    body: operatorCommandTemplate.envTemplate,
     secretHandling: 'Generated template values are non-secret aliases and placeholders; keep real commerce provider credentials in CI secrets or local shell variables before execution.',
   },
   runtime: commerceProviderCertificationRuntime(),
@@ -603,7 +661,8 @@ const commerceProviderCertification = (): CommerceStorefrontContract['providerCe
       evidence: 'Repeatable checkout, quote, catalog, label, tracking, fulfillment, refund, webhook, and reconciliation coverage without live credentials.',
     },
   ],
-});
+  };
+};
 
 export const buildCommerceStorefrontContract = ({
   siteId,
@@ -676,7 +735,7 @@ export const buildCommerceStorefrontContract = ({
       windowHours: Math.max(1, Math.min(720, Math.round(normalizeNumber(commerce.reconciliationWindowHours, 24)))),
       requiresManualReview: reconciliationMode === 'manual' || !eventsEnabled,
     },
-    providerCertification: commerceProviderCertification(),
+    providerCertification: commerceProviderCertification(siteId),
   };
 };
 
@@ -786,25 +845,74 @@ const normalizeRecordArray = (value: unknown): Array<Record<string, unknown>> | 
   return records.length > 0 ? records : undefined;
 };
 
+const normalizeUnknownArray = (value: unknown): unknown[] | undefined => (
+  Array.isArray(value) && value.length > 0 ? value : undefined
+);
+
 const normalizeDesignRecord = (value: unknown): Record<string, unknown> | undefined => (
   isRecord(value) ? value : undefined
 );
 
-const buildProductDesignContract = (values: Record<string, unknown>): CommerceProduct['design'] => {
-  const templateId = normalizeText(values.frontendDesignTemplateId);
-  const templateName = normalizeText(values.frontendDesignTemplateName);
-  const source = normalizeDesignRecord(values.frontendDesignSource);
-  const bindingHints = normalizeRecordArray(values.frontendDesignBindingHints);
-  const routePattern = normalizeText(values.frontendDesignRoutePattern);
-  const tokens = normalizeDesignRecord(values.frontendDesignTokens);
-  const chrome = normalizeDesignRecord(values.frontendDesignChrome);
-  const customCss = normalizeText(values.frontendDesignCustomCss);
+const normalizeUnknownArrayOrRecord = (value: unknown): CommerceDesignArrayOrRecord | undefined => {
+  if (Array.isArray(value) && value.length > 0) return value;
+  return normalizeDesignRecord(value);
+};
 
-  if (!templateId && !templateName && !source && !bindingHints && !routePattern && !tokens && !chrome && !customCss) {
+const buildProductDesignContract = (values: Record<string, unknown>): CommerceProduct['design'] => {
+  const designEnvelope = normalizeDesignRecord(values.design);
+  const hasDesignEnvelope = Boolean(designEnvelope && Object.keys(designEnvelope).length > 0);
+  const designValue = (key: string, frontendKey: string): unknown => (
+    designEnvelope?.[key] ?? designEnvelope?.[frontendKey] ?? values[frontendKey]
+  );
+  const templateId = normalizeText(designValue('templateId', 'frontendDesignTemplateId'));
+  const templateName = normalizeText(designValue('templateName', 'frontendDesignTemplateName'));
+  const source = normalizeDesignRecord(designValue('source', 'frontendDesignSource'));
+  const bindingHints = normalizeRecordArray(designValue('bindingHints', 'frontendDesignBindingHints'));
+  const routePattern = normalizeText(designValue('routePattern', 'frontendDesignRoutePattern'));
+  const tokens = normalizeDesignRecord(designValue('tokens', 'frontendDesignTokens'));
+  const chrome = normalizeDesignRecord(designValue('chrome', 'frontendDesignChrome'));
+  const customCss = normalizeText(designValue('customCss', 'frontendDesignCustomCss'));
+  const customJs = normalizeText(designValue('customJs', 'frontendDesignCustomJs'));
+  const contentDocument = normalizeDesignRecord(designValue('contentDocument', 'frontendDesignContentDocument'));
+  const elements = normalizeUnknownArray(designValue('elements', 'frontendDesignElements'));
+  const canvasSize = normalizeDesignRecord(designValue('canvasSize', 'frontendDesignCanvasSize'));
+  const themeTokenRefs = normalizeDesignRecord(designValue('themeTokenRefs', 'frontendDesignThemeTokenRefs'));
+  const assets = normalizeUnknownArrayOrRecord(designValue('assets', 'frontendDesignAssets'));
+  const animations = normalizeUnknownArrayOrRecord(designValue('animations', 'frontendDesignAnimations'));
+  const interactions = normalizeUnknownArrayOrRecord(designValue('interactions', 'frontendDesignInteractions'));
+  const dataBindings = normalizeDesignRecord(designValue('dataBindings', 'frontendDesignDataBindings'));
+  const editableMap = normalizeDesignRecord(designValue('editableMap', 'frontendDesignEditableMap'));
+  const seo = normalizeDesignRecord(designValue('seo', 'frontendDesignSeo'));
+  const metadata = normalizeDesignRecord(designValue('metadata', 'frontendDesignMetadata'));
+
+  if (
+    !templateId &&
+    !templateName &&
+    !source &&
+    !bindingHints &&
+    !routePattern &&
+    !tokens &&
+    !chrome &&
+    !customCss &&
+    !customJs &&
+    !contentDocument &&
+    !elements &&
+    !canvasSize &&
+    !themeTokenRefs &&
+    !assets &&
+    !animations &&
+    !interactions &&
+    !dataBindings &&
+    !editableMap &&
+    !seo &&
+    !metadata &&
+    !hasDesignEnvelope
+  ) {
     return undefined;
   }
 
   return {
+    ...(designEnvelope ? { ...designEnvelope } : {}),
     ...(templateId ? { templateId } : {}),
     ...(templateName ? { templateName } : {}),
     ...(source ? { source } : {}),
@@ -813,6 +921,18 @@ const buildProductDesignContract = (values: Record<string, unknown>): CommercePr
     ...(tokens ? { tokens } : {}),
     ...(chrome ? { chrome } : {}),
     ...(customCss ? { customCss } : {}),
+    ...(customJs ? { customJs } : {}),
+    ...(contentDocument ? { contentDocument } : {}),
+    ...(elements ? { elements } : {}),
+    ...(canvasSize ? { canvasSize } : {}),
+    ...(themeTokenRefs ? { themeTokenRefs } : {}),
+    ...(assets ? { assets } : {}),
+    ...(animations ? { animations } : {}),
+    ...(interactions ? { interactions } : {}),
+    ...(dataBindings ? { dataBindings } : {}),
+    ...(editableMap ? { editableMap } : {}),
+    ...(seo ? { seo } : {}),
+    ...(metadata ? { metadata } : {}),
     ...(templateId ? { frontendDesignTemplateId: templateId } : {}),
     ...(templateName ? { frontendDesignTemplateName: templateName } : {}),
     ...(source ? { frontendDesignSource: source } : {}),
@@ -821,8 +941,117 @@ const buildProductDesignContract = (values: Record<string, unknown>): CommercePr
     ...(tokens ? { frontendDesignTokens: tokens } : {}),
     ...(chrome ? { frontendDesignChrome: chrome } : {}),
     ...(customCss ? { frontendDesignCustomCss: customCss } : {}),
+    ...(customJs ? { frontendDesignCustomJs: customJs } : {}),
+    ...(contentDocument ? { frontendDesignContentDocument: contentDocument } : {}),
+    ...(elements ? { frontendDesignElements: elements } : {}),
+    ...(canvasSize ? { frontendDesignCanvasSize: canvasSize } : {}),
+    ...(themeTokenRefs ? { frontendDesignThemeTokenRefs: themeTokenRefs } : {}),
+    ...(assets ? { frontendDesignAssets: assets } : {}),
+    ...(animations ? { frontendDesignAnimations: animations } : {}),
+    ...(interactions ? { frontendDesignInteractions: interactions } : {}),
+    ...(dataBindings ? { frontendDesignDataBindings: dataBindings } : {}),
+    ...(editableMap ? { frontendDesignEditableMap: editableMap } : {}),
+    ...(seo ? { frontendDesignSeo: seo } : {}),
+    ...(metadata ? { frontendDesignMetadata: metadata } : {}),
   };
 };
+
+const productDesignReadinessRecord = (
+  design: CommerceProduct['design'],
+  key: keyof NonNullable<CommerceProduct['design']>,
+  fallbackKey: keyof NonNullable<CommerceProduct['design']>,
+): Record<string, unknown> | undefined => (
+  normalizeDesignRecord(design?.[key]) || normalizeDesignRecord(design?.[fallbackKey])
+);
+
+const productDesignReadinessArray = (
+  design: CommerceProduct['design'],
+  key: keyof NonNullable<CommerceProduct['design']>,
+  fallbackKey: keyof NonNullable<CommerceProduct['design']>,
+): unknown[] => (
+  normalizeUnknownArray(design?.[key]) || normalizeUnknownArray(design?.[fallbackKey]) || []
+);
+
+const productDesignReadinessArrayOrRecord = (
+  design: CommerceProduct['design'],
+  key: keyof NonNullable<CommerceProduct['design']>,
+  fallbackKey: keyof NonNullable<CommerceProduct['design']>,
+): CommerceDesignArrayOrRecord | undefined => (
+  normalizeUnknownArrayOrRecord(design?.[key]) || normalizeUnknownArrayOrRecord(design?.[fallbackKey])
+);
+
+const designStateItemCount = (value: unknown): number => {
+  if (Array.isArray(value)) return value.length;
+  if (isRecord(value)) return Object.keys(value).length;
+  return 0;
+};
+
+const buildProductDesignReadiness = (
+  design: CommerceProduct['design'],
+): CommerceProductDesignReadiness => {
+  const templateId = normalizeText(design?.templateId) || normalizeText(design?.frontendDesignTemplateId);
+  const contentDocument = productDesignReadinessRecord(design, 'contentDocument', 'frontendDesignContentDocument');
+  const elements = productDesignReadinessArray(design, 'elements', 'frontendDesignElements');
+  const animations = productDesignReadinessArrayOrRecord(design, 'animations', 'frontendDesignAnimations');
+  const assets = productDesignReadinessArrayOrRecord(design, 'assets', 'frontendDesignAssets');
+  const editableMap = productDesignReadinessRecord(design, 'editableMap', 'frontendDesignEditableMap');
+  const dataBindings = productDesignReadinessRecord(design, 'dataBindings', 'frontendDesignDataBindings');
+  const bindingHints = productDesignReadinessArray(design, 'bindingHints', 'frontendDesignBindingHints');
+  const animationCount = designStateItemCount(animations);
+  const assetCount = designStateItemCount(assets);
+  const hasDesign = Boolean(design);
+  const hasContentDocument = Boolean(contentDocument);
+  const hasEditableMap = Boolean(editableMap);
+  const hasDataBindings = Boolean(dataBindings);
+  const hasContentTree = hasContentDocument || elements.length > 0;
+  const hasEditableBindings = hasEditableMap || hasDataBindings || bindingHints.length > 0;
+  const missing = [
+    templateId ? '' : 'templateId',
+    hasContentTree ? '' : 'contentDocumentOrElements',
+    hasEditableBindings ? '' : 'editableMapOrDataBindings',
+  ].filter(Boolean);
+  const status: CommerceProductDesignReadiness['status'] = templateId && hasContentTree && hasEditableBindings
+    ? 'ready'
+    : 'attention';
+
+  return {
+    schemaVersion: 'backy.product-design-readiness.v1',
+    status,
+    templateId: templateId || null,
+    hasDesign,
+    hasContentDocument,
+    hasEditableMap,
+    hasDataBindings,
+    counts: {
+      elements: elements.length,
+      animations: animationCount,
+      assets: assetCount,
+      bindingHints: bindingHints.length,
+    },
+    missing,
+    detail: status === 'ready'
+      ? `Product carries editable custom frontend design state from template ${templateId}.`
+      : hasDesign
+        ? 'Product has partial frontend design metadata but is missing a template, content tree, editable map, data binding, or binding hints.'
+        : 'Product has no custom frontend design envelope; custom frontends can render catalog data but cannot reopen the product page as an editable design.',
+    nextAction: 'Attach a product frontend template or save contentDocument/elements plus editableMap/dataBindings so external builders can edit the product page design.',
+    evidence: [
+      `template=${templateId || 'missing'}`,
+      `elements=${elements.length}`,
+      `animations=${animationCount}`,
+      `assets=${assetCount}`,
+      `contentDocument=${hasContentDocument ? 'present' : 'missing'}`,
+      `editableMap=${hasEditableMap ? 'present' : 'missing'}`,
+      `dataBindings=${hasDataBindings ? 'present' : 'missing'}`,
+      `bindingHints=${bindingHints.length}`,
+    ],
+    secretHandling: 'Design readiness reports counts, booleans, and editable design-state presence only; provider secrets, private orders, raw customer payloads, and digital delivery URLs are excluded.',
+  };
+};
+
+export const productDesignReadinessFromValues = (
+  values: Record<string, unknown>,
+): CommerceProductDesignReadiness => buildProductDesignReadiness(buildProductDesignContract(values));
 
 export const isCommerceSourceRecord = (record: unknown): record is CommerceSourceRecord => {
   if (!record || typeof record !== 'object') return false;
@@ -847,12 +1076,16 @@ export const isCommerceSourceRecord = (record: unknown): record is CommerceSourc
 
 export const productRecordToCommerceProduct = (record: CommerceSourceRecord): CommerceProduct => {
   const values = record.values;
+  const design = buildProductDesignContract(values);
   const productType = normalizeProductType(readProductValue(values, 'productType'));
   const quantity = Math.max(0, normalizeNumber(readProductValue(values, 'inventory')));
   const lowStockThreshold = Math.max(0, normalizeNumber(readProductValue(values, 'lowStockThreshold'), 5));
   const inventoryPolicy = normalizeInventoryPolicy(readProductValue(values, 'inventoryPolicy'));
   const checkoutUrl = normalizeText(readProductValue(values, 'checkoutUrl'));
-  const hasDigitalDelivery = productType === 'digital' && normalizeText(readProductValue(values, 'downloadUrl')).length > 0;
+  const hasDigitalDelivery = productType === 'digital' && (
+    normalizeText(readProductValue(values, 'downloadUrl')).length > 0
+    || normalizeText(readProductValue(values, 'downloadMediaId')).length > 0
+  );
   const shippingRequiredValue = readProductValue(values, 'shippingRequired');
   const taxableValue = readProductValue(values, 'taxable');
 
@@ -902,7 +1135,8 @@ export const productRecordToCommerceProduct = (record: CommerceSourceRecord): Co
       interval: normalizeSubscriptionInterval(readProductValue(values, 'subscriptionInterval')),
       trialDays: Math.max(0, Math.round(normalizeNumber(readProductValue(values, 'subscriptionTrialDays')))),
     },
-    design: buildProductDesignContract(values),
+    design,
+    designReadiness: buildProductDesignReadiness(design),
     links: {
       storefrontPath: `/products/${record.slug}`,
     },

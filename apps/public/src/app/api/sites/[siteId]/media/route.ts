@@ -7,8 +7,8 @@
  */
 
 import { NextRequest } from 'next/server';
-import type { MediaItem } from '@backy-cms/core';
-import { getMediaList, getSiteByIdOrSlug } from '@/lib/backyStore';
+import type { MediaFolder, MediaItem } from '@backy-cms/core';
+import { getMediaList, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { booleanQueryFlag, mediaMatchesScopeFilters } from '@/lib/mediaScope';
 import { publicContractJson } from '@/lib/publicContractResponse';
@@ -45,7 +45,7 @@ const MAX_MEDIA_LIMIT = 100;
 
 type PublicMediaScopeFilter = typeof mediaScopeValues[number];
 
-const mediaTypeFromInput = (value: string | null): { type?: MediaItem['type']; invalid?: string } => {
+const mediaTypeFromInput = (value: string | null): { type?: MediaItem['type']; types?: MediaItem['type'][]; invalid?: string } => {
     if (!value) {
         return {};
     }
@@ -56,7 +56,7 @@ const mediaTypeFromInput = (value: string | null): { type?: MediaItem['type']; i
     }
 
     if (normalized === 'file') {
-        return { type: 'document' };
+        return { types: ['document', 'other'] };
     }
 
     if (mediaTypeValues.includes(normalized as MediaItem['type'])) {
@@ -64,6 +64,17 @@ const mediaTypeFromInput = (value: string | null): { type?: MediaItem['type']; i
     }
 
     return { invalid: value };
+};
+
+const mediaMatchesRequestedType = (
+    item: MediaItem,
+    filter: ReturnType<typeof mediaTypeFromInput>,
+) => {
+    if (filter.types) {
+        return filter.types.includes(item.type);
+    }
+
+    return true;
 };
 
 const mediaScopeFromInput = (value: string | null): { scope?: PublicMediaScopeFilter; invalid?: string } => {
@@ -146,8 +157,14 @@ const mediaTagMatches = (tags: string[], tag: string | null) => {
     return tags.some((item) => item.trim().toLowerCase() === normalizedTag);
 };
 
-const paginateMedia = (siteId: string, items: MediaItem[], limit: number, offset: number) => ({
-    media: items.slice(offset, offset + limit).map((item) => toPublicMediaAsset(siteId, item)),
+const paginateMedia = (
+    siteId: string,
+    items: MediaItem[],
+    limit: number,
+    offset: number,
+    folders: MediaFolder[] = [],
+) => ({
+    media: items.slice(offset, offset + limit).map((item) => toPublicMediaAsset(siteId, item, folders)),
     pagination: {
         total: items.length,
         limit,
@@ -171,7 +188,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 requestId,
             );
         }
-        const type = mediaType.type;
+        const type = mediaType.types ? undefined : mediaType.type;
         const mediaLimit = integerQueryFromInput(searchParams.get('limit'), DEFAULT_MEDIA_LIMIT, 1, MAX_MEDIA_LIMIT);
         if (mediaLimit.invalid) {
             return errorResponse(
@@ -225,20 +242,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
             }
 
-            const result = await repositories.media.list({
-                siteId: site.id,
-                type: type || 'all',
-                folderId,
-                visibility: 'public',
-                search: search || undefined,
-                limit: 10000,
-                offset: 0,
-            });
+            const [folders, result] = await Promise.all([
+                repositories.media.listFolders(site.id),
+                repositories.media.list({
+                    siteId: site.id,
+                    type: type || 'all',
+                    folderId,
+                    visibility: 'public',
+                    search: search || undefined,
+                    limit: 10000,
+                    offset: 0,
+                }),
+            ]);
             const filtered = result.items
+                .filter((item) => mediaMatchesRequestedType(item, mediaType))
                 .filter((item) => mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }))
                 .filter((item) => mediaTagMatches(item.tags, tag))
                 .filter((item) => !isMediaQuarantined(item));
-            const mediaPayload = paginateMedia(site.id, filtered, limit, offset);
+            const mediaPayload = paginateMedia(site.id, filtered, limit, offset, folders);
             const cacheRevision = await repositories.cacheInvalidations.latestRevision({
                 siteId: site.id,
                 scope: 'media',
@@ -276,8 +297,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             limit: 10000,
             offset: 0,
         });
-        const visibleMedia = mediaPayload.media.filter((item) => !isMediaQuarantined(item));
-        const mediaWithVariants = paginateMedia(site.id, visibleMedia, limit, offset);
+        const folders = listMediaFolders(site.id);
+        const visibleMedia = mediaPayload.media
+            .filter((item) => mediaMatchesRequestedType(item, mediaType))
+            .filter((item) => !isMediaQuarantined(item));
+        const mediaWithVariants = paginateMedia(site.id, visibleMedia, limit, offset, folders);
 
         return publicContractJson({
             success: true,

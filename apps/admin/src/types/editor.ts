@@ -39,6 +39,7 @@ export interface ResponsiveElementOverride {
   locked?: boolean;
   props?: Record<string, unknown>;
   styles?: CSSProperties;
+  tokenRefs?: Record<string, string>;
 }
 
 export type ComponentBindingSourceKind =
@@ -138,6 +139,12 @@ export interface CanvasElement {
   // Optional breakpoint-specific layout/content/style overrides.
   responsive?: Partial<Record<EditorBreakpoint, ResponsiveElementOverride>>;
 
+  // Optional theme-token bindings for style inheritance.
+  tokenRefs?: Record<string, string>;
+
+  // Reusable media/font/file asset references used by the element.
+  assetIds?: string[];
+
   // Parent element ID (for grouped/nested elements)
   parentId?: string;
 
@@ -169,7 +176,7 @@ export interface ComponentLibraryItem {
   defaultProps?: Record<string, unknown>; // Default props when adding element
   defaultSize?: { width: number; height: number }; // Default size
   defaultStyles?: CSSProperties; // Default root styles
-  defaultResponsive?: CanvasElement['responsive']; // Breakpoint defaults for composed presets
+  defaultResponsive?: CanvasElement['responsive']; // Breakpoint defaults for catalog presets
   defaultBindingSlots?: ComponentBindingSlot[]; // CMS/data binding targets for composed presets
   defaultChildren?: ComponentLibraryChild[]; // Nested preset elements
   reusableContent?: ReusableSectionContent; // Saved section/template content from the backend
@@ -180,6 +187,15 @@ export interface ReusableSectionContent {
   canvasSize?: CanvasSize;
   customCSS?: string;
   customJS?: string;
+  contentDocument?: Record<string, unknown>;
+  themeTokenRefs?: Record<string, string>;
+  assets?: unknown[] | Record<string, unknown>;
+  animations?: unknown[] | Record<string, unknown>;
+  interactions?: unknown[] | Record<string, unknown>;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   sectionId?: string;
   slug?: string;
   name?: string;
@@ -270,6 +286,14 @@ export interface ElementProps {
   success?: string;
   redirectUrl?: string;
   required?: boolean;
+  fieldBackgroundColor?: string;
+  fieldBorderColor?: string;
+  fieldBorderRadius?: number | string;
+  labelColor?: string;
+  helpTextColor?: string;
+  submitBackgroundColor?: string;
+  submitColor?: string;
+  submitBorderRadius?: number | string;
 
   // Common media/context fields
   scope?: 'global' | 'page' | 'post';
@@ -403,6 +427,7 @@ export interface AnimationConfig {
   };
   from?: Record<string, unknown>;
   to?: Record<string, unknown>;
+  tokenRefs?: Record<string, string>;
 }
 
 export interface ElementAnimation {

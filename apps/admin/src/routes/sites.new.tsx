@@ -228,9 +228,96 @@ const normalizeDomain = (value: string) => value
 
 const isValidSlug = (value: string) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 const isValidDomain = (value: string) => !value || /^[a-z0-9.-]+\.[a-z]{2,}$/.test(value);
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const isValidImportUrl = (value: string) => {
+  if (!value) return true;
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+const isValidIdentifier = (value: string) => !value || /^[A-Za-z0-9_-]+$/.test(value);
 const normalizeOptionalUrl = (value: string) => value.trim();
 const createDnsToken = (slug: string) => `backy-${slug || 'new-site'}-${Math.random().toString(36).slice(2, 10)}`;
 const createSetupEventId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+interface SiteCreateInlineErrors {
+  name?: string;
+  slug?: string;
+  customDomain?: string;
+  teamId?: string;
+  vercelProjectId?: string;
+  vercelTeamSlug?: string;
+  vercelProductionDomain?: string;
+  billingEmail?: string;
+  templateImportUrl?: string;
+}
+
+const buildSiteCreateInlineErrors = (input: {
+  name: string;
+  slug: string;
+  customDomain: string;
+  teamId: string;
+  vercelProjectId: string;
+  vercelTeamSlug: string;
+  vercelProductionDomain: string;
+  billingEmail: string;
+  templateSource: SiteCreateTemplateSource;
+  templateImportUrl: string;
+}): SiteCreateInlineErrors => {
+  const name = input.name.trim();
+  const slug = input.slug.trim();
+  const customDomain = normalizeDomain(input.customDomain);
+  const teamId = input.teamId.trim();
+  const vercelProjectId = input.vercelProjectId.trim();
+  const vercelTeamSlug = input.vercelTeamSlug.trim();
+  const vercelProductionDomain = normalizeDomain(input.vercelProductionDomain);
+  const billingEmail = input.billingEmail.trim();
+  const templateImportUrl = normalizeOptionalUrl(input.templateImportUrl);
+
+  return {
+    name: !name
+      ? 'Site name is required.'
+      : name.length < 2
+        ? 'Site name must be at least 2 characters.'
+        : name.length > 80
+          ? 'Site name must be 80 characters or fewer.'
+          : undefined,
+    slug: !slug
+      ? 'URL slug is required.'
+      : slug.length > 80
+        ? 'URL slug must be 80 characters or fewer.'
+        : !isValidSlug(slug)
+          ? 'Use lowercase letters, numbers, and single hyphens only.'
+          : undefined,
+    customDomain: customDomain && !isValidDomain(customDomain)
+      ? 'Use a domain like example.com.'
+      : undefined,
+    teamId: !isValidIdentifier(teamId)
+      ? 'Use only letters, numbers, underscores, or hyphens.'
+      : undefined,
+    vercelProjectId: !isValidIdentifier(vercelProjectId)
+      ? 'Use only letters, numbers, underscores, or hyphens.'
+      : undefined,
+    vercelTeamSlug: vercelTeamSlug && !isValidSlug(vercelTeamSlug)
+      ? 'Use lowercase letters, numbers, and single hyphens only.'
+      : undefined,
+    vercelProductionDomain: vercelProductionDomain && !isValidDomain(vercelProductionDomain)
+      ? 'Use a production domain like example.com.'
+      : undefined,
+    billingEmail: billingEmail && !isValidEmail(billingEmail)
+      ? 'Enter a valid billing email address.'
+      : undefined,
+    templateImportUrl: input.templateSource === 'import-url' && !templateImportUrl
+      ? 'Add the import URL or choose another template source.'
+      : !isValidImportUrl(templateImportUrl)
+        ? 'Use a full http or https URL.'
+        : undefined,
+  };
+};
 
 function NewSitePage() {
   const navigate = useNavigate();
@@ -240,6 +327,7 @@ function NewSitePage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [slugEdited, setSlugEdited] = useState(false);
+  const [siteCreateSubmitted, setSiteCreateSubmitted] = useState(false);
   const [createdSiteRecovery, setCreatedSiteRecovery] = useState<Site | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
@@ -307,12 +395,32 @@ function NewSitePage() {
   const starterPageDisabledTitle = creationDisabledTitle
     || (!canEditPages ? editPagesPermissionTitle : undefined)
     || (statusSeedsPublishedPages && !canPublishPages ? publishPagesPermissionTitle : undefined);
-  const canSubmit = formData.name.trim().length > 1
-    && isValidSlug(displaySlug)
-    && isValidDomain(normalizedDomain)
-    && (formData.templateSource !== 'import-url' || templateImportUrl.length > 0)
-    && canCreateSites
-    && canSeedStarterPages;
+  const siteCreateInlineErrors = useMemo(() => buildSiteCreateInlineErrors({
+    name: formData.name,
+    slug: displaySlug,
+    customDomain: formData.customDomain,
+    teamId: formData.teamId,
+    vercelProjectId: formData.vercelProjectId,
+    vercelTeamSlug: formData.vercelTeamSlug,
+    vercelProductionDomain: formData.vercelProductionDomain,
+    billingEmail: formData.billingEmail,
+    templateSource: formData.templateSource,
+    templateImportUrl: formData.templateImportUrl,
+  }), [
+    displaySlug,
+    formData.billingEmail,
+    formData.customDomain,
+    formData.name,
+    formData.teamId,
+    formData.templateImportUrl,
+    formData.templateSource,
+    formData.vercelProductionDomain,
+    formData.vercelProjectId,
+    formData.vercelTeamSlug,
+  ]);
+  const hasSiteCreateInlineErrors = Object.values(siteCreateInlineErrors).some(Boolean);
+  const showSiteCreateInlineErrors = siteCreateSubmitted && hasSiteCreateInlineErrors;
+  const canSubmit = canCreateSites && canSeedStarterPages;
   const adminSitesUrl = useMemo(() => `${getAdminApiBase()}/sites`, []);
   const publicApiBase = useMemo(() => getAdminApiBase().replace(/\/api\/admin$/, '/api'), []);
   const siteCreationReadiness = useMemo(() => {
@@ -766,6 +874,7 @@ function NewSitePage() {
     e.preventDefault();
 
     if (isCreateBusy) return;
+    setSiteCreateSubmitted(true);
     if (!canCreateSites) {
       setError(`Your account needs sites.create to create a site. ${createPermissionTitle}`);
       setNotice(null);
@@ -782,13 +891,14 @@ function NewSitePage() {
       return;
     }
 
-    if (!canSubmit) {
-      setError('Add a site name, use a valid URL slug, check the custom domain format, and complete the selected template source.');
+    if (hasSiteCreateInlineErrors) {
+      setError('Fix site creation fields before creating.');
       setNotice(null);
       return;
     }
 
     setIsLoading(true);
+    setSiteCreateSubmitted(false);
     setError(null);
     setNotice(null);
     setCreatedSiteRecovery(null);
@@ -985,7 +1095,7 @@ function NewSitePage() {
         </div>
       </section>
 
-      <form onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <form onSubmit={handleSubmit} noValidate data-testid="site-create-form" className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section id="site-identity" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
           <div className="flex items-start gap-3">
             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
@@ -1000,7 +1110,7 @@ function NewSitePage() {
           </div>
 
           {error && (
-            <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div role="alert" data-testid="site-create-inline-error" className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {error}
             </div>
           )}
@@ -1082,9 +1192,11 @@ function NewSitePage() {
           )}
 
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            <label className="block">
+            <label htmlFor="site-create-name-input" className="block">
               <span className="text-sm font-medium">Site name</span>
               <input
+                id="site-create-name-input"
+                data-testid="site-create-name-input"
                 type="text"
                 value={formData.name}
                 disabled={creationFormDisabled}
@@ -1099,9 +1211,18 @@ function NewSitePage() {
                   });
                 }}
                 placeholder="Northstar Studio"
-                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                required
+                className={cn(
+                  'mt-2 w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                  showSiteCreateInlineErrors && siteCreateInlineErrors.name ? 'border-red-300' : 'border-border',
+                )}
+                aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.name)}
+                aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.name ? 'site-create-name-error' : undefined}
               />
+              {showSiteCreateInlineErrors && siteCreateInlineErrors.name && (
+                <span id="site-create-name-error" data-testid="site-create-name-error" className="mt-2 block text-xs text-red-600">
+                  {siteCreateInlineErrors.name}
+                </span>
+              )}
             </label>
 
             <label className="block">
@@ -1126,11 +1247,17 @@ function NewSitePage() {
           </div>
 
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <label className="block">
+            <label htmlFor="site-create-slug-input" className="block">
               <span className="text-sm font-medium">URL slug</span>
-              <div className="mt-2 flex overflow-hidden rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-ring">
+              <div className={cn(
+                'mt-2 flex overflow-hidden rounded-lg border bg-background focus-within:ring-2 focus-within:ring-ring',
+                showSiteCreateInlineErrors && siteCreateInlineErrors.slug ? 'border-red-300' : 'border-border',
+              )}
+              >
                 <span className="border-r border-border bg-muted px-3 py-2.5 text-sm text-muted-foreground">backy.app/</span>
                 <input
+                  id="site-create-slug-input"
+                  data-testid="site-create-slug-input"
                   type="text"
                   value={displaySlug}
                   disabled={creationFormDisabled}
@@ -1143,19 +1270,24 @@ function NewSitePage() {
                   }}
                   placeholder="northstar-studio"
                   className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                  required
+                  aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.slug)}
+                  aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.slug ? 'site-create-slug-error' : undefined}
                 />
               </div>
-              {!isValidSlug(displaySlug) && (
-                <span className="mt-2 block text-xs text-red-600">Use lowercase letters, numbers, and hyphens.</span>
+              {showSiteCreateInlineErrors && siteCreateInlineErrors.slug && (
+                <span id="site-create-slug-error" data-testid="site-create-slug-error" className="mt-2 block text-xs text-red-600">
+                  {siteCreateInlineErrors.slug}
+                </span>
               )}
             </label>
 
-            <label className="block">
+            <label htmlFor="site-create-custom-domain-input" className="block">
               <span className="text-sm font-medium">Custom domain</span>
               <div className="relative mt-2">
                 <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
+                  id="site-create-custom-domain-input"
+                  data-testid="site-create-custom-domain-input"
                   type="text"
                   value={formData.customDomain}
                   disabled={creationFormDisabled}
@@ -1171,17 +1303,25 @@ function NewSitePage() {
                     setFormData({ ...formData, customDomain: normalizeDomain(e.target.value) });
                   }}
                   placeholder="example.com"
-                  className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    'w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                    showSiteCreateInlineErrors && siteCreateInlineErrors.customDomain ? 'border-red-300' : 'border-border',
+                  )}
+                  aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.customDomain)}
+                  aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.customDomain ? 'site-create-custom-domain-error' : undefined}
                 />
               </div>
-              {!isValidDomain(normalizedDomain) && (
-                <span className="mt-2 block text-xs text-red-600">Use a domain like example.com.</span>
+              {showSiteCreateInlineErrors && siteCreateInlineErrors.customDomain && (
+                <span id="site-create-custom-domain-error" data-testid="site-create-custom-domain-error" className="mt-2 block text-xs text-red-600">
+                  {siteCreateInlineErrors.customDomain}
+                </span>
               )}
             </label>
 
-            <label className="block">
+            <label htmlFor="site-create-team-id-input" className="block">
               <span className="text-sm font-medium">Database team ID</span>
               <input
+                id="site-create-team-id-input"
                 type="text"
                 value={formData.teamId}
                 disabled={creationFormDisabled}
@@ -1193,8 +1333,18 @@ function NewSitePage() {
                 }}
                 placeholder="team_..."
                 data-testid="site-create-team-id-input"
-                className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className={cn(
+                  'mt-2 w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                  showSiteCreateInlineErrors && siteCreateInlineErrors.teamId ? 'border-red-300' : 'border-border',
+                )}
+                aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.teamId)}
+                aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.teamId ? 'site-create-team-id-error' : undefined}
               />
+              {showSiteCreateInlineErrors && siteCreateInlineErrors.teamId && (
+                <span id="site-create-team-id-error" data-testid="site-create-team-id-error" className="mt-2 block text-xs text-red-600">
+                  {siteCreateInlineErrors.teamId}
+                </span>
+              )}
               <span className="mt-2 block text-xs leading-5 text-muted-foreground">
                 Optional for demo mode. Required in database mode when the backend cannot infer a team.
               </span>
@@ -1227,9 +1377,11 @@ function NewSitePage() {
               Store the initial DNS, deployment, billing, and design-source contract with the site record.
             </p>
             <div className="mt-4 grid gap-5 sm:grid-cols-2">
-              <label className="block">
+              <label htmlFor="site-create-vercel-project-input" className="block">
                 <span className="text-sm font-medium">Vercel project ID</span>
                 <input
+                  id="site-create-vercel-project-input"
+                  data-testid="site-create-vercel-project-input"
                   type="text"
                   value={formData.vercelProjectId}
                   disabled={creationFormDisabled}
@@ -1240,13 +1392,25 @@ function NewSitePage() {
                     setFormData({ ...formData, vercelProjectId: e.target.value.trim() });
                   }}
                   placeholder="prj_..."
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    'mt-2 w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                    showSiteCreateInlineErrors && siteCreateInlineErrors.vercelProjectId ? 'border-red-300' : 'border-border',
+                  )}
+                  aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.vercelProjectId)}
+                  aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.vercelProjectId ? 'site-create-vercel-project-error' : undefined}
                 />
+                {showSiteCreateInlineErrors && siteCreateInlineErrors.vercelProjectId && (
+                  <span id="site-create-vercel-project-error" data-testid="site-create-vercel-project-error" className="mt-2 block text-xs text-red-600">
+                    {siteCreateInlineErrors.vercelProjectId}
+                  </span>
+                )}
               </label>
 
-              <label className="block">
+              <label htmlFor="site-create-vercel-team-input" className="block">
                 <span className="text-sm font-medium">Vercel team slug</span>
                 <input
+                  id="site-create-vercel-team-input"
+                  data-testid="site-create-vercel-team-input"
                   type="text"
                   value={formData.vercelTeamSlug}
                   disabled={creationFormDisabled}
@@ -1257,13 +1421,25 @@ function NewSitePage() {
                     setFormData({ ...formData, vercelTeamSlug: e.target.value.trim() });
                   }}
                   placeholder="team-slug"
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    'mt-2 w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                    showSiteCreateInlineErrors && siteCreateInlineErrors.vercelTeamSlug ? 'border-red-300' : 'border-border',
+                  )}
+                  aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.vercelTeamSlug)}
+                  aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.vercelTeamSlug ? 'site-create-vercel-team-error' : undefined}
                 />
+                {showSiteCreateInlineErrors && siteCreateInlineErrors.vercelTeamSlug && (
+                  <span id="site-create-vercel-team-error" data-testid="site-create-vercel-team-error" className="mt-2 block text-xs text-red-600">
+                    {siteCreateInlineErrors.vercelTeamSlug}
+                  </span>
+                )}
               </label>
 
-              <label className="block">
+              <label htmlFor="site-create-production-domain-input" className="block">
                 <span className="text-sm font-medium">Production domain</span>
                 <input
+                  id="site-create-production-domain-input"
+                  data-testid="site-create-production-domain-input"
                   type="text"
                   value={formData.vercelProductionDomain}
                   disabled={creationFormDisabled}
@@ -1279,8 +1455,18 @@ function NewSitePage() {
                     setFormData({ ...formData, vercelProductionDomain: normalizeDomain(e.target.value) });
                   }}
                   placeholder={normalizedDomain || `${displaySlug || 'new-site'}.backy.app`}
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    'mt-2 w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                    showSiteCreateInlineErrors && siteCreateInlineErrors.vercelProductionDomain ? 'border-red-300' : 'border-border',
+                  )}
+                  aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.vercelProductionDomain)}
+                  aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.vercelProductionDomain ? 'site-create-production-domain-error' : undefined}
                 />
+                {showSiteCreateInlineErrors && siteCreateInlineErrors.vercelProductionDomain && (
+                  <span id="site-create-production-domain-error" data-testid="site-create-production-domain-error" className="mt-2 block text-xs text-red-600">
+                    {siteCreateInlineErrors.vercelProductionDomain}
+                  </span>
+                )}
               </label>
 
               <label className="block">
@@ -1303,9 +1489,11 @@ function NewSitePage() {
                 <span className="mt-2 block text-xs leading-5 text-muted-foreground">{selectedBillingPlan.detail}</span>
               </label>
 
-              <label className="block">
+              <label htmlFor="site-create-billing-email-input" className="block">
                 <span className="text-sm font-medium">Billing email</span>
                 <input
+                  id="site-create-billing-email-input"
+                  data-testid="site-create-billing-email-input"
                   type="email"
                   value={formData.billingEmail}
                   disabled={creationFormDisabled}
@@ -1316,8 +1504,18 @@ function NewSitePage() {
                     setFormData({ ...formData, billingEmail: e.target.value.trim() });
                   }}
                   placeholder="billing@example.com"
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    'mt-2 w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                    showSiteCreateInlineErrors && siteCreateInlineErrors.billingEmail ? 'border-red-300' : 'border-border',
+                  )}
+                  aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.billingEmail)}
+                  aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.billingEmail ? 'site-create-billing-email-error' : undefined}
                 />
+                {showSiteCreateInlineErrors && siteCreateInlineErrors.billingEmail && (
+                  <span id="site-create-billing-email-error" data-testid="site-create-billing-email-error" className="mt-2 block text-xs text-red-600">
+                    {siteCreateInlineErrors.billingEmail}
+                  </span>
+                )}
               </label>
 
               <label className="block">
@@ -1340,9 +1538,11 @@ function NewSitePage() {
                 <span className="mt-2 block text-xs leading-5 text-muted-foreground">{selectedTemplateSource.detail}</span>
               </label>
 
-              <label className="block">
+              <label htmlFor="site-create-template-import-url-input" className="block">
                 <span className="text-sm font-medium">Template import URL</span>
                 <input
+                  id="site-create-template-import-url-input"
+                  data-testid="site-create-template-import-url-input"
                   type="url"
                   value={formData.templateImportUrl}
                   disabled={creationFormDisabled}
@@ -1353,10 +1553,17 @@ function NewSitePage() {
                     setFormData({ ...formData, templateImportUrl: e.target.value.trim() });
                   }}
                   placeholder="https://example.com/design-contract.json"
-                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    'mt-2 w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                    showSiteCreateInlineErrors && siteCreateInlineErrors.templateImportUrl ? 'border-red-300' : 'border-border',
+                  )}
+                  aria-invalid={Boolean(showSiteCreateInlineErrors && siteCreateInlineErrors.templateImportUrl)}
+                  aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.templateImportUrl ? 'site-create-template-import-url-error' : undefined}
                 />
-                {formData.templateSource === 'import-url' && templateImportUrl.length === 0 && (
-                  <span className="mt-2 block text-xs text-red-600">Add the import URL or choose another template source.</span>
+                {showSiteCreateInlineErrors && siteCreateInlineErrors.templateImportUrl && (
+                  <span id="site-create-template-import-url-error" data-testid="site-create-template-import-url-error" className="mt-2 block text-xs text-red-600">
+                    {siteCreateInlineErrors.templateImportUrl}
+                  </span>
                 )}
               </label>
 

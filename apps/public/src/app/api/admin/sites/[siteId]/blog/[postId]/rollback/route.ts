@@ -172,6 +172,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         targetId: currentPost.id,
         snapshot: postRevisionSnapshot(currentPost),
         note: `Before rollback to ${revisionId}`,
+        operation: "rollback",
+        restoreTargetRevisionId: revisionId,
         createdBy: request.headers.get("x-backy-actor") || "admin",
       });
 

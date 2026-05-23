@@ -786,6 +786,13 @@ export interface BackyInteractiveComponentRollbackResult {
 }
 
 export type BackyContentTargetType = 'page' | 'post';
+export type BackyContentRevisionOperation =
+  | 'update'
+  | 'publish'
+  | 'archive'
+  | 'rollback'
+  | 'migration'
+  | (string & {});
 
 export interface BackyContentRevision {
   id: string;
@@ -794,6 +801,10 @@ export interface BackyContentRevision {
   targetId: string;
   snapshot: BackyJsonObject;
   note?: string | null;
+  parentRevisionId?: string | null;
+  operation?: BackyContentRevisionOperation | null;
+  restoreTargetRevisionId?: string | null;
+  metadata?: BackyJsonObject;
   createdBy?: string | null;
   createdAt: string;
 }
@@ -804,6 +815,10 @@ export interface BackyContentRevisionCreateInput {
   targetId: string;
   snapshot: BackyJsonObject;
   note?: string | null;
+  parentRevisionId?: string | null;
+  operation?: BackyContentRevisionOperation | null;
+  restoreTargetRevisionId?: string | null;
+  metadata?: BackyJsonObject | null;
   createdBy?: string | null;
 }
 

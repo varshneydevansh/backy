@@ -6,20 +6,32 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packagePath = path.resolve(__dirname, '../package.json');
 const smokePath = path.resolve(__dirname, 'editor-drag-smoke.mjs');
 const canvasEditorPath = path.resolve(__dirname, '../src/components/editor/CanvasEditor.tsx');
+const editorCatalogPath = path.resolve(__dirname, '../src/components/editor/editorCatalog.ts');
+const pageEditorRoutePath = path.resolve(__dirname, '../src/routes/pages.$pageId.edit.tsx');
 const activeEditorContextPath = path.resolve(__dirname, '../src/components/editor/ActiveEditorContext.tsx');
 const propertyPanelPath = path.resolve(__dirname, '../src/components/editor/PropertyPanel.tsx');
 const richTextFormattingPath = path.resolve(__dirname, '../src/components/editor/RichTextFormatting.tsx');
 const richTextListTransformsPath = path.resolve(__dirname, '../src/components/editor/richTextListTransforms.ts');
+const pageSettingsModalPath = path.resolve(__dirname, '../src/components/editor/PageSettingsModal.tsx');
+const fontCatalogPath = path.resolve(__dirname, '../src/components/editor/fontCatalog.ts');
 const editorPackageIndexPath = path.resolve(__dirname, '../../../packages/editor/src/index.tsx');
+const publicInteractiveRegistryPath = path.resolve(__dirname, '../../../apps/public/src/lib/interactiveComponentRegistry.ts');
+const pageRendererPath = path.resolve(__dirname, '../../../apps/public/src/components/PageRenderer.tsx');
 
 const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
 const smokeSource = fs.readFileSync(smokePath, 'utf8');
 const canvasEditorSource = fs.readFileSync(canvasEditorPath, 'utf8');
+const editorCatalogSource = fs.readFileSync(editorCatalogPath, 'utf8');
+const pageEditorRouteSource = fs.readFileSync(pageEditorRoutePath, 'utf8');
 const activeEditorContextSource = fs.readFileSync(activeEditorContextPath, 'utf8');
 const propertyPanelSource = fs.readFileSync(propertyPanelPath, 'utf8');
 const richTextFormattingSource = fs.readFileSync(richTextFormattingPath, 'utf8');
 const richTextListTransformsSource = fs.readFileSync(richTextListTransformsPath, 'utf8');
+const pageSettingsModalSource = fs.readFileSync(pageSettingsModalPath, 'utf8');
+const fontCatalogSource = fs.readFileSync(fontCatalogPath, 'utf8');
 const editorPackageIndexSource = fs.readFileSync(editorPackageIndexPath, 'utf8');
+const publicInteractiveRegistrySource = fs.readFileSync(publicInteractiveRegistryPath, 'utf8');
+const pageRendererSource = fs.readFileSync(pageRendererPath, 'utf8');
 const editorScripts = Object.entries(packageJson.scripts ?? {})
   .filter(([name]) => name.startsWith('test:editor'))
   .map(([name, command]) => ({ name, command }));
@@ -229,6 +241,13 @@ const missingResponsiveGroupingSourceSnippets = collectMissingSnippets(canvasEdi
   'override.x = geometry.x - (bounds?.x ?? groupBase.x);',
   '...(responsiveGroup.responsive ? { responsive: responsiveGroup.responsive } : {})',
 ]);
+const missingSavedCanvasParentScopeSnippets = collectMissingSnippets(editorCatalogSource, [
+  'function normalizeSavedCanvasElements(input: unknown, parentId?: string): CanvasElement[]',
+  'typeof metadata.parentId === \'string\'',
+  'const resolvedParentId = parentId || rawParentId;',
+  'normalizeSavedCanvasElements(rawElement.children, id)',
+  '...(resolvedParentId ? { parentId: resolvedParentId } : {})',
+]);
 const missingDistributionSourceSnippets = collectMissingSnippets(canvasEditorSource, [
   'const normalizeDistributedPosition = (value: number): number =>',
   'const nextPosition = normalizeDistributedPosition(nextCenter - sizeForAxis / 2);',
@@ -237,6 +256,24 @@ const missingDistributionSourceSnippets = collectMissingSnippets(canvasEditorSou
     ? ['distribution still snaps each layer position to grid']
     : [],
 );
+const missingEditorCommandRegistrySnippets = collectMissingSnippets(canvasEditorSource, [
+  "type EditorCommandRegistryItem",
+  "type EditorCommandRegistry =",
+  "schemaVersion: 'backy.editor-command-registry.v1'",
+  'const editorCommandRegistry = useMemo<EditorCommandRegistry>',
+  "id: 'group-selection'",
+  "id: 'ungroup-selection'",
+  "id: 'paste-selection'",
+  "id: 'toggle-grid'",
+  "id: 'save-page'",
+  "testId: 'editor-group-selection'",
+  "testId: 'editor-ungroup-selection'",
+  "commandRegistry: editorCommandRegistry",
+  "copyEditorCommandRegistry",
+  'data-testid="editor-command-registry"',
+  'data-testid="editor-copy-command-registry"',
+  'data-command-ids={editorCompositionReadiness.commandRegistry.commands.map((command) => command.id).join(\' \')}',
+]);
 const missingStressSmokeSnippets = collectMissingSnippets(smokeSource, [
   'const STRESS_SMOKE = process.env.BACKY_EDITOR_STRESS_SMOKE === \'1\';',
   'const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);',
@@ -303,6 +340,131 @@ const propertyPanelTypecheckGuards = [
   propertyPanelSource.includes('@ts-nocheck') ? 'PropertyPanel.tsx must stay under TypeScript checking' : '',
   propertyPanelSource.includes('TODO: Fix prop type access') ? 'PropertyPanel.tsx must not carry the old prop typing TODO' : '',
 ].filter(Boolean);
+const missingInteractiveControlNormalizationSnippets = [
+  ...collectMissingSnippets(propertyPanelSource, [
+    'type InteractiveControlOption',
+    'rawValue: unknown',
+    'const getInteractiveControlOptionValue = (',
+    'const normalizeInteractiveControlValue = (',
+    'const normalizedValue = control ? normalizeInteractiveControlValue(control, value) : value;',
+    '[controlKey]: normalizedValue',
+    "'select', 'radio'",
+    "'textarea', 'json', 'code'",
+    'formatInteractiveJsonControlValue(rawValue)',
+    'normalizeInteractiveJsonControlValue(e.target.value)',
+    'data-testid={`editor-interactive-control-radio-${controlKey}`}',
+  ]).map((snippet) => `PropertyPanel.tsx missing ${snippet}`),
+  ...collectMissingSnippets(editorCatalogSource, [
+    "key: 'accentColor'",
+    "type: 'color'",
+    "key: 'caption'",
+    "type: 'textarea'",
+    "key: 'runtimeConfig'",
+    "type: 'json'",
+  ]).map((snippet) => `editorCatalog.ts missing ${snippet}`),
+  ...collectMissingSnippets(publicInteractiveRegistrySource, [
+    "key: 'accentColor'",
+    "type: 'color'",
+    "key: 'caption'",
+    "type: 'textarea'",
+    "key: 'runtimeConfig'",
+    "type: 'json'",
+  ]).map((snippet) => `interactiveComponentRegistry.ts missing ${snippet}`),
+].filter(Boolean);
+const missingFormAppearanceControlSnippets = [
+  ...collectMissingSnippets(propertyPanelSource, [
+    'testId="editor-form-field-background-color"',
+    'testId="editor-form-field-border-color"',
+    'testId="editor-form-field-border-radius"',
+    'testId="editor-form-submit-background-color"',
+    'testId="editor-form-submit-color"',
+    'testId="editor-form-submit-border-radius"',
+    'onChange={(value) => onChange({ fieldBackgroundColor: value })}',
+    'onChange={(value) => onChange({ submitBackgroundColor: value })}',
+  ]).map((snippet) => `PropertyPanel.tsx missing ${snippet}`),
+  ...collectMissingSnippets(pageRendererSource, [
+    'props.fieldBackgroundColor',
+    'props.fieldBorderColor',
+    'props.fieldBorderRadius ?? props.borderRadius',
+    'props.submitBackgroundColor',
+    'props.submitColor',
+    'props.submitBorderRadius || props.borderRadius',
+  ]).map((snippet) => `PageRenderer.tsx missing ${snippet}`),
+  ...collectMissingSnippets(smokeSource, [
+    'const FORM_APPEARANCE_SPEC = {',
+    'editor-form-field-background-color',
+    'Form appearance preview mismatch',
+    'Persisted form appearance mismatch',
+  ]).map((snippet) => `editor-drag-smoke.mjs missing ${snippet}`),
+].filter(Boolean);
+const missingPageSettingsValidationSnippets = [
+  ...collectMissingSnippets(pageSettingsModalSource, [
+    'const [settingsSubmitted, setSettingsSubmitted] = useState(false);',
+    'const [jsonLdInlineError, setJsonLdInlineError] = useState<string | null>(null);',
+    'setSettingsSubmitted(true);',
+    'aria-invalid={Boolean(titleInlineError)}',
+    "aria-describedby={titleInlineError ? 'page-settings-title-error' : undefined}",
+    'data-testid="page-settings-title-error"',
+    'aria-invalid={Boolean(slugInlineError)}',
+    "aria-describedby={slugInlineError ? 'page-settings-slug-error' : undefined}",
+    'data-testid="page-settings-slug-error"',
+    'data-testid="page-settings-scheduled-at-error"',
+    'data-testid="page-settings-json-ld-error"',
+    'disabled={isSavingSettings || !canEdit}',
+  ]).map((snippet) => `PageSettingsModal.tsx missing ${snippet}`),
+  pageSettingsModalSource.includes('disabled={Boolean(settingsValidation) || isSavingSettings || !canEdit}')
+    ? 'PageSettingsModal.tsx must not disable Save with settingsValidation'
+    : '',
+].filter(Boolean);
+const missingDesignManifestPersistenceSnippets = [
+  ...collectMissingSnippets(editorCatalogSource, [
+    "customJS?: string;",
+    "themeTokenRefs?: BackyContentDocument['themeTokenRefs'];",
+    "assets?: BackyContentDocument['assets'];",
+    "interactions?: BackyContentDocument['interactions'];",
+    "editableMap?: BackyContentDocument['editableMap'];",
+    "metadata?: BackyContentDocument['metadata'];",
+    "contentDocument?.metadata?.customJS",
+    "options.themeTokenRefs !== undefined ? { themeTokenRefs: options.themeTokenRefs } : {}",
+    "interactions: options.interactions",
+    "editableMap: options.editableMap",
+    "metadata: options.metadata",
+    "payload.metadata = payload.contentDocument.metadata;",
+  ]).map((snippet) => `editorCatalog.ts missing ${snippet}`),
+  ...collectMissingSnippets(pageEditorRouteSource, [
+    "customCSS: initialCustomCSS",
+    "customJS: initialCustomJS",
+    "themeTokenRefs: initialThemeTokenRefs",
+    "assets: initialDesignAssets",
+    "interactions: initialDesignInteractions",
+    "editableMap: initialEditableMap",
+    "metadata: initialDesignMetadata",
+    "const content = serializeCanvasContent(elements, canvasSize, initialCustomCSS,",
+  ]).map((snippet) => `pages.$pageId.edit.tsx missing ${snippet}`),
+];
+const missingUploadedFontFaceSnippets = collectMissingSnippets(fontCatalogSource, [
+  "export interface FontFaceDefinition",
+  "display: FontDisplay;",
+  "faces?: FontFaceDefinition[];",
+  "if (item.type !== 'font')",
+  "const customOptionsByKey = new Map<string, FontOption>();",
+  "normalizeFontDisplay(getStringMetadata(item, 'fontDisplay') || 'swap')",
+  "existing.faces = [...(existing.faces || []), face];",
+  "font.faces?.length",
+  "font-display: ${display};",
+]).map((snippet) => `fontCatalog.ts missing ${snippet}`);
+const missingRichTextFontMediaMarkSnippets = collectMissingSnippets(richTextFormattingSource, [
+  "const FONT_MEDIA_MARK_KEYS = [",
+  "const buildRichTextFontMarkUpdates = (value: string, font?: FontOption): Record<string, unknown> =>",
+  "const uniqueFontFaceMediaIds = (font: FontOption): string[] =>",
+  "fontMediaIds: mediaIds",
+  "fontSource: 'media-library'",
+  "const runMarks = useCallback((updates: Record<string, unknown>) =>",
+  "applyTextMarksToActiveEditor(updates)",
+  "...FONT_MEDIA_MARK_KEYS",
+  "data-font-media-id={font.mediaId || ''}",
+  "data-font-face-count={font.faces?.length || 0}",
+]).map((snippet) => `RichTextFormatting.tsx missing ${snippet}`);
 
 if (
   missingEnvScripts.length ||
@@ -312,14 +474,22 @@ if (
   missingTableRangeSmokeSnippets.length ||
   missingResponsiveSmokeSnippets.length ||
   missingResponsiveGroupingSourceSnippets.length ||
+  missingSavedCanvasParentScopeSnippets.length ||
   missingDistributionSourceSnippets.length ||
+  missingEditorCommandRegistrySnippets.length ||
   missingStressSmokeSnippets.length ||
   missingLayerUndoRedoSmokeSnippets.length ||
   missingStressScriptGuards.length ||
   missingEditorMfaLoginSnippets.length ||
-  missingTableStyleSetterGuards.length ||
-  missingListIndentNormalizationGuards.length ||
-  propertyPanelTypecheckGuards.length
+	  missingTableStyleSetterGuards.length ||
+	  missingListIndentNormalizationGuards.length ||
+	  propertyPanelTypecheckGuards.length ||
+	  missingInteractiveControlNormalizationSnippets.length ||
+	  missingFormAppearanceControlSnippets.length ||
+	  missingPageSettingsValidationSnippets.length ||
+  missingDesignManifestPersistenceSnippets.length ||
+  missingUploadedFontFaceSnippets.length ||
+  missingRichTextFontMediaMarkSnippets.length
 ) {
   console.error(JSON.stringify({
     ok: false,
@@ -330,14 +500,22 @@ if (
     missingTableRangeSmokeSnippets,
     missingResponsiveSmokeSnippets,
     missingResponsiveGroupingSourceSnippets,
+    missingSavedCanvasParentScopeSnippets,
     missingDistributionSourceSnippets,
+    missingEditorCommandRegistrySnippets,
     missingStressSmokeSnippets,
     missingLayerUndoRedoSmokeSnippets,
     missingStressScriptGuards,
     missingEditorMfaLoginSnippets,
     missingTableStyleSetterGuards,
     missingListIndentNormalizationGuards,
-    propertyPanelTypecheckGuards,
+	    propertyPanelTypecheckGuards,
+	    missingInteractiveControlNormalizationSnippets,
+	    missingFormAppearanceControlSnippets,
+	    missingPageSettingsValidationSnippets,
+    missingDesignManifestPersistenceSnippets,
+    missingUploadedFontFaceSnippets,
+    missingRichTextFontMediaMarkSnippets,
   }, null, 2));
   process.exit(1);
 }
@@ -351,11 +529,19 @@ console.log(JSON.stringify({
   tableRangeSmokeSnippets: 10,
   responsiveSmokeSnippets: 116,
   responsiveGroupingSourceSnippets: 5,
+  savedCanvasParentScopeSnippets: 5,
   distributionSourceSnippets: 2,
+  editorCommandRegistrySnippets: 16,
   stressSmokeSnippets: 9,
   layerUndoRedoSmokeSnippets: 5,
   stressScriptGuards: 2,
   editorMfaLoginSnippets: 9,
   listIndentNormalizationGuards: 9,
-  propertyPanelTypecheckGuards: 2,
+	  propertyPanelTypecheckGuards: 2,
+	  interactiveControlNormalizationSnippets: 23,
+	  formAppearanceControlSnippets: 18,
+	  pageSettingsValidationSnippets: 12,
+  designManifestPersistenceSnippets: 19,
+  uploadedFontFaceSnippets: 9,
+  richTextFontMediaMarkSnippets: 10,
 }, null, 2));

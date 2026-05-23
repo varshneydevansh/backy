@@ -25,11 +25,18 @@ import {
   Trash2,
   Plus,
   Upload,
+  Download,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PORTAL_TOOLBAR_CONTAINER_ID } from '@backy-cms/editor';
+import {
+  buildBackyThemeTokenReferences,
+  buildBackyThemeTokens,
+  type ThemeConfig,
+} from '@backy-cms/core';
 // import { RichTextEditor } from './RichTextEditor';
-import { MediaLibraryModal, type MediaContext } from './MediaLibraryModal';
+import { MediaLibraryModal, type MediaContext, type MediaSelectionOptions } from './MediaLibraryModal';
 import { EmojiPickerModal } from './EmojiPickerModal';
 import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
 import { RichTextFormatting } from './RichTextFormatting';
@@ -52,7 +59,7 @@ import {
   normalizeListContent,
   getListItemsFromProps,
 } from './listUtils';
-import { useStore } from '@/stores/mockStore';
+import { useStore, type MediaAsset } from '@/stores/mockStore';
 
 const toNumber = (value: unknown, fallback = 0): number => {
   const parsed = typeof value === 'number'
@@ -101,6 +108,61 @@ const EDITOR_COLOR_SWATCHES = [
   '#ec4899',
   '#64748b',
 ];
+
+type ThemeTokenTarget = {
+  targetPath: string;
+  propName: keyof ElementProps & string;
+  label: string;
+  prefixes: string[];
+  textOnly?: boolean;
+};
+
+const THEME_TOKEN_TARGETS: ThemeTokenTarget[] = [
+  { targetPath: 'styles.color', propName: 'color', label: 'Text color', prefixes: ['colors.'], textOnly: true },
+  { targetPath: 'styles.backgroundColor', propName: 'backgroundColor', label: 'Background', prefixes: ['colors.'] },
+  { targetPath: 'styles.borderColor', propName: 'borderColor', label: 'Border color', prefixes: ['colors.'] },
+  { targetPath: 'styles.fontFamily', propName: 'fontFamily', label: 'Font family', prefixes: ['typography.families.'], textOnly: true },
+  { targetPath: 'styles.fontSize', propName: 'fontSize', label: 'Font size', prefixes: ['typography.scale.'], textOnly: true },
+  { targetPath: 'styles.lineHeight', propName: 'lineHeight', label: 'Line height', prefixes: ['typography.lineHeights.'], textOnly: true },
+  { targetPath: 'styles.fontWeight', propName: 'fontWeight', label: 'Font weight', prefixes: ['typography.weights.'], textOnly: true },
+  { targetPath: 'styles.padding', propName: 'padding', label: 'Padding', prefixes: ['spacing.'] },
+  { targetPath: 'styles.margin', propName: 'margin', label: 'Margin', prefixes: ['spacing.'] },
+  { targetPath: 'styles.borderRadius', propName: 'borderRadius', label: 'Radius', prefixes: ['radii.'] },
+  { targetPath: 'styles.boxShadow', propName: 'boxShadow', label: 'Shadow', prefixes: ['shadows.'] },
+];
+
+const themeTokenLabel = (path: string) => path
+  .replace(/^typography\./, '')
+  .split('.')
+  .map((part) => part.replace(/([a-z0-9])([A-Z])/g, '$1 $2'))
+  .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+  .join(' / ');
+
+const themeTokenSelectTestId = (targetPath: string) => (
+  `editor-theme-token-select-${targetPath.replace(/[^a-zA-Z0-9]+/g, '-')}`
+);
+
+const parseCssDurationToSeconds = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  const numeric = parseFloat(trimmed);
+  if (!Number.isFinite(numeric)) {
+    return undefined;
+  }
+
+  if (trimmed.endsWith('ms')) {
+    return numeric / 1000;
+  }
+
+  return numeric;
+};
 
 const normalizeHexColorInputValue = (value: string): string => {
   const trimmed = value.trim();
@@ -369,6 +431,15 @@ const buildButtonActionHref = (preset: string, value: unknown): string => {
   return actionValue;
 };
 
+const withQueryParam = (url: string, key: string, value: string): string => {
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+};
+
+const buildMediaDownloadHref = (mediaId: string, siteId?: string): string => (
+  withQueryParam(getPublicMediaFileUrl(mediaId, siteId), 'disposition', 'attachment')
+);
+
 const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
   const normalized = typeof value === 'string' ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') : '';
 
@@ -534,11 +605,213 @@ const normalizeTextElementContent = (rawContent: unknown, normalizedType: string
   ];
 };
 
+const EDITOR_ASSET_ID_PROP_KEYS = new Set([
+  'assetId',
+  'assetIds',
+  'mediaIds',
+  'mediaId',
+  'fileId',
+  'fileIds',
+  'fileMediaId',
+  'fileMediaIds',
+  'downloadMediaId',
+  'downloadMediaIds',
+  'imageId',
+  'imageIds',
+  'videoId',
+  'videoIds',
+  'audioId',
+  'audioIds',
+  'fontId',
+  'fontIds',
+  'documentId',
+  'documentIds',
+  'iconId',
+  'iconIds',
+  'fontMediaId',
+  'fontMediaIds',
+  'fallbackImageMediaId',
+  'fallbackImageMediaIds',
+  'backgroundMediaId',
+  'backgroundMediaIds',
+  'posterMediaId',
+  'posterMediaIds',
+]);
+
+const cleanMediaString = (value: unknown): string | undefined => (
+  typeof value === 'string' && value.trim() ? value.trim() : undefined
+);
+
+const clearDownloadFileProps = (): Partial<ElementProps> => ({
+  fileId: undefined,
+  fileIds: undefined,
+  fileMediaId: undefined,
+  fileMediaIds: undefined,
+  fileMediaName: undefined,
+  fileMediaType: undefined,
+  fileMediaUrl: undefined,
+  fileUrl: undefined,
+  fileMediaFolderId: undefined,
+  fileMediaFolderPath: undefined,
+  fileMediaOrganization: undefined,
+  fileMediaVisibility: undefined,
+  fileMediaScope: undefined,
+  fileMediaScopeTargetId: undefined,
+  fileDownloadDisposition: undefined,
+  fileSignedUrlRequired: undefined,
+  fileSignedUrlEndpoint: undefined,
+  downloadMediaId: undefined,
+  downloadMediaIds: undefined,
+});
+
+const cleanMediaStrings = (value: unknown): string[] => (
+  Array.isArray(value)
+    ? value.map(cleanMediaString).filter(Boolean) as string[]
+    : []
+);
+
+const downloadFileAssetIdsFromProps = (props: ElementProps): Array<string | undefined> => [
+  cleanMediaString(props.fileMediaId),
+  cleanMediaString(props.downloadMediaId),
+  cleanMediaString(props.fileId),
+  ...cleanMediaStrings(props.fileIds),
+  ...cleanMediaStrings(props.fileMediaIds),
+  ...cleanMediaStrings(props.downloadMediaIds),
+];
+
+const collectEditorAssetIds = (value: unknown, key: string | null, assetIds: Set<string>) => {
+  if (key && EDITOR_ASSET_ID_PROP_KEYS.has(key)) {
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        const id = cleanMediaString(item);
+        if (id) assetIds.add(id);
+      });
+      return;
+    }
+
+    const id = cleanMediaString(value);
+    if (id) assetIds.add(id);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectEditorAssetIds(item, null, assetIds));
+    return;
+  }
+
+  if (value && typeof value === 'object') {
+    Object.entries(value as Record<string, unknown>).forEach(([entryKey, entryValue]) => {
+      collectEditorAssetIds(entryValue, entryKey, assetIds);
+    });
+  }
+};
+
+const buildElementAssetIds = (
+  element: CanvasElement,
+  nextProps: ElementProps,
+  extraIds: Array<string | undefined>,
+  staleIds: Array<unknown> = [],
+): string[] | undefined => {
+  const stale = new Set(staleIds.map(cleanMediaString).filter(Boolean) as string[]);
+  const assetIds = new Set<string>();
+
+  (element.assetIds || []).forEach((assetId) => {
+    const normalized = cleanMediaString(assetId);
+    if (normalized && !stale.has(normalized)) {
+      assetIds.add(normalized);
+    }
+  });
+
+  collectEditorAssetIds(nextProps, null, assetIds);
+  extraIds.map(cleanMediaString).filter(Boolean).forEach((assetId) => assetIds.add(assetId as string));
+
+  return assetIds.size > 0 ? Array.from(assetIds) : undefined;
+};
+
+const mediaOrganizationProps = (media: MediaAsset) => (
+  media.organization
+    ? {
+        mediaOrganization: media.organization,
+        mediaFolderPath: media.organization.folderPath,
+        mediaFolderSegments: media.organization.folderSegments,
+        mediaFolderName: media.organization.folderName,
+        mediaFolderDepth: media.organization.folderDepth,
+        mediaFolderMissing: media.organization.missingFolder,
+      }
+    : {
+        mediaFolderPath: null,
+        mediaFolderSegments: [],
+        mediaFolderName: null,
+        mediaFolderDepth: null,
+        mediaFolderMissing: false,
+      }
+);
+
+const mediaIdentityProps = (media: MediaAsset, mediaContext?: MediaContext): Partial<ElementProps> => ({
+  mediaId: media.id,
+  mediaType: media.type,
+  mediaName: media.name,
+  mediaFolderId: media.folderId || null,
+  ...mediaOrganizationProps(media),
+  mediaVisibility: media.visibility || 'public',
+  mediaScope: media.scope || mediaContext?.scope || 'global',
+  mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
+});
+
+const fileDownloadIdentityProps = (
+  media: MediaAsset,
+  mediaContext: MediaContext | undefined,
+  downloadUrl: string,
+): Partial<ElementProps> => ({
+  fileId: media.id,
+  fileIds: [media.id],
+  fileMediaId: media.id,
+  fileMediaIds: [media.id],
+  downloadMediaId: media.id,
+  downloadMediaIds: [media.id],
+  fileMediaType: media.type,
+  fileMediaName: media.name,
+  fileMediaUrl: downloadUrl,
+  fileUrl: downloadUrl,
+  fileMediaFolderId: media.folderId || null,
+  fileMediaFolderPath: media.organization?.folderPath || null,
+  fileMediaOrganization: media.organization || null,
+  fileMediaVisibility: media.visibility || 'public',
+  fileMediaScope: media.scope || mediaContext?.scope || 'global',
+  fileMediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
+  fileDownloadDisposition: 'attachment',
+  fileSignedUrlRequired: (media.visibility || 'public') === 'private',
+  fileSignedUrlEndpoint: mediaContext?.siteId
+    ? `/api/admin/sites/${mediaContext.siteId}/media/${media.id}/signed-url`
+    : undefined,
+});
+
+const imageDesignProps = (selectionOptions?: MediaSelectionOptions): Partial<ElementProps> => {
+  const imagePresentation = selectionOptions?.imagePresentation;
+
+  return {
+    ...(selectionOptions?.insertPreset ? { imageInsertPreset: selectionOptions.insertPreset } : {}),
+    ...(imagePresentation
+      ? {
+          objectFit: imagePresentation.objectFit,
+          objectPosition: imagePresentation.objectPosition,
+          imageFocalPoint: imagePresentation.focalPoint,
+        }
+      : {}),
+  };
+};
+
+const fontFamilyFromMedia = (font: MediaAsset): string => {
+  const metadataFamily = cleanMediaString(font.metadata?.fontFamily);
+  if (metadataFamily) return metadataFamily;
+  return font.name.replace(/\.[a-z0-9]+$/i, '');
+};
+
 // ============================================
 // TYPES
 // ============================================
 
-type EditorMediaField = 'src' | 'video' | 'embed' | 'interactiveFallbackImage';
+type EditorMediaField = 'src' | 'video' | 'embed' | 'interactiveFallbackImage' | 'downloadFile';
 type EditorMediaAllowedTypes = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'any';
 type EditorMediaUploadFilter = 'all' | 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
 
@@ -549,6 +822,7 @@ interface PropertyPanelProps {
   onChange: (updates: Partial<CanvasElement>) => void;
   /** Callback when element is deleted */
   onDelete?: () => void;
+  theme?: ThemeConfig;
   mediaContext?: MediaContext;
   disabled?: boolean;
   canViewMedia?: boolean;
@@ -578,6 +852,7 @@ export function PropertyPanel({
   element,
   onChange,
   onDelete,
+  theme,
   mediaContext,
   disabled = false,
   canViewMedia = true,
@@ -773,6 +1048,7 @@ export function PropertyPanel({
           <ContentProperties
             element={element}
             onChange={updateProps}
+            onElementChange={guardedOnChange}
             collections={collections}
             collectionsError={collectionsError}
             interactiveComponents={interactiveComponents}
@@ -788,6 +1064,9 @@ export function PropertyPanel({
               } else if (field === 'embed') {
                 setMediaAllowedTypes('any');
                 setMediaUploadFilter('all');
+              } else if (field === 'downloadFile') {
+                setMediaAllowedTypes('file');
+                setMediaUploadFilter('file');
               } else {
                 setMediaAllowedTypes('image');
                 setMediaUploadFilter('image');
@@ -822,6 +1101,13 @@ export function PropertyPanel({
           <StyleProperties
             element={element}
             onChange={updateProps}
+            onElementChange={guardedOnChange}
+            theme={theme}
+            mediaContext={mediaContext}
+            canViewMedia={canViewMedia}
+            canCreateMedia={canCreateMedia}
+            mediaViewDisabledReason={mediaViewDisabledReason}
+            mediaCreateDisabledReason={mediaCreateDisabledReason}
             supportsTextStyles={[
               'text',
               'heading',
@@ -869,7 +1155,7 @@ export function PropertyPanel({
           isExpanded={expandedSections.includes('animation')}
           onToggle={() => toggleSection('animation')}
         >
-          <AnimationProperties element={element} onChange={guardedOnChange} />
+          <AnimationProperties element={element} onChange={guardedOnChange} theme={theme} />
         </PropertySection>
 
         {/* Delete Button */}
@@ -891,10 +1177,45 @@ export function PropertyPanel({
         isOpen={isMediaLibraryOpen}
         onClose={() => setIsMediaLibraryOpen(false)}
         onSelect={(media, selectionOptions) => {
+          if (mediaField === 'downloadFile') {
+            const downloadHref = buildMediaDownloadHref(media.id, mediaContext?.siteId);
+            const nextProps: ElementProps = {
+              ...element.props,
+              href: downloadHref,
+              actionPreset: 'download',
+              actionValue: downloadHref,
+              download: true,
+              ...fileDownloadIdentityProps(media, mediaContext, downloadHref),
+            };
+
+            guardedOnChange({
+              props: nextProps,
+              assetIds: buildElementAssetIds(
+                element,
+                nextProps,
+                [media.id],
+                downloadFileAssetIdsFromProps(element.props),
+              ),
+            });
+            return;
+          }
+
           const mediaPropKey = mediaField === 'video' || mediaField === 'embed' ? 'src' : mediaField;
           const currentFallback = element.props.fallback && typeof element.props.fallback === 'object' && !Array.isArray(element.props.fallback)
             ? element.props.fallback
             : {};
+          const mediaIdentity = mediaIdentityProps(media, mediaContext);
+          const imageDesign = imageDesignProps(selectionOptions);
+          const fallbackImageDesign = selectionOptions?.imagePresentation
+            ? {
+                imageObjectFit: selectionOptions.imagePresentation.objectFit,
+                imageObjectPosition: selectionOptions.imagePresentation.objectPosition,
+                imageFocalPoint: selectionOptions.imagePresentation.focalPoint,
+                imageInsertPreset: selectionOptions.insertPreset,
+              }
+            : selectionOptions?.insertPreset
+              ? { imageInsertPreset: selectionOptions.insertPreset }
+              : {};
           const nextProps: ElementProps = {
             ...element.props,
             ...(mediaField === 'interactiveFallbackImage'
@@ -902,13 +1223,26 @@ export function PropertyPanel({
                   fallback: {
                     ...currentFallback,
                     imageUrl: media.url,
+                    imageMediaId: media.id,
+                    imageMediaName: media.name,
+                    imageMediaFolderId: media.folderId || null,
+                    imageMediaFolderPath: media.organization?.folderPath || null,
+                    imageMediaOrganization: media.organization,
                     alt: currentFallback.alt || media.altText || media.caption || '',
+                    ...fallbackImageDesign,
                   },
+                  fallbackImageMediaId: media.id,
+                  fallbackImageMediaName: media.name,
+                  fallbackImageMediaFolderId: media.folderId || null,
+                  fallbackImageMediaFolderPath: media.organization?.folderPath || null,
+                  fallbackImageMediaOrganization: media.organization,
+                  fallbackImageMediaVisibility: media.visibility || 'public',
                 }
-              : { [mediaPropKey]: media.url }),
-            mediaId: media.id,
-            mediaScope: media.scope || mediaContext?.scope || 'global',
-            mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
+              : {
+                  [mediaPropKey]: media.url,
+                  ...mediaIdentity,
+                  mediaInsertPreset: selectionOptions?.insertPreset,
+                }),
           };
           const nextElementUpdates: Partial<CanvasElement> = {};
 
@@ -918,11 +1252,7 @@ export function PropertyPanel({
             const mediaAlt = typeof media.altText === 'string' ? media.altText.trim() : '';
             const mediaCaption = typeof media.caption === 'string' ? media.caption.trim() : '';
 
-            if (selectionOptions?.imagePresentation) {
-              nextProps.objectFit = selectionOptions.imagePresentation.objectFit;
-              nextProps.objectPosition = selectionOptions.imagePresentation.objectPosition;
-              nextProps.imageFocalPoint = selectionOptions.imagePresentation.focalPoint;
-            }
+            Object.assign(nextProps, imageDesign);
 
             if (selectionOptions?.insertPreset === 'fit-inside') {
               nextProps.objectFit = 'contain';
@@ -946,6 +1276,13 @@ export function PropertyPanel({
             }
           }
 
+          nextElementUpdates.assetIds = buildElementAssetIds(
+            element,
+            nextProps,
+            [media.id],
+            [element.props.mediaId, element.props.fallbackImageMediaId],
+          );
+
           guardedOnChange({
             ...nextElementUpdates,
             props: nextProps,
@@ -956,6 +1293,7 @@ export function PropertyPanel({
         mediaContext={mediaContext}
         allowedTypes={mediaAllowedTypes}
         replaceAssetId={typeof element.props.mediaId === 'string' ? element.props.mediaId : null}
+        allowPrivateSelection={mediaField === 'downloadFile'}
         canView={canViewMedia}
         canCreate={canCreateMedia}
         viewDisabledReason={mediaViewDisabledReason}
@@ -1021,6 +1359,7 @@ function PropertySection({
 interface ContentPropertiesProps {
   element: CanvasElement;
   onChange: (updates: Partial<ElementProps>) => void;
+  onElementChange?: (updates: Partial<CanvasElement>) => void;
   onOpenMedia: (field: EditorMediaField, mode?: 'library' | 'upload') => void;
   onOpenEmoji: () => void;
   collections: Collection[];
@@ -1049,27 +1388,135 @@ const getInteractiveControlLabel = (control: Record<string, unknown>): string =>
 
 const getInteractiveControlType = (control: Record<string, unknown>): string => {
   const type = getInteractiveControlString(control, 'type', 'text').toLowerCase();
-  return ['range', 'number', 'select', 'checkbox', 'boolean', 'toggle', 'color'].includes(type)
+  return ['range', 'number', 'select', 'radio', 'checkbox', 'boolean', 'toggle', 'color', 'textarea', 'json', 'code'].includes(type)
     ? type
     : 'text';
 };
 
-const getInteractiveControlOptions = (control: Record<string, unknown>): Array<{ label: string; value: string }> => {
+type InteractiveControlOption = {
+  label: string;
+  value: string;
+  rawValue: unknown;
+};
+
+const getInteractiveControlOptions = (control: Record<string, unknown>): InteractiveControlOption[] => {
   const options = Array.isArray(control.options) ? control.options : [];
   return options
-    .map((option) => {
+    .map<InteractiveControlOption | null>((option) => {
       if (typeof option === 'string' || typeof option === 'number' || typeof option === 'boolean') {
-        return { label: String(option), value: String(option) };
+        return { label: String(option), value: String(option), rawValue: option };
       }
       if (option && typeof option === 'object' && !Array.isArray(option)) {
         const record = option as Record<string, unknown>;
-        const value = record.value ?? record.id ?? record.key ?? record.label;
+        const value: unknown = record.value ?? record.id ?? record.key ?? record.label;
         const label = record.label ?? record.name ?? value;
-        return value === undefined ? null : { label: String(label), value: String(value) };
+        return value === undefined ? null : { label: String(label), value: String(value), rawValue: value };
       }
       return null;
     })
-    .filter((option): option is { label: string; value: string } => Boolean(option));
+    .filter((option): option is InteractiveControlOption => Boolean(option));
+};
+
+const getInteractiveControlOptionValue = (
+  control: Record<string, unknown>,
+  value: unknown,
+): unknown => {
+  const stringValue = value === undefined || value === null ? '' : String(value);
+  const option = getInteractiveControlOptions(control).find((item) => item.value === stringValue);
+  return option ? option.rawValue : stringValue;
+};
+
+const getInteractiveNumericBound = (
+  control: Record<string, unknown>,
+  key: 'min' | 'max' | 'step',
+): number | undefined => {
+  const value = control[key];
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? Number(value)
+      : Number.NaN;
+
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const normalizeInteractiveNumericControlValue = (
+  value: unknown,
+  control: Record<string, unknown>,
+): number | string => {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? Number(value)
+      : Number.NaN;
+
+  if (!Number.isFinite(parsed)) {
+    return typeof value === 'string' ? value : '';
+  }
+
+  const min = getInteractiveNumericBound(control, 'min');
+  const max = getInteractiveNumericBound(control, 'max');
+  return Math.max(
+    min ?? Number.NEGATIVE_INFINITY,
+    Math.min(max ?? Number.POSITIVE_INFINITY, parsed),
+  );
+};
+
+const formatInteractiveJsonControlValue = (value: unknown): string => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const normalizeInteractiveJsonControlValue = (value: unknown): unknown => {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeInteractiveControlValue = (
+  control: Record<string, unknown>,
+  value: unknown,
+): unknown => {
+  const controlType = getInteractiveControlType(control);
+
+  if (controlType === 'checkbox' || controlType === 'boolean' || controlType === 'toggle') {
+    return parseBooleanSetting(value, false);
+  }
+  if (controlType === 'range' || controlType === 'number') {
+    return normalizeInteractiveNumericControlValue(value, control);
+  }
+  if (controlType === 'color') {
+    return normalizeHexColorInputValue(String(value || '#000000'));
+  }
+  if (controlType === 'select' || controlType === 'radio') {
+    return getInteractiveControlOptionValue(control, value);
+  }
+  if (controlType === 'json') {
+    return normalizeInteractiveJsonControlValue(value);
+  }
+
+  return value === undefined || value === null ? '' : String(value);
 };
 
 const getInteractiveControlValue = (control: Record<string, unknown>, props: Record<string, unknown>): unknown => {
@@ -1258,6 +1705,7 @@ const getInteractivePreviewModel = (
 function ContentProperties({
   element,
   onChange,
+  onElementChange,
   onOpenMedia,
   onOpenEmoji,
   collections,
@@ -1342,10 +1790,12 @@ function ContentProperties({
     [element.props, interactiveControls, selectedInteractiveComponent],
   );
   const updateInteractiveControlValue = useCallback((controlKey: string, value: unknown) => {
-    const nextControls = updateInteractiveControlList(interactiveControls, controlKey, value);
+    const control = interactiveControls.find((item) => getInteractiveControlKey(item) === controlKey);
+    const normalizedValue = control ? normalizeInteractiveControlValue(control, value) : value;
+    const nextControls = updateInteractiveControlList(interactiveControls, controlKey, normalizedValue);
     onChange({
       controls: nextControls,
-      [controlKey]: value,
+      [controlKey]: normalizedValue,
     });
   }, [interactiveControls, onChange]);
   const applyInteractiveBindingPreset = useCallback((preset: { id: string; label: string; scope: string; targetPath: string; mode: string }) => {
@@ -1426,6 +1876,23 @@ function ContentProperties({
       content: content as ElementProps['content'],
     });
   }, [onChange]);
+  const updatePropsWithAssetSync = useCallback((
+    updates: Partial<ElementProps>,
+    options: { staleAssetIds?: Array<unknown> } = {},
+  ) => {
+    const staleAssetIds = options.staleAssetIds || [];
+
+    if (staleAssetIds.length > 0 && onElementChange) {
+      const nextProps = { ...element.props, ...updates };
+      onElementChange({
+        props: nextProps,
+        assetIds: buildElementAssetIds(element, nextProps, [], staleAssetIds),
+      });
+      return;
+    }
+
+    onChange(updates);
+  }, [element, onChange, onElementChange]);
   useEffect(() => {
     // BackyTextProperties diagnostics disabled.
   }, [element.id, element.type, elementId, hasTextContent, hasImageContent, hasVideoContent, hasLinkContent, hasButtonContent, onChange]);
@@ -1874,11 +2341,14 @@ function ContentProperties({
                 )}
                 onChange={(e) => {
                   if (e.target.value) {
-                    onChange({
+                    updatePropsWithAssetSync({
+                      ...clearDownloadFileProps(),
                       actionPreset: 'page',
                       actionValue: e.target.value,
                       href: e.target.value,
                       download: false,
+                    }, {
+                      staleAssetIds: downloadFileAssetIdsFromProps(element.props),
                     });
                   }
                 }}
@@ -1892,7 +2362,15 @@ function ContentProperties({
               <input
                 type="text"
                 value={element.props.href || ''}
-                onChange={(e) => onChange({ href: e.target.value })}
+                onChange={(e) => updatePropsWithAssetSync({
+                  ...clearDownloadFileProps(),
+                  actionPreset: 'custom',
+                  actionValue: e.target.value,
+                  href: e.target.value,
+                  download: false,
+                }, {
+                  staleAssetIds: downloadFileAssetIdsFromProps(element.props),
+                })}
                 data-testid="editor-link-href"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -1916,7 +2394,8 @@ function ContentProperties({
           <LinkBehaviorProperties
             prefix="link"
             props={element.props}
-            onChange={onChange}
+            onChange={updatePropsWithAssetSync}
+            onOpenDownloadMedia={(mode) => onOpenMedia('downloadFile', mode)}
           />
         </div>
       )}
@@ -1951,7 +2430,17 @@ function ContentProperties({
                   'focus:outline-none focus:ring-2 focus:ring-ring'
                 )}
                 onChange={(e) => {
-                  if (e.target.value) onChange({ href: e.target.value });
+                  if (e.target.value) {
+                    updatePropsWithAssetSync({
+                      ...clearDownloadFileProps(),
+                      actionPreset: 'page',
+                      actionValue: e.target.value,
+                      href: e.target.value,
+                      download: false,
+                    }, {
+                      staleAssetIds: downloadFileAssetIdsFromProps(element.props),
+                    });
+                  }
                 }}
               >
                 <option value="">Select a page...</option>
@@ -1963,11 +2452,14 @@ function ContentProperties({
               <input
                 type="text"
                 value={element.props.href || ''}
-                onChange={(e) => onChange({
+                onChange={(e) => updatePropsWithAssetSync({
+                  ...clearDownloadFileProps(),
                   actionPreset: 'custom',
                   actionValue: e.target.value,
                   href: e.target.value,
                   download: false,
+                }, {
+                  staleAssetIds: downloadFileAssetIdsFromProps(element.props),
                 })}
                 data-testid="editor-button-href"
                 className={cn(
@@ -1981,7 +2473,8 @@ function ContentProperties({
           <LinkBehaviorProperties
             prefix="button"
             props={element.props}
-            onChange={onChange}
+            onChange={updatePropsWithAssetSync}
+            onOpenDownloadMedia={(mode) => onOpenMedia('downloadFile', mode)}
             includeButtonType
           />
         </div>
@@ -2917,6 +3410,89 @@ function ContentProperties({
               placeholder="Submit"
             />
           </div>
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-foreground">Form appearance</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Label Color
+                </label>
+                <ColorInput
+                  value={(element.props.labelColor as string) || (element.props.color as string) || '#374151'}
+                  onChange={(value) => onChange({ labelColor: value })}
+                  testId="editor-form-label-color"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Help Color
+                </label>
+                <ColorInput
+                  value={(element.props.helpTextColor as string) || '#6b7280'}
+                  onChange={(value) => onChange({ helpTextColor: value })}
+                  testId="editor-form-help-color"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Field Background
+                </label>
+                <ColorInput
+                  value={(element.props.fieldBackgroundColor as string) || '#ffffff'}
+                  onChange={(value) => onChange({ fieldBackgroundColor: value })}
+                  testId="editor-form-field-background-color"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Field Border
+                </label>
+                <ColorInput
+                  value={(element.props.fieldBorderColor as string) || '#d1d5db'}
+                  onChange={(value) => onChange({ fieldBorderColor: value })}
+                  testId="editor-form-field-border-color"
+                />
+              </div>
+            </div>
+            <NumberInput
+              label="Field Radius"
+              value={element.props.fieldBorderRadius ?? 6}
+              onChange={(value) => onChange({ fieldBorderRadius: value })}
+              suffix="px"
+              testId="editor-form-field-border-radius"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Submit Background
+                </label>
+                <ColorInput
+                  value={(element.props.submitBackgroundColor as string) || '#111827'}
+                  onChange={(value) => onChange({ submitBackgroundColor: value })}
+                  testId="editor-form-submit-background-color"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  Submit Text
+                </label>
+                <ColorInput
+                  value={(element.props.submitColor as string) || '#ffffff'}
+                  onChange={(value) => onChange({ submitColor: value })}
+                  testId="editor-form-submit-color"
+                />
+              </div>
+            </div>
+            <NumberInput
+              label="Submit Radius"
+              value={element.props.submitBorderRadius ?? element.props.borderRadius ?? 8}
+              onChange={(value) => onChange({ submitBorderRadius: value })}
+              suffix="px"
+              testId="editor-form-submit-border-radius"
+            />
+          </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -3573,9 +4149,12 @@ function ContentProperties({
                   const controlOptions = getInteractiveControlOptions(control);
                   const rawValue = getInteractiveControlValue(control, element.props);
                   const stringValue = rawValue === undefined || rawValue === null ? '' : String(rawValue);
-                  const min = typeof control.min === 'number' || typeof control.min === 'string' ? String(control.min) : undefined;
-                  const max = typeof control.max === 'number' || typeof control.max === 'string' ? String(control.max) : undefined;
-                  const step = typeof control.step === 'number' || typeof control.step === 'string' ? String(control.step) : undefined;
+                  const min = getInteractiveNumericBound(control, 'min');
+                  const max = getInteractiveNumericBound(control, 'max');
+                  const step = getInteractiveNumericBound(control, 'step');
+                  const interactiveBooleanValue = parseBooleanSetting(rawValue, false);
+                  const interactiveColorValue = normalizeHexColorInputValue(stringValue || '#000000');
+                  const interactiveJsonValue = formatInteractiveJsonControlValue(rawValue);
 
                   return (
                     <div key={controlKey} className="space-y-1" data-testid={`editor-interactive-control-${controlKey}`}>
@@ -3598,28 +4177,75 @@ function ContentProperties({
                             <option key={option.value} value={option.value}>{option.label}</option>
                           ))}
                         </select>
+                      ) : controlType === 'radio' ? (
+                        <fieldset className="space-y-1" data-testid={`editor-interactive-control-radio-${controlKey}`}>
+                          {controlOptions.map((option) => (
+                            <label key={option.value} className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <input
+                                type="radio"
+                                name={`interactive-control-${element.id}-${controlKey}`}
+                                value={option.value}
+                                checked={stringValue === option.value}
+                                onChange={(e) => updateInteractiveControlValue(controlKey, e.target.value)}
+                                data-testid={`editor-interactive-control-input-${controlKey}-${option.value}`}
+                              />
+                              {option.label}
+                            </label>
+                          ))}
+                        </fieldset>
                       ) : controlType === 'checkbox' || controlType === 'boolean' || controlType === 'toggle' ? (
                         <label className="flex items-center gap-2 text-xs text-muted-foreground">
                           <input
                             type="checkbox"
-                            checked={Boolean(rawValue)}
+                            checked={interactiveBooleanValue}
                             onChange={(e) => updateInteractiveControlValue(controlKey, e.target.checked)}
                             data-testid={`editor-interactive-control-input-${controlKey}`}
                           />
                           Enabled
                         </label>
+                      ) : controlType === 'textarea' || controlType === 'json' || controlType === 'code' ? (
+                        <textarea
+                          value={controlType === 'json' ? interactiveJsonValue : stringValue}
+                          rows={controlType === 'textarea' ? 3 : 5}
+                          spellCheck={controlType === 'textarea'}
+                          onChange={(e) => updateInteractiveControlValue(
+                            controlKey,
+                            controlType === 'json' ? e.target.value : e.target.value,
+                          )}
+                          onBlur={(e) => {
+                            if (controlType === 'json') {
+                              updateInteractiveControlValue(controlKey, normalizeInteractiveJsonControlValue(e.target.value));
+                            }
+                          }}
+                          data-testid={`editor-interactive-control-input-${controlKey}`}
+                          className={cn(
+                            'w-full rounded-md border bg-background px-2 py-1.5 text-sm',
+                            controlType !== 'textarea' && 'font-mono text-xs',
+                            'focus:outline-none focus:ring-2 focus:ring-ring'
+                          )}
+                        />
                       ) : (
                         <input
                           type={controlType === 'range' || controlType === 'number' || controlType === 'color' ? controlType : 'text'}
-                          value={stringValue}
-                          min={min}
-                          max={max}
-                          step={step}
+                          value={controlType === 'color' ? interactiveColorValue : stringValue}
+                          min={min === undefined ? undefined : String(min)}
+                          max={max === undefined ? undefined : String(max)}
+                          step={step === undefined ? undefined : String(step)}
                           onChange={(e) => {
-                            const nextValue = controlType === 'range' || controlType === 'number'
-                              ? Number(e.target.value)
-                              : e.target.value;
-                            updateInteractiveControlValue(controlKey, Number.isNaN(nextValue) ? e.target.value : nextValue);
+                            if (controlType === 'range' || controlType === 'number') {
+                              updateInteractiveControlValue(
+                                controlKey,
+                                normalizeInteractiveNumericControlValue(e.target.value, control),
+                              );
+                              return;
+                            }
+
+                            updateInteractiveControlValue(
+                              controlKey,
+                              controlType === 'color'
+                                ? normalizeHexColorInputValue(e.target.value)
+                                : e.target.value,
+                            );
                           }}
                           data-testid={`editor-interactive-control-input-${controlKey}`}
                           className={cn(
@@ -4358,7 +4984,8 @@ function ContentProperties({
 interface LinkBehaviorPropertiesProps {
   prefix: 'button' | 'link';
   props: ElementProps;
-  onChange: (updates: Partial<ElementProps>) => void;
+  onChange: (updates: Partial<ElementProps>, options?: { staleAssetIds?: Array<unknown> }) => void;
+  onOpenDownloadMedia?: (mode?: 'library' | 'upload') => void;
   includeButtonType?: boolean;
 }
 
@@ -4366,6 +4993,7 @@ function LinkBehaviorProperties({
   prefix,
   props,
   onChange,
+  onOpenDownloadMedia,
   includeButtonType = false,
 }: LinkBehaviorPropertiesProps) {
   const target = normalizeLinkTarget(props.target);
@@ -4374,6 +5002,15 @@ function LinkBehaviorProperties({
   const actionValue = isButton
     ? normalizeButtonActionValue(actionPreset, props.actionValue ?? props.href)
     : '';
+  const selectedFileName = cleanMediaString(props.fileMediaName) || cleanMediaString(props.fileMediaId);
+  const selectedFileType = cleanMediaString(props.fileMediaType);
+  const selectedFileFolder = cleanMediaString(props.fileMediaFolderPath);
+  const selectedFileVisibility = cleanMediaString(props.fileMediaVisibility) || 'public';
+  const linkDownloadEnabled = !isButton && parseBooleanSetting(props.download, false);
+  const showDownloadFileControls = Boolean(onOpenDownloadMedia) && (
+    (isButton && actionPreset === 'download') || linkDownloadEnabled || Boolean(selectedFileName)
+  );
+  const staleDownloadAssetIds = downloadFileAssetIdsFromProps(props);
 
   return (
     <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
@@ -4388,12 +5025,16 @@ function LinkBehaviorProperties({
               onChange={(e) => {
                 const nextPreset = normalizeButtonActionPreset(e.target.value);
                 const nextValue = normalizeButtonActionValue(nextPreset, actionValue || props.href);
+                const clearsDownloadFile = nextPreset !== 'download';
 
                 onChange({
+                  ...(clearsDownloadFile ? clearDownloadFileProps() : {}),
                   actionPreset: nextPreset,
                   actionValue: nextValue,
                   href: buildButtonActionHref(nextPreset, nextValue),
                   download: nextPreset === 'download',
+                }, {
+                  staleAssetIds: clearsDownloadFile ? staleDownloadAssetIds : [],
                 });
               }}
               data-testid="editor-button-action-preset"
@@ -4419,11 +5060,15 @@ function LinkBehaviorProperties({
               value={actionValue}
               onChange={(e) => {
                 const nextValue = normalizeButtonActionValue(actionPreset, e.target.value);
+                const clearsDownloadFile = actionPreset === 'download';
 
                 onChange({
+                  ...(clearsDownloadFile ? clearDownloadFileProps() : {}),
                   actionValue: nextValue,
                   href: buildButtonActionHref(actionPreset, nextValue),
                   download: actionPreset === 'download',
+                }, {
+                  staleAssetIds: clearsDownloadFile ? staleDownloadAssetIds : [],
                 });
               }}
               data-testid="editor-button-action-value"
@@ -4441,6 +5086,71 @@ function LinkBehaviorProperties({
                       : '/path-or-url'
               }
             />
+          </div>
+        </div>
+      )}
+
+      {!isButton && (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={linkDownloadEnabled}
+            onChange={(e) => {
+              if (e.target.checked) {
+                onChange({
+                  actionPreset: 'download',
+                  download: true,
+                });
+                return;
+              }
+
+              onChange({
+                ...clearDownloadFileProps(),
+                actionPreset: 'custom',
+                download: false,
+              }, {
+                staleAssetIds: staleDownloadAssetIds,
+              });
+            }}
+            data-testid="editor-link-download-toggle"
+            className="rounded"
+          />
+          Download file
+        </label>
+      )}
+
+      {showDownloadFileControls && (
+        <div className="space-y-2 rounded-md border border-dashed border-border bg-background/70 p-2">
+          <div className="flex items-start gap-2 text-xs">
+            <Download className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="truncate font-medium text-foreground">
+                {selectedFileName || 'No file selected'}
+              </p>
+              <p className="truncate text-muted-foreground">
+                {[selectedFileType, selectedFileFolder, selectedFileVisibility].filter(Boolean).join(' • ')}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => onOpenDownloadMedia?.('library')}
+              data-testid={`editor-${prefix}-download-media`}
+              className="flex items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Choose file
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenDownloadMedia?.('upload')}
+              data-testid={`editor-${prefix}-upload-download-media`}
+              className="flex items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              Upload
+            </button>
           </div>
         </div>
       )}
@@ -4622,16 +5332,116 @@ function LayoutProperties({ element, onChange }: LayoutPropertiesProps) {
 interface StylePropertiesProps {
   element: CanvasElement;
   onChange: (updates: Partial<ElementProps>) => void;
+  onElementChange?: (updates: Partial<CanvasElement>) => void;
+  theme?: ThemeConfig;
+  mediaContext?: MediaContext;
+  canViewMedia?: boolean;
+  canCreateMedia?: boolean;
+  mediaViewDisabledReason?: string;
+  mediaCreateDisabledReason?: string;
   supportsTextStyles?: boolean;
 }
 
-function StyleProperties({ element, onChange, supportsTextStyles = false }: StylePropertiesProps) {
+function StyleProperties({
+  element,
+  onChange,
+  onElementChange,
+  theme,
+  mediaContext,
+  canViewMedia = true,
+  canCreateMedia = true,
+  mediaViewDisabledReason,
+  mediaCreateDisabledReason,
+  supportsTextStyles = false,
+}: StylePropertiesProps) {
   const media = useStore((state) => state.media);
   const fontFamilies = useMemo(() => getFontFamilyOptions(media), [media]);
   const [isFontLibraryOpen, setIsFontLibraryOpen] = useState(false);
+  const themeTokenReferences = useMemo(
+    () => buildBackyThemeTokenReferences(buildBackyThemeTokens(theme || {})),
+    [theme],
+  );
+  const themeTokenOptions = useMemo(
+    () => Object.entries(themeTokenReferences)
+      .map(([path, value]) => ({ path, value, label: themeTokenLabel(path) })),
+    [themeTokenReferences],
+  );
+  const themeTokenTargets = useMemo(
+    () => THEME_TOKEN_TARGETS.filter((target) => supportsTextStyles || !target.textOnly),
+    [supportsTextStyles],
+  );
+  const updateThemeTokenRef = useCallback((target: ThemeTokenTarget, tokenPath: string) => {
+    const nextTokenRefs = { ...(element.tokenRefs || {}) };
+    const nextProps = { ...element.props };
+
+    if (tokenPath) {
+      nextTokenRefs[target.targetPath] = tokenPath;
+      const tokenValue = themeTokenReferences[tokenPath];
+      if (tokenValue) {
+        nextProps[target.propName] = tokenValue;
+      }
+    } else {
+      delete nextTokenRefs[target.targetPath];
+    }
+
+    if (onElementChange) {
+      onElementChange({
+        props: nextProps,
+        tokenRefs: Object.keys(nextTokenRefs).length > 0 ? nextTokenRefs : undefined,
+      });
+      return;
+    }
+
+    onChange(nextProps);
+  }, [element.props, element.tokenRefs, onChange, onElementChange, themeTokenReferences]);
 
   return (
     <div className="space-y-3">
+      <div
+        className="rounded-md border border-dashed border-border bg-muted/30 p-3"
+        data-testid="editor-theme-token-bindings"
+        data-token-ref-path="tokenRefs"
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold text-foreground">Theme tokens</p>
+          </div>
+          <span className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            tokenRefs
+          </span>
+        </div>
+        <div className="grid gap-2">
+          {themeTokenTargets.map((target) => {
+            const selectedToken = element.tokenRefs?.[target.targetPath] || '';
+            const matchingOptions = themeTokenOptions.filter((option) => (
+              target.prefixes.some((prefix) => option.path.startsWith(prefix))
+            ));
+
+            return (
+              <label key={target.targetPath} className="grid gap-1 text-xs">
+                <span className="font-medium text-muted-foreground">{target.label}</span>
+                <select
+                  value={selectedToken}
+                  onChange={(event) => updateThemeTokenRef(target, event.target.value)}
+                  data-testid={themeTokenSelectTestId(target.targetPath)}
+                  className={cn(
+                    'w-full rounded-md border bg-background px-2 py-1.5 text-xs',
+                    'focus:outline-none focus:ring-2 focus:ring-ring'
+                  )}
+                >
+                  <option value="">Manual value</option>
+                  {matchingOptions.map((option) => (
+                    <option key={`${target.targetPath}:${option.path}`} value={option.path}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
       {supportsTextStyles && (
         <>
           {/* Font Family */}
@@ -4695,16 +5505,53 @@ function StyleProperties({ element, onChange, supportsTextStyles = false }: Styl
             <MediaLibraryModal
               isOpen={isFontLibraryOpen}
               onClose={() => setIsFontLibraryOpen(false)}
-              onSelect={(font) => {
-                const fontFamily = typeof font.metadata?.fontFamily === 'string' && font.metadata.fontFamily.trim()
-                  ? font.metadata.fontFamily.trim()
-                  : font.name.replace(/\.[a-z0-9]+$/i, '');
-                onChange({ fontFamily });
+              onSelect={(font, selectionOptions) => {
+                const fontFamily = fontFamilyFromMedia(font);
+                const registration = selectionOptions?.fontRegistration;
+                const fontFileUrl = font.url || getPublicMediaFileUrl(font.id, mediaContext?.siteId);
+                const nextProps: ElementProps = {
+                  ...element.props,
+                  fontFamily,
+                  fontMediaId: font.id,
+                  fontMediaName: font.name,
+                  fontMediaFolderId: font.folderId || null,
+                  fontMediaFolderPath: font.organization?.folderPath || null,
+                  fontMediaOrganization: font.organization,
+                  fontMediaVisibility: font.visibility || 'public',
+                  fontFileUrl,
+                  fontSource: 'media-library',
+                  fontFallback: registration?.fallback || cleanMediaString(font.metadata?.fontFallback) || 'system-ui, sans-serif',
+                  fontDisplay: registration?.display || cleanMediaString(font.metadata?.fontDisplay) || 'swap',
+                  fontRegistration: {
+                    family: fontFamily,
+                    weight: registration?.weight || cleanMediaString(font.metadata?.fontWeight) || '400',
+                    style: registration?.style || cleanMediaString(font.metadata?.fontStyle) || 'normal',
+                    fallback: registration?.fallback || cleanMediaString(font.metadata?.fontFallback) || 'system-ui, sans-serif',
+                    display: registration?.display || cleanMediaString(font.metadata?.fontDisplay) || 'swap',
+                    mediaId: font.id,
+                    url: fontFileUrl,
+                  },
+                };
+
+                if (onElementChange) {
+                  onElementChange({
+                    props: nextProps,
+                    assetIds: buildElementAssetIds(element, nextProps, [font.id], [element.props.fontMediaId]),
+                  });
+                  return;
+                }
+
+                onChange(nextProps);
               }}
               allowedTypes="font"
+              mediaContext={mediaContext}
               initialTab="upload"
               initialUploadFilter="font"
               allowScopeSwitcher={false}
+              canView={canViewMedia}
+              canCreate={canCreateMedia}
+              viewDisabledReason={mediaViewDisabledReason}
+              createDisabledReason={mediaCreateDisabledReason}
             />
           </div>
 
@@ -8877,13 +9724,128 @@ function DataBindingProperties({
 interface AnimationPropertiesProps {
   element: CanvasElement;
   onChange: (updates: Partial<CanvasElement>) => void;
+  theme?: ThemeConfig;
 }
 
-function AnimationProperties({ element, onChange }: AnimationPropertiesProps) {
+function AnimationProperties({ element, onChange, theme }: AnimationPropertiesProps) {
   const animation = element.animation as AnimationConfig | undefined;
+  const themeTokens = useMemo(
+    () => buildBackyThemeTokens(theme || {}),
+    [theme],
+  );
+  const motionDurationOptions = useMemo(
+    () => Object.entries(themeTokens.motion.duration || {}).map(([key, value]) => ({
+      path: `motion.duration.${key}`,
+      value,
+      label: themeTokenLabel(`motion.duration.${key}`),
+    })),
+    [themeTokens],
+  );
+  const motionEasingOptions = useMemo(
+    () => Object.entries(themeTokens.motion.easing || {}).map(([key, value]) => ({
+      path: `motion.easing.${key}`,
+      value,
+      label: themeTokenLabel(`motion.easing.${key}`),
+    })),
+    [themeTokens],
+  );
+  const motionTokenValueByPath = useMemo(
+    () => new Map([
+      ...motionDurationOptions.map((option) => [option.path, option.value] as const),
+      ...motionEasingOptions.map((option) => [option.path, option.value] as const),
+    ]),
+    [motionDurationOptions, motionEasingOptions],
+  );
+  const updateAnimationTokenRef = useCallback((target: 'duration' | 'easing', tokenPath: string) => {
+    const nextAnimation: AnimationConfig = {
+      type: 'fadeIn',
+      duration: 0.6,
+      delay: 0,
+      easing: 'power2.out',
+      trigger: 'load',
+      ...(animation || {}),
+    };
+    const nextTokenRefs = { ...(nextAnimation.tokenRefs || {}) };
+
+    if (tokenPath) {
+      nextTokenRefs[target] = tokenPath;
+      const tokenValue = motionTokenValueByPath.get(tokenPath);
+      if (target === 'duration') {
+        const durationSeconds = parseCssDurationToSeconds(tokenValue);
+        if (durationSeconds !== undefined) {
+          nextAnimation.duration = durationSeconds;
+        }
+      } else if (typeof tokenValue === 'string' && tokenValue.trim()) {
+        nextAnimation.easing = tokenValue.trim();
+      }
+    } else {
+      delete nextTokenRefs[target];
+    }
+
+    onChange({
+      animation: {
+        ...nextAnimation,
+        tokenRefs: Object.keys(nextTokenRefs).length > 0 ? nextTokenRefs : undefined,
+      },
+    });
+  }, [animation, motionTokenValueByPath, onChange]);
 
   return (
     <div className="space-y-3">
+      <div
+        className="rounded-md border border-dashed border-border bg-muted/30 p-3"
+        data-testid="editor-animation-token-bindings"
+        data-token-ref-path="animation.tokenRefs"
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold text-foreground">Motion tokens</p>
+          </div>
+          <span className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            animation.tokenRefs
+          </span>
+        </div>
+        <div className="grid gap-2">
+          <label className="grid gap-1 text-xs">
+            <span className="font-medium text-muted-foreground">Duration</span>
+            <select
+              value={animation?.tokenRefs?.duration || ''}
+              onChange={(event) => updateAnimationTokenRef('duration', event.target.value)}
+              data-testid="editor-animation-token-select-duration"
+              className={cn(
+                'w-full rounded-md border bg-background px-2 py-1.5 text-xs',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="">Manual duration</option>
+              {motionDurationOptions.map((option) => (
+                <option key={option.path} value={option.path}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs">
+            <span className="font-medium text-muted-foreground">Easing</span>
+            <select
+              value={animation?.tokenRefs?.easing || ''}
+              onChange={(event) => updateAnimationTokenRef('easing', event.target.value)}
+              data-testid="editor-animation-token-select-easing"
+              className={cn(
+                'w-full rounded-md border bg-background px-2 py-1.5 text-xs',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="">Manual easing</option>
+              {motionEasingOptions.map((option) => (
+                <option key={option.path} value={option.path}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
       <AnimationBuilder
         animation={animation}
         onChange={(nextAnimation) => {

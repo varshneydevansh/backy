@@ -73,6 +73,10 @@ const adminPageFromRepositoryPage = (page: BackyPage) => {
         typeof page.content.metadata?.customCSS === "string"
           ? page.content.metadata.customCSS
           : undefined,
+      customJS:
+        typeof page.content.metadata?.customJS === "string"
+          ? page.content.metadata.customJS
+          : undefined,
       contentDocument: page.content,
     },
   };
@@ -211,6 +215,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         targetId: currentPage.id,
         snapshot: pageRevisionSnapshot(currentPage),
         note: "Before publish",
+        operation: "publish",
         createdBy: request.headers.get("x-backy-actor") || "admin",
       });
       const published = await repositories.pages.publish(site.id, pageId);

@@ -125,6 +125,11 @@ on:
           - mollie
           - razorpay
           - generic
+      certification_site_id:
+        description: Site id or slug whose product/order admin API handoffs should be certified.
+        required: true
+        type: string
+        default: site-demo
 
 jobs:
   commerce-provider-certification:
@@ -147,9 +152,11 @@ jobs:
       BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER: ${{ inputs.subscription_provider }}
       BACKY_COMMERCE_CERTIFY_WEBHOOKS: ${{ inputs.certify_webhooks && '1' || '0' }}
       BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER: ${{ inputs.webhook_provider }}
+      BACKY_COMMERCE_CERTIFY_SITE_ID: ${{ inputs.certification_site_id }}
       BACKY_ADMIN_API_KEY: ${{ secrets.BACKY_ADMIN_API_KEY }}
       BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY: ${{ secrets.BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY }}
       BACKY_COMMERCE_CERTIFICATION_BASE_URL: ${{ vars.BACKY_COMMERCE_CERTIFICATION_BASE_URL }}
+      BACKY_COMMERCE_CERTIFICATION_OUTPUT: artifacts/backy-commerce-provider-certification.json
       BACKY_COMMERCE_TAX_PROVIDER_URL: ${{ vars.BACKY_COMMERCE_TAX_PROVIDER_URL }}
       COMMERCE_TAX_PROVIDER_URL: ${{ vars.COMMERCE_TAX_PROVIDER_URL }}
       BACKY_COMMERCE_SHIPPING_PROVIDER_URL: ${{ vars.BACKY_COMMERCE_SHIPPING_PROVIDER_URL }}
@@ -284,7 +291,8 @@ jobs:
             echo ""
             echo "| Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |"
             echo "| --- | --- | --- | --- | --- | --- |"
-            echo "| /products and /orders | npm run ci:commerce-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
+            echo "| /products | npm run ci:commerce-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
+            echo "| /orders | npm run ci:commerce-provider-certification | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | external target configured: $commerce_external; admin key configured: $commerce_admin_key_configured |"
             echo ""
             echo "| Selector | Value |"
             echo "| --- | --- |"
@@ -295,7 +303,16 @@ jobs:
             echo "| catalog_provider | ${{ inputs.catalog_provider }} |"
             echo "| subscription_provider | ${{ inputs.subscription_provider }} |"
             echo "| webhook_provider | ${{ inputs.webhook_provider }} |"
+            echo "| certification_site_id | ${{ inputs.certification_site_id }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Commerce provider certification
         run: npm run ci:commerce-provider-certification
+
+      - name: Upload Commerce provider certification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: backy-commerce-provider-certification-evidence
+          path: artifacts/backy-commerce-provider-certification.json
+          if-no-files-found: error
+          retention-days: 30

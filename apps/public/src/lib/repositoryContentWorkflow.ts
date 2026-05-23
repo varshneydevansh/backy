@@ -1,5 +1,5 @@
 import {
-  canvasElementsToBackyContentDocument,
+  canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
   type BackyContentDocument,
   type BackyJsonObject,
@@ -50,15 +50,15 @@ const contentDocumentFromSnapshot = (
     return rawContent.contentDocument;
   }
 
-  return canvasElementsToBackyContentDocument({
+  return canvasContentPayloadToBackyContentDocument({
     id: fallback.id,
     kind,
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements: isRecord(rawContent) ? rawContent.elements : [],
-    canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
-    customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
+    version: fallback.content.version,
+    rawContent,
+    fallbackDocument: fallback.content,
   });
 };
 
@@ -80,6 +80,7 @@ export const adminPageFromRepositoryPage = (page: BackyPage) => {
       elements: page.content.elements,
       canvasSize,
       customCSS: typeof page.content.metadata?.customCSS === 'string' ? page.content.metadata.customCSS : undefined,
+      customJS: typeof page.content.metadata?.customJS === 'string' ? page.content.metadata.customJS : undefined,
       contentDocument: page.content,
     },
   };
@@ -96,6 +97,7 @@ export const adminPostFromRepositoryPost = (post: BackyPost) => {
       elements: post.content.elements,
       canvasSize,
       customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
+      customJS: typeof post.content.metadata?.customJS === 'string' ? post.content.metadata.customJS : undefined,
       contentDocument: post.content,
     },
   };

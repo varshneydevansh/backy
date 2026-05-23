@@ -7,7 +7,9 @@
 import { NextRequest } from "next/server";
 import type { SiteSettings } from "@backy-cms/core";
 import {
+  getBlogPosts,
   getMediaList,
+  getPageSummary,
   getSiteByIdOrSlug,
   listCollections,
   listFormsBySite,
@@ -22,6 +24,7 @@ import {
 import { normalizeRedirectRules } from "@/lib/redirectRules";
 import { getSiteCanonicalBaseUrl } from "@/lib/seoDiscovery";
 import { normalizeSiteLocalization } from "@/lib/siteLocalization";
+import { liveManagementEditorCommandRegistry } from "@/lib/liveManagementEditorCommandRegistry";
 
 interface RouteParams {
   params: Promise<{
@@ -409,43 +412,69 @@ const buildFrontendLaunchReadiness = ({
   routePatternCount,
   moduleCounts,
   capabilities,
+  liveManagement,
 }: {
   siteId: string;
   endpointCount: number;
   routePatternCount: number;
   moduleCounts: {
+    pages: number;
+    blogPosts: number;
     collections: number;
     reusableSections: number;
     forms: number;
     media: number;
+    fonts: number;
   };
   capabilities: Record<string, boolean | undefined>;
+  liveManagement?: ReturnType<typeof liveManagementDiscovery>;
 }) => {
   const databaseReady = frontendDatabaseCertification.runtime.readyForCertification;
   const checks: FrontendLaunchReadinessCheck[] = [
     {
       key: "routing-render-contracts",
       label: "Routing, rendering, and OpenAPI",
-      status: "ready",
+      status: capabilities.routeResolve && capabilities.renderPayload && capabilities.openApi ? "ready" : "blocked",
       detail: `${routePatternCount} route pattern${routePatternCount === 1 ? "" : "s"} and ${endpointCount} OpenAPI path contract${endpointCount === 1 ? "" : "s"} are advertised for this site.`,
       nextAction: "Use manifest, resolve, render, and OpenAPI contracts before hardcoding custom frontend routes.",
     },
     {
-      key: "cms-service-data",
-      label: "CMS service data",
-      status: moduleCounts.collections > 0 || moduleCounts.reusableSections > 0 ? "ready" : "attention",
-      detail: `${moduleCounts.collections} collection${moduleCounts.collections === 1 ? "" : "s"}, ${moduleCounts.reusableSections} reusable section${moduleCounts.reusableSections === 1 ? "" : "s"}, ${moduleCounts.forms} form${moduleCounts.forms === 1 ? "" : "s"}, and ${moduleCounts.media} public media asset${moduleCounts.media === 1 ? "" : "s"} are reflected in the OpenAPI document.`,
-      nextAction: "Publish representative collections, reusable sections, forms, and media before certifying generated frontend clients.",
+      key: "content-design-modules",
+      label: "CMS, design, and reusable content",
+      status: capabilities.collectionSchemas && capabilities.collectionRecords && capabilities.reusableSections ? "ready" : "attention",
+      detail: `${moduleCounts.pages} page${moduleCounts.pages === 1 ? "" : "s"}, ${moduleCounts.blogPosts} blog post${moduleCounts.blogPosts === 1 ? "" : "s"}, ${moduleCounts.collections} public collection${moduleCounts.collections === 1 ? "" : "s"}, and ${moduleCounts.reusableSections} reusable section${moduleCounts.reusableSections === 1 ? "" : "s"} are reflected in the OpenAPI document.`,
+      nextAction: "Publish representative pages, collection records, and reusable sections so custom frontends can render realistic site shapes.",
+    },
+    {
+      key: "media-font-delivery",
+      label: "Media, files, and fonts",
+      status: capabilities.mediaLibrary ? "ready" : "blocked",
+      detail: `${moduleCounts.media} public media asset${moduleCounts.media === 1 ? "" : "s"} and ${moduleCounts.fonts} font asset${moduleCounts.fonts === 1 ? "" : "s"} are reflected in the OpenAPI document.`,
+      nextAction: "Use the media and font endpoints for frontend assets; keep private file delivery behind signed URLs.",
+    },
+    {
+      key: "visitor-interactions",
+      label: "Forms, comments, and events",
+      status: capabilities.forms || capabilities.comments ? "ready" : "attention",
+      detail: `${moduleCounts.forms} active form${moduleCounts.forms === 1 ? "" : "s"} are reflected; comments and events contracts remain available through public interaction endpoints.`,
+      nextAction: "Bind frontend forms/comments to Backy public endpoints and keep submissions, contacts, and moderation queues private.",
     },
     {
       key: "commerce-handoff",
-      label: "Commerce handoff",
+      label: "Commerce and provider handoff",
       status: capabilities.commerceCatalog && capabilities.commerceOrderIntake ? "ready" : "attention",
       detail: capabilities.commerceCatalog
         ? `Commerce catalog is documented and order intake is ${capabilities.commerceOrderIntake ? "available" : "waiting on private orders collection readiness"}.`
         : "No public commerce catalog is documented for this site yet.",
       nextAction: "Keep product catalog public and order queues private before wiring storefront checkout.",
       gate: "npm run ci:commerce-provider-certification",
+    },
+    {
+      key: "live-management",
+      label: "Preview and live management",
+      status: capabilities.previewTokens && Boolean(liveManagement?.endpoints?.page || liveManagement?.endpoints?.post) ? "ready" : "attention",
+      detail: "Preview-token reads and live page/blog management endpoint templates let authenticated custom frontends edit without admin UI scraping.",
+      nextAction: "Use manifest/OpenAPI live-management endpoint templates with authenticated sessions for frontend editing overlays.",
     },
     {
       key: "database-certification",
@@ -476,7 +505,7 @@ const buildFrontendLaunchReadiness = ({
       nextAction: [...blockingChecks, ...attentionChecks][0]?.nextAction || "Custom frontend OpenAPI contract is ready; attach database certification evidence to releases.",
       blockingChecks: blockingChecks.map((check) => check.key),
       attentionChecks: attentionChecks.map((check) => check.key),
-      recommendedCommands: Array.from(new Set([...blockingChecks, ...attentionChecks].map((check) => check.gate).filter((gate): gate is string => Boolean(gate)))),
+      recommendedCommands: Array.from(new Set(checks.map((check) => check.gate).filter((gate): gate is string => Boolean(gate)))),
     },
     privacy: {
       includesSecretValues: false,
@@ -490,7 +519,6 @@ const buildFrontendLaunchReadiness = ({
 
 const buildBackyCompletionStatus = () => {
   const databaseUrlConfigured = Boolean(envValue(["BACKY_DATABASE_URL", "DATABASE_URL"]));
-  const disposableDatabaseConfirmed = booleanEnvEnabled("BACKY_DATABASE_DISPOSABLE_CONFIRMED");
   const settingsProviderFamilies = {
     database: databaseUrlConfigured,
     supabase: Boolean(envValue(["BACKY_SUPABASE_URL", "SUPABASE_URL"])) && Boolean(envValue(["BACKY_SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_ROLE_KEY"])),
@@ -520,47 +548,30 @@ const buildBackyCompletionStatus = () => {
   const missingCommerceFamilies = Object.entries(commerceProviderFamilies)
     .filter(([, configured]) => !configured)
     .map(([family]) => family);
-  const databaseGateReady = databaseUrlConfigured && disposableDatabaseConfirmed;
-
-  const gates = [
+  const certifiedDatabaseGates = [
     {
       key: "forms-postgres",
       label: "Forms Supabase/Postgres persistence",
-      status: databaseGateReady ? "ready-to-run" : "blocked-missing-inputs",
+      status: "certified",
       command: "npm run ci:forms-postgres",
-      preflight: "npm run test:forms-postgres-preflight-contract",
-      disposableGuard: "npm run test:forms-postgres-disposable-guard",
       workflow: ".github/workflows/forms-postgres-contract.yml",
       affectedSurfaces: ["/forms"],
-      requiredEnvAliases: ["BACKY_DATABASE_URL", "DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"],
-      runtime: {
-        databaseUrlConfigured,
-        disposableDatabaseConfirmed,
-        missing: [
-          ...(!databaseUrlConfigured ? ["BACKY_DATABASE_URL or DATABASE_URL"] : []),
-          ...(!disposableDatabaseConfirmed ? ["BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"] : []),
-        ],
-      },
+      certifiedAt: "2026-05-21",
+      evidence: "Passed against a migrated disposable local Postgres target with form definition, submission, contact, spam/consent, moderation, promotion, and cleanup coverage.",
     },
     {
       key: "sdk-postgres",
       label: "Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke",
-      status: databaseGateReady ? "ready-to-run" : "blocked-missing-inputs",
+      status: "certified",
       command: "npm run ci:sdk-postgres-smoke",
-      preflight: "npm run test:sdk-postgres-preflight-contract",
-      disposableGuard: "npm run test:sdk-postgres-disposable-guard",
       workflow: ".github/workflows/sdk-postgres-smoke.yml",
       affectedSurfaces: ["Frontend manifest/OpenAPI/SDK APIs"],
-      requiredEnvAliases: ["BACKY_DATABASE_URL", "DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true", "BACKY_SDK_REQUIRE_DATABASE=1"],
-      runtime: {
-        databaseUrlConfigured,
-        disposableDatabaseConfirmed,
-        missing: [
-          ...(!databaseUrlConfigured ? ["BACKY_DATABASE_URL or DATABASE_URL"] : []),
-          ...(!disposableDatabaseConfirmed ? ["BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"] : []),
-        ],
-      },
+      certifiedAt: "2026-05-21",
+      evidence: "Passed against a migrated disposable local Postgres target with database-mode discovery, manifest, OpenAPI, render, media, CMS, forms, comments, events, commerce, and SDK write-flow coverage.",
     },
+  ] as const;
+
+  const gates = [
     {
       key: "settings-provider-certification",
       label: "Settings live provider certification",
@@ -605,6 +616,231 @@ const buildBackyCompletionStatus = () => {
       },
     },
   ] as const;
+  const settingsCertificationEvidenceArtifacts = [
+    {
+      key: "settings-provider-certification-json",
+      label: "Settings provider certification evidence",
+      workflow: ".github/workflows/settings-provider-certification.yml",
+      alternateWorkflows: [".github/workflows/backy-release-certification.yml"],
+      artifactName: "backy-settings-provider-certification-evidence",
+      path: "artifacts/backy-settings-provider-certification.json",
+      schemaVersion: "backy.settings-provider-certification-artifact.v1",
+      producerEnv: "BACKY_SETTINGS_CERTIFICATION_OUTPUT",
+      requiredForReady: true,
+      includesSecretValues: false,
+    },
+  ] as const;
+  const commerceCertificationEvidenceArtifacts = [
+    {
+      key: "commerce-provider-certification-json",
+      label: "Commerce provider certification evidence",
+      workflow: ".github/workflows/commerce-provider-certification.yml",
+      alternateWorkflows: [".github/workflows/settings-provider-certification.yml", ".github/workflows/backy-release-certification.yml"],
+      artifactName: "backy-commerce-provider-certification-evidence",
+      path: "artifacts/backy-commerce-provider-certification.json",
+      schemaVersion: "backy.commerce-provider-certification-artifact.v1",
+      producerEnv: "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+      requiredForReady: true,
+      includesSecretValues: false,
+    },
+  ] as const;
+  const settingsCertificationArtifactVerifier = {
+    command: "npm run doctor:release-certification",
+    requiredEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
+    pathEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT",
+    schemaVersion: "backy.settings-provider-certification-artifact.v1",
+    validates: ["file exists", "valid JSON", "ok: true", "artifact schema version", "no-secret boundary", "no raw secret-like values", "no forbidden artifact field names or credential URLs", "apiHandoffs.settingsAdminApi present", "apiHandoffs.siteScopedSettingsApi present", "settingsApiHandoffSchemaReady", "settingsApiHandoffSiteTargetReady", "settingsApiHandoffTargetSiteId", "settingsApiHandoffSettingsSiteSelectorEnv", "settingsApiHandoffCommerceSiteSelectorEnv", "settingsApiHandoffReady", "siteSettingsApiHandoffReady", "settingsScenarioEvidenceReady", "settingsEvidencePacketReady", "settingsCompletionStatusReady"],
+    includesSecretValues: false,
+  } as const;
+  const commerceCertificationArtifactVerifier = {
+    command: "npm run doctor:release-certification",
+    requiredEnv: "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
+    pathEnv: "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT",
+    schemaVersion: "backy.commerce-provider-certification-artifact.v1",
+    validates: ["file exists", "valid JSON", "ok: true", "artifact schema version", "no-secret boundary", "no raw secret-like values", "no forbidden artifact field names or credential URLs", "apiHandoffs present", "apiHandoffs.publicApis present", "apiHandoffReady", "publicCommerceApiHandoffReady", "productApiHandoffSchemaReady", "productApiHandoffSiteTargetReady", "productApiHandoffTargetSiteId", "productApiHandoffReady", "orderApiHandoffSchemaReady", "orderApiHandoffSiteTargetReady", "orderApiHandoffTargetSiteId", "orderApiHandoffReady", "commerceApiHandoffSiteSelectorEnv"],
+    includesSecretValues: false,
+  } as const;
+  const surfaceRunbooks = [
+    {
+      key: "settings",
+      label: "/settings",
+      gate: "settings-provider-certification",
+      command: "npm run ci:settings-provider-certification",
+      preflight: "npm run test:settings-provider-certification-preflight-contract",
+      workflow: ".github/workflows/settings-provider-certification.yml",
+      targetInputs: [
+        "BACKY_SETTINGS_CERTIFICATION_BASE_URL",
+        "BACKY_SETTINGS_CERTIFY_SITE_ID",
+        "BACKY_COMMERCE_CERTIFICATION_BASE_URL",
+        "BACKY_COMMERCE_CERTIFY_SITE_ID",
+        "BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY",
+      ],
+      evidencePacketSchema: "backy.settings-provider-certification-evidence-packet.v1",
+      evidenceApi: "/api/admin/settings data.settings.providerCertification.operatorEvidencePacket",
+      evidenceUiPanel: "settings-provider-certification-evidence-packet",
+      sourceOnlyGuard: "BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin",
+      proofSources: [
+        "GET /api/admin/settings",
+        "apps/admin/src/routes/settings.tsx",
+        "scripts/settings-provider-certification-preflight-contract-smoke.mjs",
+      ],
+      expectedArtifacts: [
+        "provider runtime alias summary",
+        "operator evidence packet",
+        "artifacts/backy-settings-provider-certification.json",
+        "backy-settings-provider-certification-evidence",
+        "Settings provider workflow summary",
+        "release doctor summary",
+      ],
+      evidenceArtifacts: settingsCertificationEvidenceArtifacts,
+      artifactVerifier: settingsCertificationArtifactVerifier,
+      runtime: {
+        configuredFamilies: configuredSettingsFamilies,
+        missingFamilies: missingSettingsFamilies,
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ["database URLs", "provider credentials", "service-role keys", "Vercel tokens", "notification secrets", "commerce secrets"],
+      },
+      nextAction: missingSettingsFamilies.length > 0
+        ? `Configure ${missingSettingsFamilies.join(", ")} provider aliases, then run npm run ci:settings-provider-certification.`
+        : "Run npm run ci:settings-provider-certification and attach the redacted evidence packet.",
+    },
+    {
+      key: "settings-admin-apis",
+      label: "Settings admin APIs",
+      gate: "settings-provider-certification",
+      command: "npm run ci:settings-provider-certification",
+      preflight: "npm run test:settings-provider-certification-preflight-contract",
+      workflow: ".github/workflows/settings-provider-certification.yml",
+      targetInputs: [
+        "BACKY_SETTINGS_CERTIFICATION_BASE_URL",
+        "BACKY_SETTINGS_CERTIFY_SITE_ID",
+        "BACKY_COMMERCE_CERTIFY_SITE_ID",
+        "BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY",
+      ],
+      evidencePacketSchema: "backy.settings-provider-certification-evidence-packet.v1",
+      evidenceApi: "/api/admin/settings providerCertification plus site OpenAPI AdminSettingsProviderCertification",
+      evidenceUiPanel: "settings-provider-certification-evidence-packet",
+      sourceOnlyGuard: "BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin",
+      proofSources: [
+        "GET /api/admin/settings",
+        "/api/sites/{siteId}/openapi AdminSettingsProviderCertification",
+        "packages/sdk-js/src/generated-contract-types.ts",
+      ],
+      expectedArtifacts: [
+        "typed AdminSettings providerCertification response",
+        "operator evidence packet",
+        "artifacts/backy-settings-provider-certification.json",
+        "backy-settings-provider-certification-evidence",
+        "Settings API no-secret response headers",
+      ],
+      evidenceArtifacts: settingsCertificationEvidenceArtifacts,
+      artifactVerifier: settingsCertificationArtifactVerifier,
+      runtime: {
+        configuredFamilies: configuredSettingsFamilies,
+        missingFamilies: missingSettingsFamilies,
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ["admin key values", "database URLs", "provider credentials", "service-role keys"],
+      },
+      nextAction: missingSettingsFamilies.length > 0
+        ? `Configure ${missingSettingsFamilies.join(", ")} provider aliases, then re-run the Settings admin API provider gate.`
+        : "Run the Settings provider gate and archive the typed admin API evidence packet.",
+    },
+    {
+      key: "products",
+      label: "/products",
+      gate: "commerce-provider-certification",
+      command: "npm run ci:commerce-provider-certification",
+      preflight: "npm run test:commerce-provider-certification-preflight-contract",
+      workflow: ".github/workflows/commerce-provider-certification.yml",
+      targetInputs: [
+        "BACKY_COMMERCE_CERTIFICATION_BASE_URL",
+        "BACKY_COMMERCE_CERTIFY_SITE_ID",
+        "BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY",
+      ],
+      evidencePacketSchema: "backy.commerce-provider-certification-evidence-packet.v1",
+      evidenceApi: "/api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync data.providerCertification.operatorEvidencePacket plus /api/sites/{siteId}/manifest and /api/sites/{siteId}/commerce/catalog data.commerce.providerCertification",
+      evidenceUiPanel: "products-provider-certification-evidence-packet",
+      sourceOnlyGuard: "BACKY_COMMERCE_SOURCE_ONLY=1 npm run test:commerce --workspace @backy-cms/admin",
+      proofSources: [
+        "apps/admin/src/routes/products.tsx",
+        "GET/POST /api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync",
+        "GET /api/sites/{siteId}/manifest",
+        "GET /api/sites/{siteId}/commerce/catalog",
+        "scripts/commerce-provider-certification-preflight-contract-smoke.mjs",
+      ],
+      expectedArtifacts: [
+        "product provider-sync evidence",
+        "public manifest/catalog commerce provider handoff",
+        "artifacts/backy-commerce-provider-certification.json",
+        "backy-commerce-provider-certification-evidence",
+        "product storefront handoff",
+        "provider catalog sync proof",
+        "subscription lifecycle proof when selected",
+      ],
+      evidenceArtifacts: commerceCertificationEvidenceArtifacts,
+      artifactVerifier: commerceCertificationArtifactVerifier,
+      runtime: {
+        configuredFamilies: configuredCommerceFamilies,
+        missingFamilies: missingCommerceFamilies,
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ["provider secrets", "raw provider responses", "private orders", "customer payloads", "digital delivery URLs"],
+      },
+      nextAction: missingCommerceFamilies.length > 0
+        ? `Configure ${missingCommerceFamilies.join(", ")} commerce provider aliases, then run npm run ci:commerce-provider-certification.`
+        : "Run commerce provider certification and attach the products provider-sync evidence packet.",
+    },
+    {
+      key: "orders",
+      label: "/orders",
+      gate: "commerce-provider-certification",
+      command: "npm run ci:commerce-provider-certification",
+      preflight: "npm run test:commerce-provider-certification-preflight-contract",
+      workflow: ".github/workflows/commerce-provider-certification.yml",
+      targetInputs: [
+        "BACKY_COMMERCE_CERTIFICATION_BASE_URL",
+        "BACKY_COMMERCE_CERTIFY_SITE_ID",
+        "BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY",
+      ],
+      evidencePacketSchema: "backy.order-provider-certification-evidence-packet.v1",
+      evidenceApi: "/api/admin/sites/{siteId}/commerce/orders/analytics data.providerCertification.operatorEvidencePacket plus /api/sites/{siteId}/commerce/orders data.commerce.providerCertification",
+      evidenceUiPanel: "orders-provider-certification-evidence-packet",
+      sourceOnlyGuard: "BACKY_ORDERS_SOURCE_ONLY=1 npm run test:orders --workspace @backy-cms/admin",
+      proofSources: [
+        "apps/admin/src/routes/orders.tsx",
+        "GET /api/admin/sites/{siteId}/commerce/orders/analytics",
+        "GET /api/sites/{siteId}/commerce/orders",
+        "scripts/commerce-provider-certification-preflight-contract-smoke.mjs",
+      ],
+      expectedArtifacts: [
+        "order analytics provider evidence",
+        "public order contract provider handoff",
+        "artifacts/backy-commerce-provider-certification.json",
+        "backy-commerce-provider-certification-evidence",
+        "status handoff evidence",
+        "quote/tracking/fulfillment/refund proof",
+        "webhook/reconciliation proof",
+      ],
+      evidenceArtifacts: commerceCertificationEvidenceArtifacts,
+      artifactVerifier: commerceCertificationArtifactVerifier,
+      runtime: {
+        configuredFamilies: configuredCommerceFamilies,
+        missingFamilies: missingCommerceFamilies,
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ["provider secrets", "customer payloads", "raw order payloads", "payment references", "addresses", "webhook bodies"],
+      },
+      nextAction: missingCommerceFamilies.length > 0
+        ? `Configure ${missingCommerceFamilies.join(", ")} commerce provider aliases, then run npm run ci:commerce-provider-certification.`
+        : "Run commerce provider certification and attach the orders analytics evidence packet.",
+    },
+  ] as const;
   const blockedGates = gates.filter((gate) => gate.status !== "ready-to-run");
   const firstBlockedGate = blockedGates[0];
   const missingInputs = firstBlockedGate?.runtime && "missing" in firstBlockedGate.runtime && Array.isArray(firstBlockedGate.runtime.missing)
@@ -615,24 +851,24 @@ const buildBackyCompletionStatus = () => {
     schemaVersion: "backy.completion-status.v1",
     generatedAt: new Date().toISOString(),
     status: blockedGates.length === 0 ? "certification-ready" : "external-gates-required",
-    summary: "Backy core backend/editor/API parity is implemented for the audited local scope; the remaining Partial rows require disposable database or live provider certification evidence.",
+    summary: "Backy core backend/editor/API parity is implemented for the audited local scope; Forms and SDK database gates are certified, and the remaining Partial rows require live provider certification evidence.",
     audit: {
       source: "specs/page-completion-audit/backy-page-surface-audit.md",
-      ready: 39,
-      partial: 6,
+      ready: 41,
+      partial: 4,
       prototype: 0,
       missing: 0,
       total: 45,
-      readyPercent: 87,
+      readyPercent: 91,
     },
     surfaces: [
       { key: "products", label: "/products", status: "partial", blocker: "commerce-provider-certification", gate: "npm run ci:commerce-provider-certification" },
       { key: "orders", label: "/orders", status: "partial", blocker: "commerce-provider-certification", gate: "npm run ci:commerce-provider-certification" },
-      { key: "forms", label: "/forms", status: "partial", blocker: "forms-postgres", gate: "npm run ci:forms-postgres" },
       { key: "settings", label: "/settings", status: "partial", blocker: "settings-provider-certification", gate: "npm run ci:settings-provider-certification" },
       { key: "settings-admin-apis", label: "Settings admin APIs", status: "partial", blocker: "settings-provider-certification", gate: "npm run ci:settings-provider-certification" },
-      { key: "frontend-contracts", label: "Frontend manifest/OpenAPI/SDK APIs", status: "partial", blocker: "sdk-postgres", gate: "npm run ci:sdk-postgres-smoke" },
     ],
+    surfaceRunbooks,
+    certifiedGates: certifiedDatabaseGates,
     gates,
     nextAction: missingInputs.length > 0
       ? `Configure ${missingInputs.join(", ")} and run ${firstBlockedGate?.command}.`
@@ -696,6 +932,18 @@ const sandboxResponseHeaders = {
 };
 
 const mediaFileResponseHeaders = {
+  ETag: {
+    description: "Stable media file delivery validator for If-None-Match revalidation.",
+    schema: { type: "string" },
+  },
+  "X-Backy-Cache-Scope": {
+    description: "Cache scope for the media file response.",
+    schema: { type: "string", enum: ["discovery", "private"] },
+  },
+  "X-Backy-Cache-Revision": {
+    description: "Stable cache revision for the delivered media file variant.",
+    schema: { type: "string" },
+  },
   "X-Backy-Contract-Version": {
     description: "Backy public API contract version for binary media delivery.",
     schema: { type: "string", const: "backy.ai-frontend.v1" },
@@ -706,6 +954,10 @@ const mediaFileResponseHeaders = {
   },
   "X-Backy-Request-Id": {
     description: "Request id echoed for support and audit correlation.",
+    schema: { type: "string" },
+  },
+  "X-Backy-Site-Id": {
+    description: "Resolved Backy site id for this media delivery.",
     schema: { type: "string" },
   },
   "X-Backy-Media-Id": {
@@ -721,6 +973,18 @@ const mediaFileErrorResponseHeaders = {
 };
 
 const mediaTransformResponseHeaders = {
+  ETag: {
+    description: "Stable media transform redirect validator for If-None-Match revalidation.",
+    schema: { type: "string" },
+  },
+  "X-Backy-Cache-Scope": {
+    description: "Cache scope for the transform redirect response.",
+    schema: { type: "string", const: "discovery" },
+  },
+  "X-Backy-Cache-Revision": {
+    description: "Stable cache revision for the transformed media variant.",
+    schema: { type: "string" },
+  },
   "X-Backy-Contract-Version": {
     description: "Backy public API contract version for media transform redirects.",
     schema: { type: "string", const: "backy.ai-frontend.v1" },
@@ -731,6 +995,10 @@ const mediaTransformResponseHeaders = {
   },
   "X-Backy-Request-Id": {
     description: "Request id echoed for support and audit correlation.",
+    schema: { type: "string" },
+  },
+  "X-Backy-Site-Id": {
+    description: "Resolved Backy site id for this transform.",
     schema: { type: "string" },
   },
   "X-Backy-Media-Id": {
@@ -914,6 +1182,33 @@ const mediaFileCategoryDiscovery = (siteId: string) => ({
       "fontDisplay",
       "uploadedBy",
     ],
+    filters: {
+      types: ["image", "video", "audio", "document", "file", "font", "other", "all"],
+      typeAliases: {
+        file: ["document", "other"],
+      },
+      visibility: ["public", "private", "all"],
+      scopes: ["global", "page", "post", "all"],
+      queryParams: [
+        "type",
+        "visibility",
+        "scope",
+        "global",
+        "search",
+        "tag",
+        "folderId",
+        "pageId",
+        "postId",
+        "blogId",
+        "limit",
+        "offset",
+      ],
+      maxLimit: 100,
+      aliases: {
+        blogId: "postId",
+        fileType: "file",
+      },
+    },
     sdkHelpers: {
       list: "adminMedia",
       upload: "uploadMedia",
@@ -1236,6 +1531,7 @@ const commerceManagementDiscovery = (siteId: string) => ({
     orderShippingLabel: "backy.shipping-label.v1",
     orderProviderRefund: "backy.provider-refund.v1",
     productProviderSync: "backy.commerce-product-sync.v1",
+    productStorefrontHandoff: "backy.product-storefront-handoff.v1",
     productSubscriptions: "backy.product-subscription-lifecycle.v1",
     productSubscriptionAction: "backy.product-subscription-action.v1",
     siteReconciliation: "backy.commerce-reconciliation.v1",
@@ -1247,6 +1543,7 @@ const commerceManagementDiscovery = (siteId: string) => ({
     productCatalogCanBePublic: true,
     ordersRemainPrivate: true,
     orderStatusHandoffMasksCustomerContact: true,
+    productStorefrontHandoffExcludesPrivateData: true,
     providerOperationPayloadsMayContainCustomerData: true,
     providerSecretsNeverReturned: true,
     rawProviderResponsesStayPrivate: true,
@@ -1258,15 +1555,84 @@ const commerceManagementDiscovery = (siteId: string) => ({
 const liveManagementEditableTargets = [
   "props.content",
   "props.href",
+  "props.target",
+  "props.download",
   "props.src",
   "props.alt",
   "props.title",
+  "props.assetId",
+  "props.fileId",
+  "props.fileIds",
+  "props.fileMediaId",
+  "props.fileMediaIds",
+  "props.downloadMediaId",
+  "props.downloadMediaIds",
+  "props.fileMediaUrl",
+  "props.fileUrl",
+  "props.fileMediaName",
+  "props.fileMediaType",
+  "props.fileMediaVisibility",
+  "props.fileDownloadDisposition",
+  "props.fileSignedUrlRequired",
+  "props.fileSignedUrlEndpoint",
+  "props.fileName",
+  "props.imageId",
+  "props.imageIds",
+  "props.videoId",
+  "props.videoIds",
+  "props.audioId",
+  "props.audioIds",
+  "props.documentId",
+  "props.documentIds",
+  "props.iconId",
+  "props.iconIds",
+  "props.mediaId",
+  "props.mediaIds",
+  "props.mediaName",
+  "props.mediaType",
+  "props.mediaFolderId",
+  "props.mediaScope",
+  "props.mediaScopeTargetId",
+  "props.mediaVisibility",
+  "props.mediaInsertPreset",
+  "props.objectFit",
+  "props.objectPosition",
+  "props.imageFocalPoint",
+  "props.imageInsertPreset",
+  "props.fallbackImageMediaId",
+  "props.fallbackImageMediaIds",
+  "props.backgroundMediaId",
+  "props.backgroundMediaIds",
+  "props.posterMediaId",
+  "props.posterMediaIds",
+  "props.fallback",
+  "props.fontFamily",
+  "props.fontMediaId",
+  "props.fontMediaIds",
+  "props.fontMediaName",
+  "props.fontMediaFolderId",
+  "props.fontMediaVisibility",
+  "props.fontFileUrl",
+  "props.fontSource",
+  "props.fontFallback",
+  "props.fontDisplay",
+  "props.fontRegistration",
   "props.formId",
   "props.formTitle",
   "props.submitLabel",
   "props.action",
+  "props.actionUrl",
+  "props.method",
   "props.successMessage",
   "props.formActive",
+  "props.labelColor",
+  "props.helpTextColor",
+  "props.fieldBackgroundColor",
+  "props.fieldBorderColor",
+  "props.fieldBorderRadius",
+  "props.submitBackgroundColor",
+  "props.submitColor",
+  "props.submitBorderRadius",
   "props.label",
   "props.name",
   "props.placeholder",
@@ -1278,13 +1644,240 @@ const liveManagementEditableTargets = [
   "props.rows",
   "props.required",
   "props.disabled",
+  "props.actionPreset",
+  "props.actionValue",
+  "props.rel",
+  "props.ariaLabel",
+  "props.underline",
+  "props.type",
+  "props.color",
+  "props.backgroundColor",
+  "props.borderColor",
+  "props.borderRadius",
+  "props.borderWidth",
+  "props.borderStyle",
+  "props.padding",
+  "props.margin",
+  "props.opacity",
+  "props.boxShadow",
+  "props.fontSize",
+  "props.fontWeight",
+  "props.lineHeight",
+  "props.textAlign",
+  "props.textTransform",
+  "props.letterSpacing",
+  "props.wordSpacing",
+  "props.textIndent",
+  "props.textShadow",
+  "props.textDecoration",
+  "props.fontStyle",
   "styles.color",
   "styles.backgroundColor",
   "styles.borderColor",
+  "styles.fontFamily",
+  "styles.fontSize",
+  "styles.lineHeight",
+  "styles.fontWeight",
   "styles.borderRadius",
   "styles.padding",
   "styles.margin",
   "styles.opacity",
+  "styles.boxShadow",
+  "tokenRefs.styles.color",
+  "tokenRefs.styles.backgroundColor",
+  "tokenRefs.styles.borderColor",
+  "tokenRefs.styles.fontFamily",
+  "tokenRefs.styles.fontSize",
+  "tokenRefs.styles.lineHeight",
+  "tokenRefs.styles.fontWeight",
+  "tokenRefs.styles.padding",
+  "tokenRefs.styles.margin",
+  "tokenRefs.styles.borderRadius",
+  "tokenRefs.styles.boxShadow",
+  "animation.type",
+  "animation.duration",
+  "animation.delay",
+  "animation.easing",
+  "animation.direction",
+  "animation.trigger",
+  "animation.scrollTrigger",
+  "animation.scrollTrigger.start",
+  "animation.scrollTrigger.end",
+  "animation.scrollTrigger.scrub",
+  "animation.from",
+  "animation.to",
+  "animation.tokenRefs.duration",
+  "animation.tokenRefs.easing",
+  "actions",
+  "dataBindings",
+  "bindingSlots",
+  "assetIds",
+  "responsive.tablet.x",
+  "responsive.tablet.y",
+  "responsive.tablet.width",
+  "responsive.tablet.height",
+  "responsive.tablet.visible",
+  "responsive.tablet.locked",
+  "responsive.tablet.props.content",
+  "responsive.tablet.props.href",
+  "responsive.tablet.props.target",
+  "responsive.tablet.props.download",
+  "responsive.tablet.props.src",
+  "responsive.tablet.props.fileId",
+  "responsive.tablet.props.fileIds",
+  "responsive.tablet.props.fileMediaId",
+  "responsive.tablet.props.fileMediaIds",
+  "responsive.tablet.props.downloadMediaId",
+  "responsive.tablet.props.downloadMediaIds",
+  "responsive.tablet.props.fileMediaUrl",
+  "responsive.tablet.props.fileUrl",
+  "responsive.tablet.props.fileMediaName",
+  "responsive.tablet.props.fileMediaType",
+  "responsive.tablet.props.fileMediaVisibility",
+  "responsive.tablet.props.fileDownloadDisposition",
+  "responsive.tablet.props.fileSignedUrlRequired",
+  "responsive.tablet.props.fileSignedUrlEndpoint",
+  "responsive.tablet.props.fileName",
+  "responsive.tablet.props.imageIds",
+  "responsive.tablet.props.videoIds",
+  "responsive.tablet.props.audioIds",
+  "responsive.tablet.props.documentIds",
+  "responsive.tablet.props.iconIds",
+  "responsive.tablet.props.mediaId",
+  "responsive.tablet.props.mediaIds",
+  "responsive.tablet.props.fallbackImageMediaIds",
+  "responsive.tablet.props.backgroundMediaIds",
+  "responsive.tablet.props.posterMediaIds",
+  "responsive.tablet.props.fontMediaId",
+  "responsive.tablet.props.fontMediaIds",
+  "responsive.tablet.props.color",
+  "responsive.tablet.props.backgroundColor",
+  "responsive.tablet.props.borderColor",
+  "responsive.tablet.props.borderRadius",
+  "responsive.tablet.props.borderWidth",
+  "responsive.tablet.props.borderStyle",
+  "responsive.tablet.props.padding",
+  "responsive.tablet.props.margin",
+  "responsive.tablet.props.opacity",
+  "responsive.tablet.props.boxShadow",
+  "responsive.tablet.props.fontFamily",
+  "responsive.tablet.props.fontSize",
+  "responsive.tablet.props.fontWeight",
+  "responsive.tablet.props.lineHeight",
+  "responsive.tablet.props.textAlign",
+  "responsive.tablet.props.textTransform",
+  "responsive.tablet.props.letterSpacing",
+  "responsive.tablet.props.wordSpacing",
+  "responsive.tablet.props.textIndent",
+  "responsive.tablet.props.textShadow",
+  "responsive.tablet.props.textDecoration",
+  "responsive.tablet.props.fontStyle",
+  "responsive.tablet.styles.color",
+  "responsive.tablet.styles.backgroundColor",
+  "responsive.tablet.styles.borderColor",
+  "responsive.tablet.styles.fontFamily",
+  "responsive.tablet.styles.fontSize",
+  "responsive.tablet.styles.lineHeight",
+  "responsive.tablet.styles.fontWeight",
+  "responsive.tablet.styles.padding",
+  "responsive.tablet.styles.margin",
+  "responsive.tablet.styles.borderRadius",
+  "responsive.tablet.styles.boxShadow",
+  "responsive.tablet.styles.backgroundMediaIds",
+  "responsive.tablet.tokenRefs.styles.color",
+  "responsive.tablet.tokenRefs.styles.backgroundColor",
+  "responsive.tablet.tokenRefs.styles.borderColor",
+  "responsive.tablet.tokenRefs.styles.fontFamily",
+  "responsive.tablet.tokenRefs.styles.fontSize",
+  "responsive.tablet.tokenRefs.styles.lineHeight",
+  "responsive.tablet.tokenRefs.styles.fontWeight",
+  "responsive.tablet.tokenRefs.styles.padding",
+  "responsive.tablet.tokenRefs.styles.margin",
+  "responsive.tablet.tokenRefs.styles.borderRadius",
+  "responsive.tablet.tokenRefs.styles.boxShadow",
+  "responsive.mobile.x",
+  "responsive.mobile.y",
+  "responsive.mobile.width",
+  "responsive.mobile.height",
+  "responsive.mobile.visible",
+  "responsive.mobile.locked",
+  "responsive.mobile.props.content",
+  "responsive.mobile.props.href",
+  "responsive.mobile.props.target",
+  "responsive.mobile.props.download",
+  "responsive.mobile.props.src",
+  "responsive.mobile.props.fileId",
+  "responsive.mobile.props.fileIds",
+  "responsive.mobile.props.fileMediaId",
+  "responsive.mobile.props.fileMediaIds",
+  "responsive.mobile.props.downloadMediaId",
+  "responsive.mobile.props.downloadMediaIds",
+  "responsive.mobile.props.fileMediaUrl",
+  "responsive.mobile.props.fileUrl",
+  "responsive.mobile.props.fileMediaName",
+  "responsive.mobile.props.fileMediaType",
+  "responsive.mobile.props.fileMediaVisibility",
+  "responsive.mobile.props.fileDownloadDisposition",
+  "responsive.mobile.props.fileSignedUrlRequired",
+  "responsive.mobile.props.fileSignedUrlEndpoint",
+  "responsive.mobile.props.fileName",
+  "responsive.mobile.props.imageIds",
+  "responsive.mobile.props.videoIds",
+  "responsive.mobile.props.audioIds",
+  "responsive.mobile.props.documentIds",
+  "responsive.mobile.props.iconIds",
+  "responsive.mobile.props.mediaId",
+  "responsive.mobile.props.mediaIds",
+  "responsive.mobile.props.fallbackImageMediaIds",
+  "responsive.mobile.props.backgroundMediaIds",
+  "responsive.mobile.props.posterMediaIds",
+  "responsive.mobile.props.fontMediaId",
+  "responsive.mobile.props.fontMediaIds",
+  "responsive.mobile.props.color",
+  "responsive.mobile.props.backgroundColor",
+  "responsive.mobile.props.borderColor",
+  "responsive.mobile.props.borderRadius",
+  "responsive.mobile.props.borderWidth",
+  "responsive.mobile.props.borderStyle",
+  "responsive.mobile.props.padding",
+  "responsive.mobile.props.margin",
+  "responsive.mobile.props.opacity",
+  "responsive.mobile.props.boxShadow",
+  "responsive.mobile.props.fontFamily",
+  "responsive.mobile.props.fontSize",
+  "responsive.mobile.props.fontWeight",
+  "responsive.mobile.props.lineHeight",
+  "responsive.mobile.props.textAlign",
+  "responsive.mobile.props.textTransform",
+  "responsive.mobile.props.letterSpacing",
+  "responsive.mobile.props.wordSpacing",
+  "responsive.mobile.props.textIndent",
+  "responsive.mobile.props.textShadow",
+  "responsive.mobile.props.textDecoration",
+  "responsive.mobile.props.fontStyle",
+  "responsive.mobile.styles.color",
+  "responsive.mobile.styles.backgroundColor",
+  "responsive.mobile.styles.borderColor",
+  "responsive.mobile.styles.fontFamily",
+  "responsive.mobile.styles.fontSize",
+  "responsive.mobile.styles.lineHeight",
+  "responsive.mobile.styles.fontWeight",
+  "responsive.mobile.styles.padding",
+  "responsive.mobile.styles.margin",
+  "responsive.mobile.styles.borderRadius",
+  "responsive.mobile.styles.boxShadow",
+  "responsive.mobile.styles.backgroundMediaIds",
+  "responsive.mobile.tokenRefs.styles.color",
+  "responsive.mobile.tokenRefs.styles.backgroundColor",
+  "responsive.mobile.tokenRefs.styles.borderColor",
+  "responsive.mobile.tokenRefs.styles.fontFamily",
+  "responsive.mobile.tokenRefs.styles.fontSize",
+  "responsive.mobile.tokenRefs.styles.lineHeight",
+  "responsive.mobile.tokenRefs.styles.fontWeight",
+  "responsive.mobile.tokenRefs.styles.padding",
+  "responsive.mobile.tokenRefs.styles.margin",
+  "responsive.mobile.tokenRefs.styles.borderRadius",
+  "responsive.mobile.tokenRefs.styles.boxShadow",
   "layout.x",
   "layout.y",
   "layout.width",
@@ -1297,15 +1890,41 @@ const liveManagementDiscovery = (siteId: string) => ({
   schemaVersion: "backy.live-management.v1",
   enabled: true,
   endpoints: {
+    pages: `/api/admin/sites/${siteId}/pages`,
+    pageCreate: `/api/admin/sites/${siteId}/pages`,
+    pageDetail: `/api/admin/sites/${siteId}/pages/{pageId}`,
+    pageReadiness: `/api/admin/sites/${siteId}/pages/{pageId}/readiness`,
+    pagePublish: `/api/admin/sites/${siteId}/pages/{pageId}/publish`,
+    pageArchive: `/api/admin/sites/${siteId}/pages/{pageId}/archive`,
+    pagePreview: `/api/admin/sites/${siteId}/pages/{pageId}/preview`,
+    pageRevisions: `/api/admin/sites/${siteId}/pages/{pageId}/revisions`,
+    pageRollback: `/api/admin/sites/${siteId}/pages/{pageId}/rollback`,
     page: `/api/sites/${siteId}/manage/pages/{pageId}`,
+    posts: `/api/admin/sites/${siteId}/blog`,
+    postCreate: `/api/admin/sites/${siteId}/blog`,
+    postDetail: `/api/admin/sites/${siteId}/blog/{postId}`,
+    postReadiness: `/api/admin/sites/${siteId}/blog/{postId}/readiness`,
+    postPublish: `/api/admin/sites/${siteId}/blog/{postId}/publish`,
+    postArchive: `/api/admin/sites/${siteId}/blog/{postId}/archive`,
+    postPreview: `/api/admin/sites/${siteId}/blog/{postId}/preview`,
+    postRevisions: `/api/admin/sites/${siteId}/blog/{postId}/revisions`,
+    postRollback: `/api/admin/sites/${siteId}/blog/{postId}/rollback`,
     post: `/api/sites/${siteId}/manage/blog/{postId}`,
     render: `/api/sites/${siteId}/render?path={path}`,
     editableMapSchema:
       "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
   },
   methods: {
+    list: "GET",
     read: "GET",
+    create: "POST",
     update: "PATCH",
+    delete: "DELETE",
+    publish: "POST",
+    archive: "POST",
+    preview: "POST",
+    revisions: "GET",
+    rollback: "POST",
   },
   auth: {
     modes: ["session", "api-key"],
@@ -1331,6 +1950,12 @@ const liveManagementDiscovery = (siteId: string) => ({
     cacheInvalidation: true,
     auditTrail: true,
     webhookDelivery: true,
+    authenticatedContentLifecycle: true,
+    pageLifecycle: true,
+    postLifecycle: true,
+    templateCloning: true,
+    previewTokenCreation: true,
+    revisionHistory: true,
     inlineText: true,
     inlineLinks: true,
     inlineImages: true,
@@ -1338,10 +1963,69 @@ const liveManagementDiscovery = (siteId: string) => ({
     inlineFormControls: true,
     inlineLayout: true,
     inlineAppearance: true,
+    mediaAssetRefs: true,
+    fontAssetRefs: true,
+    elementAssetIds: true,
+    tokenRefs: true,
+    animation: true,
+    animationTokenRefs: true,
     editorComposition: true,
     editorGrouping: true,
   },
   editableTargets: liveManagementEditableTargets,
+  lifecycle: {
+    schemaVersion: "backy.content-lifecycle-commands.v1",
+    cloneField: "frontendDesignTemplateId",
+    permissions: {
+      read: "pages.view",
+      create: "pages.edit",
+      update: "pages.edit",
+      delete: "pages.delete",
+      publish: "pages.publish",
+    },
+    sdkHelpers: {
+      listPages: "adminPages",
+      createPage: "createAdminPage",
+      readPage: "adminPage",
+      updatePage: "updateAdminPage",
+      deletePage: "deleteAdminPage",
+      pageReadiness: "adminPageReadiness",
+      publishPage: "publishAdminPage",
+      archivePage: "archiveAdminPage",
+      createPagePreview: "createAdminPagePreviewToken",
+      pageRevisions: "adminPageRevisions",
+      rollbackPage: "rollbackAdminPage",
+      listPosts: "adminBlogPosts",
+      createPost: "createAdminBlogPost",
+      readPost: "adminBlogPost",
+      updatePost: "updateAdminBlogPost",
+      deletePost: "deleteAdminBlogPost",
+      postReadiness: "adminBlogPostReadiness",
+      publishPost: "publishAdminBlogPost",
+      archivePost: "archiveAdminBlogPost",
+      createPostPreview: "createAdminBlogPostPreviewToken",
+      postRevisions: "adminBlogPostRevisions",
+      rollbackPost: "rollbackAdminBlogPost",
+    },
+    requestBodies: {
+      createPage: {
+        templateClone: "{ title, slug?, status?, frontendDesignTemplateId?, content?, meta? }",
+        designState: "content may carry elements, contentDocument, customCSS, customJS, themeTokenRefs, assets, animations, interactions, dataBindings, editableMap, seo, and metadata.",
+      },
+      createPost: {
+        templateClone: "{ title, slug?, status?, frontendDesignTemplateId?, content?, meta?, excerpt?, authorId?, categoryIds?, tagIds? }",
+        designState: "content may carry elements, contentDocument, customCSS, customJS, themeTokenRefs, assets, animations, interactions, dataBindings, editableMap, seo, and metadata.",
+      },
+    },
+    responseContracts: {
+      pageRevisions: "backy.admin-page-revisions.v1",
+      postRevisions: "backy.admin-blog-post-revisions.v1",
+      revisionBranchMetadata: "backy.content-revision-branch-metadata.v1",
+      branchMetadataField: "revision.branchMetadata",
+      pageRollbackRequest: "backy.admin-page-rollback-request.v1",
+      postRollbackRequest: "backy.admin-blog-post-rollback-request.v1",
+    },
+  },
   inlineElementTypes: {
     text: ["text", "heading", "paragraph", "quote", "button", "link"],
     link: ["button", "link"],
@@ -1354,6 +2038,10 @@ const liveManagementDiscovery = (siteId: string) => ({
     sdkHelpers: {
       listElements: "listBackyContentElements",
       findElement: "findBackyContentElement",
+      addElement: "addBackyContentElement",
+      duplicateElement: "duplicateBackyContentElement",
+      deleteElements: "deleteBackyContentElements",
+      transformElements: "transformBackyContentElements",
       group: "groupBackyContentElements",
       ungroup: "ungroupBackyContentElements",
       patchElement: "patchBackyContentElement",
@@ -1361,7 +2049,62 @@ const liveManagementDiscovery = (siteId: string) => ({
       buildPageUpdate: "buildBackyLiveManagedPageEditableMapUpdate",
       buildBlogPostUpdate: "buildBackyLiveManagedBlogPostEditableMapUpdate",
     },
-    commands: [
+	    commands: [
+      {
+        id: "add",
+        label: "Add an element to the canvas or selected parent layer",
+        shortcut: "Insert",
+        sdkHelper: "addBackyContentElement",
+        minSelected: 0,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["children", "parentId", "zIndex"],
+        preservesResponsiveGeometry: true,
+      },
+      {
+        id: "duplicate",
+        label: "Duplicate the selected element tree",
+        shortcut: "Cmd/Ctrl+D",
+        sdkHelper: "duplicateBackyContentElement",
+        minSelected: 1,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["id", "parentId", "children", "layout"],
+        preservesResponsiveGeometry: true,
+      },
+      {
+        id: "delete",
+        label: "Delete selected unlocked element trees",
+        shortcut: "Delete/Backspace",
+        sdkHelper: "deleteBackyContentElements",
+        minSelected: 1,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["children"],
+        preservesResponsiveGeometry: true,
+      },
+      {
+        id: "move",
+        label: "Move selected elements on desktop or responsive breakpoints",
+        shortcut: "Arrow keys / drag",
+        sdkHelper: "transformBackyContentElements",
+        minSelected: 1,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["layout.x", "layout.y", "responsive.tablet", "responsive.mobile"],
+        preservesResponsiveGeometry: true,
+      },
+      {
+        id: "resize",
+        label: "Resize selected elements on desktop or responsive breakpoints",
+        shortcut: "Drag handles",
+        sdkHelper: "transformBackyContentElements",
+        minSelected: 1,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["layout.width", "layout.height", "responsive.tablet", "responsive.mobile"],
+        preservesResponsiveGeometry: true,
+      },
       {
         id: "group",
         label: "Group selected sibling layers",
@@ -1384,8 +2127,9 @@ const liveManagementDiscovery = (siteId: string) => ({
         editorGroupRequired: true,
         preservesResponsiveGeometry: true,
       },
-    ],
-    constraints: {
+	    ],
+	    commandRegistry: liveManagementEditorCommandRegistry,
+	    constraints: {
       sameParentRequired: true,
       lockedLayersBlocked: true,
       editorGroupMarker: "props.editorGroup",
@@ -1574,6 +2318,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           })
         ).items
       : listReusableSections(site.id, { status: "active" });
+    const pages = repositories
+      ? await repositories.pages.list({
+          siteId: site.id,
+          status: "published",
+          limit: 1,
+          offset: 0,
+        })
+      : { pagination: { total: getPageSummary(site.id).length } };
+    const posts = repositories
+      ? await repositories.posts.list({
+          siteId: site.id,
+          status: "published",
+          limit: 1,
+          offset: 0,
+        })
+      : { pagination: { total: getBlogPosts(site.id, { limit: 1, offset: 0 }).pagination?.total || 0 } };
     const media = repositories
       ? await repositories.media.list({
           siteId: site.id,
@@ -1582,6 +2342,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           offset: 0,
         })
       : getMediaList(site.id, { visibility: "public", limit: 1, offset: 0 });
+    const fonts = repositories
+      ? await repositories.media.list({
+          siteId: site.id,
+          type: "font",
+          visibility: "public",
+          limit: 1,
+          offset: 0,
+        })
+      : getMediaList(site.id, { type: "font", visibility: "public", limit: 1, offset: 0 });
     const collectionIds = collections.map((collection) => collection.id);
     const hasCommerceCatalog = collections.some(
       (collection) => collection.slug === PRODUCT_COLLECTION_SLUG,
@@ -1610,15 +2379,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       endpointCount: 34 + collectionIds.length * 2 + formIds.length * 4 + reusableSectionIds.length,
       routePatternCount: 2 + collections.length * 2 + redirectRules.length,
       moduleCounts: {
+        pages: pages.pagination.total,
+        blogPosts: posts.pagination.total,
         collections: collections.length,
         reusableSections: reusableSections.length,
         forms: forms.length,
         media: media.pagination.total,
+        fonts: fonts.pagination.total,
       },
       capabilities: {
+        routeResolve: true,
+        renderPayload: true,
+        openApi: true,
+        collectionSchemas: true,
+        collectionRecords: collections.length > 0,
+        reusableSections: true,
+        mediaLibrary: true,
+        uploadedFonts: fonts.pagination.total > 0,
+        forms: forms.length > 0,
+        comments: true,
+        previewTokens: true,
         commerceCatalog: hasCommerceCatalog,
         commerceOrderIntake: hasCommerceCatalog && hasPrivateOrders,
       },
+      liveManagement: liveManagementDiscoveryContract,
     });
 
     return publicContractJson(
@@ -1651,6 +2435,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           { name: "Content" },
           { name: "Interactions" },
           { name: "Media" },
+          { name: "Admin Settings" },
         ],
         paths: {
           "/api/sites": {
@@ -1726,6 +2511,505 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       schema: {
                         $ref: "https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json",
                       },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "/api/admin/settings": {
+            get: {
+              tags: ["Admin Settings"],
+              summary: "Read workspace Settings for custom admin clients",
+              operationId: "getBackyAdminSettings",
+              description:
+                "Authenticated admin read for workspace-owned Settings. Requires settings.view and returns non-secret provider, database, storage, commerce, notification, Vercel, and frontend-database certification handoffs for external admin shells.",
+              responses: {
+                "200": {
+                  description: "Workspace Settings envelope",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/AdminSettingsEnvelope",
+                      },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin authentication required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "settings.view permission required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+            patch: {
+              tags: ["Admin Settings"],
+              summary: "Update workspace-owned Settings sections",
+              operationId: "updateBackyAdminSettings",
+              description:
+                "Authenticated admin update for workspace-owned Settings sections such as delivery mode, storage, auth, integrations, and API-key metadata. Requires settings.configure, media.configure, or settings.manageKeys according to the edited sections.",
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      $ref: "#/components/schemas/AdminSettingsUpdateRequest",
+                    },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Updated workspace Settings envelope",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/AdminSettingsEnvelope",
+                      },
+                    },
+                  },
+                },
+                "400": {
+                  description: "Invalid Settings payload",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin authentication required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing Settings permission",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+            post: {
+              tags: ["Admin Settings"],
+              summary: "Run an audited workspace Settings action",
+              operationId: "runBackyAdminSettingsAction",
+              description:
+                "Runs Settings actions for API-key management, infrastructure validation, storage provisioning and credential rotation probes, Vercel secret-manager planning, and notification webhook tests without returning provider secrets.",
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      $ref: "#/components/schemas/AdminSettingsActionRequest",
+                    },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Settings action result",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/AdminSettingsActionEnvelope",
+                      },
+                    },
+                  },
+                },
+                "400": {
+                  description: "Invalid or unsupported Settings action",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin authentication required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing Settings action permission",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "409": {
+                  description: "Provider or notification target not configured",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          [`/api/admin/sites/${site.id}/settings`]: {
+            get: {
+              tags: ["Admin Settings"],
+              summary: "Read site-scoped Settings for custom admin clients",
+              operationId: "getBackyAdminSiteSettings",
+              description:
+                "Authenticated admin read for site-owned Settings. Requires sites.view and returns workspace-vs-site scope metadata without provider or database secrets.",
+              responses: {
+                "200": {
+                  description: "Site-scoped Settings envelope",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/AdminSiteSettingsEnvelope",
+                      },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin authentication required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "sites.view permission or site scope required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site not found",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+            patch: {
+              tags: ["Admin Settings"],
+              summary: "Update site-owned Settings sections",
+              operationId: "updateBackyAdminSiteSettings",
+              description:
+                "Authenticated admin update for site-owned Settings sections. Requires sites.configure, rejects workspace-owned keys, records site.settings.updated audit events, and dispatches site-updated webhooks.",
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      $ref: "#/components/schemas/AdminSiteSettingsPatchRequest",
+                    },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Updated site-scoped Settings envelope",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/AdminSiteSettingsEnvelope",
+                      },
+                    },
+                  },
+                },
+                "400": {
+                  description:
+                    "No supported site Settings sections or unsupported workspace Settings keys",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin authentication required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description:
+                    "sites.configure permission or site scope required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site not found",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          [`/api/admin/sites/${site.id}/pages/{pageId}/revisions`]: {
+            get: {
+              tags: ["Live Management"],
+              summary: "List authenticated page revision snapshots",
+              operationId: "listBackyAdminPageRevisions",
+              "x-backy-live-management": liveManagementDiscoveryContract,
+              description:
+                "Requires an admin session or admin API key with pages.view. Returns page snapshots plus backy.content-revision-branch-metadata.v1 so custom page builders can render restore history and rollback branches without scraping the Backy editor.",
+              parameters: [
+                pathParameter("pageId", "Page id"),
+                queryParameter(
+                  "limit",
+                  { type: "integer", minimum: 1, maximum: 100 },
+                  "Maximum revision snapshots to return",
+                ),
+                queryParameter(
+                  "offset",
+                  { type: "integer", minimum: 0 },
+                  "Revision offset",
+                ),
+              ],
+              responses: {
+                "200": {
+                  description: "Page revision snapshots",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/AdminPageRevisionsEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin session or API key required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing pages.view permission or site team-scope access",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site or page not found",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          [`/api/admin/sites/${site.id}/pages/{pageId}/rollback`]: {
+            post: {
+              tags: ["Live Management"],
+              summary: "Rollback a page to a saved revision",
+              operationId: "rollbackBackyAdminPage",
+              "x-backy-live-management": liveManagementDiscoveryContract,
+              description:
+                "Requires an admin session or admin API key with pages.edit. Restores the selected page revision, creates a pre-rollback revision snapshot, records cache invalidation, and dispatches site update webhooks.",
+              parameters: [
+                pathParameter("pageId", "Page id"),
+              ],
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: { $ref: "#/components/schemas/AdminPageRollbackRequest" },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Rolled-back page detail",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/PageEnvelope" },
+                    },
+                  },
+                },
+                "400": {
+                  description: "Missing revision id",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin session or API key required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing pages.edit permission or site team-scope access",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site, page, or revision not found",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          [`/api/admin/sites/${site.id}/blog/{postId}/revisions`]: {
+            get: {
+              tags: ["Live Management"],
+              summary: "List authenticated blog post revision snapshots",
+              operationId: "listBackyAdminBlogPostRevisions",
+              "x-backy-live-management": liveManagementDiscoveryContract,
+              description:
+                "Requires an admin session or admin API key with pages.view. Returns blog post snapshots plus backy.content-revision-branch-metadata.v1 so custom blog editors can render restore history and rollback branches without scraping the Backy editor.",
+              parameters: [
+                pathParameter("postId", "Blog post id"),
+                queryParameter(
+                  "limit",
+                  { type: "integer", minimum: 1, maximum: 100 },
+                  "Maximum revision snapshots to return",
+                ),
+                queryParameter(
+                  "offset",
+                  { type: "integer", minimum: 0 },
+                  "Revision offset",
+                ),
+              ],
+              responses: {
+                "200": {
+                  description: "Blog post revision snapshots",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/AdminBlogPostRevisionsEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin session or API key required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing pages.view permission or site team-scope access",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site or blog post not found",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          [`/api/admin/sites/${site.id}/blog/{postId}/rollback`]: {
+            post: {
+              tags: ["Live Management"],
+              summary: "Rollback a blog post to a saved revision",
+              operationId: "rollbackBackyAdminBlogPost",
+              "x-backy-live-management": liveManagementDiscoveryContract,
+              description:
+                "Requires an admin session or admin API key with pages.edit. Restores the selected blog post revision, creates a pre-rollback revision snapshot, records cache invalidation, and dispatches site update webhooks.",
+              parameters: [
+                pathParameter("postId", "Blog post id"),
+              ],
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: { $ref: "#/components/schemas/AdminBlogPostRollbackRequest" },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Rolled-back blog post detail",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/BlogPostEnvelope" },
+                    },
+                  },
+                },
+                "400": {
+                  description: "Missing revision id",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Admin session or API key required",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description: "Missing pages.edit permission or site team-scope access",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site, blog post, or revision not found",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
                     },
                   },
                 },
@@ -2607,6 +3891,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     },
                   },
                 },
+                "304": {
+                  description: "Media file cache entry unchanged for the supplied ETag",
+                  headers: mediaFileResponseHeaders,
+                },
                 "400": {
                   description: "Invalid media file disposition",
                   headers: mediaFileErrorResponseHeaders,
@@ -2663,6 +3951,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               responses: {
                 "307": {
                   description: "Redirect to optimized image URL",
+                  headers: mediaTransformResponseHeaders,
+                },
+                "304": {
+                  description: "Media transform redirect unchanged for the supplied ETag",
                   headers: mediaTransformResponseHeaders,
                 },
                 "400": {
@@ -2814,16 +4106,64 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           [`/api/sites/${site.id}/commerce/orders`]: {
             get: {
               tags: ["Interactions"],
-              summary: "Fetch the public checkout order intake contract",
+              summary:
+                "Fetch the public checkout order intake contract or tokenized customer order status",
               operationId: "getBackyCommerceOrderContract",
+              parameters: [
+                queryParameter(
+                  "orderId",
+                  { type: "string" },
+                  "Order id for a tokenized customer-safe status refresh",
+                ),
+                queryParameter(
+                  "orderSlug",
+                  { type: "string" },
+                  "Order slug for a tokenized customer-safe status refresh",
+                ),
+                queryParameter(
+                  "orderNumber",
+                  { type: "string" },
+                  "Order number for a tokenized customer-safe status refresh",
+                ),
+                queryParameter(
+                  "statusToken",
+                  { type: "string" },
+                  "One-time returned public order status token; Backy stores only its hash",
+                ),
+              ],
               responses: {
                 "200": {
-                  description: "Commerce order intake contract",
+                  description:
+                    "Commerce order intake contract or customer-safe public order status handoff",
                   content: {
                     "application/json": {
                       schema: {
-                        $ref: "#/components/schemas/CommerceOrderContractEnvelope",
+                        oneOf: [
+                          {
+                            $ref: "#/components/schemas/CommerceOrderContractEnvelope",
+                          },
+                          {
+                            $ref: "#/components/schemas/CommerceOrderStatusHandoffEnvelope",
+                          },
+                        ],
                       },
+                    },
+                  },
+                },
+                "401": {
+                  description: "Status token required for public order status refresh",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+                "403": {
+                  description:
+                    "Status token was not issued, is expired, or is invalid",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
                     },
                   },
                 },
@@ -4186,6 +5526,1082 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 site: { $ref: "#/components/schemas/SiteSummary" },
               },
             }),
+            AdminSettingsProviderCertificationEvidence: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "status",
+                "requiredGate",
+                "coverage",
+                "scenarios",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.settings-provider-certification-evidence.v1",
+                },
+                status: { enum: ["ready", "attention"] },
+                requiredGate: {
+                  const:
+                    "BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:settings-provider-certification",
+                },
+                coverage: {
+                  type: "object",
+                  required: ["covered", "total", "missing"],
+                  additionalProperties: true,
+                  properties: {
+                    covered: { type: "integer", minimum: 0 },
+                    total: { type: "integer", minimum: 0 },
+                    missing: { type: "array", items: { type: "string" } },
+                  },
+                },
+                scenarios: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "label",
+                      "expectedEvidence",
+                      "nextAction",
+                      "evidenceCount",
+                      "status",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: {
+                        enum: [
+                          "database-supabase",
+                          "storage-media",
+                          "vercel-deployment",
+                          "notification-delivery",
+                          "commerce-provider-bridge",
+                          "public-api-cors",
+                          "interactive-components",
+                          "release-certification-readiness",
+                        ],
+                      },
+                      label: { type: "string" },
+                      expectedEvidence: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      nextAction: { type: "string" },
+                      evidenceCount: { type: "integer", minimum: 0 },
+                      status: { enum: ["covered", "missing"] },
+                    },
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            AdminSettingsProviderCertificationEvidencePacket: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "generatedAt",
+                "status",
+                "selectedFamilies",
+                "selectedProviderAliases",
+                "runtimeReadiness",
+                "operatorArtifacts",
+                "scenarioAttachments",
+                "commandPreview",
+                "target",
+                "redactionPolicy",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.settings-provider-certification-evidence-packet.v1",
+                },
+                generatedAt: { type: "string", format: "date-time" },
+                status: {
+                  enum: [
+                    "no-family-selected",
+                    "needs-runtime-inputs",
+                    "needs-scenario-evidence",
+                    "evidence-complete",
+                  ],
+                },
+                selectedFamilies: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                selectedProviderAliases: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                runtimeReadiness: {
+                  type: "object",
+                  required: [
+                    "localRuntimeInputsConfigured",
+                    "missingInputAliases",
+                    "missingSelectedFamilies",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    localRuntimeInputsConfigured: { type: "boolean" },
+                    missingInputAliases: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    missingSelectedFamilies: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                operatorArtifacts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "family",
+                      "providerAlias",
+                      "status",
+                      "requiredInputs",
+                      "expectedArtifacts",
+                      "captureSource",
+                      "redaction",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: { type: "string" },
+                      family: { type: "string" },
+                      providerAlias: { type: "string" },
+                      status: {
+                        enum: ["ready-to-run", "needs-runtime-inputs"],
+                      },
+                      requiredInputs: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      expectedArtifacts: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      captureSource: { type: "string" },
+                      redaction: { type: "string" },
+                    },
+                  },
+                },
+                scenarioAttachments: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "label",
+                      "status",
+                      "evidenceCount",
+                      "expectedEvidence",
+                      "nextAction",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: { type: "string" },
+                      label: { type: "string" },
+                      status: { enum: ["covered", "missing"] },
+                      evidenceCount: { type: "integer", minimum: 0 },
+                      expectedEvidence: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      nextAction: { type: "string" },
+                    },
+                  },
+                },
+                commandPreview: {
+                  type: "object",
+                  required: ["command", "envTemplate", "requiredAliases", "targetInputs"],
+                  additionalProperties: true,
+                  properties: {
+                    command: { type: "string" },
+                    envTemplate: { type: "string" },
+                    requiredAliases: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    targetInputs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                target: {
+                  type: "object",
+                  required: [
+                    "siteId",
+                    "settingsAdminApi",
+                    "siteScopedSettingsApi",
+                    "settingsApi",
+                    "settingsSiteSelectorEnv",
+                    "commerceSiteSelectorEnv",
+                    "externalBaseUrl",
+                    "publicApiOrigin",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    siteId: { type: "string" },
+                    settingsAdminApi: {
+                      const: "/api/admin/settings?certificationSiteId={siteId}",
+                    },
+                    siteScopedSettingsApi: {
+                      const: "/api/admin/sites/{siteId}/settings",
+                    },
+                    settingsApi: {
+                      const: "/api/admin/sites/{siteId}/settings",
+                    },
+                    settingsSiteSelectorEnv: {
+                      const: "BACKY_SETTINGS_CERTIFY_SITE_ID",
+                    },
+                    commerceSiteSelectorEnv: {
+                      const: "BACKY_COMMERCE_CERTIFY_SITE_ID",
+                    },
+                    externalBaseUrl: {
+                      type: ["string", "null"],
+                    },
+                    publicApiOrigin: {
+                      type: ["string", "null"],
+                    },
+                  },
+                },
+                redactionPolicy: {
+                  type: "object",
+                  required: [
+                    "includesProviderSecrets",
+                    "includesDatabaseUrls",
+                    "includesServiceRoleKeys",
+                    "includesVercelTokens",
+                    "includesNotificationSecrets",
+                    "includesCommerceSecrets",
+                    "includesCustomerOrOrderPayloads",
+                    "allowedEvidence",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    includesProviderSecrets: { const: false },
+                    includesDatabaseUrls: { const: false },
+                    includesServiceRoleKeys: { const: false },
+                    includesVercelTokens: { const: false },
+                    includesNotificationSecrets: { const: false },
+                    includesCommerceSecrets: { const: false },
+                    includesCustomerOrOrderPayloads: { const: false },
+                    allowedEvidence: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            AdminSettingsProviderCertification: {
+              type: "object",
+              required: [
+                "generatedAt",
+                "schemaVersion",
+                "status",
+                "settingsGate",
+                "commerceGate",
+                "localPreflight",
+                "releasePreflight",
+                "runtimeEvidence",
+                "scenarioEvidence",
+                "operatorEvidencePacket",
+                "operatorCommandTemplate",
+                "operatorEnvTemplate",
+                "groups",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                generatedAt: { type: "string", format: "date-time" },
+                schemaVersion: {
+                  const: "backy.settings-provider-certification-handoff.v1",
+                },
+                status: { const: "external-live-provider-gate" },
+                settingsGate: {
+                  const: "npm run ci:settings-provider-certification",
+                },
+                commerceGate: {
+                  const: "npm run ci:commerce-provider-certification",
+                },
+                localPreflight: {
+                  const:
+                    "npm run test:settings-provider-certification-preflight-contract",
+                },
+                releasePreflight: {
+                  const: "npm run test:release-certification-preflight-contract",
+                },
+                runtimeEvidence: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                scenarioEvidence: {
+                  $ref:
+                    "#/components/schemas/AdminSettingsProviderCertificationEvidence",
+                },
+                operatorEvidencePacket: {
+                  $ref:
+                    "#/components/schemas/AdminSettingsProviderCertificationEvidencePacket",
+                },
+                operatorCommandTemplate: {
+                  type: "object",
+                  required: ["command", "envTemplate", "requiredInputAliases", "targetInputs"],
+                  additionalProperties: true,
+                  properties: {
+                    command: { type: "string" },
+                    envTemplate: { type: "string" },
+                    requiredInputAliases: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    targetInputs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                operatorEnvTemplate: {
+                  type: "object",
+                  required: ["schemaVersion", "format", "fileName", "body"],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const:
+                        "backy.settings-provider-certification-env-template.v1",
+                    },
+                    format: { const: "shell-env" },
+                    fileName: { const: ".env.backy-settings-provider-certification" },
+                    body: { type: "string" },
+                    secretHandling: { type: "string" },
+                  },
+                },
+                groups: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "family",
+                      "providers",
+                      "gate",
+                      "requiredInputs",
+                      "evidence",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      family: { type: "string" },
+                      providers: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      gate: { type: "string" },
+                      requiredInputs: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      evidence: { type: "string" },
+                    },
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            AdminSettingsUpdateRequest: {
+              type: "object",
+              additionalProperties: true,
+              properties: {
+                deliveryMode: {
+                  enum: ["managed-hosting", "custom-frontend"],
+                },
+                apiKeys: { type: "object", additionalProperties: true },
+                storage: { type: "object", additionalProperties: true },
+                auth: { type: "object", additionalProperties: true },
+                integrations: { type: "object", additionalProperties: true },
+              },
+            },
+            AdminSettingsActionRequest: {
+              type: "object",
+              required: ["action"],
+              additionalProperties: true,
+              properties: {
+                action: {
+                  enum: [
+                    "regenerate-api-keys",
+                    "issue-admin-api-key",
+                    "revoke-admin-api-key",
+                    "validate-infrastructure",
+                    "media-storage-provisioning-probe",
+                    "media-storage-credential-rotation-probe",
+                    "media-storage-secret-manager",
+                    "test-notification-webhook",
+                  ],
+                },
+                scope: { enum: ["all", "public", "admin"] },
+                label: { type: "string" },
+                keyId: { type: "string" },
+                deliveryMode: {
+                  enum: ["managed-hosting", "custom-frontend"],
+                },
+                integrations: { type: "object", additionalProperties: true },
+                recordHistory: { type: "boolean" },
+                siteId: { type: "string" },
+                mode: {
+                  enum: ["plan", "promote", "revoke-replacement"],
+                },
+                dryRun: { type: "boolean" },
+                targetEnvironments: {
+                  type: "array",
+                  items: { enum: ["production", "preview", "development"] },
+                },
+                webhookUrl: { type: "string" },
+                retryOf: { type: ["string", "null"] },
+              },
+            },
+            AdminSettingsMediaStorageHandoff: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "status",
+                "provider",
+                "policies",
+                "endpointTemplates",
+                "contracts",
+                "designStateUsage",
+                "runtimeGate",
+                "privacy",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.media-storage-handoff.v1" },
+                status: { enum: ["ready", "needs-runtime-env"] },
+                provider: {
+                  type: "object",
+                  required: ["selected", "bucket", "publicBaseUrl", "pathPrefix"],
+                  additionalProperties: true,
+                  properties: {
+                    selected: { type: "string" },
+                    bucket: { type: "string" },
+                    publicBaseUrl: { type: "string" },
+                    pathPrefix: { type: "string" },
+                    runtime: { type: ["object", "null"], additionalProperties: true },
+                    supabase: { type: ["object", "null"], additionalProperties: true },
+                  },
+                },
+                policies: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    privateFilesEnabled: { type: "boolean" },
+                    imageTransformsEnabled: { type: "boolean" },
+                    maxFileSizeMb: { type: ["number", "null"] },
+                    workspaceStorageLimitGb: { type: ["number", "null"] },
+                    warningThresholdPercent: { type: ["number", "null"] },
+                    allowedFileTypes: { type: "string" },
+                  },
+                },
+                endpointTemplates: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                contracts: {
+                  type: "object",
+                  required: ["organization", "references", "editableMetadata", "deliveryPolicy", "fileCategories"],
+                  additionalProperties: true,
+                  properties: {
+                    organization: { const: "backy.media.organization.v1" },
+                    references: { const: "backy.media.references.v1" },
+                    editableMetadata: { const: "backy.media.editable-metadata.v1" },
+                    deliveryPolicy: { const: "MediaDeliveryPolicy" },
+                    fileCategories: { const: "backy.media-file-categories.v1" },
+                  },
+                },
+                designStateUsage: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    preservedFields: { type: "array", items: { type: "string" } },
+                    editableSurfaces: { type: "array", items: { type: "string" } },
+                    customFrontendUses: { type: "array", items: { type: "string" } },
+                  },
+                },
+                runtimeGate: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    certificationCommand: { type: "string" },
+                    sourceOnlyGuard: { type: "string" },
+                    missingRuntimeAliases: { type: "array", items: { type: "string" } },
+                  },
+                },
+                privacy: {
+                  type: "object",
+                  required: ["includesSecretValues", "exposesSecretReferencesOnly", "excludes"],
+                  additionalProperties: true,
+                  properties: {
+                    includesSecretValues: { const: false },
+                    exposesSecretReferencesOnly: { type: "boolean" },
+                    secretReferences: { type: "object", additionalProperties: true },
+                    excludes: { type: "array", items: { type: "string" } },
+                  },
+                },
+              },
+            },
+            AdminSettingsThemeDesignImpact: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "status",
+                "themeContract",
+                "motion",
+                "designStatePersistence",
+                "frontendBindings",
+                "privacy",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.settings-theme-design-impact.v1" },
+                status: { enum: ["ready", "attention"] },
+                source: { type: "string" },
+                themeContract: {
+                  type: "object",
+                  required: ["schemaVersion", "colors", "typography", "layout", "motion", "cssVariables"],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: { const: "backy.theme.v1" },
+                    colors: { type: "object", additionalProperties: { type: "string" } },
+                    typography: { type: "object", additionalProperties: true },
+                    layout: { type: "object", additionalProperties: true },
+                    motion: { type: "object", additionalProperties: true },
+                    cssVariables: { type: "object", additionalProperties: { type: "string" } },
+                  },
+                },
+                impact: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    colorTokenCount: { type: "integer" },
+                    typographyTokenCount: { type: "integer" },
+                    cssVariableCount: { type: "integer" },
+                    invalidControlCount: { type: "integer" },
+                    invalidControls: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                  },
+                },
+                motion: {
+                  type: "object",
+                  required: ["preset", "bindingPaths", "animationStateFields"],
+                  additionalProperties: true,
+                  properties: {
+                    preset: { type: "string" },
+                    bindingPaths: { type: "array", items: { type: "string" } },
+                    animationStateFields: { type: "array", items: { type: "string" } },
+                  },
+                },
+                designStatePersistence: {
+                  type: "object",
+                  required: ["tokenSchemaVersion", "tokenRefPaths", "editableSurfaces", "preservedDesignFields"],
+                  additionalProperties: true,
+                  properties: {
+                    tokenSchemaVersion: { const: "backy.theme.v1" },
+                    tokenRefPaths: { type: "array", items: { type: "string" } },
+                    editableSurfaces: { type: "array", items: { type: "string" } },
+                    preservedDesignFields: { type: "array", items: { type: "string" } },
+                  },
+                },
+                frontendBindings: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    publicManifestThemeModule: { type: "string" },
+                    publicOpenApiThemeSchema: { type: "string" },
+                    adminSettingsApi: { type: "string" },
+                    settingsHandoffPath: { type: "string" },
+                    cssVariableSelector: { type: "string" },
+                  },
+                },
+                privacy: {
+                  type: "object",
+                  required: ["includesSecretValues", "includesAdminApiKeys", "includesProviderCredentials", "includesPrivateContent"],
+                  additionalProperties: true,
+                  properties: {
+                    includesSecretValues: { const: false },
+                    includesAdminApiKeys: { const: false },
+                    includesProviderCredentials: { const: false },
+                    includesPrivateContent: { const: false },
+                    note: { type: "string" },
+                  },
+                },
+              },
+            },
+            AdminSettings: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "scope",
+                "endpoints",
+                "deliveryMode",
+                "apiKeys",
+                "runtimeStorage",
+                "auth",
+                "integrations",
+                "runtimeDatabase",
+                "runtimeSupabase",
+                "runtimeMediaScanner",
+                "runtimeVercel",
+                "runtimeNotifications",
+                "runtimeCommerce",
+                "runtimeInteractiveComponents",
+                "runtimePublicApi",
+                "completionStatus",
+                "mediaStorageHandoff",
+                "themeDesignImpact",
+                "providerCertification",
+                "frontendDatabaseCertification",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.admin-settings.v1" },
+                scope: {
+                  type: "object",
+                  required: [
+                    "workspaceSettingsScope",
+                    "siteSettingsScope",
+                    "siteSettingsEndpointTemplate",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    workspaceSettingsScope: { const: "global" },
+                    siteSettingsScope: { const: "site" },
+                    siteSettingsEndpointTemplate: {
+                      const: "/api/admin/sites/:siteId/settings",
+                    },
+                  },
+                },
+                endpoints: {
+                  type: "object",
+                  required: ["workspaceSettings", "siteSettings"],
+                  additionalProperties: true,
+                  properties: {
+                    workspaceSettings: { const: "/api/admin/settings" },
+                    siteSettings: { const: "/api/admin/sites/:siteId/settings" },
+                  },
+                },
+                deliveryMode: {
+                  enum: ["managed-hosting", "custom-frontend"],
+                },
+                apiKeys: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    publicApiKey: { type: "string" },
+                    adminApiKey: { type: "string" },
+                  },
+                },
+                storage: { type: "object", additionalProperties: true },
+                auth: { type: "object", additionalProperties: true },
+                integrations: { type: "object", additionalProperties: true },
+                runtimeStorage: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                runtimeDatabase: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                runtimeSupabase: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                runtimeMediaScanner: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                runtimeVercel: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                runtimeNotifications: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                runtimeCommerce: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                runtimeInteractiveComponents: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                runtimePublicApi: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                completionStatus: {
+                  $ref: "#/components/schemas/BackyCompletionStatus",
+                },
+                mediaStorageHandoff: {
+                  $ref:
+                    "#/components/schemas/AdminSettingsMediaStorageHandoff",
+                },
+                themeDesignImpact: {
+                  $ref:
+                    "#/components/schemas/AdminSettingsThemeDesignImpact",
+                },
+                providerCertification: {
+                  $ref:
+                    "#/components/schemas/AdminSettingsProviderCertification",
+                },
+                frontendDatabaseCertification: {
+                  $ref:
+                    "#/components/schemas/FrontendDatabaseCertificationHandoff",
+                },
+                updatedAt: { type: "string", format: "date-time" },
+              },
+            },
+            AdminSettingsEnvelope: envelopeSchema({
+              type: "object",
+              required: ["settings"],
+              additionalProperties: true,
+              properties: {
+                settings: { $ref: "#/components/schemas/AdminSettings" },
+              },
+            }),
+            AdminSettingsActionEnvelope: envelopeSchema({
+              type: "object",
+              additionalProperties: true,
+              properties: {
+                settings: { $ref: "#/components/schemas/AdminSettings" },
+                issuedKey: { type: "object", additionalProperties: true },
+                diagnostics: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                delivery: { type: "object", additionalProperties: true },
+                provider: { type: "string" },
+                status: { type: "string" },
+                summary: { type: "string" },
+                checks: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                operations: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                generatedAt: { type: "string", format: "date-time" },
+              },
+            }),
+            FrontendDatabaseCertificationHandoff: {
+              type: "object",
+              required: [
+                "generatedAt",
+                "schemaVersion",
+                "source",
+                "status",
+                "requiredFor",
+                "gate",
+                "environment",
+                "requires",
+                "coverage",
+                "runtime",
+                "operatorCommandTemplate",
+                "operatorEnvTemplate",
+                "scenarioEvidence",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.frontend-database-certification.v1",
+                },
+                generatedAt: { type: "string", format: "date-time" },
+                source: {
+                  enum: [
+                    "public-manifest",
+                    "site-openapi",
+                    "admin-settings-api",
+                    "admin-site-settings-api",
+                  ],
+                },
+                status: { const: "external-database-gate" },
+                requiredFor: { const: "production-custom-frontends" },
+                gate: {
+                  type: "object",
+                  required: ["command", "workflow", "localPreflight"],
+                  additionalProperties: true,
+                  properties: {
+                    command: { const: "npm run ci:sdk-postgres-smoke" },
+                    workflow: {
+                      const: ".github/workflows/sdk-postgres-smoke.yml",
+                    },
+                    localPreflight: {
+                      const: "npm run test:sdk-postgres-preflight-contract",
+                    },
+                    disposableGuard: { type: "string" },
+                    typeContract: { type: "string" },
+                  },
+                },
+                environment: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    dataMode: { const: "database" },
+                    secretAliases: {
+                      type: "array",
+                      items: { enum: ["BACKY_DATABASE_URL", "DATABASE_URL"] },
+                    },
+                    requiredConfirmationEnv: {
+                      const: "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true",
+                    },
+                    targetGuards: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                requires: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                coverage: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                runtime: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                operatorCommandTemplate: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                operatorEnvTemplate: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                scenarioEvidence: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            AdminSiteSettingsPatchRequest: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                settings: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    seo: { type: "object", additionalProperties: true },
+                    analytics: { type: "object", additionalProperties: true },
+                    social: { type: "object", additionalProperties: true },
+                    commentPolicy: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    redirectRules: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    navigation: { type: "object", additionalProperties: true },
+                    localization: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    domainVerification: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    vercelDeployment: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    billingQuota: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    webhooks: { type: "object", additionalProperties: true },
+                    frontendDesign: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                  },
+                },
+                seo: { type: "object", additionalProperties: true },
+                analytics: { type: "object", additionalProperties: true },
+                social: { type: "object", additionalProperties: true },
+                commentPolicy: { type: "object", additionalProperties: true },
+                redirectRules: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                navigation: { type: "object", additionalProperties: true },
+                localization: { type: "object", additionalProperties: true },
+                domainVerification: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                vercelDeployment: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                billingQuota: { type: "object", additionalProperties: true },
+                webhooks: { type: "object", additionalProperties: true },
+                frontendDesign: { type: "object", additionalProperties: true },
+              },
+              description:
+                "Site-owned Settings sections only. Workspace-owned fields such as storage, auth, integrations, API keys, and provider secrets are rejected by the site-scoped route.",
+            },
+            AdminSiteSettingsScope: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "scope",
+                "siteSettings",
+                "workspaceSettings",
+                "effectiveSettings",
+                "frontendDatabaseCertification",
+                "mediaStorageHandoff",
+                "endpoints",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.site-settings-scope.v1" },
+                scope: {
+                  type: "object",
+                  required: [
+                    "level",
+                    "siteId",
+                    "siteSlug",
+                    "teamId",
+                    "workspaceSettingsScope",
+                    "siteSettingsScope",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    level: { const: "site" },
+                    siteId: { type: "string" },
+                    siteSlug: { type: "string" },
+                    teamId: { type: ["string", "null"] },
+                    workspaceSettingsScope: { const: "global" },
+                    siteSettingsScope: { const: "site" },
+                  },
+                },
+                siteSettings: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    seo: { type: "object", additionalProperties: true },
+                    analytics: { type: "object", additionalProperties: true },
+                    social: { type: "object", additionalProperties: true },
+                    commentPolicy: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    redirectRules: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    navigation: { type: "object", additionalProperties: true },
+                    localization: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    domainVerification: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    vercelDeployment: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    billingQuota: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    webhooks: { type: "object", additionalProperties: true },
+                    frontendDesign: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                  },
+                },
+                workspaceSettings: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    deliveryMode: {
+                      enum: ["managed-hosting", "custom-frontend"],
+                    },
+                    integrations: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    authPolicy: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                  },
+                },
+                effectiveSettings: {
+                  type: "object",
+                  required: ["workspace", "site"],
+                  additionalProperties: true,
+                  properties: {
+                    workspace: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    site: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                  },
+                },
+                frontendDatabaseCertification: {
+                  $ref:
+                    "#/components/schemas/FrontendDatabaseCertificationHandoff",
+                },
+                mediaStorageHandoff: {
+                  $ref:
+                    "#/components/schemas/AdminSettingsMediaStorageHandoff",
+                },
+                endpoints: {
+                  type: "object",
+                  required: [
+                    "workspaceSettings",
+                    "siteSettings",
+                    "siteDetail",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    workspaceSettings: { const: "/api/admin/settings" },
+                    siteSettings: { type: "string" },
+                    siteDetail: { type: "string" },
+                  },
+                },
+              },
+            },
+            AdminSiteSettingsEnvelope: envelopeSchema({
+              type: "object",
+              required: ["settings"],
+              additionalProperties: true,
+              properties: {
+                settings: {
+                  $ref: "#/components/schemas/AdminSiteSettingsScope",
+                },
+              },
+            }),
             BackyCompletionStatus: {
               type: "object",
               required: [
@@ -4193,6 +6609,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "status",
                 "audit",
                 "surfaces",
+                "surfaceRunbooks",
                 "gates",
                 "nextAction",
                 "recommendedCommands",
@@ -4211,12 +6628,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   additionalProperties: true,
                   properties: {
                     source: { const: "specs/page-completion-audit/backy-page-surface-audit.md" },
-                    ready: { const: 39 },
-                    partial: { const: 6 },
+                    ready: { const: 41 },
+                    partial: { const: 4 },
                     prototype: { const: 0 },
                     missing: { const: 0 },
                     total: { const: 45 },
-                    readyPercent: { const: 87 },
+                    readyPercent: { const: 91 },
                   },
                 },
                 surfaces: {
@@ -4234,6 +6651,147 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     },
                   },
                 },
+                surfaceRunbooks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "label",
+                      "gate",
+                      "command",
+                      "preflight",
+                      "workflow",
+                      "targetInputs",
+                      "evidencePacketSchema",
+                      "evidenceApi",
+                      "evidenceUiPanel",
+                      "sourceOnlyGuard",
+                      "proofSources",
+	                      "expectedArtifacts",
+	                      "evidenceArtifacts",
+	                      "artifactVerifier",
+	                      "runtime",
+                      "secretBoundary",
+                      "nextAction",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: { enum: ["settings", "settings-admin-apis", "products", "orders"] },
+                      label: { type: "string" },
+                      gate: { enum: ["settings-provider-certification", "commerce-provider-certification"] },
+                      command: { type: "string" },
+                      preflight: { type: "string" },
+                      workflow: { type: "string" },
+                      targetInputs: { type: "array", items: { type: "string" } },
+                      evidencePacketSchema: {
+                        enum: [
+                          "backy.settings-provider-certification-evidence-packet.v1",
+                          "backy.commerce-provider-certification-evidence-packet.v1",
+                          "backy.order-provider-certification-evidence-packet.v1",
+                        ],
+                      },
+                      evidenceApi: { type: "string" },
+                      evidenceUiPanel: { type: "string" },
+                      sourceOnlyGuard: { type: "string" },
+                      proofSources: { type: "array", items: { type: "string" } },
+                      expectedArtifacts: { type: "array", items: { type: "string" } },
+	                      evidenceArtifacts: {
+                        type: "array",
+                        minItems: 1,
+                        items: {
+                          type: "object",
+                          required: [
+                            "key",
+                            "label",
+                            "workflow",
+                            "artifactName",
+                            "path",
+                            "schemaVersion",
+                            "producerEnv",
+                            "requiredForReady",
+                            "includesSecretValues",
+                          ],
+                          additionalProperties: true,
+                          properties: {
+                            key: { enum: ["settings-provider-certification-json", "commerce-provider-certification-json"] },
+                            label: { type: "string" },
+                            workflow: { type: "string" },
+                            alternateWorkflows: { type: "array", items: { type: "string" } },
+                            artifactName: {
+                              enum: [
+                                "backy-settings-provider-certification-evidence",
+                                "backy-commerce-provider-certification-evidence",
+                              ],
+                            },
+                            path: {
+                              enum: [
+                                "artifacts/backy-settings-provider-certification.json",
+                                "artifacts/backy-commerce-provider-certification.json",
+                              ],
+                            },
+                            schemaVersion: {
+                              enum: [
+                                "backy.settings-provider-certification-artifact.v1",
+                                "backy.commerce-provider-certification-artifact.v1",
+                              ],
+                            },
+                            producerEnv: {
+                              enum: [
+                                "BACKY_SETTINGS_CERTIFICATION_OUTPUT",
+                                "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+                              ],
+                            },
+                            requiredForReady: { const: true },
+                            includesSecretValues: { const: false },
+                          },
+	                        },
+	                      },
+	                      artifactVerifier: {
+	                        type: "object",
+	                        required: ["command", "requiredEnv", "pathEnv", "schemaVersion", "validates", "includesSecretValues"],
+	                        additionalProperties: true,
+	                        properties: {
+	                          command: { const: "npm run doctor:release-certification" },
+		                          requiredEnv: {
+		                            enum: [
+		                              "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
+		                              "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
+		                            ],
+		                          },
+		                          pathEnv: {
+		                            enum: [
+		                              "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT",
+		                              "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT",
+		                            ],
+		                          },
+	                          schemaVersion: {
+	                            enum: [
+	                              "backy.settings-provider-certification-artifact.v1",
+	                              "backy.commerce-provider-certification-artifact.v1",
+	                            ],
+	                          },
+	                          validates: {
+	                            type: "array",
+	                            items: { type: "string" },
+	                          },
+	                          includesSecretValues: { const: false },
+	                        },
+	                      },
+	                      runtime: { type: "object", additionalProperties: true },
+                      secretBoundary: {
+                        type: "object",
+                        required: ["includesSecretValues", "excludes"],
+                        additionalProperties: true,
+                        properties: {
+                          includesSecretValues: { const: false },
+                          excludes: { type: "array", items: { type: "string" } },
+                        },
+                      },
+                      nextAction: { type: "string" },
+                    },
+                  },
+                },
                 gates: {
                   type: "array",
                   items: {
@@ -4243,8 +6801,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     properties: {
                       key: {
                         enum: [
-                          "forms-postgres",
-                          "sdk-postgres",
                           "settings-provider-certification",
                           "commerce-provider-certification",
                         ],
@@ -4258,6 +6814,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       affectedSurfaces: { type: "array", items: { type: "string" } },
                       requiredEnvAliases: { type: "array", items: { type: "string" } },
                       runtime: { type: "object", additionalProperties: true },
+                    },
+                  },
+                },
+                certifiedGates: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["key", "label", "status", "command", "workflow", "affectedSurfaces", "certifiedAt", "evidence"],
+                    additionalProperties: true,
+                    properties: {
+                      key: { enum: ["forms-postgres", "sdk-postgres"] },
+                      label: { type: "string" },
+                      status: { const: "certified" },
+                      command: { type: "string" },
+                      workflow: { type: "string" },
+                      affectedSurfaces: { type: "array", items: { type: "string" } },
+                      certifiedAt: { type: "string" },
+                      evidence: { type: "string" },
                     },
                   },
                 },
@@ -4506,6 +7080,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 collectionFrontendDesign: {
                   $ref: "#/components/schemas/ReusableSectionFrontendDesign",
+                },
+                designReadiness: {
+                  $ref: "#/components/schemas/CommerceProductDesignReadiness",
                 },
               },
             },
@@ -4950,9 +7527,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   enum: [
                     "range",
                     "select",
+                    "radio",
                     "text",
+                    "textarea",
+                    "code",
                     "number",
                     "boolean",
+                    "checkbox",
+                    "toggle",
                     "color",
                     "json",
                   ],
@@ -4962,11 +7544,49 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 step: { type: "number" },
                 options: {
                   type: "array",
-                  items: { type: ["string", "number", "boolean"] },
+                  items: {
+                    $ref: "#/components/schemas/InteractiveComponentControlOption",
+                  },
                 },
                 defaultValue: {},
                 required: { type: "boolean" },
               },
+            },
+            InteractiveComponentControlOption: {
+              oneOf: [
+                { type: "string" },
+                { type: "number" },
+                { type: "boolean" },
+                {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    label: { type: "string" },
+                    name: { type: "string" },
+                    value: {
+                      oneOf: [
+                        { type: "string" },
+                        { type: "number" },
+                        { type: "boolean" },
+                      ],
+                    },
+                    id: {
+                      oneOf: [
+                        { type: "string" },
+                        { type: "number" },
+                        { type: "boolean" },
+                      ],
+                    },
+                    key: {
+                      oneOf: [
+                        { type: "string" },
+                        { type: "number" },
+                        { type: "boolean" },
+                      ],
+                    },
+                  },
+                },
+              ],
             },
             InteractiveComponentFallback: {
               type: "object",
@@ -5131,7 +7751,78 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 routePattern: { type: "string" },
                 description: { type: "string" },
                 canvasSize: { type: "object", additionalProperties: true },
-                content: { type: "object", additionalProperties: true },
+                content: {
+                  $ref: "#/components/schemas/FrontendDesignTemplateContent",
+                },
+                bindingHints: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+              },
+            },
+            FrontendDesignTemplateContent: {
+              type: "object",
+              additionalProperties: true,
+              properties: {
+                templateId: { type: "string" },
+                frontendDesignTemplateId: { type: "string" },
+                templateName: { type: "string" },
+                frontendDesignTemplateName: { type: "string" },
+                routePattern: { type: "string" },
+                elements: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                canvasSize: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    width: { type: "number", exclusiveMinimum: 0 },
+                    height: { type: "number", exclusiveMinimum: 0 },
+                  },
+                },
+                customCSS: { type: "string" },
+                customCss: { type: "string" },
+                customJS: { type: "string" },
+                customJs: { type: "string" },
+                contentDocument: {
+                  $ref: "#/components/schemas/BackyContentDocument",
+                },
+                themeTokenRefs: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                assets: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                animations: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                interactions: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                dataBindings: { type: "object", additionalProperties: true },
+                editableMap: { type: "object", additionalProperties: true },
+                seo: { type: "object", additionalProperties: true },
+                metadata: { type: "object", additionalProperties: true },
                 bindingHints: {
                   type: "array",
                   items: { type: "object", additionalProperties: true },
@@ -5147,6 +7838,42 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 role: { type: "string" },
                 binding: { type: "string" },
                 fields: { type: "array", items: { type: "string" } },
+                field: { type: "string" },
+                targetPath: { type: "string" },
+                token: { type: "string" },
+                editable: { type: "boolean" },
+                permission: { type: "string" },
+                label: { type: "string" },
+                valueType: {
+                  type: "string",
+                  enum: [
+                    "string",
+                    "richText",
+                    "number",
+                    "boolean",
+                    "color",
+                    "image",
+                    "video",
+                    "audio",
+                    "file",
+                    "url",
+                    "json",
+                  ],
+                },
+                scope: {
+                  type: "string",
+                  enum: [
+                    "site",
+                    "page",
+                    "post",
+                    "template",
+                    "element",
+                    "collectionRecord",
+                  ],
+                },
+                collectionId: { type: "string" },
+                recordId: { type: "string" },
+                sourceField: { type: "string" },
               },
             },
             SeoDiscoveryEnvelope: envelopeSchema({
@@ -5282,6 +8009,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "methods",
                 "auth",
                 "uploadFields",
+                "filters",
                 "sdkHelpers",
                 "responseContracts",
                 "auditing",
@@ -5388,6 +8116,64 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   type: "array",
                   items: { type: "string" },
                   contains: { const: "file" },
+                },
+                filters: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: ["types", "typeAliases", "visibility", "scopes", "queryParams", "maxLimit", "aliases"],
+                  properties: {
+                    types: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                        enum: ["image", "video", "audio", "document", "file", "font", "other", "all"],
+                      },
+                    },
+                    typeAliases: {
+                      type: "object",
+                      additionalProperties: true,
+                      required: ["file"],
+                      properties: {
+                        file: {
+                          type: "array",
+                          items: {
+                            type: "string",
+                            enum: ["document", "other"],
+                          },
+                          contains: { const: "document" },
+                        },
+                      },
+                    },
+                    visibility: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                        enum: ["public", "private", "all"],
+                      },
+                    },
+                    scopes: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                        enum: ["global", "page", "post", "all"],
+                      },
+                    },
+                    queryParams: {
+                      type: "array",
+                      items: { type: "string" },
+                      contains: { const: "folderId" },
+                    },
+                    maxLimit: { const: 100 },
+                    aliases: {
+                      type: "object",
+                      additionalProperties: true,
+                      required: ["blogId", "fileType"],
+                      properties: {
+                        blogId: { const: "postId" },
+                        fileType: { const: "file" },
+                      },
+                    },
+                  },
                 },
                 sdkHelpers: {
                   type: "object",
@@ -5714,16 +8500,63 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 url: { type: "string" },
                 visibility: { type: "string" },
+                organization: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: [
+                    "schemaVersion",
+                    "folderId",
+                    "folderName",
+                    "folderPath",
+                    "folderSegments",
+                    "folderAncestors",
+                    "folderDepth",
+                    "folderSortOrder",
+                    "root",
+                    "missingFolder",
+                  ],
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.media.organization.v1",
+                    },
+                    folderId: { type: ["string", "null"] },
+                    folderName: { type: "string" },
+                    folderPath: { type: "string" },
+                    folderSegments: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    folderAncestors: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["id", "name", "parentId", "sortOrder"],
+                        properties: {
+                          id: { type: "string" },
+                          name: { type: "string" },
+                          parentId: { type: ["string", "null"] },
+                          sortOrder: { type: "integer" },
+                        },
+                      },
+                    },
+                    folderDepth: { type: "integer" },
+                    folderSortOrder: { type: ["integer", "null"] },
+                    root: { type: "boolean" },
+                    missingFolder: { type: "boolean" },
+                  },
+                },
                 references: { $ref: "#/components/schemas/MediaReferences" },
                 referenceSummary: {
                   type: "object",
                   additionalProperties: false,
-                  properties: {
-                    pageCount: { type: "integer" },
-                    postCount: { type: "integer" },
-                    usageTypes: { type: "array", items: { type: "string" } },
-                    global: { type: "boolean" },
-                    scoped: { type: "boolean" },
+	                  properties: {
+	                    pageCount: { type: "integer" },
+	                    postCount: { type: "integer" },
+	                    collectionRecordCount: { type: "integer" },
+	                    usageTypes: { type: "array", items: { type: "string" } },
+	                    global: { type: "boolean" },
+	                    scoped: { type: "boolean" },
                   },
                 },
                 editableMetadata: {
@@ -5776,10 +8609,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     properties: {
                       id: { type: "string" },
                       mediaId: { type: "string" },
-                      scope: { type: "string", enum: ["page", "post"] },
-                      targetId: { type: "string" },
-                      usageType: { type: "string" },
-                      attachedBy: { type: ["string", "null"] },
+	                      scope: { type: "string", enum: ["page", "post", "collectionRecord"] },
+	                      targetId: { type: "string" },
+	                      collectionId: { type: "string" },
+	                      usageType: { type: "string" },
+	                      attachedBy: { type: ["string", "null"] },
                       createdAt: { type: "string", format: "date-time" },
                       updatedAt: { type: "string", format: "date-time" },
                     },
@@ -5794,13 +8628,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "schemaVersion",
                 "global",
                 "scoped",
-                "scopes",
-                "pageIds",
-                "postIds",
-                "pages",
-                "posts",
-                "usageTypes",
-                "totalBindings",
+	                "scopes",
+	                "pageIds",
+	                "postIds",
+	                "collectionRecordIds",
+	                "pages",
+	                "posts",
+	                "collectionRecords",
+	                "usageTypes",
+	                "totalBindings",
               ],
               properties: {
                 schemaVersion: {
@@ -5809,21 +8645,26 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 global: { type: "boolean" },
                 scoped: { type: "boolean" },
-                scopes: {
-                  type: "array",
-                  items: { type: "string", enum: ["global", "page", "post"] },
+	                scopes: {
+	                  type: "array",
+	                  items: { type: "string", enum: ["global", "page", "post", "collectionRecord"] },
+	                },
+	                pageIds: { type: "array", items: { type: "string" } },
+	                postIds: { type: "array", items: { type: "string" } },
+	                collectionRecordIds: { type: "array", items: { type: "string" } },
+	                pages: {
+	                  type: "array",
+	                  items: { $ref: "#/components/schemas/MediaReferenceTarget" },
                 },
-                pageIds: { type: "array", items: { type: "string" } },
-                postIds: { type: "array", items: { type: "string" } },
-                pages: {
-                  type: "array",
-                  items: { $ref: "#/components/schemas/MediaReferenceTarget" },
-                },
-                posts: {
-                  type: "array",
-                  items: { $ref: "#/components/schemas/MediaReferenceTarget" },
-                },
-                usageTypes: { type: "array", items: { type: "string" } },
+	                posts: {
+	                  type: "array",
+	                  items: { $ref: "#/components/schemas/MediaReferenceTarget" },
+	                },
+	                collectionRecords: {
+	                  type: "array",
+	                  items: { $ref: "#/components/schemas/MediaReferenceTarget" },
+	                },
+	                usageTypes: { type: "array", items: { type: "string" } },
                 totalBindings: { type: "integer" },
               },
             },
@@ -5876,6 +8717,135 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 section: { $ref: "#/components/schemas/ReusableSection" },
               },
             }),
+            ContentRevisionBranchMetadata: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "schemaVersion",
+                "source",
+                "targetType",
+                "position",
+                "total",
+                "order",
+                "branchId",
+                "branchLabel",
+                "branchLane",
+                "branchRole",
+                "chronologicalParentId",
+                "chronologicalChildId",
+                "restoreTargetRevisionId",
+                "restoreTargetPosition",
+                "restoreTargetInWindow",
+                "restoreEdgeId",
+                "inference",
+              ],
+              properties: {
+                schemaVersion: { const: "backy.content-revision-branch-metadata.v1" },
+                source: {
+                  type: "string",
+                  enum: ["admin-page-revisions-api", "admin-blog-revisions-api"],
+                },
+                targetType: { type: "string", enum: ["page", "post"] },
+                position: { type: "integer", minimum: 1 },
+                total: { type: "integer", minimum: 0 },
+                order: { const: "newest-first" },
+                branchId: { type: "string" },
+                branchLabel: { type: "string" },
+                branchLane: { type: "integer", minimum: 0 },
+                branchRole: {
+                  type: "string",
+                  enum: ["trunk", "restore-checkpoint", "restore-branch"],
+                },
+                chronologicalParentId: { type: ["string", "null"] },
+                chronologicalChildId: { type: ["string", "null"] },
+                restoreTargetRevisionId: { type: ["string", "null"] },
+                restoreTargetPosition: { type: ["integer", "null"], minimum: 1 },
+                restoreTargetInWindow: { type: "boolean" },
+                restoreEdgeId: { type: ["string", "null"] },
+                branchPointRevisionId: { type: ["string", "null"] },
+                inference: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: [
+	                    "source",
+	                    "lineageSource",
+	                    "rollbackNotePattern",
+                    "confidence",
+                    "persistedFields",
+                    "limitation",
+                  ],
+                  properties: {
+	                    source: { const: "revision-note-and-order" },
+	                    lineageSource: {
+	                      type: "string",
+	                      enum: ["persisted-revision-lineage", "revision-note-and-order"],
+	                    },
+	                    rollbackNotePattern: { type: "string" },
+                    confidence: { const: "explicit-api-metadata" },
+                    persistedFields: {
+                      type: "array",
+                      items: { type: "string" },
+                      contains: { const: "note" },
+                    },
+                    limitation: { type: "string" },
+                  },
+                },
+              },
+            },
+            AdminPageRevision: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "id",
+                "siteId",
+                "targetType",
+                "targetId",
+	                "snapshot",
+	                "note",
+	                "parentRevisionId",
+	                "operation",
+	                "restoreTargetRevisionId",
+	                "metadata",
+	                "createdBy",
+                "createdAt",
+                "branchMetadata",
+              ],
+              properties: {
+                id: { type: "string" },
+                siteId: { type: "string" },
+                targetType: { const: "page" },
+                targetId: { type: "string" },
+	                snapshot: { $ref: "#/components/schemas/PageResource" },
+	                note: { type: ["string", "null"] },
+	                parentRevisionId: { type: ["string", "null"] },
+	                operation: { type: ["string", "null"] },
+	                restoreTargetRevisionId: { type: ["string", "null"] },
+	                metadata: { type: "object", additionalProperties: true },
+	                createdBy: { type: ["string", "null"] },
+                createdAt: { type: "string", format: "date-time" },
+                branchMetadata: { $ref: "#/components/schemas/ContentRevisionBranchMetadata" },
+              },
+            },
+            AdminPageRevisionsEnvelope: envelopeSchema({
+              type: "object",
+              required: ["revisions", "pagination"],
+              properties: {
+                revisions: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/AdminPageRevision" },
+                },
+                pagination: { type: "object", additionalProperties: true },
+              },
+            }),
+            AdminPageRollbackRequest: {
+              type: "object",
+              additionalProperties: true,
+              required: ["revisionId"],
+              properties: {
+                revisionId: { type: "string", minLength: 1 },
+                requestId: { type: "string" },
+              },
+            },
             PageListEnvelope: envelopeSchema({
               type: "object",
               required: ["pages", "pagination"],
@@ -5909,6 +8879,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 isHomepage: { type: "boolean" },
                 parentId: { type: ["string", "null"] },
                 meta: { type: "object", additionalProperties: true },
+                design: { $ref: "#/components/schemas/FrontendDesignTemplateContent" },
+                frontendDesign: { $ref: "#/components/schemas/FrontendDesignTemplateContent" },
                 content: {
                   oneOf: [
                     { $ref: "#/components/schemas/BackyContentDocument" },
@@ -5929,6 +8901,44 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                           },
                         },
                         customCSS: { type: "string" },
+                        customJS: { type: "string" },
+                        themeTokenRefs: {
+                          type: "object",
+                          additionalProperties: { type: "string" },
+                        },
+                        assets: {
+                          oneOf: [
+                            { type: "array", items: {} },
+                            { type: "object", additionalProperties: true },
+                          ],
+                        },
+                        animations: {
+                          oneOf: [
+                            {
+                              type: "array",
+                              items: { type: "object", additionalProperties: true },
+                            },
+                            { type: "object", additionalProperties: true },
+                          ],
+                        },
+                        interactions: {
+                          oneOf: [
+                            { type: "array", items: {} },
+                            { type: "object", additionalProperties: true },
+                          ],
+                        },
+                        seo: { type: "object", additionalProperties: true },
+                        dataBindings: { type: "object", additionalProperties: true },
+                        editableMap: {
+                          type: "object",
+                          additionalProperties: {
+                            $ref: "#/components/schemas/BackyEditableMapEntry",
+                          },
+                        },
+                        metadata: { type: "object", additionalProperties: true },
+                        contentDocument: {
+                          $ref: "#/components/schemas/BackyContentDocument",
+                        },
                       },
                     },
                     {
@@ -5950,6 +8960,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "auth",
                 "capabilities",
                 "editableTargets",
+                "lifecycle",
                 "inlineElementTypes",
                 "editorComposition",
                 "updateBody",
@@ -6013,6 +9024,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     "cacheInvalidation",
                     "auditTrail",
                     "webhookDelivery",
+                    "mediaAssetRefs",
+                    "fontAssetRefs",
+                    "elementAssetIds",
+                    "tokenRefs",
+                    "animation",
+                    "animationTokenRefs",
                     "inlineFormControls",
                     "editorComposition",
                     "editorGrouping",
@@ -6034,6 +9051,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     inlineFormControls: { type: "boolean" },
                     inlineLayout: { type: "boolean" },
                     inlineAppearance: { type: "boolean" },
+                    mediaAssetRefs: { type: "boolean" },
+                    fontAssetRefs: { type: "boolean" },
+                    elementAssetIds: { type: "boolean" },
+                    tokenRefs: { type: "boolean" },
+                    animation: { type: "boolean" },
+                    animationTokenRefs: { type: "boolean" },
                     editorComposition: { type: "boolean" },
                     editorGrouping: { type: "boolean" },
                   },
@@ -6041,7 +9064,96 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 editableTargets: {
                   type: "array",
                   items: { type: "string" },
-                  contains: { const: "props.formId" },
+                  allOf: [
+                    { contains: { const: "props.formId" } },
+                    { contains: { const: "props.fieldBackgroundColor" } },
+                    { contains: { const: "props.submitBackgroundColor" } },
+                    { contains: { const: "props.mediaId" } },
+                    { contains: { const: "props.mediaIds" } },
+                    { contains: { const: "props.backgroundMediaIds" } },
+                    { contains: { const: "props.posterMediaIds" } },
+                    { contains: { const: "props.fontMediaId" } },
+                    { contains: { const: "props.fontMediaIds" } },
+                    { contains: { const: "styles.boxShadow" } },
+                    { contains: { const: "tokenRefs.styles.boxShadow" } },
+                    { contains: { const: "responsive.mobile.styles.boxShadow" } },
+                    { contains: { const: "responsive.tablet.tokenRefs.styles.boxShadow" } },
+                    { contains: { const: "assetIds" } },
+                    { contains: { const: "animation.type" } },
+                    { contains: { const: "animation.scrollTrigger.start" } },
+                    { contains: { const: "animation.scrollTrigger.scrub" } },
+                    { contains: { const: "animation.from" } },
+                    { contains: { const: "animation.to" } },
+                    { contains: { const: "animation.tokenRefs.duration" } },
+                    { contains: { const: "actions" } },
+                    { contains: { const: "dataBindings" } },
+                    { contains: { const: "bindingSlots" } },
+                    { contains: { const: "responsive.mobile.x" } },
+                    { contains: { const: "responsive.mobile.props.posterMediaIds" } },
+                    { contains: { const: "responsive.tablet.width" } },
+                  ],
+                },
+                lifecycle: {
+                  type: "object",
+                  additionalProperties: true,
+                  required: [
+                    "schemaVersion",
+                    "cloneField",
+                    "permissions",
+                    "sdkHelpers",
+                    "requestBodies",
+                    "responseContracts",
+                  ],
+                  properties: {
+                    schemaVersion: { const: "backy.content-lifecycle-commands.v1" },
+                    cloneField: { const: "frontendDesignTemplateId" },
+                    permissions: {
+                      type: "object",
+                      additionalProperties: true,
+                      required: ["create", "publish"],
+                      properties: {
+                        create: { const: "pages.edit" },
+                        publish: { const: "pages.publish" },
+                      },
+                    },
+                    sdkHelpers: {
+                      type: "object",
+                      additionalProperties: true,
+                      required: [
+                        "createPage",
+                        "createPost",
+                        "createPagePreview",
+                        "createPostPreview",
+                      ],
+                      properties: {
+                        createPage: { const: "createAdminPage" },
+                        createPost: { const: "createAdminBlogPost" },
+                        createPagePreview: { const: "createAdminPagePreviewToken" },
+                        createPostPreview: { const: "createAdminBlogPostPreviewToken" },
+                      },
+                    },
+                    requestBodies: { type: "object", additionalProperties: true },
+                    responseContracts: {
+                      type: "object",
+                      additionalProperties: true,
+                      required: [
+                        "pageRevisions",
+                        "postRevisions",
+                        "revisionBranchMetadata",
+                        "branchMetadataField",
+                        "pageRollbackRequest",
+                        "postRollbackRequest",
+                      ],
+                      properties: {
+                        pageRevisions: { const: "backy.admin-page-revisions.v1" },
+                        postRevisions: { const: "backy.admin-blog-post-revisions.v1" },
+                        revisionBranchMetadata: { const: "backy.content-revision-branch-metadata.v1" },
+                        branchMetadataField: { const: "revision.branchMetadata" },
+                        pageRollbackRequest: { const: "backy.admin-page-rollback-request.v1" },
+                        postRollbackRequest: { const: "backy.admin-blog-post-rollback-request.v1" },
+                      },
+                    },
+                  },
                 },
                 inlineElementTypes: {
                   type: "object",
@@ -6067,7 +9179,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 editorComposition: {
                   type: "object",
                   additionalProperties: true,
-                  required: ["schemaVersion", "sdkHelpers", "commands", "constraints"],
+                  required: ["schemaVersion", "sdkHelpers", "commands", "commandRegistry", "constraints"],
                   properties: {
                     schemaVersion: { const: "backy.editor-composition-commands.v1" },
                     sdkHelpers: {
@@ -6076,6 +9188,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       required: [
                         "listElements",
                         "findElement",
+                        "addElement",
+                        "duplicateElement",
+                        "deleteElements",
+                        "transformElements",
                         "group",
                         "ungroup",
                         "patchElement",
@@ -6086,6 +9202,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       properties: {
                         listElements: { const: "listBackyContentElements" },
                         findElement: { const: "findBackyContentElement" },
+                        addElement: { const: "addBackyContentElement" },
+                        duplicateElement: { const: "duplicateBackyContentElement" },
+                        deleteElements: { const: "deleteBackyContentElements" },
+                        transformElements: { const: "transformBackyContentElements" },
                         group: { const: "groupBackyContentElements" },
                         ungroup: { const: "ungroupBackyContentElements" },
                         patchElement: { const: "patchBackyContentElement" },
@@ -6094,9 +9214,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                         buildBlogPostUpdate: { const: "buildBackyLiveManagedBlogPostEditableMapUpdate" },
                       },
                     },
-                    commands: {
+	                    commands: {
                       type: "array",
-                      minItems: 2,
+                      minItems: 7,
                       items: {
                         type: "object",
                         additionalProperties: true,
@@ -6111,22 +9231,131 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                           "preservesResponsiveGeometry",
                         ],
                         properties: {
-                          id: { enum: ["group", "ungroup"] },
+                          id: { enum: ["add", "duplicate", "delete", "move", "resize", "group", "ungroup"] },
                           label: { type: "string" },
                           shortcut: { type: "string" },
                           sdkHelper: {
-                            enum: ["groupBackyContentElements", "ungroupBackyContentElements"],
+                            enum: [
+                              "addBackyContentElement",
+                              "duplicateBackyContentElement",
+                              "deleteBackyContentElements",
+                              "transformBackyContentElements",
+                              "groupBackyContentElements",
+                              "ungroupBackyContentElements",
+                            ],
                           },
-                          minSelected: { type: "integer", minimum: 1 },
+                          minSelected: { type: "integer", minimum: 0 },
                           sameParentRequired: { type: "boolean" },
                           unlockedRequired: { type: "boolean" },
+                          mutates: { type: "array", items: { type: "string" } },
                           createsEditorGroup: { type: "boolean" },
                           editorGroupRequired: { type: "boolean" },
                           preservesResponsiveGeometry: { type: "boolean" },
                         },
+	                      },
+	                    },
+                    commandRegistry: {
+                      type: "object",
+                      additionalProperties: true,
+                      required: ["schemaVersion", "source", "generatedFrom", "stateModel", "categories", "commands", "privacy"],
+                      properties: {
+                        schemaVersion: { const: "backy.editor-command-registry.v1" },
+                        source: { const: "live-management-discovery" },
+                        generatedFrom: { const: "page-editor" },
+                        stateModel: {
+                          type: "object",
+                          additionalProperties: true,
+                          required: ["runtimeState", "stateValues", "reasonField", "selectionFields", "clipboardFields", "documentFields"],
+                          properties: {
+                            runtimeState: { const: "computed-by-editor-client" },
+                            stateValues: {
+                              type: "array",
+                              items: { enum: ["ready", "disabled", "hidden"] },
+                              contains: { const: "ready" },
+                            },
+                            reasonField: { const: "reason" },
+                            selectionFields: { type: "array", items: { type: "string" } },
+                            clipboardFields: { type: "array", items: { type: "string" } },
+                            documentFields: { type: "array", items: { type: "string" } },
+                          },
+                        },
+                        categories: {
+                          type: "array",
+                          minItems: 8,
+                          items: {
+                            type: "object",
+                            required: ["id", "label", "commandIds"],
+                            properties: {
+                              id: { type: "string" },
+                              label: { type: "string" },
+                              commandIds: { type: "array", items: { type: "string" } },
+                            },
+                          },
+                        },
+                        commands: {
+                          type: "array",
+                          minItems: 30,
+                          items: {
+                            type: "object",
+                            additionalProperties: true,
+                            required: ["id", "label", "category", "targetScope", "testId", "stateRule"],
+                            properties: {
+                              id: { type: "string" },
+                              label: { type: "string" },
+                              category: {
+                                enum: [
+                                  "history",
+                                  "selection",
+                                  "clipboard",
+                                  "composition",
+                                  "layer-state",
+                                  "layer-order",
+                                  "layout",
+                                  "view",
+                                  "shell",
+                                  "workflow",
+                                ],
+                              },
+                              targetScope: {
+                                enum: [
+                                  "canvas",
+                                  "selected-layer",
+                                  "selected-layers",
+                                  "selected-sibling-scope",
+                                  "selected-child-scope",
+                                  "selected-container",
+                                  "viewport",
+                                  "shell",
+                                  "document",
+                                ],
+                              },
+                              testId: { type: "string" },
+                              shortcut: { type: "string" },
+                              ariaKeyshortcuts: { type: "string" },
+                              sdkHelper: { type: "string" },
+                              apiHelper: { type: "string" },
+                              stateRule: { type: "string" },
+                              minSelected: { type: "integer", minimum: 0 },
+                              sameParentRequired: { type: "boolean" },
+                              unlockedRequired: { type: "boolean" },
+                              editorGroupRequired: { type: "boolean" },
+                              targetPaths: { type: "array", items: { type: "string" } },
+                              mutates: { type: "array", items: { type: "string" } },
+                            },
+                          },
+                        },
+                        privacy: {
+                          type: "object",
+                          required: ["includesSecretValues", "includesAdminSessionValues", "endpointTemplatesOnly"],
+                          properties: {
+                            includesSecretValues: { const: false },
+                            includesAdminSessionValues: { const: false },
+                            endpointTemplatesOnly: { const: true },
+                          },
+                        },
                       },
                     },
-                    constraints: {
+	                    constraints: {
                       type: "object",
                       additionalProperties: true,
                       required: [
@@ -6259,6 +9488,60 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 post: { $ref: "#/components/schemas/BlogPostResource" },
               },
             }),
+            AdminBlogPostRevision: {
+              type: "object",
+              additionalProperties: true,
+              required: [
+                "id",
+                "siteId",
+                "targetType",
+                "targetId",
+	                "snapshot",
+	                "note",
+	                "parentRevisionId",
+	                "operation",
+	                "restoreTargetRevisionId",
+	                "metadata",
+	                "createdBy",
+                "createdAt",
+                "branchMetadata",
+              ],
+              properties: {
+                id: { type: "string" },
+                siteId: { type: "string" },
+                targetType: { const: "post" },
+                targetId: { type: "string" },
+	                snapshot: { $ref: "#/components/schemas/BlogPostResource" },
+	                note: { type: ["string", "null"] },
+	                parentRevisionId: { type: ["string", "null"] },
+	                operation: { type: ["string", "null"] },
+	                restoreTargetRevisionId: { type: ["string", "null"] },
+	                metadata: { type: "object", additionalProperties: true },
+	                createdBy: { type: ["string", "null"] },
+                createdAt: { type: "string", format: "date-time" },
+                branchMetadata: { $ref: "#/components/schemas/ContentRevisionBranchMetadata" },
+              },
+            },
+            AdminBlogPostRevisionsEnvelope: envelopeSchema({
+              type: "object",
+              required: ["revisions", "pagination"],
+              properties: {
+                revisions: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/AdminBlogPostRevision" },
+                },
+                pagination: { type: "object", additionalProperties: true },
+              },
+            }),
+            AdminBlogPostRollbackRequest: {
+              type: "object",
+              additionalProperties: true,
+              required: ["revisionId"],
+              properties: {
+                revisionId: { type: "string", minLength: 1 },
+                requestId: { type: "string" },
+              },
+            },
             BlogPostUpdateRequest: {
               type: "object",
               additionalProperties: true,
@@ -6277,6 +9560,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 categoryIds: { type: "array", items: { type: "string" } },
                 tagIds: { type: "array", items: { type: "string" } },
                 meta: { type: "object", additionalProperties: true },
+                design: { $ref: "#/components/schemas/FrontendDesignTemplateContent" },
+                frontendDesign: { $ref: "#/components/schemas/FrontendDesignTemplateContent" },
                 content: {
                   oneOf: [
                     { $ref: "#/components/schemas/BackyContentDocument" },
@@ -6297,6 +9582,44 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                           },
                         },
                         customCSS: { type: "string" },
+                        customJS: { type: "string" },
+                        themeTokenRefs: {
+                          type: "object",
+                          additionalProperties: { type: "string" },
+                        },
+                        assets: {
+                          oneOf: [
+                            { type: "array", items: {} },
+                            { type: "object", additionalProperties: true },
+                          ],
+                        },
+                        animations: {
+                          oneOf: [
+                            {
+                              type: "array",
+                              items: { type: "object", additionalProperties: true },
+                            },
+                            { type: "object", additionalProperties: true },
+                          ],
+                        },
+                        interactions: {
+                          oneOf: [
+                            { type: "array", items: {} },
+                            { type: "object", additionalProperties: true },
+                          ],
+                        },
+                        seo: { type: "object", additionalProperties: true },
+                        dataBindings: { type: "object", additionalProperties: true },
+                        editableMap: {
+                          type: "object",
+                          additionalProperties: {
+                            $ref: "#/components/schemas/BackyEditableMapEntry",
+                          },
+                        },
+                        metadata: { type: "object", additionalProperties: true },
+                        contentDocument: {
+                          $ref: "#/components/schemas/BackyContentDocument",
+                        },
                       },
                     },
                     {
@@ -6456,6 +9779,51 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 chrome: { type: "object", additionalProperties: true },
                 tokens: { type: "object", additionalProperties: true },
                 customCss: { type: "string" },
+                customJs: { type: "string" },
+                contentDocument: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                elements: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                canvasSize: { type: "object", additionalProperties: true },
+                themeTokenRefs: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                assets: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                animations: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                interactions: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                dataBindings: { type: "object", additionalProperties: true },
+                editableMap: { type: "object", additionalProperties: true },
+                seo: { type: "object", additionalProperties: true },
+                metadata: { type: "object", additionalProperties: true },
                 fieldKeyMap: {
                   type: "object",
                   additionalProperties: { type: "string" },
@@ -6640,6 +10008,43 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 aria: { type: "object", additionalProperties: true },
               },
             },
+            BackyElementAnimation: {
+              type: "object",
+              additionalProperties: true,
+              required: ["type", "duration"],
+              properties: {
+                type: {
+                  type: "string",
+                  enum: ["fadeIn", "slideIn", "scaleIn", "bounce", "rotate", "custom"],
+                },
+                duration: { type: "number" },
+                delay: { type: "number" },
+                easing: { type: "string" },
+                direction: {
+                  type: "string",
+                  enum: ["left", "right", "up", "down"],
+                },
+                trigger: {
+                  type: "string",
+                  enum: ["load", "scroll", "hover"],
+                },
+                scrollTrigger: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    start: { type: "string" },
+                    end: { type: "string" },
+                    scrub: { type: "boolean" },
+                  },
+                },
+                from: { type: "object", additionalProperties: true },
+                to: { type: "object", additionalProperties: true },
+                tokenRefs: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+              },
+            },
             BackyContentElement: {
               type: "object",
               additionalProperties: true,
@@ -6681,6 +10086,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 tokenRefs: {
                   type: "object",
                   additionalProperties: { type: "string" },
+                },
+                animation: {
+                  $ref: "#/components/schemas/BackyElementAnimation",
                 },
                 actions: {
                   type: "array",
@@ -6811,6 +10219,41 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 contentDocument: {
                   $ref: "#/components/schemas/BackyContentDocument",
                 },
+                themeTokenRefs: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                assets: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                animations: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                interactions: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                dataBindings: { type: "object", additionalProperties: true },
+                editableMap: { type: "object", additionalProperties: true },
+                seo: { type: "object", additionalProperties: true },
+                metadata: { type: "object", additionalProperties: true },
               },
             },
             CollectionListEnvelope: envelopeSchema({
@@ -7561,20 +11004,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   additionalProperties: true,
                   description: "Alias accepted for legacy submitters.",
                 },
-                contactShareOverride: {
-                  type: "object",
-                  additionalProperties: true,
-                  description:
-                    "Optional contact-share mapping override for generated form integrations.",
-                  properties: {
-                    enabled: { type: "boolean" },
-                    nameField: { type: "string" },
-                    emailField: { type: "string" },
-                    phoneField: { type: "string" },
-                    notesField: { type: "string" },
-                    dedupeByEmail: { type: "boolean" },
-                  },
-                },
                 requestId: { type: "string" },
                 pageId: { type: "string" },
                 postId: { type: "string" },
@@ -8240,6 +11669,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 links: { type: "object", additionalProperties: true },
                 design: { $ref: "#/components/schemas/CommerceProductDesign" },
+                designReadiness: {
+                  $ref: "#/components/schemas/CommerceProductDesignReadiness",
+                },
                 updatedAt: { type: "string", format: "date-time" },
                 publishedAt: { type: ["string", "null"], format: "date-time" },
               },
@@ -8255,6 +11687,51 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 chrome: { type: "object", additionalProperties: true },
                 tokens: { type: "object", additionalProperties: true },
                 customCss: { type: "string" },
+                customJs: { type: "string" },
+                contentDocument: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                elements: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                canvasSize: { type: "object", additionalProperties: true },
+                themeTokenRefs: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                assets: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                animations: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                interactions: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                dataBindings: { type: "object", additionalProperties: true },
+                editableMap: { type: "object", additionalProperties: true },
+                seo: { type: "object", additionalProperties: true },
+                metadata: { type: "object", additionalProperties: true },
                 bindingHints: {
                   type: "array",
                   items: { type: "object", additionalProperties: true },
@@ -8275,12 +11752,2099 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   additionalProperties: true,
                 },
                 frontendDesignCustomCss: { type: "string" },
+                frontendDesignCustomJs: { type: "string" },
+                frontendDesignContentDocument: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                frontendDesignElements: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                frontendDesignCanvasSize: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                frontendDesignThemeTokenRefs: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                frontendDesignAssets: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                frontendDesignAnimations: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                frontendDesignInteractions: {
+                  oneOf: [
+                    {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    { type: "object", additionalProperties: true },
+                  ],
+                },
+                frontendDesignDataBindings: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                frontendDesignEditableMap: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                frontendDesignSeo: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                frontendDesignMetadata: {
+                  type: "object",
+                  additionalProperties: true,
+                },
                 frontendDesignBindingHints: {
                   type: "array",
                   items: { type: "object", additionalProperties: true },
                 },
               },
             },
+            CommerceProductDesignReadiness: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "status",
+                "templateId",
+                "hasDesign",
+                "hasContentDocument",
+                "hasEditableMap",
+                "hasDataBindings",
+                "counts",
+                "missing",
+                "detail",
+                "nextAction",
+                "evidence",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.product-design-readiness.v1",
+                },
+                status: { enum: ["ready", "attention", "blocked"] },
+                templateId: { type: ["string", "null"] },
+                hasDesign: { type: "boolean" },
+                hasContentDocument: { type: "boolean" },
+                hasEditableMap: { type: "boolean" },
+                hasDataBindings: { type: "boolean" },
+                counts: {
+                  type: "object",
+                  required: ["elements", "animations", "assets", "bindingHints"],
+                  additionalProperties: true,
+                  properties: {
+                    elements: { type: "integer", minimum: 0 },
+                    animations: { type: "integer", minimum: 0 },
+                    assets: { type: "integer", minimum: 0 },
+                    bindingHints: { type: "integer", minimum: 0 },
+                  },
+                },
+                missing: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                detail: { type: "string" },
+                nextAction: { type: "string" },
+                evidence: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            CommerceProductStorefrontHandoff: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "generatedAt",
+                "source",
+                "selectedSiteId",
+                "selectedProductId",
+                "product",
+                "endpoints",
+                "pricing",
+                "inventory",
+                "media",
+                "merchandising",
+                "design",
+                "designReadiness",
+                "delivery",
+                "subscription",
+                "checkout",
+                "providerSync",
+                "launchReadiness",
+                "privacy",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.product-storefront-handoff.v1",
+                },
+                generatedAt: { type: "string", format: "date-time" },
+                source: { const: "admin-product-provider-sync-api" },
+                selectedSiteId: { type: "string" },
+                selectedProductId: { type: "string" },
+                product: {
+                  type: "object",
+                  required: ["id", "slug", "status", "title", "sku", "productType"],
+                  additionalProperties: true,
+                  properties: {
+                    id: { type: "string" },
+                    slug: { type: "string" },
+                    status: {
+                      enum: ["draft", "published", "scheduled", "archived"],
+                    },
+                    title: { type: "string" },
+                    sku: { type: "string" },
+                    productType: {
+                      enum: ["physical", "digital", "service"],
+                    },
+                  },
+                },
+                endpoints: {
+                  type: "object",
+                  required: [
+                    "catalog",
+                    "product",
+                    "orderIntake",
+                    "events",
+                    "providerSync",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    catalog: { type: "string" },
+                    product: { type: "string" },
+                    orderIntake: { type: "string" },
+                    events: { type: "string" },
+                    providerSync: { type: "string" },
+                  },
+                },
+                pricing: {
+                  type: "object",
+                  required: ["price", "compareAtPrice", "currency"],
+                  additionalProperties: true,
+                  properties: {
+                    price: { type: "number" },
+                    compareAtPrice: { type: ["number", "null"] },
+                    currency: { type: "string" },
+                  },
+                },
+                inventory: { type: "object", additionalProperties: true },
+                media: { type: "object", additionalProperties: true },
+                merchandising: { type: "object", additionalProperties: true },
+                design: {
+                  anyOf: [
+                    { $ref: "#/components/schemas/CommerceProductDesign" },
+                    { type: "null" },
+                  ],
+                },
+                designReadiness: {
+                  $ref: "#/components/schemas/CommerceProductDesignReadiness",
+                },
+                delivery: { type: "object", additionalProperties: true },
+                subscription: { type: "object", additionalProperties: true },
+                checkout: {
+                  type: "object",
+                  required: [
+                    "orderIntakeReady",
+                    "directCheckoutUrlConfigured",
+                    "mode",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    orderIntakeReady: { type: "boolean" },
+                    directCheckoutUrlConfigured: { type: "boolean" },
+                    mode: {
+                      enum: [
+                        "backy-order-intake",
+                        "direct-checkout-url",
+                        "missing",
+                      ],
+                    },
+                  },
+                },
+                providerSync: {
+                  type: "object",
+                  required: [
+                    "provider",
+                    "status",
+                    "executionMode",
+                    "syncedAt",
+                    "hasProviderProductReference",
+                    "hasProviderPriceReference",
+                    "hasError",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    provider: { type: "string" },
+                    status: { type: "string" },
+                    executionMode: { type: "string" },
+                    syncedAt: { type: ["string", "null"] },
+                    hasProviderProductReference: { type: "boolean" },
+                    hasProviderPriceReference: { type: "boolean" },
+                    hasError: { type: "boolean" },
+                  },
+                },
+                launchReadiness: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "status",
+                    "score",
+                    "readyCount",
+                    "totalChecks",
+                    "blockerCount",
+                    "attentionCount",
+                    "checks",
+                    "nextSteps",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.product-launch-readiness.v1",
+                    },
+                    status: { enum: ["ready", "attention", "blocked"] },
+                    score: { type: "integer", minimum: 0, maximum: 100 },
+                    readyCount: { type: "integer", minimum: 0 },
+                    totalChecks: { type: "integer", minimum: 0 },
+                    blockerCount: { type: "integer", minimum: 0 },
+                    attentionCount: { type: "integer", minimum: 0 },
+                    checks: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    nextSteps: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                  },
+                },
+                privacy: {
+                  type: "object",
+                  required: [
+                    "customerSafeFieldsOnly",
+                    "includesProviderSecrets",
+                    "includesProviderResponses",
+                    "includesPrivateOrders",
+                    "includesCustomerPayloads",
+                    "includesDigitalDeliveryUrl",
+                    "includesRawCheckoutSessions",
+                    "excludedFields",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    customerSafeFieldsOnly: { const: true },
+                    includesProviderSecrets: { const: false },
+                    includesProviderResponses: { const: false },
+                    includesPrivateOrders: { const: false },
+                    includesCustomerPayloads: { const: false },
+                    includesDigitalDeliveryUrl: { const: false },
+                    includesRawCheckoutSessions: { const: false },
+                    excludedFields: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            CommerceProductProviderSync: {
+              type: "object",
+              required: [
+                "provider",
+                "status",
+                "executionMode",
+                "syncedAt",
+                "requestId",
+                "product",
+                "price",
+              ],
+              additionalProperties: true,
+              properties: {
+                provider: {
+                  enum: [
+                    "stripe",
+                    "http",
+                    "paddle",
+                    "square",
+                    "paypal",
+                    "shopify",
+                    "bigcommerce",
+                    "woocommerce",
+                    "etsy",
+                    "magento",
+                  ],
+                },
+                status: { enum: ["handoff", "synced", "failed"] },
+                executionMode: { type: "string" },
+                syncedAt: { type: "string", format: "date-time" },
+                requestId: { type: "string" },
+                reason: { type: "string" },
+                error: { type: "object", additionalProperties: true },
+                product: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    id: { type: ["string", "null"] },
+                    name: { type: "string" },
+                    active: { type: ["boolean", "null"] },
+                    reference: { type: "string" },
+                    url: { type: "string" },
+                  },
+                },
+                price: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    id: { type: ["string", "null"] },
+                    currency: { type: "string" },
+                    unitAmount: { type: "integer", minimum: 0 },
+                    recurring: {
+                      oneOf: [
+                        { type: "object", additionalProperties: true },
+                        { type: "null" },
+                      ],
+                    },
+                  },
+                },
+                providerPayload: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+            CommerceProductProviderSyncEnvelope: envelopeSchema({
+              type: "object",
+              required: [
+                "sync",
+                "product",
+                "providerCertification",
+                "storefrontHandoff",
+              ],
+              additionalProperties: true,
+              properties: {
+                sync: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/CommerceProductProviderSync" },
+                    { type: "null" },
+                  ],
+                },
+                product: { $ref: "#/components/schemas/CollectionRecord" },
+                cacheInvalidation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                providerCertification: {
+                  $ref: "#/components/schemas/CommerceProviderCertification",
+                },
+                storefrontHandoff: {
+                  $ref: "#/components/schemas/CommerceProductStorefrontHandoff",
+                },
+              },
+            }),
+            CommerceProductSubscriptionLifecycle: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "generatedAt",
+                "product",
+                "summary",
+                "actionPlan",
+                "subscriptions",
+                "execution",
+                "certification",
+                "contract",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.product-subscription-lifecycle.v1",
+                },
+                generatedAt: { type: "string", format: "date-time" },
+                product: {
+                  type: "object",
+                  required: ["id", "slug", "title", "sku", "subscription"],
+                  additionalProperties: true,
+                  properties: {
+                    id: { type: "string" },
+                    slug: { type: "string" },
+                    title: { type: "string" },
+                    sku: { type: "string" },
+                    subscription: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                  },
+                },
+                summary: {
+                  type: "object",
+                  required: [
+                    "total",
+                    "active",
+                    "renewals",
+                    "dunning",
+                    "paused",
+                    "trialEnding",
+                    "cancelled",
+                    "pending",
+                    "revenue",
+                    "units",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    total: { type: "integer", minimum: 0 },
+                    active: { type: "integer", minimum: 0 },
+                    renewals: { type: "integer", minimum: 0 },
+                    dunning: { type: "integer", minimum: 0 },
+                    paused: { type: "integer", minimum: 0 },
+                    trialEnding: { type: "integer", minimum: 0 },
+                    cancelled: { type: "integer", minimum: 0 },
+                    pending: { type: "integer", minimum: 0 },
+                    revenue: { type: "number" },
+                    units: { type: "integer", minimum: 0 },
+                  },
+                },
+                actionPlan: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "attentionRequired",
+                    "executableNow",
+                    "handoffRequired",
+                    "retryRecommended",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.product-subscription-action-plan-summary.v1",
+                    },
+                    attentionRequired: { type: "integer", minimum: 0 },
+                    executableNow: { type: "integer", minimum: 0 },
+                    handoffRequired: { type: "integer", minimum: 0 },
+                    retryRecommended: { type: "integer", minimum: 0 },
+                  },
+                },
+                subscriptions: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "id",
+                      "slug",
+                      "orderNumber",
+                      "paymentProvider",
+                      "paymentStatus",
+                      "fulfillmentStatus",
+                      "lifecycleStatus",
+                      "subscriptionReference",
+                      "actionExecutionMode",
+                      "actionExecutionModes",
+                      "actionPlan",
+                      "actionHistory",
+                      "lastAction",
+                      "total",
+                      "currency",
+                      "productUnits",
+                      "productRevenue",
+                      "updatedAt",
+                      "matchedItems",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      id: { type: "string" },
+                      slug: { type: "string" },
+                      orderNumber: { type: "string" },
+                      customerName: { type: "string" },
+                      customerEmail: { type: "string" },
+                      paymentProvider: { type: "string" },
+                      paymentStatus: { type: "string" },
+                      fulfillmentStatus: { type: "string" },
+                      lifecycleStatus: {
+                        enum: [
+                          "active",
+                          "renewal",
+                          "dunning",
+                          "paused",
+                          "trial_will_end",
+                          "cancelled",
+                          "pending",
+                        ],
+                      },
+                      subscriptionReference: { type: "string" },
+                      actionExecutionMode: {
+                        enum: [
+                          "stripe-api",
+                          "paypal-api",
+                          "paddle-api",
+                          "square-api",
+                          "adyen-api",
+                          "mollie-api",
+                          "razorpay-api",
+                          "http-api",
+                          "handoff",
+                        ],
+                      },
+                      actionExecutionModes: {
+                        type: "object",
+                        required: ["pause", "resume", "cancel"],
+                        additionalProperties: true,
+                        properties: {
+                          pause: { type: "string" },
+                          resume: { type: "string" },
+                          cancel: { type: "string" },
+                        },
+                      },
+                      actionPlan: {
+                        type: "object",
+                        additionalProperties: true,
+                      },
+                      actionHistory: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          additionalProperties: true,
+                        },
+                      },
+                      lastAction: {
+                        oneOf: [
+                          {
+                            type: "object",
+                            additionalProperties: true,
+                          },
+                          { type: "null" },
+                        ],
+                      },
+                      checkoutSessionId: { type: "string" },
+                      total: { type: "number" },
+                      currency: { type: "string" },
+                      productUnits: { type: "integer", minimum: 0 },
+                      productRevenue: { type: "number" },
+                      updatedAt: { type: ["string", "null"] },
+                      matchedItems: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          additionalProperties: true,
+                        },
+                      },
+                    },
+                  },
+                },
+                execution: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "actionEndpoint",
+                    "supportedActions",
+                    "providers",
+                    "summary",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.product-subscription-execution-readiness.v1",
+                    },
+                    actionEndpoint: { type: "string" },
+                    supportedActions: {
+                      type: "array",
+                      items: { enum: ["pause", "resume", "cancel"] },
+                    },
+                    providers: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        required: [
+                          "provider",
+                          "executionMode",
+                          "configured",
+                          "referencePattern",
+                          "executableSubscriptions",
+                          "blocker",
+                        ],
+                        additionalProperties: true,
+                        properties: {
+                          provider: { type: "string" },
+                          executionMode: { type: "string" },
+                          configured: { type: "boolean" },
+                          referencePattern: { type: "string" },
+                          executableSubscriptions: {
+                            type: "integer",
+                            minimum: 0,
+                          },
+                          blocker: { type: "string" },
+                        },
+                      },
+                    },
+                    summary: {
+                      type: "object",
+                      required: [
+                        "executableSubscriptions",
+                        "handoffSubscriptions",
+                      ],
+                      additionalProperties: true,
+                      properties: {
+                        executableSubscriptions: {
+                          type: "integer",
+                          minimum: 0,
+                        },
+                        handoffSubscriptions: {
+                          type: "integer",
+                          minimum: 0,
+                        },
+                      },
+                    },
+                  },
+                },
+                certification: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "status",
+                    "requiredGate",
+                    "coverage",
+                    "scenarios",
+                    "providerFamilies",
+                    "secretHandling",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.product-subscription-certification.v1",
+                    },
+                    status: { enum: ["ready", "attention"] },
+                    requiredGate: {
+                      const: "npm run ci:commerce-provider-certification",
+                    },
+                    coverage: {
+                      type: "object",
+                      required: ["covered", "total", "missing"],
+                      additionalProperties: true,
+                      properties: {
+                        covered: { type: "integer", minimum: 0 },
+                        total: { type: "integer", minimum: 0 },
+                        missing: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                      },
+                    },
+                    scenarios: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        required: [
+                          "key",
+                          "label",
+                          "evidenceCount",
+                          "expectedEvidence",
+                          "nextAction",
+                          "status",
+                        ],
+                        additionalProperties: true,
+                        properties: {
+                          key: { type: "string" },
+                          label: { type: "string" },
+                          evidenceCount: { type: "integer", minimum: 0 },
+                          expectedEvidence: {
+                            type: "array",
+                            items: { type: "string" },
+                          },
+                          nextAction: { type: "string" },
+                          status: { enum: ["covered", "missing"] },
+                        },
+                      },
+                    },
+                    providerFamilies: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    secretHandling: { type: "string" },
+                  },
+                },
+                contract: {
+                  type: "object",
+                  required: [
+                    "ordersApi",
+                    "webhookApi",
+                    "reconciliationApi",
+                    "supportedLifecycleEvents",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    ordersApi: { type: "string" },
+                    webhookApi: { type: "string" },
+                    reconciliationApi: { type: "string" },
+                    supportedLifecycleEvents: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            CommerceProductSubscriptionsEnvelope: envelopeSchema({
+              type: "object",
+              required: ["lifecycle", "collection"],
+              additionalProperties: true,
+              properties: {
+                lifecycle: {
+                  $ref: "#/components/schemas/CommerceProductSubscriptionLifecycle",
+                },
+                collection: {
+                  type: "object",
+                  required: ["id"],
+                  additionalProperties: true,
+                  properties: {
+                    id: { type: "string" },
+                    slug: { type: "string" },
+                    name: { type: "string" },
+                  },
+                },
+              },
+            }),
+            CommerceProductSubscriptionAction: {
+              type: "object",
+              required: [
+                "id",
+                "schemaVersion",
+                "action",
+                "status",
+                "provider",
+                "executionMode",
+                "productId",
+                "productSlug",
+                "orderId",
+                "orderSlug",
+                "subscriptionReference",
+                "reason",
+                "requestedAt",
+                "completedAt",
+                "providerPayload",
+              ],
+              additionalProperties: true,
+              properties: {
+                id: { type: "string" },
+                schemaVersion: {
+                  const: "backy.product-subscription-action.v1",
+                },
+                action: { enum: ["pause", "resume", "cancel"] },
+                status: {
+                  enum: [
+                    "requested",
+                    "succeeded",
+                    "failed",
+                    "requires_action",
+                  ],
+                },
+                provider: { type: "string" },
+                executionMode: {
+                  enum: [
+                    "stripe-api",
+                    "paypal-api",
+                    "paddle-api",
+                    "square-api",
+                    "adyen-api",
+                    "mollie-api",
+                    "razorpay-api",
+                    "http-api",
+                    "handoff",
+                  ],
+                },
+                productId: { type: "string" },
+                productSlug: { type: "string" },
+                orderId: { type: "string" },
+                orderSlug: { type: "string" },
+                subscriptionReference: { type: "string" },
+                reason: { type: "string" },
+                requestedAt: { type: "string", format: "date-time" },
+                completedAt: { type: ["string", "null"] },
+                providerPayload: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+            CommerceProductSubscriptionActionEnvelope: envelopeSchema({
+              type: "object",
+              required: ["action", "record", "order"],
+              additionalProperties: true,
+              properties: {
+                action: {
+                  $ref: "#/components/schemas/CommerceProductSubscriptionAction",
+                },
+                record: { $ref: "#/components/schemas/CollectionRecord" },
+                order: { $ref: "#/components/schemas/CollectionRecord" },
+                cacheInvalidation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            }),
+            CommerceOrderStatusHandoff: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "generatedAt",
+                "source",
+                "status",
+                "score",
+                "selectedSiteId",
+                "order",
+                "customer",
+                "tracking",
+                "refund",
+                "digitalDelivery",
+                "endpoints",
+                "frontendBindings",
+                "privacy",
+                "actionPlan",
+                "checks",
+                "nextSteps",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.order-status-handoff.v1" },
+                generatedAt: { type: "string", format: "date-time" },
+                source: {
+                  enum: [
+                    "admin-order-status-handoff-api",
+                    "public-commerce-order-intake-api",
+                  ],
+                },
+                status: { enum: ["ready", "attention", "blocked"] },
+                score: { type: "integer", minimum: 0, maximum: 100 },
+                selectedSiteId: { type: "string" },
+                order: {
+                  type: "object",
+                  required: [
+                    "id",
+                    "slug",
+                    "orderNumber",
+                    "recordStatus",
+                    "total",
+                    "currency",
+                    "itemCount",
+                    "orderStatus",
+                    "paymentStatus",
+                    "fulfillmentStatus",
+                    "createdAt",
+                    "updatedAt",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    id: { type: "string" },
+                    slug: { type: "string" },
+                    orderNumber: { type: "string" },
+                    recordStatus: { type: "string" },
+                    total: { type: "number" },
+                    currency: { type: "string" },
+                    itemCount: { type: "integer", minimum: 0 },
+                    orderStatus: { type: "string" },
+                    paymentStatus: { type: "string" },
+                    fulfillmentStatus: { type: "string" },
+                    createdAt: { type: "string" },
+                    updatedAt: { type: "string" },
+                  },
+                },
+                customer: {
+                  type: "object",
+                  required: [
+                    "displayName",
+                    "maskedEmail",
+                    "maskedPhone",
+                    "customerProfileLinked",
+                    "customerProfileSlug",
+                    "customerProfileStatus",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    displayName: { type: "string" },
+                    maskedEmail: { type: "string" },
+                    maskedPhone: { type: "string" },
+                    customerProfileLinked: { type: "boolean" },
+                    customerProfileSlug: { type: "string" },
+                    customerProfileStatus: { type: "string" },
+                  },
+                },
+                tracking: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    carrier: { type: "string" },
+                    trackingNumber: { type: "string" },
+                    trackingUrl: { type: "string" },
+                    trackingStatus: { type: "string" },
+                    trackingLastCheckedAt: { type: "string" },
+                    fulfilledAt: { type: "string" },
+                    shippingLabelStatus: { type: "string" },
+                    shippingLabelProvider: { type: "string" },
+                    shippingLabelReferencePresent: { type: "boolean" },
+                  },
+                },
+                refund: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    refundAmount: { type: "number" },
+                    refundReasonPresent: { type: "boolean" },
+                    providerRefundStatus: { type: "string" },
+                    providerRefundProvider: { type: "string" },
+                    providerRefundReferencePresent: { type: "boolean" },
+                    providerRefundRequestedAt: { type: "string" },
+                    providerRefundCompletedAt: { type: "string" },
+                  },
+                },
+                digitalDelivery: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "itemCount",
+                    "configuredItemCount",
+                    "pendingItemCount",
+                    "status",
+                    "customerAction",
+                    "customerSafeFieldsOnly",
+                    "includesDownloadUrls",
+                    "includesDownloadMediaIds",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.order-digital-delivery-handoff.v1",
+                    },
+                    itemCount: { type: "integer", minimum: 0 },
+                    configuredItemCount: { type: "integer", minimum: 0 },
+                    pendingItemCount: { type: "integer", minimum: 0 },
+                    status: {
+                      enum: [
+                        "not-applicable",
+                        "pending-payment",
+                        "ready",
+                        "fulfilled",
+                        "attention",
+                      ],
+                    },
+                    customerAction: { type: "string" },
+                    customerSafeFieldsOnly: { const: true },
+                    includesDownloadUrls: { const: false },
+                    includesDownloadMediaIds: { const: false },
+                  },
+                },
+                endpoints: {
+                  type: "object",
+                  required: [
+                    "checkoutIntake",
+                    "publicStatusHandoff",
+                    "adminStatusHandoff",
+                    "adminOrderDetail",
+                    "adminTracking",
+                    "adminProviderRefund",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    checkoutIntake: { type: "string" },
+                    publicStatusHandoff: { type: "string" },
+                    adminStatusHandoff: { type: "string" },
+                    adminOrderDetail: { type: "string" },
+                    adminTracking: { type: "string" },
+                    adminProviderRefund: { type: "string" },
+                  },
+                },
+                frontendBindings: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "targetViews",
+                    "dataset",
+                    "safeBindingPaths",
+                    "maskedBindingPaths",
+                    "editableRegions",
+                    "actionBindings",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.order-status-frontend-bindings.v1",
+                    },
+                    targetViews: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    dataset: {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: {
+                        key: { const: "orderStatusHandoff" },
+                        source: {
+                          enum: [
+                            "admin-order-status-handoff-api",
+                            "public-commerce-order-intake-api",
+                          ],
+                        },
+                        endpoint: { type: "string" },
+                        selectedOrderId: {
+                          anyOf: [{ type: "string" }, { type: "null" }],
+                        },
+                        selectedOrderSlug: {
+                          anyOf: [{ type: "string" }, { type: "null" }],
+                        },
+                        auth: {
+                          enum: [
+                            "admin-session-or-service-key",
+                            "post-checkout-response",
+                            "post-checkout-status-token",
+                          ],
+                        },
+                        refreshMethod: { enum: ["GET", "POST-response"] },
+                      },
+                    },
+                    safeBindingPaths: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    maskedBindingPaths: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    editableRegions: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: true,
+                      },
+                    },
+                    actionBindings: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: true,
+                      },
+                    },
+                  },
+                },
+                privacy: {
+                  type: "object",
+                  required: [
+                    "publicCollectionReadBlocked",
+                    "customerSafeFieldsOnly",
+                    "includesRawCustomerContact",
+                    "includesProviderExecutionIds",
+                    "includesPaymentReferences",
+                    "includesAddresses",
+                    "includesInternalNotes",
+                    "includesDigitalDeliveryUrls",
+                    "includesDownloadMediaIds",
+                    "excludedFields",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    publicCollectionReadBlocked: { type: "boolean" },
+                    customerSafeFieldsOnly: { const: true },
+                    includesRawCustomerContact: { const: false },
+                    includesProviderExecutionIds: { const: false },
+                    includesPaymentReferences: { const: false },
+                    includesAddresses: { const: false },
+                    includesInternalNotes: { const: false },
+                    includesDigitalDeliveryUrls: { const: false },
+                    includesDownloadMediaIds: { const: false },
+                    excludedFields: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                actionPlan: { type: "object", additionalProperties: true },
+                checks: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                nextSteps: { type: "array", items: { type: "string" } },
+              },
+            },
+            CommerceOrderStatusAccess: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "auth",
+                "tokenReturnedOnce",
+                "tokenStorage",
+                "tokenExpiresAt",
+                "orderId",
+                "orderSlug",
+                "endpoint",
+                "endpointTemplate",
+                "refreshMethod",
+                "responseContract",
+                "privacy",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.order-status-access.v1" },
+                auth: { const: "status-token" },
+                tokenReturnedOnce: { type: "boolean" },
+                statusToken: { type: "string" },
+                tokenStorage: { type: "string" },
+                tokenExpiresAt: { type: "string", format: "date-time" },
+                orderId: { type: "string" },
+                orderSlug: { type: "string" },
+                endpoint: { type: "string" },
+                endpointTemplate: { type: "string" },
+                refreshMethod: { const: "GET" },
+                responseContract: {
+                  const: "backy.order-status-handoff.v1",
+                },
+                privacy: {
+                  type: "object",
+                  required: [
+                    "rawTokenStoredByBacky",
+                    "tokenHashField",
+                    "includesRawOrder",
+                    "customerSafeFieldsOnly",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    rawTokenStoredByBacky: { const: false },
+                    tokenHashField: { const: "statusaccesstokenhash" },
+                    includesRawOrder: { const: false },
+                    customerSafeFieldsOnly: { const: true },
+                  },
+                },
+              },
+            },
+            CommerceOrderStatusHandoffEnvelope: envelopeSchema({
+              type: "object",
+              required: ["schemaVersion", "statusHandoff", "statusAccess"],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.order-status-handoff.v1",
+                },
+                statusHandoff: {
+                  $ref: "#/components/schemas/CommerceOrderStatusHandoff",
+                },
+                statusAccess: {
+                  $ref: "#/components/schemas/CommerceOrderStatusAccess",
+                },
+              },
+            }),
+            CommerceOrderProviderCertificationEvidence: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "status",
+                "requiredGate",
+                "coverage",
+                "scenarios",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.order-provider-certification-evidence.v1",
+                },
+                status: { enum: ["ready", "attention"] },
+                requiredGate: {
+                  const:
+                    "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification",
+                },
+                coverage: {
+                  type: "object",
+                  required: ["covered", "total", "missing"],
+                  additionalProperties: true,
+                  properties: {
+                    covered: { type: "integer", minimum: 0 },
+                    total: { type: "integer", minimum: 0 },
+                    missing: { type: "array", items: { type: "string" } },
+                  },
+                },
+                scenarios: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "label",
+                      "expectedEvidence",
+                      "nextAction",
+                      "evidenceCount",
+                      "status",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: {
+                        enum: [
+                          "checkout-settlement",
+                          "quote-recalculation",
+                          "carrier-label-tracking",
+                          "fulfillment-dispatch",
+                          "provider-refund",
+                          "webhook-reconciliation",
+                          "subscription-lifecycle",
+                        ],
+                      },
+                      label: { type: "string" },
+                      expectedEvidence: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      nextAction: { type: "string" },
+                      evidenceCount: { type: "integer", minimum: 0 },
+                      status: { enum: ["covered", "missing"] },
+                    },
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            CommerceOrderProviderCertificationEvidencePacket: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "generatedAt",
+                "selectedSiteId",
+                "status",
+                "selectedFamilies",
+                "selectedProviderAliases",
+                "runtimeReadiness",
+                "operatorArtifacts",
+                "scenarioAttachments",
+                "commandPreview",
+                "redactionPolicy",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.order-provider-certification-evidence-packet.v1",
+                },
+                generatedAt: { type: "string", format: "date-time" },
+                selectedSiteId: { type: "string" },
+                status: {
+                  enum: [
+                    "needs-credentials",
+                    "needs-scenario-evidence",
+                    "evidence-complete",
+                  ],
+                },
+                selectedFamilies: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                selectedProviderAliases: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                runtimeReadiness: {
+                  type: "object",
+                  required: ["loaded", "configuredFamilies", "missingSelectedFamilies"],
+                  additionalProperties: true,
+                  properties: {
+                    loaded: { const: true },
+                    configuredFamilies: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    missingSelectedFamilies: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                operatorArtifacts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "family",
+                      "providerAlias",
+                      "status",
+                      "requiredInputs",
+                      "expectedArtifacts",
+                      "captureSource",
+                      "redaction",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: { type: "string" },
+                      family: { type: "string" },
+                      providerAlias: { type: "string" },
+                      status: { enum: ["ready-to-run", "needs-credentials"] },
+                      requiredInputs: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      expectedArtifacts: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      captureSource: { type: "string" },
+                      redaction: { type: "string" },
+                    },
+                  },
+                },
+                scenarioAttachments: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "label",
+                      "status",
+                      "evidenceCount",
+                      "expectedEvidence",
+                      "nextAction",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: { type: "string" },
+                      label: { type: "string" },
+                      status: { enum: ["covered", "missing"] },
+                      evidenceCount: { type: "integer", minimum: 0 },
+                      expectedEvidence: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      nextAction: { type: "string" },
+                    },
+                  },
+                },
+                commandPreview: {
+                  type: "object",
+                  required: ["command", "requiredInputs", "targetInputs"],
+                  additionalProperties: true,
+                  properties: {
+                    command: { type: "string" },
+                    requiredInputs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    targetInputs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                redactionPolicy: {
+                  type: "object",
+                  required: [
+                    "includesProviderSecrets",
+                    "includesCustomerPayloads",
+                    "includesRawOrderPayloads",
+                    "includesPaymentReferences",
+                    "includesAddresses",
+                    "includesWebhookBodies",
+                    "allowedEvidence",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    includesProviderSecrets: { const: false },
+                    includesCustomerPayloads: { const: false },
+                    includesRawOrderPayloads: { const: false },
+                    includesPaymentReferences: { const: false },
+                    includesAddresses: { const: false },
+                    includesWebhookBodies: { const: false },
+                    allowedEvidence: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            CommerceOrderAnalyticsProviderCertification: {
+              allOf: [
+                { $ref: "#/components/schemas/CommerceProviderCertification" },
+                {
+                  type: "object",
+                  required: [
+                    "generatedAt",
+                    "selectedSiteId",
+                    "source",
+                    "operatorGate",
+                    "analyticsSchemaVersion",
+                    "endpointEvidence",
+                    "providerAnalytics",
+                    "certificationEvidence",
+                    "operatorEvidencePacket",
+                    "secretHandling",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    generatedAt: { type: "string", format: "date-time" },
+                    selectedSiteId: { type: "string" },
+                    site: { type: "object", additionalProperties: true },
+                    source: { const: "admin-order-analytics-api" },
+                    operatorGate: {
+                      const:
+                        "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification",
+                    },
+                    analyticsSchemaVersion: {
+                      const: "backy.order-analytics.v1",
+                    },
+                    endpointEvidence: {
+                      type: "object",
+                      required: [
+                        "analytics",
+                        "quote",
+                        "shippingLabel",
+                        "fulfillment",
+                        "tracking",
+                        "providerRefund",
+                        "commerceWebhook",
+                        "siteReconciliation",
+                        "platformReconciliation",
+                        "reconciliationReadiness",
+                        "checkoutIntake",
+                      ],
+                      additionalProperties: true,
+                      properties: {
+                        analytics: { type: "string" },
+                        quote: { type: "string" },
+                        shippingLabel: { type: "string" },
+                        fulfillment: { type: "string" },
+                        tracking: { type: "string" },
+                        providerRefund: { type: "string" },
+                        commerceWebhook: { type: "string" },
+                        siteReconciliation: { type: "string" },
+                        platformReconciliation: { type: "string" },
+                        reconciliationReadiness: { type: "string" },
+                        checkoutIntake: { type: "string" },
+                      },
+                    },
+                    providerAnalytics: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    certificationEvidence: {
+                      $ref:
+                        "#/components/schemas/CommerceOrderProviderCertificationEvidence",
+                    },
+                    operatorEvidencePacket: {
+                      $ref:
+                        "#/components/schemas/CommerceOrderProviderCertificationEvidencePacket",
+                    },
+                    secretHandling: { type: "string" },
+                  },
+                },
+              ],
+            },
+            CommerceOrderAnalytics: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "generatedAt",
+                "recordLimit",
+                "orderCount",
+                "revenue",
+                "payment",
+                "fulfillment",
+                "operations",
+                "providerOperations",
+                "sources",
+                "currencies",
+                "trend",
+                "recentOrders",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.order-analytics.v1" },
+                generatedAt: { type: "string", format: "date-time" },
+                recordLimit: { type: "integer", minimum: 0 },
+                orderCount: { type: "integer", minimum: 0 },
+                revenue: {
+                  type: "object",
+                  required: [
+                    "grossTotal",
+                    "paidTotal",
+                    "pendingTotal",
+                    "failedTotal",
+                    "refundedTotal",
+                    "refundAmountTotal",
+                    "taxTotal",
+                    "shippingTotal",
+                    "discountTotal",
+                    "averageOrderValue",
+                    "paidAverageOrderValue",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    grossTotal: { type: "number" },
+                    paidTotal: { type: "number" },
+                    pendingTotal: { type: "number" },
+                    failedTotal: { type: "number" },
+                    refundedTotal: { type: "number" },
+                    refundAmountTotal: { type: "number" },
+                    taxTotal: { type: "number" },
+                    shippingTotal: { type: "number" },
+                    discountTotal: { type: "number" },
+                    averageOrderValue: { type: "number" },
+                    paidAverageOrderValue: { type: "number" },
+                  },
+                },
+                payment: {
+                  type: "object",
+                  required: ["pending", "paid", "failed", "refunded"],
+                  additionalProperties: true,
+                  properties: {
+                    pending: {
+                      type: "object",
+                      required: ["count", "total"],
+                      additionalProperties: true,
+                      properties: {
+                        count: { type: "integer", minimum: 0 },
+                        total: { type: "number" },
+                      },
+                    },
+                    paid: {
+                      type: "object",
+                      required: ["count", "total"],
+                      additionalProperties: true,
+                      properties: {
+                        count: { type: "integer", minimum: 0 },
+                        total: { type: "number" },
+                      },
+                    },
+                    failed: {
+                      type: "object",
+                      required: ["count", "total"],
+                      additionalProperties: true,
+                      properties: {
+                        count: { type: "integer", minimum: 0 },
+                        total: { type: "number" },
+                      },
+                    },
+                    refunded: {
+                      type: "object",
+                      required: ["count", "total"],
+                      additionalProperties: true,
+                      properties: {
+                        count: { type: "integer", minimum: 0 },
+                        total: { type: "number" },
+                      },
+                    },
+                  },
+                },
+                fulfillment: {
+                  type: "object",
+                  required: [
+                    "unfulfilled",
+                    "processing",
+                    "fulfilled",
+                    "cancelled",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    unfulfilled: {
+                      type: "object",
+                      required: ["count", "total"],
+                      additionalProperties: true,
+                      properties: {
+                        count: { type: "integer", minimum: 0 },
+                        total: { type: "number" },
+                      },
+                    },
+                    processing: {
+                      type: "object",
+                      required: ["count", "total"],
+                      additionalProperties: true,
+                      properties: {
+                        count: { type: "integer", minimum: 0 },
+                        total: { type: "number" },
+                      },
+                    },
+                    fulfilled: {
+                      type: "object",
+                      required: ["count", "total"],
+                      additionalProperties: true,
+                      properties: {
+                        count: { type: "integer", minimum: 0 },
+                        total: { type: "number" },
+                      },
+                    },
+                    cancelled: {
+                      type: "object",
+                      required: ["count", "total"],
+                      additionalProperties: true,
+                      properties: {
+                        count: { type: "integer", minimum: 0 },
+                        total: { type: "number" },
+                      },
+                    },
+                  },
+                },
+                operations: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                providerOperations: {
+                  type: "object",
+                  required: [
+                    "paymentProviders",
+                    "refundProviders",
+                    "fulfillmentProviders",
+                    "shippingLabelProviders",
+                    "attention",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    paymentProviders: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    refundProviders: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    fulfillmentProviders: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    shippingLabelProviders: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
+                    attention: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                  },
+                },
+                sources: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["source", "count", "total"],
+                    additionalProperties: true,
+                    properties: {
+                      source: { type: "string" },
+                      count: { type: "integer", minimum: 0 },
+                      total: { type: "number" },
+                    },
+                  },
+                },
+                currencies: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["currency", "count", "total"],
+                    additionalProperties: true,
+                    properties: {
+                      currency: { type: "string" },
+                      count: { type: "integer", minimum: 0 },
+                      total: { type: "number" },
+                    },
+                  },
+                },
+                trend: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["date", "orders", "paid", "grossTotal", "paidTotal"],
+                    additionalProperties: true,
+                    properties: {
+                      date: { type: "string" },
+                      orders: { type: "integer", minimum: 0 },
+                      paid: { type: "integer", minimum: 0 },
+                      grossTotal: { type: "number" },
+                      paidTotal: { type: "number" },
+                    },
+                  },
+                },
+                recentOrders: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "id",
+                      "slug",
+                      "status",
+                      "orderNumber",
+                      "customerName",
+                      "total",
+                      "currency",
+                      "paymentStatus",
+                      "fulfillmentStatus",
+                      "orderSource",
+                      "subscriptionReference",
+                      "updatedAt",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      id: { type: "string" },
+                      slug: { type: "string" },
+                      status: { type: "string" },
+                      orderNumber: { type: "string" },
+                      customerName: { type: "string" },
+                      total: { type: "number" },
+                      currency: { type: "string" },
+                      paymentStatus: {
+                        enum: ["pending", "paid", "failed", "refunded"],
+                      },
+                      fulfillmentStatus: {
+                        enum: [
+                          "unfulfilled",
+                          "processing",
+                          "fulfilled",
+                          "cancelled",
+                        ],
+                      },
+                      orderSource: { type: "string" },
+                      subscriptionReference: { type: "string" },
+                      updatedAt: { type: ["string", "null"] },
+                    },
+                  },
+                },
+              },
+            },
+            CommerceOrderAnalyticsEnvelope: envelopeSchema({
+              type: "object",
+              required: [
+                "site",
+                "collection",
+                "analytics",
+                "providerCertification",
+              ],
+              additionalProperties: true,
+              properties: {
+                site: {
+                  type: "object",
+                  required: ["id"],
+                  additionalProperties: true,
+                  properties: {
+                    id: { type: "string" },
+                    slug: { type: "string" },
+                    name: { type: "string" },
+                  },
+                },
+                collection: {
+                  type: "object",
+                  required: ["id"],
+                  additionalProperties: true,
+                  properties: {
+                    id: { type: "string" },
+                    slug: { type: "string" },
+                    name: { type: "string" },
+                  },
+                },
+                analytics: {
+                  $ref: "#/components/schemas/CommerceOrderAnalytics",
+                },
+                providerCertification: {
+                  $ref:
+                    "#/components/schemas/CommerceOrderAnalyticsProviderCertification",
+                },
+              },
+            }),
+            CommerceOrderQuote: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "subtotal",
+                "discountAmount",
+                "taxAmount",
+                "shippingAmount",
+                "total",
+                "currency",
+                "discountCode",
+                "discountRate",
+                "taxLines",
+                "shippingLines",
+                "discountLines",
+                "providerAdjustments",
+                "pricing",
+                "calculatedAt",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: { const: "backy.order-quote.v1" },
+                subtotal: { type: "number" },
+                discountAmount: { type: "number" },
+                taxAmount: { type: "number" },
+                shippingAmount: { type: "number" },
+                total: { type: "number" },
+                currency: { type: "string" },
+                discountCode: { type: "string" },
+                discountRate: { type: "number" },
+                taxLines: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                shippingLines: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                discountLines: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                providerAdjustments: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: ["kind", "provider", "status"],
+                    additionalProperties: true,
+                    properties: {
+                      kind: { enum: ["tax", "shipping", "discount"] },
+                      provider: {
+                        enum: [
+                          "http",
+                          "stripe",
+                          "taxjar",
+                          "avalara",
+                          "easypost",
+                          "shippo",
+                        ],
+                      },
+                      status: { enum: ["succeeded", "failed", "skipped"] },
+                      url: { type: "string" },
+                      amount: { type: "number" },
+                      lines: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          additionalProperties: true,
+                        },
+                      },
+                      error: { type: "string" },
+                      statusCode: { type: "integer" },
+                      reference: { type: "string" },
+                    },
+                  },
+                },
+                pricing: { type: "object", additionalProperties: true },
+                calculatedAt: { type: "string", format: "date-time" },
+              },
+            },
+            CommerceOrderTracking: {
+              type: "object",
+              required: [
+                "status",
+                "provider",
+                "trackingNumber",
+                "trackingUrl",
+                "checkedAt",
+              ],
+              additionalProperties: true,
+              properties: {
+                status: { type: "string" },
+                provider: { type: "string" },
+                trackingNumber: { type: "string" },
+                trackingUrl: { type: "string" },
+                checkedAt: { type: "string", format: "date-time" },
+                providerPayload: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+            CommerceOrderFulfillment: {
+              type: "object",
+              required: [
+                "id",
+                "status",
+                "provider",
+                "orderNumber",
+                "requestedAt",
+                "completedAt",
+                "providerPayload",
+              ],
+              additionalProperties: true,
+              properties: {
+                id: { type: "string" },
+                status: {
+                  enum: [
+                    "requested",
+                    "succeeded",
+                    "failed",
+                    "requires_action",
+                  ],
+                },
+                provider: { type: "string" },
+                orderNumber: { type: "string" },
+                requestedAt: { type: "string", format: "date-time" },
+                completedAt: { type: ["string", "null"], format: "date-time" },
+                providerPayload: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+            CommerceOrderShippingLabel: {
+              type: "object",
+              required: [
+                "id",
+                "status",
+                "provider",
+                "serviceLevel",
+                "url",
+                "cost",
+                "createdAt",
+              ],
+              additionalProperties: true,
+              properties: {
+                id: { type: "string" },
+                status: { enum: ["draft", "purchased", "voided"] },
+                provider: { type: "string" },
+                serviceLevel: { type: "string" },
+                url: { type: "string" },
+                cost: { type: "number" },
+                createdAt: { type: "string", format: "date-time" },
+                providerPayload: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+            CommerceOrderProviderRefund: {
+              type: "object",
+              required: [
+                "id",
+                "status",
+                "provider",
+                "reference",
+                "amount",
+                "currency",
+                "reason",
+                "requestedAt",
+                "completedAt",
+                "providerPayload",
+              ],
+              additionalProperties: true,
+              properties: {
+                id: { type: "string" },
+                status: {
+                  enum: [
+                    "requested",
+                    "succeeded",
+                    "failed",
+                    "requires_action",
+                  ],
+                },
+                provider: { type: "string" },
+                reference: { type: "string" },
+                amount: { type: "number" },
+                currency: { type: "string" },
+                reason: { type: "string" },
+                requestedAt: { type: "string", format: "date-time" },
+                completedAt: { type: ["string", "null"], format: "date-time" },
+                providerPayload: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+            CommerceOrderQuoteEnvelope: envelopeSchema({
+              type: "object",
+              required: ["record", "quote"],
+              additionalProperties: true,
+              properties: {
+                record: { $ref: "#/components/schemas/CollectionRecord" },
+                order: { $ref: "#/components/schemas/CollectionRecord" },
+                quote: { $ref: "#/components/schemas/CommerceOrderQuote" },
+                cacheInvalidation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            }),
+            CommerceOrderTrackingEnvelope: envelopeSchema({
+              type: "object",
+              required: ["record", "tracking"],
+              additionalProperties: true,
+              properties: {
+                record: { $ref: "#/components/schemas/CollectionRecord" },
+                order: { $ref: "#/components/schemas/CollectionRecord" },
+                tracking: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/CommerceOrderTracking" },
+                    { type: "null" },
+                  ],
+                },
+                cacheInvalidation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            }),
+            CommerceOrderFulfillmentEnvelope: envelopeSchema({
+              type: "object",
+              required: ["record", "fulfillment"],
+              additionalProperties: true,
+              properties: {
+                record: { $ref: "#/components/schemas/CollectionRecord" },
+                order: { $ref: "#/components/schemas/CollectionRecord" },
+                fulfillment: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/CommerceOrderFulfillment" },
+                    { type: "null" },
+                  ],
+                },
+                cacheInvalidation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            }),
+            CommerceOrderShippingLabelEnvelope: envelopeSchema({
+              type: "object",
+              required: ["record", "label"],
+              additionalProperties: true,
+              properties: {
+                record: { $ref: "#/components/schemas/CollectionRecord" },
+                order: { $ref: "#/components/schemas/CollectionRecord" },
+                label: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/CommerceOrderShippingLabel" },
+                    { type: "null" },
+                  ],
+                },
+                cacheInvalidation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            }),
+            CommerceOrderProviderRefundEnvelope: envelopeSchema({
+              type: "object",
+              required: ["record", "refund"],
+              additionalProperties: true,
+              properties: {
+                record: { $ref: "#/components/schemas/CollectionRecord" },
+                order: { $ref: "#/components/schemas/CollectionRecord" },
+                refund: {
+                  oneOf: [
+                    { $ref: "#/components/schemas/CommerceOrderProviderRefund" },
+                    { type: "null" },
+                  ],
+                },
+                cacheInvalidation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            }),
             CommerceProviderCertification: {
               type: "object",
               required: [
@@ -8672,6 +14236,54 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 responseContracts: {
                   type: "object",
+                  required: [
+                    "orderAnalytics",
+                    "orderStatusHandoff",
+                    "orderQuote",
+                    "orderTracking",
+                    "orderFulfillment",
+                    "orderShippingLabel",
+                    "orderProviderRefund",
+                    "productProviderSync",
+                    "productStorefrontHandoff",
+                    "productSubscriptions",
+                    "productSubscriptionAction",
+                    "providerCertification",
+                  ],
+                  properties: {
+                    orderAnalytics: {
+                      const: "backy.order-analytics.v1",
+                    },
+                    orderStatusHandoff: {
+                      const: "backy.order-status-handoff.v1",
+                    },
+                    orderQuote: { const: "backy.order-quote.v1" },
+                    orderTracking: { const: "backy.tracking.v1" },
+                    orderFulfillment: {
+                      const: "backy.fulfillment-dispatch.v1",
+                    },
+                    orderShippingLabel: {
+                      const: "backy.shipping-label.v1",
+                    },
+                    orderProviderRefund: {
+                      const: "backy.provider-refund.v1",
+                    },
+                    productProviderSync: {
+                      const: "backy.commerce-product-sync.v1",
+                    },
+                    productStorefrontHandoff: {
+                      const: "backy.product-storefront-handoff.v1",
+                    },
+                    productSubscriptions: {
+                      const: "backy.product-subscription-lifecycle.v1",
+                    },
+                    productSubscriptionAction: {
+                      const: "backy.product-subscription-action.v1",
+                    },
+                    providerCertification: {
+                      const: "backy.commerce-provider-certification-handoff.v1",
+                    },
+                  },
                   additionalProperties: true,
                 },
                 privacy: {
@@ -8680,6 +14292,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     "productCatalogCanBePublic",
                     "ordersRemainPrivate",
                     "orderStatusHandoffMasksCustomerContact",
+                    "productStorefrontHandoffExcludesPrivateData",
                     "providerOperationPayloadsMayContainCustomerData",
                     "providerSecretsNeverReturned",
                     "rawProviderResponsesStayPrivate",
@@ -8688,6 +14301,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     productCatalogCanBePublic: { const: true },
                     ordersRemainPrivate: { const: true },
                     orderStatusHandoffMasksCustomerContact: { const: true },
+                    productStorefrontHandoffExcludesPrivateData: {
+                      const: true,
+                    },
                     providerOperationPayloadsMayContainCustomerData: {
                       const: true,
                     },
@@ -8965,6 +14581,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "checkoutSession",
                 "quote",
                 "lineItems",
+                "statusHandoff",
+                "statusAccess",
               ],
               properties: {
                 schemaVersion: {
@@ -9025,6 +14643,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 lineItems: {
                   type: "array",
                   items: { type: "object", additionalProperties: true },
+                },
+                statusHandoff: {
+                  $ref: "#/components/schemas/CommerceOrderStatusHandoff",
+                },
+                statusAccess: {
+                  $ref: "#/components/schemas/CommerceOrderStatusAccess",
                 },
               },
             }),

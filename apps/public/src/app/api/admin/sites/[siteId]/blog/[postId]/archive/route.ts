@@ -68,6 +68,10 @@ const adminPostFromRepositoryPost = (post: BackyPost) => {
         typeof post.content.metadata?.customCSS === "string"
           ? post.content.metadata.customCSS
           : undefined,
+      customJS:
+        typeof post.content.metadata?.customJS === "string"
+          ? post.content.metadata.customJS
+          : undefined,
       contentDocument: post.content,
     },
   };
@@ -191,6 +195,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         targetId: currentPost.id,
         snapshot: postRevisionSnapshot(currentPost),
         note: "Before archive",
+        operation: "archive",
         createdBy: request.headers.get("x-backy-actor") || "admin",
       });
       const archived = await repositories.posts.archive(site.id, postId);

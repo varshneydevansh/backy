@@ -31,7 +31,10 @@ import { requireAdminAccess } from "@/lib/adminAccess";
 import { requireCommerceCollectionAccess } from "@/lib/adminCommerceCollectionAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
-import { seedCollectionRecordInputFromFrontendDesignTemplate } from "@/lib/frontendDesignContract";
+import {
+  normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope,
+  seedCollectionRecordInputFromFrontendDesignTemplate,
+} from "@/lib/frontendDesignContract";
 import {
   normalizeCollectionRecordMediaValues,
   validateRepositoryCollectionRecordValues,
@@ -40,6 +43,7 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import { syncRepositoryCollectionRecordMediaReferences } from "@/lib/repositoryMediaReferenceSync";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
 export const runtime = "nodejs";
@@ -574,7 +578,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!seeded.ok) {
         return errorResponse(400, seeded.code, seeded.message, requestId);
       }
-      const body = seeded.body;
+      const body = normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope(
+        seeded.body,
+      );
       const values = normalizeCollectionRecordMediaValues(
         collection,
         toRecord(body.values),
@@ -660,6 +666,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           values: toJsonRecord(values),
         })
       ).item;
+      await syncRepositoryCollectionRecordMediaReferences({
+        mediaRepository: repositories.media,
+        siteId: site.id,
+        collectionId: collection.id,
+        recordId: record.id,
+        values: record.values,
+      });
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
         {
@@ -733,7 +746,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!seeded.ok) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
-    const body = seeded.body;
+    const body = normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope(
+      seeded.body,
+    );
     const values = normalizeCollectionRecordMediaValues(
       collection as unknown as BackyCollection,
       toRecord(body.values),

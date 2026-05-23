@@ -46,6 +46,9 @@ const BORDER_STYLE_OPTIONS = ['', 'solid', 'dashed', 'dotted', 'double', 'none']
 const TEXT_ALIGN_OPTIONS = ['', 'left', 'center', 'right', 'justify'] as const;
 const TEXT_TRANSFORM_OPTIONS = ['', 'none', 'uppercase', 'lowercase', 'capitalize'] as const;
 const TEXT_DECORATION_OPTIONS = ['', 'none', 'underline', 'line-through', 'overline'] as const;
+const ANIMATION_TYPE_OPTIONS = ['', 'fadeIn', 'slideIn', 'scaleIn', 'bounce', 'rotate', 'custom'] as const;
+const ANIMATION_TRIGGER_OPTIONS = ['', 'load', 'scroll', 'hover'] as const;
+const ANIMATION_DIRECTION_OPTIONS = ['', 'left', 'right', 'up', 'down'] as const;
 type ImageObjectFit = typeof IMAGE_OBJECT_FIT_OPTIONS[number];
 type IframeLoadingOption = typeof IFRAME_LOADING_OPTIONS[number];
 type FormInputTypeOption = typeof FORM_INPUT_TYPE_OPTIONS[number];
@@ -53,9 +56,14 @@ type BorderStyleOption = typeof BORDER_STYLE_OPTIONS[number];
 type TextAlignOption = typeof TEXT_ALIGN_OPTIONS[number];
 type TextTransformOption = typeof TEXT_TRANSFORM_OPTIONS[number];
 type TextDecorationOption = typeof TEXT_DECORATION_OPTIONS[number];
+type AnimationTypeOption = typeof ANIMATION_TYPE_OPTIONS[number];
+type AnimationTriggerOption = typeof ANIMATION_TRIGGER_OPTIONS[number];
+type AnimationDirectionOption = typeof ANIMATION_DIRECTION_OPTIONS[number];
 type InlineMediaFields = {
   src: string;
+  mediaId: string;
   poster: string;
+  posterMediaId: string;
   title: string;
   address: string;
   markerLabel: string;
@@ -118,6 +126,26 @@ type InlineLayoutFields = {
   rotation: string;
   visible: boolean;
   locked: boolean;
+};
+type InlineAnimationFields = {
+  type: AnimationTypeOption;
+  trigger: AnimationTriggerOption;
+  direction: AnimationDirectionOption;
+  duration: string;
+  delay: string;
+  easing: string;
+  scrollStart: string;
+  scrollEnd: string;
+  scrollScrub: boolean;
+  from: string;
+  to: string;
+  durationToken: string;
+  easingToken: string;
+};
+type InlineActionsBindingsFields = {
+  actions: string;
+  dataBindings: string;
+  bindingSlots: string;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -203,7 +231,7 @@ const contentElementTargets = (content: Record<string, unknown> | undefined): Ma
           type: typeof item.type === 'string' ? item.type : 'element',
           label: contentElementLabel(item),
           source: 'content',
-          visible: item.visible !== false,
+          visible: booleanValue(item.visible, true),
         });
       }
       if (Array.isArray(item.children)) {
@@ -288,6 +316,22 @@ const inlineHrefFromElement = (element: Record<string, unknown> | null): string 
   return typeof props.href === 'string' ? props.href : '';
 };
 
+const inlineDownloadFromElement = (element: Record<string, unknown> | null): boolean => {
+  const props = elementProps(element);
+  return booleanProp(props, 'download');
+};
+
+const inlineDownloadMediaIdFromElement = (element: Record<string, unknown> | null): string => {
+  const props = elementProps(element);
+  return stringProp(props, 'fileMediaId')
+    || stringProp(props, 'fileId')
+    || stringProp(props, 'downloadMediaId')
+    || firstStringFromListProp(props, 'fileIds')
+    || firstStringFromListProp(props, 'fileMediaIds')
+    || firstStringFromListProp(props, 'downloadMediaIds')
+    || mediaIdFromUrl(inlineHrefFromElement(element));
+};
+
 const inlineTargetBlankFromElement = (element: Record<string, unknown> | null): boolean => {
   const props = elementProps(element);
   return props.target === '_blank';
@@ -295,6 +339,77 @@ const inlineTargetBlankFromElement = (element: Record<string, unknown> | null): 
 
 const stringProp = (props: Record<string, unknown>, key: string): string => (
   typeof props[key] === 'string' ? props[key] : ''
+);
+
+const firstStringFromListProp = (props: Record<string, unknown>, key: string): string => {
+  const value = props[key];
+  if (Array.isArray(value)) {
+    return value.find((item) => typeof item === 'string' && item.trim().length > 0)?.trim() || '';
+  }
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const mediaIdFromUrl = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const match = trimmed.match(/\/api\/(?:admin\/)?sites\/[^/?#]+\/media\/([^/?#]+)/);
+  return match?.[1] ? decodeURIComponent(match[1]) : '';
+};
+
+const publicMediaFileUrl = (siteId: string | undefined, mediaId: string, disposition?: 'attachment'): string => {
+  const trimmedSiteId = siteId?.trim();
+  const trimmedMediaId = mediaId.trim();
+  return trimmedSiteId && trimmedMediaId
+    ? `/api/sites/${encodeURIComponent(trimmedSiteId)}/media/${encodeURIComponent(trimmedMediaId)}/file${disposition ? '?disposition=attachment' : ''}`
+    : '';
+};
+
+const emptyDownloadFileMetadata = () => ({
+  fileMediaName: '',
+  fileMediaType: '',
+  fileMediaVisibility: '',
+  fileName: '',
+  fileSignedUrlRequired: false,
+  fileSignedUrlEndpoint: '',
+});
+
+const downloadFileMetadataFromElement = (
+  element: Record<string, unknown> | null,
+  mediaId: string,
+) => {
+  const props = elementProps(element);
+  const existingMediaId = inlineDownloadMediaIdFromElement(element);
+  if (!mediaId || existingMediaId !== mediaId) {
+    return emptyDownloadFileMetadata();
+  }
+
+  const fileMediaVisibility = stringProp(props, 'fileMediaVisibility');
+  return {
+    fileMediaName: stringProp(props, 'fileMediaName'),
+    fileMediaType: stringProp(props, 'fileMediaType'),
+    fileMediaVisibility,
+    fileName: stringProp(props, 'fileName'),
+    fileSignedUrlRequired: booleanProp(props, 'fileSignedUrlRequired') || fileMediaVisibility === 'private',
+    fileSignedUrlEndpoint: stringProp(props, 'fileSignedUrlEndpoint'),
+  };
+};
+
+const mediaAssetIds = (...values: string[]): string[] => (
+  Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
+);
+
+const mediaIdsFromProps = (props: Record<string, unknown>, keys: string[]): string[] => (
+  mediaAssetIds(...keys.flatMap((key) => {
+    const value = props[key];
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === 'string');
+    }
+    return typeof value === 'string' ? [value] : [];
+  }))
+);
+
+const removeUndefined = (patch: Record<string, unknown>): Record<string, unknown> => (
+  Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined))
 );
 
 const lengthProp = (props: Record<string, unknown>, key: string): string => {
@@ -320,8 +435,10 @@ const hexColorInputValue = (value: string): string => (
 const imageFieldsFromElement = (element: Record<string, unknown> | null) => {
   const props = elementProps(element);
   const objectFit = stringProp(props, 'objectFit');
+  const src = stringProp(props, 'src');
   return {
-    src: stringProp(props, 'src'),
+    src,
+    mediaId: stringProp(props, 'mediaId') || firstStringFromListProp(props, 'mediaIds') || mediaIdFromUrl(src),
     alt: stringProp(props, 'alt'),
     title: stringProp(props, 'title'),
     objectFit: IMAGE_OBJECT_FIT_OPTIONS.includes(objectFit as ImageObjectFit)
@@ -338,17 +455,42 @@ const stringOrListProp = (props: Record<string, unknown>, key: string): string =
   return typeof value === 'string' ? value : '';
 };
 
-const booleanProp = (props: Record<string, unknown>, key: string, fallback = false): boolean => {
-  const value = props[key];
-  return typeof value === 'boolean' ? value : fallback;
+const booleanValue = (value: unknown, fallback = false): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return fallback;
 };
+
+const booleanProp = (props: Record<string, unknown>, key: string, fallback = false): boolean => (
+  booleanValue(props[key], fallback)
+);
 
 const mediaFieldsFromElement = (element: Record<string, unknown> | null): InlineMediaFields => {
   const props = elementProps(element);
   const loading = stringProp(props, 'loading');
+  const src = stringProp(props, 'src') || stringProp(props, 'url');
+  const poster = stringProp(props, 'poster');
   return {
-    src: stringProp(props, 'src') || stringProp(props, 'url'),
-    poster: stringProp(props, 'poster'),
+    src,
+    mediaId: stringProp(props, 'mediaId') || firstStringFromListProp(props, 'mediaIds') || mediaIdFromUrl(src),
+    poster,
+    posterMediaId: stringProp(props, 'posterMediaId') || firstStringFromListProp(props, 'posterMediaIds') || mediaIdFromUrl(poster),
     title: stringProp(props, 'title'),
     address: stringProp(props, 'address'),
     markerLabel: stringProp(props, 'markerLabel'),
@@ -444,8 +586,68 @@ const layoutFieldsFromElement = (element: Record<string, unknown> | null): Inlin
   height: numberField(element, 'height'),
   zIndex: numberField(element, 'zIndex'),
   rotation: numberField(element, 'rotation'),
-  visible: element?.visible !== false,
-  locked: element?.locked === true,
+  visible: booleanValue(element?.visible, true),
+  locked: booleanValue(element?.locked),
+});
+
+const animationRecordFromElement = (element: Record<string, unknown> | null): Record<string, unknown> => (
+  isRecord(element?.animation) ? element.animation : {}
+);
+
+const animationJsonField = (value: unknown): string => {
+  if (!isRecord(value)) return '';
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return '';
+  }
+};
+
+const jsonArrayFieldFromElement = (element: Record<string, unknown> | null, key: string): string => {
+  const value = element?.[key];
+  if (!Array.isArray(value)) return '';
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return '';
+  }
+};
+
+const animationFieldsFromElement = (element: Record<string, unknown> | null): InlineAnimationFields => {
+  const animation = animationRecordFromElement(element);
+  const type = typeof animation.type === 'string' && ANIMATION_TYPE_OPTIONS.includes(animation.type as AnimationTypeOption)
+    ? animation.type as AnimationTypeOption
+    : '';
+  const trigger = typeof animation.trigger === 'string' && ANIMATION_TRIGGER_OPTIONS.includes(animation.trigger as AnimationTriggerOption)
+    ? animation.trigger as AnimationTriggerOption
+    : '';
+  const direction = typeof animation.direction === 'string' && ANIMATION_DIRECTION_OPTIONS.includes(animation.direction as AnimationDirectionOption)
+    ? animation.direction as AnimationDirectionOption
+    : '';
+  const scrollTrigger = isRecord(animation.scrollTrigger) ? animation.scrollTrigger : {};
+  const tokenRefs = isRecord(animation.tokenRefs) ? animation.tokenRefs : {};
+
+  return {
+    type,
+    trigger,
+    direction,
+    duration: typeof animation.duration === 'number' && Number.isFinite(animation.duration) ? `${animation.duration}` : '',
+    delay: typeof animation.delay === 'number' && Number.isFinite(animation.delay) ? `${animation.delay}` : '',
+    easing: typeof animation.easing === 'string' ? animation.easing : '',
+    scrollStart: typeof scrollTrigger.start === 'string' ? scrollTrigger.start : '',
+    scrollEnd: typeof scrollTrigger.end === 'string' ? scrollTrigger.end : '',
+    scrollScrub: scrollTrigger.scrub === true,
+    from: animationJsonField(animation.from),
+    to: animationJsonField(animation.to),
+    durationToken: typeof tokenRefs.duration === 'string' ? tokenRefs.duration : '',
+    easingToken: typeof tokenRefs.easing === 'string' ? tokenRefs.easing : '',
+  };
+};
+
+const actionsBindingsFieldsFromElement = (element: Record<string, unknown> | null): InlineActionsBindingsFields => ({
+  actions: jsonArrayFieldFromElement(element, 'actions'),
+  dataBindings: jsonArrayFieldFromElement(element, 'dataBindings'),
+  bindingSlots: jsonArrayFieldFromElement(element, 'bindingSlots'),
 });
 
 const updateElementProps = (
@@ -468,6 +670,53 @@ const updateElementProps = (
           ...(isRecord(item.props) ? item.props : {}),
           ...patch,
         };
+        changed = true;
+      }
+      if (Array.isArray(item.children)) {
+        visit(item.children);
+      }
+    });
+  };
+
+  if (Array.isArray(nextContent.elements)) {
+    visit(nextContent.elements);
+  }
+  if (isRecord(nextContent.contentDocument) && Array.isArray(nextContent.contentDocument.elements)) {
+    visit(nextContent.contentDocument.elements);
+  }
+
+  return changed ? nextContent : null;
+};
+
+const updateElementPropsWithAssetIds = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  patch: Record<string, unknown>,
+  assetIds: string[],
+  stalePropKeys: string[],
+): Record<string, unknown> | null => {
+  if (!content) {
+    return null;
+  }
+
+  const nextContent = JSON.parse(JSON.stringify(content)) as Record<string, unknown>;
+  let changed = false;
+  const mergedAssetIds = mediaAssetIds(...assetIds);
+
+  const visit = (items: unknown[]) => {
+    items.forEach((item) => {
+      if (!isRecord(item)) return;
+      if (item.id === elementId) {
+        const oldProps = isRecord(item.props) ? item.props : {};
+        const staleMediaIds = new Set(mediaIdsFromProps(oldProps, stalePropKeys));
+        item.props = {
+          ...oldProps,
+          ...removeUndefined(patch),
+        };
+        const existingAssetIds = Array.isArray(item.assetIds)
+          ? item.assetIds.filter((assetId) => typeof assetId === 'string' && assetId.trim().length > 0 && !staleMediaIds.has(assetId.trim()))
+          : [];
+        item.assetIds = mediaAssetIds(...existingAssetIds, ...mergedAssetIds);
         changed = true;
       }
       if (Array.isArray(item.children)) {
@@ -548,51 +797,98 @@ const updateElementText = (
 const updateElementLink = (
   content: Record<string, unknown> | undefined,
   elementId: string,
+  siteId: string | undefined,
   href: string,
   targetBlank: boolean,
-): Record<string, unknown> | null => updateElementProps(content, elementId, {
-  href,
-  target: targetBlank ? '_blank' : '_self',
-  rel: targetBlank ? 'noopener noreferrer' : '',
-});
+  download: boolean,
+  downloadMediaId: string,
+): Record<string, unknown> | null => {
+  const mediaId = downloadMediaId.trim() || mediaIdFromUrl(href);
+  const downloadHref = download && mediaId ? publicMediaFileUrl(siteId, mediaId, 'attachment') : '';
+  const nextHref = href.trim() || downloadHref;
+  const downloadFileMetadata = download
+    ? downloadFileMetadataFromElement(elementFromContent(content, elementId), mediaId)
+    : emptyDownloadFileMetadata();
+  const signedUrlEndpoint = siteId && mediaId
+    ? downloadFileMetadata.fileSignedUrlEndpoint || `/api/admin/sites/${encodeURIComponent(siteId)}/media/${encodeURIComponent(mediaId)}/signed-url`
+    : '';
+
+  return updateElementPropsWithAssetIds(content, elementId, {
+    href: nextHref,
+    target: targetBlank ? '_blank' : '_self',
+    rel: targetBlank ? 'noopener noreferrer' : '',
+    download,
+    fileId: download && mediaId ? mediaId : '',
+    fileIds: download && mediaId ? [mediaId] : [],
+    fileMediaId: download && mediaId ? mediaId : '',
+    fileMediaIds: download && mediaId ? [mediaId] : [],
+    downloadMediaId: download && mediaId ? mediaId : '',
+    downloadMediaIds: download && mediaId ? [mediaId] : [],
+    fileMediaUrl: download && nextHref ? nextHref : '',
+    fileUrl: download && nextHref ? nextHref : '',
+    fileMediaName: download ? downloadFileMetadata.fileMediaName : '',
+    fileMediaType: download ? downloadFileMetadata.fileMediaType : '',
+    fileMediaVisibility: download ? downloadFileMetadata.fileMediaVisibility : '',
+    fileDownloadDisposition: download ? 'attachment' : '',
+    fileSignedUrlRequired: download && mediaId ? downloadFileMetadata.fileSignedUrlRequired : false,
+    fileSignedUrlEndpoint: download && signedUrlEndpoint ? signedUrlEndpoint : '',
+    fileName: download ? downloadFileMetadata.fileName : '',
+  }, download && mediaId ? [mediaId] : [], ['fileId', 'fileIds', 'fileMediaId', 'fileMediaIds', 'downloadMediaId', 'downloadMediaIds']);
+};
 
 const updateElementImage = (
   content: Record<string, unknown> | undefined,
   elementId: string,
+  siteId: string | undefined,
   input: {
     src: string;
+    mediaId: string;
     alt: string;
     title: string;
     objectFit: ImageObjectFit;
   },
-): Record<string, unknown> | null => updateElementProps(content, elementId, {
-  src: input.src,
-  alt: input.alt,
-  title: input.title,
-  objectFit: input.objectFit,
-});
+): Record<string, unknown> | null => {
+  const mediaId = input.mediaId.trim() || mediaIdFromUrl(input.src);
+  const src = input.src.trim() || publicMediaFileUrl(siteId, mediaId);
+  return updateElementPropsWithAssetIds(content, elementId, {
+    src,
+    mediaId: mediaId || '',
+    mediaIds: mediaId ? [mediaId] : [],
+    alt: input.alt,
+    title: input.title,
+    objectFit: input.objectFit,
+  }, mediaId ? [mediaId] : [], ['mediaId', 'mediaIds']);
+};
 
 const updateElementMedia = (
   content: Record<string, unknown> | undefined,
   elementId: string,
   elementType: string,
+  siteId: string | undefined,
   input: InlineMediaFields,
 ): Record<string, unknown> | null => {
-  const src = input.src.trim();
+  const mediaId = input.mediaId.trim() || mediaIdFromUrl(input.src);
+  const posterMediaId = input.posterMediaId.trim() || mediaIdFromUrl(input.poster);
+  const src = input.src.trim() || publicMediaFileUrl(siteId, mediaId);
+  const poster = input.poster.trim() || publicMediaFileUrl(siteId, posterMediaId);
   const title = input.title.trim();
   const loading = input.loading || undefined;
 
   if (elementType === 'video') {
-    return updateElementProps(content, elementId, {
+    return updateElementPropsWithAssetIds(content, elementId, {
       src,
-      poster: input.poster.trim(),
+      mediaId: mediaId || '',
+      mediaIds: mediaId ? [mediaId] : [],
+      poster,
+      posterMediaId: posterMediaId || '',
+      posterMediaIds: posterMediaId ? [posterMediaId] : [],
       title,
       controls: input.controls,
       autoplay: input.autoplay,
       muted: input.muted,
       loop: input.loop,
       playsInline: input.playsInline,
-    });
+    }, mediaAssetIds(mediaId, posterMediaId), ['mediaId', 'mediaIds', 'posterMediaId', 'posterMediaIds']);
   }
 
   if (elementType === 'embed') {
@@ -753,6 +1049,96 @@ const updateElementLayout = (
   return updateElementFields(content, elementId, patch);
 };
 
+const optionalJsonObjectField = (value: string, label: string): Record<string, unknown> | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!isRecord(parsed)) {
+      throw new Error(`${label} must be a JSON object.`);
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof Error && error.message.endsWith('must be a JSON object.')) {
+      throw error;
+    }
+    throw new Error(`${label} must be valid JSON.`);
+  }
+};
+
+const optionalJsonArrayField = (value: string, label: string): unknown[] | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${label} must be a JSON array.`);
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof Error && error.message.endsWith('must be a JSON array.')) {
+      throw error;
+    }
+    throw new Error(`${label} must be valid JSON.`);
+  }
+};
+
+const updateElementAnimation = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  input: InlineAnimationFields,
+): Record<string, unknown> | null => {
+  const type = input.type || 'fadeIn';
+  const duration = numericPatchValue(input.duration || '0.6', 'Duration', true);
+  if (duration !== undefined && duration < 0) {
+    throw new Error('Duration must be zero or greater.');
+  }
+  const delay = numericPatchValue(input.delay, 'Delay');
+  if (delay !== undefined && delay < 0) {
+    throw new Error('Delay must be zero or greater.');
+  }
+
+  const animation: Record<string, unknown> = {
+    type,
+    duration,
+  };
+  if (delay !== undefined) animation.delay = delay;
+  if (input.easing.trim()) animation.easing = input.easing.trim();
+  if (input.trigger) animation.trigger = input.trigger;
+  if (input.direction) animation.direction = input.direction;
+
+  const from = optionalJsonObjectField(input.from, 'Animation from');
+  const to = optionalJsonObjectField(input.to, 'Animation to');
+  if (from) animation.from = from;
+  if (to) animation.to = to;
+
+  if (input.scrollStart.trim() || input.scrollEnd.trim() || input.scrollScrub) {
+    animation.scrollTrigger = {
+      ...(input.scrollStart.trim() ? { start: input.scrollStart.trim() } : {}),
+      ...(input.scrollEnd.trim() ? { end: input.scrollEnd.trim() } : {}),
+      ...(input.scrollScrub ? { scrub: true } : {}),
+    };
+  }
+  if (input.durationToken.trim() || input.easingToken.trim()) {
+    animation.tokenRefs = {
+      ...(input.durationToken.trim() ? { duration: input.durationToken.trim() } : {}),
+      ...(input.easingToken.trim() ? { easing: input.easingToken.trim() } : {}),
+    };
+  }
+
+  return updateElementFields(content, elementId, { animation });
+};
+
+const updateElementActionsBindings = (
+  content: Record<string, unknown> | undefined,
+  elementId: string,
+  input: InlineActionsBindingsFields,
+): Record<string, unknown> | null => updateElementFields(content, elementId, {
+  actions: optionalJsonArrayField(input.actions, 'Actions'),
+  dataBindings: optionalJsonArrayField(input.dataBindings, 'Data bindings'),
+  bindingSlots: optionalJsonArrayField(input.bindingSlots, 'Binding slots'),
+});
+
 export function LivePageManagementOverlay({
   enabled,
   siteId,
@@ -777,14 +1163,19 @@ export function LivePageManagementOverlay({
   const [inlineTextSaving, setInlineTextSaving] = useState(false);
   const [inlineHref, setInlineHref] = useState('');
   const [inlineTargetBlank, setInlineTargetBlank] = useState(false);
+  const [inlineDownloadEnabled, setInlineDownloadEnabled] = useState(false);
+  const [inlineDownloadMediaId, setInlineDownloadMediaId] = useState('');
   const [inlineLinkSaving, setInlineLinkSaving] = useState(false);
   const [inlineImageSrc, setInlineImageSrc] = useState('');
+  const [inlineImageMediaId, setInlineImageMediaId] = useState('');
   const [inlineImageAlt, setInlineImageAlt] = useState('');
   const [inlineImageTitle, setInlineImageTitle] = useState('');
   const [inlineImageObjectFit, setInlineImageObjectFit] = useState<ImageObjectFit>('cover');
   const [inlineImageSaving, setInlineImageSaving] = useState(false);
   const [inlineMediaSrc, setInlineMediaSrc] = useState('');
+  const [inlineMediaId, setInlineMediaId] = useState('');
   const [inlineMediaPoster, setInlineMediaPoster] = useState('');
+  const [inlineMediaPosterMediaId, setInlineMediaPosterMediaId] = useState('');
   const [inlineMediaTitle, setInlineMediaTitle] = useState('');
   const [inlineMediaAddress, setInlineMediaAddress] = useState('');
   const [inlineMediaMarkerLabel, setInlineMediaMarkerLabel] = useState('');
@@ -845,6 +1236,24 @@ export function LivePageManagementOverlay({
   const [inlineLayoutVisible, setInlineLayoutVisible] = useState(true);
   const [inlineLayoutLocked, setInlineLayoutLocked] = useState(false);
   const [inlineLayoutSaving, setInlineLayoutSaving] = useState(false);
+  const [inlineAnimationType, setInlineAnimationType] = useState<AnimationTypeOption>('');
+  const [inlineAnimationTrigger, setInlineAnimationTrigger] = useState<AnimationTriggerOption>('');
+  const [inlineAnimationDirection, setInlineAnimationDirection] = useState<AnimationDirectionOption>('');
+  const [inlineAnimationDuration, setInlineAnimationDuration] = useState('');
+  const [inlineAnimationDelay, setInlineAnimationDelay] = useState('');
+  const [inlineAnimationEasing, setInlineAnimationEasing] = useState('');
+  const [inlineAnimationScrollStart, setInlineAnimationScrollStart] = useState('');
+  const [inlineAnimationScrollEnd, setInlineAnimationScrollEnd] = useState('');
+  const [inlineAnimationScrollScrub, setInlineAnimationScrollScrub] = useState(false);
+  const [inlineAnimationFrom, setInlineAnimationFrom] = useState('');
+  const [inlineAnimationTo, setInlineAnimationTo] = useState('');
+  const [inlineAnimationDurationToken, setInlineAnimationDurationToken] = useState('');
+  const [inlineAnimationEasingToken, setInlineAnimationEasingToken] = useState('');
+  const [inlineAnimationSaving, setInlineAnimationSaving] = useState(false);
+  const [inlineActionsJson, setInlineActionsJson] = useState('');
+  const [inlineDataBindingsJson, setInlineDataBindingsJson] = useState('');
+  const [inlineBindingSlotsJson, setInlineBindingSlotsJson] = useState('');
+  const [inlineActionsBindingsSaving, setInlineActionsBindingsSaving] = useState(false);
   const managedResourceType: LiveManagedResourceType = resourceType || (postId ? 'post' : 'page');
   const managedResourceId = managedResourceType === 'post' ? postId : pageId;
   const managedResourceLabel = managedResourceType === 'post' ? 'Post' : 'Page';
@@ -953,12 +1362,17 @@ export function LivePageManagementOverlay({
       setInlineText('');
       setInlineHref('');
       setInlineTargetBlank(false);
+      setInlineDownloadEnabled(false);
+      setInlineDownloadMediaId('');
       setInlineImageSrc('');
+      setInlineImageMediaId('');
       setInlineImageAlt('');
       setInlineImageTitle('');
       setInlineImageObjectFit('cover');
       setInlineMediaSrc('');
+      setInlineMediaId('');
       setInlineMediaPoster('');
+      setInlineMediaPosterMediaId('');
       setInlineMediaTitle('');
       setInlineMediaAddress('');
       setInlineMediaMarkerLabel('');
@@ -1015,6 +1429,22 @@ export function LivePageManagementOverlay({
       setInlineLayoutRotation('');
       setInlineLayoutVisible(true);
       setInlineLayoutLocked(false);
+      setInlineAnimationType('');
+      setInlineAnimationTrigger('');
+      setInlineAnimationDirection('');
+      setInlineAnimationDuration('');
+      setInlineAnimationDelay('');
+      setInlineAnimationEasing('');
+      setInlineAnimationScrollStart('');
+      setInlineAnimationScrollEnd('');
+      setInlineAnimationScrollScrub(false);
+      setInlineAnimationFrom('');
+      setInlineAnimationTo('');
+      setInlineAnimationDurationToken('');
+      setInlineAnimationEasingToken('');
+      setInlineActionsJson('');
+      setInlineDataBindingsJson('');
+      setInlineBindingSlotsJson('');
       return;
     }
 
@@ -1037,7 +1467,7 @@ export function LivePageManagementOverlay({
     [page?.content, selectedElementId],
   );
   const selectedElementType = String(selectedContentElement?.type || '');
-  const selectedElementLocked = selectedContentElement?.locked === true;
+  const selectedElementLocked = booleanValue(selectedContentElement?.locked);
   const selectedElementSupportsInlineText = INLINE_TEXT_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineLink = INLINE_LINK_ELEMENT_TYPES.has(selectedElementType);
   const selectedElementSupportsInlineImage = INLINE_IMAGE_ELEMENT_TYPES.has(selectedElementType);
@@ -1047,20 +1477,25 @@ export function LivePageManagementOverlay({
     || inlineMediaSaving
     || (selectedElementType === 'map'
       ? inlineMediaSrc.trim().length === 0 && inlineMediaAddress.trim().length === 0
-      : inlineMediaSrc.trim().length === 0);
+      : inlineMediaSrc.trim().length === 0 && inlineMediaId.trim().length === 0);
 
   useEffect(() => {
     setInlineText(inlineTextFromElement(selectedContentElement));
     setInlineHref(inlineHrefFromElement(selectedContentElement));
     setInlineTargetBlank(inlineTargetBlankFromElement(selectedContentElement));
+    setInlineDownloadEnabled(inlineDownloadFromElement(selectedContentElement));
+    setInlineDownloadMediaId(inlineDownloadMediaIdFromElement(selectedContentElement));
     const imageFields = imageFieldsFromElement(selectedContentElement);
     setInlineImageSrc(imageFields.src);
+    setInlineImageMediaId(imageFields.mediaId);
     setInlineImageAlt(imageFields.alt);
     setInlineImageTitle(imageFields.title);
     setInlineImageObjectFit(imageFields.objectFit);
     const mediaFields = mediaFieldsFromElement(selectedContentElement);
     setInlineMediaSrc(mediaFields.src);
+    setInlineMediaId(mediaFields.mediaId);
     setInlineMediaPoster(mediaFields.poster);
+    setInlineMediaPosterMediaId(mediaFields.posterMediaId);
     setInlineMediaTitle(mediaFields.title);
     setInlineMediaAddress(mediaFields.address);
     setInlineMediaMarkerLabel(mediaFields.markerLabel);
@@ -1120,6 +1555,24 @@ export function LivePageManagementOverlay({
     setInlineLayoutRotation(layoutFields.rotation);
     setInlineLayoutVisible(layoutFields.visible);
     setInlineLayoutLocked(layoutFields.locked);
+    const animationFields = animationFieldsFromElement(selectedContentElement);
+    setInlineAnimationType(animationFields.type);
+    setInlineAnimationTrigger(animationFields.trigger);
+    setInlineAnimationDirection(animationFields.direction);
+    setInlineAnimationDuration(animationFields.duration);
+    setInlineAnimationDelay(animationFields.delay);
+    setInlineAnimationEasing(animationFields.easing);
+    setInlineAnimationScrollStart(animationFields.scrollStart);
+    setInlineAnimationScrollEnd(animationFields.scrollEnd);
+    setInlineAnimationScrollScrub(animationFields.scrollScrub);
+    setInlineAnimationFrom(animationFields.from);
+    setInlineAnimationTo(animationFields.to);
+    setInlineAnimationDurationToken(animationFields.durationToken);
+    setInlineAnimationEasingToken(animationFields.easingToken);
+    const actionsBindingsFields = actionsBindingsFieldsFromElement(selectedContentElement);
+    setInlineActionsJson(actionsBindingsFields.actions);
+    setInlineDataBindingsJson(actionsBindingsFields.dataBindings);
+    setInlineBindingSlotsJson(actionsBindingsFields.bindingSlots);
   }, [selectedContentElement]);
 
   const focusElement = (elementId: string) => {
@@ -1233,7 +1686,15 @@ export function LivePageManagementOverlay({
       return;
     }
 
-    const nextContent = updateElementLink(page.content, selectedElementId, inlineHref.trim(), inlineTargetBlank);
+    const nextContent = updateElementLink(
+      page.content,
+      selectedElementId,
+      siteId,
+      inlineHref.trim(),
+      inlineTargetBlank,
+      inlineDownloadEnabled,
+      inlineDownloadMediaId,
+    );
     if (!nextContent) {
       setError('Unable to update this destination from the live overlay. Open the full editor instead.');
       return;
@@ -1281,8 +1742,9 @@ export function LivePageManagementOverlay({
       return;
     }
 
-    const nextContent = updateElementImage(page.content, selectedElementId, {
+    const nextContent = updateElementImage(page.content, selectedElementId, siteId, {
       src: inlineImageSrc.trim(),
+      mediaId: inlineImageMediaId.trim(),
       alt: inlineImageAlt.trim(),
       title: inlineImageTitle.trim(),
       objectFit: inlineImageObjectFit,
@@ -1334,9 +1796,11 @@ export function LivePageManagementOverlay({
       return;
     }
 
-    const nextContent = updateElementMedia(page.content, selectedElementId, selectedElementType, {
+    const nextContent = updateElementMedia(page.content, selectedElementId, selectedElementType, siteId, {
       src: inlineMediaSrc,
+      mediaId: inlineMediaId,
       poster: inlineMediaPoster,
+      posterMediaId: inlineMediaPosterMediaId,
       title: inlineMediaTitle,
       address: inlineMediaAddress,
       markerLabel: inlineMediaMarkerLabel,
@@ -1583,6 +2047,132 @@ export function LivePageManagementOverlay({
     }
   };
 
+  const saveInlineAnimation = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+    if (selectedElementLocked) {
+      setError('Unlock this element before editing its animation.');
+      return;
+    }
+
+    let nextContent: Record<string, unknown> | null = null;
+    try {
+      nextContent = updateElementAnimation(page.content, selectedElementId, {
+        type: inlineAnimationType,
+        trigger: inlineAnimationTrigger,
+        direction: inlineAnimationDirection,
+        duration: inlineAnimationDuration,
+        delay: inlineAnimationDelay,
+        easing: inlineAnimationEasing,
+        scrollStart: inlineAnimationScrollStart,
+        scrollEnd: inlineAnimationScrollEnd,
+        scrollScrub: inlineAnimationScrollScrub,
+        from: inlineAnimationFrom,
+        to: inlineAnimationTo,
+        durationToken: inlineAnimationDurationToken,
+        easingToken: inlineAnimationEasingToken,
+      });
+    } catch (animationError) {
+      setError(animationError instanceof Error ? animationError.message : 'Unable to update this animation.');
+      return;
+    }
+    if (!nextContent) {
+      setError('Unable to update this animation from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineAnimationSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected animation.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Animation saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected animation.');
+    } finally {
+      setInlineAnimationSaving(false);
+    }
+  };
+
+  const saveInlineActionsBindings = async () => {
+    if (!manageEndpoint || !page || !selectedElementId) return;
+    if (selectedElementLocked) {
+      setError('Unlock this element before editing its actions or bindings.');
+      return;
+    }
+
+    let nextContent: Record<string, unknown> | null = null;
+    try {
+      nextContent = updateElementActionsBindings(page.content, selectedElementId, {
+        actions: inlineActionsJson,
+        dataBindings: inlineDataBindingsJson,
+        bindingSlots: inlineBindingSlotsJson,
+      });
+    } catch (advancedError) {
+      setError(advancedError instanceof Error ? advancedError.message : 'Unable to update these actions or bindings.');
+      return;
+    }
+    if (!nextContent) {
+      setError('Unable to update these actions or bindings from the live overlay. Open the full editor instead.');
+      return;
+    }
+
+    setInlineActionsBindingsSaving(true);
+    setError('');
+    setMessage('');
+
+    try {
+      const response = await fetch(manageEndpoint, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: nextContent,
+          expectedUpdatedAt: page.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(errorMessageFromResponse(payload, 'Unable to save the selected actions or bindings.'));
+      }
+
+      const updatedPage = managedPageFromResponse(payload);
+      if (updatedPage) {
+        setPage(updatedPage);
+      }
+      setMessage('Actions and bindings saved. Reload the page to see delivery changes.');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save the selected actions or bindings.');
+    } finally {
+      setInlineActionsBindingsSaving(false);
+    }
+  };
+
   if (!enabled || !manageEndpoint || (!page && !loading && !error)) {
     return null;
   }
@@ -1815,6 +2405,31 @@ export function LivePageManagementOverlay({
                     />
                     Open in new tab
                   </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={inlineDownloadEnabled}
+                      onChange={(event) => setInlineDownloadEnabled(event.target.checked)}
+                    />
+                    Download uploaded file
+                  </label>
+                  {inlineDownloadEnabled ? (
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Backy file media ID
+                      <input
+                        value={inlineDownloadMediaId}
+                        onChange={(event) => setInlineDownloadMediaId(event.target.value)}
+                        placeholder="Backy file media ID"
+                        style={{
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 6,
+                          font: 'inherit',
+                          fontSize: 13,
+                          padding: '8px 9px',
+                        }}
+                      />
+                    </label>
+                  ) : null}
                   <button
                     type="button"
                     onClick={saveInlineLink}
@@ -1843,6 +2458,19 @@ export function LivePageManagementOverlay({
                     value={inlineImageSrc}
                     onChange={(event) => setInlineImageSrc(event.target.value)}
                     placeholder="Image URL or Backy media URL"
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      font: 'inherit',
+                      fontSize: 13,
+                      padding: '8px 9px',
+                    }}
+                  />
+                  <input
+                    value={inlineImageMediaId}
+                    onChange={(event) => setInlineImageMediaId(event.target.value)}
+                    placeholder="Backy media ID"
+                    aria-label="Backy image media ID"
                     style={{
                       border: '1px solid #cbd5e1',
                       borderRadius: 6,
@@ -1894,14 +2522,14 @@ export function LivePageManagementOverlay({
                   <button
                     type="button"
                     onClick={saveInlineImage}
-                    disabled={selectedElementLocked || inlineImageSaving || inlineImageSrc.trim().length === 0}
+                    disabled={selectedElementLocked || inlineImageSaving || (inlineImageSrc.trim().length === 0 && inlineImageMediaId.trim().length === 0)}
                     style={{
                       justifySelf: 'start',
                       border: 0,
                       borderRadius: 6,
-                      background: selectedElementLocked || inlineImageSaving || inlineImageSrc.trim().length === 0 ? '#94a3b8' : '#2563eb',
+                      background: selectedElementLocked || inlineImageSaving || (inlineImageSrc.trim().length === 0 && inlineImageMediaId.trim().length === 0) ? '#94a3b8' : '#2563eb',
                       color: '#fff',
-                      cursor: selectedElementLocked || inlineImageSaving || inlineImageSrc.trim().length === 0 ? 'not-allowed' : 'pointer',
+                      cursor: selectedElementLocked || inlineImageSaving || (inlineImageSrc.trim().length === 0 && inlineImageMediaId.trim().length === 0) ? 'not-allowed' : 'pointer',
                       fontWeight: 700,
                       padding: '7px 10px',
                     }}
@@ -1930,6 +2558,23 @@ export function LivePageManagementOverlay({
                       }}
                     />
                   </label>
+                  {selectedElementType === 'video' ? (
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      Backy media ID
+                      <input
+                        value={inlineMediaId}
+                        onChange={(event) => setInlineMediaId(event.target.value)}
+                        placeholder="Backy video media ID"
+                        style={{
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 6,
+                          font: 'inherit',
+                          fontSize: 13,
+                          padding: '8px 9px',
+                        }}
+                      />
+                    </label>
+                  ) : null}
                   <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
                     Title
                     <input
@@ -1953,6 +2598,15 @@ export function LivePageManagementOverlay({
                           value={inlineMediaPoster}
                           onChange={(event) => setInlineMediaPoster(event.target.value)}
                           placeholder="Poster image URL"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Poster media ID
+                        <input
+                          value={inlineMediaPosterMediaId}
+                          onChange={(event) => setInlineMediaPosterMediaId(event.target.value)}
+                          placeholder="Backy poster media ID"
                           style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
                         />
                       </label>
@@ -2425,6 +3079,225 @@ export function LivePageManagementOverlay({
                     }}
                   >
                     {inlineLayoutSaving ? 'Saving layout...' : 'Save layout'}
+                  </button>
+                </div>
+              ) : null}
+              {selectedElementId ? (
+                <div data-backy-live-animation-section="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Animation
+                  </span>
+                  <div data-backy-live-animation-editor="page" style={{ display: 'grid', gap: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Type
+                        <select
+                          value={inlineAnimationType}
+                          onChange={(event) => setInlineAnimationType(event.target.value as AnimationTypeOption)}
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                        >
+                          {ANIMATION_TYPE_OPTIONS.map((option) => (
+                            <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Trigger
+                        <select
+                          value={inlineAnimationTrigger}
+                          onChange={(event) => setInlineAnimationTrigger(event.target.value as AnimationTriggerOption)}
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                        >
+                          {ANIMATION_TRIGGER_OPTIONS.map((option) => (
+                            <option key={option || 'default'} value={option}>{option || 'default'}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Duration
+                        <input
+                          value={inlineAnimationDuration}
+                          onChange={(event) => setInlineAnimationDuration(event.target.value)}
+                          placeholder="0.6"
+                          inputMode="decimal"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Delay
+                        <input
+                          value={inlineAnimationDelay}
+                          onChange={(event) => setInlineAnimationDelay(event.target.value)}
+                          placeholder="0"
+                          inputMode="decimal"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Direction
+                        <select
+                          value={inlineAnimationDirection}
+                          onChange={(event) => setInlineAnimationDirection(event.target.value as AnimationDirectionOption)}
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px', background: '#fff' }}
+                        >
+                          {ANIMATION_DIRECTION_OPTIONS.map((option) => (
+                            <option key={option || 'none'} value={option}>{option || 'none'}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Easing
+                        <input
+                          value={inlineAnimationEasing}
+                          onChange={(event) => setInlineAnimationEasing(event.target.value)}
+                          placeholder="ease-out, power2.out"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Duration token
+                        <input
+                          value={inlineAnimationDurationToken}
+                          onChange={(event) => setInlineAnimationDurationToken(event.target.value)}
+                          placeholder="motion.duration.fast"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Easing token
+                        <input
+                          value={inlineAnimationEasingToken}
+                          onChange={(event) => setInlineAnimationEasingToken(event.target.value)}
+                          placeholder="motion.easing.standard"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Scroll start
+                        <input
+                          value={inlineAnimationScrollStart}
+                          onChange={(event) => setInlineAnimationScrollStart(event.target.value)}
+                          placeholder="top 80%"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                        Scroll end
+                        <input
+                          value={inlineAnimationScrollEnd}
+                          onChange={(event) => setInlineAnimationScrollEnd(event.target.value)}
+                          placeholder="bottom 20%"
+                          style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 13, padding: '8px 9px' }}
+                        />
+                      </label>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                      <input
+                        type="checkbox"
+                        checked={inlineAnimationScrollScrub}
+                        onChange={(event) => setInlineAnimationScrollScrub(event.target.checked)}
+                      />
+                      Scrub with scroll
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      From JSON
+                      <textarea
+                        value={inlineAnimationFrom}
+                        onChange={(event) => setInlineAnimationFrom(event.target.value)}
+                        rows={3}
+                        placeholder='{"opacity":0,"y":24}'
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 12, lineHeight: 1.4, padding: '8px 9px', resize: 'vertical' }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                      To JSON
+                      <textarea
+                        value={inlineAnimationTo}
+                        onChange={(event) => setInlineAnimationTo(event.target.value)}
+                        rows={3}
+                        placeholder='{"opacity":1,"y":0}'
+                        style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 12, lineHeight: 1.4, padding: '8px 9px', resize: 'vertical' }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={saveInlineAnimation}
+                      disabled={selectedElementLocked || inlineAnimationSaving}
+                      style={{
+                        justifySelf: 'start',
+                        border: 0,
+                        borderRadius: 6,
+                        background: selectedElementLocked || inlineAnimationSaving ? '#94a3b8' : '#2563eb',
+                        color: '#fff',
+                        cursor: selectedElementLocked || inlineAnimationSaving ? 'not-allowed' : 'pointer',
+                        fontWeight: 700,
+                        padding: '7px 10px',
+                      }}
+                    >
+                      {inlineAnimationSaving ? 'Saving animation...' : 'Save animation'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {selectedElementId ? (
+                <div data-backy-live-actions-bindings-editor="page" style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                    Actions and bindings
+                  </span>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Actions JSON
+                    <textarea
+                      value={inlineActionsJson}
+                      onChange={(event) => setInlineActionsJson(event.target.value)}
+                      rows={3}
+                      placeholder='[{"type":"navigate","href":"/pricing"}]'
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 12, lineHeight: 1.4, padding: '8px 9px', resize: 'vertical' }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Data bindings JSON
+                    <textarea
+                      value={inlineDataBindingsJson}
+                      onChange={(event) => setInlineDataBindingsJson(event.target.value)}
+                      rows={3}
+                      placeholder='[{"targetPath":"props.content","source":{"kind":"collection","field":"title"}}]'
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 12, lineHeight: 1.4, padding: '8px 9px', resize: 'vertical' }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 12, color: '#334155' }}>
+                    Binding slots JSON
+                    <textarea
+                      value={inlineBindingSlotsJson}
+                      onChange={(event) => setInlineBindingSlotsJson(event.target.value)}
+                      rows={3}
+                      placeholder='[{"id":"title","targetPath":"props.content","fieldKey":"title"}]'
+                      style={{ border: '1px solid #cbd5e1', borderRadius: 6, font: 'inherit', fontSize: 12, lineHeight: 1.4, padding: '8px 9px', resize: 'vertical' }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={saveInlineActionsBindings}
+                    disabled={selectedElementLocked || inlineActionsBindingsSaving}
+                    style={{
+                      justifySelf: 'start',
+                      border: 0,
+                      borderRadius: 6,
+                      background: selectedElementLocked || inlineActionsBindingsSaving ? '#94a3b8' : '#2563eb',
+                      color: '#fff',
+                      cursor: selectedElementLocked || inlineActionsBindingsSaving ? 'not-allowed' : 'pointer',
+                      fontWeight: 700,
+                      padding: '7px 10px',
+                    }}
+                  >
+                    {inlineActionsBindingsSaving ? 'Saving actions...' : 'Save actions/bindings'}
                   </button>
                 </div>
               ) : null}

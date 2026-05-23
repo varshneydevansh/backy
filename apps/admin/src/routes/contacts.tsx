@@ -215,7 +215,7 @@ const CONTACT_WORKFLOW_SURFACES = [
   {
     key: 'registrationPage',
     title: 'Registration page',
-    detail: 'Create account/signup pages that capture member leads before auth provider credentials are wired.',
+    detail: 'Seed signup pages that capture member leads through Backy Forms before provider-enforced sessions are enabled.',
     route: '/pages/new',
     template: 'registration',
   },
@@ -251,9 +251,28 @@ const CONTACT_PROMOTION_REQUIREMENTS = [
   },
   {
     key: 'auth',
-    title: 'Auth provider pending',
-    detail: 'Credentialed member sessions, password reset, and protected portal APIs still belong to the Users/Auth integration pass.',
+    title: 'Auth provider boundary',
+    detail: 'Credentialed member sessions, password reset, and protected portal routes are enforced by the Users/Auth provider handoff, while Contacts remains the capture and review layer.',
   },
+] as const;
+
+const CONTACT_MEMBER_CAPTURE_HANDOFF_SCHEMA_VERSION = 'backy.contact-member-capture-handoff.v1';
+
+const CONTACT_MEMBER_CAPTURE_BINDINGS = [
+  { key: 'registration.identity', target: 'contact identity', fields: ['name', 'email', 'phone'] },
+  { key: 'registration.consent', target: 'contact consent evidence', fields: ['consent', 'source_form_id', 'request_id'] },
+  { key: 'registration.memberType', target: 'member segmentation', fields: ['member_type', 'status'] },
+  { key: 'promotion.workspaceUser', target: 'Backy private user invite', fields: ['email', 'role', 'status', 'invite'] },
+  { key: 'promotion.memberProfile', target: 'collection-backed member/customer profile', fields: ['name', 'email', 'phone', 'member_type'] },
+] as const;
+
+const CONTACT_MEMBER_CAPTURE_ACTIONS = [
+  { key: 'create-registration-page', route: '/pages/new', template: 'registration' },
+  { key: 'review-form-definition', route: '/forms' },
+  { key: 'qualify-contact', route: '/contacts' },
+  { key: 'promote-to-user', route: '/contacts', endpoint: 'promoteUser' },
+  { key: 'promote-to-profile-record', route: '/contacts', endpoint: 'promoteCustomer' },
+  { key: 'configure-auth-provider', route: '/settings?tab=infrastructure' },
 ] as const;
 
 interface ContactInbox {
@@ -285,7 +304,9 @@ function ContactsRoute() {
     notes: '',
   });
   const [savedListName, setSavedListName] = useState('');
+  const [savedListSubmitted, setSavedListSubmitted] = useState(false);
   const [contactSyncTarget, setContactSyncTarget] = useState('');
+  const [contactSyncSubmitted, setContactSyncSubmitted] = useState(false);
   const [lastContactSync, setLastContactSync] = useState<ContactSyncDelivery | null>(null);
   const [contactRetentionDays, setContactRetentionDays] = useState('0');
   const [lastContactRetention, setLastContactRetention] = useState<ContactConsentRetentionResult | null>(null);
@@ -335,6 +356,7 @@ function ContactsRoute() {
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
+  const publicBaseUrl = useMemo(() => getAdminApiBase().replace(/\/api\/admin$/, '/api'), []);
   const formById = useMemo(() => new Map(forms.map((form) => [form.id, form])), [forms]);
   const apiForm = useMemo(
     () => selectedFormId === 'all' ? null : forms.find((form) => form.id === selectedFormId) || null,
@@ -432,6 +454,17 @@ function ContactsRoute() {
     filteredContacts.filter((contact) => selectedContactSet.has(contact.id))
   ), [filteredContacts, selectedContactSet]);
   const hiddenSelectedContactCount = Math.max(0, selectedContacts.length - selectedVisibleContacts.length);
+  const savedListNameInlineError = savedListSubmitted && savedListName.trim().length === 0
+    ? 'Enter a saved list name before saving this view.'
+    : null;
+  const contactSyncTargetValue = contactSyncTarget.trim();
+  const contactSyncTargetInlineError = contactSyncSubmitted && selectedContacts.length > 0
+    ? contactSyncTargetValue.length === 0
+      ? 'Enter a webhook URL before syncing selected contacts.'
+      : /^https?:\/\//i.test(contactSyncTargetValue)
+        ? null
+        : 'Enter a valid http(s) webhook URL before syncing selected contacts.'
+    : null;
   const selectedMergeEmail = useMemo(() => {
     const emails = Array.from(new Set(selectedContacts.map((contact) => normalizeContactEmail(contact.email)).filter(Boolean)));
     return emails.length === 1 && selectedContacts.length > 1 ? emails[0] : '';
@@ -600,6 +633,57 @@ function ContactsRoute() {
     };
   }, [apiForm, contactsByForm, duplicateEmailGroups]);
   const commandReadiness = pipelineReadiness || apiFormReadiness;
+  const contactMemberCaptureHandoff = useMemo(() => ({
+    schemaVersion: CONTACT_MEMBER_CAPTURE_HANDOFF_SCHEMA_VERSION,
+    generatedAt: new Date().toISOString(),
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+    },
+    pageTemplates: {
+      registration: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
+      memberLogin: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
+      memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
+    },
+    publicApis: {
+      formsCatalog: `${publicBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms`,
+      registrationDefinition: `${publicBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/{registrationFormId}/definition`,
+      registrationSubmit: `${publicBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/{registrationFormId}/submissions`,
+    },
+    privateReviewApis: {
+      contacts: contactsUrl,
+      segments: contactSegmentsUrl,
+      savedLists: contactListsUrl,
+      promoteUser: contactPromoteUserUrl,
+      promoteProfileRecord: contactPromoteCustomerUrl,
+    },
+    bindings: CONTACT_MEMBER_CAPTURE_BINDINGS,
+    actionBindings: CONTACT_MEMBER_CAPTURE_ACTIONS,
+    providerGate: {
+      status: 'provider-gated',
+      settingsRoute: '/settings?tab=infrastructure',
+      userHandoffRoute: `/users?siteId=${encodeURIComponent(activeSiteId)}`,
+      requiredFor: ['credentialed-public-member-sessions', 'member-password-reset', 'member-email-verification', 'protected-member-routes'],
+      boundary: 'Contacts captures and qualifies leads; Users/Auth enforces public member credentials and protected routes.',
+    },
+    privacy: {
+      includesIdentity: false,
+      includesSourceValues: false,
+      excludes: ['raw contact values', 'private admin users', 'session cookies', 'auth provider secrets', 'invite tokens', 'reset tokens'],
+      note: 'Use this contract to wire capture and review flows. Use private Contacts APIs or CSV export for identity values.',
+    },
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSiteId,
+    contactListsUrl,
+    contactPromoteCustomerUrl,
+    contactPromoteUserUrl,
+    contactSegmentsUrl,
+    contactsUrl,
+    publicBaseUrl,
+  ]);
   const contactHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -638,6 +722,7 @@ function ContactsRoute() {
     promotion: {
       model: 'Contacts are the review layer between public registration/contact forms and private users, CRM follow-up, or member profile collections.',
       requirements: CONTACT_PROMOTION_REQUIREMENTS,
+      memberCaptureHandoff: contactMemberCaptureHandoff,
       readyToPromote: allContacts.filter((contact) => contact.status === 'qualified' && Boolean(normalizeContactEmail(contact.email))).length,
       promotedUsers: allContacts.filter((contact) => Boolean(getContactPromotion(contact)?.userId)).length,
       promotedCustomers: allContacts.filter((contact) => Boolean(getContactCustomerPromotion(contact)?.recordId)).length,
@@ -790,6 +875,7 @@ function ContactsRoute() {
     contactSegmentsUrl,
     commandReadiness.checks,
     commandReadiness.score,
+    contactMemberCaptureHandoff,
     contactPromoteUserUrl,
     contactUpdateUrl,
     contactsByForm,
@@ -810,6 +896,7 @@ function ContactsRoute() {
     statusFilter,
   ]);
   const contactHandoffText = useMemo(() => JSON.stringify(contactHandoff, null, 2), [contactHandoff]);
+  const contactMemberCaptureHandoffText = useMemo(() => JSON.stringify(contactMemberCaptureHandoff, null, 2), [contactMemberCaptureHandoff]);
   const contactsRouteSearch = useMemo<ContactsSearch>(() => ({
     siteId: activeSiteId,
     ...(selectedFormId !== 'all' ? { formId: selectedFormId } : {}),
@@ -1156,6 +1243,7 @@ function ContactsRoute() {
       return;
     }
 
+    setContactSyncSubmitted(true);
     const targetUrl = contactSyncTarget.trim();
     if (selectedContacts.length === 0) {
       setNotice('Select at least one visible contact before syncing.');
@@ -1213,6 +1301,9 @@ function ContactsRoute() {
         setError(`${failedCount} contact source ${failedCount === 1 ? 'form' : 'forms'} failed to sync.`);
       } else {
         setNotice(`Synced ${syncedCount} selected contact${syncedCount === 1 ? '' : 's'} to webhook.`);
+      }
+      if (failedCount === 0) {
+        setContactSyncSubmitted(false);
       }
       void loadContactAuditLogs();
     } finally {
@@ -1789,6 +1880,7 @@ function ContactsRoute() {
       return;
     }
 
+    setSavedListSubmitted(true);
     const name = savedListName.trim();
     if (!name) {
       setNotice(null);
@@ -1807,6 +1899,7 @@ function ContactsRoute() {
       });
       setContactSavedLists(result.lists);
       setSavedListName('');
+      setSavedListSubmitted(false);
       setNotice(`Saved list "${result.list.name}" for ${filteredContacts.length} visible contact${filteredContacts.length === 1 ? '' : 's'}.`);
       void loadContactAuditLogs();
     } catch (saveError) {
@@ -2218,6 +2311,36 @@ function ContactsRoute() {
               </div>
             ))}
           </div>
+          <div data-testid="contacts-member-capture-handoff" className="mt-4 rounded-lg border border-border bg-card p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">Member capture handoff</div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {CONTACT_MEMBER_CAPTURE_HANDOFF_SCHEMA_VERSION} gives custom frontends the registration APIs, contact review endpoints, bindings, promotion actions, provider gate, and privacy boundary for member lead capture.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void copyContactApiText(contactMemberCaptureHandoffText, 'Member capture handoff')}
+                disabled={contactViewDisabled}
+                title={!canViewForms ? viewPermissionTitle : undefined}
+                iconStart={<Copy className="size-3.5" />}
+              >
+                Copy member handoff
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <MetaTile label="Bindings" value={`${CONTACT_MEMBER_CAPTURE_BINDINGS.length}`} />
+              <MetaTile label="Actions" value={`${CONTACT_MEMBER_CAPTURE_ACTIONS.length}`} />
+              <MetaTile label="Provider gate" value={contactMemberCaptureHandoff.providerGate.status} />
+            </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-3">
+              <ApiSnippet label="Registration definition" value={contactMemberCaptureHandoff.publicApis.registrationDefinition} />
+              <ApiSnippet label="Registration submit" value={contactMemberCaptureHandoff.publicApis.registrationSubmit} />
+              <ApiSnippet label="Users/Auth handoff" value={contactMemberCaptureHandoff.providerGate.userHandoffRoute} />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -2324,17 +2447,26 @@ function ContactsRoute() {
               value={savedListName}
               disabled={contactMutationDisabled}
               onChange={(event) => setSavedListName(event.target.value)}
+              aria-invalid={Boolean(savedListNameInlineError)}
+              aria-describedby={savedListNameInlineError ? 'contacts-saved-list-name-error' : undefined}
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Qualified leads with source values"
+              data-testid="contacts-saved-list-name-input"
             />
+            {savedListNameInlineError && (
+              <span id="contacts-saved-list-name-error" className="mt-1 block text-xs font-medium text-destructive" role="alert" data-testid="contacts-saved-list-name-error">
+                {savedListNameInlineError}
+              </span>
+            )}
           </label>
           <div className="flex items-end">
             <Button
               type="button"
-              disabled={contactMutationDisabled || !savedListName.trim()}
+              disabled={contactMutationDisabled}
               title={!canManageForms ? managePermissionTitle : undefined}
               onClick={() => void handleSaveContactList()}
               iconStart={<Save className="size-4" />}
+              data-testid="contacts-saved-list-save"
             >
               Save current view
             </Button>
@@ -2875,20 +3007,29 @@ function ContactsRoute() {
                 >
                   Apply retention
                 </Button>
-                <input
-                  type="url"
-                  value={contactSyncTarget}
-                  disabled={contactMutationDisabled}
-                  onChange={(event) => setContactSyncTarget(event.target.value)}
-                  placeholder="https://crm.example.com/backy/contacts"
-                  className="min-h-10 min-w-[18rem] rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label="Contact sync webhook URL"
-                  data-testid="contacts-sync-webhook-url"
-                />
+                <div className="flex min-w-[18rem] flex-col gap-1">
+                  <input
+                    type="url"
+                    value={contactSyncTarget}
+                    disabled={contactMutationDisabled}
+                    onChange={(event) => setContactSyncTarget(event.target.value)}
+                    placeholder="https://crm.example.com/backy/contacts"
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Contact sync webhook URL"
+                    aria-invalid={Boolean(contactSyncTargetInlineError)}
+                    aria-describedby={contactSyncTargetInlineError ? 'contacts-sync-webhook-url-error' : undefined}
+                    data-testid="contacts-sync-webhook-url"
+                  />
+                  {contactSyncTargetInlineError && (
+                    <span id="contacts-sync-webhook-url-error" className="text-xs font-medium text-destructive" role="alert" data-testid="contacts-sync-webhook-url-error">
+                      {contactSyncTargetInlineError}
+                    </span>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={contactMutationDisabled || selectedContacts.length === 0 || !contactSyncTarget.trim()}
+                  disabled={contactMutationDisabled || selectedContacts.length === 0}
                   title={!canManageForms ? managePermissionTitle : undefined}
                   onClick={() => void handleSyncSelectedContacts()}
                   iconStart={<Upload className="size-4" />}

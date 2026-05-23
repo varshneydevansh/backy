@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useEditorRef } from '@udecode/plate/react';
 import {
     Bold, Italic, Underline, Strikethrough, Code,
@@ -8,6 +8,9 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils';
 import { Editor, Transforms, Element as SlateElement } from 'slate';
+import { ColorPicker } from './ColorPicker';
+
+type InsertMode = 'link' | 'image';
 
 // --- Compact ToolbarButton ---
 const Btn = ({
@@ -29,6 +32,7 @@ const Btn = ({
             active && "bg-muted text-foreground"
         )}
         title={title}
+        aria-label={title}
     >
         {children}
     </button>
@@ -51,6 +55,9 @@ const MiniDropdown = ({
                 type="button"
                 onMouseDown={(e) => { e.preventDefault(); setOpen(!open); }}
                 className="flex items-center gap-0.5 px-1 h-6 text-[10px] font-medium rounded hover:bg-muted/80 border border-border/40"
+                aria-label={`${label} menu`}
+                aria-haspopup="menu"
+                aria-expanded={open}
             >
                 <span className="truncate max-w-[50px]">{label}</span>
                 <ChevronDown className="w-2.5 h-2.5 opacity-50" />
@@ -89,6 +96,50 @@ const toggleMark = (editor: any, format: string) => {
     }
 };
 
+const markValue = (editor: any, format: string): string | undefined => {
+    const marks = Editor.marks(editor) as Record<string, unknown> | null;
+    const value = marks?.[format];
+    return typeof value === 'string' ? value : undefined;
+};
+
+const setMarkValue = (editor: any, format: string, value: string) => {
+    const nextValue = value.trim();
+    if (!nextValue) {
+        Editor.removeMark(editor, format);
+        return;
+    }
+
+    Editor.addMark(editor, format, nextValue);
+};
+
+const normalizeUrl = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (/^(#|\/|mailto:|tel:)/i.test(trimmed) || /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+        return trimmed;
+    }
+    return `https://${trimmed}`;
+};
+
+const insertLinkAtSelection = (editor: any, url: string) => {
+    const normalizedUrl = normalizeUrl(url);
+    if (!normalizedUrl) return false;
+    Transforms.unwrapNodes(editor, {
+        match: n => !Editor.isEditor(n) && SlateElement.isElement(n) && ['a', 'link'].includes((n as any).type),
+        split: true,
+    });
+    Transforms.wrapNodes(editor, { type: 'link', url: normalizedUrl, children: [] } as any, { split: true });
+    Transforms.collapse(editor, { edge: 'end' });
+    return true;
+};
+
+const insertImageAtSelection = (editor: any, url: string) => {
+    const normalizedUrl = normalizeUrl(url);
+    if (!normalizedUrl) return false;
+    Transforms.insertNodes(editor, { type: 'img', url: normalizedUrl, children: [{ text: '' }] } as any);
+    return true;
+};
+
 const toggleBlock = (editor: any, format: string) => {
     const isList = ['ul', 'ol'].includes(format);
     Transforms.unwrapNodes(editor, {
@@ -104,7 +155,41 @@ const toggleBlock = (editor: any, format: string) => {
 // --- Main Compact Toolbar ---
 export const AdvancedToolbar = ({ className }: { className?: string }) => {
     const editor = useEditorRef() as any;
+    const [insertMode, setInsertMode] = useState<InsertMode | null>(null);
+    const [insertUrl, setInsertUrl] = useState('');
+    const savedSelectionRef = useRef<any>(null);
     if (!editor) return null;
+
+    const openInsertForm = (mode: InsertMode) => {
+        savedSelectionRef.current = editor.selection ? { ...editor.selection } : null;
+        setInsertMode(mode);
+        setInsertUrl(mode === 'link' ? 'https://' : '');
+    };
+
+    const closeInsertForm = () => {
+        setInsertMode(null);
+        setInsertUrl('');
+        savedSelectionRef.current = null;
+    };
+
+    const submitInsertForm = () => {
+        if (savedSelectionRef.current) {
+            try {
+                Transforms.select(editor, savedSelectionRef.current);
+            } catch {
+                // Best effort: Slate can reject stale selections after document changes.
+            }
+        }
+
+        const inserted = insertMode === 'link'
+            ? insertLinkAtSelection(editor, insertUrl)
+            : insertMode === 'image'
+                ? insertImageAtSelection(editor, insertUrl)
+                : false;
+        if (inserted) {
+            closeInsertForm();
+        }
+    };
 
     return (
         <div className={cn(
@@ -179,18 +264,20 @@ export const AdvancedToolbar = ({ className }: { className?: string }) => {
             <div className="w-px h-4 bg-border/50 mx-0.5" />
 
             {/* Colors */}
-            <Btn onClick={() => {
-                const c = window.prompt('Text color:', '#000000');
-                if (c) Editor.addMark(editor, 'color', c);
-            }} title="Text Color">
-                <Palette className="w-3.5 h-3.5" />
-            </Btn>
-            <Btn onClick={() => {
-                const c = window.prompt('Highlight:', '#ffff00');
-                if (c) Editor.addMark(editor, 'backgroundColor', c);
-            }} title="Highlight">
-                <Highlighter className="w-3.5 h-3.5" />
-            </Btn>
+            <ColorPicker
+                value={markValue(editor, 'color')}
+                onChange={(color) => setMarkValue(editor, 'color', color)}
+                icon={<Palette className="w-3.5 h-3.5" />}
+                tooltip="Text Color"
+                testId="backy-editor-advanced-text-color"
+            />
+            <ColorPicker
+                value={markValue(editor, 'backgroundColor')}
+                onChange={(color) => setMarkValue(editor, 'backgroundColor', color)}
+                icon={<Highlighter className="w-3.5 h-3.5" />}
+                tooltip="Highlight"
+                testId="backy-editor-advanced-highlight-color"
+            />
 
             <div className="w-px h-4 bg-border/50 mx-0.5" />
 
@@ -230,20 +317,47 @@ export const AdvancedToolbar = ({ className }: { className?: string }) => {
             }} title="Table">
                 <Table className="w-3.5 h-3.5" />
             </Btn>
-            <Btn onClick={() => {
-                const url = window.prompt('Link URL:');
-                if (url) {
-                    Transforms.wrapNodes(editor, { type: 'link', url, children: [] } as any, { split: true });
-                }
-            }} title="Link">
+            <Btn onClick={() => openInsertForm('link')} title="Link">
                 <Link className="w-3.5 h-3.5" />
             </Btn>
-            <Btn onClick={() => {
-                const url = window.prompt('Image URL:');
-                if (url) Transforms.insertNodes(editor, { type: 'img', url, children: [{ text: '' }] } as any);
-            }} title="Image">
+            <Btn onClick={() => openInsertForm('image')} title="Image">
                 <Image className="w-3.5 h-3.5" />
             </Btn>
+            {insertMode ? (
+                <form
+                    className="ml-1 flex min-w-[220px] items-center gap-1 rounded-md border border-border/60 bg-background px-1 py-0.5"
+                    data-testid={`backy-editor-advanced-${insertMode}-form`}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        submitInsertForm();
+                    }}
+                >
+                    <input
+                        type="url"
+                        value={insertUrl}
+                        onChange={(event) => setInsertUrl(event.target.value)}
+                        placeholder={insertMode === 'link' ? 'https://example.com' : 'Image URL'}
+                        className="h-6 min-w-0 flex-1 rounded border border-border/60 bg-background px-2 text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
+                        data-testid={`backy-editor-advanced-${insertMode}-input`}
+                    />
+                    <button
+                        type="submit"
+                        className="h-6 rounded bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+                        data-testid={`backy-editor-advanced-${insertMode}-insert`}
+                    >
+                        Insert
+                    </button>
+                    <button
+                        type="button"
+                        className="h-6 rounded px-1.5 text-[11px] text-muted-foreground hover:bg-muted"
+                        data-testid={`backy-editor-advanced-${insertMode}-cancel`}
+                        onClick={closeInsertForm}
+                    >
+                        ×
+                    </button>
+                </form>
+            ) : null}
         </div>
     );
 };

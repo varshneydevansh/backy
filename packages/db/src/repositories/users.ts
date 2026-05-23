@@ -13,8 +13,9 @@ import {
     type BackyUserStatus,
     type BackyUserUpdateInput,
 } from '@backy-cms/core';
-import { desc, eq } from 'drizzle-orm';
-import { adminUserCredentials, profiles } from '../schema';
+import { randomUUID } from 'node:crypto';
+import { desc, eq, sql } from 'drizzle-orm';
+import { activityLogs, adminUserCredentials, profiles } from '../schema';
 import type { DatabaseInstance } from '../adapters';
 
 type QueryDatabase = {
@@ -32,6 +33,7 @@ type QueryDatabase = {
     delete: (table: unknown) => {
         where: (condition: unknown) => Promise<unknown>;
     };
+    execute?: (query: unknown) => Promise<unknown>;
 };
 
 type QueryBuilder = {
@@ -143,6 +145,37 @@ const compareUsers = (
     return first.id.localeCompare(second.id);
 };
 
+const createAuthUserIdentity = async (
+    database: QueryDatabase,
+    input: {
+        id: string;
+        email: string;
+        fullName?: string | null;
+        role: BackyUserRole;
+    },
+): Promise<boolean> => {
+    if (typeof database.execute !== 'function') {
+        return false;
+    }
+
+    try {
+        await database.execute(sql`
+            INSERT INTO auth.users (id, email, raw_user_meta_data, created_at, updated_at)
+            VALUES (
+                ${input.id},
+                ${input.email},
+                jsonb_build_object('full_name', ${input.fullName || ''}::text, 'role', ${input.role}::text),
+                NOW(),
+                NOW()
+            )
+            ON CONFLICT (id) DO NOTHING
+        `);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
 const toUser = (row: UserRow): BackyUser => ({
     id: row.id,
     email: row.email,
@@ -230,16 +263,34 @@ export function createUserRepository(db: DatabaseInstance): BackyUserRepository 
         },
 
         async create(input: BackyUserCreateInput): Promise<BackyRepositoryMutationResult<BackyUser>> {
+            const id = randomUUID();
+            const email = input.email.trim().toLowerCase();
             const normalizedStatus = input.status || 'invited';
-            const [row] = await database.insert(profiles).values({
-                email: input.email.trim().toLowerCase(),
+            const values = {
+                id,
+                email,
                 fullName: input.fullName,
                 role: input.role,
                 status: normalizedStatus,
                 isActive: normalizedStatus === 'active',
                 updatedAt: new Date(),
-            }).returning() as UserRow[];
-            return { item: toUser(row) };
+            };
+            const createdAuthIdentity = await createAuthUserIdentity(database, {
+                id,
+                email,
+                fullName: input.fullName,
+                role: input.role,
+            });
+
+            const [row] = createdAuthIdentity
+                ? await database.update(profiles).set(values).where(eq(profiles.id, id)).returning() as UserRow[]
+                : await database.insert(profiles).values(values).returning() as UserRow[];
+            if (row) {
+                return { item: toUser(row) };
+            }
+
+            const [insertedRow] = await database.insert(profiles).values(values).returning() as UserRow[];
+            return { item: toUser(insertedRow) };
         },
 
         async update(userId: string, input: BackyUserUpdateInput): Promise<BackyRepositoryMutationResult<BackyUser>> {
@@ -263,6 +314,7 @@ export function createUserRepository(db: DatabaseInstance): BackyUserRepository 
                 return false;
             }
 
+            await database.update(activityLogs).set({ userId: null }).where(eq(activityLogs.userId, userId)).returning();
             await database.delete(profiles).where(eq(profiles.id, userId));
             return true;
         },

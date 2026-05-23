@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditorRef } from '@udecode/plate/react';
-import { AlignCenter, AlignLeft, AlignRight, Bold, Code, Italic, Link, RemoveFormatting, Strikethrough, Underline } from 'lucide-react';
+import { AlignCenter, AlignLeft, AlignRight, Bold, Code, Highlighter, Italic, Link, Palette, RemoveFormatting, Strikethrough, Underline } from 'lucide-react';
 import { Editor, Element as SlateElement, Range, Transforms } from 'slate';
 import { ReactEditor, useFocused } from 'slate-react';
 import { cn } from '../utils';
+import { ColorPicker } from './ColorPicker';
 
 type FloatingToolbarPosition = {
     left: number;
@@ -28,6 +29,30 @@ const toggleMark = (editor: Editor, format: string) => {
         return;
     }
     Editor.addMark(editor, format, true);
+};
+
+const markValue = (editor: Editor, format: string): string | undefined => {
+    const marks = Editor.marks(editor) as Record<string, unknown> | null;
+    const value = marks?.[format];
+    return typeof value === 'string' ? value : undefined;
+};
+
+const setMarkValue = (editor: Editor, format: string, value: string, selection: Range | null) => {
+    if (selection) {
+        try {
+            Transforms.select(editor, selection);
+        } catch {
+            // Best effort when the document changed while the color picker was open.
+        }
+    }
+
+    const nextValue = value.trim();
+    if (!nextValue) {
+        Editor.removeMark(editor, format);
+        return;
+    }
+
+    Editor.addMark(editor, format, nextValue);
 };
 
 const clearSelectedMarks = (editor: Editor) => {
@@ -55,9 +80,8 @@ const normalizeLinkUrl = (value: string) => {
     return `https://${trimmed}`;
 };
 
-const wrapSelectionWithLink = (editor: Editor) => {
-    const selection = editor.selection ? { ...editor.selection } : null;
-    const url = normalizeLinkUrl(window.prompt('Link URL:', 'https://') || '');
+const wrapSelectionWithLink = (editor: Editor, rawUrl: string, selection: Range | null) => {
+    const url = normalizeLinkUrl(rawUrl);
     if (!url || !selection) return;
 
     Transforms.select(editor, selection);
@@ -95,9 +119,19 @@ export const FloatingToolbar = () => {
     const editor = useEditorRef() as unknown as Editor & ReactEditor;
     const focused = useFocused();
     const [position, setPosition] = useState<FloatingToolbarPosition | null>(null);
+    const [linkOpen, setLinkOpen] = useState(false);
+    const [linkUrl, setLinkUrl] = useState('https://');
+    const savedSelectionRef = useRef<Range | null>(null);
+
+    const captureSelection = () => {
+        savedSelectionRef.current = editor.selection && Range.isRange(editor.selection) ? { ...editor.selection } : null;
+    };
 
     const updatePosition = useCallback(() => {
         if (typeof window === 'undefined') {
+            return;
+        }
+        if (linkOpen) {
             return;
         }
 
@@ -122,7 +156,7 @@ export const FloatingToolbar = () => {
         } catch {
             setPosition(null);
         }
-    }, [editor, focused]);
+    }, [editor, focused, linkOpen]);
 
     useEffect(() => {
         updatePosition();
@@ -180,6 +214,23 @@ export const FloatingToolbar = () => {
                 <Code className="h-3.5 w-3.5" />
             </ToolbarButton>
             <div className="mx-1 h-5 w-px bg-border" />
+            <ColorPicker
+                value={markValue(editor, 'color')}
+                onBeforeOpen={captureSelection}
+                onChange={(color) => setMarkValue(editor, 'color', color, savedSelectionRef.current || editor.selection)}
+                icon={<Palette className="h-3.5 w-3.5" />}
+                tooltip="Text Color"
+                testId="backy-editor-floating-text-color"
+            />
+            <ColorPicker
+                value={markValue(editor, 'backgroundColor')}
+                onBeforeOpen={captureSelection}
+                onChange={(color) => setMarkValue(editor, 'backgroundColor', color, savedSelectionRef.current || editor.selection)}
+                icon={<Highlighter className="h-3.5 w-3.5" />}
+                tooltip="Highlight Color"
+                testId="backy-editor-floating-highlight-color"
+            />
+            <div className="mx-1 h-5 w-px bg-border" />
             <ToolbarButton label="Align left" onMouseDown={() => setSelectedAlignment(editor, 'left')}>
                 <AlignLeft className="h-3.5 w-3.5" />
             </ToolbarButton>
@@ -190,9 +241,51 @@ export const FloatingToolbar = () => {
                 <AlignRight className="h-3.5 w-3.5" />
             </ToolbarButton>
             <div className="mx-1 h-5 w-px bg-border" />
-            <ToolbarButton label="Add link" onMouseDown={() => wrapSelectionWithLink(editor)}>
+            <ToolbarButton
+                label="Add link"
+                onMouseDown={() => {
+                    captureSelection();
+                    setLinkUrl('https://');
+                    setLinkOpen(true);
+                }}
+            >
                 <Link className="h-3.5 w-3.5" />
             </ToolbarButton>
+            {linkOpen ? (
+                <form
+                    className="ml-1 flex items-center gap-1 rounded-md border border-border bg-background px-1 py-0.5"
+                    data-testid="backy-editor-floating-link-form"
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        wrapSelectionWithLink(editor, linkUrl, savedSelectionRef.current);
+                        setLinkOpen(false);
+                    }}
+                >
+                    <input
+                        type="url"
+                        value={linkUrl}
+                        onChange={(event) => setLinkUrl(event.target.value)}
+                        className="h-6 w-40 rounded border border-border bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+                        data-testid="backy-editor-floating-link-input"
+                    />
+                    <button
+                        type="submit"
+                        className="h-6 rounded bg-primary px-2 text-xs font-medium text-primary-foreground"
+                        data-testid="backy-editor-floating-link-insert"
+                    >
+                        Insert
+                    </button>
+                    <button
+                        type="button"
+                        className="h-6 rounded px-1.5 text-xs text-muted-foreground hover:bg-muted"
+                        data-testid="backy-editor-floating-link-cancel"
+                        onClick={() => setLinkOpen(false)}
+                    >
+                        ×
+                    </button>
+                </form>
+            ) : null}
             <ToolbarButton label="Clear formatting" onMouseDown={() => clearSelectedMarks(editor)}>
                 <RemoveFormatting className="h-3.5 w-3.5" />
             </ToolbarButton>

@@ -16,6 +16,7 @@ const DESKTOP_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-b
 const FOCUS_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-blog-create-focus.png');
 const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-contract-template';
 const FRONTEND_BLOG_TEMPLATE_NAME = 'Smoke Blog Contract';
+const BLOG_CREATE_CONTROL_WAIT_ATTEMPTS = Number(process.env.BACKY_BLOG_CREATE_CONTROL_WAIT_ATTEMPTS || 240);
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,11 +40,46 @@ const assertBlogCreateSourceContract = () => {
     'Blog create route must accept designTemplate, frontendDesignTemplateId, and frontendTemplate aliases for custom frontend template handoffs',
   );
   assert(
+    source.includes('extractFrontendTemplateDesignSerialization') &&
+      source.includes('const frontendTemplateDesignState = effectiveFrontendTemplate') &&
+      source.includes('...(frontendTemplateDesignState?.options || {})') &&
+      source.includes('frontendDesignCustomJs: frontendTemplateDesignState?.provenance.customJS') &&
+      source.includes('frontendDesignContentDocument: frontendTemplateDesignState?.provenance.contentDocument') &&
+      source.includes('frontendDesignThemeTokenRefs: frontendTemplateDesignState?.provenance.themeTokenRefs') &&
+      source.includes('frontendDesignAssets: frontendTemplateDesignState?.provenance.assets') &&
+      source.includes('frontendDesignAnimations: frontendTemplateDesignState?.provenance.animations') &&
+      source.includes('frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions') &&
+      source.includes('frontendDesignDataBindings: frontendTemplateDesignState?.provenance.dataBindings') &&
+      source.includes('frontendDesignEditableMap: frontendTemplateDesignState?.provenance.editableMap') &&
+      source.includes('frontendDesignMetadata: frontendTemplateDesignState?.provenance.metadata'),
+    'Blog create frontend template seeding must preserve custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance',
+  );
+  assert(
     source.includes('getScheduledBlogPostDateError') &&
       source.includes('Date.parse(scheduledAt)') &&
       source.includes('scheduledAtMs <= Date.now()') &&
       source.includes('Choose a future publish date before scheduling.'),
     'Blog create route must block scheduled posts with non-future publish dates before submit',
+  );
+  assert(
+    source.includes('const [blogCreateFormSubmitted, setBlogCreateFormSubmitted] = useState(false);') &&
+      source.includes('const blogTitleInlineError = blogCreateFormSubmitted && !title.trim()') &&
+      source.includes('const blogSlugInlineError = blogCreateFormSubmitted') &&
+      source.includes('const blogCanonicalInlineError = blogCreateFormSubmitted && !canonicalValid') &&
+      source.includes('const blogScheduleInlineError = blogCreateFormSubmitted && scheduleValidationMessage') &&
+      source.includes('setBlogCreateFormSubmitted(true);') &&
+      source.includes('<form id="blog-create-form" onSubmit={handleSubmit} noValidate') &&
+      source.includes('data-testid="blog-create-title-input"') &&
+      source.includes('aria-describedby={blogTitleInlineError ?') &&
+      source.includes('data-testid="blog-create-title-error"') &&
+      source.includes('data-testid="blog-create-slug-input"') &&
+      source.includes('data-testid="blog-create-slug-error"') &&
+      source.includes('data-testid="blog-create-canonical-input"') &&
+      source.includes('data-testid="blog-create-canonical-error"') &&
+      source.includes('data-testid="blog-create-schedule-input"') &&
+      source.includes('data-testid="blog-create-schedule-error"') &&
+      source.includes('<Button type="submit" disabled={createFormDisabled}'),
+    'Blog create must expose inline title/slug/canonical/schedule validation while keeping save reachable',
   );
   assert(
     source.includes('const loadBlogCreatePermissions = useCallback(() => {') &&
@@ -116,6 +152,7 @@ const loginAdminApi = async () => {
   let response = await login();
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_BLOG_CREATE_SMOKE_MFA_CODE
+    || process.env.BACKY_EDITOR_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
     || process.env.BACKY_ADMIN_2FA_CODE;
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
@@ -182,6 +219,41 @@ const smokeFrontendDesignContract = () => ({
       routePattern: '/blog/smoke-contract',
       description: 'Frontend contract blog template used by the blog create smoke.',
       canvasSize: { width: 1260, height: 940 },
+      content: {
+        customJS: 'window.__backySmokeBlogTemplate = true;',
+        themeTokenRefs: {
+          primary: 'tokens.colors.primary',
+          text: 'tokens.colors.text',
+        },
+        assets: {
+          media: [{ id: 'media-smoke-blog-cover', role: 'cover-image', source: 'custom-frontend' }],
+          fonts: [{ id: 'font-smoke-blog-heading', family: 'Inter', source: 'custom-frontend' }],
+        },
+        animations: [
+          { id: 'post-title-enter-animation', target: 'post.title', timeline: ['post-title-enter'], easing: 'ease-out' },
+        ],
+        interactions: {
+          timeline: [{ id: 'post-title-enter', target: 'post.title', animation: 'slide-up' }],
+        },
+        dataBindings: {
+          datasets: [{ id: 'current-post', source: 'blog', mode: 'current' }],
+          bindings: [{ elementId: `frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading`, source: 'post.title', target: 'props.content' }],
+        },
+        editableMap: {
+          'post.hero.title': {
+            elementId: `frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading`,
+            field: 'props.content',
+            label: 'Post title',
+          },
+        },
+        seo: {
+          titleTemplate: '{title} | Smoke Blog',
+        },
+        metadata: {
+          animationTimeline: [{ id: 'post-title-enter', duration: 360, easing: 'ease-out' }],
+          editableSurface: 'blog-create-smoke',
+        },
+      },
       bindingHints: [
         { role: 'post.title', binding: 'post.title' },
         { role: 'post.content', binding: 'post.content' },
@@ -685,7 +757,7 @@ const assertWritingStructureTools = async (client) => {
 const navigateToBlogCreate = async (client) => {
   await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&frontendDesignTemplateId=${encodeURIComponent(FRONTEND_BLOG_TEMPLATE_ID)}` });
 
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < BLOG_CREATE_CONTROL_WAIT_ATTEMPTS; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="blog-create-command-center"]')),
       title: document.body?.innerText?.includes('New Blog Post') || false,
@@ -715,7 +787,7 @@ const navigateToBlogCreate = async (client) => {
       return state;
     }
 
-    if (attempt === 99) {
+    if (attempt === BLOG_CREATE_CONTROL_WAIT_ATTEMPTS - 1) {
       throw new Error(`Blog create page did not render expected controls: ${JSON.stringify(state)}`);
     }
 
@@ -1096,12 +1168,19 @@ const createPreviewFromUi = async (client) => {
         return {
           ok: false,
           label: button?.textContent || null,
-          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
-          title: document.querySelector('#blog-create-title')?.value || '',
-          slug: document.querySelector('#blog-create-slug')?.value || '',
-          canonical: document.querySelector('#blog-create-canonical')?.value || '',
-          body: document.body?.innerText?.slice(0, 260) || '',
-        };
+	          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+	          title: document.querySelector('#blog-create-title')?.value || '',
+	          slug: document.querySelector('#blog-create-slug')?.value || '',
+	          canonical: document.querySelector('#blog-create-canonical')?.value || '',
+	          payload: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}'),
+	          alerts: Array.from(document.querySelectorAll('[role="alert"], [data-testid*="error"]')).map((node) => node.textContent || '').slice(0, 4),
+	          buttons: Array.from(document.querySelectorAll('button')).filter((candidate) => (candidate.textContent || '').includes('Save')).map((candidate) => ({
+	            text: candidate.textContent || '',
+	            disabled: candidate instanceof HTMLButtonElement ? candidate.disabled : null,
+	            title: candidate.getAttribute('title') || '',
+	          })),
+	          body: document.body?.innerText?.slice(0, 260) || '',
+	        };
       }
       button.click();
       return { ok: true, label: button.textContent || '' };
@@ -1182,12 +1261,20 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
   assert(post.meta?.frontendDesignTemplateName === FRONTEND_BLOG_TEMPLATE_NAME, `Created blog did not store frontend template name: ${JSON.stringify(post.meta)}`);
   assert(post.meta?.frontendDesignSource?.type === 'custom-frontend', `Created blog did not store frontend design source: ${JSON.stringify(post.meta)}`);
   assert(Array.isArray(post.meta?.frontendDesignBindingHints) && post.meta.frontendDesignBindingHints.length === 2, `Created blog did not store frontend binding hints: ${JSON.stringify(post.meta)}`);
+  assert(post.meta?.frontendDesignCustomJs?.includes('__backySmokeBlogTemplate'), `Created blog did not store frontend custom JS provenance: ${JSON.stringify(post.meta)}`);
+  assert(post.meta?.frontendDesignThemeTokenRefs?.primary === 'tokens.colors.primary', `Created blog did not store frontend theme token refs: ${JSON.stringify(post.meta)}`);
+  assert(Array.isArray(post.meta?.frontendDesignAssets) && post.meta.frontendDesignAssets[0]?.media?.[0]?.id === 'media-smoke-blog-cover', `Created blog did not store frontend asset provenance: ${JSON.stringify(post.meta)}`);
+  assert(Array.isArray(post.meta?.frontendDesignAnimations) && post.meta.frontendDesignAnimations[0]?.target === 'post.title', `Created blog did not store frontend animation provenance: ${JSON.stringify(post.meta)}`);
+  assert(Array.isArray(post.meta?.frontendDesignInteractions) && post.meta.frontendDesignInteractions[0]?.timeline?.[0]?.animation === 'slide-up', `Created blog did not store frontend interaction provenance: ${JSON.stringify(post.meta)}`);
+  assert(post.meta?.frontendDesignEditableMap?.['post.hero.title']?.field === 'props.content', `Created blog did not store frontend editable map provenance: ${JSON.stringify(post.meta)}`);
+  assert(post.meta?.frontendDesignMetadata?.editableSurface === 'blog-create-smoke', `Created blog did not store frontend design metadata: ${JSON.stringify(post.meta)}`);
 
   const content = normalizeCreatedContent(post.content);
   const elements = Array.isArray(content.elements) ? content.elements : [];
   const allElements = flattenElements(elements);
   const byId = new Map(allElements.map((element) => [element.id, element]));
   const canvasSize = content.canvasSize || content.contentDocument?.metadata?.canvasSize || {};
+  const contentDocument = content.contentDocument || null;
   const wrapper = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}`);
   const heading = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading`);
   const bodyRegion = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-body-region`);
@@ -1202,6 +1289,15 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
   assert(longFormSection && longFormQuote, `Created blog did not persist long-form writing blocks: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 80) })}`);
   assert(canvasSize.width === 1260 && canvasSize.height >= 940, `Frontend blog canvas size mismatch: ${JSON.stringify(canvasSize)}`);
   assert(typeof content.customCSS === 'string' && content.customCSS.includes('--backy-smoke-blog-primary'), `Frontend blog custom CSS was not persisted: ${JSON.stringify(content.customCSS)}`);
+  assert(typeof content.customJS === 'string' && content.customJS.includes('__backySmokeBlogTemplate'), `Frontend blog custom JS was not persisted: ${JSON.stringify(content.customJS)}`);
+  assert(contentDocument?.metadata?.customJS?.includes('__backySmokeBlogTemplate'), `Frontend blog contentDocument custom JS missing: ${JSON.stringify(contentDocument?.metadata)}`);
+  assert(contentDocument?.themeTokenRefs?.primary === 'tokens.colors.primary', `Frontend blog theme token refs missing: ${JSON.stringify(contentDocument?.themeTokenRefs)}`);
+  assert(contentDocument?.assets?.media?.[0]?.id === 'media-smoke-blog-cover', `Frontend blog asset manifest missing: ${JSON.stringify(contentDocument?.assets)}`);
+  assert(contentDocument?.interactions?.timeline?.[0]?.animation === 'slide-up', `Frontend blog interaction manifest missing: ${JSON.stringify(contentDocument?.interactions)}`);
+  assert(contentDocument?.dataBindings?.datasets?.[0]?.source === 'blog', `Frontend blog data bindings missing: ${JSON.stringify(contentDocument?.dataBindings)}`);
+  assert(contentDocument?.editableMap?.['post.hero.title']?.field === 'props.content', `Frontend blog editable map missing: ${JSON.stringify(contentDocument?.editableMap)}`);
+  assert(contentDocument?.seo?.titleTemplate === '{title} | Smoke Blog', `Frontend blog SEO manifest missing: ${JSON.stringify(contentDocument?.seo)}`);
+  assert(contentDocument?.metadata?.animationTimeline?.[0]?.id === 'post-title-enter', `Frontend blog animation metadata missing: ${JSON.stringify(contentDocument?.metadata)}`);
 
   return {
     postId,
@@ -1211,6 +1307,7 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
       frontendDesignTemplateName: post.meta?.frontendDesignTemplateName,
       frontendDesignSourceType: post.meta?.frontendDesignSource?.type,
       bindingHintCount: post.meta?.frontendDesignBindingHints?.length || 0,
+      hasDesignState: Boolean(post.meta?.frontendDesignCustomJs && post.meta?.frontendDesignEditableMap),
     },
     content: {
       rootElementCount: elements.length,
@@ -1222,6 +1319,8 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
       longFormSectionId: longFormSection?.id,
       longFormQuoteId: longFormQuote?.id,
       customCssStored: typeof content.customCSS === 'string',
+      customJsStored: typeof content.customJS === 'string',
+      editableMapKeys: Object.keys(contentDocument?.editableMap || {}),
     },
   };
 };

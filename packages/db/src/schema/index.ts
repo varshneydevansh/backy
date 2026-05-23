@@ -340,7 +340,7 @@ export const media = pgTable('media', {
     thumbnailUrl: text('thumbnail_url'),
 
     folderId: uuid('folder_id'),
-    tags: jsonb('tags').default([]),
+    tags: text('tags').array().default(sql`'{}'::text[]`),
     metadata: jsonb('metadata').default({}),
     altText: text('alt_text'),
     caption: text('caption'),
@@ -522,7 +522,7 @@ export const formSubmissions = pgTable('form_submissions', {
     userAgent: text('user_agent'),
     requestId: text('request_id'),
     status: text('status').default('pending').notNull(),
-    reviewedBy: uuid('reviewed_by').references(() => profiles.id),
+    reviewedBy: text('reviewed_by'),
     reviewedAt: timestamp('reviewed_at'),
     adminNotes: text('admin_notes'),
     collectionRecord: jsonb('collection_record'),
@@ -676,6 +676,10 @@ export const contentRevisions = pgTable('content_revisions', {
     targetId: text('target_id').notNull(),
     snapshot: jsonb('snapshot').default({}).notNull(),
     note: text('note'),
+    parentRevisionId: text('parent_revision_id'),
+    operation: text('operation'),
+    restoreTargetRevisionId: text('restore_target_revision_id'),
+    metadata: jsonb('metadata').default({}).notNull(),
     createdBy: text('created_by'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -801,7 +805,7 @@ export const domainMappings = pgTable('domain_mappings', {
 export const activityLogs = pgTable('activity_logs', {
     id: uuid('id').defaultRandom().primaryKey(),
     siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id').references(() => profiles.id),
+    userId: uuid('user_id').references(() => profiles.id, { onDelete: 'set null' }),
     action: text('action').notNull(),
     entityType: text('entity_type').notNull(),
     entityId: text('entity_id'),

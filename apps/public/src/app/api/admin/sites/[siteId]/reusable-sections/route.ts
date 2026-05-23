@@ -20,7 +20,10 @@ import {
 } from "@/lib/repositoryRuntime";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import { buildInitialReusableSectionMetadata } from "@/lib/reusableSectionVersions";
-import { seedSectionInputFromFrontendDesignTemplate } from "@/lib/frontendDesignContract";
+import {
+  normalizeReusableSectionInputFromDirectFrontendDesignEnvelope,
+  seedSectionInputFromFrontendDesignTemplate,
+} from "@/lib/frontendDesignContract";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 import type { BackyJsonObject, Site } from "@backy-cms/core";
 
@@ -282,7 +285,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (!seeded.ok) {
         return errorResponse(400, seeded.code, seeded.message, requestId);
       }
-      const body = seeded.body;
+      const body = normalizeReusableSectionInputFromDirectFrontendDesignEnvelope(
+        seeded.body,
+      );
       const name = typeof body.name === "string" ? body.name.trim() : "";
       const slug = normalizeSlug(body.slug || name);
 
@@ -416,7 +421,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!seeded.ok) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
-    const body = seeded.body;
+    const body = normalizeReusableSectionInputFromDirectFrontendDesignEnvelope(
+      seeded.body,
+    );
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const slug = normalizeSlug(body.slug || name);
 

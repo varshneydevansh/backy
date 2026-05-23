@@ -22,6 +22,7 @@ import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionFrontendDesign, withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
 import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { syncRepositoryCollectionRecordMediaReferences } from '@/lib/repositoryMediaReferenceSync';
 
 interface RouteParams {
   params: Promise<{
@@ -317,6 +318,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         status: 'draft',
         values: toJsonRecord(values),
       })).item;
+      await syncRepositoryCollectionRecordMediaReferences({
+        mediaRepository: repositories.media,
+        siteId: site.id,
+        collectionId: collection.id,
+        recordId: record.id,
+        values: record.values,
+      });
 
       return privateResponse(
         {

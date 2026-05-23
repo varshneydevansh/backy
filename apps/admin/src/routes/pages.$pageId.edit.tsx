@@ -56,6 +56,7 @@ import {
   normalizeSavedCanvasContent,
   serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
+import { canvasElementsToBackyContentDocument } from '@backy-cms/core';
 
 interface PageEditorSearch {
   siteId?: string;
@@ -179,6 +180,7 @@ type PageRevisionTimelineNode = {
   restoreTargetPosition: number | null;
   restoreTargetLabel: string | null;
   restoreEdgeId: string | null;
+  branchMetadata: ContentRevision['branchMetadata'] | null;
 };
 
 type PageRevisionBranchRole = 'trunk' | 'restore-checkpoint' | 'restore-branch';
@@ -213,9 +215,9 @@ type PageRevisionBranchGraph = {
   edges: PageRevisionGraphEdge[];
   nodes: PageRevisionTimelineNode[];
   inference: {
-    source: 'revision-notes';
+    source: 'revision-api-branch-metadata' | 'revision-notes';
     rollbackNotePattern: string;
-    confidence: 'inferred';
+    confidence: 'explicit-api-metadata' | 'inferred';
     limitation: string;
   };
 };
@@ -242,13 +244,31 @@ const PAGE_EDITOR_PERMISSION_ROLE_DEFAULTS: Record<PageEditorPermissionKey, Arra
 const PAGE_REVISION_COLLAPSED_COUNT = 6;
 const PAGE_REVISION_RESTORE_TARGET_PATTERN = /\b(?:rollback|restore)\s+to\s+([a-zA-Z0-9_-]+)/i;
 
-const getRevisionRestoreTargetId = (revision: Pick<ContentRevision, 'note'>): string | null => {
+const isPageRevisionBranchRole = (value: unknown): value is PageRevisionBranchRole => (
+  value === 'trunk' || value === 'restore-checkpoint' || value === 'restore-branch'
+);
+
+const getRevisionBranchMetadata = (
+  revision: Pick<ContentRevision, 'branchMetadata'>,
+): NonNullable<ContentRevision['branchMetadata']> | null => (
+  revision.branchMetadata?.schemaVersion === 'backy.content-revision-branch-metadata.v1'
+    ? revision.branchMetadata
+    : null
+);
+
+const getRevisionRestoreTargetId = (revision: Pick<ContentRevision, 'note' | 'branchMetadata'>): string | null => {
+  const metadataRestoreTargetId = getRevisionBranchMetadata(revision)?.restoreTargetRevisionId;
+  if (metadataRestoreTargetId) return metadataRestoreTargetId;
+
   const note = revision.note || '';
   const match = note.match(PAGE_REVISION_RESTORE_TARGET_PATTERN);
   return match?.[1] || null;
 };
 
 const buildPageRevisionBranchGraph = (revisions: ContentRevision[]): PageRevisionBranchGraph => {
+  const hasApiBranchMetadata = revisions.some((revision) => (
+    revision.branchMetadata?.schemaVersion === 'backy.content-revision-branch-metadata.v1'
+  ));
   const revisionIds = new Set(revisions.map((revision) => revision.id));
   const positionById = new Map(revisions.map((revision, index) => [revision.id, index + 1]));
   const branchByRevisionId = new Map<string, string>();
@@ -297,7 +317,7 @@ const buildPageRevisionBranchGraph = (revisions: ContentRevision[]): PageRevisio
         toId: restoreTargetId,
         kind: 'rollback-target',
         label: `Rollback checkpoint restores from #${restoreTargetPosition || '?'}`,
-        inferred: true,
+        inferred: !hasApiBranchMetadata,
       });
 
       lane += 1;
@@ -331,11 +351,20 @@ const buildPageRevisionBranchGraph = (revisions: ContentRevision[]): PageRevisio
       .map((edge) => [edge.fromId, edge]),
   );
   const nodes = revisions.map((revision, index) => {
-    const branchId = branchByRevisionId.get(revision.id) || rootBranchId;
+    const branchMetadata = getRevisionBranchMetadata(revision);
+    const branchId = branchMetadata?.branchId || branchByRevisionId.get(revision.id) || rootBranchId;
     const branch = branchSummaryById.get(branchId) || branchSummaries[0];
     const restoreTargetId = getRevisionRestoreTargetId(revision);
-    const restoreTargetPosition = restoreTargetId ? positionById.get(restoreTargetId) || null : null;
+    const restoreTargetPosition = branchMetadata?.restoreTargetPosition ?? (restoreTargetId ? positionById.get(restoreTargetId) || null : null);
     const restoreEdge = rollbackEdgesByFromId.get(revision.id) || null;
+    const metadataBranchRole = branchMetadata?.branchRole;
+    const branchRole = isPageRevisionBranchRole(metadataBranchRole)
+      ? metadataBranchRole
+      : restoreTargetId && revisionIds.has(restoreTargetId)
+        ? 'restore-checkpoint'
+        : branchId === rootBranchId
+          ? 'trunk'
+          : 'restore-branch';
 
     return {
       id: revision.id,
@@ -355,19 +384,16 @@ const buildPageRevisionBranchGraph = (revisions: ContentRevision[]): PageRevisio
       isLatest: index === 0,
       isOldest: index === revisions.length - 1,
       branchId,
-      branchLabel: branch?.label || 'Main timeline',
-      branchLane: branch?.lane || 0,
-      branchRole: restoreTargetId && revisionIds.has(restoreTargetId)
-        ? 'restore-checkpoint'
-        : branchId === rootBranchId
-          ? 'trunk'
-          : 'restore-branch',
-      chronologicalParentId: revisions[index + 1]?.id || null,
-      chronologicalChildId: revisions[index - 1]?.id || null,
+      branchLabel: branchMetadata?.branchLabel || branch?.label || 'Main timeline',
+      branchLane: branchMetadata?.branchLane ?? branch?.lane ?? 0,
+      branchRole,
+      chronologicalParentId: branchMetadata?.chronologicalParentId ?? revisions[index + 1]?.id ?? null,
+      chronologicalChildId: branchMetadata?.chronologicalChildId ?? revisions[index - 1]?.id ?? null,
       restoreTargetId: restoreTargetId && revisionIds.has(restoreTargetId) ? restoreTargetId : null,
       restoreTargetPosition,
       restoreTargetLabel: restoreTargetPosition ? `Revision #${restoreTargetPosition}` : null,
-      restoreEdgeId: restoreEdge?.id || null,
+      restoreEdgeId: branchMetadata?.restoreEdgeId || restoreEdge?.id || null,
+      branchMetadata,
     } satisfies PageRevisionTimelineNode;
   });
 
@@ -381,10 +407,12 @@ const buildPageRevisionBranchGraph = (revisions: ContentRevision[]): PageRevisio
     edges,
     nodes,
     inference: {
-      source: 'revision-notes',
+      source: hasApiBranchMetadata ? 'revision-api-branch-metadata' : 'revision-notes',
       rollbackNotePattern: PAGE_REVISION_RESTORE_TARGET_PATTERN.source,
-      confidence: 'inferred',
-      limitation: 'Backy currently stores page revision order and rollback notes; explicit parent revision IDs can replace this inference when the revision schema grows branch metadata.',
+      confidence: hasApiBranchMetadata ? 'explicit-api-metadata' : 'inferred',
+      limitation: hasApiBranchMetadata
+        ? 'Backy revision APIs return normalized branch metadata from persisted parent revision, operation, restore-target, order, and legacy rollback-note metadata.'
+        : 'Backy currently stores page revision order and rollback notes for legacy revisions; new revisions persist parent revision, operation, and restore-target metadata.',
     },
   };
 };
@@ -457,6 +485,23 @@ const metaStringValue = (meta: Record<string, any> | undefined, key: string): st
   const value = meta?.[key];
   return typeof value === 'string' ? value.trim() : '';
 };
+
+const getPageRelationParentId = (page: Pick<Page, 'parentId' | 'meta'>): string | null => {
+  if (typeof page.parentId === 'string' && page.parentId.trim()) {
+    return page.parentId.trim();
+  }
+
+  const metaParentId = metaStringValue(page.meta, 'parentPageId');
+  return metaParentId || null;
+};
+
+const recordKeyCount = (value: unknown): number => (
+  isRecord(value) ? Object.keys(value).length : 0
+);
+
+const arrayCount = (value: unknown): number => (
+  Array.isArray(value) ? value.length : 0
+);
 
 const compactRevisionDiffValue = (value: string | null | undefined, fallback = 'empty'): string => {
   const normalized = value?.trim();
@@ -846,7 +891,20 @@ function PageEditorRoute() {
   }, [routeSearch.focus]);
 
   // Load Elements
-  const { elements: initialElements, canvasSize: initialCanvasSize } = useMemo(
+  const {
+    elements: initialElements,
+    canvasSize: initialCanvasSize,
+    customCSS: initialCustomCSS,
+    customJS: initialCustomJS,
+    themeTokenRefs: initialThemeTokenRefs,
+    assets: initialDesignAssets,
+    interactions: initialDesignInteractions,
+    seo: initialDesignSeo,
+    dataBindings: initialDesignDataBindings,
+    editableMap: initialEditableMap,
+    metadata: initialDesignMetadata,
+    contentDocument: initialContentDocument,
+  } = useMemo(
     () => normalizeSavedCanvasContent(page?.content || null),
     [page?.content]
   );
@@ -882,13 +940,21 @@ function PageEditorRoute() {
   }, [initialElements, page?.id, page?.title]);
 
   const editorElements = initialElements.length ? initialElements : fallbackElements;
-  const canvasTreeStats = useMemo(() => getCanvasTreeStats(editorElements), [editorElements]);
+  const [currentCanvasElements, setCurrentCanvasElements] = useState<CanvasElement[]>(editorElements);
+  const [currentCanvasSize, setCurrentCanvasSize] = useState<CanvasSize>(initialCanvasSize);
+
+  useEffect(() => {
+    setCurrentCanvasElements(editorElements);
+    setCurrentCanvasSize(initialCanvasSize);
+  }, [editorElements, editorResetVersion, initialCanvasSize, page?.id]);
+
+  const canvasTreeStats = useMemo(() => getCanvasTreeStats(currentCanvasElements), [currentCanvasElements]);
   const revisionDiffById = useMemo(() => page
     ? new Map(revisions.map((revision) => [
         revision.id,
-        pageRevisionDiff(page, revision, canvasTreeStats, initialCanvasSize, editorElements),
+        pageRevisionDiff(page, revision, canvasTreeStats, currentCanvasSize, currentCanvasElements),
       ]))
-    : new Map<string, PageRevisionDiff>(), [canvasTreeStats, editorElements, initialCanvasSize, page, revisions]);
+    : new Map<string, PageRevisionDiff>(), [canvasTreeStats, currentCanvasElements, currentCanvasSize, page, revisions]);
   const pageRevisionBranchGraph = useMemo(() => buildPageRevisionBranchGraph(revisions), [revisions]);
   const pageRevisionTimeline = pageRevisionBranchGraph.nodes;
   const pageRevisionBranchGraphText = useMemo(
@@ -912,12 +978,48 @@ function PageEditorRoute() {
     }, 0);
   };
   const interactiveReadinessIssues = useMemo(
-    () => collectInteractiveReadinessIssues(editorElements),
-    [editorElements],
+    () => collectInteractiveReadinessIssues(currentCanvasElements),
+    [currentCanvasElements],
   );
   const interactivePublishDisabledReason = interactiveReadinessIssues.length
     ? `Resolve interactive block readiness before publishing: ${interactiveReadinessIssues[0]}`
     : null;
+  const currentDesignDocument = useMemo(() => canvasElementsToBackyContentDocument({
+    id: page?.id || pageId,
+    kind: 'page',
+    title: page?.title,
+    slug: page?.slug,
+    status: page?.status,
+    locale: 'en',
+    elements: currentCanvasElements,
+    canvasSize: currentCanvasSize,
+    customCSS: initialCustomCSS,
+    customJS: initialCustomJS,
+    themeTokenRefs: initialThemeTokenRefs,
+    assets: initialDesignAssets,
+    interactions: initialDesignInteractions,
+    seo: initialDesignSeo,
+    dataBindings: initialDesignDataBindings,
+    editableMap: initialEditableMap,
+    metadata: initialDesignMetadata,
+  }), [
+    currentCanvasElements,
+    currentCanvasSize,
+    initialCustomCSS,
+    initialCustomJS,
+    initialDesignAssets,
+    initialDesignDataBindings,
+    initialDesignInteractions,
+    initialDesignMetadata,
+    initialDesignSeo,
+    initialEditableMap,
+    initialThemeTokenRefs,
+    page?.id,
+    page?.slug,
+    page?.status,
+    page?.title,
+    pageId,
+  ]);
 
   const parseSerializedContent = (serialized: string): unknown => {
     try {
@@ -994,6 +1096,26 @@ function PageEditorRoute() {
   const siteRouteCheckPages = routeCheckSiteId === siteId ? routeCheckPages : null;
   const selectedSitePages = siteRouteCheckPages || localSelectedSitePages;
   const isRouteCheckBackendVerified = Boolean(siteRouteCheckPages);
+  const pageParentId = getPageRelationParentId(page);
+  const parentPage = pageParentId
+    ? selectedSitePages.find((candidate) => candidate.id === pageParentId) || null
+    : null;
+  const directChildPages = selectedSitePages.filter((candidate) => getPageRelationParentId(candidate) === page.id);
+  const descendantPages: Page[] = [];
+  const visitedDescendantIds = new Set<string>();
+  const collectPageDescendants = (parentId: string) => {
+    selectedSitePages
+      .filter((candidate) => getPageRelationParentId(candidate) === parentId)
+      .forEach((child) => {
+        if (visitedDescendantIds.has(child.id)) return;
+        visitedDescendantIds.add(child.id);
+        descendantPages.push(child);
+        collectPageDescendants(child.id);
+      });
+  };
+  collectPageDescendants(page.id);
+  const navigationPlacement = metaStringValue(page.meta, 'navigationPlacement') || 'none';
+  const navigationLabel = metaStringValue(page.meta, 'navigationLabel') || page.title;
   const routeCheckBlockedMessage = !isRouteCheckBackendVerified
     ? isRouteCheckLoading
       ? 'Checking backend page routes before confirming availability.'
@@ -1047,6 +1169,91 @@ function PageEditorRoute() {
         : isUsingLocalPageCopy
           ? localPageCopyDisabledMessage
           : null;
+  const pagePublishImpact = {
+    schemaVersion: 'backy.page-publish-impact.v1',
+    generatedAt: new Date().toISOString(),
+    page: {
+      id: page.id,
+      title: page.title,
+      path: publicPath,
+      status: page.status,
+      scheduledAt: page.scheduledAt || null,
+      isHomepage: Boolean(page.isHomepage),
+    },
+    route: {
+      path: publicPath,
+      backendVerified: isRouteCheckBackendVerified,
+      checkedPages: selectedSitePages.length,
+      conflict: currentRouteConflict
+        ? {
+            id: currentRouteConflict.id,
+            title: currentRouteConflict.title,
+            path: getPagePublicPath(currentRouteConflict),
+          }
+        : null,
+      blockedReason: routeCheckBlockedMessage,
+    },
+    relations: {
+      parent: parentPage
+        ? {
+            id: parentPage.id,
+            title: parentPage.title,
+            path: getPagePublicPath(parentPage),
+            status: parentPage.status,
+          }
+        : null,
+      directChildren: directChildPages.map((child) => ({
+        id: child.id,
+        title: child.title,
+        path: getPagePublicPath(child),
+        status: child.status,
+      })),
+      descendantCount: descendantPages.length,
+      publishedDescendantCount: descendantPages.filter((child) => child.status === 'published').length,
+      draftDescendantCount: descendantPages.filter((child) => child.status === 'draft').length,
+      scheduledDescendantCount: descendantPages.filter((child) => child.status === 'scheduled').length,
+      archivedDescendantCount: descendantPages.filter((child) => child.status === 'archived').length,
+    },
+    navigation: {
+      placement: navigationPlacement,
+      label: navigationLabel,
+      childNavigationItems: directChildPages.map((child) => ({
+        id: child.id,
+        label: metaStringValue(child.meta, 'navigationLabel') || child.title,
+        path: getPagePublicPath(child),
+        status: child.status,
+      })),
+    },
+    readiness: {
+      statusLabel: pageReadiness?.statusLabel || null,
+      score: pageReadiness?.score ?? null,
+      blockingFindings: pageReadinessFindings.map((finding) => ({
+        id: finding.id,
+        severity: finding.severity,
+        message: finding.message,
+      })),
+    },
+    actions: {
+      publish: {
+        allowed: canPublishPage && page.status !== 'published' && !externalWorkflowDisabledReason,
+        disabledReason: externalWorkflowDisabledReason || null,
+      },
+      unpublish: {
+        allowed: canEditPage && canPublishPage && page.status === 'published' && !unpublishDisabledReason,
+        disabledReason: unpublishDisabledReason || null,
+      },
+      archive: {
+        allowed: canEditPage && page.status !== 'archived' && !archiveDisabledReason,
+        disabledReason: archiveDisabledReason || null,
+      },
+    },
+    privacy: {
+      includesCanvasContent: false,
+      includesAdminApiOnlyEndpoints: false,
+      note: 'This impact handoff exposes route, relationship, navigation, readiness, and action safety metadata only.',
+    },
+  };
+  const pagePublishImpactText = JSON.stringify(pagePublishImpact, null, 2);
   const validatePageSettings = (settings: PageSettings) => {
     const nextSlug = slugify(settings.slug || settings.title || 'page');
     const nextPath = getPublicPathForSettings(settings);
@@ -1186,8 +1393,8 @@ function PageEditorRoute() {
       publicResolve: publicResolveUrl,
     },
     canvas: {
-      width: initialCanvasSize.width,
-      height: initialCanvasSize.height,
+      width: currentCanvasSize.width,
+      height: currentCanvasSize.height,
       rootLayerCount: elementCount,
       totalLayerCount: totalElementCount,
       containerLayerCount,
@@ -1199,6 +1406,33 @@ function PageEditorRoute() {
         targetId: pageId,
       },
     },
+    design: {
+      schemaVersion: 'backy.custom-frontend-design-envelope.v1',
+      source: initialContentDocument ? 'stored-content-document' : 'normalized-editor-canvas',
+      contentDocumentSummary: {
+        id: currentDesignDocument.id,
+        kind: currentDesignDocument.kind,
+        schemaVersion: currentDesignDocument.schemaVersion,
+        status: currentDesignDocument.status || page.status,
+        slug: currentDesignDocument.slug || page.slug,
+      },
+      contentDocument: currentDesignDocument,
+      elements: currentCanvasElements,
+      canvasSize: currentCanvasSize,
+      customCSS: initialCustomCSS || '',
+      customJS: initialCustomJS || '',
+      customCSSPresent: Boolean(initialCustomCSS?.trim()),
+      customJSPresent: Boolean(initialCustomJS?.trim()),
+      themeTokenRefCount: recordKeyCount(currentDesignDocument.themeTokenRefs),
+      assetCount: arrayCount(currentDesignDocument.assets?.media) + arrayCount(currentDesignDocument.assets?.fonts),
+      animationTimelineCount: arrayCount(currentDesignDocument.metadata?.animations),
+      interactionGroupCount: recordKeyCount(currentDesignDocument.interactions),
+      dataBindingDatasetCount: arrayCount(currentDesignDocument.dataBindings?.datasets),
+      dataBindingCount: arrayCount(currentDesignDocument.dataBindings?.bindings),
+      editableFieldCount: recordKeyCount(currentDesignDocument.editableMap),
+      metadata: currentDesignDocument.metadata || {},
+      editorComposition: currentDesignDocument.metadata?.editorComposition || null,
+    },
     editorCapabilities: [
       'Drag and resize elements on the page canvas.',
       'Select unlocked sibling layers with Cmd/Ctrl+A, group them with Cmd/Ctrl+G, and ungroup with Shift+Cmd/Ctrl+G.',
@@ -1207,21 +1441,26 @@ function PageEditorRoute() {
       'Bind media, forms, and CMS-ready element props through the inspector.',
       'Persist canvas, settings, route, status, metadata, and revision notes through the page update endpoint.',
     ],
-    readiness: {
-      score: editorReadiness.score,
-      checks: editorReadiness.checks,
-      backend: pageReadiness
+	    readiness: {
+	      score: editorReadiness.score,
+	      checks: editorReadiness.checks,
+	      backend: pageReadiness
         ? {
             score: pageReadiness.score,
             statusLabel: pageReadiness.statusLabel,
             elementCount: pageReadiness.elementCount,
             canvasSize: pageReadiness.canvasSize,
           }
-        : null,
-    },
-    revisions: revisions.map((revision) => ({
+	        : null,
+	    },
+	    publishImpact: pagePublishImpact,
+	    revisions: revisions.map((revision) => ({
       id: revision.id,
       note: revision.note,
+      parentRevisionId: revision.parentRevisionId,
+      operation: revision.operation,
+      restoreTargetRevisionId: revision.restoreTargetRevisionId,
+      metadata: revision.metadata,
       createdAt: revision.createdAt,
       createdBy: revision.createdBy,
       actor: getContentRevisionActorLabel(revision),
@@ -1286,6 +1525,10 @@ function PageEditorRoute() {
     revision: {
       id: revision.id,
       note: revision.note,
+      parentRevisionId: revision.parentRevisionId,
+      operation: revision.operation,
+      restoreTargetRevisionId: revision.restoreTargetRevisionId,
+      metadata: revision.metadata,
       createdAt: revision.createdAt,
       createdBy: revision.createdBy,
       actor: getContentRevisionActorLabel(revision),
@@ -1308,8 +1551,8 @@ function PageEditorRoute() {
       metaTitle: metaStringValue(page.meta, 'title') || page.title,
       metaDescription: metaStringValue(page.meta, 'description'),
       canvas: {
-        width: initialCanvasSize.width,
-        height: initialCanvasSize.height,
+        width: currentCanvasSize.width,
+        height: currentCanvasSize.height,
         rootLayerCount: canvasTreeStats.rootLayerCount,
         totalLayerCount: canvasTreeStats.totalLayerCount,
         containerLayerCount: canvasTreeStats.containerLayerCount,
@@ -1385,13 +1628,21 @@ function PageEditorRoute() {
 
       const shouldPublishThroughWorkflow = settings.status === 'published' && page.status !== 'published';
       const statusForSave = shouldPublishThroughWorkflow ? 'draft' : settings.status;
-      const content = serializeCanvasContent(elements, canvasSize, undefined, {
+      const content = serializeCanvasContent(elements, canvasSize, initialCustomCSS, {
         documentId: page.id,
         kind: 'page',
         title: settings.title,
         slug: settings.slug,
         status: statusForSave,
         locale: 'en',
+        customJS: initialCustomJS,
+        themeTokenRefs: initialThemeTokenRefs,
+        assets: initialDesignAssets,
+        interactions: initialDesignInteractions,
+        seo: initialDesignSeo,
+        dataBindings: initialDesignDataBindings,
+        editableMap: initialEditableMap,
+        metadata: initialDesignMetadata,
       });
       const savedPage = await updatePageFromApi(siteId, pageId, {
         title: settings.title,
@@ -1413,6 +1664,8 @@ function PageEditorRoute() {
       )) || currentPages);
       setRouteCheckSiteId(siteId);
       updatePage(pageId, nextPage);
+      setCurrentCanvasElements(elements);
+      setCurrentCanvasSize(canvasSize);
       setSaveConflict(null);
       setSaveWarning(null);
       setWorkflowNotice(shouldPublishThroughWorkflow
@@ -1865,7 +2118,7 @@ function PageEditorRoute() {
           <div className="mt-4 grid gap-3 md:grid-cols-5">
             <EditorMetaTile label="Site" value={`${selectedSite?.name || siteId} (${siteId})`} />
             <EditorMetaTile label="Route" value={page.slug ? `/${page.slug}` : 'No slug'} />
-            <EditorMetaTile label="Canvas" value={`${initialCanvasSize.width} x ${initialCanvasSize.height}px`} />
+            <EditorMetaTile label="Canvas" value={`${currentCanvasSize.width} x ${currentCanvasSize.height}px`} />
             <EditorMetaTile label="Layers" value={`${totalElementCount} total / ${elementCount} root`} />
             <EditorMetaTile label="Status" value={page.status} />
           </div>
@@ -1908,7 +2161,7 @@ function PageEditorRoute() {
             meta={
               <>
                 <span className="rounded bg-muted px-2 py-1 tabular-nums">
-                  {initialCanvasSize.width} x {initialCanvasSize.height}px
+                  {currentCanvasSize.width} x {currentCanvasSize.height}px
                 </span>
                 <span className="rounded bg-muted px-2 py-1">
                   {totalElementCount} layer{totalElementCount === 1 ? '' : 's'} / {elementCount} root
@@ -1956,6 +2209,7 @@ function PageEditorRoute() {
               initialSize={initialCanvasSize}
               initialSelectedElementId={routeSearch.elementId}
               initialSettings={initialSettings}
+              theme={selectedSite?.theme}
               onSave={handleSave}
               onBack={handleBack}
               hideNavigation={true}
@@ -1966,6 +2220,12 @@ function PageEditorRoute() {
                 targetLabel: page.title,
               }}
               validateSettings={validatePageSettings}
+              onChange={(elements, _settings, size) => {
+                setCurrentCanvasElements(elements);
+                if (size) {
+                  setCurrentCanvasSize(size);
+                }
+              }}
               canView={canViewPage}
               canEdit={canEditPage && !isUsingLocalPageCopy}
               canPublish={canPublishPage && !isUsingLocalPageCopy}
@@ -2003,9 +2263,9 @@ function PageEditorRoute() {
                 </div>
               )}
 
-              <div className="grid gap-2">
-                <Button
-                  onClick={() => void generatePreview()}
+	              <div className="grid gap-2">
+	                <Button
+	                  onClick={() => void generatePreview()}
                   disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
                   variant="outline"
                   iconStart={<Eye className="size-4" />}
@@ -2042,12 +2302,69 @@ function PageEditorRoute() {
                   className="w-full"
                   title={archiveDisabledReason || 'Archive page'}
                 >
-                  Archive
-                </Button>
-              </div>
+	                  Archive
+	                </Button>
+	              </div>
 
-              {previewUrl && (
-                <a
+	              <div
+	                className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs leading-5 text-muted-foreground"
+	                data-testid="page-editor-publish-impact"
+	                data-schema-version={pagePublishImpact.schemaVersion}
+	                data-direct-children={directChildPages.length}
+	                data-descendants={descendantPages.length}
+	                data-route-verified={isRouteCheckBackendVerified ? 'true' : 'false'}
+	              >
+	                <div className="flex flex-wrap items-start justify-between gap-2">
+	                  <div>
+	                    <div className="font-medium text-foreground">Publish impact</div>
+	                    <div className="mt-0.5">
+	                      {parentPage ? `Nested under ${parentPage.title}. ` : 'Top-level page. '}
+	                      {directChildPages.length} direct child page{directChildPages.length === 1 ? '' : 's'} and {descendantPages.length} total descendant{descendantPages.length === 1 ? '' : 's'}.
+	                    </div>
+	                  </div>
+	                  <Button
+	                    type="button"
+	                    size="sm"
+	                    variant="ghost"
+	                    disabled={isPageEditorBusy}
+	                    onClick={() => void copyEditorHandoffText(pagePublishImpactText, 'Page publish impact')}
+	                    data-testid="page-editor-copy-publish-impact"
+	                  >
+	                    Copy impact
+	                  </Button>
+	                </div>
+	                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+	                  <div>
+	                    <span className="font-medium text-foreground">Route</span>
+	                    <div>{publicPath} · {isRouteCheckBackendVerified ? `${selectedSitePages.length} backend pages checked` : 'backend route check pending'}</div>
+	                    {currentRouteConflict ? (
+	                      <div className="text-red-700">Conflicts with {currentRouteConflict.title}</div>
+	                    ) : null}
+	                  </div>
+	                  <div>
+	                    <span className="font-medium text-foreground">Navigation</span>
+	                    <div>{navigationPlacement} · {navigationLabel}</div>
+	                    <div>{pagePublishImpact.relations.publishedDescendantCount} published descendant{pagePublishImpact.relations.publishedDescendantCount === 1 ? '' : 's'}</div>
+	                  </div>
+	                </div>
+	                {directChildPages.length > 0 ? (
+	                  <div className="mt-2 flex flex-wrap gap-1" data-testid="page-editor-publish-impact-children">
+	                    {directChildPages.slice(0, 4).map((child) => (
+	                      <span key={child.id} className="rounded bg-background px-1.5 py-0.5">
+	                        {child.title} · {child.status}
+	                      </span>
+	                    ))}
+	                    {directChildPages.length > 4 ? (
+	                      <span className="rounded bg-background px-1.5 py-0.5">
+	                        +{directChildPages.length - 4} more
+	                      </span>
+	                    ) : null}
+	                  </div>
+	                ) : null}
+	              </div>
+
+	              {previewUrl && (
+	                <a
                   href={previewUrl}
                   target="_blank"
                   rel="noreferrer"
@@ -2434,11 +2751,11 @@ function PageEditorRoute() {
                             <RevisionCanvasVisualDiff
                               testId={`page-editor-revision-visual-diff-${revision.id}`}
                               snapshotElements={revision.snapshotElements}
-                              currentElements={editorElements}
+                              currentElements={currentCanvasElements}
                               snapshotCanvasWidth={revision.snapshotCanvas.canvasWidth}
                               snapshotCanvasHeight={revision.snapshotCanvas.canvasHeight}
-                              currentCanvasWidth={initialCanvasSize.width}
-                              currentCanvasHeight={initialCanvasSize.height}
+                              currentCanvasWidth={currentCanvasSize.width}
+                              currentCanvasHeight={currentCanvasSize.height}
                               elementDiff={revisionDiff.elementDiff}
                               pixelComparison={revisionDiff.renderedPixelDiff}
                             />

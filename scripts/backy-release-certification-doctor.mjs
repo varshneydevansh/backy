@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 const env = process.env;
 
 const value = (name) => (env[name] || '').trim();
@@ -9,6 +12,40 @@ const hasCompleteAlternative = (fields) => fields.every((names) => hasAny(names)
 const selected = (name, fallback = 'auto') => value(name).toLowerCase() || fallback;
 const requested = (name, fallback = false) => (env[name] === undefined ? fallback : env[name] === '1' || env[name] === 'true');
 const isHttpUrl = (name) => /^https?:\/\//i.test(value(name));
+const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value);
+const RAW_SECRET_VALUE_PATTERN = /(sk_live_[A-Za-z0-9]+|sk_test_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]+)/i;
+const URL_WITH_CREDENTIALS_PATTERN = /\b(?:https?|postgres(?:ql)?):\/\/[^/\s:@]+:[^@\s/]+@/i;
+const FORBIDDEN_ARTIFACT_FIELD_NAMES = new Set([
+  'adminkey',
+  'adminapikey',
+  'authorization',
+  'cookie',
+  'setcookie',
+  'databaseurl',
+  'databaseuri',
+  'externalbaseurl',
+  'externalurl',
+  'targeturl',
+  'webhookbody',
+  'webhookpayload',
+  'rawwebhookbody',
+  'rawwebhookpayload',
+  'providercredential',
+  'providercredentials',
+  'credential',
+  'credentials',
+  'paymentreference',
+  'paymentreferences',
+  'providerpaymentreference',
+  'customerpayload',
+  'rawcustomerpayload',
+  'orderpayload',
+  'raworderpayload',
+  'raworder',
+  'raworders',
+  'privatekey',
+  'servicerolekey',
+]);
 const isPostgresUrl = (url) => {
   try {
     return ['postgres:', 'postgresql:'].includes(new URL(url).protocol);
@@ -46,6 +83,261 @@ const checkCompleteAny = (label, alternatives, enabled = true) => {
     missingAnyOf: ready
       ? []
       : alternatives.map((fields) => fields.map((names) => names.join(' | ')).join(' + ')),
+  };
+};
+
+const configuredPath = (names) => {
+  for (const name of names) {
+    if (has(name)) return { env: name, value: value(name) };
+  }
+  return null;
+};
+
+const normalizeArtifactFieldName = (name) => name.replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+const collectForbiddenArtifactFields = (input, pathSegments = []) => {
+  if (Array.isArray(input)) {
+    return input.flatMap((item, index) => collectForbiddenArtifactFields(item, [...pathSegments, String(index)]));
+  }
+
+  if (!isRecord(input)) {
+    if (typeof input === 'string' && URL_WITH_CREDENTIALS_PATTERN.test(input)) {
+      return [pathSegments.join('.') || '$'];
+    }
+    return [];
+  }
+
+  return Object.entries(input).flatMap(([key, nestedValue]) => {
+    const nextPath = [...pathSegments, key];
+    const normalizedKey = normalizeArtifactFieldName(key);
+    const fieldLeak = FORBIDDEN_ARTIFACT_FIELD_NAMES.has(normalizedKey)
+      ? [nextPath.join('.')]
+      : [];
+    return [
+      ...fieldLeak,
+      ...collectForbiddenArtifactFields(nestedValue, nextPath),
+    ];
+  });
+};
+
+const verifyCertificationArtifact = ({
+  label,
+  pathEnvNames,
+  requiredEnv,
+  expectedContract,
+  expectedSchemaVersion,
+  extraChecks,
+}) => {
+  const configured = configuredPath(pathEnvNames);
+  const required = requested(requiredEnv, false) || requested('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED', false);
+  const base = {
+    label,
+    required,
+    configured: Boolean(configured),
+    pathEnvNames,
+    configuredEnv: configured?.env || null,
+    fileName: configured ? path.basename(configured.value) : null,
+    exists: false,
+    parsed: false,
+    okReady: false,
+    contractReady: false,
+    schemaReady: false,
+    noSecretBoundaryReady: false,
+    noRawSecretValuesReady: false,
+    ready: false,
+    failure: null,
+  };
+
+  if (!configured) {
+    return {
+      ...base,
+      failure: required ? `${label} artifact path not configured` : null,
+    };
+  }
+
+  const artifactPath = path.isAbsolute(configured.value)
+    ? configured.value
+    : path.resolve(process.cwd(), configured.value);
+
+  if (!fs.existsSync(artifactPath)) {
+    return {
+      ...base,
+      failure: `${label} artifact file not found`,
+    };
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+  } catch {
+    return {
+      ...base,
+      exists: true,
+      failure: `${label} artifact is not valid JSON`,
+    };
+  }
+
+  const artifact = isRecord(payload.artifact) ? payload.artifact : {};
+  const okReady = payload.ok === true;
+  const contractReady = payload.contract === expectedContract;
+  const schemaReady = artifact.schemaVersion === expectedSchemaVersion;
+  const secretHandling = typeof artifact.secretHandling === 'string' ? artifact.secretHandling : '';
+  const noSecretBoundaryReady = secretHandling.includes('provider credentials') &&
+    secretHandling.includes('stay in CI secrets or runtime logs');
+  const noRawSecretValuesReady = !RAW_SECRET_VALUE_PATTERN.test(JSON.stringify(payload));
+  const forbiddenArtifactFields = collectForbiddenArtifactFields(payload);
+  const noForbiddenArtifactFieldsReady = forbiddenArtifactFields.length === 0;
+  const extraCheckResult = typeof extraChecks === 'function'
+    ? extraChecks(payload)
+    : { ready: true, fields: {} };
+  const extraReady = extraCheckResult.ready !== false;
+  const ready = okReady &&
+    contractReady &&
+    schemaReady &&
+    noSecretBoundaryReady &&
+    noRawSecretValuesReady &&
+    noForbiddenArtifactFieldsReady &&
+    extraReady;
+
+  return {
+    ...base,
+    exists: true,
+    parsed: true,
+    okReady,
+    contractReady,
+    schemaReady,
+    noSecretBoundaryReady,
+    noRawSecretValuesReady,
+    noForbiddenArtifactFieldsReady,
+    forbiddenArtifactFields,
+    extraReady,
+    ...(extraCheckResult.fields || {}),
+    ready,
+    failure: ready ? null : `${label} artifact schema validation failed`,
+  };
+};
+
+const verifyCommerceApiHandoffs = (payload) => {
+  const handoffs = isRecord(payload.apiHandoffs) ? payload.apiHandoffs : {};
+  const publicApis = isRecord(handoffs.publicApis) ? handoffs.publicApis : {};
+  const product = isRecord(handoffs.product) ? handoffs.product : {};
+  const orders = isRecord(handoffs.orders) ? handoffs.orders : {};
+  const apiHandoffSiteId = typeof handoffs.siteId === 'string' && handoffs.siteId.trim()
+    ? handoffs.siteId.trim()
+    : null;
+  const publicCommerceApiHandoffReady = publicApis.status === 'certified' &&
+    publicApis.manifestProviderSchema === 'backy.commerce-provider-certification-handoff.v1' &&
+    publicApis.runtimeProviderSchema === 'backy.commerce-provider-certification-handoff.v1' &&
+    publicApis.catalogSchema === 'backy.commerce-catalog.v1' &&
+    publicApis.catalogProviderSchema === 'backy.commerce-provider-certification-handoff.v1' &&
+    publicApis.orderContractSchema === 'backy.commerce-orders.v1' &&
+    publicApis.orderProviderSchema === 'backy.commerce-provider-certification-handoff.v1';
+  const productApiHandoffSchemaReady = product.status === 'certified' &&
+    product.providerSchema === 'backy.commerce-provider-certification-handoff.v1' &&
+    product.productEvidenceSchema === 'backy.product-provider-certification-evidence.v1' &&
+    product.packetSchema === 'backy.commerce-provider-certification-evidence-packet.v1' &&
+    product.storefrontSchema === 'backy.product-storefront-handoff.v1' &&
+    typeof product.designReadinessStatus === 'string' &&
+    product.designReadinessStatus.length > 0;
+  const orderApiHandoffSchemaReady = orders.status === 'certified' &&
+    orders.analyticsSchema === 'backy.order-analytics.v1' &&
+    orders.providerSchema === 'backy.commerce-provider-certification-handoff.v1' &&
+    orders.orderEvidenceSchema === 'backy.order-provider-certification-evidence.v1' &&
+    orders.packetSchema === 'backy.order-provider-certification-evidence-packet.v1';
+  const productApiHandoffSiteTargetReady = productApiHandoffSchemaReady &&
+    apiHandoffSiteId !== null &&
+    product.targetSiteId === apiHandoffSiteId &&
+    product.siteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
+    product.commandPreviewTargetInputsIncludeSiteSelector === true;
+  const orderApiHandoffSiteTargetReady = orderApiHandoffSchemaReady &&
+    apiHandoffSiteId !== null &&
+    orders.targetSiteId === apiHandoffSiteId &&
+    orders.siteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
+    orders.commandPreviewTargetInputsIncludeSiteSelector === true;
+  const productApiHandoffReady = productApiHandoffSchemaReady && productApiHandoffSiteTargetReady;
+  const orderApiHandoffReady = orderApiHandoffSchemaReady && orderApiHandoffSiteTargetReady;
+  const apiHandoffReady = publicCommerceApiHandoffReady && productApiHandoffReady && orderApiHandoffReady;
+
+  return {
+    ready: apiHandoffReady,
+    fields: {
+      apiHandoffReady,
+      apiHandoffSiteId,
+      publicCommerceApiHandoffReady,
+      productApiHandoffSchemaReady,
+      productApiHandoffReady,
+      productApiHandoffSiteTargetReady,
+      productApiHandoffTargetSiteId: typeof product.targetSiteId === 'string' ? product.targetSiteId : null,
+      orderApiHandoffSchemaReady,
+      orderApiHandoffReady,
+      orderApiHandoffSiteTargetReady,
+      orderApiHandoffTargetSiteId: typeof orders.targetSiteId === 'string' ? orders.targetSiteId : null,
+      commerceApiHandoffSiteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      expectedApiHandoffs: [
+        'GET /api/sites/:siteId/manifest',
+        'GET /api/sites/:siteId/commerce/catalog',
+        'GET /api/sites/:siteId/commerce/orders',
+        'GET /api/admin/sites/:siteId/commerce/products/:productId/provider-sync',
+        'GET /api/admin/sites/:siteId/commerce/orders/analytics',
+      ],
+    },
+  };
+};
+
+const verifySettingsApiHandoffs = (payload) => {
+  const handoffs = isRecord(payload.apiHandoffs) ? payload.apiHandoffs : {};
+  const settingsAdminApi = isRecord(handoffs.settingsAdminApi) ? handoffs.settingsAdminApi : {};
+  const siteScopedSettingsApi = isRecord(handoffs.siteScopedSettingsApi) ? handoffs.siteScopedSettingsApi : {};
+  const siteSettingsApiHandoffSiteId = typeof siteScopedSettingsApi.resolvedSiteId === 'string' && siteScopedSettingsApi.resolvedSiteId.trim()
+    ? siteScopedSettingsApi.resolvedSiteId.trim()
+    : null;
+  const settingsApiHandoffTargetSiteId = typeof settingsAdminApi.targetSiteId === 'string' && settingsAdminApi.targetSiteId.trim()
+    ? settingsAdminApi.targetSiteId.trim()
+    : null;
+  const settingsScenarioEvidenceReady =
+    settingsAdminApi.scenarioEvidenceSchema === 'backy.settings-provider-certification-evidence.v1';
+  const settingsEvidencePacketReady =
+    settingsAdminApi.evidencePacketSchema === 'backy.settings-provider-certification-evidence-packet.v1';
+  const settingsCompletionStatusReady =
+    settingsAdminApi.completionStatusSchema === 'backy.completion-status.v1';
+  const settingsApiHandoffSchemaReady = settingsAdminApi.status === 'certified' &&
+    settingsAdminApi.providerSchema === 'backy.settings-provider-certification-handoff.v1' &&
+    settingsScenarioEvidenceReady &&
+    settingsEvidencePacketReady &&
+    settingsCompletionStatusReady;
+  const siteSettingsApiHandoffReady = siteScopedSettingsApi.status === 'certified' &&
+    siteScopedSettingsApi.settingsSchema === 'backy.site-settings-scope.v1' &&
+    siteScopedSettingsApi.source === 'admin-site-settings-api' &&
+    siteScopedSettingsApi.mediaStorageSchema === 'backy.media-storage-handoff.v1' &&
+    siteScopedSettingsApi.frontendDatabaseSchema === 'backy.frontend-database-certification.v1' &&
+    siteScopedSettingsApi.frontendDatabaseEvidenceSchema === 'backy.frontend-database-certification-evidence.v1' &&
+    siteSettingsApiHandoffSiteId !== null;
+  const settingsApiHandoffSiteTargetReady = settingsApiHandoffSchemaReady &&
+    siteSettingsApiHandoffReady &&
+    settingsApiHandoffTargetSiteId === siteSettingsApiHandoffSiteId &&
+    settingsAdminApi.settingsSiteSelectorEnv === 'BACKY_SETTINGS_CERTIFY_SITE_ID' &&
+    settingsAdminApi.commerceSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
+    settingsAdminApi.commandPreviewTargetInputsIncludeSettingsSiteSelector === true &&
+    settingsAdminApi.commandPreviewTargetInputsIncludeCommerceSiteSelector === true;
+  const settingsApiHandoffReady = settingsApiHandoffSchemaReady && settingsApiHandoffSiteTargetReady;
+
+  return {
+    ready: settingsApiHandoffReady && siteSettingsApiHandoffReady,
+    fields: {
+      settingsApiHandoffSchemaReady,
+      settingsApiHandoffReady,
+      settingsApiHandoffSiteTargetReady,
+      settingsApiHandoffTargetSiteId,
+      siteSettingsApiHandoffReady,
+      settingsScenarioEvidenceReady,
+      settingsEvidencePacketReady,
+      settingsCompletionStatusReady,
+      settingsApiHandoffSurface: 'GET /api/admin/settings',
+      siteSettingsApiHandoffSurface: 'GET /api/admin/sites/:siteId/settings',
+      siteSettingsApiHandoffSiteId,
+      settingsApiHandoffSettingsSiteSelectorEnv: 'BACKY_SETTINGS_CERTIFY_SITE_ID',
+      settingsApiHandoffCommerceSiteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+    },
   };
 };
 
@@ -94,6 +386,7 @@ const storageProvider = selected(
   selected('BACKY_STORAGE_PROVIDER', selected('BACKY_MEDIA_STORAGE_PROVIDER', 'auto')),
 );
 const notificationProvider = selected('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER');
+const publicApiOrigin = selected('BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN', selected('BACKY_CORS_ALLOWED_ORIGINS'));
 const paymentProvider = selected('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER');
 const taxProvider = selected('BACKY_COMMERCE_CERTIFY_TAX_PROVIDER');
 const shippingProvider = selected('BACKY_COMMERCE_CERTIFY_SHIPPING_PROVIDER');
@@ -159,10 +452,12 @@ const settings = {
     rotation: requested('BACKY_SETTINGS_CERTIFY_ROTATION', false),
     vercelSecrets: requested('BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS', false),
     notification: requested('BACKY_SETTINGS_CERTIFY_NOTIFICATION', false),
+    publicApiCors: requested('BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS', false),
   },
   selectors: {
     storageProvider,
     notificationProvider,
+    publicApiOriginConfigured: Boolean(publicApiOrigin),
     vercelProjectExpected: has('BACKY_SETTINGS_CERTIFY_VERCEL_PROJECT_ID'),
     vercelTeamExpected: has('BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID'),
   },
@@ -179,6 +474,7 @@ const settings = {
       const enabled = item.enabled && requested('BACKY_SETTINGS_CERTIFY_NOTIFICATION', false);
       return { ...item, enabled, ready: enabled ? item.ready : true };
     }),
+    checkAny('Public API CORS origin', ['BACKY_CORS_ALLOWED_ORIGINS', 'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN'], requested('BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS', false)),
   ],
 };
 
@@ -286,6 +582,29 @@ const commerce = {
   ],
 };
 
+const certificationArtifacts = {
+  settings: verifyCertificationArtifact({
+    label: 'Settings certification artifact',
+    pathEnvNames: ['BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH', 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT'],
+    requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED',
+    expectedContract: 'backy.settings-provider-certification.v1',
+    expectedSchemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    extraChecks: verifySettingsApiHandoffs,
+  }),
+  commerce: verifyCertificationArtifact({
+    label: 'Commerce certification artifact',
+    pathEnvNames: ['BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH', 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT'],
+    requiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED',
+    expectedContract: 'backy.commerce-provider-certification.v1',
+    expectedSchemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+    extraChecks: verifyCommerceApiHandoffs,
+  }),
+};
+
+const collectArtifactFailures = () => Object.values(certificationArtifacts)
+  .filter((artifact) => (artifact.required || artifact.configured) && !artifact.ready)
+  .map((artifact) => artifact.label);
+
 const collectFailures = (group) => group.checks
   .filter((item) => item.enabled && !item.ready)
   .map((item) => item.label);
@@ -300,6 +619,7 @@ const failures = [
     settings.requested.rotation,
     settings.requested.vercelSecrets,
     settings.requested.notification,
+    settings.requested.publicApiCors,
   ].some(Boolean) ? ['settings provider group selection'] : []),
   ...(commerce.required && commerce.target.externalBaseUrlConfigured && !isHttpUrl('BACKY_COMMERCE_CERTIFICATION_BASE_URL') ? ['Commerce external base URL'] : []),
   ...(commerce.required && ![
@@ -313,6 +633,7 @@ const failures = [
   ].some(Boolean) ? ['commerce provider group selection'] : []),
   ...collectFailures(settings),
   ...collectFailures(commerce),
+  ...collectArtifactFailures(),
 ];
 
 const aggregatePreflight = 'npm run test:partial-gate-preflights';
@@ -320,13 +641,75 @@ const adminSourceGuard = 'npm run test:admin-contract-source';
 
 const partialGateMap = [
   {
+    row: '/settings',
+    gate: 'npm run ci:settings-provider-certification',
+    preflight: 'npm run test:settings-provider-certification-preflight-contract',
+    sourceOnlyGuard: 'npm run test:settings-source-only',
+    aggregatePreflight,
+    adminSourceGuard,
+    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+    artifactPathEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT',
+    artifactRequiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+    artifactSchemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    workflow: '.github/workflows/settings-provider-certification.yml',
+    requiredInputFamily: 'selected storage, Vercel, notification, custom frontend CORS, and provider-family inputs',
+  },
+  {
+    row: 'Settings admin APIs',
+    gate: 'npm run ci:settings-provider-certification',
+    preflight: 'npm run test:settings-provider-certification-preflight-contract',
+    sourceOnlyGuard: 'npm run test:settings-source-only',
+    aggregatePreflight,
+    adminSourceGuard,
+    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+    artifactPathEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT',
+    artifactRequiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+    artifactSchemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    workflow: '.github/workflows/settings-provider-certification.yml',
+    requiredInputFamily: 'selected storage, Vercel, notification, custom frontend CORS, and provider-family inputs',
+  },
+  {
+    row: '/products',
+    gate: 'npm run ci:commerce-provider-certification',
+    preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+    sourceOnlyGuard: 'npm run test:commerce-source-only',
+    mockGate: 'npm run ci:commerce-provider-smoke',
+    aggregatePreflight,
+    adminSourceGuard,
+    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+    artifactPathEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT',
+    artifactRequiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+    artifactSchemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+    workflow: '.github/workflows/commerce-provider-certification.yml',
+    requiredInputFamily: 'selected payment, tax, shipping, discount, catalog, subscription, and webhook provider inputs',
+  },
+  {
+    row: '/orders',
+    gate: 'npm run ci:commerce-provider-certification',
+    preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+    sourceOnlyGuard: 'npm run test:orders-source-only',
+    mockGate: 'npm run ci:commerce-provider-smoke',
+    aggregatePreflight,
+    adminSourceGuard,
+    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+    artifactPathEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT',
+    artifactRequiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+    artifactSchemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+    workflow: '.github/workflows/commerce-provider-certification.yml',
+    requiredInputFamily: 'selected payment, tax, shipping, discount, catalog, subscription, and webhook provider inputs',
+  },
+];
+
+const certifiedGates = [
+  {
     row: '/forms',
     gate: 'npm run ci:forms-postgres',
     preflight: 'npm run test:forms-postgres-preflight-contract',
     disposableGuard: 'npm run test:forms-postgres-disposable-guard',
     aggregatePreflight,
-    adminSourceGuard,
     workflow: '.github/workflows/forms-postgres-contract.yml',
+    certifiedOn: '2026-05-21',
+    status: 'certified-regression',
     requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL pointing at a disposable migrated Supabase/Postgres database',
   },
   {
@@ -335,30 +718,10 @@ const partialGateMap = [
     preflight: 'npm run test:sdk-postgres-preflight-contract',
     disposableGuard: 'npm run test:sdk-postgres-disposable-guard',
     aggregatePreflight,
-    adminSourceGuard,
     workflow: '.github/workflows/sdk-postgres-smoke.yml',
+    certifiedOn: '2026-05-21',
+    status: 'certified-regression',
     requiredInputFamily: 'BACKY_DATABASE_URL or DATABASE_URL pointing at a disposable migrated Supabase/Postgres database',
-  },
-  {
-    row: '/settings and Settings admin APIs',
-    gate: 'npm run ci:settings-provider-certification',
-    preflight: 'npm run test:settings-provider-certification-preflight-contract',
-    aggregatePreflight,
-    adminSourceGuard,
-    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
-    workflow: '.github/workflows/settings-provider-certification.yml',
-    requiredInputFamily: 'selected storage, Vercel, notification, and provider-family inputs',
-  },
-  {
-    row: '/products and /orders',
-    gate: 'npm run ci:commerce-provider-certification',
-    preflight: 'npm run test:commerce-provider-certification-preflight-contract',
-    mockGate: 'npm run ci:commerce-provider-smoke',
-    aggregatePreflight,
-    adminSourceGuard,
-    doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
-    workflow: '.github/workflows/commerce-provider-certification.yml',
-    requiredInputFamily: 'selected payment, tax, shipping, discount, catalog, subscription, and webhook provider inputs',
   },
 ];
 
@@ -366,9 +729,11 @@ console.log(JSON.stringify({
   ok: failures.length === 0,
   contract: 'backy.release-certification-doctor.v1',
   partialGateMap,
+  certifiedGates,
   database,
   settings,
   commerce,
+  certificationArtifacts,
   failures,
 }, null, 2));
 

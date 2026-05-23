@@ -3,7 +3,7 @@
 **Date:** 2026-02-26  
 **Goal:** build `backy` into a backend-first CMS platform that ships a first-class admin editor (`backy-admin`) and a contract-complete, custom-frontend-friendly public API (`backy-public`).
 
-> Historical snapshot: this v2 roadmap is superseded by `backy-phase-a-j-completion-spec.md` and `../page-completion-audit/backy-page-surface-audit.md`. The current audit baseline is **39 Ready / 6 Partial / 0 Prototype / 0 Missing**; remaining Partial work is external Forms/SDK Supabase/Postgres certification plus live Settings/Commerce provider certification.
+> Historical snapshot: this v2 roadmap is superseded by `backy-phase-a-j-completion-spec.md` and `../page-completion-audit/backy-page-surface-audit.md`. The current audit baseline is **41 Ready / 4 Partial / 0 Prototype / 0 Missing**; remaining Partial work is live Settings/Commerce provider certification after Forms/SDK Supabase/Postgres certification passed on 2026-05-21.
 
 ## 0) What “done” means for this roadmap
 

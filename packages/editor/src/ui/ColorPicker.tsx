@@ -21,6 +21,7 @@ export interface ColorPickerProps {
   tooltip?: string;
   testId?: string;
   triggerRef?: React.RefObject<HTMLElement | null> | null;
+  onBeforeOpen?: () => void;
 }
 
 const POPOVER_WIDTH = 260;
@@ -36,6 +37,7 @@ export const ColorPicker = ({
   tooltip,
   testId,
   triggerRef,
+  onBeforeOpen,
 }: ColorPickerProps) => {
   const [open, setOpen] = useState(false);
   const [customColor, setCustomColor] = useState(value || '#000000');
@@ -127,11 +129,22 @@ export const ColorPicker = ({
     setCustomColor(color);
     onChange(color);
   };
+  const triggerLabel = tooltip || 'Color picker';
+
+  const toggleOpen = (nextOpen: boolean) => {
+    if (nextOpen) {
+      onBeforeOpen?.();
+    }
+    setOpen(nextOpen);
+  };
 
   const popover = open ? (
     <div
       ref={popoverRef}
+      role="dialog"
+      aria-label={`${triggerLabel} options`}
       className="ignore-click-outside/toolbar fixed z-[10000] bg-popover rounded-lg shadow-lg border border-border p-2 animate-in fade-in zoom-in-95 duration-100"
+      data-testid={testId ? `${testId}-popover` : undefined}
       onMouseDown={(e) => {
         e.stopPropagation();
       }}
@@ -165,6 +178,8 @@ export const ColorPicker = ({
                   handleColorSelect(color);
                 }}
                 title={color}
+                aria-label={`Set ${triggerLabel} to ${color}`}
+                data-testid={testId ? `${testId}-swatch-${color.slice(1).toLowerCase()}` : undefined}
               />
             ))}
           </div>
@@ -179,6 +194,8 @@ export const ColorPicker = ({
           value={customColor}
           onChange={handleCustomColorChange}
           className="w-7 h-7 p-0 border-0 rounded cursor-pointer"
+          aria-label={`Custom ${triggerLabel}`}
+          data-testid={testId ? `${testId}-custom-picker` : undefined}
         />
         <input
           type="text"
@@ -191,6 +208,8 @@ export const ColorPicker = ({
           }}
           className="flex-1 h-7 px-2 text-xs border rounded-md bg-background"
           placeholder="#000000"
+          aria-label={`${triggerLabel} hex value`}
+          data-testid={testId ? `${testId}-custom-text` : undefined}
         />
       </div>
 
@@ -198,6 +217,7 @@ export const ColorPicker = ({
         type="button"
         className="w-full mt-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md"
         data-testid={testId ? `${testId}-clear` : undefined}
+        aria-label={`Clear ${triggerLabel}`}
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -217,11 +237,24 @@ export const ColorPicker = ({
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setOpen(!open);
+          toggleOpen(!open);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleOpen(!open);
+          }
+          if (e.key === 'Escape') {
+            setOpen(false);
+          }
         }}
         className="p-1.5 rounded-md hover:bg-muted/80 transition-all flex items-center justify-center h-7 w-7 relative"
         data-testid={testId}
         title={tooltip}
+        aria-label={triggerLabel}
+        aria-haspopup="dialog"
+        aria-expanded={open}
       >
         {icon || <Palette className="w-4 h-4" />}
         <div

@@ -1728,6 +1728,56 @@ function downloadBlob(filename: string, blob: Blob): void {
   URL.revokeObjectURL(url);
 }
 
+const normalizeSiteSettingsDomain = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "");
+
+const isValidSiteSettingsSlug = (value: string): boolean =>
+  /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+
+const isValidSiteSettingsDomain = (value: string): boolean =>
+  !value || /^[a-z0-9.-]+\.[a-z]{2,}$/.test(value);
+
+interface SiteSettingsInlineErrors {
+  name?: string;
+  slug?: string;
+  customDomain?: string;
+}
+
+const buildSiteSettingsInlineErrors = (input: {
+  name: string;
+  slug: string;
+  customDomain: string;
+}): SiteSettingsInlineErrors => {
+  const name = input.name.trim();
+  const slug = input.slug.trim();
+  const customDomain = normalizeSiteSettingsDomain(input.customDomain);
+
+  return {
+    name: !name
+      ? "Site name is required."
+      : name.length < 2
+        ? "Site name must be at least 2 characters."
+        : name.length > 80
+          ? "Site name must be 80 characters or fewer."
+          : undefined,
+    slug: !slug
+      ? "URL slug is required."
+      : slug.length > 80
+        ? "URL slug must be 80 characters or fewer."
+        : !isValidSiteSettingsSlug(slug)
+          ? "Use lowercase letters, numbers, and single hyphens only."
+          : undefined,
+    customDomain:
+      customDomain && !isValidSiteSettingsDomain(customDomain)
+        ? "Use a domain like example.com."
+        : undefined,
+  };
+};
+
 function readinessStatusLabel(value?: SiteReadiness["statusLabel"]): string {
   if (value === "ready") return "Ready";
   if (value === "blocked") return "Blocked";
@@ -1817,6 +1867,7 @@ function EditSitePage() {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [siteSettingsSubmitted, setSiteSettingsSubmitted] = useState(false);
   const [siteSettingsError, setSiteSettingsError] = useState<string | null>(
     null,
   );
@@ -2072,6 +2123,15 @@ function EditSitePage() {
   const isSiteSettingsBusy =
     isLoading || commentPolicySaving || isPermissionMatrixPending;
   const isSiteConfigurationDisabled = isSiteSettingsBusy || !canConfigureSite;
+  const siteSettingsInlineErrors = useMemo(
+    () => buildSiteSettingsInlineErrors(formData),
+    [formData],
+  );
+  const hasSiteSettingsInlineErrors = Object.values(
+    siteSettingsInlineErrors,
+  ).some(Boolean);
+  const showSiteSettingsInlineErrors =
+    siteSettingsSubmitted && hasSiteSettingsInlineErrors;
   const isWebhookConfigurationDisabled =
     webhookState.loading || webhookState.saving || !canConfigureSite;
   const isSiteDeletionDisabled = isSiteSettingsBusy || !canDeleteSite;
@@ -2164,6 +2224,7 @@ function EditSitePage() {
         description: site.description,
         status: site.status as SiteStatusFilter,
       });
+      setSiteSettingsSubmitted(false);
       setThemeDraft(normalizeSiteThemeDraft(site.theme));
     }
   }, [site]);
@@ -5013,20 +5074,28 @@ function EditSitePage() {
     e.preventDefault();
 
     if (isSiteSettingsBusy) return;
+    setSiteSettingsSubmitted(true);
     if (!canConfigureSite) {
       setSiteSettingsError(siteConfigureDeniedMessage);
       return;
     }
 
+    if (hasSiteSettingsInlineErrors) {
+      setSiteSettingsError("Fix site settings fields before saving.");
+      setSiteSettingsNotice(null);
+      return;
+    }
+
     setIsLoading(true);
+    setSiteSettingsSubmitted(false);
     setSiteSettingsError(null);
     setSiteSettingsNotice(null);
 
     const nextSite = {
-      name: formData.name,
-      slug: formData.slug,
-      customDomain: formData.customDomain || null,
-      description: formData.description,
+      name: formData.name.trim(),
+      slug: formData.slug.trim(),
+      customDomain: normalizeSiteSettingsDomain(formData.customDomain) || null,
+      description: formData.description.trim(),
       status: formData.status,
     };
 
@@ -8097,10 +8166,16 @@ function EditSitePage() {
         <form
           id="site-settings"
           onSubmit={handleSubmit}
+          noValidate
+          data-testid="site-settings-form"
           className="space-y-6 scroll-mt-24"
         >
           {siteSettingsError && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div
+              role="alert"
+              data-testid="site-settings-inline-error"
+              className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            >
               {siteSettingsError}
             </div>
           )}
@@ -8112,10 +8187,15 @@ function EditSitePage() {
 
           <div className="bg-card border border-border rounded-xl p-6 space-y-6 shadow-sm">
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label
+                htmlFor="site-settings-name-input"
+                className="block text-sm font-medium mb-2"
+              >
                 Site Name
               </label>
               <input
+                id="site-settings-name-input"
+                data-testid="site-settings-name-input"
                 type="text"
                 value={formData.name}
                 disabled={isSiteConfigurationDisabled}
@@ -8127,16 +8207,42 @@ function EditSitePage() {
 
                   setFormData({ ...formData, name: e.target.value });
                 }}
-                className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                required
+                className={cn(
+                  "w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                  showSiteSettingsInlineErrors && siteSettingsInlineErrors.name
+                    ? "border-red-300"
+                    : "border-border",
+                )}
+                aria-invalid={Boolean(
+                  showSiteSettingsInlineErrors && siteSettingsInlineErrors.name,
+                )}
+                aria-describedby={
+                  showSiteSettingsInlineErrors && siteSettingsInlineErrors.name
+                    ? "site-settings-name-error"
+                    : undefined
+                }
               />
+              {showSiteSettingsInlineErrors && siteSettingsInlineErrors.name ? (
+                <p
+                  id="site-settings-name-error"
+                  data-testid="site-settings-name-error"
+                  className="mt-2 text-xs text-red-600"
+                >
+                  {siteSettingsInlineErrors.name}
+                </p>
+              ) : null}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label
+                  htmlFor="site-settings-slug-input"
+                  className="block text-sm font-medium mb-2"
+                >
                   URL Slug
                 </label>
                 <input
+                  id="site-settings-slug-input"
+                  data-testid="site-settings-slug-input"
                   type="text"
                   value={formData.slug}
                   disabled={isSiteConfigurationDisabled}
@@ -8148,14 +8254,43 @@ function EditSitePage() {
 
                     setFormData({ ...formData, slug: e.target.value });
                   }}
-                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    "w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                    showSiteSettingsInlineErrors && siteSettingsInlineErrors.slug
+                      ? "border-red-300"
+                      : "border-border",
+                  )}
+                  aria-invalid={Boolean(
+                    showSiteSettingsInlineErrors &&
+                      siteSettingsInlineErrors.slug,
+                  )}
+                  aria-describedby={
+                    showSiteSettingsInlineErrors && siteSettingsInlineErrors.slug
+                      ? "site-settings-slug-error"
+                      : undefined
+                  }
                 />
+                {showSiteSettingsInlineErrors &&
+                siteSettingsInlineErrors.slug ? (
+                  <p
+                    id="site-settings-slug-error"
+                    data-testid="site-settings-slug-error"
+                    className="mt-2 text-xs text-red-600"
+                  >
+                    {siteSettingsInlineErrors.slug}
+                  </p>
+                ) : null}
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label
+                  htmlFor="site-settings-custom-domain-input"
+                  className="block text-sm font-medium mb-2"
+                >
                   Custom Domain
                 </label>
                 <input
+                  id="site-settings-custom-domain-input"
+                  data-testid="site-settings-custom-domain-input"
                   type="text"
                   value={formData.customDomain}
                   disabled={isSiteConfigurationDisabled}
@@ -8167,9 +8302,43 @@ function EditSitePage() {
 
                     setFormData({ ...formData, customDomain: e.target.value });
                   }}
+                  onBlur={(e) => {
+                    if (isSiteConfigurationDisabled) return;
+
+                    setFormData({
+                      ...formData,
+                      customDomain: normalizeSiteSettingsDomain(e.target.value),
+                    });
+                  }}
                   placeholder="e.g. mysite.com"
-                  className="w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    "w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                    showSiteSettingsInlineErrors &&
+                      siteSettingsInlineErrors.customDomain
+                      ? "border-red-300"
+                      : "border-border",
+                  )}
+                  aria-invalid={Boolean(
+                    showSiteSettingsInlineErrors &&
+                      siteSettingsInlineErrors.customDomain,
+                  )}
+                  aria-describedby={
+                    showSiteSettingsInlineErrors &&
+                    siteSettingsInlineErrors.customDomain
+                      ? "site-settings-custom-domain-error"
+                      : undefined
+                  }
                 />
+                {showSiteSettingsInlineErrors &&
+                siteSettingsInlineErrors.customDomain ? (
+                  <p
+                    id="site-settings-custom-domain-error"
+                    data-testid="site-settings-custom-domain-error"
+                    className="mt-2 text-xs text-red-600"
+                  >
+                    {siteSettingsInlineErrors.customDomain}
+                  </p>
+                ) : null}
               </div>
             </div>
             <div>

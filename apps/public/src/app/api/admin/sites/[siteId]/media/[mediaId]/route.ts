@@ -50,8 +50,9 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import { buildPublicMediaOrganization } from "@/lib/publicMediaResource";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
-import type { BackyJsonObject, MediaItem, Site } from "@backy-cms/core";
+import type { BackyJsonObject, MediaFolder, MediaItem, Site } from "@backy-cms/core";
 
 export const runtime = "nodejs";
 
@@ -65,6 +66,14 @@ interface RouteParams {
 const makeRequestId = () =>
   `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 const MAX_REPLACEMENT_VERSIONS = 20;
+
+const withAdminMediaOrganization = (
+  media: MediaItem,
+  folders: MediaFolder[] = [],
+) => ({
+  ...media,
+  organization: buildPublicMediaOrganization(media, folders),
+});
 
 const buildMediaBinaryFingerprint = (buffer: Buffer) => {
   const value = createHash("sha256").update(buffer).digest("hex");
@@ -722,7 +731,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({
         success: true,
         requestId,
-        data: { media: updated.item, cacheInvalidation },
+        data: {
+          media: withAdminMediaOrganization(
+            updated.item,
+            await repositories.media.listFolders(site.id),
+          ),
+          cacheInvalidation,
+        },
       });
     }
 
@@ -825,7 +840,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       actor: access.session?.user.id,
     });
 
-    return NextResponse.json({ success: true, requestId, data: { media } });
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: { media: withAdminMediaOrganization(media, listMediaFolders(site.id)) },
+    });
   } catch (error) {
     console.error("Admin media update API error:", error);
     return errorResponse(
@@ -1189,7 +1208,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       success: true,
       requestId,
       data: {
-        media: updated,
+        media: withAdminMediaOrganization(
+          updated,
+          repositories
+            ? await repositories.media.listFolders(site.id)
+            : listMediaFolders(site.id),
+        ),
         cacheInvalidation,
         quota: mediaQuotaPayload(siteMediaQuotaBytes, nextUsageBytes),
         replacement: {

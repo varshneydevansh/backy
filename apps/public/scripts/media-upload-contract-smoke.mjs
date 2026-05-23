@@ -20,13 +20,27 @@ const mediaFoldersRoute = read('../src/app/api/admin/sites/[siteId]/media/folder
 const mediaFolderDetailRoute = read('../src/app/api/admin/sites/[siteId]/media/folders/[folderId]/route.ts');
 const adminSignedMediaUrlRoute = read('../src/app/api/admin/sites/[siteId]/media/[mediaId]/signed-url/route.ts');
 const publicMediaRoute = read('../src/app/api/sites/[siteId]/media/route.ts');
+const publicMediaDetailRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/route.ts');
 const publicMediaFoldersRoute = read('../src/app/api/sites/[siteId]/media/folders/route.ts');
 const publicFontManifestRoute = read('../src/app/api/sites/[siteId]/media/fonts/route.ts');
 const publicMediaFileRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/file/route.ts');
 const publicMediaTransformRoute = read('../src/app/api/sites/[siteId]/media/[mediaId]/transform/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
+const mediaDeliveryCache = read('../src/lib/mediaDeliveryCache.ts');
 const uploadPolicy = read('../src/lib/mediaUploadPolicy.ts');
+const publicMediaResource = read('../src/lib/publicMediaResource.ts');
+const repositoryRuntime = read('../src/lib/repositoryRuntime.ts');
+const repositoryMediaReferenceSync = read('../src/lib/repositoryMediaReferenceSync.ts');
+const adminCollectionRecordsRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/route.ts');
+const adminCollectionRecordDetailRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts');
+const adminCollectionRecordBulkRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/bulk/route.ts');
+const adminCollectionRecordImportRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/import/route.ts');
+const adminCollectionsImportRoute = read('../src/app/api/admin/sites/[siteId]/collections/import/route.ts');
+const publicCollectionRecordsRoute = read('../src/app/api/sites/[siteId]/collections/[collectionId]/records/route.ts');
+const publicCollectionRecordDetailRoute = read('../src/app/api/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts');
 const adminMediaApi = read('../../../apps/admin/src/lib/mediaApi.ts');
+const adminMediaModal = read('../../../apps/admin/src/components/editor/MediaLibraryModal.tsx');
+const adminMediaPage = read('../../../apps/admin/src/routes/media.tsx');
 const coreTypes = read('../../../packages/core/src/types/index.ts');
 const dbSchema = read('../../../packages/db/src/schema/index.ts');
 const dbMediaRepository = read('../../../packages/db/src/repositories/media.ts');
@@ -133,7 +147,9 @@ assert(
 assert(
   publicMediaRoute.includes("'INVALID_MEDIA_TYPE'") &&
     publicMediaRoute.includes('mediaType.invalid') &&
-    publicMediaRoute.includes('document, file, font, other'),
+    publicMediaRoute.includes('document, file, font, other') &&
+    publicMediaRoute.includes("return { types: ['document', 'other'] };") &&
+    publicMediaRoute.includes('mediaMatchesRequestedType'),
   'Public media list route must reject invalid media type filters instead of silently returning all assets.',
 );
 assert(
@@ -141,6 +157,59 @@ assert(
     publicMediaRoute.includes('mediaScope.invalid') &&
     publicMediaRoute.includes('global, page, post'),
   'Public media list route must reject invalid media scope filters instead of silently returning all assets.',
+);
+assert(
+  publicMediaResource.includes("scope: 'page' | 'post' | 'collectionRecord'") &&
+    publicMediaResource.includes('collectionRecordIds') &&
+    publicMediaResource.includes('collectionRecords: referenceTargets(collectionRecordIds, collectionRecordBindings)') &&
+    openApiRoute.includes('collectionRecordCount') &&
+    openApiRoute.includes('"collectionRecordIds"') &&
+    openApiRoute.includes('"collectionRecords"') &&
+    openApiRoute.includes('"collectionRecord"'),
+  'Public media references must expose product/collection-record usage for custom storefront and CMS asset browsers.',
+);
+assert(
+  repositoryMediaReferenceSync.includes('collectRepositoryMediaReferenceIds') &&
+    repositoryMediaReferenceSync.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    repositoryMediaReferenceSync.includes('removeRepositoryCollectionRecordMediaReferences') &&
+    repositoryMediaReferenceSync.includes("scope: 'collectionRecord'") &&
+    repositoryMediaReferenceSync.includes("usageType: 'collection-record'") &&
+    repositoryMediaReferenceSync.includes('mediaRepository.update') &&
+    repositoryMediaReferenceSync.includes("parentKey && MEDIA_REFERENCE_ASSET_COLLECTION_KEYS.has(parentKey)"),
+  'Repository collection-record media sync must track product/custom CMS design assets in Supabase/Postgres metadata bindings.',
+);
+assert(
+  repositoryRuntime.includes('withRepositoryMediaReferenceSync') &&
+    repositoryRuntime.includes('pages.create(input, context)') &&
+    repositoryRuntime.includes('pages.update(siteId, pageId, input, context)') &&
+    repositoryRuntime.includes('pages.delete(siteId, pageId, context)') &&
+    repositoryRuntime.includes('posts.create(input, context)') &&
+    repositoryRuntime.includes('posts.update(siteId, postId, input, context)') &&
+    repositoryRuntime.includes('posts.delete(siteId, postId, context)') &&
+    repositoryRuntime.includes('collections.createRecord(input, context)') &&
+    repositoryRuntime.includes('collections.updateRecord(siteId, collectionId, recordId, input, context)') &&
+    repositoryRuntime.includes('collections.deleteRecord(siteId, collectionId, recordId, context)') &&
+    repositoryRuntime.includes('syncRepositoryPageMediaReferences') &&
+    repositoryRuntime.includes('removeRepositoryPageMediaReferences') &&
+    repositoryRuntime.includes('syncRepositoryPostMediaReferences') &&
+    repositoryRuntime.includes('removeRepositoryPostMediaReferences') &&
+    repositoryRuntime.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    repositoryRuntime.includes('removeRepositoryCollectionRecordMediaReferences') &&
+    repositoryRuntime.includes('withRepositoryMediaReferenceSync(createDatabaseRepositories({ adapter }))'),
+  'Database repository runtime must decorate page, post, and collection-record mutations with central media reference sync.',
+);
+assert(
+  adminCollectionRecordsRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    adminCollectionRecordDetailRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    adminCollectionRecordDetailRoute.includes('removeRepositoryCollectionRecordMediaReferences') &&
+    publicCollectionRecordsRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    publicCollectionRecordDetailRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    publicCollectionRecordDetailRoute.includes('removeRepositoryCollectionRecordMediaReferences') &&
+    adminCollectionRecordBulkRoute.includes('removeRepositoryCollectionRecordMediaReferences') &&
+    adminCollectionRecordBulkRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    adminCollectionRecordImportRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    adminCollectionsImportRoute.includes('syncRepositoryCollectionRecordMediaReferences'),
+  'Admin and public repository collection-record mutation routes must sync media references after create/update/delete/bulk/import.',
 );
 assert(
   publicMediaRoute.includes("searchParams.has('folderId')") &&
@@ -155,8 +224,10 @@ assert(
   'Public media list route must reject invalid global filters instead of silently returning all assets.',
 );
 assert(
-  publicMediaRoute.includes('const visibleMedia = mediaPayload.media.filter((item) => !isMediaQuarantined(item))') &&
-    publicMediaRoute.includes('paginateMedia(site.id, visibleMedia, limit, offset)'),
+  publicMediaRoute.includes('const visibleMedia = mediaPayload.media') &&
+    publicMediaRoute.includes('filter((item) => mediaMatchesRequestedType(item, mediaType))') &&
+    publicMediaRoute.includes('filter((item) => !isMediaQuarantined(item))') &&
+    publicMediaRoute.includes('paginateMedia(site.id, visibleMedia, limit, offset, folders)'),
   'Public demo media list route must exclude quarantined assets before pagination totals and slices are computed.',
 );
 assert(
@@ -178,6 +249,40 @@ assert(
   'Public media folder route must expose a cacheable read-only folder tree limited to folders with public, non-quarantined assets and their ancestors.',
 );
 assert(
+  publicMediaResource.includes("schemaVersion: 'backy.media.organization.v1'") &&
+    publicMediaResource.includes('export const buildPublicMediaOrganization') &&
+    publicMediaResource.includes('folderSegments') &&
+    publicMediaResource.includes('folderAncestors: Array<') &&
+    publicMediaResource.includes('const folderAncestors = chain.map((folder) => ({') &&
+    publicMediaResource.includes('folderPath: folderSegments.join') &&
+    publicMediaResource.includes('missingFolder') &&
+    publicMediaResource.includes('organization: buildPublicMediaOrganization(media, folders)'),
+  'Public media assets must carry a versioned organization breadcrumb for custom frontend media pickers.',
+);
+assert(
+  publicMediaRoute.includes('listMediaFolders') &&
+    publicMediaRoute.includes('repositories.media.listFolders(site.id)') &&
+    publicMediaRoute.includes('toPublicMediaAsset(siteId, item, folders)') &&
+    publicMediaRoute.includes('paginateMedia(site.id, filtered, limit, offset, folders)'),
+  'Public media list route must attach folder organization breadcrumbs to listed assets.',
+);
+assert(
+  publicMediaDetailRoute.includes('listMediaFolders') &&
+    publicMediaDetailRoute.includes('repositories.media.listFolders(site.id)') &&
+    publicMediaDetailRoute.includes('toPublicMediaAsset(site.id, media, folders)'),
+  'Public media detail route must attach folder organization breadcrumbs to individual assets.',
+);
+assert(
+  mediaRoute.includes('buildPublicMediaOrganization') &&
+    mediaRoute.includes('withAdminMediaOrganization') &&
+    mediaRoute.includes('paginateMedia(filtered, limit, offset, folders)') &&
+    mediaRoute.includes('media: withAdminMediaOrganization(') &&
+    mediaDetailRoute.includes('buildPublicMediaOrganization') &&
+    mediaDetailRoute.includes('withAdminMediaOrganization') &&
+    mediaDetailRoute.includes('await repositories.media.listFolders(site.id)'),
+  'Admin media list/upload/detail responses must mirror versioned organization breadcrumbs for the rich editor and custom frontend handoff.',
+);
+assert(
   publicFontManifestRoute.includes("from '@/lib/mediaSafety'") &&
     publicFontManifestRoute.includes('!isMediaQuarantined(item)') &&
     publicFontManifestRoute.includes('buildPublicFontManifest('),
@@ -195,6 +300,23 @@ assert(
   'Public media file route must reject invalid disposition values instead of silently serving inline.',
 );
 assert(
+  mediaDeliveryCache.includes('buildMediaDeliveryCacheSeed') &&
+    mediaDeliveryCache.includes('createMediaDeliveryEtag') &&
+    mediaDeliveryCache.includes('createMediaDeliveryCacheRevision') &&
+    mediaDeliveryCache.includes('requestMatchesMediaDeliveryEtag') &&
+    mediaDeliveryCache.includes("entry === etag || entry === '*'"),
+  'Public media delivery cache helper must keep stable ETag, cache revision, and If-None-Match matching support.',
+);
+assert(
+  publicMediaFileRoute.includes("from '@/lib/mediaDeliveryCache'") &&
+    publicMediaFileRoute.includes('mediaDeliveryCacheMetadata(request, site.id, media') &&
+    publicMediaFileRoute.includes("status: 304") &&
+    publicMediaFileRoute.includes("'x-backy-cache-revision': cacheMetadata.cacheRevision") &&
+    publicMediaFileRoute.includes('etag: cacheMetadata.etag') &&
+    publicMediaFileRoute.indexOf('if (isPrivateMedia && !verifySignedMediaAccess') < publicMediaFileRoute.indexOf('if (cacheMetadata.notModified)'),
+  'Public media file delivery must authorize and validate safety before returning ETag-backed 304 responses with cache revision headers.',
+);
+assert(
   publicMediaTransformRoute.includes("'INVALID_TRANSFORM_WIDTH'") &&
     publicMediaTransformRoute.includes("'INVALID_TRANSFORM_QUALITY'") &&
     publicMediaTransformRoute.includes('Number.isInteger(parsed)') &&
@@ -205,6 +327,17 @@ assert(
   publicMediaTransformRoute.includes("errorResponse(423, 'MEDIA_QUARANTINED'") &&
     publicMediaTransformRoute.includes('cannot be transformed'),
   'Public media transform route must expose a distinct quarantined transform error.',
+);
+assert(
+  publicMediaTransformRoute.includes("from '@/lib/mediaDeliveryCache'") &&
+    publicMediaTransformRoute.includes("export const runtime = 'nodejs'") &&
+    publicMediaTransformRoute.includes('mediaDeliveryCacheMetadata(request, site.id, media') &&
+    publicMediaTransformRoute.includes("delivery: 'optimizer-transform'") &&
+    publicMediaTransformRoute.includes("status: 304") &&
+    publicMediaTransformRoute.includes("'x-backy-cache-revision': cacheMetadata.cacheRevision") &&
+    publicMediaTransformRoute.includes('etag: cacheMetadata.etag') &&
+    publicMediaTransformRoute.indexOf("if (isMediaQuarantined(media))") < publicMediaTransformRoute.indexOf('if (cacheMetadata.notModified)'),
+  'Public media transform redirects must validate publish/type/quarantine checks before returning ETag-backed 304 responses with cache revision headers.',
 );
 assert(
   mediaRoute.includes('const mimeType = file.type || "application/octet-stream"') ||
@@ -224,6 +357,17 @@ assert(
   uploadPolicy.includes("rule.startsWith('.')") &&
     uploadPolicy.includes("rule.endsWith('/*')"),
   'Media upload policy must support extension and MIME-family allowlist rules for generic files.',
+);
+assert(
+  uploadPolicy.includes('const fileMatchesMediaCategory =') &&
+    uploadPolicy.includes("category === 'file'") &&
+    uploadPolicy.includes("fileCategory === 'document' || fileCategory === 'other'") &&
+    uploadPolicy.includes("'application/pdf': 'document'") &&
+    uploadPolicy.includes("'.docx': 'document'") &&
+    uploadPolicy.includes("'.txt': 'document'") &&
+    uploadPolicy.includes("['image', 'video', 'audio', 'document', 'file', 'font', 'other'].includes(rule)") &&
+    uploadPolicy.includes("rule === '*/*'"),
+  'Media upload policy must support Backy media category allowlists like document/*, file/*, other/*, and explicit all uploads.',
 );
 assert(
   uploadPolicy.includes("'application/font-woff2': 'font'") &&
@@ -276,6 +420,18 @@ assert(
   'Public OpenAPI must document public media folder discovery for custom frontend media pickers.',
 );
 assert(
+  openApiRoute.includes('backy.media.organization.v1') &&
+    openApiRoute.includes('folderSegments') &&
+    openApiRoute.includes('"folderAncestors"') &&
+    openApiRoute.includes('folderDepth') &&
+    openApiRoute.includes('missingFolder') &&
+    generatedSdkSource.includes('organization?: {') &&
+    generatedSdkSource.includes('schemaVersion: "backy.media.organization.v1"') &&
+    generatedSdkSource.includes('folderAncestors: Array<{') &&
+    generatedSdkSmoke.includes('mediaOrganization'),
+  'Public OpenAPI and generated SDK types must expose per-asset media organization breadcrumbs.',
+);
+assert(
   openApiRoute.includes('Fetch public, non-quarantined uploaded font families'),
   'Public OpenAPI font manifest route must advertise that quarantined fonts are excluded.',
 );
@@ -305,6 +461,14 @@ assert(
   'Public OpenAPI media file route must document invalid disposition errors.',
 );
 assert(
+  openApiRoute.includes('Stable media file delivery validator for If-None-Match revalidation') &&
+    openApiRoute.includes('Media file cache entry unchanged for the supplied ETag') &&
+    openApiRoute.includes('Stable media transform redirect validator for If-None-Match revalidation') &&
+    openApiRoute.includes('Media transform redirect unchanged for the supplied ETag') &&
+    openApiRoute.includes('"X-Backy-Cache-Revision"'),
+  'Public OpenAPI media file and transform routes must document ETag, 304, and cache revision headers for custom frontend revalidation.',
+);
+assert(
   sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other"') ||
     sdkSource.includes("type?: 'image' | 'video' | 'audio' | 'document' | 'file' | 'font' | 'other'"),
   'SDK media list options must allow type=other.',
@@ -319,9 +483,43 @@ assert(
 );
 assert(
   adminMediaApi.includes("type MediaListType = 'image' | 'video' | 'audio' | 'document' | 'file' | 'font' | 'other'") &&
-    adminMediaApi.includes("type === 'file' ? 'document' : type"),
-  'Admin media API helper must accept the UI/custom-frontend type=file alias and normalize it to document for Backy media endpoints.',
+    adminMediaApi.includes('const toApiMediaListType = (type: MediaListType): MediaListType => type'),
+  'Admin media API helper must preserve type=file so Backy endpoints return documents and arbitrary other files.',
 );
+assert(
+  adminMediaPage.includes("const MEDIA_FILE_FILTER_TYPES = new Set<MediaAsset['type']>(['file', 'other'])") &&
+    adminMediaPage.includes("if (filter === 'file') return MEDIA_FILE_FILTER_TYPES.has(mediaType)") &&
+    adminMediaPage.includes('if (!mediaTypeMatchesFilter(file.type, typeFilter))') &&
+    adminMediaPage.includes("type: typeFilter === 'all' ? undefined : typeFilter"),
+  'Central Media page must load and display type=file as the same document/other file bucket advertised by the API.',
+);
+assert(
+  adminMediaModal.includes("const FILE_BUCKET_MEDIA_TYPES = new Set<MediaAsset['type']>(['file', 'other'])") &&
+    adminMediaModal.includes("if (allowedTypes === 'file') return new Set(['file', 'other'])") &&
+    adminMediaModal.includes("allowedTypes === 'any' || allowedTypes === 'file'") &&
+    adminMediaModal.includes("if (filter === 'file') return FILE_BUCKET_MEDIA_TYPES.has(type)") &&
+    adminMediaModal.includes("!mediaTypeMatchesFilter(item.type, libraryTypeFilter)") &&
+    adminMediaModal.includes('mediaTypeMatchesFilter(resolvedType, filterHint)'),
+  'Editor media modal must align allowedTypes=file, library file filters, and upload file filters with the document/other backend file bucket.',
+);
+	assert(
+	  adminMediaApi.includes("organization?: MediaAsset['organization']") &&
+	    adminMediaApi.includes('organization: item.organization') &&
+	    adminMediaPage.includes('const buildAdminMediaOrganization') &&
+	    adminMediaPage.includes("schemaVersion: 'backy.media.organization.v1'") &&
+	    adminMediaPage.includes('folderAncestors,') &&
+	    adminMediaPage.includes('organization: buildAdminMediaOrganization(asset, folderOptions)') &&
+	    adminMediaPage.includes('organization: selectedAssetOrganization') &&
+	    adminMediaPage.includes("schemaVersion: 'backy.media-editor-binding.v1'") &&
+	    adminMediaPage.includes('editorBinding: buildMediaEditorBinding') &&
+	    adminMediaPage.includes('propsPatch') &&
+	    adminMediaPage.includes('responsiveEditableTargets') &&
+	    adminMediaPage.includes('bindingRequestTemplate') &&
+	    adminMediaPage.includes("'props.mediaOrganization'") &&
+	    adminMediaPage.includes("'props.downloadMediaIds'") &&
+	    adminMediaPage.includes("'props.fontMediaId'"),
+	  'Admin media client and placement handoff must preserve media organization breadcrumbs for reusable frontend design placement.',
+	);
 assert(
   sdkSource.includes('BackyMediaFolder') &&
     sdkSource.includes('BackyMediaFolderList') &&
@@ -350,6 +548,11 @@ assert(
   'API contract docs must describe invalid public media type filter errors.',
 );
 assert(
+  apiContracts.includes('`type=file` remains a compatibility alias for downloadable file assets and returns both `document` and `other` media') &&
+    apiContracts.includes('`type=file` returns both `document` and `other` media assets'),
+  'API contract docs must describe broad document/other type=file media filter behavior.',
+);
+assert(
   apiContracts.includes('Invalid public media scope filters return `400 INVALID_MEDIA_SCOPE`'),
   'API contract docs must describe invalid public media scope filter errors.',
 );
@@ -372,6 +575,13 @@ assert(
 assert(
   apiContracts.includes('Invalid media file disposition values return `400 INVALID_MEDIA_DISPOSITION`'),
   'API contract docs must describe invalid public media file disposition errors.',
+);
+assert(
+  apiContracts.includes('Public media file responses emit `ETag` and `x-backy-cache-revision`') &&
+    apiContracts.includes('matching `If-None-Match` returns `304` without streaming bytes') &&
+    apiContracts.includes('Transform redirects emit `ETag` and `x-backy-cache-revision`') &&
+    apiContracts.includes('matching `If-None-Match` returns `304` without redirecting or counting another transform delivery'),
+  'API contract docs must describe public media file and transform cache revalidation semantics.',
 );
 assert(
   apiContracts.includes('Signed media URL requests also reject invalid `disposition` values before minting tokens'),

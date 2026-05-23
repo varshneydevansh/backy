@@ -17,20 +17,58 @@ const assert = (condition, message) => {
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
 const publicSiteDiscoveryRoute = read('../src/app/api/sites/route.ts');
+const publicPagesRoute = read('../src/app/api/sites/[siteId]/pages/route.ts');
+const publicBlogRoute = read('../src/app/api/sites/[siteId]/blog/route.ts');
+const publicFormsRoute = read('../src/app/api/sites/[siteId]/forms/route.ts');
+const publicFormDetailRoute = read('../src/app/api/sites/[siteId]/forms/[formId]/route.ts');
+const publicFormDefinitionRoute = read('../src/app/api/sites/[siteId]/forms/[formId]/definition/route.ts');
+const publicCommerceOrdersRoute = read('../src/app/api/sites/[siteId]/commerce/orders/route.ts');
+const publicCollectionsRoute = read('../src/app/api/sites/[siteId]/collections/route.ts');
+const publicCollectionResourcesLib = read('../src/lib/publicCollectionResources.ts');
+const commerceCatalogLib = read('../src/lib/commerceCatalog.ts');
+const routeResolverLib = read('../src/lib/routeResolver.ts');
+const repositoryRouteResolverLib = read('../src/lib/repositoryRouteResolver.ts');
+const renderPayloadLib = read('../src/lib/renderPayload.ts');
 const publicProxy = read('../src/proxy.ts');
 const adminSitesRoute = read('../src/app/api/admin/sites/route.ts');
 const adminSiteDetailRoute = read('../src/app/api/admin/sites/[siteId]/route.ts');
+const adminSiteSettingsRoute = read('../src/app/api/admin/sites/[siteId]/settings/route.ts');
 const adminFrontendDesignRoute = read('../src/app/api/admin/sites/[siteId]/frontend-design/route.ts');
+const adminPagesRoute = read('../src/app/api/admin/sites/[siteId]/pages/route.ts');
+const adminPageDetailRoute = read('../src/app/api/admin/sites/[siteId]/pages/[pageId]/route.ts');
+const adminPagePublishRoute = read('../src/app/api/admin/sites/[siteId]/pages/[pageId]/publish/route.ts');
+const adminPageArchiveRoute = read('../src/app/api/admin/sites/[siteId]/pages/[pageId]/archive/route.ts');
+const adminBlogRoute = read('../src/app/api/admin/sites/[siteId]/blog/route.ts');
+const adminBlogPostDetailRoute = read('../src/app/api/admin/sites/[siteId]/blog/[postId]/route.ts');
+const adminBlogPostPublishRoute = read('../src/app/api/admin/sites/[siteId]/blog/[postId]/publish/route.ts');
+const adminBlogPostArchiveRoute = read('../src/app/api/admin/sites/[siteId]/blog/[postId]/archive/route.ts');
+const adminCollectionRecordsRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/route.ts');
+const adminCollectionRecordDetailRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts');
+const adminReusableSectionsRoute = read('../src/app/api/admin/sites/[siteId]/reusable-sections/route.ts');
+const adminReusableSectionDetailRoute = read('../src/app/api/admin/sites/[siteId]/reusable-sections/[sectionId]/route.ts');
+const publicReusableSectionsRoute = read('../src/app/api/sites/[siteId]/reusable-sections/route.ts');
+const publicReusableSectionDetailRoute = read('../src/app/api/sites/[siteId]/reusable-sections/[sectionId]/route.ts');
 const adminTemplateRegistryRoute = read('../src/app/api/admin/sites/[siteId]/templates/route.ts');
 const templateRegistryLib = read('../src/lib/templateRegistry.ts');
+const frontendDesignContractLib = read('../src/lib/frontendDesignContract.ts');
+const liveManagementEditorCommandRegistryLib = read('../src/lib/liveManagementEditorCommandRegistry.ts');
+const backyStoreLib = read('../src/lib/backyStore.ts');
+const pageRenderer = read('../src/components/PageRenderer.tsx');
+const livePageManagementOverlay = read('../src/components/LivePageManagementOverlay.tsx');
+const repositoryMediaReferenceSync = read('../src/lib/repositoryMediaReferenceSync.ts');
+const coreContentMigrations = read('../../../packages/core/src/content-migrations.ts');
+const coreTypes = read('../../../packages/core/src/types/index.ts');
+const coreThemeTokens = read('../../../packages/core/src/theme-tokens.ts');
 const sdkSource = read('../../../packages/sdk-js/src/index.ts');
 const sdkSmoke = read('../../../packages/sdk-js/scripts/smoke.mjs');
 const generatedSdkSmoke = read('../../../packages/sdk-js/scripts/generated-contract-types.ts');
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
+const contentPayloadSchema = read('../../../specs/ai-frontend-contract/content-payload.schema.json');
 const rootPackage = read('../../../package.json');
 const publicPackage = read('../package.json');
 const templateRegistrySmoke = read('template-registry-smoke.ts');
+const pageRendererSmoke = read('page-renderer-rich-text-smoke.tsx');
 const apiContracts = read('../../../specs/backy-api-contracts.md');
 const audit = read('../../../specs/page-completion-audit/backy-page-surface-audit.md');
 const completionSpec = read('../../../specs/backy-cms-completion-spec.md');
@@ -41,6 +79,11 @@ const adminFormsPage = read('../../../apps/admin/src/routes/forms.tsx');
 const adminProductsPage = read('../../../apps/admin/src/routes/products.tsx');
 const adminCollectionsPage = read('../../../apps/admin/src/routes/collections.tsx');
 const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-sections.tsx');
+const adminReusableSectionsSmoke = read('../../../apps/admin/scripts/reusable-sections-smoke.mjs');
+const adminPropertyPanel = read('../../../apps/admin/src/components/editor/PropertyPanel.tsx');
+const adminCanvas = read('../../../apps/admin/src/components/editor/Canvas.tsx');
+const adminCanvasEditor = read('../../../apps/admin/src/components/editor/CanvasEditor.tsx');
+const adminLayersPanel = read('../../../apps/admin/src/components/editor/LayersPanel.tsx');
 
 assert(
   manifestRoute.includes('site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`'),
@@ -89,24 +132,177 @@ assert(
 assert(
   manifestRoute.includes('buildBackyCompletionStatus') &&
     manifestRoute.includes("schemaVersion: 'backy.completion-status.v1'") &&
-    manifestRoute.includes("ready: 39") &&
-    manifestRoute.includes("partial: 6") &&
-    manifestRoute.includes("gate: 'npm run ci:forms-postgres'") &&
-    manifestRoute.includes("gate: 'npm run ci:sdk-postgres-smoke'") &&
+    manifestRoute.includes("ready: 41") &&
+    manifestRoute.includes("partial: 4") &&
+    manifestRoute.includes('certifiedGates: certifiedDatabaseGates') &&
+    manifestRoute.includes("status: 'certified'") &&
+    manifestRoute.includes("command: 'npm run ci:forms-postgres'") &&
+    manifestRoute.includes("command: 'npm run ci:sdk-postgres-smoke'") &&
     manifestRoute.includes("gate: 'npm run ci:settings-provider-certification'") &&
     manifestRoute.includes("gate: 'npm run ci:commerce-provider-certification'") &&
+    manifestRoute.includes('surfaceRunbooks') &&
+    manifestRoute.includes("evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1'") &&
+    manifestRoute.includes("evidencePacketSchema: 'backy.commerce-provider-certification-evidence-packet.v1'") &&
+    manifestRoute.includes("evidencePacketSchema: 'backy.order-provider-certification-evidence-packet.v1'") &&
+    manifestRoute.includes('artifactVerifier: settingsCertificationArtifactVerifier') &&
+    manifestRoute.includes('artifactVerifier: commerceCertificationArtifactVerifier') &&
+    manifestRoute.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+    manifestRoute.includes('evidenceArtifacts: settingsCertificationEvidenceArtifacts') &&
+    manifestRoute.includes('evidenceArtifacts: commerceCertificationEvidenceArtifacts') &&
+    manifestRoute.includes("'artifacts/backy-settings-provider-certification.json'") &&
+    manifestRoute.includes("'backy-settings-provider-certification-evidence'") &&
+    manifestRoute.includes("'BACKY_SETTINGS_CERTIFICATION_OUTPUT'") &&
+    manifestRoute.includes("'backy.settings-provider-certification-artifact.v1'") &&
+    manifestRoute.includes("'no raw secret-like values'") &&
+    manifestRoute.includes("'apiHandoffs.siteScopedSettingsApi present'") &&
+    manifestRoute.includes("'settingsApiHandoffSiteTargetReady'") &&
+    manifestRoute.includes("'settingsApiHandoffTargetSiteId'") &&
+    manifestRoute.includes("'settingsApiHandoffSettingsSiteSelectorEnv'") &&
+    manifestRoute.includes("'settingsApiHandoffCommerceSiteSelectorEnv'") &&
+    manifestRoute.includes("'settingsApiHandoffReady'") &&
+    manifestRoute.includes("'siteSettingsApiHandoffReady'") &&
+    manifestRoute.includes("'settingsScenarioEvidenceReady'") &&
+    manifestRoute.includes("'settingsEvidencePacketReady'") &&
+    manifestRoute.includes("'artifacts/backy-commerce-provider-certification.json'") &&
+    manifestRoute.includes("'backy-commerce-provider-certification-evidence'") &&
+    manifestRoute.includes("'BACKY_COMMERCE_CERTIFICATION_OUTPUT'") &&
+    manifestRoute.includes("'backy.commerce-provider-certification-artifact.v1'") &&
+    manifestRoute.includes("'apiHandoffReady'") &&
+    manifestRoute.includes("'publicCommerceApiHandoffReady'") &&
+    manifestRoute.includes("'productApiHandoffSiteTargetReady'") &&
+    manifestRoute.includes("'productApiHandoffTargetSiteId'") &&
+    manifestRoute.includes("'productApiHandoffReady'") &&
+    manifestRoute.includes("'orderApiHandoffSiteTargetReady'") &&
+    manifestRoute.includes("'orderApiHandoffTargetSiteId'") &&
+    manifestRoute.includes("'orderApiHandoffReady'") &&
+    manifestRoute.includes("'commerceApiHandoffSiteSelectorEnv'") &&
+    manifestRoute.includes("evidenceUiPanel: 'products-provider-certification-evidence-packet'") &&
+    manifestRoute.includes("evidenceUiPanel: 'orders-provider-certification-evidence-packet'") &&
     manifestRoute.includes('completionStatus: buildBackyCompletionStatus()') &&
     openApiRoute.includes('buildBackyCompletionStatus') &&
     openApiRoute.includes('"x-backy-completion-status"') &&
     openApiRoute.includes('BackyCompletionStatus') &&
+    openApiRoute.includes('surfaceRunbooks') &&
+    openApiRoute.includes('"evidenceArtifacts"') &&
+    openApiRoute.includes('"artifactVerifier"') &&
+    openApiRoute.includes('"no raw secret-like values"') &&
+    openApiRoute.includes('"apiHandoffs.siteScopedSettingsApi present"') &&
+    openApiRoute.includes('"settingsApiHandoffSiteTargetReady"') &&
+    openApiRoute.includes('"settingsApiHandoffTargetSiteId"') &&
+    openApiRoute.includes('"settingsApiHandoffSettingsSiteSelectorEnv"') &&
+    openApiRoute.includes('"settingsApiHandoffCommerceSiteSelectorEnv"') &&
+    openApiRoute.includes('"settingsApiHandoffReady"') &&
+    openApiRoute.includes('"siteSettingsApiHandoffReady"') &&
+    openApiRoute.includes('"settingsScenarioEvidenceReady"') &&
+    openApiRoute.includes('"settingsEvidencePacketReady"') &&
+    openApiRoute.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT') &&
+    openApiRoute.includes('"backy.order-provider-certification-evidence-packet.v1"') &&
+    openApiRoute.includes('"artifacts/backy-settings-provider-certification.json"') &&
+    openApiRoute.includes('"backy-commerce-provider-certification-evidence"') &&
+    openApiRoute.includes('"BACKY_COMMERCE_CERTIFICATION_OUTPUT"') &&
+    openApiRoute.includes('"apiHandoffReady"') &&
+    openApiRoute.includes('"publicCommerceApiHandoffReady"') &&
+    openApiRoute.includes('"productApiHandoffSiteTargetReady"') &&
+    openApiRoute.includes('"productApiHandoffTargetSiteId"') &&
+    openApiRoute.includes('"productApiHandoffReady"') &&
+    openApiRoute.includes('"orderApiHandoffSiteTargetReady"') &&
+    openApiRoute.includes('"orderApiHandoffTargetSiteId"') &&
+    openApiRoute.includes('"orderApiHandoffReady"') &&
+    openApiRoute.includes('"commerceApiHandoffSiteSelectorEnv"') &&
     frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
     frontendManifestSchema.includes('"backy.completion-status.v1"') &&
-    sdkSource.includes('BackyCompletionStatus') &&
+    frontendManifestSchema.includes('"surfaceRunbooks"') &&
+    frontendManifestSchema.includes('"evidenceArtifacts"') &&
+	    frontendManifestSchema.includes('"artifactVerifier"') &&
+	    frontendManifestSchema.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+	    frontendManifestSchema.includes('"no raw secret-like values"') &&
+	    frontendManifestSchema.includes('"producerEnv"') &&
+	    apiContracts.includes('surfaceRunbooks[].artifactVerifier') &&
+	    apiContracts.includes('noRawSecretValuesReady') &&
+	    apiContracts.includes('settingsApiHandoffSiteTargetReady') &&
+	    apiContracts.includes('settingsApiHandoffReady') &&
+	    apiContracts.includes('productApiHandoffSiteTargetReady') &&
+	    apiContracts.includes('orderApiHandoffSiteTargetReady') &&
+	    apiContracts.includes('apiHandoffReady') &&
+	    apiContracts.includes('publicCommerceApiHandoffReady') &&
+	    audit.includes('Completion-status artifact verifier metadata now mirrors the stricter selected-site proof') &&
+	    audit.includes('Frontend-design contract token persistence now keeps custom motion token groups') &&
+	    audit.includes('Completion-status runbooks now expose structured durable provider-certification artifact verifier metadata') &&
+	    audit.includes('release certification doctor now rejects stale Settings evidence artifacts') &&
+	    audit.includes('noRawSecretValuesReady') &&
+	    audit.includes('release certification doctor now rejects stale Commerce evidence artifacts') &&
+	    completionSpec.includes('surfaceRunbooks[].artifactVerifier') &&
+	    sdkSource.includes('BackyCompletionStatus') &&
+    sdkSource.includes('BackyCompletionArtifactVerifier') &&
+    sdkSource.includes('BackyCompletionEvidenceArtifact') &&
+    sdkSource.includes('surfaceRunbooks: Array<') &&
+    sdkSource.includes('evidenceArtifacts: BackyCompletionEvidenceArtifact[]') &&
+    sdkSource.includes('artifactVerifier: BackyCompletionArtifactVerifier') &&
     sdkSmoke.includes('manifest() completion status audit counts drifted') &&
+    sdkSmoke.includes('hasCompletionEvidenceArtifact') &&
+    sdkSmoke.includes('manifest() completion status missing products runbook') &&
+    sdkSmoke.includes('manifest() completion status missing orders runbook') &&
+    sdkSmoke.includes('artifacts/backy-settings-provider-certification.json') &&
+    sdkSmoke.includes('backy-commerce-provider-certification-evidence') &&
+    sdkSmoke.includes('hasCompletionArtifactVerifier') &&
+    sdkSmoke.includes('settingsApiHandoffSiteTargetReady') &&
+    sdkSmoke.includes('productApiHandoffSiteTargetReady') &&
+    sdkSmoke.includes('orderApiHandoffSiteTargetReady') &&
+    sdkSmoke.includes('manifest() completion status missing Settings runbook') &&
+    sdkSmoke.includes('completionStatus.audit?.ready === 41') &&
+    sdkSmoke.includes('completionStatus.audit?.partial === 4') &&
+    sdkSmoke.includes('completionStatus.audit?.readyPercent === 91') &&
+    sdkSmoke.includes('completionStatus.certifiedGates?.some') &&
+    sdkSmoke.includes('completion status should not list certified database gates as current Partial surfaces') &&
+    sdkSmoke.includes('completion status should not recommend certified SDK Postgres as remaining work') &&
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestCompletionStatus') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiBackyCompletionStatus') &&
+    generatedSdkTypes.includes('surfaceRunbooks: Array<') &&
+    generatedSdkTypes.includes('evidenceArtifacts: Array<') &&
+    generatedSdkTypes.includes('artifactVerifier: {') &&
+    generatedSdkSmoke.includes('surfaceRunbooks') &&
+    generatedSdkSmoke.includes('settingsCompletionArtifactVerifier') &&
+    generatedSdkSmoke.includes('commerceCompletionArtifactVerifier') &&
+    generatedSdkSmoke.includes('settingsCompletionEvidenceArtifacts') &&
+    generatedSdkSmoke.includes('commerceCompletionEvidenceArtifacts') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCompletionStatus'),
   'Frontend manifest/OpenAPI/SDK must expose structured Backy completion status and remaining partial-gate handoff for custom admin clients.',
+);
+
+assert(
+  manifestRoute.includes('manifest.data.contract.frontendLaunchReadiness = buildFrontendLaunchReadiness') &&
+    manifestRoute.includes("key: 'content-design-modules'") &&
+    manifestRoute.includes("key: 'media-font-delivery'") &&
+    manifestRoute.includes("key: 'visitor-interactions'") &&
+    manifestRoute.includes("key: 'commerce-handoff'") &&
+    manifestRoute.includes("key: 'live-management'") &&
+    openApiRoute.includes('"x-backy-frontend-launch-readiness"') &&
+    openApiRoute.includes('key: "content-design-modules"') &&
+    openApiRoute.includes('key: "media-font-delivery"') &&
+    openApiRoute.includes('key: "visitor-interactions"') &&
+    openApiRoute.includes('key: "commerce-handoff"') &&
+    openApiRoute.includes('key: "live-management"') &&
+    openApiRoute.includes('pages: pages.pagination.total') &&
+    openApiRoute.includes('blogPosts: posts.pagination.total') &&
+    openApiRoute.includes('fonts: fonts.pagination.total') &&
+    manifestRoute.includes("fonts: input.media.filter((item) => item.type === 'font').length") &&
+    manifestRoute.includes('fonts: fonts.length') &&
+    openApiRoute.includes('liveManagement: liveManagementDiscoveryContract') &&
+    frontendManifestSchema.includes('"frontendLaunchReadiness"') &&
+    frontendManifestSchema.includes('"fonts": { "type": "integer", "minimum": 0 }') &&
+    sdkSource.includes('BackyFrontendLaunchReadiness') &&
+    sdkSource.includes('fonts?: number') &&
+    sdkSmoke.includes('manifest() missing content/design launch readiness check') &&
+    sdkSmoke.includes('manifest() launch readiness missing font count') &&
+    sdkSmoke.includes('openapi() missing live-management frontend launch check') &&
+    sdkSmoke.includes('openapi() launch readiness missing font count') &&
+    generatedSdkTypes.includes('GeneratedBackyFrontendManifestLaunchReadiness') &&
+    generatedSdkTypes.includes('fonts?: number') &&
+    generatedSdkSmoke.includes('content-design-modules') &&
+    generatedSdkSmoke.includes('fonts: 2') &&
+    apiContracts.includes('OpenAPI now mirrors the manifest readiness check keys') &&
+    audit.includes('OpenAPI frontend launch-readiness parity update'),
+  'Manifest/OpenAPI/SDK/docs must expose frontend launch readiness parity for custom frontend operators.',
 );
 
 assert(
@@ -153,7 +349,11 @@ assert(
     manifestRoute.includes("'fontFamily'") &&
     manifestRoute.includes("'scope'") &&
     manifestRoute.includes("'tag'") &&
-    manifestRoute.includes("file: 'document'") &&
+    manifestRoute.includes("file: ['document', 'other']") &&
+    manifestRoute.includes("fileType: 'file'") &&
+    manifestRoute.includes("types: ['image', 'video', 'audio', 'document', 'file', 'font', 'other', 'all']") &&
+    manifestRoute.includes("visibility: ['public', 'private', 'all']") &&
+    manifestRoute.includes("scopes: ['global', 'page', 'post', 'all']") &&
     manifestRoute.includes('media: buildManifestMediaDiscovery(input.site.id, input.media, input.media.length, input.media.length)') &&
     manifestRoute.includes('media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total)') &&
     openApiRoute.includes('mediaFileCategoryDiscovery') &&
@@ -162,6 +362,9 @@ assert(
     openApiRoute.includes('MediaDeliveryPolicy') &&
     openApiRoute.includes('MediaManagementPolicy') &&
     openApiRoute.includes('"backy.media-management.v1"') &&
+    openApiRoute.includes('types: ["image", "video", "audio", "document", "file", "font", "other", "all"]') &&
+    openApiRoute.includes('file: ["document", "other"]') &&
+    openApiRoute.includes('fileType: "file"') &&
     openApiRoute.includes('"ingestMediaProviderAnalytics"') &&
     frontendManifestSchema.includes('"backy.media-discovery.v1"') &&
     frontendManifestSchema.includes('"managementPolicy"') &&
@@ -179,12 +382,28 @@ assert(
     frontendManifestSchema.includes('"maxLimit"') &&
     sdkSource.includes('schemaVersion: "backy.media-discovery.v1";') &&
     sdkSource.includes('BackyManifestMediaManagementPolicy') &&
+    sdkSource.includes('types: Array<"image" | "video" | "audio" | "document" | "file" | "font" | "other" | "all">') &&
+    sdkSource.includes('fileType: "file";') &&
     sdkSource.includes('fileCategories: Array<') &&
     sdkSource.includes('deliveryPolicy:') &&
     sdkSource.includes('privateFiles: "signed-url-required";') &&
     sdkSource.includes('fileCategories: "backy.media-file-categories.v1";') &&
     sdkSource.includes('BackyMediaFolder') &&
     sdkSource.includes('mediaFolders(') &&
+    sdkSource.includes('buildBackyMediaFilePath') &&
+    sdkSource.includes('buildBackyMediaFileUrl') &&
+    sdkSource.includes('buildBackyMediaTransformPath') &&
+    sdkSource.includes('buildBackyMediaTransformUrl') &&
+    sdkSource.includes('mediaFileCached(') &&
+    sdkSource.includes('mediaTransformCached(') &&
+    sdkSource.includes('requestConditionalArrayBuffer') &&
+    sdkSource.includes('requestConditionalRedirect') &&
+    sdkSource.includes('location: response.headers.get("location")') &&
+    sdkSource.includes('buildBackyMediaDownloadLinkProps') &&
+    sdkSource.includes('fileIds: [mediaId]') &&
+    sdkSource.includes('buildBackyContentDownloadFilePatch') &&
+    sdkSource.includes('patchBackyContentElementDownloadFile') &&
+    sdkSource.includes('mediaDownloadLinkProps(') &&
     sdkSource.includes('type?: "image" | "video" | "audio" | "document" | "file" | "font" | "other"') &&
     sdkSource.includes('siteId?: string') &&
     generatedSdkTypes.includes('"x-backy-media-file-categories"?: GeneratedBackyOpenApiMediaFileCategoryDiscovery') &&
@@ -192,10 +411,23 @@ assert(
     sdkSmoke.includes('manifest() media discovery missing folderId filter') &&
     sdkSmoke.includes('manifest() media discovery missing document category') &&
     sdkSmoke.includes('manifest() media discovery missing signed URL policy') &&
+    sdkSmoke.includes('manifest() media management missing broad file type alias') &&
+    sdkSmoke.includes('openapi() media management missing broad file type alias') &&
     sdkSmoke.includes('manifest() media management missing upload helper') &&
+    sdkSmoke.includes('buildBackyMediaFilePath() did not normalize signed download file paths') &&
+    sdkSmoke.includes('buildBackyMediaTransformPath() did not build public media transform paths') &&
+    sdkSmoke.includes('mediaFileCached() did not return notModified for matching ETag') &&
+    sdkSmoke.includes('mediaTransformCached() did not use manual redirects with If-None-Match') &&
+    sdkSmoke.includes('mediaDownloadLinkProps.fileIds') &&
+    sdkSmoke.includes("downloadFilePatch.changes?.['props.fileIds']") &&
+    sdkSmoke.includes('buildBackyMediaDownloadLinkProps() did not emit editor-compatible downloadable file props') &&
+    sdkSmoke.includes('buildBackyContentDownloadFilePatch() did not create editor-compatible props patch') &&
+    sdkSmoke.includes('patchBackyContentElementDownloadFile() did not attach central uploaded file design state') &&
+    sdkSmoke.includes('mediaDownloadLinkProps() did not build editor-compatible media download props') &&
     sdkSmoke.includes('mediaFolders() missing folder array') &&
     generatedSdkSmoke.includes('openApiMediaFileCategories') &&
     generatedSdkSmoke.includes('managementPolicy') &&
+    generatedSdkSmoke.includes('file: ["document", "other"]') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestMediaDiscovery') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestMediaManagement'),
   'Frontend manifest, OpenAPI, and SDK must expose structured media discovery for custom frontend asset browsers.',
@@ -209,11 +441,33 @@ assert(
     manifestRoute.includes("themeTokens: buildBackyThemeTokens(site.theme)") &&
     frontendManifestSchema.includes('"backy.theme-discovery.v1"') &&
     frontendManifestSchema.includes('"cssVariables"') &&
+    frontendManifestSchema.includes('"tokenReferences"') &&
+    frontendManifestSchema.includes('"styleSheet"') &&
+    frontendManifestSchema.includes('"elementTokenRefPath"') &&
+    frontendManifestSchema.includes('"animationTokenRefs"') &&
     frontendManifestSchema.includes('"editableFields"') &&
+    coreThemeTokens.includes('buildBackyThemeDiscovery') &&
+    coreThemeTokens.includes('buildBackyThemeStyleSheet') &&
+    coreThemeTokens.includes('buildBackyThemeTokenReferences') &&
+    coreThemeTokens.includes('animationTokenRefs: true') &&
     sdkSource.includes('BackyManifestThemeModule') &&
+    sdkSource.includes('tokenReferences: Record<string, string>') &&
+    sdkSource.includes('styleSheet: string') &&
+    sdkSource.includes('elementTokenRefPath: "tokenRefs"') &&
+    sdkSource.includes('animationTokenRefs: boolean') &&
+    sdkSource.includes('documentTokenRefPath?: "themeTokenRefs"') &&
+    pageRenderer.includes('buildBackyThemeTokenRefStyle') &&
+    pageRenderer.includes('applyThemeTokenRefsToElements') &&
+    pageRenderer.includes('resolveRendererAnimationTokenRefs') &&
+    pageRenderer.includes('DEFAULT_RENDERER_ANIMATION_DURATION_SECONDS') &&
+    pageRenderer.includes('motion: theme?.motion') &&
+    pageRenderer.includes('themedElements.map') &&
     sdkSmoke.includes('manifest() missing theme discovery module') &&
+    sdkSmoke.includes('manifest() theme discovery missing token reference map') &&
+    sdkSmoke.includes('manifest() theme discovery missing compiled stylesheet') &&
+    sdkSmoke.includes('manifest() theme discovery missing per-block token inheritance metadata') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestThemeDiscovery'),
-  'Frontend manifest and SDK must expose structured theme discovery and compiled CSS variables for custom frontends.',
+  'Frontend manifest, core compiler, and SDK must expose structured theme discovery, compiled CSS variables/stylesheets, and per-block token references for custom frontends.',
 );
 
 assert(
@@ -221,13 +475,63 @@ assert(
     manifestRoute.includes("schemaVersion: 'backy.live-management.v1'") &&
     manifestRoute.includes("post: `/api/sites/${siteId}/manage/blog/{postId}`") &&
     manifestRoute.includes("requiredPermissions:") &&
-    manifestRoute.includes("read: 'pages.view'") &&
-    manifestRoute.includes("update: 'pages.edit'") &&
-    manifestRoute.includes("'props.formId'") &&
+	    manifestRoute.includes("read: 'pages.view'") &&
+	    manifestRoute.includes("update: 'pages.edit'") &&
+	    manifestRoute.includes("'props.formId'") &&
+	    manifestRoute.includes("'props.fieldBackgroundColor'") &&
+	    manifestRoute.includes("'props.submitBackgroundColor'") &&
+	    manifestRoute.includes("'props.mediaId'") &&
+    manifestRoute.includes("'props.mediaIds'") &&
+    manifestRoute.includes("'props.imageIds'") &&
+    manifestRoute.includes("'props.videoIds'") &&
+    manifestRoute.includes("'props.backgroundMediaIds'") &&
+    manifestRoute.includes("'props.posterMediaIds'") &&
+    manifestRoute.includes("'props.fontMediaId'") &&
+    manifestRoute.includes("'props.fontMediaIds'") &&
+    manifestRoute.includes("'assetIds'") &&
+    manifestRoute.includes("'responsive.mobile.x'") &&
+    manifestRoute.includes("'responsive.tablet.width'") &&
+    manifestRoute.includes("'responsive.mobile.props.mediaIds'") &&
+    manifestRoute.includes("'responsive.mobile.props.posterMediaIds'") &&
+    manifestRoute.includes("'responsive.mobile.styles.backgroundMediaIds'") &&
+    manifestRoute.includes("'responsive.tablet.props.fontMediaIds'") &&
+    manifestRoute.includes("'responsive.tablet.styles.backgroundMediaIds'") &&
+    manifestRoute.includes('mediaAssetRefs: true') &&
+    manifestRoute.includes('fontAssetRefs: true') &&
+    manifestRoute.includes('animationTokenRefs: true') &&
     manifestRoute.includes("'props.submitLabel'") &&
     manifestRoute.includes("'props.options'") &&
     manifestRoute.includes("'props.required'") &&
+    manifestRoute.includes("'animation.type'") &&
+    manifestRoute.includes("'animation.scrollTrigger.start'") &&
+    manifestRoute.includes("'animation.scrollTrigger.scrub'") &&
+    manifestRoute.includes("'animation.from'") &&
+    manifestRoute.includes("'animation.to'") &&
+    manifestRoute.includes("'actions'") &&
+    manifestRoute.includes("'dataBindings'") &&
+    manifestRoute.includes("'bindingSlots'") &&
+    manifestRoute.includes("schemaVersion: 'backy.content-lifecycle-commands.v1'") &&
+    manifestRoute.includes("pageCreate: `/api/admin/sites/${siteId}/pages`") &&
+    manifestRoute.includes("postCreate: `/api/admin/sites/${siteId}/blog`") &&
+    manifestRoute.includes("createPage: 'createAdminPage'") &&
+    manifestRoute.includes("createPost: 'createAdminBlogPost'") &&
+    manifestRoute.includes("pageRevisions: 'backy.admin-page-revisions.v1'") &&
+    manifestRoute.includes("postRevisions: 'backy.admin-blog-post-revisions.v1'") &&
+    manifestRoute.includes("revisionBranchMetadata: 'backy.content-revision-branch-metadata.v1'") &&
+    manifestRoute.includes("branchMetadataField: 'revision.branchMetadata'") &&
+    manifestRoute.includes("pageRollbackRequest: 'backy.admin-page-rollback-request.v1'") &&
+    manifestRoute.includes("postRollbackRequest: 'backy.admin-blog-post-rollback-request.v1'") &&
+    manifestRoute.includes("schemaVersion: 'backy.pages-management.v1'") &&
+    manifestRoute.includes("schemaVersion: 'backy.blog-management.v1'") &&
+    manifestRoute.includes("templateRegistry: `/api/admin/sites/${siteId}/templates?type=page`") &&
+    manifestRoute.includes("templateRegistry: `/api/admin/sites/${siteId}/templates?type=blogPost`") &&
     manifestRoute.includes("schemaVersion: 'backy.editor-composition-commands.v1'") &&
+    manifestRoute.includes("addElement: 'addBackyContentElement'") &&
+    manifestRoute.includes("duplicateElement: 'duplicateBackyContentElement'") &&
+    manifestRoute.includes("deleteElements: 'deleteBackyContentElements'") &&
+    manifestRoute.includes("transformElements: 'transformBackyContentElements'") &&
+    manifestRoute.includes("id: 'duplicate'") &&
+    manifestRoute.includes("id: 'resize'") &&
     manifestRoute.includes("group: 'groupBackyContentElements'") &&
     manifestRoute.includes("ungroup: 'ungroupBackyContentElements'") &&
     manifestRoute.includes("shortcut: 'Cmd/Ctrl+G'") &&
@@ -237,33 +541,683 @@ assert(
     openApiRoute.includes('"x-backy-live-management"') &&
     openApiRoute.includes('liveManagementDiscovery') &&
     openApiRoute.includes('LiveManagementDiscovery') &&
-    openApiRoute.includes('inlineFormControls') &&
-    openApiRoute.includes('"backy.editor-composition-commands.v1"') &&
+    openApiRoute.includes('"props.mediaId"') &&
+    openApiRoute.includes('"props.mediaIds"') &&
+    openApiRoute.includes('"props.imageIds"') &&
+    openApiRoute.includes('"props.videoIds"') &&
+    openApiRoute.includes('"props.backgroundMediaIds"') &&
+    openApiRoute.includes('"props.posterMediaIds"') &&
+    openApiRoute.includes('"props.fontMediaId"') &&
+    openApiRoute.includes('"props.fontMediaIds"') &&
+    openApiRoute.includes('"animation.type"') &&
+    openApiRoute.includes('"animation.scrollTrigger.start"') &&
+    openApiRoute.includes('"animation.scrollTrigger.scrub"') &&
+    openApiRoute.includes('"animation.from"') &&
+    openApiRoute.includes('"animation.to"') &&
+    openApiRoute.includes('"actions"') &&
+    openApiRoute.includes('"dataBindings"') &&
+    openApiRoute.includes('"bindingSlots"') &&
+    openApiRoute.includes('"backy.content-lifecycle-commands.v1"') &&
+    openApiRoute.includes('pageCreate: `/api/admin/sites/${siteId}/pages`') &&
+    openApiRoute.includes('postCreate: `/api/admin/sites/${siteId}/blog`') &&
+    openApiRoute.includes('createPage: "createAdminPage"') &&
+    openApiRoute.includes('createPost: "createAdminBlogPost"') &&
+    openApiRoute.includes('pageRevisions: "backy.admin-page-revisions.v1"') &&
+    openApiRoute.includes('postRevisions: "backy.admin-blog-post-revisions.v1"') &&
+    openApiRoute.includes('revisionBranchMetadata: "backy.content-revision-branch-metadata.v1"') &&
+    openApiRoute.includes('branchMetadataField: "revision.branchMetadata"') &&
+    openApiRoute.includes('pageRollbackRequest: "backy.admin-page-rollback-request.v1"') &&
+    openApiRoute.includes('postRollbackRequest: "backy.admin-blog-post-rollback-request.v1"') &&
+    openApiRoute.includes('operationId: "listBackyAdminPageRevisions"') &&
+    openApiRoute.includes('operationId: "listBackyAdminBlogPostRevisions"') &&
+    openApiRoute.includes('operationId: "rollbackBackyAdminPage"') &&
+    openApiRoute.includes('operationId: "rollbackBackyAdminBlogPost"') &&
+    openApiRoute.includes('AdminPageRollbackRequest') &&
+    openApiRoute.includes('AdminBlogPostRollbackRequest') &&
+    openApiRoute.includes('AdminPageRevisionsEnvelope') &&
+    openApiRoute.includes('AdminBlogPostRevisionsEnvelope') &&
+	    openApiRoute.includes('ContentRevisionBranchMetadata') &&
+	    openApiRoute.includes('branchMetadata: { $ref: "#/components/schemas/ContentRevisionBranchMetadata" }') &&
+	    openApiRoute.includes('"parentRevisionId"') &&
+	    openApiRoute.includes('"restoreTargetRevisionId"') &&
+	    openApiRoute.includes('"persisted-revision-lineage"') &&
+	    openApiRoute.includes('"animation.tokenRefs.duration"') &&
+    openApiRoute.includes('"responsive.mobile.x"') &&
+    openApiRoute.includes('"responsive.tablet.width"') &&
+    openApiRoute.includes('"responsive.mobile.props.mediaIds"') &&
+    openApiRoute.includes('"responsive.mobile.props.posterMediaIds"') &&
+    openApiRoute.includes('"responsive.mobile.styles.backgroundMediaIds"') &&
+    openApiRoute.includes('"responsive.tablet.props.fontMediaIds"') &&
+    openApiRoute.includes('"responsive.tablet.styles.backgroundMediaIds"') &&
+	    openApiRoute.includes('inlineFormControls') &&
+	    openApiRoute.includes('"backy.editor-composition-commands.v1"') &&
+	    openApiRoute.includes('commandRegistry: liveManagementEditorCommandRegistry') &&
+	    openApiRoute.includes('"addBackyContentElement"') &&
+    openApiRoute.includes('"duplicateBackyContentElement"') &&
+    openApiRoute.includes('"deleteBackyContentElements"') &&
+    openApiRoute.includes('"transformBackyContentElements"') &&
     openApiRoute.includes('"groupBackyContentElements"') &&
-    openApiRoute.includes('"ungroupBackyContentElements"') &&
-    openApiRoute.includes('formControls: ["form", "input", "textarea", "select", "checkbox", "radio"]') &&
-    manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(input.site.id)') &&
+	    openApiRoute.includes('"ungroupBackyContentElements"') &&
+	    openApiRoute.includes('formControls: ["form", "input", "textarea", "select", "checkbox", "radio"]') &&
+	    openApiRoute.includes('"props.fieldBackgroundColor"') &&
+	    openApiRoute.includes('"props.submitBackgroundColor"') &&
+	    manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(input.site.id)') &&
     manifestRoute.includes('liveManagement: buildManifestLiveManagementDiscovery(site.id)') &&
     frontendManifestSchema.includes('"backy.live-management.v1"') &&
     frontendManifestSchema.includes('"postConflict"') &&
     frontendManifestSchema.includes('"optimisticConcurrency"') &&
-    frontendManifestSchema.includes('"editorComposition"') &&
-    frontendManifestSchema.includes('"backy.editor-composition-commands.v1"') &&
+	    frontendManifestSchema.includes('"editorComposition"') &&
+	    frontendManifestSchema.includes('"backy.editor-composition-commands.v1"') &&
+	    frontendManifestSchema.includes('"backy.editor-command-registry.v1"') &&
+	    frontendManifestSchema.includes('"commandRegistry"') &&
+	    frontendManifestSchema.includes('"backy.content-lifecycle-commands.v1"') &&
+    frontendManifestSchema.includes('"backy.content-revision-branch-metadata.v1"') &&
+    frontendManifestSchema.includes('"backy.admin-page-revisions.v1"') &&
+    frontendManifestSchema.includes('"backy.admin-blog-post-revisions.v1"') &&
+    frontendManifestSchema.includes('"backy.pages-management.v1"') &&
+    frontendManifestSchema.includes('"backy.blog-management.v1"') &&
+    frontendManifestSchema.includes('"createAdminPage"') &&
+    frontendManifestSchema.includes('"createAdminBlogPost"') &&
+    frontendManifestSchema.includes('"duplicateBackyContentElement"') &&
+    frontendManifestSchema.includes('"transformBackyContentElements"') &&
     frontendManifestSchema.includes('"PAGE_VERSION_CONFLICT"') &&
     frontendManifestSchema.includes('"BLOG_VERSION_CONFLICT"') &&
-    sdkSource.includes('BackyManifestLiveManagementModule') &&
-    sdkSource.includes('BackyManifestEditorComposition') &&
+	    sdkSource.includes('BackyManifestLiveManagementModule') &&
+	    sdkSource.includes('BackyManifestEditorComposition') &&
+	    sdkSource.includes('BackyManifestEditorCommandRegistry') &&
+	    sdkSource.includes('commandRegistry: BackyManifestEditorCommandRegistry') &&
+	    sdkSource.includes('evaluateBackyEditorCommandRegistry') &&
+	    sdkSource.includes('BackyEditorCommandRegistryEvaluation') &&
+	    sdkSource.includes('backy.editor-command-registry-evaluation.v1') &&
+	    apiContracts.includes('evaluateBackyEditorCommandRegistry()') &&
+	    audit.includes('SDK editor command registry evaluator update') &&
+	    sdkSource.includes('BackyManifestContentLifecycleCommands') &&
+    sdkSource.includes('BackyContentRevisionBranchMetadata') &&
+    sdkSource.includes('BackyAdminPageRevision') &&
+    sdkSource.includes('BackyAdminBlogPostRevision') &&
+    sdkSource.includes('revisionBranchMetadata: "backy.content-revision-branch-metadata.v1"') &&
+    sdkSource.includes('GeneratedBackyOpenApiAdminPageRevisionsEnvelope') &&
+    sdkSource.includes('GeneratedBackyOpenApiAdminBlogPostRevisionsEnvelope') &&
+    sdkSource.includes('GeneratedBackyOpenApiAdminPageRollbackRequest') &&
+	    sdkSource.includes('GeneratedBackyOpenApiAdminBlogPostRollbackRequest') &&
+	    sdkSource.includes('GeneratedBackyOpenApiContentRevisionBranchMetadata') &&
+	    sdkSource.includes('parentRevisionId: string | null') &&
+	    sdkSource.includes('restoreTargetRevisionId: string | null') &&
+	    sdkSource.includes('"persisted-revision-lineage"') &&
+	    sdkSource.includes('BackyManifestContentManagementPolicy') &&
+    sdkSource.includes('createPage: "createAdminPage"') &&
+    sdkSource.includes('createPost: "createAdminBlogPost"') &&
+    sdkSource.includes('| "assets"') &&
+    sdkSource.includes('| "assetList"') &&
+    sdkSource.includes('| "responsive"') &&
+    sdkSource.includes('| "interactions"') &&
+    sdkSource.includes('responsive.${breakpoint}.styles.${key}') &&
+    sdkSource.includes('setBackyTokenRefValue') &&
+    sdkSource.includes('syncBackyElementAssetIdsAfterPatch') &&
+    sdkSource.includes('BACKY_STYLE_EDITABLE_TARGETS') &&
+    sdkSource.includes('BACKY_TOKEN_REF_EDITABLE_TARGETS') &&
+    sdkSource.includes('tokenRefTargetPath') &&
+    sdkSource.includes('BACKY_ANIMATION_EDITABLE_TARGETS') &&
+    sdkSource.includes('BACKY_INTERACTION_EDITABLE_TARGETS') &&
+    sdkSource.includes('BACKY_DOWNLOAD_FILE_PROP_EDITABLE_TARGETS') &&
+    sdkSource.includes('normalizedPath === "actions"') &&
+	    sdkSource.includes('BACKY_ASSET_REFERENCE_KEYS') &&
+	    sdkSource.includes('"mediaIds"') &&
+	    sdkSource.includes('"fontMediaIds"') &&
+	    sdkSource.includes('"fileMediaId"') &&
+    sdkSource.includes('"downloadMediaId"') &&
+    sdkSource.includes('const assetTargetPath = normalizedPath === "assetids"') &&
+    sdkSource.includes('const assetListTargetPath = assetTargetPath && leaf.endsWith("ids");') &&
+    sdkSource.includes('if (assetTargetPath && (Array.isArray(value) || assetListTargetPath)) return "assetList";') &&
+    renderPayloadLib.includes("buildPublicFontManifest(site.id, mediaFonts)") &&
+    renderPayloadLib.includes("variants: family.variants") &&
+    renderPayloadLib.includes("assetIds: family.assetIds") &&
+    pageRenderer.includes("variants?: FontAssetVariant[]") &&
+    pageRenderer.includes("font.variants?.length") &&
+    contentPayloadSchema.includes('"fontVariant"') &&
+    contentPayloadSchema.includes('"variants": {') &&
+    generatedSdkTypes.includes('export type GeneratedBackyPublicRenderPayloadFontVariant') &&
+    generatedSdkTypes.includes('variants?: Array<GeneratedBackyPublicRenderPayloadFontVariant>;') &&
+    generatedSdkSmoke.includes('variants: [') &&
+	    backyStoreLib.includes('"mediaIds"') &&
+	    backyStoreLib.includes('"fontMediaIds"') &&
+    backyStoreLib.includes('"fileMediaId"') &&
+    backyStoreLib.includes('"downloadMediaId"') &&
+    repositoryMediaReferenceSync.includes("'fileMediaId'") &&
+    repositoryMediaReferenceSync.includes("'downloadMediaId'") &&
+    backyStoreLib.includes('MEDIA_REFERENCE_ASSET_COLLECTION_KEYS') &&
+    backyStoreLib.includes('mediaReferencePayloadForContent(page.content, page.meta)') &&
+    backyStoreLib.includes('mediaReferencePayloadForContent(post.content, post.meta)') &&
+    backyStoreLib.includes('entry.forEach(addReference)') &&
+    coreContentMigrations.includes("'mediaIds'") &&
+    coreContentMigrations.includes("'fontMediaIds'") &&
+    coreContentMigrations.includes("'fileMediaId'") &&
+    coreContentMigrations.includes("'downloadMediaId'") &&
+    coreContentMigrations.includes('animatedElementIds') &&
+    coreContentMigrations.includes('dataBoundElementIds') &&
+    coreContentMigrations.includes('assetBoundElementIds') &&
+    coreContentMigrations.includes('hasAnimations: metrics.animatedLayers > 0') &&
+    coreContentMigrations.includes('ACTION_PROP_KEYS') &&
+    coreContentMigrations.includes('hasBackyElementActionWiring') &&
+    sdkSource.includes('addBackyContentElement') &&
+    sdkSource.includes('duplicateBackyContentElement') &&
+    sdkSource.includes('deleteBackyContentElements') &&
+    sdkSource.includes('transformBackyContentElements') &&
+    sdkSource.includes('defaultBackyEditableTargetPathsForElement') &&
+    sdkSource.includes('const layoutPaths = BACKY_LAYER_LAYOUT_TARGETS.map') &&
+    sdkSource.includes('const responsiveLayoutPaths = BACKY_RESPONSIVE_BREAKPOINTS.flatMap') &&
+    sdkSource.includes('BACKY_BUTTON_PROP_EDITABLE_TARGETS') &&
+    sdkSource.includes('BACKY_FORM_PROP_EDITABLE_TARGETS') &&
+    sdkSource.includes('refreshBackyEditorCompositionMetadata') &&
+    sdkSource.includes('backy.editor-composition-summary.v1') &&
+    sdkSource.includes('animatedLayers: 0') &&
+    sdkSource.includes('dataBoundLayers: 0') &&
+    sdkSource.includes('assetBoundLayers: 0') &&
+    sdkSource.includes('animatedElementIds') &&
+    sdkSource.includes('BACKY_ACTION_PROP_KEYS') &&
+    sdkSource.includes('hasBackyElementActionWiring(item, props)') &&
+    sdkSource.includes('editorComposition: buildBackyEditorCompositionSummaryFromElements') &&
     sdkSource.includes('post: string;') &&
     sdkSource.includes('GeneratedBackyOpenApiLiveManagementDiscovery') &&
     generatedSdkTypes.includes('"x-backy-live-management"?: GeneratedBackyOpenApiLiveManagementDiscovery') &&
     sdkSmoke.includes('manifest() missing live-management discovery module') &&
     sdkSmoke.includes('manifest() live-management missing form id editable target') &&
+    sdkSmoke.includes('manifest() live-management missing media id editable target') &&
+    sdkSmoke.includes('manifest() live-management missing plural media ids editable target') &&
+    sdkSmoke.includes('manifest() live-management missing font media id editable target') &&
+    sdkSmoke.includes('manifest() live-management missing plural font media ids editable target') &&
+    sdkSmoke.includes('manifest() live-management missing download media id editable target') &&
+    sdkSmoke.includes('manifest() live-management missing file download disposition editable target') &&
+    sdkSmoke.includes('manifest() live-management missing style token box shadow editable target') &&
+    sdkSmoke.includes('manifest() live-management missing mobile style box shadow editable target') &&
+    sdkSmoke.includes('manifest() live-management missing tablet style token box shadow editable target') &&
+    sdkSmoke.includes('manifest() live-management missing animation scroll-trigger start editable target') &&
+    sdkSmoke.includes('manifest() live-management missing animation scroll-trigger scrub editable target') &&
+    sdkSmoke.includes('manifest() live-management missing element actions editable target') &&
+    sdkSmoke.includes('manifest() live-management missing element data bindings editable target') &&
+    sdkSmoke.includes('manifest() live-management missing element binding slots editable target') &&
+	    sdkSmoke.includes('manifest() live-management missing page create lifecycle endpoint') &&
+	    sdkSmoke.includes('manifest() live-management missing editor command registry contract') &&
+	    sdkSmoke.includes('openapi() missing live-management editor command registry') &&
+	    sdkSmoke.includes('evaluateBackyEditorCommandRegistry() did not mark sibling grouping ready') &&
+	    sdkSmoke.includes('evaluateBackyEditorCommandRegistry() did not mark selected editor group ungroup ready') &&
+    sdkSmoke.includes('manifest() pages runtime missing management create helper') &&
+    sdkSmoke.includes('manifest() blog runtime missing management create helper') &&
+    sdkSmoke.includes('manifest() live-management missing element assetIds editable target') &&
+    sdkSmoke.includes('manifest() live-management missing mobile responsive editable target') &&
+    sdkSmoke.includes('listBackyContentElements() did not expose responsive override editable target paths') &&
+    sdkSmoke.includes('listBackyContentElements() did not expose unset default button/link/form control targets') &&
+	    sdkSmoke.includes('listBackyContentElements() did not expose unset layout/responsive geometry targets') &&
+	    sdkSmoke.includes('listBackyContentElements() did not normalize boolean-like layer visibility/locking values') &&
+	    sdkSmoke.includes('listBackyContentElements() did not expose unset animation/actions/bindings targets') &&
+    sdkSmoke.includes('patchBackyContentEditableFields() did not patch unset default button/link/form control targets') &&
+	    sdkSmoke.includes('patchBackyContentEditableFields() did not patch unset layout/responsive geometry targets') &&
+	    sdkSmoke.includes('evaluateBackyEditorCommandRegistry() did not normalize boolean-like layer visibility/locking state') &&
+	    sdkSmoke.includes('patchBackyContentEditableFields() did not patch unset animation/actions/bindings targets') &&
+    sdkSmoke.includes('patchBackyContentEditableFields() did not patch responsive custom frontend design state') &&
+    sdkSmoke.includes('patchBackyContentEditableFields() did not patch custom animation JSON state') &&
+    sdkSmoke.includes('patchBackyContentEditableMapValues() did not patch responsive targetPath aliases') &&
+    sdkSmoke.includes('groupBackyContentElements() did not refresh editor composition metadata') &&
+    sdkSmoke.includes('ungroupBackyContentElements() did not refresh editor composition metadata') &&
+    sdkSmoke.includes('patchBackyContentEditableMapValues() did not refresh responsive override composition metadata') &&
+    sdkSmoke.includes('patchBackyContentEditableFields() did not refresh animated composition metadata') &&
+    sdkSmoke.includes('patchBackyContentEditableFields() composition metadata missing prop-action element id') &&
+	    sdkSmoke.includes('patchBackyContentEditableFields() did not refresh data-bound composition metadata') &&
+	    liveManagementEditorCommandRegistryLib.includes("schemaVersion: 'backy.editor-command-registry.v1'") &&
+	    liveManagementEditorCommandRegistryLib.includes("id: 'group-selection'") &&
+	    liveManagementEditorCommandRegistryLib.includes("id: 'toggle-selection-visibility'") &&
+	    liveManagementEditorCommandRegistryLib.includes("id: 'toggle-grid'") &&
+	    liveManagementEditorCommandRegistryLib.includes("id: 'save-page'") &&
+    sdkSmoke.includes('patchBackyContentEditableFields() did not refresh asset-bound composition metadata') &&
+    sdkSmoke.includes('patchBackyContentElement() did not sync media/font/file/download editable target refs into assetIds') &&
+    sdkSmoke.includes('listBackyContentElements() did not classify file/download media editable targets for asset pickers') &&
+    sdkSmoke.includes('listBackyContentElements() did not expose patched custom animation targets') &&
     sdkSmoke.includes('manifest() live-management missing editor composition command contract') &&
+    sdkSmoke.includes('openapi() live-management missing animation scroll-trigger start editable target') &&
+    sdkSmoke.includes('openapi() live-management missing style token box shadow editable target') &&
+    sdkSmoke.includes('openapi() live-management missing mobile style box shadow editable target') &&
+    sdkSmoke.includes('openapi() live-management missing tablet style token box shadow editable target') &&
+    sdkSmoke.includes('openapi() live-management missing element actions editable target') &&
+    sdkSmoke.includes('openapi() live-management missing element data bindings editable target') &&
+    sdkSmoke.includes('openapi() live-management missing element binding slots editable target') &&
+    sdkSmoke.includes('addBackyContentElement') &&
+    sdkSmoke.includes('duplicateBackyContentElement') &&
+    sdkSmoke.includes('deleteBackyContentElements') &&
+    sdkSmoke.includes('transformBackyContentElements') &&
+	    sdkSource.includes('function parseBackyBoolean') &&
+	    sdkSource.includes('function isBackyElementLocked') &&
+	    sdkSource.includes('element.visible = !parseBackyBoolean(value, false)') &&
+	    coreContentMigrations.includes("normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes'") &&
     sdkSmoke.includes('openapi() missing live-management group helper metadata') &&
-    generatedSdkSmoke.includes('props.formId') &&
+    livePageManagementOverlay.includes('data-backy-live-animation-editor="page"') &&
+    livePageManagementOverlay.includes('data-backy-live-animation-section="page"') &&
+    livePageManagementOverlay.includes('const updateElementAnimation = (') &&
+    livePageManagementOverlay.includes('optionalJsonObjectField') &&
+    livePageManagementOverlay.includes('scrollTrigger') &&
+    livePageManagementOverlay.includes('tokenRefs') &&
+    livePageManagementOverlay.includes('Save animation') &&
+    livePageManagementOverlay.includes('data-backy-live-actions-bindings-editor="page"') &&
+    livePageManagementOverlay.includes('const updateElementActionsBindings = (') &&
+    livePageManagementOverlay.includes('optionalJsonArrayField') &&
+    livePageManagementOverlay.includes('setInlineDataBindingsJson') &&
+    livePageManagementOverlay.includes('Save actions/bindings') &&
+    livePageManagementOverlay.includes('Backy image media ID') &&
+    livePageManagementOverlay.includes('Backy video media ID') &&
+    livePageManagementOverlay.includes('Backy poster media ID') &&
+    livePageManagementOverlay.includes('Download uploaded file') &&
+    livePageManagementOverlay.includes('Backy file media ID') &&
+    livePageManagementOverlay.includes('mediaIdFromUrl') &&
+    livePageManagementOverlay.includes("stringProp(props, 'fileId')") &&
+    livePageManagementOverlay.includes("firstStringFromListProp(props, 'fileIds')") &&
+    livePageManagementOverlay.includes('publicMediaFileUrl') &&
+    livePageManagementOverlay.includes('updateElementPropsWithAssetIds') &&
+    livePageManagementOverlay.includes('fileIds: download && mediaId ? [mediaId] : []') &&
+    livePageManagementOverlay.includes('downloadMediaIds: download && mediaId ? [mediaId] : []') &&
+    livePageManagementOverlay.includes('downloadFileMetadataFromElement(elementFromContent(content, elementId), mediaId)') &&
+    livePageManagementOverlay.includes("fileMediaName: download ? downloadFileMetadata.fileMediaName : ''") &&
+    livePageManagementOverlay.includes("fileMediaType: download ? downloadFileMetadata.fileMediaType : ''") &&
+    livePageManagementOverlay.includes("fileMediaVisibility: download ? downloadFileMetadata.fileMediaVisibility : ''") &&
+    livePageManagementOverlay.includes('fileSignedUrlRequired: download && mediaId ? downloadFileMetadata.fileSignedUrlRequired : false') &&
+    livePageManagementOverlay.includes("fileName: download ? downloadFileMetadata.fileName : ''") &&
+    livePageManagementOverlay.includes("fileDownloadDisposition: download ? 'attachment' : ''") &&
+    livePageManagementOverlay.includes('posterMediaIds: posterMediaId ? [posterMediaId] : []') &&
+    manifestRoute.includes("'props.fileMediaId'") &&
+    manifestRoute.includes("'props.downloadMediaIds'") &&
+    manifestRoute.includes("'props.fileMediaName'") &&
+    manifestRoute.includes("'props.fileMediaType'") &&
+    manifestRoute.includes("'props.fileMediaVisibility'") &&
+    manifestRoute.includes("'props.fileSignedUrlRequired'") &&
+    manifestRoute.includes("'props.fileName'") &&
+    manifestRoute.includes("'props.backgroundColor'") &&
+    manifestRoute.includes("'props.borderWidth'") &&
+    manifestRoute.includes("'props.textAlign'") &&
+    manifestRoute.includes("'props.actionPreset'") &&
+    manifestRoute.includes("'props.underline'") &&
+    manifestRoute.includes("'styles.boxShadow'") &&
+    manifestRoute.includes("'tokenRefs.styles.boxShadow'") &&
+    manifestRoute.includes("'responsive.mobile.props.downloadMediaIds'") &&
+    manifestRoute.includes("'responsive.mobile.props.fileMediaName'") &&
+    manifestRoute.includes("'responsive.mobile.props.fileSignedUrlRequired'") &&
+    manifestRoute.includes("'responsive.mobile.props.backgroundColor'") &&
+    manifestRoute.includes("'responsive.mobile.styles.boxShadow'") &&
+    manifestRoute.includes("'responsive.tablet.props.borderWidth'") &&
+    manifestRoute.includes("'responsive.tablet.props.fileMediaVisibility'") &&
+    manifestRoute.includes("'responsive.tablet.props.fileSignedUrlEndpoint'") &&
+    manifestRoute.includes("'responsive.tablet.tokenRefs.styles.boxShadow'") &&
+    openApiRoute.includes('"props.fileMediaId"') &&
+    openApiRoute.includes('"props.downloadMediaIds"') &&
+    openApiRoute.includes('"props.fileMediaName"') &&
+    openApiRoute.includes('"props.fileMediaType"') &&
+    openApiRoute.includes('"props.fileMediaVisibility"') &&
+    openApiRoute.includes('"props.fileSignedUrlRequired"') &&
+    openApiRoute.includes('"props.fileName"') &&
+    openApiRoute.includes('"props.backgroundColor"') &&
+    openApiRoute.includes('"props.borderWidth"') &&
+    openApiRoute.includes('"props.textAlign"') &&
+    openApiRoute.includes('"props.actionPreset"') &&
+    openApiRoute.includes('"props.underline"') &&
+    openApiRoute.includes('"styles.boxShadow"') &&
+    openApiRoute.includes('"tokenRefs.styles.boxShadow"') &&
+    openApiRoute.includes('"responsive.mobile.props.backgroundColor"') &&
+    openApiRoute.includes('"responsive.mobile.props.fileMediaName"') &&
+    openApiRoute.includes('"responsive.mobile.props.fileSignedUrlRequired"') &&
+    openApiRoute.includes('"responsive.mobile.styles.boxShadow"') &&
+    openApiRoute.includes('"responsive.tablet.props.borderWidth"') &&
+    openApiRoute.includes('"responsive.tablet.props.fileMediaVisibility"') &&
+    openApiRoute.includes('"responsive.tablet.props.fileSignedUrlEndpoint"') &&
+    openApiRoute.includes('"responsive.tablet.tokenRefs.styles.boxShadow"') &&
+    openApiRoute.includes('"responsive.tablet.props.fileMediaIds"') &&
+    adminPropertyPanel.includes("| 'downloadFile'") &&
+    adminPropertyPanel.includes('fileDownloadIdentityProps') &&
+    adminPropertyPanel.includes('fileIds: [media.id]') &&
+    adminPropertyPanel.includes('fileMediaIds: [media.id]') &&
+    adminPropertyPanel.includes('downloadMediaId: media.id') &&
+    adminPropertyPanel.includes('downloadMediaIds: [media.id]') &&
+    adminPropertyPanel.includes('...cleanMediaStrings(props.fileIds)') &&
+    adminCanvasEditor.includes("'fileMediaIds'") &&
+    adminCanvasEditor.includes("'downloadMediaIds'") &&
+    adminCanvasEditor.includes("'fallbackImageMediaIds'") &&
+    adminCanvasEditor.includes('const parseEditorBoolean =') &&
+    adminCanvasEditor.includes('parseEditorBoolean(value, true)') &&
+    adminCanvasEditor.includes('selectedActiveElements.every(isLayerHidden)') &&
+    adminCanvasEditor.includes('selectedActiveElements.every(isLayerLocked)') &&
+    adminPropertyPanel.includes('data-testid={`editor-${prefix}-download-media`}') &&
+    adminCanvas.includes('fileDownloadDataAttributes(p)') &&
+    adminCanvas.includes('const isCanvasElementHidden =') &&
+    adminCanvas.includes('const isCanvasElementLocked =') &&
+    adminCanvas.includes('const isHidden = isCanvasElementHidden(element)') &&
+    adminCanvas.includes("'data-backy-file-id': fileMediaId || undefined") &&
+    adminCanvas.includes('firstTextFromList(props.fileIds)') &&
+    adminCanvas.includes('getBooleanWithFallback(props.fileSignedUrlRequired, false)') &&
+    adminCanvas.includes("download={getBooleanWithFallback(p.download, false) ? '' : undefined}") &&
+    adminLayersPanel.includes('const parseLayerBoolean =') &&
+    adminLayersPanel.includes('isHidden={isLayerHidden(element)}') &&
+    adminLayersPanel.includes('canReorder={!disabled && !isLayerLocked(element)}') &&
+    livePageManagementOverlay.includes("return booleanProp(props, 'download');") &&
+    livePageManagementOverlay.includes('visible: booleanValue(item.visible, true)') &&
+    livePageManagementOverlay.includes('const selectedElementLocked = booleanValue(selectedContentElement?.locked);') &&
+    livePageManagementOverlay.includes("normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes'") &&
+    pageRenderer.includes('getFirstNameClassFromList(props.fileIds)') &&
+    pageRenderer.includes("'data-backy-file-id': fileMediaId || undefined") &&
+    pageRenderer.includes("fileMediaVisibility === 'private'") &&
+    pageRenderer.includes("download={getBooleanWithFallback(props.download, false) ? '' : undefined}") &&
+    pageRenderer.includes('getBooleanWithFallback(boundElement.props.hidden, false)') &&
+    pageRenderer.includes('!getBooleanWithFallback(boundElement.visible, true)') &&
+    pageRendererSmoke.includes('data-backy-file-id="renderer-file-id"') &&
+    pageRendererSmoke.includes('Boolean-like visible=false layer should not render') &&
+    pageRendererSmoke.includes('Download link generic file id metadata was not rendered from fileIds') &&
+    pageRendererSmoke.includes('Download link private signed URL requirement was not inferred from private visibility') &&
+	    generatedSdkSmoke.includes('props.formId') &&
+	    generatedSdkSmoke.includes('props.fieldBackgroundColor') &&
+	    generatedSdkSmoke.includes('props.submitBackgroundColor') &&
+	    generatedSdkSmoke.includes('props.mediaId') &&
+    generatedSdkSmoke.includes('props.mediaIds') &&
+    generatedSdkSmoke.includes('props.backgroundMediaIds') &&
+    generatedSdkSmoke.includes('props.posterMediaIds') &&
+    generatedSdkSmoke.includes('props.fontMediaId') &&
+    generatedSdkSmoke.includes('props.fontMediaIds') &&
+    generatedSdkSmoke.includes('props.downloadMediaId') &&
+    generatedSdkSmoke.includes('props.downloadMediaIds') &&
+    generatedSdkSmoke.includes('props.fileMediaName') &&
+    generatedSdkSmoke.includes('props.fileMediaType') &&
+    generatedSdkSmoke.includes('props.fileMediaVisibility') &&
+    generatedSdkSmoke.includes('props.fileSignedUrlRequired') &&
+    generatedSdkSmoke.includes('props.fileName') &&
+    generatedSdkSmoke.includes('props.backgroundColor') &&
+    generatedSdkSmoke.includes('props.borderWidth') &&
+    generatedSdkSmoke.includes('props.textAlign') &&
+    generatedSdkSmoke.includes('props.actionPreset') &&
+    generatedSdkSmoke.includes('props.underline') &&
+    generatedSdkSmoke.includes('styles.boxShadow') &&
+    generatedSdkSmoke.includes('tokenRefs.styles.boxShadow') &&
+    generatedSdkSmoke.includes('responsive.mobile.props.downloadMediaIds') &&
+    generatedSdkSmoke.includes('responsive.mobile.props.fileMediaName') &&
+    generatedSdkSmoke.includes('responsive.mobile.props.fileSignedUrlRequired') &&
+    generatedSdkSmoke.includes('responsive.mobile.props.backgroundColor') &&
+    generatedSdkSmoke.includes('responsive.mobile.styles.boxShadow') &&
+    generatedSdkSmoke.includes('responsive.tablet.props.borderWidth') &&
+    generatedSdkSmoke.includes('responsive.tablet.tokenRefs.styles.boxShadow') &&
+    generatedSdkSmoke.includes('responsive.tablet.props.fileMediaIds') &&
+    generatedSdkSmoke.includes('responsive.tablet.props.fileMediaVisibility') &&
+    generatedSdkSmoke.includes('responsive.tablet.props.fileSignedUrlEndpoint') &&
+    generatedSdkSmoke.includes('animation.type') &&
+    generatedSdkSmoke.includes('animation.scrollTrigger.start') &&
+    generatedSdkSmoke.includes('animation.scrollTrigger.scrub') &&
+    generatedSdkSmoke.includes('animation.from') &&
+    generatedSdkSmoke.includes('animation.to') &&
+    generatedSdkSmoke.includes('animation.tokenRefs.duration') &&
+    generatedSdkSmoke.includes('actions') &&
+    generatedSdkSmoke.includes('dataBindings') &&
+    generatedSdkSmoke.includes('bindingSlots') &&
+    generatedSdkSmoke.includes('responsive.mobile.x') &&
+    generatedSdkSmoke.includes('responsive.mobile.styles.color') &&
+    generatedSdkSmoke.includes('responsive.mobile.props.mediaId') &&
+    generatedSdkSmoke.includes('responsive.mobile.props.mediaIds') &&
+    generatedSdkSmoke.includes('responsive.mobile.props.posterMediaIds') &&
     sdkSmoke.includes('manifest() live-management blog post endpoint drifted') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestLiveManagementDiscovery'),
   'Frontend manifest and SDK must expose structured live-management discovery for inline custom frontend editing.',
+);
+
+	assert(
+	    coreContentMigrations.includes('canvasContentPayloadToBackyContentDocument') &&
+	    coreTypes.includes('export interface SiteFrontendDesignTemplateContent') &&
+	    coreTypes.includes('content?: SiteFrontendDesignTemplateContent') &&
+	    coreTypes.includes('frontendDesignCustomJs?: string;') &&
+	    coreTypes.includes('frontendDesignContentDocument?: Record<string, unknown>;') &&
+	    coreTypes.includes('frontendDesignEditableMap?: Record<string, unknown>;') &&
+	    coreTypes.includes('export interface SiteFrontendDesignEditableMapEntry') &&
+	    coreTypes.includes('targetPath?: string;') &&
+	    coreTypes.includes('valueType?: SiteFrontendDesignEditableValueType;') &&
+	    coreTypes.includes('export interface SiteFrontendDesignMotionTokens') &&
+	    coreTypes.includes('motion?: SiteFrontendDesignMotionTokens;') &&
+	    coreTypes.includes('customCSS?: string;') &&
+    coreContentMigrations.includes('customJS?: string') &&
+    coreContentMigrations.includes('themeTokenRefs: payloadStringRecord(') &&
+    coreContentMigrations.includes("metadata.animations = animations") &&
+    frontendDesignContractLib.includes('const contentDesignStatePayload = (content: unknown): Record<string, unknown> =>') &&
+    frontendDesignContractLib.includes('export const normalizeInputFromDirectFrontendDesignEnvelope') &&
+    frontendDesignContractLib.includes('const directDesignEnvelopeFromBody = (') &&
+    frontendDesignContractLib.includes("body.design, body.frontendDesign, body.designEnvelope, body.frontendDesignEnvelope") &&
+    frontendDesignContractLib.includes('const mergeFrontendDesignContractInput = (') &&
+    frontendDesignContractLib.includes('const normalizeFrontendDesignEditableMapEntry = (') &&
+    frontendDesignContractLib.includes('const inferFrontendDesignEditableValueType = (') &&
+    frontendDesignContractLib.includes('const defaultFrontendDesignEditableTargetPathsForElement = (') &&
+    frontendDesignContractLib.includes('const editableMapEntriesFromRecord = (') &&
+    frontendDesignContractLib.includes('const editableMapRecordFromEntries = (') &&
+    frontendDesignContractLib.includes('const editableMapRecordFromContentElements = (') &&
+    frontendDesignContractLib.includes('const editableMap = editableMapRecordFromContentElements(elements, designState.editableMap);') &&
+    frontendDesignContractLib.includes('const directDesignEditableMapRecord = (') &&
+    frontendDesignContractLib.includes('const directDesignTemplateId = (') &&
+    frontendDesignContractLib.includes("fallbackTemplateId('content'") &&
+    publicPagesRoute.includes('frontendDesignProvenanceFromMetadata(page.meta)') &&
+    publicBlogRoute.includes('frontendDesignProvenanceFromMetadata(post.meta)') &&
+    frontendDesignContractLib.includes("applyProvenanceField(meta, 'frontendDesignEditableMap', directDesignEditableMapRecord(envelope, content));") &&
+    frontendDesignContractLib.includes('const contentEditableMap = editableMapEntriesFromRecord(contentRecord.editableMap);') &&
+    frontendDesignContractLib.includes('const capturedEditableMapRecord = editableMapRecordFromEntries(capturedEditableMap);') &&
+    frontendDesignContractLib.includes('content: templateContentWithEditableMap') &&
+    frontendDesignContractLib.includes("'targetPath',") &&
+    frontendDesignContractLib.includes("'valueType',") &&
+    frontendDesignContractLib.includes('const fields = stringArrayValue(entry.fields);') &&
+    frontendDesignContractLib.includes('const editable = booleanValue(entry.editable);') &&
+    frontendDesignContractLib.includes('const mergeDeepRecord = (') &&
+    frontendDesignContractLib.includes("      'motion',") &&
+    frontendDesignContractLib.includes('const motionTokenRecord = (') &&
+    frontendDesignContractLib.includes('motion: motionTokenRecord(tokensInput.motion)') &&
+    frontendDesignContractLib.includes('customCss: stringValue(tokensInput.customCss) || stringValue(tokensInput.customCSS)') &&
+    frontendDesignContractLib.includes('const mergeTemplateContentInput = (') &&
+    frontendDesignContractLib.includes("'animations',") &&
+    frontendDesignContractLib.includes("'interactions',") &&
+    frontendDesignContractLib.includes("'dataBindings',") &&
+    frontendDesignContractLib.includes('merged[key] = mergeDeepRecord(fallbackRecord[key], nextRecord[key]);') &&
+    frontendDesignContractLib.includes('const designStateValue = (') &&
+    frontendDesignContractLib.includes('const buildFrontendDesignProvenanceFields = (') &&
+    frontendDesignContractLib.includes('meta: buildFrontendDesignProvenanceFields(frontendDesign, template, existingMeta)') &&
+    frontendDesignContractLib.includes('frontendDesignAnimations') &&
+    frontendDesignContractLib.includes('customJs: stringValue(metadata.frontendDesignCustomJs)') &&
+    frontendDesignContractLib.includes('contentDocument: cloneRecord(metadata.frontendDesignContentDocument)') &&
+    frontendDesignContractLib.includes('themeTokenRefs: cloneRecord(metadata.frontendDesignThemeTokenRefs)') &&
+    frontendDesignContractLib.includes('editableMap: cloneRecord(metadata.frontendDesignEditableMap)') &&
+    frontendDesignContractLib.includes('animations: arrayOrRecordValue(metadata.frontendDesignAnimations)') &&
+    frontendDesignContractLib.includes('...(customJS ? { customJS } : {})') &&
+    frontendDesignContractLib.includes("const assets = designStateValue(content, 'assets');") &&
+    frontendDesignContractLib.includes("const animations = designStateValue(content, 'animations');") &&
+    frontendDesignContractLib.includes("const interactions = designStateValue(content, 'interactions');") &&
+    frontendDesignContractLib.includes('...(animations ? { animations } : {})') &&
+    frontendDesignContractLib.includes('const mergeSectionTemplateDesignStateIntoContent = (') &&
+    frontendDesignContractLib.includes('mergeSectionTemplateDesignStateIntoContent(seed.template, currentContent)') &&
+    frontendDesignContractLib.includes('...(editableMap ? { editableMap } : {})') &&
+    templateRegistrySmoke.includes('partiallyPatchedFrontendDesign.tokens.motion?.duration?.fast') &&
+    templateRegistrySmoke.includes('partiallyPatchedFrontendDesign.tokens.motion?.duration?.slow') &&
+    templateRegistrySmoke.includes('partiallyPatchedFrontendDesign.tokens.customCss') &&
+    templateRegistrySmoke.includes('Partial frontend-design patch should retain fallback interaction timelines') &&
+    templateRegistrySmoke.includes('Partial frontend-design patch should merge newly patched data-binding fields') &&
+    templateRegistrySmoke.includes('Partial frontend-design patch should merge newly patched nested template design state') &&
+    templateRegistrySmoke.includes('Captured button editable map should expose color controls') &&
+    templateRegistrySmoke.includes('Captured button editable map should expose downloadable file controls') &&
+    templateRegistrySmoke.includes('Captured button editable map should expose responsive color controls') &&
+    templateRegistrySmoke.includes('Captured data bindings should map source fields back to editable target paths') &&
+    templateRegistrySmoke.includes('Captured template content should persist inferred button color controls') &&
+    templateRegistrySmoke.includes('Seeded page content should retain inferred editable color controls') &&
+    templateRegistrySmoke.includes('Seeded page metadata should retain inferred editable animation controls') &&
+    templateRegistrySmoke.includes('Direct design envelope content should infer file controls') &&
+    templateRegistrySmoke.includes('Direct design envelope metadata should retain inferred animation controls') &&
+    templateRegistrySmoke.includes('Direct design envelopes without template ids should receive stable frontend-design provenance ids') &&
+    templateRegistrySmoke.includes('Frontend-design provenance should remain public-readable for direct designs without explicit template ids') &&
+    templateRegistrySmoke.includes('Direct design content should retain record-shaped animation maps') &&
+    templateRegistrySmoke.includes('Frontend-design provenance should expose record-shaped animation maps') &&
+    templateRegistrySmoke.includes('Direct reusable-section design content should retain record-shaped animations') &&
+    templateRegistrySmoke.includes('Direct reusable-section design envelope should infer downloadable file controls') &&
+    templateRegistrySmoke.includes('Direct collection-record design envelope should infer data-binding controls') &&
+    backyStoreLib.includes('frontendDesignAnimations?: unknown[] | Record<string, unknown>') &&
+    backyStoreLib.includes('| "frontendDesignAnimations"') &&
+    backyStoreLib.includes('frontendDesignAnimations: arrayOrRecordField("frontendDesignAnimations")') &&
+    backyStoreLib.includes('const pageContentFromCanvasInput = (') &&
+    backyStoreLib.includes('const designStateValueFromContent = <T = unknown>(') &&
+    backyStoreLib.includes('animations: designStateValueFromContent<unknown[] | Record<string, unknown>>') &&
+    adminPagesRoute.includes('canvasContentPayloadToBackyContentDocument') &&
+    adminPagesRoute.includes('normalizeInputFromDirectFrontendDesignEnvelope') &&
+    adminPagesRoute.includes('animations: designStateValue<unknown[] | Record<string, unknown>>("animations")') &&
+    adminPagesRoute.includes('animations: Array.isArray(page.content.metadata?.animations) || isRecord(page.content.metadata?.animations)') &&
+    adminPageDetailRoute.includes('fallbackDocument: fallback.content') &&
+    adminPageDetailRoute.includes('normalizeInputFromDirectFrontendDesignEnvelope') &&
+    adminPageDetailRoute.includes(': fallback.elements) as StorePage["content"]["elements"]') &&
+    adminPageDetailRoute.includes('animations: designStateValue<unknown[] | Record<string, unknown>>("animations")') &&
+    adminPageDetailRoute.includes('animations: Array.isArray(page.content.metadata?.animations) || isRecord(page.content.metadata?.animations)') &&
+    adminPagePublishRoute.includes('typeof page.content.metadata?.customJS === "string"') &&
+    adminPageArchiveRoute.includes('typeof page.content.metadata?.customJS === "string"') &&
+    adminBlogRoute.includes('canvasContentPayloadToBackyContentDocument') &&
+    adminBlogRoute.includes('normalizeInputFromDirectFrontendDesignEnvelope') &&
+    adminBlogRoute.includes('animations: Array.isArray(post.content.metadata?.animations) || isRecord(post.content.metadata?.animations)') &&
+    adminBlogPostDetailRoute.includes('fallbackDocument: fallback.content') &&
+    adminBlogPostDetailRoute.includes('normalizeInputFromDirectFrontendDesignEnvelope') &&
+    adminBlogPostDetailRoute.includes('animations: Array.isArray(post.content.metadata?.animations) || isRecord(post.content.metadata?.animations)') &&
+    adminBlogPostPublishRoute.includes('typeof post.content.metadata?.customJS === "string"') &&
+    adminBlogPostArchiveRoute.includes('typeof post.content.metadata?.customJS === "string"') &&
+    publicPagesRoute.includes('const publicPageContentFromRepositoryDocument = (content: BackyPage[\'content\'])') &&
+    publicBlogRoute.includes('const publicPostContentFromRepositoryDocument = (content: BackyPost[\'content\'])') &&
+    publicPagesRoute.includes('themeTokenRefs: content.themeTokenRefs') &&
+    publicBlogRoute.includes('themeTokenRefs: content.themeTokenRefs') &&
+    publicPagesRoute.includes('assets: content.assets') &&
+    publicBlogRoute.includes('assets: content.assets') &&
+    publicPagesRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
+    publicBlogRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
+    publicPagesRoute.includes('interactions: content.interactions') &&
+    publicBlogRoute.includes('interactions: content.interactions') &&
+    publicPagesRoute.includes('dataBindings: content.dataBindings') &&
+    publicBlogRoute.includes('dataBindings: content.dataBindings') &&
+    publicPagesRoute.includes('editableMap: content.editableMap') &&
+    publicBlogRoute.includes('editableMap: content.editableMap') &&
+    frontendDesignContractLib.includes('customJs: stringValue(metadata.frontendDesignCustomJs)') &&
+	    frontendDesignContractLib.includes('const cloneArrayOrRecord = (value: unknown): unknown[] | Record<string, unknown> | undefined => (') &&
+	    frontendDesignContractLib.includes('animations: arrayOrRecordValue(metadata.frontendDesignAnimations)') &&
+	    frontendDesignContractLib.includes('const animations = cloneArrayOrRecord(current.frontendDesignAnimations)') &&
+	    publicPagesRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
+	    publicBlogRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
+	    renderPayloadLib.includes('const jsonArrayOrRecordValue = (...values: unknown[]): JsonArrayOrObject | undefined => {') &&
+	    renderPayloadLib.includes('jsonArrayOrRecordValue(content.animations, contentDocument?.animations, metadata?.animations)') &&
+    frontendDesignContractLib.includes('editableMap: cloneRecord(metadata.frontendDesignEditableMap)') &&
+	    publicReusableSectionsRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
+	    publicReusableSectionDetailRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
+	    frontendDesignContractLib.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
+	    adminReusableSectionsRoute.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
+	    adminReusableSectionDetailRoute.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
+	    adminReusableSectionsPage.includes('reusableSectionDesignStateFromRecord(content)') &&
+	    adminReusableSectionsPage.includes('contentDocument: cloneDesignStateValue(record.contentDocument)') &&
+    publicFormsRoute.includes('frontendDesignProvenanceFromMetadata(form.settings)') &&
+    publicFormDetailRoute.includes('frontendDesignProvenanceFromMetadata(form.settings)') &&
+    publicFormDefinitionRoute.includes('frontendDesignProvenanceFromMetadata(form.settings)') &&
+    publicCollectionsRoute.includes('withCollectionFrontendDesign') &&
+    publicCollectionResourcesLib.includes('frontendDesignProvenanceFromMetadata(collection.metadata)') &&
+    publicCollectionResourcesLib.includes('frontendDesignProvenanceFromMetadata(record.values)') &&
+    commerceCatalogLib.includes('const normalizeUnknownArrayOrRecord = (value: unknown): CommerceDesignArrayOrRecord | undefined => {') &&
+    commerceCatalogLib.includes('const productDesignReadinessArrayOrRecord = (') &&
+    commerceCatalogLib.includes('const designStateItemCount = (value: unknown): number => {') &&
+    commerceCatalogLib.includes("const assets = normalizeUnknownArrayOrRecord(designValue('assets', 'frontendDesignAssets'));") &&
+    commerceCatalogLib.includes("const animations = normalizeUnknownArrayOrRecord(designValue('animations', 'frontendDesignAnimations'));") &&
+    commerceCatalogLib.includes("const interactions = normalizeUnknownArrayOrRecord(designValue('interactions', 'frontendDesignInteractions'));") &&
+    commerceCatalogLib.includes('const animationCount = designStateItemCount(animations);') &&
+    commerceCatalogLib.includes('const assetCount = designStateItemCount(assets);') &&
+    commerceCatalogLib.includes('animations: animationCount,') &&
+    commerceCatalogLib.includes('assets: assetCount,') &&
+    manifestRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
+    manifestRoute.includes('frontendDesignProvenanceFromMetadata(item.meta)') &&
+    adminFrontendDesignRoute.includes('mergeFallback: true') &&
+    adminSiteSettingsRoute.includes('normalizeFrontendDesignContract(patch.frontendDesign') &&
+    adminSiteSettingsRoute.includes('mergeFallback: true') &&
+	    openApiRoute.includes('customJS: { type: "string" }') &&
+	    openApiRoute.includes('customJs: { type: "string" }') &&
+	    openApiRoute.includes('FrontendDesignTemplateContent: {') &&
+	    openApiRoute.includes('FrontendEditableMapEntry: {') &&
+	    openApiRoute.includes('targetPath: { type: "string" }') &&
+	    openApiRoute.includes('valueType: {') &&
+	    openApiRoute.includes('$ref: "#/components/schemas/FrontendDesignTemplateContent"') &&
+	    (openApiRoute.match(/oneOf: \[\s+\{\s+type: "array",\s+items: \{ type: "object", additionalProperties: true \},\s+\},\s+\{ type: "object", additionalProperties: true \},\s+\],\s+\},\s+animations: \{/g) || []).length >= 2 &&
+	    openApiRoute.includes('contentDocument: {') &&
+	    openApiRoute.includes('editableMap: { type: "object", additionalProperties: true }') &&
+    openApiRoute.includes('themeTokenRefs: {') &&
+    openApiRoute.includes('animations: {') &&
+    openApiRoute.includes('dataBindings: { type: "object", additionalProperties: true }') &&
+    openApiRoute.includes('BackyElementAnimation: {') &&
+    openApiRoute.includes('$ref: "#/components/schemas/BackyElementAnimation"') &&
+    openApiRoute.includes('$ref: "#/components/schemas/BackyEditableMapEntry"') &&
+    openApiRoute.includes('$ref: "#/components/schemas/BackyContentDocument"') &&
+    openApiRoute.includes('templateId: { type: "string" }') &&
+    openApiRoute.includes('bindingHints: {') &&
+    (openApiRoute.match(/design: \{ \$ref: "#\/components\/schemas\/FrontendDesignTemplateContent" \}/g) || []).length >= 2 &&
+    (openApiRoute.match(/frontendDesign: \{ \$ref: "#\/components\/schemas\/FrontendDesignTemplateContent" \}/g) || []).length >= 2 &&
+    generatedSdkTypes.includes('customJS?: string;') &&
+	    generatedSdkTypes.includes('themeTokenRefs?: Record<string, string>;') &&
+	    generatedSdkTypes.includes('export type GeneratedBackyOpenApiFrontendDesignTemplateContent = {') &&
+    generatedSdkTypes.includes('content?: GeneratedBackyOpenApiFrontendDesignTemplateContent;') &&
+	    generatedSdkTypes.includes('export type GeneratedBackyOpenApiReusableSectionFrontendDesign = {') &&
+    generatedSdkTypes.includes('export type GeneratedBackyOpenApiBackyReusableSectionContent = {') &&
+    generatedSdkTypes.includes('animations?: Array<Record<string, unknown>> | Record<string, unknown>;') &&
+    generatedSdkTypes.includes('customJs?: string;') &&
+    generatedSdkTypes.includes('contentDocument?: Record<string, unknown>;') &&
+    generatedSdkTypes.includes('editableMap?: Record<string, unknown>;') &&
+	    sdkSource.includes('contentDocument?: Record<string, unknown>;') &&
+	    sdkSource.includes('export interface BackyFrontendDesignTemplateContent') &&
+	    sdkSource.includes('content?: BackyFrontendDesignTemplateContent;') &&
+	    sdkSource.includes('customCSS?: string;') &&
+		    sdkSource.includes('export function buildBackyContentDesignPayload') &&
+		    sdkSource.includes('export function buildBackyAdminPageCreateInput') &&
+		    sdkSource.includes('export function buildBackyAdminPageUpdateInput') &&
+		    sdkSource.includes('export function buildBackyAdminBlogPostCreateInput') &&
+		    sdkSource.includes('export function buildBackyAdminBlogPostUpdateInput') &&
+		    sdkSource.includes('export function buildBackyAdminReusableSectionCreateInput') &&
+		    sdkSource.includes('export function buildBackyAdminReusableSectionUpdateInput') &&
+		    sdkSource.includes('export function buildBackyAdminCollectionRecordCreateInput') &&
+		    sdkSource.includes('export function buildBackyAdminCollectionRecordUpdateInput') &&
+		    sdkSource.includes('export function buildBackyAdminCommerceProductCreateInput') &&
+		    sdkSource.includes('export function buildBackyAdminCommerceProductUpdateInput') &&
+		    sdkSource.includes('frontendDesignContentDocument') &&
+	    sdkSource.includes('frontendDesignAnimations') &&
+	    frontendManifestSchema.includes('"customCSS": { "type": "string" }') &&
+	    frontendManifestSchema.includes('"targetPath": { "type": "string" }') &&
+	    frontendManifestSchema.includes('"valueType": {') &&
+	    sdkSource.includes('themeTokenRefs?: Record<string, unknown>;') &&
+	    sdkSource.includes('export interface BackyFrontendEditableMapEntry') &&
+	    sdkSource.includes('targetPath?: string;') &&
+	    sdkSource.includes('valueType?:') &&
+    sdkSource.includes('function inferBackyFrontendEditableMapFromElements(') &&
+    sdkSource.includes('function buildBackyFrontendEditableMapRecord(') &&
+    sdkSource.includes('function backyDesignTemplateId(') &&
+    sdkSource.includes('function fallbackBackyTemplateId(') &&
+    sdkSource.includes('editableMap?: Record<string, unknown>;') &&
+    adminReusableSectionsSmoke.includes('__backySmokeSectionHydrated') &&
+    adminReusableSectionsSmoke.includes('frontendDesignContentDocument?.schemaVersion') &&
+    adminReusableSectionsSmoke.includes('frontendDesignAnimations[0]?.timeline === \'section-intro\'') &&
+    adminReusableSectionsSmoke.includes('frontendDesignEditableMap?.[\'section.heading\']?.elementId') &&
+    adminReusableSectionsSmoke.includes('Frontend data bindings were not retained') &&
+    adminReusableSectionsSmoke.includes('Frontend SEO was not retained') &&
+    templateRegistrySmoke.includes('nested-section-template') &&
+    templateRegistrySmoke.includes('Nested section content should retain root animation arrays') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiBackyElementAnimation') &&
+    generatedSdkTypes.includes('animation?: GeneratedBackyPublicRenderPayloadAnimation') &&
+    generatedSdkSmoke.includes('pageDesignStateUpdate') &&
+    generatedSdkSmoke.includes('animationTimeline: "hero-intro"') &&
+    sdkSmoke.includes('buildBackyContentDesignPayload() did not preserve animation timelines') &&
+    sdkSmoke.includes('buildBackyContentDesignPayload() did not infer editable controls from SDK design elements') &&
+    sdkSmoke.includes('buildBackyContentDesignPayload() did not preserve contentDocument metadata customCSS') &&
+    sdkSmoke.includes('buildBackyAdminPageCreateInput() did not preserve animation provenance') &&
+    sdkSmoke.includes('buildBackyAdminPageCreateInput() did not preserve inferred editable-map provenance') &&
+    sdkSmoke.includes('buildBackyAdminPageCreateInput() did not synthesize a stable template id for imported designs') &&
+    sdkSmoke.includes('buildBackyAdminPageUpdateInput() did not preserve expectedUpdatedAt') &&
+    sdkSmoke.includes('buildBackyAdminBlogPostCreateInput() did not infer template id from content') &&
+    sdkSmoke.includes('buildBackyAdminBlogPostUpdateInput() did not prefer explicit content customJS') &&
+    sdkSmoke.includes('buildBackyAdminReusableSectionCreateInput() did not preserve animation metadata') &&
+    sdkSmoke.includes('buildBackyAdminReusableSectionUpdateInput() did not preserve expectedVersion') &&
+    sdkSmoke.includes('buildBackyAdminCollectionRecordCreateInput() did not preserve animation aliases') &&
+    sdkSmoke.includes('buildBackyAdminCollectionRecordCreateInput() did not preserve inferred editable-map aliases') &&
+    sdkSmoke.includes('buildBackyAdminCollectionRecordCreateInput() did not synthesize record template id') &&
+    sdkSmoke.includes('buildBackyAdminCollectionRecordUpdateInput() did not preserve clean animation state') &&
+    sdkSmoke.includes('buildBackyAdminCommerceProductCreateInput() did not preserve product content document') &&
+    sdkSmoke.includes('buildBackyAdminCommerceProductUpdateInput() did not prefer update custom JS') &&
+    sdkSmoke.includes('buildBackyAdminCommerceProductUpdateInput() did not preserve inferred product editable-map alias') &&
+    sdkSmoke.includes('openapi() page update canvas payload missing customJS design state') &&
+    sdkSmoke.includes('openapi() blog update canvas payload missing data binding design state'),
+  'Page/blog/reusable-section contracts must preserve canvas design state, animations, bindings, editable maps, custom CSS/JS, and canonical content documents.',
 );
 
 assert(
@@ -373,11 +1327,15 @@ assert(
     manifestRoute.includes("'customerName/customerEmail/customerPhone'") &&
     manifestRoute.includes("'provider_created'") &&
     manifestRoute.includes("ordersCollectionMustRemainPrivate: true") &&
+    manifestRoute.includes("publicOrderStatusUsesOneTimeReturnedToken: true") &&
+    manifestRoute.includes("publicOrderStatusTokenStoredAsHashOnly: true") &&
     manifestRoute.includes("orderQueueNotPrivate: 'ORDER_QUEUE_NOT_PRIVATE'") &&
     manifestRoute.includes("schemaVersion: 'backy.commerce-management.v1'") &&
     manifestRoute.includes("authenticatedManagement: true") &&
     manifestRoute.includes("orderStatusHandoff: 'commerceOrderStatusHandoff'") &&
     manifestRoute.includes("syncProductProvider: 'syncCommerceProductProvider'") &&
+    manifestRoute.includes("productStorefrontHandoff: 'backy.product-storefront-handoff.v1'") &&
+    manifestRoute.includes("productStorefrontHandoffExcludesPrivateData: true") &&
     manifestRoute.includes("providerSecretsNeverReturned: true") &&
     manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(input.site.id, commerce, productCollection, ordersCollection)') &&
     manifestRoute.includes('commerceRuntime: buildManifestCommerceDiscovery(site.id, commerce, productCollection, ordersCollection)') &&
@@ -395,6 +1353,7 @@ assert(
     generatedSdkTypes.includes('providerCertification: GeneratedBackyFrontendManifestCommerceProviderCertification') &&
     sdkSource.includes('BackyManifestCommerceRuntimeModule') &&
     sdkSource.includes('BackyManifestCommerceManagementPolicy') &&
+    sdkSource.includes('BackyCommerceOrderAnalyticsProviderCertification') &&
     sdkSource.includes('GeneratedBackyFrontendManifestCommerceProviderCertification') &&
     sdkSource.includes('lineItems?: BackyCommerceLineItemInput[]') &&
     sdkSource.includes('checkoutSession?: string | { id?: string; [key: string]: unknown }') &&
@@ -402,18 +1361,215 @@ assert(
     openApiRoute.includes('commerceManagementDiscovery') &&
     openApiRoute.includes('"x-backy-commerce-management"') &&
     openApiRoute.includes('CommerceManagementPolicy') &&
+    openApiRoute.includes('CommerceOrderAnalyticsEnvelope') &&
+    openApiRoute.includes('CommerceOrderQuoteEnvelope') &&
+    openApiRoute.includes('CommerceOrderTrackingEnvelope') &&
+    openApiRoute.includes('CommerceOrderFulfillmentEnvelope') &&
+    openApiRoute.includes('CommerceOrderShippingLabelEnvelope') &&
+    openApiRoute.includes('CommerceOrderProviderRefundEnvelope') &&
+    openApiRoute.includes('CommerceOrderProviderCertificationEvidencePacket') &&
+    openApiRoute.includes('CommerceProductProviderSyncEnvelope') &&
+    openApiRoute.includes('CommerceProductSubscriptionsEnvelope') &&
+    openApiRoute.includes('CommerceProductSubscriptionActionEnvelope') &&
+    openApiRoute.includes('includesRawOrderPayloads: { const: false }') &&
+    openApiRoute.includes('orderAnalytics: "backy.order-analytics.v1"') &&
+    openApiRoute.includes('orderQuote: { const: "backy.order-quote.v1" }') &&
+    openApiRoute.includes('orderTracking: { const: "backy.tracking.v1" }') &&
+    openApiRoute.includes('orderFulfillment: {') &&
+    openApiRoute.includes('orderShippingLabel: {') &&
+    openApiRoute.includes('orderProviderRefund: {') &&
+    openApiRoute.includes('CommerceOrderStatusHandoff') &&
+    openApiRoute.includes('CommerceOrderStatusAccess') &&
+    openApiRoute.includes('CommerceOrderStatusHandoffEnvelope') &&
+    openApiRoute.includes('public-commerce-order-intake-api') &&
+    openApiRoute.includes('post-checkout-status-token') &&
+    openApiRoute.includes('tokenHashField: { const: "statusaccesstokenhash" }') &&
+    openApiRoute.includes('includesRawCustomerContact: { const: false }') &&
+    openApiRoute.includes('adminOrderDetail: { type: "string" }') &&
+    openApiRoute.includes('statusHandoff: {') &&
+    openApiRoute.includes('$ref: "#/components/schemas/CommerceOrderStatusHandoff"') &&
+    openApiRoute.includes('CommerceProductStorefrontHandoff') &&
+    openApiRoute.includes('CommerceProductDesignReadiness') &&
+    openApiRoute.includes('CommerceProductProviderSync') &&
+    openApiRoute.includes('"designReadiness"') &&
+    frontendDesignContractLib.includes('normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope') &&
+    frontendDesignContractLib.includes('const collectionRecordDesignEnvelope = (') &&
+    adminCollectionRecordsRoute.includes('normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope') &&
+    adminCollectionRecordDetailRoute.includes('normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope') &&
+    adminCollectionRecordDetailRoute.includes('...toRecord(record.values),') &&
+    adminCollectionRecordDetailRoute.includes('...submittedValues,') &&
+    backyStoreLib.includes('for (const [key, value] of Object.entries(existingValues))') &&
+    commerceCatalogLib.includes('const designEnvelope = normalizeDesignRecord(values.design);') &&
+    commerceCatalogLib.includes("designValue('customJs', 'frontendDesignCustomJs')") &&
+    adminProductsPage.includes("const designEnvelope = optionalRecordFromRecord(values, 'design');") &&
+    adminProductsPage.includes("designValue('customJs', 'frontendDesignCustomJs')") &&
+    sdkSmoke.includes('product design missing clean design-envelope binding hint') &&
+    sdkSmoke.includes('partial design update wiped existing product design content document') &&
+    commerceCatalogLib.includes('const buildProductDesignReadiness = (') &&
+    commerceCatalogLib.includes('export const productDesignReadinessFromValues = (') &&
+    commerceCatalogLib.includes('designReadiness: buildProductDesignReadiness(design)') &&
+    routeResolverLib.includes('productDesignReadinessFromValues(record.values)') &&
+    repositoryRouteResolverLib.includes('productDesignReadinessFromValues(record.values)') &&
+    renderPayloadLib.includes('resource: {') &&
+    renderPayloadLib.includes('const designReadiness = collection.slug === PRODUCT_COLLECTION_SLUG') &&
+    renderPayloadLib.includes('...(designReadiness ? { designReadiness } : {})') &&
+    contentPayloadSchema.includes('"productDesignReadiness"') &&
+    contentPayloadSchema.includes('"resource"') &&
+    openApiRoute.includes('const: "backy.product-design-readiness.v1"') &&
+    openApiRoute.includes('DynamicItemRouteResource') &&
+    openApiRoute.includes('$ref: "#/components/schemas/CommerceProductDesignReadiness"') &&
+    openApiRoute.includes('frontendDesignContentDocument') &&
+    openApiRoute.includes('frontendDesignCustomJs') &&
+    openApiRoute.includes('frontendDesignThemeTokenRefs') &&
+    openApiRoute.includes('frontendDesignAnimations') &&
+    openApiRoute.includes('frontendDesignElements') &&
+    openApiRoute.includes('includesProviderSecrets: { const: false }') &&
+    openApiRoute.includes('orderStatusHandoff: "backy.order-status-handoff.v1"') &&
+    openApiRoute.includes('productStorefrontHandoff: "backy.product-storefront-handoff.v1"') &&
+    openApiRoute.includes('productSubscriptions: "backy.product-subscription-lifecycle.v1"') &&
+    openApiRoute.includes('productSubscriptionAction: "backy.product-subscription-action.v1"') &&
+    openApiRoute.includes('productStorefrontHandoffExcludesPrivateData: true') &&
     openApiRoute.includes('"backy.commerce-management.v1"') &&
     openApiRoute.includes('lineItems: {') &&
     openApiRoute.includes('customerName: { type: "string" }') &&
+    publicCommerceOrdersRoute.includes('const buildCheckoutStatusHandoff =') &&
+    publicCommerceOrdersRoute.includes('ORDER_STATUS_ACCESS_SCHEMA_VERSION = "backy.order-status-access.v1"') &&
+    publicCommerceOrdersRoute.includes('const createOrderStatusAccessToken =') &&
+    publicCommerceOrdersRoute.includes('statusaccesstokenhash') &&
+    publicCommerceOrdersRoute.includes('verifyOrderStatusAccessToken') &&
+    publicCommerceOrdersRoute.includes('publicStatusHandoff') &&
+    publicCommerceOrdersRoute.includes('source: "public-commerce-order-intake-api"') &&
+    publicCommerceOrdersRoute.includes('statusHandoff,') &&
+    publicCommerceOrdersRoute.includes('statusAccess,') &&
+    publicCommerceOrdersRoute.includes('includesRawCustomerContact: false') &&
+    publicCommerceOrdersRoute.includes('includesPaymentReferences: false') &&
+    publicCommerceOrdersRoute.includes('includesDigitalDeliveryUrls: false') &&
+    publicCommerceOrdersRoute.includes('customerProfileSlug: ""') &&
+    publicCommerceOrdersRoute.includes('"post-checkout-response"') &&
+    publicCommerceOrdersRoute.includes('"post-checkout-status-token"') &&
+    publicCommerceOrdersRoute.includes('safeBindingPaths') &&
     sdkSmoke.includes('manifest() missing commerce runtime discovery module') &&
     sdkSmoke.includes('manifest() commerce runtime missing lineItems order alias') &&
     sdkSmoke.includes('manifest() commerce management missing product provider sync helper') &&
+    sdkSmoke.includes('manifest() commerce management missing order analytics contract') &&
+    sdkSmoke.includes('manifest() commerce management missing order shipping label contract') &&
+    sdkSmoke.includes('manifest() commerce management missing product subscription lifecycle contract') &&
+    sdkSmoke.includes('manifest() commerce management missing product subscription action contract') &&
+    sdkSmoke.includes('openapi() missing product provider sync envelope schema') &&
+    sdkSmoke.includes('openapi() missing product subscription lifecycle envelope schema') &&
+    sdkSmoke.includes('openapi() missing product subscription action envelope schema') &&
+    sdkSmoke.includes('openapi() commerce management missing order analytics contract metadata') &&
+    sdkSmoke.includes('openapi() commerce management missing order provider refund contract metadata') &&
+    sdkSmoke.includes('openapi() missing order shipping label envelope schema') &&
+    sdkSmoke.includes('openapi() commerce management missing order status handoff contract metadata') &&
+    sdkSmoke.includes('openapi() missing order status handoff admin order detail endpoint') &&
+    sdkSmoke.includes('openapi() checkout order response missing customer-safe status handoff schema') &&
+    sdkSmoke.includes('openapi() missing public order status access token schema') &&
+    sdkSmoke.includes('openapi() missing tokenized public order status auth mode') &&
+    sdkSmoke.includes('openapi() missing order analytics evidence redaction boundary') &&
+    sdkSmoke.includes('manifest() commerce management missing product storefront handoff contract') &&
+    sdkSmoke.includes('openapi() commerce management missing product storefront handoff contract metadata') &&
+    sdkSmoke.includes('openapi() missing product frontend design content document schema') &&
+    sdkSmoke.includes('openapi() missing product frontend design animations schema') &&
+    sdkSmoke.includes('openapi() missing product frontend design readiness schema') &&
+    sdkSmoke.includes('openapi() missing public product design readiness schema') &&
+    sdkSmoke.includes('openapi() missing dynamic product route design readiness schema') &&
+    sdkSmoke.includes('commerceCatalog() product design missing readiness schema') &&
+    sdkSmoke.includes('resolve() product dynamic route missing design readiness schema') &&
+    sdkSmoke.includes('render() product dynamic route missing design readiness schema') &&
+    sdkSmoke.includes('commerceProductProviderSync() storefront handoff missing design readiness schema') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceManagementPolicy') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderAnalyticsEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderQuoteEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderTrackingEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderFulfillmentEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderShippingLabelEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderProviderRefundEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidencePacket') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderStatusHandoff') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderStatusAccess') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceOrderStatusHandoffEnvelope') &&
+    generatedSdkTypes.includes('statusHandoff: GeneratedBackyOpenApiCommerceOrderStatusHandoff') &&
+    generatedSdkTypes.includes('statusAccess: GeneratedBackyOpenApiCommerceOrderStatusAccess') &&
+    generatedSdkTypes.includes('"public-commerce-order-intake-api"') &&
+    generatedSdkTypes.includes('"post-checkout-status-token"') &&
+    sdkSource.includes('statusHandoff: BackyCommerceOrderStatusHandoff') &&
+    sdkSource.includes('statusAccess: BackyCommerceOrderStatusAccess') &&
+    sdkSource.includes('commerceOrderPublicStatusHandoff(') &&
+    generatedSdkTypes.includes('adminOrderDetail: string') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceProductSubscriptionActionEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceProductStorefrontHandoff') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCommerceProductDesignReadiness') &&
+    generatedSdkTypes.includes('designReadiness?: GeneratedBackyOpenApiCommerceProductDesignReadiness') &&
+    generatedSdkTypes.includes('designReadiness?: GeneratedBackyPublicRenderPayloadProductDesignReadiness') &&
+    generatedSdkTypes.includes('frontendDesignContentDocument?: Record<string, unknown>') &&
+    generatedSdkTypes.includes('frontendDesignAnimations?: Array<Record<string, unknown>> | Record<string, unknown>') &&
+    generatedSdkTypes.includes('frontendDesignCustomJs?: string') &&
     generatedSdkTypes.includes('"x-backy-commerce-management"?: GeneratedBackyOpenApiCommerceManagementPolicy') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceProviderCertification') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceManagement') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceRuntimeDiscovery'),
   'Frontend manifest and SDK must expose structured commerce runtime discovery for custom frontend product catalog and checkout UIs.',
+);
+
+assert(
+  openApiRoute.includes('"/api/admin/settings"') &&
+    openApiRoute.includes('getBackyAdminSettings') &&
+    openApiRoute.includes('updateBackyAdminSettings') &&
+    openApiRoute.includes('runBackyAdminSettingsAction') &&
+    openApiRoute.includes('AdminSettingsEnvelope') &&
+    openApiRoute.includes('AdminSettingsProviderCertification') &&
+    openApiRoute.includes('AdminSettingsProviderCertificationEvidencePacket') &&
+    openApiRoute.includes('AdminSettingsActionRequest') &&
+    openApiRoute.includes('media-storage-secret-manager') &&
+    openApiRoute.includes('test-notification-webhook') &&
+    sdkSource.includes('GeneratedBackyOpenApiAdminSettings') &&
+    sdkSource.includes('GeneratedBackyOpenApiAdminSettingsUpdateRequest') &&
+    sdkSource.includes('GeneratedBackyOpenApiAdminSettingsActionRequest') &&
+    sdkSource.includes('BackyAdminSettingsActionInput') &&
+    sdkSource.includes('adminSettings(') &&
+    sdkSource.includes('updateAdminSettings(') &&
+    sdkSmoke.includes('openapi() missing global admin settings read path') &&
+    sdkSmoke.includes('openapi() missing global admin settings provider certification handoff') &&
+    sdkSmoke.includes('openapi() missing settings secret-manager action schema') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiAdminSettingsEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiAdminSettingsProviderCertification') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidencePacket') &&
+    generatedSdkTypes.includes('settingsAdminApi: "/api/admin/settings?certificationSiteId={siteId}"') &&
+    generatedSdkTypes.includes('siteScopedSettingsApi: "/api/admin/sites/{siteId}/settings"') &&
+    generatedSdkTypes.includes('settingsSiteSelectorEnv: "BACKY_SETTINGS_CERTIFY_SITE_ID"') &&
+    generatedSdkTypes.includes('commerceSiteSelectorEnv: "BACKY_COMMERCE_CERTIFY_SITE_ID"') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiAdminSettingsActionRequest') &&
+    generatedSdkSmoke.includes('GeneratedBackyOpenApiAdminSettingsEnvelope') &&
+    generatedSdkSmoke.includes('GeneratedBackyOpenApiAdminSettingsProviderCertification'),
+  'Global Settings admin API must be discoverable and typed from the site OpenAPI document for custom admin clients.',
+);
+
+assert(
+  openApiRoute.includes('getBackyAdminSiteSettings') &&
+    openApiRoute.includes('updateBackyAdminSiteSettings') &&
+    openApiRoute.includes('AdminSiteSettingsEnvelope') &&
+    openApiRoute.includes('AdminSiteSettingsScope') &&
+    openApiRoute.includes('AdminSiteSettingsPatchRequest') &&
+    openApiRoute.includes('FrontendDatabaseCertificationHandoff') &&
+    openApiRoute.includes('"backy.site-settings-scope.v1"') &&
+    openApiRoute.includes('sites.configure') &&
+    sdkSource.includes('BackySiteSettingsScope') &&
+    sdkSource.includes('GeneratedBackyOpenApiAdminSiteSettingsScope') &&
+    sdkSource.includes('GeneratedBackyOpenApiAdminSiteSettingsPatchRequest') &&
+    sdkSource.includes('adminSiteSettings(') &&
+    sdkSource.includes('updateAdminSiteSettings(') &&
+    sdkSmoke.includes('openapi() missing admin site settings read path') &&
+    sdkSmoke.includes('openapi() missing admin site settings envelope schema') &&
+    sdkSmoke.includes('openapi() missing site settings database certification handoff') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiAdminSiteSettingsEnvelope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiAdminSiteSettingsScope') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiAdminSiteSettingsPatchRequest') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiFrontendDatabaseCertificationHandoff') &&
+    generatedSdkSmoke.includes('GeneratedBackyOpenApiAdminSiteSettingsEnvelope'),
+  'Site-scoped Settings APIs must be discoverable and typed for custom admin clients.',
 );
 
 assert(
@@ -456,6 +1612,30 @@ assert(
     templateRegistrySmoke.includes('backy.template-version-readiness.v1') &&
     templateRegistrySmoke.includes('backy.template-registry-action-plan.v1') &&
     templateRegistrySmoke.includes('registry.cloneTargets.product') &&
+    templateRegistrySmoke.includes('buildFrontendDesignContractFromContentTemplate') &&
+    templateRegistrySmoke.includes('seedInputFromFrontendDesignTemplate') &&
+    templateRegistrySmoke.includes('captured-roundtrip-template') &&
+    templateRegistrySmoke.includes('captured-roundtrip-blog-template') &&
+    templateRegistrySmoke.includes('Seeded page content should retain animation timeline arrays') &&
+    templateRegistrySmoke.includes('Merged page content should retain captured interaction arrays') &&
+    templateRegistrySmoke.includes('Seeded blog content should retain animation arrays') &&
+    templateRegistrySmoke.includes('Merged blog content should retain captured interaction arrays') &&
+    templateRegistrySmoke.includes('captured-roundtrip-section-template') &&
+    templateRegistrySmoke.includes('Merged section content should retain captured animation arrays') &&
+    templateRegistrySmoke.includes('captured-roundtrip-product-template') &&
+    templateRegistrySmoke.includes('Seeded product values should retain frontendDesignAnimations') &&
+    templateRegistrySmoke.includes('captured-roundtrip-form-template') &&
+    templateRegistrySmoke.includes('Seeded form settings should retain frontendDesignAnimations') &&
+    templateRegistrySmoke.includes('captured-roundtrip-collection-template') &&
+    templateRegistrySmoke.includes('Seeded collection metadata should retain frontendDesignAnimations') &&
+    templateRegistrySmoke.includes('Seeded collection record values should retain frontendDesignAnimations') &&
+    templateRegistrySmoke.includes('frontendDesignProvenanceFromMetadata(seededFormSettings)') &&
+    templateRegistrySmoke.includes('frontendDesignProvenanceFromMetadata(seededCollectionMetadata)') &&
+    templateRegistrySmoke.includes('frontendDesignProvenanceFromMetadata(seededCollectionRecordValues)') &&
+    templateRegistrySmoke.includes('productRecordToCommerceProduct') &&
+    templateRegistrySmoke.includes('assert(productDesign, "Seeded public product should expose design metadata")') &&
+    templateRegistrySmoke.includes('productDesign.templateId') &&
+    templateRegistrySmoke.includes('Seeded public product design should expose array animations') &&
     apiContracts.includes('templateRegistry') &&
     apiContracts.includes('endpoints.templates'),
   'Admin frontend-design responses must advertise the normalized template registry endpoint and clone summary.',
@@ -495,6 +1675,27 @@ assert(
     adminCollectionsPage.includes('slugPolicy: slugPolicyReadiness') &&
     apiContracts.includes('backy.collection-slug-policy.v1'),
   'Admin collections dynamic routes must expose slug policy readiness and handoff metadata for custom frontends.',
+);
+
+assert(
+  adminCollectionsPage.includes('customJS?: string;') &&
+    adminCollectionsPage.includes('themeTokenRefs?: Record<string, string>;') &&
+    adminCollectionsPage.includes('animations?: unknown[] | Record<string, unknown>;') &&
+	adminCollectionsPage.includes('contentDocument?: Record<string, unknown>;') &&
+	adminCollectionsPage.includes('authoredDynamicTemplateDesignStateSummary') &&
+	renderPayloadLib.includes('includeContentDocument: true') &&
+	renderPayloadLib.includes('customJS: content.customJS') &&
+	renderPayloadLib.includes('themeTokenRefs: content.themeTokenRefs') &&
+	renderPayloadLib.includes('animations: content.animations') &&
+	renderPayloadLib.includes('editableMap: content.editableMap') &&
+	renderPayloadLib.includes('contentDocument: content.contentDocument') &&
+	contentPayloadSchema.includes('"customJS": { "type": "string" }') &&
+	contentPayloadSchema.includes('"contentDocument": {\n              "$ref": "#/$defs/contentDocument"') &&
+	contentPayloadSchema.includes('"contentAssetRef"') &&
+	generatedSdkTypes.includes('GeneratedBackyPublicRenderPayloadContentDocument') &&
+	generatedSdkTypes.includes('contentDocument?: GeneratedBackyPublicRenderPayloadContentDocument;') &&
+	sdkSource.includes('export type BackyRenderContent = BackyContentDocument &'),
+	'Collection list/detail authored templates must preserve custom frontend design state through admin capture, public render payloads, JSON schema, and SDK render types.',
 );
 
 assert(

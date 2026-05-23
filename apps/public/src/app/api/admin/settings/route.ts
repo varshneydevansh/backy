@@ -92,6 +92,16 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
     evidence: 'Configured provider readiness plus test-notification delivery proof for the selected channel.',
   },
   {
+    family: 'Public API and custom frontend CORS',
+    providers: ['Backy Public API', 'Custom frontend origin', 'Browser CORS preflight'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: [
+      'BACKY_CORS_ALLOWED_ORIGINS',
+      'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
+    ],
+    evidence: 'Exact custom frontend origin, OPTIONS preflight, GET origin echo, and exposed Backy contract headers.',
+  },
+  {
     family: 'Commerce providers',
     providers: ['Stripe', 'TaxJar', 'Avalara', 'EasyPost', 'Shippo', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay', 'Shopify', 'BigCommerce', 'WooCommerce', 'Etsy', 'Magento'],
     gate: 'npm run ci:commerce-provider-certification',
@@ -171,6 +181,9 @@ type SettingsCertificationCommandOptions = {
   vercelTeamId: string;
   certifyNotification: boolean;
   notificationProvider: SettingsCertificationNotificationProvider;
+  certifyPublicApiCors: boolean;
+  publicApiOrigin: string;
+  siteId: string;
   certifyCommerce: boolean;
   externalBaseUrl: string;
   includeReleaseDoctor: boolean;
@@ -188,6 +201,9 @@ const DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS = {
   vercelTeamId: '',
   certifyNotification: true,
   notificationProvider: 'auto',
+  certifyPublicApiCors: true,
+  publicApiOrigin: '',
+  siteId: 'site-demo',
   certifyCommerce: true,
   externalBaseUrl: '',
   includeReleaseDoctor: true,
@@ -202,22 +218,30 @@ const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOpti
   options.certifyStorage ||
   options.certifyRotation ||
   options.certifyVercelSecrets ||
-  options.certifyNotification
+  options.certifyNotification ||
+  options.certifyPublicApiCors
 );
 
 const buildSettingsProviderCertificationEnvEntries = (options: SettingsCertificationCommandOptions): Array<[string, string]> => {
   const settingsSelected = hasSettingsCertificationGroup(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/$/, '');
+  const siteId = options.siteId.trim() || 'site-demo';
   const envEntries: Array<[string, string]> = [
     ['BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(settingsSelected)],
+    ['BACKY_SETTINGS_CERTIFY_SITE_ID', siteId],
     ['BACKY_SETTINGS_CERTIFY_STORAGE', boolEnv(options.certifyStorage)],
     ['BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER', options.storageProvider],
     ['BACKY_SETTINGS_CERTIFY_ROTATION', boolEnv(options.certifyRotation)],
     ['BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS', boolEnv(options.certifyVercelSecrets)],
     ['BACKY_SETTINGS_CERTIFY_NOTIFICATION', boolEnv(options.certifyNotification)],
     ['BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER', options.notificationProvider],
+    ['BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS', boolEnv(options.certifyPublicApiCors)],
     ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(options.certifyCommerce)],
   ];
+
+  if (options.certifyCommerce) {
+    envEntries.push(['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId]);
+  }
 
   if (options.includeReleaseDoctor) {
     envEntries.unshift(['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1']);
@@ -237,6 +261,14 @@ const buildSettingsProviderCertificationEnvEntries = (options: SettingsCertifica
 
   if (options.certifyVercelSecrets && options.vercelTeamId.trim()) {
     envEntries.push(['BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID', options.vercelTeamId.trim()]);
+  }
+
+  if (options.certifyPublicApiCors) {
+    const publicApiOrigin = options.publicApiOrigin.trim();
+    envEntries.push(
+      ['BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN', publicApiOrigin || '<https://custom-frontend.example.com>'],
+      ['BACKY_CORS_ALLOWED_ORIGINS', publicApiOrigin || '<https://custom-frontend.example.com>'],
+    );
   }
 
   return envEntries;
@@ -271,7 +303,9 @@ const buildSettingsProviderCertificationEnvTemplate = (options: SettingsCertific
 const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCertificationCommandOptions): string[] => Array.from(new Set([
   options.includeReleaseDoctor ? 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1' : '',
   hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+  hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_CERTIFY_SITE_ID or BACKY_SETTINGS_CERTIFICATION_SITE_ID' : '',
   options.certifyCommerce ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+  options.certifyCommerce ? 'BACKY_COMMERCE_CERTIFY_SITE_ID' : '',
   options.certifyStorage || options.certifyRotation ? 'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER' : '',
   options.certifyStorage || options.certifyRotation ? 'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY' : '',
   options.certifyStorage || options.certifyRotation ? 'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY' : '',
@@ -283,6 +317,8 @@ const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCert
   options.certifyNotification ? 'BACKY_SMTP_HOST or SMTP_HOST' : '',
   options.certifyNotification ? 'BACKY_SMTP_USER or SMTP_USER' : '',
   options.certifyNotification ? 'BACKY_SMTP_PASSWORD or SMTP_PASSWORD' : '',
+  options.certifyPublicApiCors ? 'BACKY_CORS_ALLOWED_ORIGINS' : '',
+  options.certifyPublicApiCors ? 'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN' : '',
   options.certifyCommerce ? 'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY' : '',
   options.certifyCommerce ? 'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY' : '',
   options.certifyCommerce ? 'BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY' : '',
@@ -297,7 +333,29 @@ const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   storageProviderChoices: SETTINGS_CERTIFICATION_STORAGE_PROVIDER_CHOICES,
   notificationProviderChoices: SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_CHOICES,
   requiredInputAliases: buildSettingsProviderCertificationRequiredAliases(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+  targetInputs: [
+    'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+    'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'BACKY_SETTINGS_CERTIFY_SITE_ID',
+    'BACKY_SETTINGS_CERTIFICATION_SITE_ID',
+    'BACKY_COMMERCE_CERTIFY_SITE_ID',
+    'BACKY_CORS_ALLOWED_ORIGINS',
+    'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
+    'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
+  ],
 };
+
+const buildSettingsCertificationOperatorCommandTemplate = (
+  options: SettingsCertificationCommandOptions,
+): typeof SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE => ({
+  command: buildSettingsProviderCertificationCommand(options),
+  envTemplate: buildSettingsProviderCertificationEnvTemplate(options),
+  envTemplateSchemaVersion: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplateSchemaVersion,
+  storageProviderChoices: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.storageProviderChoices,
+  notificationProviderChoices: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.notificationProviderChoices,
+  requiredInputAliases: buildSettingsProviderCertificationRequiredAliases(options),
+  targetInputs: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs,
+});
 
 type FrontendDatabaseCertificationEnvAlias = 'BACKY_DATABASE_URL' | 'DATABASE_URL';
 
@@ -657,10 +715,221 @@ const buildProviderCertificationScenarioEvidence = ({
   };
 };
 
+const providerCertificationGroup = (family: string) => SETTINGS_PROVIDER_CERTIFICATION_GROUPS.find((group) => group.family === family);
+const providerCertificationScenarioExpectedEvidence = (scenarioKey: string): string[] => {
+  const scenario = SETTINGS_PROVIDER_CERTIFICATION_SCENARIOS.find((item) => item.key === scenarioKey);
+  return scenario ? [...scenario.expectedEvidence] : [];
+};
+
+const hasCommerceProviderRuntime = (commerce: unknown): boolean => [
+  'webhookSecretConfigured',
+  'stripeSecretConfigured',
+  'paypalAccessTokenConfigured',
+  'paddleApiKeyConfigured',
+  'squareAccessTokenConfigured',
+  'adyenApiKeyConfigured',
+  'mollieApiKeyConfigured',
+  'easyPostApiKeyConfigured',
+  'shippoApiKeyConfigured',
+  'shopifyAdminAccessTokenConfigured',
+  'bigCommerceAccessTokenConfigured',
+  'wooCommerceConsumerKeyConfigured',
+  'etsyAccessTokenConfigured',
+  'magentoAccessTokenConfigured',
+].some((key) => booleanFlag(commerce, key)) || (
+  booleanFlag(commerce, 'razorpayKeyIdConfigured') &&
+  booleanFlag(commerce, 'razorpayKeySecretConfigured')
+);
+
+const buildProviderCertificationEvidencePacket = (
+  runtimeEvidence: ReturnType<typeof buildProviderCertificationRuntimeEvidence>,
+  scenarioEvidence: ReturnType<typeof buildProviderCertificationScenarioEvidence>,
+  commandOptions: SettingsCertificationCommandOptions = DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS,
+) => {
+  const defaultOptions = commandOptions;
+  const operatorCommandTemplate = buildSettingsCertificationOperatorCommandTemplate(commandOptions);
+  const storageGroup = providerCertificationGroup('Storage and media delivery');
+  const vercelGroup = providerCertificationGroup('Vercel deployment and secrets');
+  const notificationsGroup = providerCertificationGroup('Notifications');
+  const publicApiGroup = providerCertificationGroup('Public API and custom frontend CORS');
+  const commerceGroup = providerCertificationGroup('Commerce providers');
+  const scenarioCovered = (key: string) => scenarioEvidence.scenarios.some((scenario) => scenario.key === key && scenario.status === 'covered');
+  const publicApi = objectValue(runtimeEvidence.publicApi);
+  const exposedHeaders = publicApi.exposedContractHeaders;
+  const readiness = {
+    'storage-media': booleanFlag(runtimeEvidence.storage, 'configured'),
+    'credential-rotation': booleanFlag(runtimeEvidence.storage, 'configured'),
+    'vercel-deployment': booleanFlag(runtimeEvidence.vercel, 'configured'),
+    'notification-delivery': booleanFlag(runtimeEvidence.notifications, 'productionReady') || booleanFlag(runtimeEvidence.notifications, 'configured'),
+    'public-api-cors': booleanFlag(publicApi, 'corsAllowedOriginsConfigured') &&
+      Array.isArray(exposedHeaders) &&
+      exposedHeaders.length > 0,
+    'commerce-provider-bridge': hasCommerceProviderRuntime(runtimeEvidence.commerce),
+    'release-certification-readiness': Boolean(runtimeEvidence.localRuntimeInputsConfigured && scenarioCovered('release-certification-readiness')),
+  };
+  const artifacts = [
+    {
+      key: 'storage-media',
+      family: 'Storage and media delivery',
+      selected: defaultOptions.certifyStorage,
+      ready: readiness['storage-media'],
+      providerAlias: defaultOptions.storageProvider,
+      requiredInputs: storageGroup ? [...storageGroup.requiredInputs] : ['BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER'],
+      expectedArtifacts: providerCertificationScenarioExpectedEvidence('storage-media'),
+      captureSource: 'storage provisioning probe, media scanner diagnostics, runtime storage summary, and Settings storage metadata',
+    },
+    {
+      key: 'credential-rotation',
+      family: 'Storage credential rotation',
+      selected: defaultOptions.certifyRotation,
+      ready: readiness['credential-rotation'],
+      providerAlias: defaultOptions.storageProvider,
+      requiredInputs: [
+        ...(storageGroup ? [...storageGroup.requiredInputs] : ['BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER']),
+        'BACKY_*_NEXT_* replacement storage env',
+      ],
+      expectedArtifacts: ['current credential alias readiness', 'replacement credential alias readiness', 'rotation probe result'],
+      captureSource: 'storage credential rotation probe and secret-manager planning response',
+    },
+    {
+      key: 'vercel-deployment',
+      family: 'Vercel deployment and secrets',
+      selected: defaultOptions.certifyVercelSecrets,
+      ready: readiness['vercel-deployment'],
+      providerAlias: 'Vercel project/team selector',
+      requiredInputs: vercelGroup ? [...vercelGroup.requiredInputs] : ['VERCEL_TOKEN or BACKY_VERCEL_TOKEN'],
+      expectedArtifacts: providerCertificationScenarioExpectedEvidence('vercel-deployment'),
+      captureSource: 'Vercel runtime diagnostics, env secret-manager dry-run, and project/team selector metadata',
+    },
+    {
+      key: 'notification-delivery',
+      family: 'Notification delivery',
+      selected: defaultOptions.certifyNotification,
+      ready: readiness['notification-delivery'],
+      providerAlias: defaultOptions.notificationProvider,
+      requiredInputs: notificationsGroup ? [...notificationsGroup.requiredInputs] : ['BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'],
+      expectedArtifacts: providerCertificationScenarioExpectedEvidence('notification-delivery'),
+      captureSource: 'test notification delivery endpoint, local outbox, Resend, SMTP, or webhook delivery diagnostics',
+    },
+    {
+      key: 'public-api-cors',
+      family: 'Public API and custom frontend CORS',
+      selected: defaultOptions.certifyPublicApiCors,
+      ready: readiness['public-api-cors'],
+      providerAlias: defaultOptions.publicApiOrigin.trim() || 'BACKY_CORS_ALLOWED_ORIGINS',
+      requiredInputs: publicApiGroup ? [...publicApiGroup.requiredInputs] : ['BACKY_CORS_ALLOWED_ORIGINS'],
+      expectedArtifacts: providerCertificationScenarioExpectedEvidence('public-api-cors'),
+      captureSource: 'Public API/CORS runtime summary, OPTIONS preflight, GET /api/sites origin echo, and exposed Backy contract headers',
+    },
+    {
+      key: 'commerce-provider-bridge',
+      family: 'Commerce provider bridge',
+      selected: defaultOptions.certifyCommerce,
+      ready: readiness['commerce-provider-bridge'],
+      providerAlias: 'Nested Commerce provider certification',
+      requiredInputs: commerceGroup ? [...commerceGroup.requiredInputs] : ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'],
+      expectedArtifacts: providerCertificationScenarioExpectedEvidence('commerce-provider-bridge'),
+      captureSource: 'nested commerce provider certification summary and Settings commerce runtime diagnostics',
+    },
+    {
+      key: 'release-certification-readiness',
+      family: 'Release certification readiness',
+      selected: defaultOptions.includeReleaseDoctor,
+      ready: readiness['release-certification-readiness'],
+      providerAlias: 'Release doctor',
+      requiredInputs: [
+        'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1',
+        'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+        'npm run doctor:release-certification',
+      ],
+      expectedArtifacts: providerCertificationScenarioExpectedEvidence('release-certification-readiness'),
+      captureSource: 'release certification doctor output, missing-alias summary, and selected provider-family flags',
+    },
+  ];
+  const selectedArtifacts = artifacts.filter((artifact) => artifact.selected);
+  const missingSelectedFamilies = selectedArtifacts.filter((artifact) => !artifact.ready).map((artifact) => artifact.key);
+  const status = selectedArtifacts.length === 0
+    ? 'no-family-selected'
+    : missingSelectedFamilies.length > 0
+      ? 'needs-runtime-inputs'
+      : scenarioEvidence.status === 'ready'
+        ? 'evidence-complete'
+        : 'needs-scenario-evidence';
+
+  return {
+    schemaVersion: 'backy.settings-provider-certification-evidence-packet.v1',
+    generatedAt: new Date().toISOString(),
+    status,
+    selectedFamilies: selectedArtifacts.map((artifact) => artifact.key),
+    selectedProviderAliases: Object.fromEntries(selectedArtifacts.map((artifact) => [artifact.key, artifact.providerAlias])),
+    target: {
+      siteId: defaultOptions.siteId,
+      settingsAdminApi: '/api/admin/settings?certificationSiteId={siteId}',
+      siteScopedSettingsApi: '/api/admin/sites/{siteId}/settings',
+      settingsApi: '/api/admin/sites/{siteId}/settings',
+      settingsSiteSelectorEnv: 'BACKY_SETTINGS_CERTIFY_SITE_ID',
+      commerceSiteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      externalBaseUrl: defaultOptions.externalBaseUrl || null,
+      publicApiOrigin: defaultOptions.publicApiOrigin || null,
+    },
+    runtimeReadiness: {
+      localRuntimeInputsConfigured: runtimeEvidence.localRuntimeInputsConfigured,
+      missingInputAliases: runtimeEvidence.missingInputAliases,
+      missingSelectedFamilies,
+    },
+    operatorArtifacts: selectedArtifacts.map((artifact) => ({
+      key: artifact.key,
+      family: artifact.family,
+      providerAlias: artifact.providerAlias,
+      status: artifact.ready ? 'ready-to-run' : 'needs-runtime-inputs',
+      requiredInputs: artifact.requiredInputs,
+      expectedArtifacts: artifact.expectedArtifacts,
+      captureSource: artifact.captureSource,
+      redaction: 'Attach ids, timestamps, provider-family names, status codes, counts, and command summaries only; remove database URLs, provider credentials, service-role keys, Vercel tokens, notification secrets, commerce secrets, and customer/order payloads.',
+    })),
+    scenarioAttachments: scenarioEvidence.scenarios.map((scenario) => ({
+      key: scenario.key,
+      label: scenario.label,
+      status: scenario.status,
+      evidenceCount: scenario.evidenceCount,
+      expectedEvidence: [...scenario.expectedEvidence],
+      nextAction: scenario.nextAction,
+    })),
+    commandPreview: {
+      command: operatorCommandTemplate.command,
+      envTemplate: operatorCommandTemplate.envTemplate,
+      requiredAliases: operatorCommandTemplate.requiredInputAliases,
+      targetInputs: operatorCommandTemplate.targetInputs,
+    },
+    redactionPolicy: {
+      includesProviderSecrets: false,
+      includesDatabaseUrls: false,
+      includesServiceRoleKeys: false,
+      includesVercelTokens: false,
+      includesNotificationSecrets: false,
+      includesCommerceSecrets: false,
+      includesCustomerOrOrderPayloads: false,
+      allowedEvidence: [
+        'provider-family names and selectors',
+        'timestamped preflight and doctor summaries',
+        'runtime readiness booleans and missing-alias names',
+        'storage, notification, Vercel, and commerce status codes',
+        'custom frontend origins and exposed Backy contract header names',
+        'scenario counts and coverage state',
+      ],
+    },
+    secretHandling: 'Redacted operator attachment manifest only; database URLs, provider credentials, service-role keys, Vercel tokens, notification secrets, commerce secrets, and customer/order payloads stay out of copied JSON.',
+  };
+};
+
 const providerCertificationContract = (
   runtimeEvidence: ReturnType<typeof buildProviderCertificationRuntimeEvidence>,
   scenarioEvidence: ReturnType<typeof buildProviderCertificationScenarioEvidence>,
-) => ({
+  commandOptions: SettingsCertificationCommandOptions = DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS,
+) => {
+  const operatorCommandTemplate = buildSettingsCertificationOperatorCommandTemplate(commandOptions);
+
+  return {
   generatedAt: new Date().toISOString(),
   schemaVersion: 'backy.settings-provider-certification-handoff.v1',
   status: 'external-live-provider-gate',
@@ -671,12 +940,13 @@ const providerCertificationContract = (
   secretHandling: 'Provider credentials stay in deployment or CI environment variables; admin settings responses only expose non-secret provider families, gate names, and readiness evidence.',
   runtimeEvidence,
   scenarioEvidence,
-  operatorCommandTemplate: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE,
+  operatorEvidencePacket: buildProviderCertificationEvidencePacket(runtimeEvidence, scenarioEvidence, commandOptions),
+  operatorCommandTemplate,
   operatorEnvTemplate: {
     schemaVersion: 'backy.settings-provider-certification-env-template.v1',
     format: 'shell-env',
     fileName: '.env.backy-settings-provider-certification',
-    body: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+    body: operatorCommandTemplate.envTemplate,
     secretHandling: 'Generated template values are non-secret aliases and placeholders; keep real Settings, storage, Vercel, notification, and commerce provider credentials in CI secrets or local shell variables before execution.',
   },
   groups: SETTINGS_PROVIDER_CERTIFICATION_GROUPS.map((group) => ({
@@ -685,8 +955,327 @@ const providerCertificationContract = (
     gate: group.gate,
     requiredInputs: [...group.requiredInputs],
     evidence: group.evidence,
-  })),
-});
+    })),
+  };
+};
+
+const configuredFamilies = (families: Record<string, boolean>) => Object.entries(families)
+  .filter(([, configured]) => configured)
+  .map(([family]) => family);
+
+const missingFamilies = (families: Record<string, boolean>) => Object.entries(families)
+  .filter(([, configured]) => !configured)
+  .map(([family]) => family);
+
+const buildSettingsCompletionStatus = () => {
+  const databaseUrlConfigured = Boolean(envValue(['BACKY_DATABASE_URL', 'DATABASE_URL']));
+  const settingsProviderFamilies = {
+    database: databaseUrlConfigured,
+    supabase: Boolean(envValue(['BACKY_SUPABASE_URL', 'SUPABASE_URL'])) &&
+      Boolean(envValue(['BACKY_SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY'])),
+    storage: Boolean(envValue(['BACKY_MEDIA_STORAGE_PROVIDER', 'BACKY_STORAGE_PROVIDER', 'AWS_ACCESS_KEY_ID', 'SUPABASE_SERVICE_ROLE_KEY'])),
+    vercel: Boolean(envValue(['BACKY_VERCEL_TOKEN', 'VERCEL_TOKEN'])),
+    notifications: Boolean(envValue(['BACKY_EMAIL_DELIVERY_ENDPOINT', 'BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL', 'BACKY_RESEND_API_KEY', 'RESEND_API_KEY', 'SMTP_HOST'])),
+    publicApiCors: Boolean(envValue(['BACKY_CORS_ALLOWED_ORIGINS'])),
+    commerce: Boolean(envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY', 'BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN', 'BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET'])),
+  };
+  const commerceProviderFamilies = {
+    payment: Boolean(envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY', 'BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN', 'BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY', 'BACKY_SQUARE_ACCESS_TOKEN', 'SQUARE_ACCESS_TOKEN', 'BACKY_ADYEN_API_KEY', 'ADYEN_API_KEY', 'BACKY_MOLLIE_API_KEY', 'MOLLIE_API_KEY', 'BACKY_RAZORPAY_KEY_ID', 'RAZORPAY_KEY_ID'])),
+    tax: Boolean(envValue(['BACKY_TAXJAR_API_KEY', 'TAXJAR_API_KEY', 'BACKY_AVALARA_ACCOUNT_ID', 'AVALARA_ACCOUNT_ID', 'BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY'])),
+    shipping: Boolean(envValue(['BACKY_EASYPOST_API_KEY', 'EASYPOST_API_KEY', 'BACKY_SHIPPO_API_KEY', 'SHIPPO_API_KEY'])),
+    discount: Boolean(envValue(['BACKY_COMMERCE_DISCOUNT_PROVIDER_URL', 'COMMERCE_DISCOUNT_PROVIDER_URL', 'BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY'])),
+    catalog: Boolean(envValue(['BACKY_COMMERCE_PRODUCT_SYNC_URL', 'COMMERCE_PRODUCT_SYNC_URL', 'BACKY_SHOPIFY_ADMIN_ACCESS_TOKEN', 'SHOPIFY_ADMIN_ACCESS_TOKEN', 'BACKY_BIGCOMMERCE_ACCESS_TOKEN', 'BIGCOMMERCE_ACCESS_TOKEN', 'BACKY_WOOCOMMERCE_CONSUMER_KEY', 'WOOCOMMERCE_CONSUMER_KEY', 'BACKY_ETSY_ACCESS_TOKEN', 'ETSY_ACCESS_TOKEN'])),
+    subscription: Boolean(envValue(['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL', 'COMMERCE_SUBSCRIPTION_ACTION_URL', 'BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY', 'BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN', 'BACKY_PADDLE_API_KEY', 'PADDLE_API_KEY'])),
+    webhook: Boolean(envValue(['BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET'])),
+  };
+  const configuredSettingsFamilies = configuredFamilies(settingsProviderFamilies);
+  const missingSettingsFamilies = missingFamilies(settingsProviderFamilies);
+  const configuredCommerceFamilies = configuredFamilies(commerceProviderFamilies);
+  const missingCommerceFamilies = missingFamilies(commerceProviderFamilies);
+  const certifiedGates = [
+    {
+      key: 'forms-postgres',
+      label: 'Forms Supabase/Postgres persistence',
+      status: 'certified',
+      command: 'npm run ci:forms-postgres',
+      workflow: '.github/workflows/forms-postgres-contract.yml',
+      affectedSurfaces: ['/forms'],
+      certifiedAt: '2026-05-21',
+      evidence: 'Passed against a migrated disposable local Postgres target with form definition, submission, contact, spam/consent, moderation, promotion, and cleanup coverage.',
+    },
+    {
+      key: 'sdk-postgres',
+      label: 'Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke',
+      status: 'certified',
+      command: 'npm run ci:sdk-postgres-smoke',
+      workflow: '.github/workflows/sdk-postgres-smoke.yml',
+      affectedSurfaces: ['Frontend manifest/OpenAPI/SDK APIs'],
+      certifiedAt: '2026-05-21',
+      evidence: 'Passed against a migrated disposable local Postgres target with database-mode discovery, manifest, OpenAPI, render, media, CMS, forms, comments, events, commerce, and SDK write-flow coverage.',
+    },
+  ];
+  const gates = [
+    {
+      key: 'settings-provider-certification',
+      label: 'Settings live provider certification',
+      status: missingSettingsFamilies.length === 0 ? 'ready-to-run' : 'blocked-missing-inputs',
+      command: 'npm run ci:settings-provider-certification',
+      preflight: 'npm run test:settings-provider-certification-preflight-contract',
+      workflow: '.github/workflows/settings-provider-certification.yml',
+      affectedSurfaces: ['/settings', 'Settings admin APIs'],
+      requiredEnvAliases: [
+        'BACKY_DATABASE_URL or DATABASE_URL',
+        'BACKY_SUPABASE_URL or SUPABASE_URL',
+        'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY',
+        'BACKY_VERCEL_TOKEN or VERCEL_TOKEN',
+        'notification provider aliases',
+        'BACKY_CORS_ALLOWED_ORIGINS',
+        'commerce provider aliases',
+      ],
+      runtime: {
+        configuredFamilies: configuredSettingsFamilies,
+        missingFamilies: missingSettingsFamilies,
+      },
+    },
+    {
+      key: 'commerce-provider-certification',
+      label: 'Commerce live provider certification',
+      status: missingCommerceFamilies.length === 0 ? 'ready-to-run' : 'blocked-missing-inputs',
+      command: 'npm run ci:commerce-provider-certification',
+      preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+      workflow: '.github/workflows/commerce-provider-certification.yml',
+      affectedSurfaces: ['/products', '/orders'],
+      requiredEnvAliases: [
+        'payment provider aliases',
+        'tax provider aliases',
+        'shipping provider aliases',
+        'discount provider aliases',
+        'catalog provider aliases',
+        'subscription provider aliases',
+        'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+      ],
+      runtime: {
+        configuredFamilies: configuredCommerceFamilies,
+        missingFamilies: missingCommerceFamilies,
+      },
+    },
+  ];
+  const settingsCertificationEvidenceArtifacts = [
+    {
+      key: 'settings-provider-certification-json',
+      label: 'Settings provider certification evidence',
+      workflow: '.github/workflows/settings-provider-certification.yml',
+      alternateWorkflows: ['.github/workflows/backy-release-certification.yml'],
+      artifactName: 'backy-settings-provider-certification-evidence',
+      path: 'artifacts/backy-settings-provider-certification.json',
+      schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+      producerEnv: 'BACKY_SETTINGS_CERTIFICATION_OUTPUT',
+      requiredForReady: true,
+      includesSecretValues: false,
+    },
+  ];
+  const commerceCertificationEvidenceArtifacts = [
+    {
+      key: 'commerce-provider-certification-json',
+      label: 'Commerce provider certification evidence',
+      workflow: '.github/workflows/commerce-provider-certification.yml',
+      alternateWorkflows: ['.github/workflows/settings-provider-certification.yml', '.github/workflows/backy-release-certification.yml'],
+      artifactName: 'backy-commerce-provider-certification-evidence',
+      path: 'artifacts/backy-commerce-provider-certification.json',
+      schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+      producerEnv: 'BACKY_COMMERCE_CERTIFICATION_OUTPUT',
+      requiredForReady: true,
+      includesSecretValues: false,
+    },
+  ];
+  const settingsCertificationArtifactVerifier = {
+    command: 'npm run doctor:release-certification',
+    requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+    pathEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT',
+    schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    validates: ['file exists', 'valid JSON', 'ok: true', 'artifact schema version', 'no-secret boundary', 'no raw secret-like values', 'no forbidden artifact field names or credential URLs', 'apiHandoffs.settingsAdminApi present', 'apiHandoffs.siteScopedSettingsApi present', 'settingsApiHandoffSchemaReady', 'settingsApiHandoffSiteTargetReady', 'settingsApiHandoffTargetSiteId', 'settingsApiHandoffSettingsSiteSelectorEnv', 'settingsApiHandoffCommerceSiteSelectorEnv', 'settingsApiHandoffReady', 'siteSettingsApiHandoffReady', 'settingsScenarioEvidenceReady', 'settingsEvidencePacketReady', 'settingsCompletionStatusReady'],
+    includesSecretValues: false,
+  };
+  const commerceCertificationArtifactVerifier = {
+    command: 'npm run doctor:release-certification',
+    requiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+    pathEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT',
+    schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+    validates: ['file exists', 'valid JSON', 'ok: true', 'artifact schema version', 'no-secret boundary', 'no raw secret-like values', 'no forbidden artifact field names or credential URLs', 'apiHandoffs present', 'apiHandoffs.publicApis present', 'apiHandoffReady', 'publicCommerceApiHandoffReady', 'productApiHandoffSchemaReady', 'productApiHandoffSiteTargetReady', 'productApiHandoffTargetSiteId', 'productApiHandoffReady', 'orderApiHandoffSchemaReady', 'orderApiHandoffSiteTargetReady', 'orderApiHandoffTargetSiteId', 'orderApiHandoffReady', 'commerceApiHandoffSiteSelectorEnv'],
+    includesSecretValues: false,
+  };
+  const runbookSecretBoundary = {
+    includesSecretValues: false,
+    excludes: ['admin key values', 'database URLs', 'provider credentials', 'service-role keys'],
+  };
+  const surfaceRunbooks = [
+    {
+      key: 'settings',
+      label: '/settings',
+      gate: 'settings-provider-certification',
+      command: 'npm run ci:settings-provider-certification',
+      preflight: 'npm run test:settings-provider-certification-preflight-contract',
+      workflow: '.github/workflows/settings-provider-certification.yml',
+      targetInputs: ['BACKY_SETTINGS_CERTIFICATION_BASE_URL', 'BACKY_SETTINGS_CERTIFY_SITE_ID', 'BACKY_COMMERCE_CERTIFICATION_BASE_URL', 'BACKY_COMMERCE_CERTIFY_SITE_ID', 'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY'],
+      evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
+      evidenceApi: '/api/admin/settings data.settings.providerCertification.operatorEvidencePacket',
+      evidenceUiPanel: 'settings-provider-certification-evidence-packet',
+      sourceOnlyGuard: 'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+      proofSources: ['GET /api/admin/settings', 'GET /api/admin/sites/:siteId/settings', 'apps/admin/src/routes/settings.tsx', 'scripts/settings-provider-certification-preflight-contract-smoke.mjs'],
+      expectedArtifacts: [
+        'provider runtime alias summary',
+        'operator evidence packet',
+        'artifacts/backy-settings-provider-certification.json',
+        'backy-settings-provider-certification-evidence',
+        'Settings provider workflow summary',
+        'release doctor summary',
+      ],
+      evidenceArtifacts: settingsCertificationEvidenceArtifacts,
+      artifactVerifier: settingsCertificationArtifactVerifier,
+      runtime: { configuredFamilies: configuredSettingsFamilies, missingFamilies: missingSettingsFamilies },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ['database URLs', 'provider credentials', 'service-role keys', 'Vercel tokens', 'notification secrets', 'commerce secrets'],
+      },
+      nextAction: missingSettingsFamilies.length > 0
+        ? `Configure ${missingSettingsFamilies.join(', ')} provider aliases, then run npm run ci:settings-provider-certification.`
+        : 'Run npm run ci:settings-provider-certification and attach the redacted evidence packet.',
+    },
+    {
+      key: 'settings-admin-apis',
+      label: 'Settings admin APIs',
+      gate: 'settings-provider-certification',
+      command: 'npm run ci:settings-provider-certification',
+      preflight: 'npm run test:settings-provider-certification-preflight-contract',
+      workflow: '.github/workflows/settings-provider-certification.yml',
+      targetInputs: ['BACKY_SETTINGS_CERTIFICATION_BASE_URL', 'BACKY_SETTINGS_CERTIFY_SITE_ID', 'BACKY_COMMERCE_CERTIFY_SITE_ID', 'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY'],
+      evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
+      evidenceApi: '/api/admin/settings data.settings.completionStatus plus data.settings.providerCertification.operatorEvidencePacket and /api/admin/sites/{siteId}/settings data.settings.mediaStorageHandoff/frontendDatabaseCertification',
+      evidenceUiPanel: 'settings-provider-certification-evidence-packet',
+      sourceOnlyGuard: 'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+      proofSources: ['GET /api/admin/settings', 'GET /api/admin/sites/:siteId/settings', '/api/sites/{siteId}/openapi AdminSettingsProviderCertification', 'packages/sdk-js/src/generated-contract-types.ts'],
+      expectedArtifacts: [
+        'typed AdminSettings completionStatus response',
+        'typed AdminSettings providerCertification response',
+        'typed site-scoped Settings mediaStorageHandoff/frontendDatabaseCertification response',
+        'operator evidence packet',
+        'artifacts/backy-settings-provider-certification.json',
+        'backy-settings-provider-certification-evidence',
+        'Settings API no-secret response headers',
+      ],
+      evidenceArtifacts: settingsCertificationEvidenceArtifacts,
+      artifactVerifier: settingsCertificationArtifactVerifier,
+      runtime: { configuredFamilies: configuredSettingsFamilies, missingFamilies: missingSettingsFamilies },
+      secretBoundary: runbookSecretBoundary,
+      nextAction: missingSettingsFamilies.length > 0
+        ? `Configure ${missingSettingsFamilies.join(', ')} provider aliases, then re-run the Settings admin API provider gate.`
+        : 'Run the Settings provider gate and archive the typed admin API completion/evidence packet.',
+    },
+    {
+      key: 'products',
+      label: '/products',
+      gate: 'commerce-provider-certification',
+      command: 'npm run ci:commerce-provider-certification',
+      preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+      workflow: '.github/workflows/commerce-provider-certification.yml',
+      targetInputs: ['BACKY_COMMERCE_CERTIFICATION_BASE_URL', 'BACKY_COMMERCE_CERTIFY_SITE_ID', 'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY'],
+      evidencePacketSchema: 'backy.commerce-provider-certification-evidence-packet.v1',
+      evidenceApi: '/api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync data.providerCertification.operatorEvidencePacket plus /api/sites/{siteId}/manifest and /api/sites/{siteId}/commerce/catalog data.commerce.providerCertification',
+      evidenceUiPanel: 'products-provider-certification-evidence-packet',
+      sourceOnlyGuard: 'BACKY_COMMERCE_SOURCE_ONLY=1 npm run test:commerce --workspace @backy-cms/admin',
+      proofSources: ['apps/admin/src/routes/products.tsx', 'GET/POST /api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync', 'GET /api/sites/{siteId}/manifest', 'GET /api/sites/{siteId}/commerce/catalog', 'scripts/commerce-provider-certification-preflight-contract-smoke.mjs'],
+      expectedArtifacts: [
+        'product provider-sync evidence',
+        'public manifest/catalog commerce provider handoff',
+        'artifacts/backy-commerce-provider-certification.json',
+        'backy-commerce-provider-certification-evidence',
+        'product storefront handoff',
+        'provider catalog sync proof',
+        'subscription lifecycle proof when selected',
+      ],
+      evidenceArtifacts: commerceCertificationEvidenceArtifacts,
+      artifactVerifier: commerceCertificationArtifactVerifier,
+      runtime: { configuredFamilies: configuredCommerceFamilies, missingFamilies: missingCommerceFamilies },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ['provider secrets', 'raw provider responses', 'private orders', 'customer payloads', 'digital delivery URLs'],
+      },
+      nextAction: missingCommerceFamilies.length > 0
+        ? `Configure ${missingCommerceFamilies.join(', ')} commerce provider aliases, then run npm run ci:commerce-provider-certification.`
+        : 'Run commerce provider certification and attach the products provider-sync evidence packet.',
+    },
+    {
+      key: 'orders',
+      label: '/orders',
+      gate: 'commerce-provider-certification',
+      command: 'npm run ci:commerce-provider-certification',
+      preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+      workflow: '.github/workflows/commerce-provider-certification.yml',
+      targetInputs: ['BACKY_COMMERCE_CERTIFICATION_BASE_URL', 'BACKY_COMMERCE_CERTIFY_SITE_ID', 'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY'],
+      evidencePacketSchema: 'backy.order-provider-certification-evidence-packet.v1',
+      evidenceApi: '/api/admin/sites/{siteId}/commerce/orders/analytics data.providerCertification.operatorEvidencePacket plus /api/sites/{siteId}/commerce/orders data.commerce.providerCertification',
+      evidenceUiPanel: 'orders-provider-certification-evidence-packet',
+      sourceOnlyGuard: 'BACKY_ORDERS_SOURCE_ONLY=1 npm run test:orders --workspace @backy-cms/admin',
+      proofSources: ['apps/admin/src/routes/orders.tsx', 'GET /api/admin/sites/{siteId}/commerce/orders/analytics', 'GET /api/sites/{siteId}/commerce/orders', 'scripts/commerce-provider-certification-preflight-contract-smoke.mjs'],
+      expectedArtifacts: [
+        'order analytics provider evidence',
+        'public order contract provider handoff',
+        'artifacts/backy-commerce-provider-certification.json',
+        'backy-commerce-provider-certification-evidence',
+        'status handoff evidence',
+        'quote/tracking/fulfillment/refund proof',
+        'webhook/reconciliation proof',
+      ],
+      evidenceArtifacts: commerceCertificationEvidenceArtifacts,
+      artifactVerifier: commerceCertificationArtifactVerifier,
+      runtime: { configuredFamilies: configuredCommerceFamilies, missingFamilies: missingCommerceFamilies },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ['provider secrets', 'customer payloads', 'raw order payloads', 'payment references', 'addresses', 'webhook bodies'],
+      },
+      nextAction: missingCommerceFamilies.length > 0
+        ? `Configure ${missingCommerceFamilies.join(', ')} commerce provider aliases, then run npm run ci:commerce-provider-certification.`
+        : 'Run commerce provider certification and attach the orders analytics evidence packet.',
+    },
+  ];
+  const blockedGate = gates.find((gate) => gate.status !== 'ready-to-run');
+  const missingInputs = blockedGate?.runtime.missingFamilies || [];
+
+  return {
+    schemaVersion: 'backy.completion-status.v1',
+    generatedAt: new Date().toISOString(),
+    status: blockedGate ? 'external-gates-required' : 'certification-ready',
+    summary: 'Backy core backend/editor/API parity is implemented for the audited local scope; Forms and SDK database gates are certified, and the remaining Partial rows require live provider certification evidence.',
+    audit: {
+      source: 'specs/page-completion-audit/backy-page-surface-audit.md',
+      ready: 41,
+      partial: 4,
+      prototype: 0,
+      missing: 0,
+      total: 45,
+      readyPercent: 91,
+    },
+    surfaces: [
+      { key: 'products', label: '/products', status: 'partial', blocker: 'commerce-provider-certification', gate: 'npm run ci:commerce-provider-certification' },
+      { key: 'orders', label: '/orders', status: 'partial', blocker: 'commerce-provider-certification', gate: 'npm run ci:commerce-provider-certification' },
+      { key: 'settings', label: '/settings', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
+      { key: 'settings-admin-apis', label: 'Settings admin APIs', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
+    ],
+    surfaceRunbooks,
+    certifiedGates,
+    gates,
+    nextAction: missingInputs.length > 0
+      ? `Configure ${missingInputs.join(', ')} and run ${blockedGate?.command}.`
+      : `Run ${blockedGate?.command || 'npm run test:partial-gate-preflights'} and attach the redacted evidence packet.`,
+    recommendedCommands: gates.map((gate) => gate.command),
+    localPreflight: 'npm run test:partial-gate-preflights',
+    privacy: {
+      includesSecretValues: false,
+      exposesOnlyAliasPresence: true,
+      secretHandling: 'Admin Settings completion status exposes audited counts, gate names, workflow paths, env alias presence, and missing provider families only; database URLs, provider keys, admin keys, and customer/order/submission payloads are never returned.',
+    },
+  };
+};
 
 const booleanEnvEnabled = (key: string): boolean => {
   const value = process.env[key]?.trim().toLowerCase();
@@ -830,6 +1419,255 @@ const frontendDatabaseCertificationContract = (
   secretHandling:
     'Database URLs and service credentials stay in CI/runtime environment; admin settings responses expose only non-secret gate names, aliases, runtime booleans, and scenario evidence.',
 });
+
+const mediaStorageHandoffContract = ({
+  settings,
+  runtimeStorage,
+  runtimeSupabase,
+}: {
+  settings: AdminSettingsSource;
+  runtimeStorage: unknown;
+  runtimeSupabase: unknown;
+}) => {
+  const integrations = objectValue(settings.integrations);
+  const storage = objectValue(integrations.storage);
+  const provider = stringField(storage, 'provider') || stringField(runtimeStorage, 'provider') || 'local';
+  const bucket = stringField(storage, 'bucket') || stringField(runtimeStorage, 'bucket') || stringField(runtimeSupabase, 'storageBucket');
+  const publicBaseUrl = stringField(storage, 'publicBaseUrl') || stringField(runtimeStorage, 'publicUrl');
+  const pathPrefix = stringField(storage, 'pathPrefix') || stringField(runtimeStorage, 'basePath') || 'sites/{siteId}';
+  const configured = Boolean(
+    booleanFlag(runtimeStorage, 'configured') ||
+    stringField(storage, 'provider') ||
+    stringField(storage, 'bucket') ||
+    stringField(storage, 'publicBaseUrl'),
+  );
+
+  return {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 'backy.media-storage-handoff.v1',
+    status: configured ? 'ready' : 'needs-runtime-env',
+    provider: {
+      selected: provider,
+      bucket,
+      publicBaseUrl,
+      pathPrefix,
+      runtime: runtimeStorage || null,
+      supabase: runtimeSupabase || null,
+    },
+    policies: {
+      privateFilesEnabled: booleanFlag(storage, 'privateFilesEnabled'),
+      imageTransformsEnabled: objectValue(storage).imageTransformsEnabled !== false,
+      maxFileSizeMb: objectValue(storage).maxFileSizeMb ?? null,
+      workspaceStorageLimitGb: objectValue(storage).workspaceStorageLimitGb ?? null,
+      warningThresholdPercent: objectValue(storage).warningThresholdPercent ?? null,
+      allowedFileTypes: stringField(storage, 'allowedFileTypes') || 'image/*,font/*,document/*,file/*',
+    },
+    endpointTemplates: {
+      adminMediaList: '/api/admin/sites/{siteId}/media',
+      adminMediaUpload: '/api/admin/sites/{siteId}/media',
+      adminSignedUrl: '/api/admin/sites/{siteId}/media/{mediaId}/signed-url',
+      publicMediaList: '/api/sites/{siteId}/media',
+      publicMediaFolders: '/api/sites/{siteId}/media/folders',
+      publicFontManifest: '/api/sites/{siteId}/media/fonts',
+      publicMediaDetail: '/api/sites/{siteId}/media/{mediaId}',
+      publicMediaFile: '/api/sites/{siteId}/media/{mediaId}/file',
+      publicMediaTransform: '/api/sites/{siteId}/media/{mediaId}/transform',
+    },
+    contracts: {
+      organization: 'backy.media.organization.v1',
+      references: 'backy.media.references.v1',
+      editableMetadata: 'backy.media.editable-metadata.v1',
+      deliveryPolicy: 'MediaDeliveryPolicy',
+      fileCategories: 'backy.media-file-categories.v1',
+    },
+    designStateUsage: {
+      preservedFields: [
+        'frontendDesignAssets',
+        'frontendDesignContentDocument.assets',
+        'content.assets.media[]',
+        'content.assets.fonts[]',
+        'element.props.mediaId',
+        'element.props.imageMediaId',
+        'element.props.fileMediaId',
+        'element.props.fontMediaId',
+        'element.props.mediaOrganization',
+      ],
+      editableSurfaces: ['pages', 'blog', 'reusable sections', 'products', 'collections', 'editor media picker'],
+      customFrontendUses: ['image picker', 'font picker', 'file download picker', 'product media gallery', 'private signed delivery', 'responsive transforms'],
+    },
+    runtimeGate: {
+      certificationCommand: 'npm run ci:settings-provider-certification',
+      sourceOnlyGuard: 'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+      missingRuntimeAliases: missingInputsFromRuntime(runtimeStorage),
+    },
+    privacy: {
+      includesSecretValues: false,
+      exposesSecretReferencesOnly: true,
+      secretReferences: {
+        supabaseServiceRole: stringField(storage, 'supabaseKeySecretRef') || 'env:BACKY_SUPABASE_SERVICE_ROLE_KEY',
+        s3AccessKeyId: stringField(storage, 'accessKeyIdSecretRef') || 'env:BACKY_S3_ACCESS_KEY_ID',
+        s3SecretAccessKey: stringField(storage, 'secretAccessKeySecretRef') || 'env:BACKY_S3_SECRET_ACCESS_KEY',
+      },
+      excludes: ['raw provider credentials', 'service-role key values', 'signed URL tokens', 'private file bytes'],
+    },
+  };
+};
+
+const DEFAULT_APPEARANCE_CONTRACT = {
+  primaryColor: '#3b82f6',
+  secondaryColor: '#8b5cf6',
+  backgroundColor: '#ffffff',
+  surfaceColor: '#f8fafc',
+  textColor: '#0f172a',
+  mutedTextColor: '#64748b',
+  fontFamily: 'inter',
+  headingFontFamily: 'inter',
+  bodyFontFamily: 'inter',
+  monoFontFamily: 'jetbrains-mono',
+  baseFontSize: 16,
+  radius: 8,
+  spacingUnit: 4,
+  motionPreset: 'subtle',
+};
+
+const numberField = (source: unknown, key: string, fallback: number): number => {
+  const value = objectValue(source)[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+};
+
+const resolveAppearanceContract = (settings: AdminSettingsSource) => {
+  const integrations = objectValue(settings.integrations);
+  const appearance = objectValue(integrations.appearance);
+  const resolved = {
+    primaryColor: stringField(appearance, 'primaryColor') || DEFAULT_APPEARANCE_CONTRACT.primaryColor,
+    secondaryColor: stringField(appearance, 'secondaryColor') || DEFAULT_APPEARANCE_CONTRACT.secondaryColor,
+    backgroundColor: stringField(appearance, 'backgroundColor') || DEFAULT_APPEARANCE_CONTRACT.backgroundColor,
+    surfaceColor: stringField(appearance, 'surfaceColor') || DEFAULT_APPEARANCE_CONTRACT.surfaceColor,
+    textColor: stringField(appearance, 'textColor') || DEFAULT_APPEARANCE_CONTRACT.textColor,
+    mutedTextColor: stringField(appearance, 'mutedTextColor') || DEFAULT_APPEARANCE_CONTRACT.mutedTextColor,
+    fontFamily: stringField(appearance, 'fontFamily') || DEFAULT_APPEARANCE_CONTRACT.fontFamily,
+    headingFontFamily: stringField(appearance, 'headingFontFamily') || DEFAULT_APPEARANCE_CONTRACT.headingFontFamily,
+    bodyFontFamily: stringField(appearance, 'bodyFontFamily') || DEFAULT_APPEARANCE_CONTRACT.bodyFontFamily,
+    monoFontFamily: stringField(appearance, 'monoFontFamily') || DEFAULT_APPEARANCE_CONTRACT.monoFontFamily,
+    baseFontSize: numberField(appearance, 'baseFontSize', DEFAULT_APPEARANCE_CONTRACT.baseFontSize),
+    radius: numberField(appearance, 'radius', DEFAULT_APPEARANCE_CONTRACT.radius),
+    spacingUnit: numberField(appearance, 'spacingUnit', DEFAULT_APPEARANCE_CONTRACT.spacingUnit),
+    motionPreset: stringField(appearance, 'motionPreset') || DEFAULT_APPEARANCE_CONTRACT.motionPreset,
+  };
+
+  return {
+    schemaVersion: 'backy.theme.v1',
+    colors: {
+      primary: resolved.primaryColor,
+      secondary: resolved.secondaryColor,
+      background: resolved.backgroundColor,
+      surface: resolved.surfaceColor,
+      text: resolved.textColor,
+      mutedText: resolved.mutedTextColor,
+    },
+    typography: {
+      heading: resolved.headingFontFamily,
+      body: resolved.bodyFontFamily || resolved.fontFamily,
+      mono: resolved.monoFontFamily,
+      baseFontSize: resolved.baseFontSize,
+    },
+    layout: {
+      radius: resolved.radius,
+      spacingUnit: resolved.spacingUnit,
+    },
+    motion: {
+      preset: resolved.motionPreset,
+    },
+    cssVariables: {
+      '--backy-color-primary': resolved.primaryColor,
+      '--backy-color-secondary': resolved.secondaryColor,
+      '--backy-color-background': resolved.backgroundColor,
+      '--backy-color-surface': resolved.surfaceColor,
+      '--backy-color-text': resolved.textColor,
+      '--backy-color-muted-text': resolved.mutedTextColor,
+      '--backy-font-heading': resolved.headingFontFamily,
+      '--backy-font-body': resolved.bodyFontFamily || resolved.fontFamily,
+      '--backy-font-mono': resolved.monoFontFamily,
+      '--backy-font-size-base': `${resolved.baseFontSize}px`,
+      '--backy-radius': `${resolved.radius}px`,
+      '--backy-spacing-unit': `${resolved.spacingUnit}px`,
+      '--backy-motion-preset': resolved.motionPreset,
+    },
+  };
+};
+
+const themeDesignImpactContract = (settings: AdminSettingsSource) => {
+  const themeContract = resolveAppearanceContract(settings);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 'backy.settings-theme-design-impact.v1',
+    status: 'ready',
+    source: 'admin-settings-api',
+    themeContract,
+    impact: {
+      colorTokenCount: Object.keys(themeContract.colors).length,
+      typographyTokenCount: Object.keys(themeContract.typography).length,
+      cssVariableCount: Object.keys(themeContract.cssVariables).length,
+    },
+    motion: {
+      preset: themeContract.motion.preset,
+      bindingPaths: [
+        'content.themeTokenRefs.motion',
+        'element.tokenRefs.animationDuration',
+        'element.tokenRefs.animationEasing',
+        'element.animation.tokenRefs.duration',
+        'element.animation.tokenRefs.easing',
+      ],
+      animationStateFields: [
+        'content.animations[]',
+        'content.contentDocument.animations[]',
+        'element.animation',
+        'element.animation.from',
+        'element.animation.to',
+        'element.animation.scrollTrigger',
+      ],
+    },
+    designStatePersistence: {
+      tokenSchemaVersion: themeContract.schemaVersion,
+      tokenRefPaths: [
+        'content.themeTokenRefs',
+        'content.contentDocument.themeTokenRefs',
+        'element.tokenRefs',
+        'element.styles',
+        'element.props',
+        'document.themeTokenRefs',
+      ],
+      editableSurfaces: ['pages', 'blog', 'reusable sections', 'products', 'collections', 'live management overlay', 'hosted public renderer'],
+      preservedDesignFields: [
+        'content.elements',
+        'content.contentDocument',
+        'content.customCSS',
+        'content.customJS',
+        'content.assets',
+        'content.animations',
+        'content.interactions',
+        'content.dataBindings',
+        'content.editableMap',
+        'content.themeTokenRefs',
+      ],
+    },
+    frontendBindings: {
+      publicManifestThemeModule: '/api/sites/{siteId}/manifest#data.modules.theme',
+      publicOpenApiThemeSchema: '/api/sites/{siteId}/openapi#/components/schemas/BackyThemeTokens',
+      adminSettingsApi: '/api/admin/settings#data.settings.themeDesignImpact',
+      settingsHandoffPath: 'settingsHandoff.themeDesignImpact',
+      cssVariableSelector: ':root, [data-backy-theme]',
+    },
+    privacy: {
+      includesSecretValues: false,
+      includesAdminApiKeys: false,
+      includesProviderCredentials: false,
+      includesPrivateContent: false,
+      note: 'Theme design impact only exports non-secret design tokens, token reference paths, and editable design-state field names.',
+    },
+  };
+};
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json(
@@ -1573,7 +2411,10 @@ const buildRevocationHistoryEntries = ({
   return entries;
 };
 
-const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminApiKey?: boolean } = {}) => {
+const toAdminSettings = (
+  settings: AdminSettingsSource,
+  options: { includeAdminApiKey?: boolean; providerCertificationSiteId?: string } = {},
+) => {
   const apiKeys = settingsApiKeys(settings);
   const runtimeStorage = getMediaStorageConfigSummary();
   const runtimeDatabase = getDatabaseRuntimeSummary();
@@ -1612,6 +2453,7 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
   const frontendDatabaseCertificationScenarioEvidence = buildFrontendDatabaseCertificationScenarioEvidence(
     frontendDatabaseCertificationRuntime,
   );
+  const providerCertificationSiteId = options.providerCertificationSiteId?.trim() || DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS.siteId;
 
   return {
     schemaVersion: ADMIN_SETTINGS_SCHEMA,
@@ -1641,7 +2483,17 @@ const toAdminSettings = (settings: AdminSettingsSource, options: { includeAdminA
     runtimeCommerce,
     runtimeInteractiveComponents,
     runtimePublicApi,
-    providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence, providerCertificationScenarioEvidence),
+    completionStatus: buildSettingsCompletionStatus(),
+    mediaStorageHandoff: mediaStorageHandoffContract({ settings, runtimeStorage, runtimeSupabase }),
+    themeDesignImpact: themeDesignImpactContract(settings),
+    providerCertification: providerCertificationContract(
+      providerCertificationRuntimeEvidence,
+      providerCertificationScenarioEvidence,
+      {
+        ...DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS,
+        siteId: providerCertificationSiteId,
+      },
+    ),
     frontendDatabaseCertification: frontendDatabaseCertificationContract(
       frontendDatabaseCertificationRuntime,
       frontendDatabaseCertificationScenarioEvidence,
@@ -1990,22 +2842,29 @@ const normalizeNotificationIntegrations = (value: unknown): BackyJsonObject | un
 
   const email = parseJsonObject(notifications.email) || {};
   const inApp = parseJsonObject(notifications.inApp) || {};
+  const digestFrequency = notifications.digestFrequency;
 
   return {
     ...notifications,
     email: {
       ...email,
-      newUser: false,
-      pagePublished: false,
+      newUser: email.newUser === true,
+      pagePublished: email.pagePublished === true,
+      formSubmission: email.formSubmission === true,
+      comments: email.comments === true,
       orderCreated: email.orderCreated === true,
       productLowStock: email.productLowStock === true,
-      systemUpdates: false,
+      systemUpdates: email.systemUpdates === true,
     },
     inApp: {
       ...inApp,
-      mentions: false,
+      comments: inApp.comments === true,
+      activity: inApp.activity === true,
+      mentions: inApp.mentions === true,
     },
-    digestFrequency: notifications.digestFrequency === 'off' ? 'off' : 'instant',
+    digestFrequency: ['instant', 'daily', 'weekly', 'off'].includes(String(digestFrequency))
+      ? digestFrequency
+      : 'instant',
   };
 };
 
@@ -2477,7 +3336,7 @@ const optionalRuntimeImport = async <TModule,>(specifier: string): Promise<TModu
 };
 
 const makeInfrastructureDiagnostic = (
-  area: 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce' | 'interactiveComponents',
+  area: 'database' | 'storage' | 'supabase' | 'mediaScanner' | 'vercel' | 'notifications' | 'commerce' | 'interactiveComponents' | 'publicApi',
   label: string,
   checks: Array<{ label: string; ready: boolean; required: boolean; detail: string }>,
 ) => {
@@ -2514,6 +3373,7 @@ const buildInfrastructureDiagnostics = ({
   runtimeNotifications,
   runtimeCommerce,
   runtimeInteractiveComponents,
+  runtimePublicApi,
 }: InfrastructureCheckInput) => {
   const storage = parseJsonObject(integrations.storage) || {};
   const supabase = parseJsonObject(integrations.supabase) || {};
@@ -2536,6 +3396,8 @@ const buildInfrastructureDiagnostics = ({
   const vercelProductionDomain = stringValue(vercel.productionDomain) || runtimeVercel.url || '';
   const notificationEmailEnabled = boolValue(notificationEmail.formSubmission)
     || boolValue(notificationEmail.comments)
+    || boolValue(notificationEmail.newUser)
+    || boolValue(notificationEmail.pagePublished)
     || boolValue(notificationEmail.orderCreated)
     || boolValue(notificationEmail.productLowStock)
     || boolValue(notificationEmail.systemUpdates)
@@ -2836,6 +3698,31 @@ const buildInfrastructureDiagnostics = ({
             ? 'Custom code components will render in a sandboxed iframe with CSP.'
             : 'Set sandbox origin and CSP before enabling custom code component execution.'
           : 'Custom code components are disabled; fallback and registry metadata remain available.',
+      },
+    ]),
+    makeInfrastructureDiagnostic('publicApi', 'Public API CORS', [
+      {
+        label: 'Exact frontend origins',
+        ready: Boolean(runtimePublicApi.corsAllowedOriginsConfigured),
+        required: deliveryMode === 'custom-frontend',
+        detail: runtimePublicApi.corsAllowedOriginsConfigured
+          ? `${runtimePublicApi.corsAllowedOriginCount} exact custom frontend origin(s) configured.`
+          : `Missing ${runtimePublicApi.missing.join(', ') || 'custom frontend CORS origin configuration'}.`,
+      },
+      {
+        label: 'Wildcard origin disabled',
+        ready: runtimePublicApi.wildcardAllowed === false,
+        required: true,
+        detail: runtimePublicApi.wildcardAllowed
+          ? 'Wildcard CORS origins are not allowed for Backy public APIs.'
+          : 'Public APIs require exact browser origins.',
+      },
+      {
+        label: 'Exposed Backy contract headers',
+        ready: runtimePublicApi.exposedContractHeaders.includes('x-backy-request-id') &&
+          runtimePublicApi.exposedContractHeaders.includes('x-backy-contract-version'),
+        required: true,
+        detail: 'Custom frontends need request-id and contract-version headers for API observability.',
       },
     ]),
   ];
@@ -4018,6 +4905,10 @@ export async function GET(request: NextRequest) {
   if (access instanceof NextResponse) {
     return access;
   }
+  const providerCertificationSiteId =
+    request.nextUrl.searchParams.get('certificationSiteId') ||
+    request.nextUrl.searchParams.get('siteId') ||
+    undefined;
 
   try {
     if (!shouldUseDemoStoreFallback()) {
@@ -4028,7 +4919,10 @@ export async function GET(request: NextRequest) {
         success: true,
         requestId,
         data: {
-          settings: toAdminSettings(settings, { includeAdminApiKey: canExposeAdminApiKey(access) }),
+          settings: toAdminSettings(settings, {
+            includeAdminApiKey: canExposeAdminApiKey(access),
+            providerCertificationSiteId,
+          }),
         },
       });
     }
@@ -4038,7 +4932,10 @@ export async function GET(request: NextRequest) {
       requestId,
       data: {
         settings: {
-          ...toAdminSettings(getAdminSettings(), { includeAdminApiKey: canExposeAdminApiKey(access) }),
+          ...toAdminSettings(getAdminSettings(), {
+            includeAdminApiKey: canExposeAdminApiKey(access),
+            providerCertificationSiteId,
+          }),
           runtimeStorage: getMediaStorageConfigSummary(),
           runtimeDatabase: getDatabaseRuntimeSummary(),
           runtimeMediaScanner: getMediaScannerRuntimeSummary(),

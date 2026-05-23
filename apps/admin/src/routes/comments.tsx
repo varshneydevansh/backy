@@ -85,6 +85,7 @@ const COMMENT_STATUS_FILTERS: CommentStatusFilter[] = ['all', 'pending', 'approv
 const COMMENT_TARGET_TYPE_FILTERS: CommentModerationTarget[] = ['all', 'page', 'post'];
 const COMMENT_TRIAGE_FILTERS: CommentTriageFilter[] = ['all', 'reported', 'replies', 'top-level', 'anonymous', 'authenticated', 'missing-email', 'reviewed', 'unreviewed'];
 const COMMENT_SORT_FILTERS: CommentSortFilter[] = ['newest', 'oldest'];
+const COMMENT_LARGE_SCOPE_SELECTION_THRESHOLD = 25;
 
 const isCommentStatusFilter = (value: unknown): value is CommentStatusFilter => (
   typeof value === 'string' && COMMENT_STATUS_FILTERS.includes(value as CommentStatusFilter)
@@ -274,6 +275,73 @@ const DEFAULT_COMMENT_POLICY: CommentPolicyDraft = {
   sort: 'newest',
 };
 
+interface CommentPolicyPreset {
+  key: 'community-queue' | 'strict-launch' | 'members-only';
+  label: string;
+  detail: string;
+  policy: Partial<CommentPolicyDraft> & { blockedTerms: string[] };
+}
+
+const COMMENT_POLICY_PRESETS: CommentPolicyPreset[] = [
+  {
+    key: 'community-queue',
+    label: 'Community queue',
+    detail: 'Manual review, guest comments, reports, replies, and common spam terms.',
+    policy: {
+      enabled: true,
+      moderationMode: 'manual',
+      allowGuests: true,
+      requireName: true,
+      requireEmail: false,
+      allowReplies: true,
+      enableReports: true,
+      enableCaptcha: false,
+      captchaProvider: 'mock',
+      captchaSiteKey: '',
+      blockedTerms: ['casino', 'crypto giveaway', 'free money', 'loan offer'],
+      sort: 'newest',
+    },
+  },
+  {
+    key: 'strict-launch',
+    label: 'Strict launch',
+    detail: 'Manual review with required email, captcha, reports, and stronger spam terms.',
+    policy: {
+      enabled: true,
+      moderationMode: 'manual',
+      allowGuests: true,
+      requireName: true,
+      requireEmail: true,
+      allowReplies: true,
+      enableReports: true,
+      enableCaptcha: true,
+      captchaProvider: 'mock',
+      captchaSiteKey: '',
+      blockedTerms: ['casino', 'crypto', 'free money', 'loan offer', 'adult', 'telegram'],
+      sort: 'newest',
+    },
+  },
+  {
+    key: 'members-only',
+    label: 'Members only',
+    detail: 'Closes guest intake while preserving review, reports, and reply policy for authenticated shells.',
+    policy: {
+      enabled: true,
+      moderationMode: 'manual',
+      allowGuests: false,
+      requireName: true,
+      requireEmail: true,
+      allowReplies: true,
+      enableReports: true,
+      enableCaptcha: false,
+      captchaProvider: 'mock',
+      captchaSiteKey: '',
+      blockedTerms: ['spam', 'abuse', 'impersonation'],
+      sort: 'newest',
+    },
+  },
+];
+
 const normalizeCommentPolicyDraft = (policy?: SiteCommentPolicy | null): CommentPolicyDraft => ({
   ...DEFAULT_COMMENT_POLICY,
   ...(policy || {}),
@@ -324,6 +392,7 @@ function CommentsRoute() {
   const [moderationReason, setModerationReason] = useState('');
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState<CommentReplyDraft>(DEFAULT_REPLY_DRAFT);
+  const [replySubmitted, setReplySubmitted] = useState(false);
   const [movingCommentId, setMovingCommentId] = useState<string | null>(null);
   const [moveParentDraft, setMoveParentDraft] = useState('');
   const [pendingDeleteComment, setPendingDeleteComment] = useState<AdminComment | null>(null);
@@ -341,6 +410,9 @@ function CommentsRoute() {
   const [deletingBlocklistIds, setDeletingBlocklistIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const replyContentInlineError = replySubmitted && replyDraft.content.trim().length === 0
+    ? 'Enter a reply before publishing.'
+    : null;
   const isCommentMutationBusy = updatingIds.length > 0
     || deletingBlocklistIds.length > 0
     || retryingDeliveryIds.length > 0
@@ -577,6 +649,25 @@ function CommentsRoute() {
   const allVisibleSelected = filteredComments.length > 0 && filteredComments.every((comment) => selectedSet.has(comment.id));
   const commentPolicyDirty = JSON.stringify(commentPolicyDraft) !== JSON.stringify(savedCommentPolicy);
   const commentPolicyBlockedTermsText = commentPolicyDraft.blockedTerms.join('\n');
+  const moderationReasonText = moderationReason.trim();
+  const selectedFlaggedCommentCount = selectedComments.filter((comment) => (
+    (comment.reportCount || 0) > 0 ||
+    Boolean(comment.reportReasons?.length) ||
+    comment.status === 'spam' ||
+    comment.status === 'blocked'
+  )).length;
+  const selectedPendingCommentCount = selectedComments.filter((comment) => comment.status === 'pending').length;
+  const bulkSafetyRequiresReason = hasSelection && (
+    selectedCommentIds.length >= COMMENT_LARGE_SCOPE_SELECTION_THRESHOLD ||
+    hiddenSelectedCommentCount > 0
+  );
+  const bulkDestructiveActionDisabled = !hasSelection ||
+    isCommentsBusy ||
+    !canManageComments ||
+    (bulkSafetyRequiresReason && !moderationReasonText);
+  const bulkDestructiveActionTitle = bulkSafetyRequiresReason && !moderationReasonText
+    ? 'Add a moderation reason before rejecting, marking spam, or blocking a large/cross-filter selection.'
+    : managePermissionTitle;
   const moderationReadiness = useMemo(() => {
     const reviewComplete = metrics.pending === 0;
     const safetyClean = metrics.flagged === 0;
@@ -782,11 +873,29 @@ function CommentsRoute() {
         createdAt: entry.createdAt,
       })),
     },
+    antiAbusePresets: COMMENT_POLICY_PRESETS.map((preset) => ({
+      key: preset.key,
+      label: preset.label,
+      detail: preset.detail,
+      policy: preset.policy,
+    })),
     selectedCommentIds: selectedCommentIds,
     selection: {
       selectedIds: selectedCommentIds,
       selectedVisibleIds: selectedVisibleCommentIds,
       hiddenSelectedCount: hiddenSelectedCommentCount,
+    },
+    bulkSafety: {
+      schemaVersion: 'backy.comments-bulk-safety.v1',
+      largeScopeThreshold: COMMENT_LARGE_SCOPE_SELECTION_THRESHOLD,
+      selectedCount: selectedCommentIds.length,
+      selectedVisibleCount: selectedVisibleCommentIds.length,
+      hiddenSelectedCount: hiddenSelectedCommentCount,
+      selectedFlaggedCount: selectedFlaggedCommentCount,
+      selectedPendingCount: selectedPendingCommentCount,
+      requiresReason: bulkSafetyRequiresReason,
+      reasonPresent: Boolean(moderationReasonText),
+      destructiveActionsBlocked: bulkDestructiveActionDisabled && hasSelection && canManageComments,
     },
     targets: targets.map((target) => ({
       id: target.id,
@@ -867,6 +976,13 @@ function CommentsRoute() {
     selectedCommentIds,
     selectedVisibleCommentIds,
     hiddenSelectedCommentCount,
+    selectedFlaggedCommentCount,
+    selectedPendingCommentCount,
+    bulkSafetyRequiresReason,
+    bulkDestructiveActionDisabled,
+    hasSelection,
+    canManageComments,
+    moderationReasonText,
     sortFilter,
     statusFilter,
     targetByKey,
@@ -882,7 +998,6 @@ function CommentsRoute() {
     commentDeliveryEvents,
   ]);
   const moderationHandoffText = useMemo(() => JSON.stringify(moderationHandoff, null, 2), [moderationHandoff]);
-  const moderationReasonText = moderationReason.trim();
   const rejectReason = moderationReasonText || 'Rejected from moderation queue.';
   const spamReason = moderationReasonText || 'Marked as spam.';
   const blockReason = moderationReasonText || 'Blocked from moderation queue.';
@@ -1334,6 +1449,15 @@ function CommentsRoute() {
     });
   };
 
+  const applyCommentPolicyPreset = (preset: CommentPolicyPreset) => {
+    if (isCommentsBusy || !canConfigureComments) return;
+    setCommentPolicyDraft((current) => ({
+      ...current,
+      ...preset.policy,
+      blockedTerms: preset.policy.blockedTerms,
+    }));
+  };
+
   const saveCommentPolicy = async () => {
     if (isCommentsBusy || !activeSiteId) return;
     if (!canConfigureComments) {
@@ -1409,6 +1533,7 @@ function CommentsRoute() {
 
     const defaultAuthorName = activeSite?.name ? `${activeSite.name} Team` : DEFAULT_REPLY_DRAFT.authorName;
     setReplyingToId(comment.id);
+    setReplySubmitted(false);
     setReplyDraft({
       ...DEFAULT_REPLY_DRAFT,
       authorName: replyDraft.authorName || defaultAuthorName,
@@ -1430,6 +1555,7 @@ function CommentsRoute() {
       return;
     }
 
+    setReplySubmitted(true);
     const content = replyDraft.content.trim();
     if (!content) {
       setError('Enter a reply before publishing.');
@@ -1461,6 +1587,7 @@ function CommentsRoute() {
       setComments((current) => [created, ...current.filter((comment) => comment.id !== created.id)]);
       setReplyingToId(null);
       setReplyDraft((current) => ({ ...current, content: '' }));
+      setReplySubmitted(false);
       setThreadFilter(getCommentThreadKey(parentComment));
       await refreshCommentAnalytics().catch(() => null);
       await refreshCommentDeliveryEvents().catch(() => null);
@@ -2155,6 +2282,45 @@ function CommentsRoute() {
             />
           </label>
         </div>
+
+        <div
+          className="mt-4 rounded-lg border border-border bg-muted/30 p-4"
+          data-testid="comments-anti-abuse-presets"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <ShieldAlert className="size-4 text-primary" />
+                Anti-abuse presets
+              </div>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                Apply operator-only starting policies for public comment intake before saving the site policy.
+              </p>
+            </div>
+            <span className="rounded-full bg-background px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+              {COMMENT_POLICY_PRESETS.length} presets
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {COMMENT_POLICY_PRESETS.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                disabled={isCommentsBusy || !canConfigureComments}
+                title={configurePermissionTitle}
+                onClick={() => applyCommentPolicyPreset(preset)}
+                className="rounded-lg border border-border bg-background px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid={`comments-anti-abuse-preset-${preset.key}`}
+              >
+                <span className="block text-sm font-semibold text-foreground">{preset.label}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{preset.detail}</span>
+                <span className="mt-3 block text-xs font-medium text-muted-foreground">
+                  {preset.policy.enableCaptcha ? 'captcha' : 'no captcha'} · {preset.policy.allowGuests ? 'guests' : 'members'} · {preset.policy.blockedTerms.length} blocked terms
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <div id="comments-metrics" className="mb-6 grid gap-3 scroll-mt-24 md:grid-cols-4">
@@ -2605,13 +2771,13 @@ function CommentsRoute() {
               <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
                 Approve
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={bulkDestructiveActionDisabled} title={bulkDestructiveActionTitle} onClick={() => void handleModerate(selectedCommentIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
                 Reject
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={bulkDestructiveActionDisabled} title={bulkDestructiveActionTitle} onClick={() => void handleModerate(selectedCommentIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
                 Spam
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'blocked', { blockReason })} iconStart={<ShieldAlert className="size-4" />}>
+              <Button size="sm" variant="outline" disabled={bulkDestructiveActionDisabled} title={bulkDestructiveActionTitle} onClick={() => void handleModerate(selectedCommentIds, 'blocked', { blockReason })} iconStart={<ShieldAlert className="size-4" />}>
                 Block
               </Button>
               <Button
@@ -2628,6 +2794,44 @@ function CommentsRoute() {
           }
         />
         <PanelContent>
+          {hasSelection ? (
+            <div
+              className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950"
+              data-testid="comments-bulk-safety-review"
+              data-large-scope={selectedCommentIds.length >= COMMENT_LARGE_SCOPE_SELECTION_THRESHOLD ? 'true' : 'false'}
+              data-reason-required={bulkSafetyRequiresReason ? 'true' : 'false'}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <ShieldAlert className="mt-0.5 size-5 flex-none" />
+                  <div>
+                    <div className="text-sm font-semibold">Bulk safety review</div>
+                    <p className="mt-1 max-w-2xl text-sm">
+                      Large or cross-filter selections require a moderation reason before reject, spam, or block actions run.
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold">
+                  threshold {COMMENT_LARGE_SCOPE_SELECTION_THRESHOLD}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <MetaTile label="Selected" value={`${selectedCommentIds.length}`} />
+                <MetaTile label="Outside view" value={`${hiddenSelectedCommentCount}`} />
+                <MetaTile label="Flagged" value={`${selectedFlaggedCommentCount}`} />
+                <MetaTile label="Pending" value={`${selectedPendingCommentCount}`} />
+              </div>
+              {bulkSafetyRequiresReason && !moderationReasonText ? (
+                <div
+                  className="mt-3 rounded-md border border-amber-300 bg-white px-3 py-2 text-sm font-medium"
+                  data-testid="comments-bulk-safety-reason-required"
+                >
+                  Add a moderation reason before applying reject, spam, or block to this selection.
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div id="comments-api" className="mb-5 rounded-lg border border-border bg-muted/30 p-4 scroll-mt-24">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -2945,6 +3149,7 @@ function CommentsRoute() {
                     isReplying={replyingToId === comment.id}
                     isSubmittingReply={isReplyingId === comment.id}
                     replyDraft={replyDraft}
+                    replyContentError={replyingToId === comment.id ? replyContentInlineError : null}
                     parentOptions={parentOptions}
                     isMoving={movingCommentId === comment.id}
                     isSubmittingMove={isMovingId === comment.id}
@@ -2970,6 +3175,7 @@ function CommentsRoute() {
                     onCancelReply={() => {
                       setReplyingToId(null);
                       setReplyDraft((current) => ({ ...current, content: '' }));
+                      setReplySubmitted(false);
                     }}
                     onReplyDraftChange={patchReplyDraft}
                     onSubmitReply={() => void handleCreateReply(comment)}
@@ -3391,6 +3597,7 @@ function CommentCard({
   isReplying,
   isSubmittingReply,
   replyDraft,
+  replyContentError,
   parentOptions,
   isMoving,
   isSubmittingMove,
@@ -3423,6 +3630,7 @@ function CommentCard({
   isReplying: boolean;
   isSubmittingReply: boolean;
   replyDraft: CommentReplyDraft;
+  replyContentError: string | null;
   parentOptions: AdminComment[];
   isMoving: boolean;
   isSubmittingMove: boolean;
@@ -3680,13 +3888,21 @@ function CommentCard({
               className="min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Write an official response..."
               aria-label="Comment reply content"
+              aria-invalid={Boolean(replyContentError)}
+              aria-describedby={replyContentError ? 'comments-reply-content-error' : undefined}
+              data-testid="comments-reply-content"
             />
+            {replyContentError && (
+              <span id="comments-reply-content-error" className="text-xs font-medium text-destructive" role="alert" data-testid="comments-reply-content-error">
+                {replyContentError}
+              </span>
+            )}
           </label>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               onClick={onSubmitReply}
-              disabled={disabled || isSubmittingReply || !replyDraft.content.trim()}
+              disabled={disabled || isSubmittingReply}
               title={disabledReason}
               iconStart={<MessageSquare className="size-4" />}
               data-testid="comments-reply-submit"

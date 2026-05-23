@@ -7,7 +7,7 @@
  * Supports: fadeIn, slideIn, scaleIn, bounce, rotate, and custom animations.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { AnimationConfig as SharedAnimationConfig } from '@/types/editor';
 
 // ==========================================================================
@@ -70,6 +70,43 @@ const DEFAULT_ANIMATION: AnimationConfig = {
     delay: 0,
     easing: 'power2.out',
     trigger: 'load',
+};
+
+const DEFAULT_CUSTOM_FROM: Record<string, unknown> = {
+    opacity: 0,
+    y: 24,
+};
+
+const DEFAULT_CUSTOM_TO: Record<string, unknown> = {
+    opacity: 1,
+    y: 0,
+};
+
+const normalizeAnimationConfig = (animation?: AnimationConfig): AnimationConfig => ({
+    ...DEFAULT_ANIMATION,
+    ...(animation || {}),
+});
+
+const stringifyCustomAnimationObject = (value: Record<string, unknown> | undefined): string => (
+    JSON.stringify(value || {}, null, 2)
+);
+
+const parseCustomAnimationObject = (value: string): { value?: Record<string, unknown>; error?: string } => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return { value: {} };
+    }
+
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return { error: 'Use a JSON object, for example { "opacity": 0, "y": 24 }.' };
+        }
+
+        return { value: parsed as Record<string, unknown> };
+    } catch {
+        return { error: 'Invalid JSON object.' };
+    }
 };
 
 // ==========================================================================
@@ -148,10 +185,24 @@ const styles = {
 // ==========================================================================
 
 export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps) {
-    const [config, setConfig] = useState<AnimationConfig>(
-        animation || DEFAULT_ANIMATION
-    );
+    const initialConfig = normalizeAnimationConfig(animation);
+    const [config, setConfig] = useState<AnimationConfig>(initialConfig);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [customFromText, setCustomFromText] = useState(() => (
+        stringifyCustomAnimationObject(initialConfig.from || DEFAULT_CUSTOM_FROM)
+    ));
+    const [customToText, setCustomToText] = useState(() => (
+        stringifyCustomAnimationObject(initialConfig.to || DEFAULT_CUSTOM_TO)
+    ));
+    const [customJsonErrors, setCustomJsonErrors] = useState<{ from?: string; to?: string }>({});
+
+    useEffect(() => {
+        const nextConfig = normalizeAnimationConfig(animation);
+        setConfig(nextConfig);
+        setCustomFromText(stringifyCustomAnimationObject(nextConfig.from || DEFAULT_CUSTOM_FROM));
+        setCustomToText(stringifyCustomAnimationObject(nextConfig.to || DEFAULT_CUSTOM_TO));
+        setCustomJsonErrors({});
+    }, [animation]);
 
     const updateConfig = useCallback(
         (updates: Partial<AnimationConfig>) => {
@@ -161,6 +212,40 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
         },
         [config, onChange]
     );
+
+    const handleAnimationTypeChange = useCallback((type: AnimationConfig['type']) => {
+        if (type === 'custom') {
+            const from = config.from || DEFAULT_CUSTOM_FROM;
+            const to = config.to || DEFAULT_CUSTOM_TO;
+            setCustomFromText(stringifyCustomAnimationObject(from));
+            setCustomToText(stringifyCustomAnimationObject(to));
+            setCustomJsonErrors({});
+            updateConfig({ type, from, to });
+            return;
+        }
+
+        updateConfig({ type });
+    }, [config.from, config.to, updateConfig]);
+
+    const handleCustomObjectChange = useCallback((target: 'from' | 'to', value: string) => {
+        if (target === 'from') {
+            setCustomFromText(value);
+        } else {
+            setCustomToText(value);
+        }
+
+        const parsed = parseCustomAnimationObject(value);
+        setCustomJsonErrors((current) => ({
+            ...current,
+            [target]: parsed.error,
+        }));
+
+        if (parsed.error || !parsed.value) {
+            return;
+        }
+
+        updateConfig(target === 'from' ? { from: parsed.value } : { to: parsed.value });
+    }, [updateConfig]);
 
     const playPreview = useCallback(() => {
         setIsPlaying(true);
@@ -191,7 +276,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                     data-testid="editor-animation-type"
                     value={config.type}
                     onChange={(e) =>
-                        updateConfig({ type: e.target.value as AnimationConfig['type'] })
+                        handleAnimationTypeChange(e.target.value as AnimationConfig['type'])
                     }
                 >
                     {ANIMATION_TYPES.map((opt) => (
@@ -283,6 +368,89 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             />
                         </div>
                     </div>
+
+                    {config.type === 'custom' && (
+                        <div
+                            style={{
+                                ...styles.section,
+                                padding: '12px',
+                                backgroundColor: '#f9fafb',
+                                borderRadius: '6px',
+                            }}
+                            data-testid="editor-animation-custom-props"
+                        >
+                            <label style={{ ...styles.label, marginBottom: '12px' }}>
+                                Custom GSAP state
+                            </label>
+                            <div style={styles.row}>
+                                <div style={styles.half}>
+                                    <label style={{ ...styles.label, fontSize: '11px' }}>
+                                        From JSON
+                                    </label>
+                                    <textarea
+                                        data-testid="editor-animation-custom-from"
+                                        value={customFromText}
+                                        onChange={(e) => handleCustomObjectChange('from', e.target.value)}
+                                        style={{ ...styles.input, minHeight: '96px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                                        aria-invalid={customJsonErrors.from ? 'true' : 'false'}
+                                    />
+                                    {customJsonErrors.from ? (
+                                        <div
+                                            data-testid="editor-animation-custom-from-error"
+                                            style={{ marginTop: '4px', color: '#b91c1c', fontSize: '11px' }}
+                                        >
+                                            {customJsonErrors.from}
+                                        </div>
+                                    ) : null}
+                                </div>
+                                <div style={styles.half}>
+                                    <label style={{ ...styles.label, fontSize: '11px' }}>
+                                        To JSON
+                                    </label>
+                                    <textarea
+                                        data-testid="editor-animation-custom-to"
+                                        value={customToText}
+                                        onChange={(e) => handleCustomObjectChange('to', e.target.value)}
+                                        style={{ ...styles.input, minHeight: '96px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                                        aria-invalid={customJsonErrors.to ? 'true' : 'false'}
+                                    />
+                                    {customJsonErrors.to ? (
+                                        <div
+                                            data-testid="editor-animation-custom-to-error"
+                                            style={{ marginTop: '4px', color: '#b91c1c', fontSize: '11px' }}
+                                        >
+                                            {customJsonErrors.to}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                data-testid="editor-animation-custom-defaults"
+                                onClick={() => {
+                                    setCustomFromText(stringifyCustomAnimationObject(DEFAULT_CUSTOM_FROM));
+                                    setCustomToText(stringifyCustomAnimationObject(DEFAULT_CUSTOM_TO));
+                                    setCustomJsonErrors({});
+                                    updateConfig({
+                                        from: DEFAULT_CUSTOM_FROM,
+                                        to: DEFAULT_CUSTOM_TO,
+                                    });
+                                }}
+                                style={{
+                                    marginTop: '10px',
+                                    padding: '8px 10px',
+                                    border: '1px solid #d1d5db',
+                                    borderRadius: '6px',
+                                    backgroundColor: '#ffffff',
+                                    fontSize: '12px',
+                                    fontWeight: 500,
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                Reset custom motion
+                            </button>
+                        </div>
+                    )}
 
                     {/* Easing */}
                     <div style={styles.section}>

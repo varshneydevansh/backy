@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
+import { mediaDeliveryCacheMetadata } from '@/lib/mediaDeliveryCache';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { BACKY_PUBLIC_CONTRACT_VERSION, publicContractJson } from '@/lib/publicContractResponse';
@@ -12,6 +13,8 @@ interface RouteParams {
     mediaId: string;
   }>;
 }
+
+export const runtime = 'nodejs';
 
 const MIN_WIDTH = 16;
 const MAX_WIDTH = 3840;
@@ -101,6 +104,33 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'MEDIA_TRANSFORM_UNSUPPORTED', 'Only public image media can be transformed.', requestId);
     }
 
+    const cacheMetadata = mediaDeliveryCacheMetadata(request, site.id, media, {
+      delivery: 'optimizer-transform',
+      width,
+      quality,
+    });
+    const commonHeaders = {
+      'cache-control': 'public, max-age=60, stale-while-revalidate=300',
+      vary: 'Accept, Origin',
+      'x-backy-cache-scope': 'discovery',
+      'x-backy-cache-revision': cacheMetadata.cacheRevision,
+      'x-backy-contract-version': BACKY_PUBLIC_CONTRACT_VERSION,
+      'x-backy-schema-version': MEDIA_TRANSFORM_SCHEMA_VERSION,
+      'x-backy-request-id': requestId,
+      'x-backy-site-id': site.id,
+      'x-backy-media-id': media.id,
+      'x-backy-transform-width': String(width),
+      'x-backy-transform-quality': String(quality),
+      etag: cacheMetadata.etag,
+    };
+
+    if (cacheMetadata.notModified) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: commonHeaders,
+      });
+    }
+
     await recordMediaDelivery({
       repositories,
       siteId: site.id,
@@ -119,16 +149,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     transformUrl.searchParams.set('q', String(quality));
 
     const response = NextResponse.redirect(transformUrl, 307);
-    response.headers.set('cache-control', 'public, max-age=60, stale-while-revalidate=300');
-    response.headers.set('vary', 'Accept, Origin');
-    response.headers.set('x-backy-cache-scope', 'discovery');
-    response.headers.set('x-backy-contract-version', BACKY_PUBLIC_CONTRACT_VERSION);
-    response.headers.set('x-backy-schema-version', MEDIA_TRANSFORM_SCHEMA_VERSION);
-    response.headers.set('x-backy-request-id', requestId);
-    response.headers.set('x-backy-site-id', site.id);
-    response.headers.set('x-backy-media-id', media.id);
-    response.headers.set('x-backy-transform-width', String(width));
-    response.headers.set('x-backy-transform-quality', String(quality));
+    Object.entries(commonHeaders).forEach(([key, value]) => {
+      response.headers.set(key, value);
+    });
     return response;
   } catch (error) {
     console.error('Public media transform API error:', error);

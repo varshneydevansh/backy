@@ -1,6 +1,6 @@
 import type { ContentRevision } from '@/lib/adminContentApi';
 
-type RevisionMetadataInput = Pick<ContentRevision, 'createdBy' | 'note' | 'snapshotStatus' | 'snapshotUpdatedAt'>;
+type RevisionMetadataInput = Pick<ContentRevision, 'createdBy' | 'note' | 'operation' | 'snapshotStatus' | 'snapshotUpdatedAt'>;
 
 const formatActorToken = (value: string) => value
   .trim()
@@ -17,6 +17,13 @@ export const getContentRevisionActorLabel = (revision: RevisionMetadataInput) =>
 };
 
 export const getContentRevisionActionLabel = (revision: RevisionMetadataInput) => {
+  const operation = revision.operation?.toLowerCase() || '';
+  if (operation === 'rollback') return 'Rollback snapshot';
+  if (operation === 'publish') return 'Publish snapshot';
+  if (operation === 'archive') return 'Archive snapshot';
+  if (operation === 'update') return 'Editor save snapshot';
+  if (operation === 'migration') return 'Migration snapshot';
+
   const note = revision.note?.toLowerCase() || '';
 
   if (note.includes('rollback') || note.includes('restore')) return 'Rollback snapshot';

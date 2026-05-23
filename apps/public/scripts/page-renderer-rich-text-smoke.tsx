@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   PageRenderer,
   applyResponsiveOverrides,
+  resolveRendererAnimationTokenRefs,
   resolveRendererBreakpoint,
   type FontAsset,
   type PageContent,
@@ -175,9 +176,60 @@ const content: PageContent = {
         ariaLabel: 'Read renderer docs',
         title: 'Renderer docs',
         underline: false,
+        download: true,
+        fileIds: ['renderer-file-id'],
+        fileMediaName: 'Renderer download.pdf',
+        fileMediaType: 'document',
+        fileMediaVisibility: 'private',
+        fileSignedUrlEndpoint: '/api/admin/sites/site_renderer_smoke/media/renderer-file-id/signed-url',
         color: '#2563eb',
         fontSize: 17,
         fontWeight: '600',
+      },
+    },
+    {
+      id: 'metadata-token-animation',
+      type: 'text',
+      x: 24,
+      y: 284,
+      width: 280,
+      height: 32,
+      props: {
+        content: 'Token-only metadata animation',
+      },
+      metadata: {
+        animation: {
+          type: 'fadeIn',
+          trigger: 'load',
+          tokenRefs: {
+            duration: 'motion.duration.slow',
+            easing: 'motion.easing.standard',
+          },
+        },
+      },
+    },
+    {
+      id: 'boolean-like-hidden-layer',
+      type: 'text',
+      x: 320,
+      y: 284,
+      width: 220,
+      height: 32,
+      visible: 'false' as unknown as boolean,
+      props: {
+        content: 'Boolean-like hidden layer',
+      },
+    },
+    {
+      id: 'boolean-like-hidden-prop',
+      type: 'text',
+      x: 320,
+      y: 324,
+      width: 220,
+      height: 32,
+      props: {
+        hidden: 'true',
+        content: 'Boolean-like hidden prop',
       },
     },
     {
@@ -831,17 +883,47 @@ const html = renderToStaticMarkup(
         unit: 8,
         section: '24px',
       },
+      motion: {
+        duration: {
+          slow: '450ms',
+        },
+        easing: {
+          standard: 'cubic-bezier(0.35, 0, 0.15, 1)',
+        },
+      },
       customCSS: '.theme-probe{color:var(--color-primary);font-family:var(--font-heading);}',
     }}
     fontAssets={[
       {
-        id: 'uploaded-font',
+        id: 'uploaded-font-family',
+        mediaId: 'uploaded-font-regular',
         family: 'Uploaded Renderer Font',
         source: 'uploaded',
-        url: '/api/sites/site_renderer_smoke/media/uploaded-font/file',
-        weights: ['700'],
-        styles: ['italic'],
+        url: '/api/sites/site_renderer_smoke/media/uploaded-font-regular/file',
+        weights: ['400', '700'],
+        styles: ['normal', 'italic'],
         display: 'swap',
+        assetIds: ['uploaded-font-regular', 'uploaded-font-italic'],
+        variants: [
+          {
+            id: 'uploaded-font-regular:400:normal',
+            mediaId: 'uploaded-font-regular',
+            family: 'Uploaded Renderer Font',
+            url: '/api/sites/site_renderer_smoke/media/uploaded-font-regular/file',
+            weight: '400',
+            style: 'normal',
+            display: 'swap',
+          },
+          {
+            id: 'uploaded-font-italic:700:italic',
+            mediaId: 'uploaded-font-italic',
+            family: 'Uploaded Renderer Font',
+            url: '/api/sites/site_renderer_smoke/media/uploaded-font-italic/file',
+            weight: '700',
+            style: 'italic',
+            display: 'optional',
+          },
+        ],
       } satisfies FontAsset,
     ]}
   />,
@@ -859,8 +941,19 @@ assert(html.includes('.theme-probe{color:var(--color-primary);font-family:var(--
 assert(html.includes('font-family: "Theme Upload"'), `Theme custom font-face was not rendered: ${html}`);
 assert(html.includes('@import url("/fonts/theme-import.css");'), `Theme CSS font import was not rendered: ${html}`);
 assert(html.includes('font-family: "Uploaded Renderer Font"'), `Uploaded font-face was not rendered: ${html}`);
+assert(html.includes('/api/sites/site_renderer_smoke/media/uploaded-font-regular/file'), `Uploaded normal font variant URL was not rendered: ${html}`);
+assert(html.includes('/api/sites/site_renderer_smoke/media/uploaded-font-italic/file'), `Uploaded italic font variant URL was not rendered: ${html}`);
+assert(html.includes('font-weight: 400'), `Uploaded normal font variant weight was not rendered: ${html}`);
 assert(html.includes('font-weight: 700'), `Uploaded font weight was not rendered: ${html}`);
 assert(html.includes('font-style: italic'), `Uploaded font style was not rendered: ${html}`);
+assert(html.includes('font-display: optional'), `Uploaded font variant display was not rendered: ${html}`);
+assert(html.includes('Token-only metadata animation'), `Metadata animation element was not rendered: ${html}`);
+assert(!html.includes('Boolean-like hidden layer'), `Boolean-like visible=false layer should not render: ${html}`);
+assert(!html.includes('Boolean-like hidden prop'), `Boolean-like props.hidden=true layer should not render: ${html}`);
+assert(html.includes('data-element-id="metadata-token-animation"'), `Metadata animation element id was not rendered: ${html}`);
+assert(html.includes('data-animation-type="fadeIn"'), `Metadata token-only animation did not render data-animation-type: ${html}`);
+assert(html.includes('&quot;duration&quot;:0.45') || html.includes('"duration":0.45'), `Metadata token-only animation duration did not resolve from theme motion tokens: ${html}`);
+assert(html.includes('cubic-bezier(0.35, 0, 0.15, 1)'), `Metadata token-only animation easing did not resolve from theme motion tokens: ${html}`);
 assert(html.includes('Slate Heading Rendered'), `Heading Slate content was not rendered: ${html}`);
 assert(html.includes('font-size:42px'), `Heading font size was not rendered: ${html}`);
 assert(html.includes('font-weight:700'), `Heading font weight was not rendered: ${html}`);
@@ -919,6 +1012,14 @@ assert(styledLink.includes('aria-label="Read renderer docs"'), `Link aria label 
 assert(styledLink.includes('title="Renderer docs"'), `Link title was not rendered: ${styledLink}`);
 assert(styledLink.includes('text-decoration:none'), `Link underline off state was not rendered: ${styledLink}`);
 assert(styledLink.includes('font-size:17px'), `Link font size was not rendered: ${styledLink}`);
+assert(styledLink.includes('download=""'), `Link download attribute was not rendered: ${styledLink}`);
+assert(styledLink.includes('data-backy-file-id="renderer-file-id"'), `Download link generic file id metadata was not rendered from fileIds: ${styledLink}`);
+assert(styledLink.includes('data-backy-file-media-id="renderer-file-id"'), `Download link media id metadata was not rendered from fileIds: ${styledLink}`);
+assert(styledLink.includes('data-backy-file-media-name="Renderer download.pdf"'), `Download link file name metadata was not rendered: ${styledLink}`);
+assert(styledLink.includes('data-backy-file-media-type="document"'), `Download link file type metadata was not rendered: ${styledLink}`);
+assert(styledLink.includes('data-backy-file-media-visibility="private"'), `Download link file visibility metadata was not rendered: ${styledLink}`);
+assert(styledLink.includes('data-backy-file-signed-url-required="true"'), `Download link private signed URL requirement was not inferred from private visibility: ${styledLink}`);
+assert(styledLink.includes('data-backy-file-signed-url-endpoint="/api/admin/sites/site_renderer_smoke/media/renderer-file-id/signed-url"'), `Download link signed URL endpoint metadata was not rendered: ${styledLink}`);
 const styledDivider = html.match(/<hr[^>]*border-top:6px dashed #dc2626[^>]*>/)?.[0] || '';
 assert(styledDivider.length > 0, `Divider output was not rendered: ${html}`);
 assert(styledDivider.includes('height:0'), `Divider height should be border-only: ${styledDivider}`);
@@ -1142,6 +1243,51 @@ assert(responsiveRoot.props.content === 'Mobile section', `Mobile props override
 assert(responsiveRoot.styles?.backgroundColor === '#f8fafc', `Mobile styles override was not applied: ${JSON.stringify(responsiveRoot.styles)}`);
 assert(responsiveRoot.children?.[0]?.x === 8, `Child mobile layout override was not applied: ${JSON.stringify(responsiveRoot.children?.[0])}`);
 assert(responsiveRoot.children?.[0]?.props.content === 'Mobile child', `Child mobile props override was not applied: ${JSON.stringify(responsiveRoot.children?.[0]?.props)}`);
+
+const resolvedMotionAnimation = resolveRendererAnimationTokenRefs(
+  {
+    type: 'fadeIn',
+    duration: 1.5,
+    easing: 'power2.out',
+    tokenRefs: {
+      duration: 'motion.duration.slow',
+      easing: 'motion.easing.standard',
+    },
+  },
+  {
+    'motion.duration.slow': 'var(--backy-duration-slow)',
+    'motion.easing.standard': 'var(--backy-easing-standard)',
+  },
+  {
+    '--backy-duration-slow': '450ms',
+    '--backy-easing-standard': 'cubic-bezier(0.2, 0, 0, 1)',
+  },
+);
+assert(resolvedMotionAnimation?.duration === 0.45, `Animation duration token was not resolved to seconds: ${JSON.stringify(resolvedMotionAnimation)}`);
+assert(resolvedMotionAnimation?.easing === 'cubic-bezier(0.2, 0, 0, 1)', `Animation easing token was not resolved: ${JSON.stringify(resolvedMotionAnimation)}`);
+const resolvedTokenOnlyMotionAnimation = resolveRendererAnimationTokenRefs(
+  {
+    type: 'fadeIn',
+    tokenRefs: {
+      duration: 'motion.duration.slow',
+      easing: 'motion.easing.standard',
+    },
+  } as unknown as Parameters<typeof resolveRendererAnimationTokenRefs>[0],
+  {
+    'motion.duration.slow': 'var(--backy-duration-slow)',
+    'motion.easing.standard': 'var(--backy-easing-standard)',
+  },
+  {
+    '--backy-duration-slow': '450ms',
+    '--backy-easing-standard': 'cubic-bezier(0.2, 0, 0, 1)',
+  },
+);
+assert(resolvedTokenOnlyMotionAnimation?.duration === 0.45, `Token-only animation duration token was not resolved: ${JSON.stringify(resolvedTokenOnlyMotionAnimation)}`);
+assert(resolvedTokenOnlyMotionAnimation?.easing === 'cubic-bezier(0.2, 0, 0, 1)', `Token-only animation easing token was not resolved: ${JSON.stringify(resolvedTokenOnlyMotionAnimation)}`);
+assert(pageRendererSource.includes('resolveRendererAnimationTokenRefs(element.animation'), 'PageRenderer must resolve animation motion token refs before rendering data-animation attrs');
+assert(pageRendererSource.includes('animation.tokenRefs.duration') && pageRendererSource.includes('animation.tokenRefs.easing'), 'PageRenderer must support duration/easing motion token refs');
+assert(pageRendererSource.includes('DEFAULT_RENDERER_ANIMATION_DURATION_SECONDS'), 'PageRenderer must keep metadata token-only animations renderable before token resolution');
+assert(pageRendererSource.includes('motion: theme?.motion'), 'PageRenderer must pass site motion tokens into the theme token compiler');
 
 const dynamicTemplateSite = {
   id: 'site_renderer_smoke',

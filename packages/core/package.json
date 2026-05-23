@@ -26,6 +26,11 @@
       "import": "./dist/repositories.mjs",
       "require": "./dist/repositories.js"
     },
+    "./theme-tokens": {
+      "types": "./dist/theme-tokens.d.ts",
+      "import": "./dist/theme-tokens.mjs",
+      "require": "./dist/theme-tokens.js"
+    },
     "./types": {
       "types": "./dist/types/index.d.ts",
       "import": "./dist/types/index.mjs",
@@ -33,8 +38,8 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/repositories.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/repositories.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/repositories.ts src/theme-tokens.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/repositories.ts src/theme-tokens.ts --format cjs,esm --dts --watch",
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit",
     "test:content-contract": "npm run build && node scripts/content-contract-smoke.mjs && node scripts/content-migrations-smoke.mjs",

@@ -241,6 +241,9 @@ const jsonRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
+const jsonArray = (value: unknown): unknown[] =>
+  Array.isArray(value) ? value : [];
+
 const countEvidence = (...checks: boolean[]): number =>
   checks.filter(Boolean).length;
 
@@ -2702,6 +2705,431 @@ const productProviderSyncFromRecord = (record: {
   return Object.keys(sync).length ? sync : null;
 };
 
+type ProductStorefrontHandoffStatus = "ready" | "attention" | "blocked";
+
+const productStatusRank = (status: ProductStorefrontHandoffStatus): number => {
+  if (status === "blocked") return 3;
+  if (status === "attention") return 2;
+  return 1;
+};
+
+const summarizeProductStatus = (
+  checks: Array<{ status: ProductStorefrontHandoffStatus }>,
+): ProductStorefrontHandoffStatus => {
+  if (checks.some((check) => productStatusRank(check.status) >= 3)) {
+    return "blocked";
+  }
+  if (checks.some((check) => check.status === "attention")) {
+    return "attention";
+  }
+  return "ready";
+};
+
+const endpointFor = (origin: string, path: string): string => {
+  const base = origin.replace(/\/+$/, "");
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+const designRecordValue = (
+  design: Record<string, unknown>,
+  key: string,
+  fallbackKey: string,
+): Record<string, unknown> => {
+  const direct = jsonRecord(design[key]);
+  if (Object.keys(direct).length > 0) return direct;
+  return jsonRecord(design[fallbackKey]);
+};
+
+const designArrayValue = (
+  design: Record<string, unknown>,
+  key: string,
+  fallbackKey: string,
+): unknown[] => {
+  const direct = jsonArray(design[key]);
+  return direct.length > 0 ? direct : jsonArray(design[fallbackKey]);
+};
+
+const buildProductDesignReadiness = (
+  design: CommerceProduct["design"] | null | undefined,
+) => {
+  const designRecord = jsonRecord(design);
+  const templateId =
+    textValue(designRecord.templateId) ||
+    textValue(designRecord.frontendDesignTemplateId);
+  const contentDocument = designRecordValue(
+    designRecord,
+    "contentDocument",
+    "frontendDesignContentDocument",
+  );
+  const elements = designArrayValue(
+    designRecord,
+    "elements",
+    "frontendDesignElements",
+  );
+  const animations = designArrayValue(
+    designRecord,
+    "animations",
+    "frontendDesignAnimations",
+  );
+  const assets = designArrayValue(designRecord, "assets", "frontendDesignAssets");
+  const editableMap = designRecordValue(
+    designRecord,
+    "editableMap",
+    "frontendDesignEditableMap",
+  );
+  const dataBindings = designRecordValue(
+    designRecord,
+    "dataBindings",
+    "frontendDesignDataBindings",
+  );
+  const bindingHints = designArrayValue(
+    designRecord,
+    "bindingHints",
+    "frontendDesignBindingHints",
+  );
+  const hasDesign = Object.keys(designRecord).length > 0;
+  const hasContentTree = Object.keys(contentDocument).length > 0 || elements.length > 0;
+  const hasEditableBindings =
+    Object.keys(editableMap).length > 0 ||
+    Object.keys(dataBindings).length > 0 ||
+    bindingHints.length > 0;
+  const missing = [
+    templateId ? "" : "templateId",
+    hasContentTree ? "" : "contentDocumentOrElements",
+    hasEditableBindings ? "" : "editableMapOrDataBindings",
+  ].filter(Boolean);
+  const status: ProductStorefrontHandoffStatus =
+    templateId && hasContentTree && hasEditableBindings
+      ? "ready"
+      : hasDesign
+        ? "attention"
+        : "attention";
+
+  return {
+    schemaVersion: "backy.product-design-readiness.v1",
+    status,
+    templateId: templateId || null,
+    hasDesign,
+    hasContentDocument: Object.keys(contentDocument).length > 0,
+    hasEditableMap: Object.keys(editableMap).length > 0,
+    hasDataBindings: Object.keys(dataBindings).length > 0,
+    counts: {
+      elements: elements.length,
+      animations: animations.length,
+      assets: assets.length,
+      bindingHints: bindingHints.length,
+    },
+    missing,
+    detail:
+      status === "ready"
+        ? `Product carries editable custom frontend design state from template ${templateId}.`
+        : hasDesign
+          ? "Product has partial frontend design metadata but is missing a template, content tree, editable map, data binding, or binding hints."
+          : "Product has no custom frontend design envelope; custom frontends can render catalog data but cannot reopen the product page as an editable design.",
+    nextAction:
+      "Attach a product frontend template or save contentDocument/elements plus editableMap/dataBindings so external builders can edit the product page design.",
+    evidence: [
+      `template=${templateId || "missing"}`,
+      `elements=${elements.length}`,
+      `animations=${animations.length}`,
+      `assets=${assets.length}`,
+      `contentDocument=${Object.keys(contentDocument).length > 0 ? "present" : "missing"}`,
+      `editableMap=${Object.keys(editableMap).length > 0 ? "present" : "missing"}`,
+      `dataBindings=${Object.keys(dataBindings).length > 0 ? "present" : "missing"}`,
+      `bindingHints=${bindingHints.length}`,
+    ],
+    secretHandling:
+      "Design readiness reports counts, booleans, and editable design-state presence only; provider secrets, private orders, raw customer payloads, and digital delivery URLs are excluded.",
+  };
+};
+
+const buildProductStorefrontHandoff = ({
+  origin,
+  siteId,
+  product,
+  sync,
+  hasCatalog,
+  hasOrderIntake,
+}: {
+  origin: string;
+  siteId: string;
+  product: CommerceProduct;
+  sync: Record<string, unknown> | null;
+  hasCatalog: boolean;
+  hasOrderIntake: boolean;
+}) => {
+  const syncRecord = jsonRecord(sync);
+  const syncProduct = jsonRecord(syncRecord.product);
+  const syncPrice = jsonRecord(syncRecord.price);
+  const catalogPath = `/api/sites/${encodeURIComponent(siteId)}/commerce/catalog`;
+  const catalogEndpoint = endpointFor(origin, catalogPath);
+  const productEndpoint = `${catalogEndpoint}?slug=${encodeURIComponent(product.slug || product.id)}`;
+  const orderIntakeEndpoint = endpointFor(origin, `/api/sites/${encodeURIComponent(siteId)}/commerce/orders`);
+  const eventsEndpoint = endpointFor(origin, `/api/sites/${encodeURIComponent(siteId)}/events?kind=commerce-product`);
+  const productApiReady = hasCatalog && product.status === "published";
+  const directCheckoutUrlConfigured = Boolean(product.checkout.url);
+  const checkoutReady = hasOrderIntake || directCheckoutUrlConfigured;
+  const deliveryReady = product.productType === "digital"
+    ? product.delivery.hasDigitalDelivery
+    : product.productType === "physical"
+      ? !product.delivery.shippingRequired || Boolean(product.delivery.shippingProfile)
+      : !product.delivery.shippingRequired;
+  const deliveryAttention = product.productType === "physical" &&
+    product.delivery.shippingRequired &&
+    (!product.delivery.weight || product.delivery.weight <= 0);
+  const providerSyncStatus = textValue(syncRecord.status) || "not-run";
+  const designReadiness = buildProductDesignReadiness(product.design);
+  const checks = [
+    {
+      key: "storefront-api",
+      label: "Storefront API",
+      status: productApiReady ? "ready" as const : "blocked" as const,
+      detail: productApiReady
+        ? "Published product catalog API can serve this product."
+        : "Publish the product catalog and selected product before storefront handoff.",
+      action: "Publish the product and verify the catalog slug response.",
+      evidence: [
+        `catalogPublished=${hasCatalog}`,
+        `productStatus=${product.status}`,
+        `productApi=${productEndpoint}`,
+      ],
+    },
+    {
+      key: "identity",
+      label: "Product identity",
+      status: product.title && (product.sku || product.slug) ? "ready" as const : "blocked" as const,
+      detail: "Storefront-safe title, slug, and SKU metadata are bounded in the handoff.",
+      action: "Add a title and SKU before exposing the product to generated storefronts.",
+      evidence: [`title=${product.title ? "present" : "missing"}`, `sku=${product.sku ? "present" : "missing"}`],
+    },
+    {
+      key: "pricing",
+      label: "Pricing",
+      status: product.price > 0 ? "ready" as const : "blocked" as const,
+      detail: product.price > 0 ? "Positive product price is configured." : "A positive product price is required.",
+      action: "Set a positive product price and currency.",
+      evidence: [`price=${product.price}`, `currency=${product.currency}`],
+    },
+    {
+      key: "inventory",
+      label: "Inventory",
+      status: product.productType !== "physical" || product.inventory.inStock || product.inventory.policy !== "deny"
+        ? "ready" as const
+        : "blocked" as const,
+      detail: product.inventory.inStock
+        ? "Inventory is currently in stock."
+        : `Inventory policy is ${product.inventory.policy}.`,
+      action: "Restock the product or switch inventory policy to continue/preorder.",
+      evidence: [
+        `productType=${product.productType}`,
+        `quantity=${product.inventory.quantity}`,
+        `policy=${product.inventory.policy}`,
+      ],
+    },
+    {
+      key: "media",
+      label: "Media",
+      status: product.imageUrl || product.galleryImages.length > 0 ? "ready" as const : "attention" as const,
+      detail: product.imageUrl || product.galleryImages.length > 0
+        ? "Primary or gallery media is configured."
+        : "Storefront cards can render, but product media is missing.",
+      action: "Attach a primary image or gallery images for storefront rendering.",
+      evidence: [`primaryImage=${product.imageUrl ? "present" : "missing"}`, `galleryImages=${product.galleryImages.length}`],
+    },
+    {
+      key: "frontend-design",
+      label: "Custom frontend design",
+      status: designReadiness.status,
+      detail: designReadiness.detail,
+      action: designReadiness.nextAction,
+      evidence: designReadiness.evidence,
+    },
+    {
+      key: "checkout",
+      label: "Checkout handoff",
+      status: checkoutReady ? "ready" as const : "blocked" as const,
+      detail: hasOrderIntake
+        ? "Backy private order intake is available."
+        : directCheckoutUrlConfigured
+          ? "Direct checkout URL is configured."
+          : "No Backy order intake or direct checkout URL is available.",
+      action: "Publish the private orders collection for Backy order intake or add a direct checkout URL.",
+      evidence: [
+        `orderIntakeReady=${hasOrderIntake}`,
+        `directCheckoutUrl=${directCheckoutUrlConfigured ? "present" : "missing"}`,
+      ],
+    },
+    {
+      key: "delivery",
+      label: "Delivery",
+      status: deliveryReady ? (deliveryAttention ? "attention" as const : "ready" as const) : "blocked" as const,
+      detail: product.productType === "digital"
+        ? (product.delivery.hasDigitalDelivery ? "Digital delivery is configured." : "Digital delivery is not configured.")
+        : product.productType === "physical"
+          ? (product.delivery.shippingRequired ? "Physical product shipping metadata is included without exposing labels." : "Product does not require shipping.")
+          : "Service product delivery does not require physical shipment.",
+      action: "Configure digital delivery, shipping profile/weight, or service delivery flags.",
+      evidence: [
+        `shippingRequired=${product.delivery.shippingRequired}`,
+        `shippingProfile=${product.delivery.shippingProfile || "missing"}`,
+        `digitalDelivery=${product.delivery.hasDigitalDelivery}`,
+      ],
+    },
+    {
+      key: "seo-merchandising",
+      label: "SEO and merchandising",
+      status: product.description.length >= 20 && Boolean(product.seoTitle || product.title)
+        ? "ready" as const
+        : "attention" as const,
+      detail: "Description, SEO title, tags, category, vendor, and featured state are summarized for builders.",
+      action: "Add stronger description, SEO title, category/tags, and vendor metadata.",
+      evidence: [
+        `descriptionChars=${product.description.length}`,
+        `seoTitle=${product.seoTitle || product.title || "missing"}`,
+        `tags=${product.tags.length}`,
+      ],
+    },
+    {
+      key: "provider-sync",
+      label: "Provider catalog sync",
+      status: providerSyncStatus === "synced" ? "ready" as const : "attention" as const,
+      detail: providerSyncStatus === "synced"
+        ? "Provider catalog sync has a successful non-secret summary."
+        : "Provider catalog sync is not required for Backy storefronts, but remains launch evidence.",
+      action: "Run provider catalog sync when launching through an external catalog provider.",
+      evidence: [
+        `provider=${textValue(syncRecord.provider) || "not-run"}`,
+        `status=${providerSyncStatus}`,
+        `executionMode=${textValue(syncRecord.executionMode) || "none"}`,
+      ],
+    },
+  ];
+  const readyCount = checks.filter((check) => check.status === "ready").length;
+  const status = summarizeProductStatus(checks);
+  const nextSteps = checks
+    .filter((check) => check.status !== "ready")
+    .map((check) => ({
+      key: check.key,
+      label: check.label,
+      priority: check.status === "blocked" ? "blocker" as const : "attention" as const,
+      action: check.action,
+    }));
+
+  return {
+    schemaVersion: "backy.product-storefront-handoff.v1",
+    generatedAt: new Date().toISOString(),
+    source: "admin-product-provider-sync-api",
+    selectedSiteId: siteId,
+    selectedProductId: product.id,
+    product: {
+      id: product.id,
+      slug: product.slug,
+      status: product.status,
+      title: product.title,
+      sku: product.sku,
+      productType: product.productType,
+    },
+    endpoints: {
+      catalog: catalogEndpoint,
+      product: productEndpoint,
+      orderIntake: orderIntakeEndpoint,
+      events: eventsEndpoint,
+      providerSync: endpointFor(
+        origin,
+        `/api/admin/sites/${encodeURIComponent(siteId)}/commerce/products/${encodeURIComponent(product.id)}/provider-sync`,
+      ),
+    },
+    pricing: {
+      price: product.price,
+      compareAtPrice: product.compareAtPrice,
+      currency: product.currency,
+    },
+    inventory: {
+      quantity: product.inventory.quantity,
+      lowStockThreshold: product.inventory.lowStockThreshold,
+      policy: product.inventory.policy,
+      inStock: product.inventory.inStock,
+      lowStock: product.inventory.lowStock,
+      outOfStock: !product.inventory.inStock,
+    },
+    media: {
+      imageUrl: product.imageUrl,
+      galleryImages: product.galleryImages,
+    },
+    merchandising: {
+      category: product.category,
+      tags: product.tags,
+      vendor: product.vendor,
+      featured: product.featured,
+      seoTitle: product.seoTitle || product.title,
+      descriptionChars: product.description.length,
+    },
+    design: product.design || null,
+    designReadiness,
+    delivery: {
+      shippingRequired: product.delivery.shippingRequired,
+      shippingProfile: product.delivery.shippingProfile,
+      weight: product.delivery.weight,
+      downloadUrlConfigured: product.delivery.hasDigitalDelivery,
+      returnPolicyConfigured: Boolean(product.delivery.returnPolicy),
+    },
+    subscription: {
+      enabled: product.subscription.enabled,
+      interval: product.subscription.interval,
+      trialDays: product.subscription.trialDays,
+    },
+    checkout: {
+      orderIntakeReady: hasOrderIntake,
+      directCheckoutUrlConfigured,
+      mode: hasOrderIntake
+        ? "backy-order-intake"
+        : directCheckoutUrlConfigured
+          ? "direct-checkout-url"
+          : "missing",
+    },
+    providerSync: {
+      provider: textValue(syncRecord.provider) || "not-run",
+      status: providerSyncStatus,
+      executionMode: textValue(syncRecord.executionMode) || "none",
+      syncedAt: textValue(syncRecord.syncedAt) || null,
+      hasProviderProductReference: Boolean(textValue(syncProduct.id)),
+      hasProviderPriceReference: Boolean(textValue(syncPrice.id)),
+      hasError: Boolean(textValue(jsonRecord(syncRecord.error).message)),
+    },
+    launchReadiness: {
+      schemaVersion: "backy.product-launch-readiness.v1",
+      status,
+      score: Math.round((readyCount / checks.length) * 100),
+      readyCount,
+      totalChecks: checks.length,
+      blockerCount: checks.filter((check) => check.status === "blocked").length,
+      attentionCount: checks.filter((check) => check.status === "attention").length,
+      checks,
+      nextSteps,
+    },
+    privacy: {
+      customerSafeFieldsOnly: true,
+      includesProviderSecrets: false,
+      includesProviderResponses: false,
+      includesPrivateOrders: false,
+      includesCustomerPayloads: false,
+      includesDigitalDeliveryUrl: false,
+      includesRawCheckoutSessions: false,
+      excludedFields: [
+        "provider credentials",
+        "raw provider responses",
+        "provider product and price ids",
+        "private orders",
+        "customer payloads",
+        "digital delivery URL",
+        "raw checkout sessions",
+      ],
+    },
+    secretHandling:
+      "Product storefront handoff is a bounded custom-frontend projection; provider secrets, raw provider responses, private orders, customer payloads, raw checkout sessions, and digital delivery URLs stay out of API JSON.",
+  };
+};
+
 const buildProductProviderCertificationEvidence = ({
   product,
   sync,
@@ -2781,6 +3209,178 @@ const buildProductProviderCertificationEvidence = ({
   };
 };
 
+const commerceCertificationGroup = (
+  certification: ReturnType<typeof buildCommerceStorefrontContract>["providerCertification"],
+  family: string,
+) => certification.groups.find((group) => group.family === family);
+
+const productCertificationExpectedEvidence = (
+  certificationEvidence: ReturnType<typeof buildProductProviderCertificationEvidence>,
+  scenarioKey: string,
+) => {
+  const scenario = certificationEvidence.scenarios.find((item) => item.key === scenarioKey);
+  return scenario ? [...scenario.expectedEvidence] : [];
+};
+
+const buildProductProviderCertificationEvidencePacket = ({
+  site,
+  product,
+  providerSync,
+  certification,
+  certificationEvidence,
+}: {
+  site: Site;
+  product: CommerceProduct;
+  providerSync: Record<string, unknown> | null;
+  certification: ReturnType<typeof buildCommerceStorefrontContract>["providerCertification"];
+  certificationEvidence: ReturnType<typeof buildProductProviderCertificationEvidence>;
+}) => {
+  const checkoutGroup = commerceCertificationGroup(certification, "Checkout and payment settlement");
+  const taxGroup = commerceCertificationGroup(certification, "Tax quote providers");
+  const shippingGroup = commerceCertificationGroup(certification, "Shipping rate, label, and tracking providers");
+  const discountGroup = commerceCertificationGroup(certification, "Discount quote providers");
+  const catalogGroup = commerceCertificationGroup(certification, "Catalog sync providers");
+  const subscriptionGroup = commerceCertificationGroup(certification, "Subscription lifecycle providers");
+  const runtime = certification.runtime;
+  const familyArtifacts = [
+    {
+      key: "payment-checkout",
+      family: "Payment checkout",
+      providerAlias: "Auto payment provider",
+      ready: runtime.paymentConfigured,
+      requiredInputs: checkoutGroup?.requiredInputs || ["BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY"],
+      expectedArtifacts: productCertificationExpectedEvidence(certificationEvidence, "checkout-settlement"),
+      captureSource: "public checkout intake response, private order record, and signed provider webhook readback",
+    },
+    {
+      key: "tax-quotes",
+      family: "Tax quotes",
+      providerAlias: "Auto tax provider",
+      ready: runtime.taxConfigured,
+      requiredInputs: taxGroup?.requiredInputs || ["BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY"],
+      expectedArtifacts: productCertificationExpectedEvidence(certificationEvidence, "quote-adjustments"),
+      captureSource: "checkout quote response and private order tax totals",
+    },
+    {
+      key: "shipping-rates",
+      family: "Shipping rates",
+      providerAlias: "Auto shipping provider",
+      ready: runtime.shippingConfigured,
+      requiredInputs: shippingGroup?.requiredInputs || ["BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY"],
+      expectedArtifacts: productCertificationExpectedEvidence(certificationEvidence, "quote-adjustments"),
+      captureSource: "checkout quote response, shipping adjustment metadata, and carrier label response",
+    },
+    {
+      key: "discount-quotes",
+      family: "Discount quotes",
+      providerAlias: "Auto discount provider",
+      ready: runtime.discountConfigured,
+      requiredInputs: discountGroup?.requiredInputs || ["BACKY_COMMERCE_DISCOUNT_PROVIDER_URL or COMMERCE_DISCOUNT_PROVIDER_URL"],
+      expectedArtifacts: productCertificationExpectedEvidence(certificationEvidence, "quote-adjustments"),
+      captureSource: "checkout quote response and private order discount fields",
+    },
+    {
+      key: "catalog-sync",
+      family: "Catalog sync",
+      providerAlias: "Auto catalog provider",
+      ready: runtime.catalogSyncConfigured || Boolean(providerSync),
+      requiredInputs: catalogGroup?.requiredInputs || ["BACKY_COMMERCE_PRODUCT_SYNC_URL or COMMERCE_PRODUCT_SYNC_URL"],
+      expectedArtifacts: productCertificationExpectedEvidence(certificationEvidence, "provider-catalog-sync"),
+      captureSource: "admin provider-sync response and stored provider-sync metadata",
+    },
+    {
+      key: "subscription-lifecycle",
+      family: "Subscription lifecycle",
+      providerAlias: "Auto subscription provider",
+      ready: runtime.subscriptionConfigured && product.subscription.enabled,
+      requiredInputs: subscriptionGroup?.requiredInputs || ["BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL"],
+      expectedArtifacts: productCertificationExpectedEvidence(certificationEvidence, "subscription-lifecycle"),
+      captureSource: "product subscription lifecycle endpoint and subscription action response",
+    },
+    {
+      key: "webhook-settlement",
+      family: "Webhooks",
+      providerAlias: "Auto webhook provider",
+      ready: runtime.webhookSecretConfigured,
+      requiredInputs: ["BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET"],
+      expectedArtifacts: productCertificationExpectedEvidence(certificationEvidence, "webhook-settlement"),
+      captureSource: "commerce webhook POST response and /events?kind=commerce-webhook readback",
+    },
+  ];
+  const missingSelectedFamilies = familyArtifacts
+    .filter((artifact) => !artifact.ready)
+    .map((artifact) => artifact.key);
+  const status = missingSelectedFamilies.length > 0
+    ? "needs-credentials"
+    : certificationEvidence.status === "ready"
+      ? "evidence-complete"
+      : "needs-scenario-evidence";
+
+  return {
+    schemaVersion: "backy.commerce-provider-certification-evidence-packet.v1",
+    generatedAt: new Date().toISOString(),
+    selectedSiteId: site.id,
+    selectedProductId: product.id,
+    status,
+    selectedFamilies: familyArtifacts.map((artifact) => artifact.key),
+    selectedProviderAliases: Object.fromEntries(familyArtifacts.map((artifact) => [
+      artifact.key,
+      artifact.providerAlias,
+    ])),
+    runtimeReadiness: {
+      loaded: true,
+      configuredFamilies: runtime.configuredFamilies,
+      missingSelectedFamilies,
+    },
+    operatorArtifacts: familyArtifacts.map((artifact) => ({
+      key: artifact.key,
+      family: artifact.family,
+      providerAlias: artifact.providerAlias,
+      status: artifact.ready ? "ready-to-run" : "needs-credentials",
+      requiredInputs: artifact.requiredInputs,
+      expectedArtifacts: artifact.expectedArtifacts,
+      captureSource: artifact.captureSource,
+      redaction: "Attach ids, timestamps, event names, totals, and status codes only; remove provider secrets, raw customer payloads, private order payloads, and full webhook bodies.",
+    })),
+    scenarioAttachments: certificationEvidence.scenarios.map((scenario) => ({
+      key: scenario.key,
+      label: scenario.label,
+      status: scenario.status,
+      evidenceCount: scenario.evidenceCount,
+      expectedEvidence: [...scenario.expectedEvidence],
+      nextAction: scenario.nextAction,
+    })),
+    commandPreview: {
+      command: certification.operatorCommandTemplate.command,
+      requiredInputs: certification.operatorCommandTemplate.requiredInputs,
+      targetInputs: certification.operatorCommandTemplate.targetInputs,
+    },
+    target: {
+      siteId: site.id,
+      productId: product.id,
+      siteSelectorEnv: "BACKY_COMMERCE_CERTIFY_SITE_ID",
+      productProviderSyncApi: `/api/admin/sites/${site.id}/commerce/products/${product.id}/provider-sync`,
+      orderAnalyticsApi: `/api/admin/sites/${site.id}/commerce/orders/analytics`,
+      publicCatalogApi: `/api/sites/${site.id}/commerce/catalog`,
+    },
+    redactionPolicy: {
+      includesProviderSecrets: false,
+      includesCustomerPayloads: false,
+      includesPrivateOrderPayloads: false,
+      includesWebhookBodies: false,
+      allowedEvidence: [
+        "provider ids and references",
+        "timestamped CI/preflight logs",
+        "quote totals and adjustment names",
+        "webhook event names and accepted status codes",
+        "scenario counts and coverage state",
+        "non-secret provider family names",
+      ],
+    },
+    secretHandling: "Redacted operator attachment manifest only; provider credentials, raw customer data, raw private orders, and webhook bodies stay out of API JSON.",
+  };
+};
+
 const buildProductProviderCertification = ({
   site,
   productRecord,
@@ -2820,6 +3420,14 @@ const buildProductProviderCertification = ({
       ? siteRecord.status
       : undefined;
 
+  const certificationEvidence = buildProductProviderCertificationEvidence({
+    product,
+    sync,
+    runtime: commerce.providerCertification.runtime,
+    hasCatalog,
+    hasOrderIntake,
+  });
+
   return {
     ...commerce.providerCertification,
     generatedAt: new Date().toISOString(),
@@ -2850,12 +3458,13 @@ const buildProductProviderCertification = ({
       commerceOrderCreate: `/api/sites/${site.id}/commerce/orders`,
     },
     providerSync: sync,
-    certificationEvidence: buildProductProviderCertificationEvidence({
+    certificationEvidence,
+    operatorEvidencePacket: buildProductProviderCertificationEvidencePacket({
+      site,
       product,
-      sync,
-      runtime: commerce.providerCertification.runtime,
-      hasCatalog,
-      hasOrderIntake,
+      providerSync: sync,
+      certification: commerce.providerCertification,
+      certificationEvidence,
     }),
     secretHandling:
       "Provider credentials stay in server environment/configuration; product provider-sync responses expose only non-secret readiness, scenario counts, endpoint names, and provider-family metadata.",
@@ -2990,6 +3599,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         settings,
       });
       const sync = productProviderSyncFromRecord(record);
+      const storefrontHandoff = buildProductStorefrontHandoff({
+        origin: request.nextUrl.origin,
+        siteId: site.id,
+        product: productRecordToCommerceProduct(sourceRecordFromRecord(record)),
+        sync,
+        hasCatalog: collection.status === "published",
+        hasOrderIntake: hasPrivateOrderIntake(ordersCollection),
+      });
 
       return productSyncResponse(
         {
@@ -3000,10 +3617,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             sync,
             product: record,
             providerCertification,
+            storefrontHandoff,
           },
           sync,
           product: record,
           providerCertification,
+          storefrontHandoff,
         },
         requestId,
         site.id,
@@ -3054,6 +3673,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       settings: getAdminSettings(),
     });
     const sync = productProviderSyncFromRecord(record);
+    const storefrontHandoff = buildProductStorefrontHandoff({
+      origin: request.nextUrl.origin,
+      siteId: site.id,
+      product: productRecordToCommerceProduct(sourceRecordFromRecord(record)),
+      sync,
+      hasCatalog: collection.status === "published",
+      hasOrderIntake: hasPrivateOrderIntake(ordersCollection),
+    });
 
     return productSyncResponse(
       {
@@ -3064,10 +3691,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           sync,
           product: record,
           providerCertification,
+          storefrontHandoff,
         },
         sync,
         product: record,
         providerCertification,
+        storefrontHandoff,
       },
       requestId,
       site.id,
@@ -3227,6 +3856,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ordersCollection,
         settings,
       });
+      const storefrontHandoff = buildProductStorefrontHandoff({
+        origin: request.nextUrl.origin,
+        siteId: site.id,
+        product: productRecordToCommerceProduct(sourceRecordFromRecord(updated)),
+        sync: productProviderSyncFromRecord(updated),
+        hasCatalog: collection.status === "published",
+        hasOrderIntake: hasPrivateOrderIntake(ordersCollection),
+      });
 
       return productSyncResponse(
         {
@@ -3238,10 +3875,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             product: updated,
             cacheInvalidation,
             providerCertification,
+            storefrontHandoff,
           },
           sync,
           product: updated,
           providerCertification,
+          storefrontHandoff,
         },
         requestId,
         site.id,
@@ -3357,6 +3996,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ordersCollection,
       settings,
     });
+    const storefrontHandoff = buildProductStorefrontHandoff({
+      origin: request.nextUrl.origin,
+      siteId: site.id,
+      product: productRecordToCommerceProduct(sourceRecordFromRecord(updated)),
+      sync: productProviderSyncFromRecord(updated),
+      hasCatalog: collection.status === "published",
+      hasOrderIntake: hasPrivateOrderIntake(ordersCollection),
+    });
 
     return productSyncResponse(
       {
@@ -3367,10 +4014,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           sync,
           product: updated,
           providerCertification,
+          storefrontHandoff,
         },
         sync,
         product: updated,
         providerCertification,
+        storefrontHandoff,
       },
       requestId,
       site.id,

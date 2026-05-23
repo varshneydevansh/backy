@@ -21,6 +21,10 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import {
+  removeRepositoryCollectionRecordMediaReferences,
+  syncRepositoryCollectionRecordMediaReferences,
+} from "@/lib/repositoryMediaReferenceSync";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
 export const runtime = "nodejs";
@@ -291,6 +295,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               record.id,
             )
           ) {
+            await removeRepositoryCollectionRecordMediaReferences({
+              mediaRepository: repositories.media,
+              siteId: site.id,
+              collectionId: collection.id,
+              recordId: record.id,
+            });
             deletedRecords.push(record);
             deleted += 1;
           } else {
@@ -400,6 +410,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               { status },
             )
           ).item;
+          await syncRepositoryCollectionRecordMediaReferences({
+            mediaRepository: repositories.media,
+            siteId: site.id,
+            collectionId: collection.id,
+            recordId: saved.id,
+            values: saved.values,
+          });
           records.push(saved);
           updatedRecords.push({ before: record, after: saved });
           updated += 1;

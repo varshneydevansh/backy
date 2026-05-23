@@ -31,6 +31,7 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import { syncRepositoryCollectionRecordMediaReferences } from "@/lib/repositoryMediaReferenceSync";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
 export const runtime = "nodejs";
@@ -531,6 +532,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                   values: toJsonRecord(values),
                 })
               ).item;
+
+          await syncRepositoryCollectionRecordMediaReferences({
+            mediaRepository: repositories.media,
+            siteId: site.id,
+            collectionId: collection.id,
+            recordId: record.id,
+            values: record.values,
+          });
 
           return { record, existing: Boolean(existing) };
         },

@@ -223,6 +223,28 @@ const canvasElementsFromRecord = (record: Record<string, unknown> | undefined): 
   Array.isArray(record?.elements) ? record.elements as CanvasElement[] : []
 );
 
+const cloneDesignStateValue = (value: unknown): unknown | undefined => {
+  if (Array.isArray(value) || isPlainRecord(value)) {
+    return JSON.parse(JSON.stringify(value));
+  }
+  return undefined;
+};
+
+const reusableSectionDesignStateFromRecord = (record: Record<string, unknown> | undefined): Partial<ReusableSectionContent> => {
+  if (!record) return {};
+  return {
+    ...(cloneDesignStateValue(record.contentDocument) ? { contentDocument: cloneDesignStateValue(record.contentDocument) as ReusableSectionContent['contentDocument'] } : {}),
+    ...(cloneDesignStateValue(record.themeTokenRefs) ? { themeTokenRefs: cloneDesignStateValue(record.themeTokenRefs) as ReusableSectionContent['themeTokenRefs'] } : {}),
+    ...(cloneDesignStateValue(record.assets) ? { assets: cloneDesignStateValue(record.assets) as ReusableSectionContent['assets'] } : {}),
+    ...(cloneDesignStateValue(record.animations) ? { animations: cloneDesignStateValue(record.animations) as ReusableSectionContent['animations'] } : {}),
+    ...(cloneDesignStateValue(record.interactions) ? { interactions: cloneDesignStateValue(record.interactions) as ReusableSectionContent['interactions'] } : {}),
+    ...(cloneDesignStateValue(record.dataBindings) ? { dataBindings: cloneDesignStateValue(record.dataBindings) as ReusableSectionContent['dataBindings'] } : {}),
+    ...(cloneDesignStateValue(record.editableMap) ? { editableMap: cloneDesignStateValue(record.editableMap) as ReusableSectionContent['editableMap'] } : {}),
+    ...(cloneDesignStateValue(record.seo) ? { seo: cloneDesignStateValue(record.seo) as ReusableSectionContent['seo'] } : {}),
+    ...(cloneDesignStateValue(record.metadata) ? { metadata: cloneDesignStateValue(record.metadata) as ReusableSectionContent['metadata'] } : {}),
+  };
+};
+
 const defaultSectionContent = (name: string, description: string, frontendDesign: SiteFrontendDesignContract | null): ReusableSectionContent => {
   const titleId = makeElementId('frontend-section-heading');
   const bodyId = makeElementId('frontend-section-text');
@@ -322,6 +344,7 @@ const buildFrontendSectionTemplateBlueprint = (
           canvasSize,
           customCSS: optionalStringFromRecord(content, 'customCSS') || frontendDesign?.tokens?.customCss || '',
           customJS: optionalStringFromRecord(content, 'customJS') || '',
+          ...reusableSectionDesignStateFromRecord(content),
         }
       : defaultSectionContent(name, description, frontendDesign),
   };
@@ -330,16 +353,41 @@ const buildFrontendSectionTemplateBlueprint = (
 const buildFrontendSectionTemplateMetadata = (
   template: SiteFrontendDesignTemplate,
   frontendDesign: SiteFrontendDesignContract | null,
-): Record<string, unknown> => ({
-  frontendDesignTemplateId: template.id,
-  frontendDesignTemplateName: template.name,
-  frontendDesignSource: frontendDesign?.source,
-  frontendDesignBindingHints: template.bindingHints || [],
-  ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
-  ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
-  ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
-  ...(frontendDesign?.tokens?.customCss ? { frontendDesignCustomCss: frontendDesign.tokens.customCss } : {}),
-});
+): Record<string, unknown> => {
+  const content = templateContentRecord(template);
+  const customCSS = optionalStringFromRecord(content, 'customCSS') || frontendDesign?.tokens?.customCss;
+  const customJS = optionalStringFromRecord(content, 'customJS');
+  const contentDocument = cloneDesignStateValue(content.contentDocument);
+  const themeTokenRefs = cloneDesignStateValue(content.themeTokenRefs);
+  const assets = cloneDesignStateValue(content.assets);
+  const animations = cloneDesignStateValue(content.animations);
+  const interactions = cloneDesignStateValue(content.interactions);
+  const dataBindings = cloneDesignStateValue(content.dataBindings);
+  const editableMap = cloneDesignStateValue(content.editableMap);
+  const seo = cloneDesignStateValue(content.seo);
+  const metadata = cloneDesignStateValue(content.metadata);
+
+  return {
+    frontendDesignTemplateId: template.id,
+    frontendDesignTemplateName: template.name,
+    frontendDesignSource: frontendDesign?.source,
+    frontendDesignBindingHints: template.bindingHints || [],
+    ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
+    ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
+    ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
+    ...(customCSS ? { frontendDesignCustomCss: customCSS } : {}),
+    ...(customJS ? { frontendDesignCustomJs: customJS } : {}),
+    ...(contentDocument ? { frontendDesignContentDocument: contentDocument } : {}),
+    ...(themeTokenRefs ? { frontendDesignThemeTokenRefs: themeTokenRefs } : {}),
+    ...(assets ? { frontendDesignAssets: assets } : {}),
+    ...(animations ? { frontendDesignAnimations: animations } : {}),
+    ...(interactions ? { frontendDesignInteractions: interactions } : {}),
+    ...(dataBindings ? { frontendDesignDataBindings: dataBindings } : {}),
+    ...(editableMap ? { frontendDesignEditableMap: editableMap } : {}),
+    ...(seo ? { frontendDesignSeo: seo } : {}),
+    ...(metadata ? { frontendDesignMetadata: metadata } : {}),
+  };
+};
 
 const getSectionFrontendTemplateId = (section: ReusableSection): string | undefined => (
   typeof section.metadata?.frontendDesignTemplateId === 'string'
@@ -387,7 +435,17 @@ const parseReusableSectionContent = (rawJson: string): ReusableSectionContent =>
     canvasSize: normalized.canvasSize,
     customCSS: typeof parsedRecord.customCSS === 'string' ? parsedRecord.customCSS : normalized.customCSS || '',
     customJS: typeof parsedRecord.customJS === 'string' ? parsedRecord.customJS : '',
+    ...reusableSectionDesignStateFromRecord(parsedRecord),
   };
+};
+
+const reusableSectionContentValidationError = (rawJson: string): string | null => {
+  try {
+    parseReusableSectionContent(rawJson);
+    return null;
+  } catch (validationError) {
+    return validationError instanceof Error ? validationError.message : 'Reusable section content must be valid.';
+  }
 };
 
 function ReusableSectionsRoute() {
@@ -414,6 +472,7 @@ function ReusableSectionsRoute() {
   const [contentJson, setContentJson] = useState(JSON.stringify(EMPTY_CONTENT, null, 2));
   const [tagsText, setTagsText] = useState('');
   const [contentValidationMessage, setContentValidationMessage] = useState<string | null>(null);
+  const [sectionFormSubmitted, setSectionFormSubmitted] = useState(false);
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
@@ -465,6 +524,17 @@ function ReusableSectionsRoute() {
   const deletePermissionTitle = canDeleteSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
   const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId) || isPermissionMatrixPending;
   const isWorkflowBusy = isBusy || isWorkflowLoading;
+  const sectionNameInlineError = sectionFormSubmitted && !formState.name.trim()
+    ? 'Section name is required before saving.'
+    : null;
+  const sectionContentInlineError = sectionFormSubmitted
+    ? reusableSectionContentValidationError(contentJson)
+    : null;
+  const sectionContentDescriptionId = sectionContentInlineError
+    ? 'reusable-section-content-error'
+    : contentValidationMessage
+      ? 'reusable-section-content-validation'
+      : undefined;
   const filteredSections = useMemo(() => (
     sections.filter((section) => {
       if (statusFilter !== 'all' && section.status !== statusFilter) return false;
@@ -792,6 +862,7 @@ function ReusableSectionsRoute() {
       setContentJson(JSON.stringify(EMPTY_CONTENT, null, 2));
       setTagsText('');
       setContentValidationMessage(null);
+      setSectionFormSubmitted(false);
       setSectionVersions(null);
       setSectionInstances(null);
       setSectionMetadata(null);
@@ -816,6 +887,7 @@ function ReusableSectionsRoute() {
     setContentJson(JSON.stringify(section.content, null, 2));
     setTagsText(section.tags.join(', '));
     setContentValidationMessage(null);
+    setSectionFormSubmitted(false);
     setVisualEditorHasUnsavedChanges(false);
     setVisualEditorResetVersion((current) => current + 1);
   };
@@ -1224,9 +1296,18 @@ function ReusableSectionsRoute() {
 
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSectionFormSubmitted(true);
     if (isBusy) return;
     if (!canEditSections) {
       showPermissionDenied('pages.edit', 'save reusable sections');
+      return;
+    }
+
+    const contentValidationError = reusableSectionContentValidationError(contentJson);
+    if (!formState.name.trim() || contentValidationError) {
+      setNotice(null);
+      setError('Fix required reusable section fields before saving.');
+      setContentValidationMessage(null);
       return;
     }
 
@@ -1255,6 +1336,7 @@ function ReusableSectionsRoute() {
       setSelectedSectionId(saved.id);
       setFormFromSection(saved);
       setContentValidationMessage(`${saved.content.elements.length} reusable root${saved.content.elements.length === 1 ? '' : 's'} saved.`);
+      setSectionFormSubmitted(false);
       updateRouteSearch({ sectionId: saved.id });
       setNotice(`${saved.name} saved.`);
     } catch (saveError) {
@@ -1322,6 +1404,7 @@ function ReusableSectionsRoute() {
       setContentJson(JSON.stringify(saved.content, null, 2));
       setTagsText(saved.tags.join(', '));
       setVisualEditorHasUnsavedChanges(false);
+      setSectionFormSubmitted(false);
       setContentValidationMessage(`${saved.content.elements.length} reusable root${saved.content.elements.length === 1 ? '' : 's'} saved from visual editor.`);
       updateRouteSearch({ sectionId: saved.id });
       setNotice(`${saved.name} saved from the visual editor.`);
@@ -2054,18 +2137,28 @@ function ReusableSectionsRoute() {
             icon={<Code2 className="size-4" />}
           />
           <PanelContent>
-            <form onSubmit={handleFormSubmit} className="space-y-4">
+            <form onSubmit={handleFormSubmit} className="space-y-4" noValidate>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">Name</span>
                   <input
+                    id="reusable-section-name-input"
                     value={formState.name}
                     onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
                     disabled={isBusy || !canEditSections}
                     title={!canEditSections ? editPermissionTitle : undefined}
+                    aria-invalid={Boolean(sectionNameInlineError)}
+                    aria-describedby={sectionNameInlineError ? 'reusable-section-name-error' : undefined}
                     data-testid="reusable-section-name"
-                  className="w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60"
-                  required
+                  className={cn(
+                    'w-full rounded-lg border bg-background px-3 py-2 disabled:cursor-not-allowed disabled:opacity-60',
+                    sectionNameInlineError && 'border-destructive focus-visible:outline-destructive',
+                  )}
                 />
+                {sectionNameInlineError ? (
+                  <p id="reusable-section-name-error" className="text-xs font-medium text-destructive" data-testid="reusable-section-name-error">
+                    {sectionNameInlineError}
+                  </p>
+                ) : null}
               </label>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
@@ -2135,28 +2228,37 @@ function ReusableSectionsRoute() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">Content JSON</span>
                   <div className="flex flex-wrap gap-2">
-                      <Button size="sm" onClick={insertStarterContent} disabled={isBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Sparkles className="size-3.5" />} data-testid="reusable-section-insert-starter">
-                        Insert starter
-                      </Button>
-                      <Button size="sm" onClick={normalizeContentJsonForEditing} disabled={isBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Code2 className="size-3.5" />} data-testid="reusable-section-format-json">
-                        Format JSON
-                      </Button>
+                    <Button size="sm" onClick={insertStarterContent} disabled={isBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Sparkles className="size-3.5" />} data-testid="reusable-section-insert-starter">
+                      Insert starter
+                    </Button>
+                    <Button size="sm" onClick={normalizeContentJsonForEditing} disabled={isBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Code2 className="size-3.5" />} data-testid="reusable-section-format-json">
+                      Format JSON
+                    </Button>
                   </div>
                 </div>
-                  <textarea
-                    value={contentJson}
+                <textarea
+                  value={contentJson}
                   onChange={(event) => {
                     setContentJson(event.target.value);
                     setContentValidationMessage(null);
                   }}
-                    disabled={isBusy || !canEditSections}
-                    title={!canEditSections ? editPermissionTitle : undefined}
-                    rows={14}
+                  disabled={isBusy || !canEditSections}
+                  title={!canEditSections ? editPermissionTitle : undefined}
+                  aria-invalid={Boolean(sectionContentInlineError)}
+                  aria-describedby={sectionContentDescriptionId}
+                  rows={14}
                   spellCheck={false}
                   data-testid="reusable-section-content-json"
-                  className="w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                  className={cn(
+                    'w-full rounded-lg border bg-background px-3 py-2 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-60',
+                    sectionContentInlineError && 'border-destructive focus-visible:outline-destructive',
+                  )}
                 />
-                {contentValidationMessage ? (
+                {sectionContentInlineError ? (
+                  <p id="reusable-section-content-error" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive" data-testid="reusable-section-content-error">
+                    {sectionContentInlineError}
+                  </p>
+                ) : contentValidationMessage ? (
                   <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700" data-testid="reusable-section-content-validation">
                     {contentValidationMessage}
                   </p>
@@ -2188,9 +2290,9 @@ function ReusableSectionsRoute() {
                 >
                   Reset
                 </Button>
-                  <Button type="submit" variant="primary" disabled={isBusy || formState.name.trim().length === 0 || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Save className="size-4" />} data-testid="reusable-section-save">
+                  <Button type="submit" variant="primary" disabled={isBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Save className="size-4" />} data-testid="reusable-section-save">
                     {isSaving ? 'Saving...' : 'Save section'}
-                </Button>
+                  </Button>
               </div>
             </form>
           </PanelContent>

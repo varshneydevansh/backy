@@ -38,6 +38,18 @@
             "mono": { "type": "string" }
           }
         },
+        "customFonts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" },
+              "url": { "type": "string" }
+            },
+            "required": ["name", "url"]
+          }
+        },
         "scale": {
           "type": "object",
           "additionalProperties": { "type": "string" }

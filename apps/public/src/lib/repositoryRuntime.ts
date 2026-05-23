@@ -7,6 +7,14 @@ import {
   assertProductionDemoModeAllowed,
   shouldUseDemoStoreFallback,
 } from './repositoryRuntimePolicy';
+import {
+  removeRepositoryCollectionRecordMediaReferences,
+  removeRepositoryPageMediaReferences,
+  removeRepositoryPostMediaReferences,
+  syncRepositoryCollectionRecordMediaReferences,
+  syncRepositoryPageMediaReferences,
+  syncRepositoryPostMediaReferences,
+} from './repositoryMediaReferenceSync';
 export { shouldUseDemoStoreFallback } from './repositoryRuntimePolicy';
 
 type DatabaseRepositories = ReturnType<typeof import('@backy/db/repositories').createDatabaseRepositories>;
@@ -15,6 +23,178 @@ type DatabaseAdapterModule = {
 };
 type DatabaseRepositoryModule = {
   createDatabaseRepositories: (input: { adapter: DatabaseAdapter }) => DatabaseRepositories;
+};
+
+const withRepositoryMediaReferenceSync = (
+  repositories: DatabaseRepositories,
+): DatabaseRepositories => {
+  const collections = repositories.collections;
+  const pages = repositories.pages;
+  const posts = repositories.posts;
+
+  return {
+    ...repositories,
+    pages: {
+      ...pages,
+      async create(input, context) {
+        const result = await pages.create(input, context);
+        await syncRepositoryPageMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          pageId: result.item.id,
+          content: result.item.content,
+          meta: result.item.meta,
+        });
+        return result;
+      },
+      async update(siteId, pageId, input, context) {
+        const result = await pages.update(siteId, pageId, input, context);
+        await syncRepositoryPageMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          pageId: result.item.id,
+          content: result.item.content,
+          meta: result.item.meta,
+        });
+        return result;
+      },
+      async publish(siteId, pageId, context) {
+        const result = await pages.publish(siteId, pageId, context);
+        await syncRepositoryPageMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          pageId: result.item.id,
+          content: result.item.content,
+          meta: result.item.meta,
+        });
+        return result;
+      },
+      async archive(siteId, pageId, context) {
+        const result = await pages.archive(siteId, pageId, context);
+        await syncRepositoryPageMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          pageId: result.item.id,
+          content: result.item.content,
+          meta: result.item.meta,
+        });
+        return result;
+      },
+      async delete(siteId, pageId, context) {
+        const existingPage = await pages.getById(siteId, pageId, context);
+        const deleted = await pages.delete(siteId, pageId, context);
+        if (deleted) {
+          await removeRepositoryPageMediaReferences({
+            mediaRepository: repositories.media,
+            siteId,
+            pageId: existingPage?.id || pageId,
+          });
+        }
+        return deleted;
+      },
+    },
+    posts: {
+      ...posts,
+      async create(input, context) {
+        const result = await posts.create(input, context);
+        await syncRepositoryPostMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          postId: result.item.id,
+          content: result.item.content,
+          meta: result.item.meta,
+          featuredImageId: result.item.featuredImageId,
+        });
+        return result;
+      },
+      async update(siteId, postId, input, context) {
+        const result = await posts.update(siteId, postId, input, context);
+        await syncRepositoryPostMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          postId: result.item.id,
+          content: result.item.content,
+          meta: result.item.meta,
+          featuredImageId: result.item.featuredImageId,
+        });
+        return result;
+      },
+      async publish(siteId, postId, context) {
+        const result = await posts.publish(siteId, postId, context);
+        await syncRepositoryPostMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          postId: result.item.id,
+          content: result.item.content,
+          meta: result.item.meta,
+          featuredImageId: result.item.featuredImageId,
+        });
+        return result;
+      },
+      async archive(siteId, postId, context) {
+        const result = await posts.archive(siteId, postId, context);
+        await syncRepositoryPostMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          postId: result.item.id,
+          content: result.item.content,
+          meta: result.item.meta,
+          featuredImageId: result.item.featuredImageId,
+        });
+        return result;
+      },
+      async delete(siteId, postId, context) {
+        const existingPost = await posts.getById(siteId, postId, context);
+        const deleted = await posts.delete(siteId, postId, context);
+        if (deleted) {
+          await removeRepositoryPostMediaReferences({
+            mediaRepository: repositories.media,
+            siteId,
+            postId: existingPost?.id || postId,
+          });
+        }
+        return deleted;
+      },
+    },
+    collections: {
+      ...collections,
+      async createRecord(input, context) {
+        const result = await collections.createRecord(input, context);
+        await syncRepositoryCollectionRecordMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          collectionId: result.item.collectionId,
+          recordId: result.item.id,
+          values: result.item.values,
+        });
+        return result;
+      },
+      async updateRecord(siteId, collectionId, recordId, input, context) {
+        const result = await collections.updateRecord(siteId, collectionId, recordId, input, context);
+        await syncRepositoryCollectionRecordMediaReferences({
+          mediaRepository: repositories.media,
+          siteId: result.item.siteId,
+          collectionId: result.item.collectionId,
+          recordId: result.item.id,
+          values: result.item.values,
+        });
+        return result;
+      },
+      async deleteRecord(siteId, collectionId, recordId, context) {
+        const existingRecord = await collections.getRecordById(siteId, collectionId, recordId, context);
+        const deleted = await collections.deleteRecord(siteId, collectionId, recordId, context);
+        if (deleted) {
+          await removeRepositoryCollectionRecordMediaReferences({
+            mediaRepository: repositories.media,
+            siteId,
+            collectionId,
+            recordId: existingRecord?.id || recordId,
+          });
+        }
+        return deleted;
+      },
+    },
+  };
 };
 const importDatabaseAdapters = async (): Promise<DatabaseAdapterModule> => {
   const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<DatabaseAdapterModule>;
@@ -70,7 +250,7 @@ export async function createPublicRepositoryRuntime(
 
   return {
     mode: 'database',
-    repositories: createDatabaseRepositories({ adapter }),
+    repositories: withRepositoryMediaReferenceSync(createDatabaseRepositories({ adapter })),
   };
 }
 

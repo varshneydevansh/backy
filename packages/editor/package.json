@@ -8,7 +8,8 @@
         "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
         "test:inline-markdown": "tsx scripts/inline-markdown-smoke.ts",
         "test:list-indent": "tsx scripts/list-indent-smoke.ts",
-        "test": "npm run test:inline-markdown && npm run test:list-indent"
+        "test:toolbar-controls": "tsx scripts/toolbar-controls-smoke.ts",
+        "test": "npm run test:inline-markdown && npm run test:list-indent && npm run test:toolbar-controls"
     },
     "peerDependencies": {
         "react": "^18.2.0",

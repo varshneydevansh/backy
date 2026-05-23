@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { getAdminBlogPostById, getSiteByIdOrSlug, listContentRevisions } from '@/lib/backyStore';
+import { withContentRevisionBranchMetadata } from '@/lib/contentRevisionBranchMetadata';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { resolveRepositorySite } from '@/lib/repositoryContentWorkflow';
 
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          revisions: result.items,
+          revisions: withContentRevisionBranchMetadata(result.items, 'admin-blog-revisions-api'),
           pagination: result.pagination,
         },
       });
@@ -82,7 +83,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       requestId,
-      data: payload,
+      data: {
+        ...payload,
+        revisions: withContentRevisionBranchMetadata(payload.revisions, 'admin-blog-revisions-api'),
+      },
     });
   } catch (error) {
     console.error('Admin blog revisions API error:', error);

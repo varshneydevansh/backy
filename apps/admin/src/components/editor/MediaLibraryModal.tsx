@@ -29,6 +29,13 @@ type MediaLibraryTab = 'library' | 'upload';
 type MediaInsertSizePreset = 'fill-frame' | 'fit-inside' | 'natural' | 'square' | 'hero';
 type FontDisplayMode = 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
 const MEDIA_PICKER_PAGE_SIZE = 100;
+const FILE_BUCKET_MEDIA_TYPES = new Set<MediaAsset['type']>(['file', 'other']);
+
+const mediaTypeMatchesFilter = (type: MediaAsset['type'], filter: UploadFilter) => {
+  if (filter === 'all') return true;
+  if (filter === 'file') return FILE_BUCKET_MEDIA_TYPES.has(type);
+  return type === filter;
+};
 
 export interface MediaSelectionOptions {
   insertPreset: MediaInsertSizePreset;
@@ -64,6 +71,7 @@ interface MediaLibraryModalProps {
   initialTab?: MediaLibraryTab;
   initialUploadFilter?: UploadFilter;
   replaceAssetId?: string | null;
+  allowPrivateSelection?: boolean;
   canView?: boolean;
   canCreate?: boolean;
   viewDisabledReason?: string;
@@ -116,6 +124,7 @@ export function MediaLibraryModal({
   initialTab = 'library',
   initialUploadFilter = 'all',
   replaceAssetId = null,
+  allowPrivateSelection = false,
   canView = true,
   canCreate = true,
   viewDisabledReason = 'You do not have permission to view media.',
@@ -133,6 +142,7 @@ export function MediaLibraryModal({
   const [includeNestedFolders, setIncludeNestedFolders] = useState(true);
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderParentId, setNewFolderParentId] = useState<'root' | string>('root');
+  const [newFolderSubmitted, setNewFolderSubmitted] = useState(false);
   const [uploadTags, setUploadTags] = useState('');
   const [insertSizePreset, setInsertSizePreset] = useState<MediaInsertSizePreset>('fill-frame');
   const [imageObjectFit, setImageObjectFit] = useState<'cover' | 'contain' | 'fill' | 'none'>('cover');
@@ -172,6 +182,7 @@ export function MediaLibraryModal({
     setIncludeNestedFolders(true);
     setNewFolderName('');
     setNewFolderParentId('root');
+    setNewFolderSubmitted(false);
     setSearchQuery('');
     setInsertSizePreset('fill-frame');
     setImageObjectFit('cover');
@@ -209,7 +220,7 @@ export function MediaLibraryModal({
 
   const allowedTypesSet = useMemo(() => {
     if (allowedTypes === 'any') return new Set(['image', 'video', 'audio', 'file', 'font', 'other']);
-    if (allowedTypes === 'file') return new Set(['file']);
+    if (allowedTypes === 'file') return new Set(['file', 'other']);
     return new Set([allowedTypes]);
   }, [allowedTypes]);
 
@@ -258,7 +269,9 @@ export function MediaLibraryModal({
 
   const allowedTypeOptions = useMemo(
     () => (['all', 'image', 'video', 'audio', 'file', 'font', 'other'] as const).filter((filter) => (
-      filter === 'all' ? allowedTypes === 'any' : allowedTypes === 'any' || allowedTypesSet.has(filter)
+      filter === 'all'
+        ? allowedTypes === 'any' || allowedTypes === 'file'
+        : allowedTypes === 'any' || allowedTypesSet.has(filter)
     )),
     [allowedTypes, allowedTypesSet]
   );
@@ -321,6 +334,23 @@ export function MediaLibraryModal({
     if (uploadFolderId === 'root') return 'Root library';
     return folderPathById.get(uploadFolderId) || 'Selected folder';
   }, [folderPathById, uploadFolderId]);
+
+  const newFolderInlineError = useMemo(() => {
+    if (!newFolderSubmitted) return null;
+
+    const name = newFolderName.trim();
+    if (!name) {
+      return 'Enter a folder name before creating a media folder.';
+    }
+
+    const parentId = newFolderParentId === 'root' ? null : newFolderParentId;
+    const duplicate = folderOptions.some((folder) => (
+      (folder.parentId || null) === parentId &&
+      folder.name.trim().toLowerCase() === name.toLowerCase()
+    ));
+
+    return duplicate ? `A sibling media folder named "${name}" already exists.` : null;
+  }, [folderOptions, newFolderName, newFolderParentId, newFolderSubmitted]);
 
   const libraryFolderIds = useMemo(() => {
     if (libraryFolderFilter === 'all') {
@@ -393,7 +423,7 @@ export function MediaLibraryModal({
       :
       normalized.filter((item) => {
         if (!allowedTypesSet.has(item.type)) return false;
-        if (libraryTypeFilter !== 'all' && item.type !== libraryTypeFilter) return false;
+        if (libraryTypeFilter !== 'all' && !mediaTypeMatchesFilter(item.type, libraryTypeFilter)) return false;
         if (libraryFolderFilter === 'root' && item.folderId) return false;
         if (libraryFolderFilter !== 'all' && libraryFolderFilter !== 'root') {
           if (!item.folderId || !libraryFolderIds?.has(item.folderId)) return false;
@@ -657,7 +687,7 @@ export function MediaLibraryModal({
   );
 
   const handleSelectMedia = async (item: MediaAsset) => {
-    if (item.visibility === 'private') {
+    if (item.visibility === 'private' && !allowPrivateSelection) {
       setError('Private media cannot be inserted directly into public editor fields. Generate a signed URL from Media details instead.');
       return;
     }
@@ -695,6 +725,7 @@ export function MediaLibraryModal({
 
   const handleCreateFolder = async () => {
     if (isCreatingFolder || isUploading) return;
+    setNewFolderSubmitted(true);
     if (!canCreate) {
       setError(createDisabledReason);
       return;
@@ -702,7 +733,7 @@ export function MediaLibraryModal({
 
     const name = newFolderName.trim();
     if (!name) {
-      setError('Enter a folder name before creating a media folder.');
+      setError('Fix media folder fields before creating.');
       return;
     }
 
@@ -712,7 +743,7 @@ export function MediaLibraryModal({
       folder.name.trim().toLowerCase() === name.toLowerCase()
     ));
     if (duplicate) {
-      setError(`A sibling media folder named "${name}" already exists.`);
+      setError('Fix media folder fields before creating.');
       return;
     }
 
@@ -726,6 +757,7 @@ export function MediaLibraryModal({
       setLibraryFolderFilter(folder.id);
       setNewFolderParentId(folder.id);
       setNewFolderName('');
+      setNewFolderSubmitted(false);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create media folder');
     } finally {
@@ -742,7 +774,12 @@ export function MediaLibraryModal({
       <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]">
         <select
           value={newFolderParentId}
-          onChange={(event) => setNewFolderParentId(event.target.value)}
+          onChange={(event) => {
+            setNewFolderParentId(event.target.value);
+            if (error === 'Fix media folder fields before creating.') {
+              setError(null);
+            }
+          }}
           disabled={isUploading || isCreatingFolder || !canCreate}
           title={canCreate ? undefined : createDisabledReason}
           data-testid="media-library-create-folder-parent"
@@ -757,7 +794,12 @@ export function MediaLibraryModal({
         <input
           type="text"
           value={newFolderName}
-          onChange={(event) => setNewFolderName(event.target.value)}
+          onChange={(event) => {
+            setNewFolderName(event.target.value);
+            if (error === 'Fix media folder fields before creating.') {
+              setError(null);
+            }
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
@@ -767,13 +809,15 @@ export function MediaLibraryModal({
           disabled={isUploading || isCreatingFolder || !canCreate}
           title={canCreate ? undefined : createDisabledReason}
           data-testid="media-library-create-folder-name"
+          aria-invalid={Boolean(newFolderInlineError)}
+          aria-describedby={newFolderInlineError ? 'media-library-create-folder-name-error' : undefined}
           className="min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="Campaign assets"
         />
         <button
           type="button"
           onClick={() => void handleCreateFolder()}
-          disabled={isUploading || isCreatingFolder || !newFolderName.trim() || !canCreate}
+          disabled={isUploading || isCreatingFolder || !canCreate}
           title={canCreate ? undefined : createDisabledReason}
           data-testid="media-library-create-folder"
           className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
@@ -781,6 +825,11 @@ export function MediaLibraryModal({
           {isCreatingFolder ? 'Creating' : 'Create'}
         </button>
       </div>
+      {newFolderInlineError && (
+        <p id="media-library-create-folder-name-error" className="mt-2 text-xs font-medium text-destructive" data-testid="media-library-create-folder-name-error">
+          {newFolderInlineError}
+        </p>
+      )}
     </div>
   );
 
@@ -794,13 +843,7 @@ export function MediaLibraryModal({
 
     const shouldKeepFile = (file: File) => {
       const resolvedType = getUploadType(file);
-      if (filterHint === 'all') return true;
-      if (filterHint === 'image') return resolvedType === 'image';
-      if (filterHint === 'video') return resolvedType === 'video';
-      if (filterHint === 'audio') return resolvedType === 'audio';
-      if (filterHint === 'font') return resolvedType === 'font';
-      if (filterHint === 'other') return resolvedType === 'other';
-      return resolvedType === 'file';
+      return mediaTypeMatchesFilter(resolvedType, filterHint);
     };
 
     const selectedFiles = Array.from(files);
@@ -1082,7 +1125,11 @@ export function MediaLibraryModal({
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                     {filteredMedia.map((item) => {
                       const isPrivateAsset = item.visibility === 'private';
+                      const privateSelectionDisabled = isPrivateAsset && !allowPrivateSelection;
                       const isSelecting = selectingMediaId === item.id;
+                      const folderPath = item.organization?.folderPath || (item.folderId ? folderPathById.get(item.folderId) || '' : 'Root');
+                      const folderSegments = item.organization?.folderSegments || [];
+                      const folderAncestorIds = item.organization?.folderAncestors?.map((folder) => folder.id) || [];
                       return (
                       <button
                         key={item.id}
@@ -1094,25 +1141,38 @@ export function MediaLibraryModal({
                         onMouseEnter={() => {
                           if (item.type === 'image') setFocalPreviewAssetId(item.id);
                         }}
-                        disabled={Boolean(selectingMediaId) || isPrivateAsset}
-                        aria-disabled={isPrivateAsset}
-                        title={isPrivateAsset ? 'Private media requires signed delivery and cannot be inserted directly into public page fields.' : undefined}
+                        disabled={Boolean(selectingMediaId) || privateSelectionDisabled}
+                        aria-disabled={privateSelectionDisabled}
+                        title={
+                          privateSelectionDisabled
+                            ? 'Private media requires signed delivery and cannot be inserted directly into public page fields.'
+                            : isPrivateAsset
+                              ? 'Private file will be inserted with signed-delivery metadata.'
+                              : undefined
+                        }
                         data-testid="media-library-item"
                         data-media-id={item.id}
                         data-media-name={item.name}
                         data-media-type={item.type}
                         data-media-url={item.url}
-                        data-media-private-select-disabled={isPrivateAsset ? 'true' : 'false'}
+                        data-media-private-select-disabled={privateSelectionDisabled ? 'true' : 'false'}
+                        data-media-private-select-allowed={isPrivateAsset && allowPrivateSelection ? 'true' : 'false'}
                         data-media-scope={item.scope || 'global'}
                         data-media-scope-target-id={item.scopeTargetId || ''}
                         data-media-folder-id={item.folderId || ''}
+                        data-media-folder-path={folderPath}
+                        data-media-folder-segments={folderSegments.join('/')}
+                        data-media-folder-ancestor-ids={folderAncestorIds.join('/')}
+                        data-media-organization-schema={item.organization?.schemaVersion || ''}
+                        data-media-organization-root={item.organization?.root ? 'true' : 'false'}
+                        data-media-organization-missing-folder={item.organization?.missingFolder ? 'true' : 'false'}
                         data-insert-preset={insertSizePreset}
                         data-image-object-fit={imageObjectFit}
                         data-image-focal-x={imageFocalX}
                         data-image-focal-y={imageFocalY}
                         className={cn(
                           'group relative overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30',
-                          (isPrivateAsset || selectingMediaId) && 'cursor-not-allowed opacity-65 hover:translate-y-0 hover:border-border hover:shadow-sm'
+                          (privateSelectionDisabled || selectingMediaId) && 'cursor-not-allowed opacity-65 hover:translate-y-0 hover:border-border hover:shadow-sm'
                         )}
                       >
                         <div className="aspect-[4/3] overflow-hidden bg-muted">

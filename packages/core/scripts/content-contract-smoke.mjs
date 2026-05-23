@@ -53,6 +53,16 @@ const pageDocument = createBackyContentDocument({
               height: 120,
             },
           },
+          animation: {
+            type: 'fadeIn',
+            duration: 0.2,
+            easing: 'cubic-bezier(0.2, 0, 0, 1)',
+            trigger: 'load',
+            tokenRefs: {
+              duration: 'motion.duration.normal',
+              easing: 'motion.easing.standard',
+            },
+          },
           dataBindings: [
             {
               id: 'bind_hero_title',
@@ -150,6 +160,8 @@ assert(isBackyContentDocument(pageDocument), 'Expected page document type guard 
 const index = buildBackyElementIndex(pageDocument.elements);
 assert(index.order.join(',') === 'hero,hero_title', `Unexpected element order ${index.order.join(',')}`);
 assert(index.byId.hero_title?.type === 'heading', 'Expected flat lookup by id');
+assert(index.byId.hero_title?.parentId === 'hero', 'Expected canonical children to expose parentId for editor grouping round-trips');
+assert(index.byId.hero_title?.animation?.tokenRefs?.easing === 'motion.easing.standard', 'Expected canonical animation token refs');
 assert(findBackyElementById(pageDocument.elements, 'hero_title')?.id === 'hero_title', 'Expected findBackyElementById lookup');
 
 const invalidDocument = {

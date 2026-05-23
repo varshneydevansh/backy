@@ -27,7 +27,11 @@ function ForgotPasswordPage() {
   const [deliveryStatus, setDeliveryStatus] = useState<string | null>(null);
   const [localRecoveryUrl, setLocalRecoveryUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [recoverySubmitted, setRecoverySubmitted] = useState(false);
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const emailInlineError = recoverySubmitted && !emailIsValid
+    ? 'Enter a valid workspace email address.'
+    : null;
   const readiness = useMemo(() => Math.round(([emailIsValid, !isSubmitting].filter(Boolean).length / 2) * 100), [emailIsValid, isSubmitting]);
 
   const handleRequestRecovery = async (event: React.FormEvent) => {
@@ -35,11 +39,12 @@ function ForgotPasswordPage() {
     if (isSubmitting) return;
 
     const normalizedEmail = email.trim().toLowerCase();
+    setRecoverySubmitted(true);
     setEmail(normalizedEmail);
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       setRecoveryState('error');
-      setMessage('Enter a valid workspace email before requesting recovery.');
+      setMessage('Fix the email field before requesting recovery.');
       return;
     }
 
@@ -128,7 +133,14 @@ function ForgotPasswordPage() {
             </div>
           </div>
 
-          <form onSubmit={handleRequestRecovery} className="rounded-lg border border-border bg-card p-6 shadow-sm">
+          <form
+            onSubmit={handleRequestRecovery}
+            noValidate
+            data-testid="forgot-password-form"
+            data-recovery-status={recoveryState}
+            data-readiness={readiness}
+            className="rounded-lg border border-border bg-card p-6 shadow-sm"
+          >
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-primary/10 p-2 text-primary">
                 <KeyRound className="h-5 w-5" />
@@ -147,6 +159,7 @@ function ForgotPasswordPage() {
                 <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   id="recovery-email"
+                  data-testid="forgot-password-email-input"
                   type="email"
                   value={email}
                   onChange={(event) => {
@@ -163,11 +176,18 @@ function ForgotPasswordPage() {
                   )}
                   autoComplete="email"
                   disabled={isSubmitting}
+                  aria-invalid={Boolean(emailInlineError)}
+                  aria-describedby={emailInlineError ? 'recovery-email-error' : undefined}
                 />
                 {emailIsValid && (
                   <CheckCircle2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600" />
                 )}
               </div>
+              {emailInlineError && (
+                <p id="recovery-email-error" data-testid="forgot-password-email-error" className="mt-1 text-xs font-medium text-red-600" role="alert">
+                  {emailInlineError}
+                </p>
+              )}
             </label>
 
             {message && (
@@ -177,6 +197,8 @@ function ForgotPasswordPage() {
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                   : 'border-amber-200 bg-amber-50 text-amber-800',
               )}
+                role={recoveryState === 'error' ? 'alert' : 'status'}
+                data-testid="forgot-password-message"
               >
                 <div>{message}</div>
                 {deliveryStatus && (
@@ -198,7 +220,7 @@ function ForgotPasswordPage() {
             <div className="mt-6 grid gap-3">
               <Button
                 type="submit"
-                disabled={!emailIsValid || isSubmitting}
+                disabled={isSubmitting}
                 iconStart={isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
                 className="w-full"
               >

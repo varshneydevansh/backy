@@ -12,6 +12,9 @@ const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Co
 const PORT = Number(process.env.BACKY_SETTINGS_CDP_PORT || 9376);
 const SCREENSHOT_PATH = process.env.BACKY_SETTINGS_SCREENSHOT || path.join(os.tmpdir(), 'backy-settings-smoke.png');
 const STALE_ADMIN_API_KEY = 'sk_live_stale_settings_smoke_admin_key';
+const SOURCE_ONLY_MODE = process.env.BACKY_SETTINGS_SOURCE_ONLY === '1'
+  || process.env.BACKY_SETTINGS_SMOKE_SOURCE_ONLY === '1'
+  || process.env.BACKY_SETTINGS_SOURCE_GUARD === '1';
 let apiAdminSessionToken = '';
 
 const commerceWebhookSecretReference = (suffix) => `env:STRIPE_WEBHOOK_SECRET_${suffix.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`;
@@ -42,6 +45,7 @@ const assert = (condition, message) => {
 
 const assertSettingsSourceContracts = () => {
   const settingsRoute = fs.readFileSync(new URL('../src/routes/settings.tsx', import.meta.url), 'utf8');
+  const adminContentApiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
   const requiredSettingsRouteSnippets = [
     'formatSiteScopedLocaleRows',
     'parseSiteScopedLocaleRows',
@@ -73,14 +77,45 @@ const assertSettingsSourceContracts = () => {
     'title="No site settings updates yet"',
     'Save scoped SEO, analytics, localization, or comment policy changes to start this request-id audit trail.',
     'title="No matching settings audit events"',
-    'Change the audit filter or perform a settings, provider, deployment, notification, or API-key action to populate this trail.',
-    'Issue a scoped admin service key',
-    'non-secret fingerprints and actor details',
+	    'Change the audit filter or perform a settings, provider, deployment, notification, or API-key action to populate this trail.',
+	    'Issue a scoped admin service key',
+	    'const [notificationWebhookSubmitted, setNotificationWebhookSubmitted] = useState(false);',
+	    'const notificationWebhookUrlInlineError = notificationWebhookSubmitted',
+	    'data-testid="settings-notification-webhook-url-error"',
+	    'aria-invalid={Boolean(webhookUrlError)}',
+	    'const [serviceKeySubmitted, setServiceKeySubmitted] = useState(false);',
+	    'const serviceKeyLabelInlineError = serviceKeySubmitted',
+	    'data-testid="settings-admin-service-key-label-error"',
+	    'aria-invalid={Boolean(serviceKeyLabelInlineError)}',
+	    'non-secret fingerprints and actor details',
     'Revoked fingerprints appear here after key rotation',
     "Run rotation probe",
     "Plan env sync",
     "Promote env",
     "Revoke next env",
+	    'settingsMediaStorageHandoff',
+	    'settingsMediaStorageHandoffText',
+	    'settingsThemeDesignImpact',
+	    'settingsThemeDesignImpactText',
+	    'buildSettingsThemeDesignImpact',
+	    'data-testid="settings-media-storage-handoff"',
+	    'data-testid="settings-media-storage-handoff-copy-button"',
+	    'data-testid="settings-theme-design-impact"',
+	    'data-testid="settings-theme-design-impact-copy-button"',
+	    'data-testid="settings-theme-design-impact-token-paths"',
+	    'backy.media-storage-handoff.v1',
+	    'backy.settings-theme-design-impact.v1',
+	    'backy.media.organization.v1',
+	    'backy.media.references.v1',
+	    'backy.media.editable-metadata.v1',
+	    'MediaDeliveryPolicy',
+	    'frontendDesignAssets',
+	    'content.themeTokenRefs',
+	    'element.animation.tokenRefs.duration',
+	    'settingsHandoff.themeDesignImpact',
+	    'adminSignedUrl',
+	    'Copy media handoff',
+	    'Copy design impact',
     'data-testid="settings-release-certification-runbook"',
     '.github/workflows/backy-release-certification.yml',
     'npm run test:release-certification-preflight-contract',
@@ -139,6 +174,8 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-provider-certification"',
     'data-testid="settings-provider-runtime-evidence"',
     'data-testid="settings-provider-certification-evidence"',
+    'data-testid="settings-provider-certification-evidence-packet"',
+    'data-testid="settings-provider-certification-evidence-packet-copy-button"',
     'data-testid="settings-provider-certification-download-button"',
     'data-testid="settings-provider-certification-copy-button"',
     'data-testid="settings-provider-certification-command-builder"',
@@ -147,13 +184,28 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-provider-certification-env-template-body"',
     'data-testid="settings-provider-certification-command-copy-button"',
     'settings-provider-certification-doctor-toggle',
+    'settings-provider-certification-cors-toggle',
+    'settings-provider-certification-site-id-input',
+    'settings-provider-certification-public-api-origin-input',
     'data-testid="settings-provider-certification-required-aliases"',
     'providerCertification',
     'providerCertificationHandoff',
     'settingsCertificationEnvTemplate',
     'buildSettingsProviderCertificationEnvTemplate',
     'scenarioEvidence',
+    'operatorEvidencePacket',
+    'settingsAdminApi',
+    'siteScopedSettingsApi',
+    'settingsCertificationEvidencePacket',
+    'settingsCertificationEvidencePacketText',
     'backy.settings-provider-certification-evidence.v1',
+    'backy.settings-provider-certification-evidence-packet.v1',
+    'Redacted operator attachment manifest',
+    'Copy evidence packet',
+    'targetInputs: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs',
+    'redactionPolicy',
+    'captureSource',
+    'expectedArtifacts',
     'operatorCommandTemplate',
     'operatorEnvTemplate',
     'backy.settings-provider-certification-env-template.v1',
@@ -173,6 +225,12 @@ const assertSettingsSourceContracts = () => {
     'npm run test:settings-provider-certification-preflight-contract',
     'BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER',
     'BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER',
+    'BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS',
+    'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
+    'BACKY_SETTINGS_CERTIFY_SITE_ID',
+    'BACKY_SETTINGS_CERTIFICATION_SITE_ID',
+    'BACKY_COMMERCE_CERTIFY_SITE_ID',
+    'BACKY_CORS_ALLOWED_ORIGINS',
     'npm run doctor:release-certification',
     'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED',
     'npm run ci:settings-provider-certification',
@@ -184,11 +242,13 @@ const assertSettingsSourceContracts = () => {
     'Storage and media delivery',
     'Vercel deployment and secrets',
     'Notification delivery',
+    'Public API and custom frontend CORS',
     'Commerce provider bridge',
     'Public API and CORS',
     'Interactive component sandbox',
     'Release certification readiness',
     'Public API/CORS',
+    'public-api-cors',
     'Needs runtime inputs',
     'Required inputs',
     'Supabase/Postgres',
@@ -201,7 +261,20 @@ const assertSettingsSourceContracts = () => {
     'Resend',
     'BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL',
     'BACKY_RESEND_API_KEY or RESEND_API_KEY',
+    'BACKY_CORS_ALLOWED_ORIGINS',
+    'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
     'BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET',
+    'New user registration',
+    'Page published',
+    'System updates',
+    'Team mentions',
+    "newUser: settings.email?.newUser === true",
+    "pagePublished: settings.email?.pagePublished === true",
+    "systemUpdates: settings.email?.systemUpdates === true",
+    "mentions: settings.inApp?.mentions === true",
+    "['instant', 'daily', 'weekly', 'off']",
+    '<option value="daily">Daily digest</option>',
+    '<option value="weekly">Weekly digest</option>',
     'releaseCertification',
     'data-testid="settings-launch-readiness"',
     'data-testid="settings-launch-readiness-copy-button"',
@@ -210,17 +283,45 @@ const assertSettingsSourceContracts = () => {
     'settingsLaunchReadinessText',
     "schemaVersion: 'backy.settings-launch-readiness.v1'",
     "schemaVersion: 'backy.settings-launch-action-plan.v1'",
+    'settings-${control.key}-color-input',
+    'settings-${control.key}-hex-input',
+    'aria-invalid={colorInvalid}',
+    'data-testid={`settings-${control.key}-error`}',
+    'data-testid="settings-base-font-size-input"',
+    'data-testid="settings-base-font-size-error"',
+    'data-testid="settings-radius-input"',
+    'data-testid="settings-radius-error"',
+    'data-testid="settings-spacing-unit-input"',
+    'data-testid="settings-spacing-unit-error"',
+    'data-testid="settings-motion-preset-select"',
+    'baseFontSizeInvalid',
+    'radiusInvalid',
+    'spacingUnitInvalid',
     'includesSecretValues: false',
     "copySettingsHandoffText(settingsLaunchReadinessText, 'Settings launch readiness handoff')",
     'data-testid="settings-backy-completion-status"',
     'data-testid="settings-backy-completion-status-copy-button"',
     'data-testid="settings-backy-completion-status-action-plan"',
     'data-testid="settings-backy-completion-status-gates"',
+    'data-testid="settings-backy-completion-status-runbooks"',
+    'settings-backy-completion-status-runbook-${runbook.key}',
+    'settings-backy-completion-status-runbook-copy-${runbook.key}',
     'settingsBackyCompletionStatus',
     'settingsBackyCompletionStatusText',
+    'type BackyCompletionSurfaceRunbook',
+    'surfaceRunbooks',
+    'completionStatus.surfaceRunbooks',
     'BACKY_COMPLETION_AUDIT',
     'BACKY_COMPLETION_SURFACES',
+    'certifiedGates',
     "schemaVersion: 'backy.completion-status.v1'",
+    'backy.commerce-provider-certification-evidence-packet.v1',
+    'backy.order-provider-certification-evidence-packet.v1',
+    'products-provider-certification-evidence-packet',
+    'orders-provider-certification-evidence-packet',
+    'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+    'BACKY_COMMERCE_SOURCE_ONLY=1 npm run test:commerce --workspace @backy-cms/admin',
+    'BACKY_ORDERS_SOURCE_ONLY=1 npm run test:orders --workspace @backy-cms/admin',
     'data.contract.completionStatus',
     'x-backy-completion-status',
     'GeneratedBackyFrontendManifestCompletionStatus',
@@ -229,9 +330,40 @@ const assertSettingsSourceContracts = () => {
   ];
 
   const missingRouteSnippets = requiredSettingsRouteSnippets.filter((snippet) => !settingsRoute.includes(snippet));
+	  assert(
+	    missingRouteSnippets.length === 0,
+	    `Settings route is missing site-scoped localization contract snippets: ${missingRouteSnippets.join(', ')}`,
+	  );
   assert(
-    missingRouteSnippets.length === 0,
-    `Settings route is missing site-scoped localization contract snippets: ${missingRouteSnippets.join(', ')}`,
+    /disabled=\{disabled \|\| deliveryLoading\}[\s\S]{0,250}data-testid="settings-notification-webhook-test"/.test(settingsRoute),
+    'Settings notification webhook test must stay reachable for inline URL validation',
+  );
+  assert(
+    /disabled=\{!canManageApiKeys \|\| issuingServiceKey\}[\s\S]{0,250}data-testid="settings-admin-service-key-issue"/.test(settingsRoute),
+    'Settings service-key issue action must stay reachable for inline label validation',
+  );
+  assert(!settingsRoute.includes('disabled={disabled || deliveryLoading || !value.webhookUrl?.trim()}'), 'Settings webhook test must not hide blank URL validation behind a disabled state');
+  assert(!settingsRoute.includes('disabled={!canManageApiKeys || issuingServiceKey || !serviceKeyLabel.trim()}'), 'Settings service-key issue must not hide blank label validation behind a disabled state');
+
+  const requiredAdminContentApiSnippets = [
+    'export interface SettingsProviderCertificationHandoff',
+    'export interface BackyCompletionStatusHandoff',
+    'export interface SettingsMediaStorageHandoff',
+    'completionStatus?: BackyCompletionStatusHandoff',
+    'mediaStorageHandoff?: SettingsMediaStorageHandoff',
+    'providerCertification?: SettingsProviderCertificationHandoff',
+    'operatorEvidencePacket?: ProviderCertificationEvidencePacket',
+    'backy.settings-provider-certification-evidence-packet.v1',
+    'const toSiteSettingsInput = (settings: ApiSettings): SiteSettingsInput',
+    'completionStatus: settings.completionStatus',
+    'mediaStorageHandoff: settings.mediaStorageHandoff',
+    'providerCertification: settings.providerCertification',
+    'return toSiteSettingsInput(payload.data.settings)',
+  ];
+  const missingAdminContentApiSnippets = requiredAdminContentApiSnippets.filter((snippet) => !adminContentApiSource.includes(snippet));
+  assert(
+    missingAdminContentApiSnippets.length === 0,
+    `Admin content API must preserve Settings provider certification handoff for custom admin clients: ${missingAdminContentApiSnippets.join(', ')}`,
   );
 
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
@@ -246,6 +378,9 @@ const assertSettingsSourceContracts = () => {
     "handoffState.localization?.localeStrategy === 'path-prefix'",
     "scope.siteSettings?.localization?.localeStrategy === 'path-prefix'",
     "entry.metadata?.changedKeys?.includes('localization')",
+    'BACKY_SETTINGS_SOURCE_ONLY',
+    'BACKY_SETTINGS_SMOKE_SOURCE_ONLY',
+    'settings-source-only',
   ];
   const missingSmokeSnippets = requiredSmokeSnippets.filter((snippet) => !smokeSource.includes(snippet));
   assert(
@@ -1832,6 +1967,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     const providerEnvTemplateText = document.querySelector('[data-testid="settings-provider-certification-env-template-body"]')?.textContent || '';
     const providerCommandText = document.querySelector('[data-testid="settings-provider-certification-command"]')?.textContent || '';
     const completionStatusText = document.querySelector('[data-testid="settings-backy-completion-status"]')?.textContent || '';
+    const completionRunbooksText = document.querySelector('[data-testid="settings-backy-completion-status-runbooks"]')?.textContent || '';
     return {
     search: window.location.search,
     text: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 500) || '',
@@ -1858,6 +1994,12 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasEtsyCatalogEnv: document.body?.innerText?.includes('Etsy access token') || false,
     hasEasyPostLabelEnv: document.body?.innerText?.includes('EasyPost label API key') || false,
     hasStorageSecretRefs: document.body?.innerText?.includes('Storage credentials stay in deployment env') || false,
+    hasMediaStorageHandoff: Boolean(document.querySelector('[data-testid="settings-media-storage-handoff"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-media-storage-handoff-copy-button"]')) &&
+      (document.querySelector('[data-testid="settings-media-storage-handoff"]')?.textContent?.includes('backy.media-storage-handoff.v1') || false) &&
+      (document.querySelector('[data-testid="settings-media-storage-handoff"]')?.textContent?.includes('backy.media.organization.v1') || false) &&
+      (document.querySelector('[data-testid="settings-media-storage-handoff"]')?.textContent?.includes('MediaDeliveryPolicy') || false) &&
+      (document.querySelector('[data-testid="settings-media-storage-handoff"]')?.textContent?.includes('Signed private URL') || false),
     hasInfrastructureCheck: document.body?.innerText?.includes('Run infrastructure check') || false,
     hasStorageProbe: document.body?.innerText?.includes('Run storage probe') || false,
     hasRotationProbe: document.body?.innerText?.includes('Run rotation probe') || false,
@@ -1872,22 +2014,39 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationCommerceGate: runbookText.includes('certify_commerce_providers') && runbookText.includes('ci:commerce-provider-certification'),
     hasBackyCompletionStatus: Boolean(document.querySelector('[data-testid="settings-backy-completion-status"]')) &&
       completionStatusText.includes('Backy completion status') &&
-      completionStatusText.includes('39 Ready / 6 Partial') &&
+      completionStatusText.includes('41 Ready / 4 Partial') &&
       completionStatusText.includes('backy.completion-status.v1') &&
       completionStatusText.includes('data.contract.completionStatus') &&
       completionStatusText.includes('x-backy-completion-status'),
     hasBackyCompletionStatusCopyButton: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-copy-button"]')),
     hasBackyCompletionStatusActionPlan: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-action-plan"]')) &&
       completionStatusText.includes('npm run test:partial-gate-preflights') &&
-      completionStatusText.includes('npm run ci:forms-postgres') &&
-      completionStatusText.includes('npm run ci:sdk-postgres-smoke') &&
       completionStatusText.includes('npm run ci:settings-provider-certification') &&
       completionStatusText.includes('npm run ci:commerce-provider-certification'),
     hasBackyCompletionStatusGates: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-gates"]')) &&
-      completionStatusText.includes('Forms Supabase/Postgres persistence') &&
-      completionStatusText.includes('Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke') &&
       completionStatusText.includes('Settings live provider certification') &&
       completionStatusText.includes('Commerce live provider certification'),
+    hasBackyCompletionStatusRunbooks: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbooks"]')) &&
+      completionRunbooksText.includes('Partial surface runbooks') &&
+      completionRunbooksText.includes('completionStatus.surfaceRunbooks') &&
+      completionRunbooksText.includes('backy.settings-provider-certification-evidence-packet.v1') &&
+      completionRunbooksText.includes('backy.commerce-provider-certification-evidence-packet.v1') &&
+      completionRunbooksText.includes('backy.order-provider-certification-evidence-packet.v1') &&
+      completionRunbooksText.includes('/api/admin/settings data.settings.providerCertification.operatorEvidencePacket') &&
+      completionRunbooksText.includes('/api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync') &&
+      completionRunbooksText.includes('/api/admin/sites/{siteId}/commerce/orders/analytics') &&
+      completionRunbooksText.includes('BACKY_SETTINGS_CERTIFICATION_BASE_URL') &&
+      completionRunbooksText.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
+      completionRunbooksText.includes('BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin') &&
+      completionRunbooksText.includes('BACKY_COMMERCE_SOURCE_ONLY=1 npm run test:commerce --workspace @backy-cms/admin') &&
+      completionRunbooksText.includes('BACKY_ORDERS_SOURCE_ONLY=1 npm run test:orders --workspace @backy-cms/admin') &&
+      completionRunbooksText.includes('Secret boundary: no secret values') &&
+      completionRunbooksText.includes('Copy runbook'),
+    hasBackyCompletionStatusRunbookCopyButtons:
+      Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-copy-settings"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-copy-settings-admin-apis"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-copy-products"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-copy-orders"]')),
     hasProviderCertificationMatrix: Boolean(document.querySelector('[data-testid="settings-provider-certification"]')),
     hasProviderRuntimeEvidence: Boolean(document.querySelector('[data-testid="settings-provider-runtime-evidence"]')),
     hasProviderRuntimeEvidenceCopy: document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Runtime provider evidence') && document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Public API/CORS') || false,
@@ -1897,9 +2056,23 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       (document.querySelector('[data-testid="settings-provider-certification-evidence"]')?.textContent?.includes('Database and Supabase') || false) &&
       (document.querySelector('[data-testid="settings-provider-certification-evidence"]')?.textContent?.includes('Storage and media delivery') || false) &&
       (document.querySelector('[data-testid="settings-provider-certification-evidence"]')?.textContent?.includes('Public API and CORS') || false),
+    hasProviderCertificationEvidencePacket: Boolean(document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-provider-certification-evidence-packet-copy-button"]')) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')?.textContent?.includes('Certification evidence packet') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')?.textContent?.includes('backy.settings-provider-certification-evidence-packet.v1') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')?.textContent?.includes('Copy evidence packet') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')?.textContent?.includes('Scenario attachments') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')?.textContent?.includes('Runtime gaps') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')?.textContent?.includes('Redacted operator attachment manifest') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')?.textContent?.includes('Storage and media delivery') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-evidence-packet"]')?.textContent?.includes('Notification delivery') || false),
     hasProviderCertificationDownloadButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-download-button"]')),
     hasProviderCertificationCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-copy-button"]')),
     hasProviderCertificationCommandBuilder: Boolean(document.querySelector('[data-testid="settings-provider-certification-command-builder"]')),
+    hasProviderCertificationSiteSelector: Boolean(document.querySelector('[data-testid="settings-provider-certification-site-id-input"]')) &&
+      providerCommandBuilderText.includes('Certification site id') &&
+      providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_SITE_ID') &&
+      providerCommandBuilderText.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
     hasProviderCertificationEnvCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-env-copy-button"]')),
     hasProviderCertificationEnvTemplate: Boolean(document.querySelector('[data-testid="settings-provider-certification-env-template"]')) &&
       Boolean(document.querySelector('[data-testid="settings-provider-certification-env-template-body"]')) &&
@@ -1909,15 +2082,19 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       providerEnvTemplateText.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1') &&
       providerEnvTemplateText.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1') &&
       providerEnvTemplateText.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER=auto') &&
+      providerEnvTemplateText.includes('BACKY_SETTINGS_CERTIFY_SITE_ID=site-demo') &&
+      providerEnvTemplateText.includes('BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS=1') &&
+      providerEnvTemplateText.includes('BACKY_CORS_ALLOWED_ORIGINS=') &&
+      providerEnvTemplateText.includes('BACKY_COMMERCE_CERTIFY_SITE_ID=site-demo') &&
       providerEnvTemplateText.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1'),
     hasProviderCertificationCommandCopyButton: Boolean(document.querySelector('[data-testid="settings-provider-certification-command-copy-button"]')),
-    hasProviderCertificationCommandDefaults: providerCommandText.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_STORAGE') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION') && providerCommandText.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') && providerCommandText.includes('npm run doctor:release-certification') && providerCommandText.includes('npm run ci:settings-provider-certification') && providerCommandText.includes('npm run ci:commerce-provider-certification'),
-    hasProviderCertificationCommandAliases: providerCommandBuilderText.includes('Release doctor') && providerCommandBuilderText.includes('npm run doctor:release-certification') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER') && providerCommandBuilderText.includes('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER') && providerCommandBuilderText.includes('BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'),
+    hasProviderCertificationCommandDefaults: providerCommandText.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_SITE_ID') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_STORAGE') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION') && providerCommandText.includes('BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS') && providerCommandText.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') && providerCommandText.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') && providerCommandText.includes('npm run doctor:release-certification') && providerCommandText.includes('npm run ci:settings-provider-certification') && providerCommandText.includes('npm run ci:commerce-provider-certification'),
+    hasProviderCertificationCommandAliases: providerCommandBuilderText.includes('Release doctor') && providerCommandBuilderText.includes('npm run doctor:release-certification') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS') && providerCommandBuilderText.includes('BACKY_SETTINGS_CERTIFY_SITE_ID') && providerCommandBuilderText.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') && providerCommandBuilderText.includes('BACKY_CORS_ALLOWED_ORIGINS') && providerCommandBuilderText.includes('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER') && providerCommandBuilderText.includes('BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'),
     hasProviderCertificationSettings: runbookText.includes('Provider certification matrix') && runbookText.includes('npm run ci:settings-provider-certification'),
     hasProviderCertificationCommerce: runbookText.includes('npm run ci:commerce-provider-certification') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
-    hasProviderCertificationFamilies: runbookText.includes('Supabase/Postgres') && runbookText.includes('Vercel env secret manager') && runbookText.includes('Resend') && runbookText.includes('Magento'),
+    hasProviderCertificationFamilies: runbookText.includes('Supabase/Postgres') && runbookText.includes('Vercel env secret manager') && runbookText.includes('Resend') && runbookText.includes('Backy Public API') && runbookText.includes('Magento'),
     hasProviderCertificationHandoffSummary: runbookText.includes('backy.settings-provider-certification-handoff.v1') && runbookText.includes('backy.settings-provider-certification-evidence.v1') && runbookText.includes('external-live-provider-gate') && runbookText.includes('npm run test:settings-provider-certification-preflight-contract') && runbookText.includes('Provider credentials stay in deployment or CI environment variables'),
-    hasProviderCertificationRequiredInputs: runbookText.includes('Required inputs') && runbookText.includes('BACKY_DATABASE_URL or DATABASE_URL') && runbookText.includes('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID'),
+    hasProviderCertificationRequiredInputs: runbookText.includes('Required inputs') && runbookText.includes('BACKY_DATABASE_URL or DATABASE_URL') && runbookText.includes('BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('VERCEL_PROJECT_ID or BACKY_VERCEL_PROJECT_ID') && runbookText.includes('BACKY_CORS_ALLOWED_ORIGINS'),
     hasReleaseCertificationStorageAliases: runbookText.includes('BACKY_MEDIA_STORAGE_PROVIDER') && runbookText.includes('SUPABASE_SERVICE_ROLE_KEY') && runbookText.includes('AWS_ACCESS_KEY_ID'),
     hasReleaseCertificationNotificationAliases: runbookText.includes('RESEND_API_KEY') && runbookText.includes('SMTP_HOST') && runbookText.includes('SMTP_USER') && runbookText.includes('SMTP_PASSWORD') && runbookText.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
     hasReleaseCertificationCommerceAliases: runbookText.includes('STRIPE_SECRET_KEY') && runbookText.includes('PAYPAL_ACCESS_TOKEN') && runbookText.includes('SHOPIFY_ADMIN_ACCESS_TOKEN') && runbookText.includes('COMMERCE_WEBHOOK_SECRET'),
@@ -1948,7 +2125,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     infrastructureState.hasWooCommerceCatalogEnv &&
     infrastructureState.hasEtsyCatalogEnv &&
     infrastructureState.hasEasyPostLabelEnv &&
-    infrastructureState.hasStorageSecretRefs,
+    infrastructureState.hasStorageSecretRefs &&
+    infrastructureState.hasMediaStorageHandoff,
     `Infrastructure environment validation did not expose broader runtime coverage: ${JSON.stringify(infrastructureState)}`,
   );
   assert(infrastructureState.hasInfrastructureCheck, `Infrastructure check control was not visible: ${JSON.stringify(infrastructureState)}`);
@@ -1980,10 +2158,13 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasBackyCompletionStatusCopyButton &&
       infrastructureState.hasBackyCompletionStatusActionPlan &&
       infrastructureState.hasBackyCompletionStatusGates &&
+      infrastructureState.hasBackyCompletionStatusRunbooks &&
+      infrastructureState.hasBackyCompletionStatusRunbookCopyButtons &&
       infrastructureState.hasProviderCertificationMatrix &&
       infrastructureState.hasProviderCertificationDownloadButton &&
       infrastructureState.hasProviderCertificationCopyButton &&
       infrastructureState.hasProviderCertificationCommandBuilder &&
+      infrastructureState.hasProviderCertificationSiteSelector &&
       infrastructureState.hasProviderCertificationEnvCopyButton &&
       infrastructureState.hasProviderCertificationEnvTemplate &&
       infrastructureState.hasProviderCertificationCommandCopyButton &&
@@ -1995,6 +2176,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasProviderRuntimeEvidence &&
       infrastructureState.hasProviderRuntimeEvidenceCopy &&
       infrastructureState.hasProviderCertificationEvidence &&
+      infrastructureState.hasProviderCertificationEvidencePacket &&
       infrastructureState.hasProviderCertificationHandoffSummary &&
       infrastructureState.hasProviderCertificationRequiredInputs &&
       infrastructureState.hasReleaseCertificationStorageAliases &&
@@ -2371,11 +2553,8 @@ const assertPersistedSettings = (settings, suffix, notificationWebhookUrl) => {
   assert(settings.integrations?.commerce?.billingContactEmail === `billing+${suffix}@example.com`, 'Commerce billing contact email was not persisted');
   assert(settings.integrations?.notifications?.email?.comments === false, 'Comment notification email toggle was not persisted');
   assert(settings.integrations?.notifications?.email?.formSubmission === true, 'Form notification email toggle was not persisted');
-  assert(settings.integrations?.notifications?.email?.newUser !== true, 'Planned new-user notification email should not persist as enabled');
-  assert(settings.integrations?.notifications?.email?.pagePublished !== true, 'Planned page-published notification email should not persist as enabled');
   assert(settings.integrations?.notifications?.inApp?.comments === false, 'Notification in-app toggle was not persisted');
-  assert(settings.integrations?.notifications?.inApp?.mentions !== true, 'Planned mention notification should not persist as enabled');
-  assert(settings.integrations?.notifications?.digestFrequency === 'instant', 'Planned digest frequency should normalize to instant');
+  assert(settings.integrations?.notifications?.digestFrequency === 'daily', 'Daily notification digest frequency was not persisted');
   assert(settings.integrations?.notifications?.webhookUrl === notificationWebhookUrl, 'Notification webhook was not persisted');
   assert(settings.auth?.requireTwoFactor === true, 'Require 2FA toggle was not persisted');
   assert(settings.auth?.inviteOnly === true, 'Invite-only toggle was not persisted');
@@ -2429,7 +2608,7 @@ const assertPersistedSiteScopedSettings = async (siteId, suffix) => {
   return scope;
 };
 
-const assertDirectSettingsApiNormalizesPlannedNotifications = async (settings) => {
+const assertDirectSettingsApiPersistsNotificationControls = async (settings) => {
   await requestApi('/api/admin/settings', {
     method: 'PATCH',
     body: JSON.stringify({
@@ -2454,11 +2633,11 @@ const assertDirectSettingsApiNormalizesPlannedNotifications = async (settings) =
   });
 
   const normalized = await readSettings();
-  assert(normalized.integrations?.notifications?.email?.newUser === false, 'Settings API should normalize planned new-user email notifications');
-  assert(normalized.integrations?.notifications?.email?.pagePublished === false, 'Settings API should normalize planned page-published email notifications');
-  assert(normalized.integrations?.notifications?.email?.systemUpdates === false, 'Settings API should normalize planned system update email notifications');
-  assert(normalized.integrations?.notifications?.inApp?.mentions === false, 'Settings API should normalize planned mention notifications');
-  assert(normalized.integrations?.notifications?.digestFrequency === 'instant', 'Settings API should normalize planned digest frequencies');
+  assert(normalized.integrations?.notifications?.email?.newUser === true, 'Settings API should persist new-user email notification controls');
+  assert(normalized.integrations?.notifications?.email?.pagePublished === true, 'Settings API should persist page-published email notification controls');
+  assert(normalized.integrations?.notifications?.email?.systemUpdates === true, 'Settings API should persist system-update email notification controls');
+  assert(normalized.integrations?.notifications?.inApp?.mentions === true, 'Settings API should persist mention notification controls');
+  assert(normalized.integrations?.notifications?.digestFrequency === 'weekly', 'Settings API should persist weekly digest frequency');
 
   return {
     email: normalized.integrations?.notifications?.email,
@@ -3098,7 +3277,7 @@ const main = async () => {
       webhookCapture.requests.some((entry) => entry.headers['x-backy-webhook-retry'] === 'true' && entry.body?.kind === 'settings.notification_webhook.retry' && entry.body?.retry === true),
       `Settings webhook retry payload was not captured: ${JSON.stringify(webhookCapture.requests).slice(0, 500)}`,
     );
-    const apiNormalization = await assertDirectSettingsApiNormalizesPlannedNotifications(persisted);
+    const apiNormalization = await assertDirectSettingsApiPersistsNotificationControls(persisted);
     const secretStorage = await assertDirectSettingsApiRejectsRawSecrets(await readSettings());
     const providerEndpointValidation = await assertDirectSettingsApiRejectsInvalidCommerceProviderEndpoints(await readSettings());
     const callbackUrlValidation = await assertDirectSettingsApiRejectsInvalidCallbackUrls(await readSettings());
@@ -3208,9 +3387,18 @@ const main = async () => {
   }
 };
 
-if (process.env.BACKY_SETTINGS_SOURCE_GUARD === '1') {
+if (SOURCE_ONLY_MODE) {
   assertSettingsSourceContracts();
-  console.log(JSON.stringify({ ok: true, guard: 'settings-site-scoped-localization' }));
+  console.log(JSON.stringify({
+    ok: true,
+    mode: 'settings-source-only',
+    guard: 'settings-site-scoped-localization',
+    contracts: [
+      'settings-route-provider-certification',
+      'settings-admin-client-provider-certification',
+      'settings-smoke-source-coverage',
+    ],
+  }));
   process.exit(0);
 }
 

@@ -34,6 +34,7 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import { syncRepositoryCollectionRecordMediaReferences } from "@/lib/repositoryMediaReferenceSync";
 import {
   isValidCollectionListRoutePattern,
   isValidCollectionRoutePattern,
@@ -631,6 +632,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                   values: recordInput.values,
                 })
               ).item;
+          await syncRepositoryCollectionRecordMediaReferences({
+            mediaRepository: repositories.media,
+            siteId: site.id,
+            collectionId: collection.id,
+            recordId: record.id,
+            values: record.values,
+          });
           importedRecords.push(record);
           if (existingRecord) updatedRecords += 1;
           else createdRecords += 1;

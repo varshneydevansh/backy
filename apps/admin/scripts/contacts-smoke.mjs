@@ -35,6 +35,23 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
   assert(source.includes('title="No contacts match this view"'), 'Contacts inbox filter empty state must keep the shared title visible');
   assert(source.includes('Change the search, form, lifecycle, or lead quality filters to broaden the inbox.'), 'Contacts inbox filter empty state must explain how to recover from filters');
   assert(
+    !source.includes('before auth provider credentials are wired') &&
+      !source.includes('still belong to the Users/Auth integration pass') &&
+      !source.includes('Users/Auth roadmap'),
+    'Contacts route must not expose stale member/auth roadmap copy.',
+  );
+  assert(
+    source.includes("const CONTACT_MEMBER_CAPTURE_HANDOFF_SCHEMA_VERSION = 'backy.contact-member-capture-handoff.v1'") &&
+      source.includes('bindings: CONTACT_MEMBER_CAPTURE_BINDINGS') &&
+      source.includes('actionBindings: CONTACT_MEMBER_CAPTURE_ACTIONS') &&
+      source.includes('data-testid="contacts-member-capture-handoff"') &&
+      source.includes('Copy member handoff') &&
+      source.includes('providerGate') &&
+      source.includes('auth provider secrets') &&
+      source.includes('raw contact values'),
+    'Contacts route must expose a versioned member capture handoff with bindings, actions, provider gate, and privacy boundary.',
+  );
+  assert(
     source.includes('const selectedVisibleContacts = useMemo') &&
       source.includes('const hiddenSelectedContactCount = Math.max') &&
       source.includes('data-testid="contacts-bulk-selection-summary"') &&
@@ -51,6 +68,28 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
       source.includes('Review users'),
     'Contacts permission state must expose retryable permission recovery and user-access handoff',
   );
+  assert(
+    source.includes('const [savedListSubmitted, setSavedListSubmitted] = useState(false);') &&
+      source.includes('const savedListNameInlineError = savedListSubmitted') &&
+      source.includes('data-testid="contacts-saved-list-name-input"') &&
+      source.includes('data-testid="contacts-saved-list-name-error"') &&
+      source.includes('aria-invalid={Boolean(savedListNameInlineError)}') &&
+      source.includes("aria-describedby={savedListNameInlineError ? 'contacts-saved-list-name-error' : undefined}") &&
+      source.includes('data-testid="contacts-saved-list-save"') &&
+      /disabled=\{contactMutationDisabled\}[\s\S]{0,300}data-testid="contacts-saved-list-save"/.test(source),
+    'Contacts saved-list creation must keep Save reachable and expose inline list-name validation',
+  );
+  assert(
+    source.includes('const [contactSyncSubmitted, setContactSyncSubmitted] = useState(false);') &&
+      source.includes('const contactSyncTargetInlineError = contactSyncSubmitted') &&
+      source.includes('data-testid="contacts-sync-webhook-url-error"') &&
+      source.includes('aria-invalid={Boolean(contactSyncTargetInlineError)}') &&
+      source.includes("aria-describedby={contactSyncTargetInlineError ? 'contacts-sync-webhook-url-error' : undefined}") &&
+      /disabled=\{contactMutationDisabled \|\| selectedContacts\.length === 0\}[\s\S]{0,350}data-testid="contacts-sync-webhook"/.test(source),
+    'Contacts sync webhook action must keep selected-contact sync reachable and expose inline webhook URL validation',
+  );
+  assert(!source.includes('disabled={contactMutationDisabled || !savedListName.trim()}'), 'Contacts saved-list Save must not hide blank-name validation behind a disabled state');
+  assert(!source.includes('disabled={contactMutationDisabled || selectedContacts.length === 0 || !contactSyncTarget.trim()}'), 'Contacts sync action must not hide webhook URL validation behind a disabled state');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -1177,6 +1216,11 @@ const assertLayout = async (client) => {
       hasPromotionContract: Boolean(document.querySelector('[data-testid="contacts-promotion-contract"]')) &&
         document.body?.innerText?.includes('Lead promotion contract') &&
         document.body?.innerText?.includes('Registration page'),
+      hasMemberCaptureHandoff: Boolean(document.querySelector('[data-testid="contacts-member-capture-handoff"]')) &&
+        document.body?.innerText?.includes('backy.contact-member-capture-handoff.v1') &&
+        document.body?.innerText?.includes('Copy member handoff') &&
+        document.body?.innerText?.includes('Registration definition') &&
+        document.body?.innerText?.includes('Provider gate'),
       hasBulkActions: Boolean(document.querySelector('[data-testid="contacts-bulk-actions"]')),
       hasCreateContact: Boolean(document.querySelector('[data-testid="contacts-create-contact"]')),
       hasImportCsv: Boolean(document.querySelector('[data-testid="contacts-import-csv"]')),
@@ -1214,6 +1258,7 @@ const assertLayout = async (client) => {
   assert(
     layout.hasCommandCenter
     && layout.hasPromotionContract
+    && layout.hasMemberCaptureHandoff
     && layout.hasBulkActions
     && layout.hasCreateContact
     && layout.hasImportCsv

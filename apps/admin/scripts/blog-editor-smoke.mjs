@@ -27,6 +27,8 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   const source = fs.readFileSync(new URL('../src/routes/blog.$postId.tsx', import.meta.url), 'utf8');
   const visualDiffSource = fs.readFileSync(new URL('../src/components/editor/RevisionCanvasVisualDiff.tsx', import.meta.url), 'utf8');
   const revisionMetadataSource = fs.readFileSync(new URL('../src/lib/revisionMetadata.ts', import.meta.url), 'utf8');
+  const blogRevisionRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/blog/[postId]/revisions/route.ts', import.meta.url), 'utf8');
+  const revisionBranchMetadataSource = fs.readFileSync(new URL('../../public/src/lib/contentRevisionBranchMetadata.ts', import.meta.url), 'utf8');
   assert(source.includes('isUsingLocalPostCopy'), 'Blog editor must track backend-load fallback state');
   assert(source.includes('localPostCopyDisabledMessage'), 'Blog editor must explain that local fallback copies are read-only');
   assert(source.includes('canEdit={canEditBlog && !isUsingLocalPostCopy}'), 'Blog editor canvas editing must be disabled for local fallback copies');
@@ -51,15 +53,84 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes('renderedPixelDiff: RevisionCanvasPixelComparison') && source.includes('getRevisionCanvasPixelComparison') && source.includes('pixelComparison={revisionDiff.renderedPixelDiff}'), 'Blog editor revision diffs must include rendered pixel comparison metadata in cards and handoff manifests');
   assert(visualDiffSource.includes('Rendered pixel comparison') && visualDiffSource.includes('data-testid={`${testId}-pixel-comparison`}') && visualDiffSource.includes('data-changed-pixels') && visualDiffSource.includes('changedPixelRatio'), 'Shared revision visual diff must expose sampled rendered-pixel comparison metrics');
   assert(source.includes("schema: 'backy.blog-revision-graph.v1'") && source.includes('blogRevisionTimeline') && source.includes('data-testid="blog-editor-revision-graph"') && source.includes('data-testid="blog-editor-toggle-revision-graph"'), 'Blog editor revisions must expose graph timeline navigation and handoff metadata');
+  assert(
+    source.includes("schema: 'backy.blog-revision-branch-graph.v1'") &&
+      source.includes('buildBlogRevisionBranchGraph') &&
+      source.includes('rollbackNotePattern') &&
+      source.includes('branchGraph: blogRevisionBranchGraph') &&
+      source.includes('data-testid="blog-editor-revision-branch-graph"') &&
+      source.includes('data-testid="blog-editor-copy-revision-branch-graph"') &&
+      source.includes('data-testid="blog-editor-revision-branch-edges"') &&
+      source.includes('branchRole') &&
+      source.includes('revision.branchMetadata?.schemaVersion === \'backy.content-revision-branch-metadata.v1\'') &&
+      source.includes('revision-api-branch-metadata') &&
+      source.includes('explicit-api-metadata') &&
+      source.includes('parentRevisionId: revision.parentRevisionId') &&
+      source.includes('operation: revision.operation') &&
+      source.includes('restoreTargetRevisionId: revision.restoreTargetRevisionId') &&
+      source.includes('branchMetadata,') &&
+      blogRevisionRouteSource.includes('withContentRevisionBranchMetadata(result.items, \'admin-blog-revisions-api\')') &&
+      blogRevisionRouteSource.includes('withContentRevisionBranchMetadata(payload.revisions, \'admin-blog-revisions-api\')') &&
+      revisionBranchMetadataSource.includes('backy.content-revision-branch-metadata.v1') &&
+      revisionBranchMetadataSource.includes('CONTENT_REVISION_RESTORE_TARGET_PATTERN') &&
+      revisionBranchMetadataSource.includes('persisted-revision-lineage') &&
+      revisionBranchMetadataSource.includes('parentRevisionId') &&
+      revisionBranchMetadataSource.includes('restoreTargetRevisionId') &&
+      revisionBranchMetadataSource.includes('persistedFields'),
+    'Blog editor revisions must consume persisted backend branch metadata, expose rollback edges, copyable branch graph handoff, and per-node branch roles',
+  );
   assert(source.includes('summary: getContentRevisionGraphNodeLabel(revision') && source.includes('data-testid="blog-editor-revision-graph-summary"') && source.includes('data-action={node.action}') && source.includes('snapshotUpdatedLabel') && revisionMetadataSource.includes('getContentRevisionGraphNodeLabel'), 'Blog editor revision graph nodes must expose action/actor/status metadata');
   assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="blog-editor-restore-impact"') && source.includes('data-testid="blog-editor-confirm-restore"') && source.includes('Current </span>'), 'Blog editor restore confirmation must preview restore impact before rollback');
-  assert(source.includes('data-testid={`blog-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Blog editor revisions must expose actor/action metadata in cards and handoff summaries');
+  assert(source.includes('data-testid={`blog-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('operation') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Blog editor revisions must expose persisted operation plus actor/action metadata in cards and handoff summaries');
   assert(
     source.includes('getScheduledBlogEditorDateError') &&
       source.includes('Date.parse(scheduledAt)') &&
       source.includes('scheduledAtMs <= Date.now()') &&
       source.includes('Choose a future publish date before scheduling changes.'),
     'Blog editor must block scheduled posts with non-future publish dates before save',
+  );
+  assert(
+    source.includes('customCSS: savedCustomCSS') &&
+      source.includes('customJS: savedCustomJS') &&
+      source.includes('themeTokenRefs: savedThemeTokenRefs') &&
+      source.includes('assets: savedDesignAssets') &&
+      source.includes('interactions: savedDesignInteractions') &&
+      source.includes('dataBindings: savedDesignDataBindings') &&
+      source.includes('editableMap: savedEditableMap') &&
+      source.includes('metadata: savedDesignMetadata') &&
+      source.includes('const content = serializeCanvasContent(canvasElements, canvasSize, savedCustomCSS,'),
+    'Blog editor save must preserve the stored custom frontend design envelope while updating editable article elements',
+  );
+  assert(
+    source.includes('canvasElementsToBackyContentDocument') &&
+      source.includes("schemaVersion: 'backy.custom-frontend-design-envelope.v1'") &&
+      source.includes('source: savedContentDocument ?') &&
+      source.includes('contentDocumentSummary: {') &&
+      source.includes('contentDocument: currentDesignDocument') &&
+      source.includes('elements: canvasElements') &&
+      source.includes('canvasSize') &&
+      source.includes('customCSS: savedCustomCSS ||') &&
+      source.includes('customJS: savedCustomJS ||') &&
+      source.includes('themeTokenRefCount: recordKeyCount(currentDesignDocument.themeTokenRefs)') &&
+      source.includes('assetCount: arrayCount(currentDesignDocument.assets?.media) + arrayCount(currentDesignDocument.assets?.fonts)') &&
+      source.includes('animationTimelineCount: arrayCount(currentDesignDocument.metadata?.animations)') &&
+      source.includes('dataBindingDatasetCount: arrayCount(currentDesignDocument.dataBindings?.datasets)') &&
+      source.includes('editableFieldCount: recordKeyCount(currentDesignDocument.editableMap)') &&
+      source.includes('editorComposition: currentDesignDocument.metadata?.editorComposition || null'),
+    'Blog editor handoff manifest must expose the stored custom frontend design envelope and editor composition metadata for custom frontends',
+  );
+  assert(
+    source.includes("schemaVersion: 'backy.blog-publish-impact.v1'") &&
+      source.includes('const blogPublishImpact = {') &&
+      source.includes('publishImpact: blogPublishImpact') &&
+      source.includes('data-testid="blog-editor-publish-impact"') &&
+      source.includes('data-testid="blog-editor-copy-publish-impact"') &&
+      source.includes('data-testid="blog-editor-publish-impact-taxonomy"') &&
+      source.includes('featuredImageReady: Boolean(selectedFeaturedImage)') &&
+      source.includes('moderationMode: siteCommentPolicy?.moderationMode || \'manual\'') &&
+      source.includes('includesCanvasContent: false') &&
+      source.includes('includesPrivateComments: false'),
+    'Blog editor publish panel must expose a copyable taxonomy, media, comment, readiness, and action-impact handoff before status changes',
   );
   assert(
     source.includes('const loadBlogEditorPermissions = useCallback(() => {') &&
@@ -332,6 +403,57 @@ const createBlogPost = async (slug) => {
         canvasSize: {
           width: 1200,
           height: 800,
+        },
+        customCSS: '.smoke-blog-editor-template { color: var(--backy-smoke-blog-editor-primary); }',
+        customJS: 'window.__backySmokeBlogEditorTemplate = true;',
+        themeTokenRefs: {
+          primary: 'tokens.colors.primary',
+          bodyFont: 'tokens.fonts.body',
+        },
+        assets: {
+          media: [
+            {
+              id: 'media-smoke-blog-editor-cover',
+              type: 'image',
+              role: 'cover',
+            },
+          ],
+        },
+        interactions: {
+          timeline: [
+            {
+              target: `frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}-title`,
+              animation: 'fade-up',
+            },
+          ],
+        },
+        dataBindings: {
+          datasets: [
+            {
+              id: 'dataset_smoke_blog_editor_post',
+              source: 'blog',
+            },
+          ],
+        },
+        editableMap: {
+          'post.hero.title': {
+            elementId: `frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}-title`,
+            field: 'props.content',
+            editable: true,
+            valueType: 'string',
+            scope: 'element',
+          },
+        },
+        seo: {
+          titleTemplate: '{title} | Smoke Blog Editor',
+        },
+        metadata: {
+          animationTimeline: [
+            {
+              id: 'blog-editor-title-enter',
+              target: `frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}-title`,
+            },
+          ],
         },
       },
     }),

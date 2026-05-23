@@ -88,6 +88,22 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('aria-label="Retry loading forms"') && source.includes('Clear form filters'), 'Forms backend error state must expose retry and filter recovery actions');
   assert(source.includes('data-testid="forms-permission-state"') && source.includes('Form permissions could not be verified'), 'Forms route must expose a labelled permission error state');
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Forms permission error state must link to user access management');
+  assert(!source.includes('Users/Auth roadmap'), 'Forms route must not send registration/account work to stale Users/Auth roadmap copy');
+  assert(!source.includes('Authenticated member accounts remain a separate Users/Auth milestone'), 'Forms route must not render stale member-account milestone copy');
+  assert(!source.includes('remainingAccountMilestone'), 'Forms handoff must use a provider gate instead of a stale remaining-account milestone');
+  assert(
+    source.includes("const FORM_ACCOUNT_REGISTRATION_HANDOFF_SCHEMA_VERSION = 'backy.form-account-registration-handoff.v1'") &&
+      source.includes('FORM_ACCOUNT_REGISTRATION_BINDINGS') &&
+      source.includes('FORM_ACCOUNT_REGISTRATION_ACTIONS') &&
+      source.includes('frontendHandoff: formsAccountRegistrationHandoff') &&
+      source.includes('formsAccountRegistrationHandoffText') &&
+      source.includes('data-testid="forms-account-registration-handoff"') &&
+      source.includes('data-testid="forms-account-registration-handoff-copy-button"') &&
+      source.includes('Users/Auth provider handoff') &&
+      source.includes('raw submission values') &&
+      source.includes('auth provider secrets'),
+    'Forms route must expose a copyable account-registration custom frontend handoff with provider and privacy boundaries',
+  );
   assert(source.includes('data-testid="forms-rbac-permission-state"') && source.includes('aria-label="Retry loading form permissions"'), 'Forms permission banner must expose a retry action');
   assert(source.includes('title="No form audit events yet"'), 'Forms audit panel must keep the empty activity title visible');
   assert(source.includes('Form edits, submission review, consent retention, and embed-block changes will appear here.'), 'Forms audit empty state must explain which actions populate activity');
@@ -198,6 +214,27 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('const validation = hasValue') &&
       source.includes('disabled={!ruleHasValue}'),
     'Forms builder must only expose and persist validation rules compatible with each field type',
+  );
+  assert(
+    source.includes('const [formDraftSubmitted, setFormDraftSubmitted] = useState(false);') &&
+      source.includes('buildFormDraftInlineErrors(formDraft, collections)') &&
+      source.includes("setError('Fix form builder fields before saving.');") &&
+      source.includes('data-testid="form-builder-save-button"') &&
+      source.includes('testId="form-builder-name-error"') &&
+      source.includes('testId="form-builder-notification-email-error"') &&
+      source.includes('testId="form-builder-notification-webhook-error"') &&
+      source.includes('testId="form-builder-success-redirect-error"') &&
+      source.includes('testId="form-builder-consent-request-email-error"') &&
+      source.includes('testId="form-builder-collection-target-error"') &&
+      source.includes('data-testid={`form-builder-field-${fieldIndex}-key-input`}') &&
+      source.includes('testId={`${fieldKeyErrorKey}-error`}') &&
+      source.includes('testId={`${fieldLabelErrorKey}-error`}') &&
+      source.includes('testId={`${fieldOptionsErrorKey}-error`}') &&
+      source.includes('testId={`${fieldDefaultErrorKey}-error`}') &&
+      source.includes('testId={`${fieldValidationErrorKey}-error`}') &&
+      source.includes('Map required collection fields:') &&
+      source.includes('Default value must match this field type and options.'),
+    'Forms builder must use source-guarded inline validation before saving standalone form API definitions',
   );
   assert(
     source.includes('patchFormDraftContactShare') &&
@@ -2511,8 +2548,13 @@ const assertLayout = async (client) => {
     hasAudit: Boolean(document.querySelector('[data-testid="forms-audit-panel"]')) &&
       bodyText.includes('Forms activity'),
     hasAccountContract: Boolean(document.querySelector('[data-testid="forms-account-contract"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-account-registration-handoff"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-account-registration-handoff-copy-button"]')) &&
       bodyText.includes('Registration/account handoff') &&
-      bodyText.includes('Create registration form'),
+      bodyText.includes('Create registration form') &&
+      bodyText.includes('backy.form-account-registration-handoff.v1') &&
+      bodyText.includes('Copy account handoff') &&
+      bodyText.includes('Users/Auth handoff'),
     persistenceCertification,
     hasPersistenceCertification: Object.values(persistenceCertification).every(Boolean),
     hasLaunchReadiness: Boolean(document.querySelector('[data-testid="forms-launch-readiness"]')) &&
@@ -2581,6 +2623,7 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 const main = async () => {
   assertFormsPersistenceCertificationSource();
   if (process.env.BACKY_FORMS_SOURCE_ONLY === '1') {
+    console.log(JSON.stringify({ ok: true, mode: 'source-only', route: 'forms' }, null, 2));
     return;
   }
 

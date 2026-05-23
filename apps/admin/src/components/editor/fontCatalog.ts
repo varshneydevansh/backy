@@ -1,6 +1,16 @@
 import { type MediaAsset } from '@/stores/mockStore';
 
 export type FontSource = 'system' | 'google' | 'custom';
+export type FontDisplay = 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
+
+export interface FontFaceDefinition {
+  mediaId?: string;
+  url: string;
+  format?: string;
+  weight: string;
+  style: 'normal' | 'italic' | 'oblique';
+  display: FontDisplay;
+}
 
 export interface FontOption {
   value: string;
@@ -11,9 +21,12 @@ export interface FontOption {
   format?: string;
   weight?: string;
   style?: string;
+  display?: FontDisplay;
+  faces?: FontFaceDefinition[];
 }
 
 const FONT_EXTENSIONS = ['woff', 'woff2', 'ttf', 'otf', 'eot', 'svg'] as const;
+const FONT_DISPLAY_VALUES: FontDisplay[] = ['auto', 'block', 'swap', 'fallback', 'optional'];
 
 const GOOGLE_FONT_LIST: FontOption[] = [
   { value: 'Inter, sans-serif', label: 'Inter', source: 'google' },
@@ -65,6 +78,34 @@ const cleanFontNameFromFilename = (name: string): string => {
 const getStringMetadata = (media: MediaAsset, key: string): string => {
   const value = media.metadata?.[key];
   return typeof value === 'string' ? value.trim() : '';
+};
+
+const escapeCssString = (value: string): string => value.replace(/["\\]/g, '');
+
+const normalizeFontWeight = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  if (['normal', 'bold', 'lighter', 'bolder'].includes(normalized)) {
+    return normalized;
+  }
+
+  if (/^\d{1,4}$/.test(normalized)) {
+    const numeric = Number(normalized);
+    if (numeric >= 1 && numeric <= 1000) {
+      return String(numeric);
+    }
+  }
+
+  return '400';
+};
+
+const normalizeFontStyle = (value: string): FontFaceDefinition['style'] => {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'italic' || normalized === 'oblique' ? normalized : 'normal';
+};
+
+const normalizeFontDisplay = (value: string): FontDisplay => {
+  const normalized = value.trim().toLowerCase();
+  return FONT_DISPLAY_VALUES.includes(normalized as FontDisplay) ? normalized as FontDisplay : 'swap';
 };
 
 const toFontName = (media: MediaAsset): string | null => {
@@ -120,12 +161,17 @@ export const buildGoogleFontImportUrl = (fonts: FontOption[]): string => {
 export const getFontFamilyOptions = (media: MediaAsset[] = []): FontOption[] => {
   const options: FontOption[] = [...DEFAULT_FONT_LIST, ...GOOGLE_FONT_LIST];
   const seen = new Set<string>();
+  const customOptionsByKey = new Map<string, FontOption>();
 
   for (const font of options) {
     seen.add(font.value.toLowerCase());
   }
 
   media.forEach((item) => {
+    if (item.type !== 'font') {
+      return;
+    }
+
     const extension = getExtension(item.name || normalizeFontUrl(item.url));
     if (!extension || !FONT_EXTENSIONS.includes(extension as (typeof FONT_EXTENSIONS)[number])) {
       return;
@@ -135,12 +181,28 @@ export const getFontFamilyOptions = (media: MediaAsset[] = []): FontOption[] => 
     if (!value) return;
 
     const key = value.toLowerCase();
-    if (seen.has(key)) return;
 
     const format = FONT_FORMAT_MAP[extension];
     if (!format) return;
     const url = normalizeFontUrl(item.url);
     if (!url) return;
+
+    const face: FontFaceDefinition = {
+      mediaId: item.id,
+      url,
+      format,
+      weight: normalizeFontWeight(getStringMetadata(item, 'fontWeight') || '400'),
+      style: normalizeFontStyle(getStringMetadata(item, 'fontStyle') || 'normal'),
+      display: normalizeFontDisplay(getStringMetadata(item, 'fontDisplay') || 'swap'),
+    };
+
+    const existing = customOptionsByKey.get(key);
+    if (existing) {
+      existing.faces = [...(existing.faces || []), face];
+      return;
+    }
+
+    if (seen.has(key)) return;
 
     options.push({
       value,
@@ -149,9 +211,12 @@ export const getFontFamilyOptions = (media: MediaAsset[] = []): FontOption[] => 
       mediaId: item.id,
       url,
       format,
-      weight: getStringMetadata(item, 'fontWeight') || '400',
-      style: getStringMetadata(item, 'fontStyle') || 'normal',
+      weight: face.weight,
+      style: face.style,
+      display: face.display,
+      faces: [face],
     });
+    customOptionsByKey.set(key, options[options.length - 1]);
     seen.add(key);
   });
 
@@ -160,19 +225,37 @@ export const getFontFamilyOptions = (media: MediaAsset[] = []): FontOption[] => 
 
 export const buildCustomFontFaces = (fonts: FontOption[]): string => {
   return fonts
-    .filter((font) => font.source === 'custom' && !!font.url)
-    .map((font) => {
-      const fontName = font.value.replace(/["']/g, '');
-      const formatPart = font.format ? ` format("${font.format}")` : '';
-      const weight = font.weight || '400';
-      const style = font.style || 'normal';
+    .filter((font) => font.source === 'custom')
+    .flatMap((font) => {
+      const faces = font.faces?.length
+        ? font.faces
+        : font.url
+          ? [{
+            mediaId: font.mediaId,
+            url: font.url,
+            format: font.format,
+            weight: normalizeFontWeight(font.weight || '400'),
+            style: normalizeFontStyle(font.style || 'normal'),
+            display: normalizeFontDisplay(font.display || 'swap'),
+          }]
+          : [];
+
+      return faces.map((face) => ({ font, face }));
+    })
+    .filter(({ face }) => !!face.url)
+    .map(({ font, face }) => {
+      const fontName = escapeCssString(font.value);
+      const formatPart = face.format ? ` format("${escapeCssString(face.format)}")` : '';
+      const weight = normalizeFontWeight(face.weight);
+      const style = normalizeFontStyle(face.style);
+      const display = normalizeFontDisplay(face.display);
 
       return `@font-face {
   font-family: "${fontName}";
-  src: url("${font.url}")${formatPart};
+  src: url("${escapeCssString(face.url)}")${formatPart};
   font-style: ${style};
   font-weight: ${weight};
-  font-display: swap;
+  font-display: ${display};
 }`.trim();
     })
     .join('\n');

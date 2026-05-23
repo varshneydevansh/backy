@@ -43,6 +43,9 @@ const EASYPOST_MOCK_PORT = Number(process.env.BACKY_EASYPOST_MOCK_PORT || 45681)
 const EASYPOST_MOCK_BASE_URL = `http://127.0.0.1:${EASYPOST_MOCK_PORT}/v2`;
 const SHIPPO_MOCK_PORT = Number(process.env.BACKY_SHIPPO_MOCK_PORT || 45682);
 const SHIPPO_MOCK_BASE_URL = `http://127.0.0.1:${SHIPPO_MOCK_PORT}`;
+const SOURCE_ONLY_MODE = process.env.BACKY_ORDERS_SOURCE_ONLY === '1'
+  || process.env.BACKY_ORDERS_SMOKE_SOURCE_ONLY === '1'
+  || process.env.BACKY_COMMERCE_ORDERS_SOURCE_ONLY === '1';
 let apiAdminSessionToken = '';
 
 const ORDER_FIELDS = [
@@ -157,6 +160,42 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('data-testid="orders-bulk-selection-summary"') && source.includes('data-testid="orders-bulk-clear-selection"'), 'Orders bulk toolbar must expose selection summary and clear-selection controls');
   assert(source.includes('providerAnalytics: orderAnalytics?.providerOperations || null'), 'Orders handoff manifest must expose provider analytics for custom admin frontends');
   assert(source.includes('apiContracts: ORDER_API_CONTRACTS.map'), 'Orders handoff manifest must expose API response contracts for custom admin frontends');
+  assert(
+    source.includes('const [orderFormSubmitted, setOrderFormSubmitted] = useState(false);') &&
+      source.includes('const isLikelyOrderEmail = (value: string): boolean =>') &&
+      source.includes('const orderNumberInlineError = orderFormSubmitted && orderNumberMissing') &&
+      source.includes('const orderEmailInlineError = orderFormSubmitted') &&
+      source.includes('const orderRequiredFieldsInvalid = Boolean(') &&
+      source.includes("setError('Fix required order fields before saving.')") &&
+      source.includes('<form onSubmit={saveOrder} noValidate>') &&
+      source.includes('data-testid="orders-order-number-input"') &&
+      source.includes('aria-describedby={orderNumberInlineError ?') &&
+      source.includes('data-testid="orders-order-number-error"') &&
+      source.includes('data-testid="orders-customer-input"') &&
+      source.includes('data-testid="orders-customer-error"') &&
+      source.includes('data-testid="orders-email-input"') &&
+      source.includes('data-testid="orders-email-error"') &&
+      source.includes('data-testid="orders-total-input"') &&
+      source.includes('data-testid="orders-total-error"') &&
+	      source.includes('data-testid="orders-items-input"') &&
+	      source.includes('data-testid="orders-items-error"') &&
+	      source.includes('disabled={isOrdersAccessBusy || !canEditOrders}') &&
+	      source.includes('const [lineItemSubmitted, setLineItemSubmitted] = useState(false);') &&
+	      source.includes('const lineItemTitleInlineError = lineItemSubmitted && itemDraftTitleMissing') &&
+	      source.includes('const lineItemQuantityInlineError = lineItemSubmitted && itemDraftQuantityInvalid') &&
+	      source.includes('const lineItemPriceInlineError = lineItemSubmitted && itemDraftPriceInvalid') &&
+	      source.includes("setError('Fix line item fields before adding.')") &&
+	      source.includes('data-testid="orders-line-item-title-input"') &&
+	      source.includes('data-testid="orders-line-item-title-error"') &&
+	      source.includes('data-testid="orders-line-item-quantity-input"') &&
+	      source.includes('data-testid="orders-line-item-quantity-error"') &&
+	      source.includes('data-testid="orders-line-item-price-input"') &&
+	      source.includes('data-testid="orders-line-item-price-error"') &&
+	      source.includes('data-testid="orders-line-item-add"') &&
+	      source.includes('disabled={isOrdersAccessBusy || !canEditOrders || orderLineItems.length >= 100}') &&
+	      !source.includes('disabled={isOrdersAccessBusy || !canEditOrders || !itemDraft.title.trim() || orderLineItems.length >= 100}'),
+	    'Orders editor must expose inline order identity/contact/total/item and manual line-item validation instead of silently disabling save/add',
+	  );
   assert(source.includes('data-testid="orders-action-plan"'), 'Orders page must render the provider operation action-plan summary');
   assert(source.includes("schemaVersion: 'backy.order-operation-action-plan-summary.v1'"), 'Orders handoff manifest must expose the order operation action-plan summary schema');
   assert(source.includes("schemaVersion: 'backy.order-operation-action-plan.v1'"), 'Orders handoff manifest must expose per-order operation action plans');
@@ -170,6 +209,16 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('buildOrderStatusHandoff') &&
       source.includes('data-testid="orders-status-handoff-copy-button"') &&
       source.includes('data-testid="orders-status-handoff-action-plan"') &&
+      source.includes("schemaVersion: 'backy.order-operation-impact.v1'") &&
+      source.includes('buildOrderOperationImpact') &&
+      source.includes('operationImpact: OrderOperationImpact') &&
+      source.includes('selectedOrderOperationImpactText') &&
+      source.includes('copySelectedOrderOperationImpact') &&
+      source.includes('data-testid="orders-operation-impact"') &&
+      source.includes('data-testid="orders-operation-impact-copy-button"') &&
+      source.includes('data-testid="orders-operation-impact-actions"') &&
+      source.includes('includesProviderPayloads: false') &&
+      source.includes('publicCollectionReadBlocked') &&
       source.includes('Order status handoff copied.') &&
       source.includes('customerSafeFieldsOnly') &&
       source.includes('includesRawCustomerContact: false') &&
@@ -180,7 +229,20 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('customerProfileLinked') &&
       source.includes('shippingLabelReferencePresent') &&
       source.includes('providerRefundReferencePresent') &&
+      source.includes('const frontendBindings = buildOrderStatusFrontendBindings(endpoints, order)') &&
+      source.includes('frontendBindings,') &&
+      source.includes('publicStatusHandoff: string;') &&
+      source.includes('?orderId=${encodeURIComponent(order.id)}&statusToken={statusToken}') &&
+      source.includes("schemaVersion: 'backy.order-status-frontend-bindings.v1'") &&
+      source.includes('safeBindingPaths') &&
+      source.includes('maskedBindingPaths') &&
+      source.includes('editableRegions') &&
+      source.includes('actionBindings') &&
+      source.includes('adminOrderOperationsApiUrl') &&
+      source.includes('`${adminOrderOperationsApiUrl}/{orderId}/quote`') &&
+      !source.includes('`${adminOrdersApiUrl}/{orderId}/quote`') &&
       source.includes('adminStatusHandoff') &&
+      source.includes('adminOrderDetail') &&
       source.includes('/status-handoff') &&
       source.includes("'providerrefundid'") &&
       source.includes("'shippinglabelid'") &&
@@ -190,7 +252,7 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   );
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
   assert(
-      source.includes('data-testid="orders-provider-certification-download-button"') &&
+    source.includes('data-testid="orders-provider-certification-download-button"') &&
       source.includes('data-testid="orders-provider-certification-copy-button"') &&
       source.includes('data-testid="orders-provider-certification-command-copy-button"') &&
       source.includes('data-testid="orders-provider-certification-command-builder"') &&
@@ -198,8 +260,14 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-testid="orders-provider-certification-env-template"') &&
       source.includes('data-testid="orders-provider-certification-env-template-body"') &&
       source.includes('data-testid="orders-provider-certification-command-builder-copy-button"') &&
+      source.includes('data-testid="orders-provider-certification-site-target"') &&
+      source.includes('data-testid="orders-provider-certification-evidence-packet"') &&
+      source.includes('data-testid="orders-provider-certification-evidence-packet-copy-button"') &&
       source.includes('providerCertificationHandoffText') &&
       source.includes('providerCertificationEnvTemplate') &&
+      source.includes('providerCertificationEvidencePacket') &&
+      source.includes('providerCertificationEvidencePacketText') &&
+      source.includes('operatorEvidencePacket: providerCertificationEvidencePacket') &&
       source.includes('orderEvidence') &&
       source.includes('endpointEvidence') &&
       source.includes('providerReadinessEvidence') &&
@@ -226,6 +294,7 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-testid="orders-provider-certification-external-target-input"') &&
       source.includes('data-testid="orders-provider-certification-doctor-toggle"') &&
       source.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
+      source.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
       source.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
       source.includes('npm run test:commerce-provider-certification-preflight-contract') &&
       source.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification') &&
@@ -233,11 +302,22 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-testid="orders-provider-certification-evidence"') &&
       source.includes('data-testid="orders-provider-certification-runbook"') &&
       source.includes("schemaVersion: 'backy.order-provider-certification-evidence.v1'") &&
+      source.includes("schemaVersion: 'backy.order-provider-certification-evidence-packet.v1'") &&
       source.includes('Checkout settlement') &&
       source.includes('Quote recalculation') &&
       source.includes('Carrier labels and tracking') &&
       source.includes('Webhook and reconciliation') &&
       source.includes('Order certification evidence') &&
+      source.includes('Certification evidence packet') &&
+      source.includes('Copy evidence packet') &&
+      source.includes('Redacted operator attachment manifest') &&
+      source.includes('targetInputs: ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs') &&
+      source.includes('redactionPolicy') &&
+      source.includes('includesAddresses: false') &&
+      source.includes('includesWebhookBodies: false') &&
+      source.includes('Scenario attachments') &&
+      source.includes('expectedArtifacts') &&
+      source.includes('captureSource') &&
       source.includes('requiredInputs'),
     'Orders handoff manifest must expose mock and live provider certification gates',
   );
@@ -293,6 +373,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   const apiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
   const analyticsApiSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/commerce/orders/analytics/route.ts', import.meta.url), 'utf8');
   const statusHandoffApiSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/commerce/orders/[orderId]/status-handoff/route.ts', import.meta.url), 'utf8');
+  const publicOrdersApiSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/commerce/orders/route.ts', import.meta.url), 'utf8');
+  const openApiSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url), 'utf8');
   const sdkSource = fs.readFileSync(new URL('../../../packages/sdk-js/src/index.ts', import.meta.url), 'utf8');
   assert(
     apiSource.includes("provider: 'http' | 'stripe' | 'taxjar' | 'avalara' | 'easypost' | 'shippo'"),
@@ -305,8 +387,15 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   );
   assert(
     analyticsApiSource.includes('buildOrderProviderCertification') &&
+      analyticsApiSource.includes('buildOrderProviderCertificationEvidencePacket') &&
       analyticsApiSource.includes("source: 'admin-order-analytics-api'") &&
       analyticsApiSource.includes("schemaVersion: 'backy.order-provider-certification-evidence.v1'") &&
+      analyticsApiSource.includes('operatorEvidencePacket') &&
+      analyticsApiSource.includes('backy.order-provider-certification-evidence-packet.v1') &&
+      analyticsApiSource.includes('redactionPolicy') &&
+      analyticsApiSource.includes('captureSource') &&
+      analyticsApiSource.includes('expectedArtifacts') &&
+      analyticsApiSource.includes('Redacted operator attachment manifest only') &&
       analyticsApiSource.includes('ORDER_PROVIDER_CERTIFICATION_SCENARIOS') &&
       analyticsApiSource.includes('providerCertification,') &&
       analyticsApiSource.includes('Provider credentials stay in server environment/configuration; order analytics exposes only non-secret readiness'),
@@ -322,19 +411,71 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       statusHandoffApiSource.includes('includesPaymentReferences: false') &&
       statusHandoffApiSource.includes('includesAddresses: false') &&
       statusHandoffApiSource.includes('includesInternalNotes: false') &&
+      statusHandoffApiSource.includes('includesDigitalDeliveryUrls: false') &&
+      statusHandoffApiSource.includes('includesDownloadMediaIds: false') &&
       statusHandoffApiSource.includes('"providerrefundid"') &&
       statusHandoffApiSource.includes('"shippinglabelid"') &&
+      statusHandoffApiSource.includes('"statusaccesstokenhash"') &&
+      statusHandoffApiSource.includes('"downloadurl"') &&
+      statusHandoffApiSource.includes('"downloadmediaid"') &&
+      statusHandoffApiSource.includes('adminOrderDetail') &&
+      statusHandoffApiSource.includes('/collections/') &&
+      statusHandoffApiSource.includes('buildFrontendBindings') &&
+      statusHandoffApiSource.includes('backy.order-status-frontend-bindings.v1') &&
+      statusHandoffApiSource.includes('commerce/orders?orderId=${encodeURIComponent(order.id)}&statusToken={statusToken}') &&
+      statusHandoffApiSource.includes('backy.order-digital-delivery-handoff.v1') &&
+      statusHandoffApiSource.includes('digitalDelivery.customerAction') &&
+      statusHandoffApiSource.includes('safeBindingPaths') &&
+      statusHandoffApiSource.includes('maskedBindingPaths') &&
+      statusHandoffApiSource.includes('editableRegions') &&
+      statusHandoffApiSource.includes('actionBindings') &&
       statusHandoffApiSource.includes('statusHandoff,') &&
       !statusHandoffApiSource.includes('record: order'),
-    'Order status-handoff API must require admin commerce view access and return only the masked customer-safe projection',
+    'Order status-handoff API must require admin commerce view access and return only the masked customer-safe projection plus frontend binding metadata',
+  );
+  assert(
+    publicOrdersApiSource.includes('ORDER_STATUS_ACCESS_SCHEMA_VERSION = "backy.order-status-access.v1"') &&
+      publicOrdersApiSource.includes('createOrderStatusAccessToken') &&
+      publicOrdersApiSource.includes('statusaccesstokenhash') &&
+      publicOrdersApiSource.includes('verifyOrderStatusAccessToken') &&
+      publicOrdersApiSource.includes('ORDER_STATUS_TOKEN_REQUIRED') &&
+      publicOrdersApiSource.includes('ORDER_STATUS_TOKEN_INVALID') &&
+      publicOrdersApiSource.includes('statusAccess,') &&
+      publicOrdersApiSource.includes('"post-checkout-status-token"') &&
+      publicOrdersApiSource.includes('commerce/orders?orderId=${encodeURIComponent(order.id)}&statusToken={statusToken}') &&
+      publicOrdersApiSource.includes('publicStatusHandoff'),
+    'Public commerce orders API must return a tokenized public order-status refresh contract without exposing raw order records',
+  );
+  assert(
+    openApiSource.includes('CommerceOrderStatusHandoff') &&
+      openApiSource.includes('CommerceOrderStatusAccess') &&
+      openApiSource.includes('CommerceOrderStatusHandoffEnvelope') &&
+      openApiSource.includes('"digitalDelivery"') &&
+      openApiSource.includes('backy.order-digital-delivery-handoff.v1') &&
+      openApiSource.includes('backy.order-status-access.v1') &&
+      openApiSource.includes('post-checkout-status-token') &&
+      openApiSource.includes('"includesDigitalDeliveryUrls"') &&
+      openApiSource.includes('"includesDownloadMediaIds"') &&
+      openApiSource.includes('"frontendBindings"') &&
+      openApiSource.includes('backy.order-status-frontend-bindings.v1') &&
+      openApiSource.includes('orderStatusHandoff') &&
+      openApiSource.includes('safeBindingPaths') &&
+      openApiSource.includes('maskedBindingPaths') &&
+      openApiSource.includes('editableRegions') &&
+      openApiSource.includes('actionBindings'),
+    'OpenAPI must expose the order status frontend binding metadata for custom confirmation/tracking/support views',
   );
   assert(
     sdkSource.includes('commerceOrderStatusHandoff(') &&
+      sdkSource.includes('commerceOrderPublicStatusHandoff(') &&
       sdkSource.includes('/status-handoff') &&
       sdkSource.includes('BackyCommerceOrderStatusHandoffResponse') &&
-      sdkSource.includes('includesProviderExecutionIds?: boolean') &&
-      sdkSource.includes('includesPaymentReferences?: boolean'),
-    'SDK must expose the authenticated order status-handoff helper and typed privacy flags',
+      sdkSource.includes('GeneratedBackyOpenApiCommerceOrderStatusHandoff') &&
+      sdkSource.includes('GeneratedBackyOpenApiCommerceOrderStatusAccess') &&
+      sdkSource.includes('BackyCommerceOrderStatusAccess') &&
+      sdkSource.includes('export type BackyCommerceOrderStatusHandoff =') &&
+      sdkSource.includes('GeneratedBackyOpenApiCommerceOrderStatusHandoff & Record<string, unknown>'),
+    'SDK must expose the authenticated order status-handoff helper through the generated OpenAPI type with frontend binding metadata and privacy flags',
   );
 };
 
@@ -2128,36 +2269,53 @@ const assertOrdersLayout = async (client) => {
         document.body?.innerText?.includes('Attention') &&
         document.body?.innerText?.includes('Executable') &&
         document.body?.innerText?.includes('Blocked actions'),
-      providerCertificationExport: Boolean(document.querySelector('[data-testid="orders-provider-certification"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-download-button"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-command-copy-button"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-env-copy-button"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-env-template"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-env-template-body"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder-copy-button"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-payment-toggle"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-tax-provider-select"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-command"]')) &&
-        Boolean(document.querySelector('[data-testid="orders-provider-certification-runbook"]')) &&
-        document.body?.innerText?.includes('Live provider certification') &&
-        document.body?.innerText?.includes('Order certification command builder') &&
-        (document.body?.innerText?.includes('Env template') || document.body?.innerText?.includes('ENV TEMPLATE')) &&
-        document.body?.innerText?.includes('backy.order-provider-certification-env-template.v1') &&
-        document.body?.innerText?.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1') &&
-        document.body?.innerText?.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
-        document.body?.innerText?.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED') &&
-        document.body?.innerText?.includes('Order certification evidence') &&
-        document.body?.innerText?.includes('backy.order-provider-certification-evidence.v1') &&
-        document.body?.innerText?.includes('Checkout settlement') &&
-        document.body?.innerText?.includes('Quote recalculation') &&
-        document.body?.innerText?.includes('Carrier labels and tracking') &&
-        document.body?.innerText?.includes('Webhook and reconciliation') &&
-        document.body?.innerText?.includes('Copy env template') &&
-        document.body?.innerText?.includes('Copy CI command') &&
-        document.body?.innerText?.includes('Live provider runbook') &&
-        document.body?.innerText?.includes('Download provider JSON'),
+      providerCertificationExport: (() => {
+        const root = document.querySelector('[data-testid="orders-provider-certification"]');
+        const text = root?.textContent || document.body?.innerText || '';
+        const details = {
+          wrapper: Boolean(root),
+          downloadButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-download-button"]')),
+          copyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')),
+          commandCopyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-command-copy-button"]')),
+          commandBuilder: Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder"]')),
+          siteTarget: Boolean(document.querySelector('[data-testid="orders-provider-certification-site-target"]')),
+          envCopyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-env-copy-button"]')),
+          envTemplate: Boolean(document.querySelector('[data-testid="orders-provider-certification-env-template"]')),
+          envTemplateBody: Boolean(document.querySelector('[data-testid="orders-provider-certification-env-template-body"]')),
+          commandBuilderCopyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder-copy-button"]')),
+          evidencePacket: Boolean(document.querySelector('[data-testid="orders-provider-certification-evidence-packet"]')),
+          evidencePacketCopyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-evidence-packet-copy-button"]')),
+          paymentToggle: Boolean(document.querySelector('[data-testid="orders-provider-certification-payment-toggle"]')),
+          taxProviderSelect: Boolean(document.querySelector('[data-testid="orders-provider-certification-tax-provider-select"]')),
+          command: Boolean(document.querySelector('[data-testid="orders-provider-certification-command"]')),
+          runbook: Boolean(document.querySelector('[data-testid="orders-provider-certification-runbook"]')),
+          liveHeading: text.includes('Live provider certification'),
+          commandBuilderText: text.includes('Order certification command builder'),
+          envTemplateText: text.includes('Env template') || text.includes('ENV TEMPLATE'),
+          envTemplateSchema: text.includes('backy.order-provider-certification-env-template.v1'),
+          certificationRequiredEnv: text.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1'),
+          paymentProviderEnv: text.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER'),
+          siteTargetEnv: text.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
+          releaseDoctorEnv: text.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED'),
+          evidenceHeading: text.includes('Order certification evidence'),
+          evidenceSchema: text.includes('backy.order-provider-certification-evidence.v1'),
+          packetHeading: text.includes('Certification evidence packet'),
+          packetSchema: text.includes('backy.order-provider-certification-evidence-packet.v1'),
+          packetCopyText: text.includes('Copy evidence packet'),
+          scenarioAttachmentsText: text.includes('Scenario attachments'),
+          checkoutSettlement: text.includes('Checkout settlement'),
+          quoteRecalculation: text.includes('Quote recalculation'),
+          carrierLabels: text.includes('Carrier labels and tracking'),
+          webhookReconciliation: text.includes('Webhook and reconciliation'),
+          copyEnvTemplate: text.includes('Copy env template'),
+          copyCiCommand: text.includes('Copy CI command'),
+          liveRunbook: text.includes('Live provider runbook'),
+          downloadProviderJson: text.includes('Download provider JSON'),
+        };
+        window.__backyOrdersProviderCertificationDetails = details;
+        return Object.values(details).every(Boolean);
+      })(),
+      providerCertificationDetails: window.__backyOrdersProviderCertificationDetails || null,
       cronReadiness: Boolean(document.querySelector('[data-testid="orders-cron-readiness"]')),
       riskControls: Boolean(document.querySelector('[data-testid="orders-risk-controls"]')),
       hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="orders-customer-profile-manager"]')),
@@ -2418,8 +2576,12 @@ const fillOrderEditor = async (client, suffix, customerRecord) => {
     price: 40,
     lineTotal: 80,
     sku: `ORDER-SMOKE-${suffix.toUpperCase()}`,
+    productType: 'digital',
+    digitalDelivery: true,
+    downloadMediaId: `media_orders_download_${suffix}`,
+    downloadUrl: `https://downloads.example.com/orders/${suffix}.zip`,
     taxable: true,
-    shippingRequired: true,
+    shippingRequired: false,
     discountCode: 'STRIPESMOKE',
   }]), { exact: true });
 
@@ -3293,7 +3455,18 @@ const main = async () => {
   let fulfillmentProviderServer;
   let expectedProviderTotal = 93.69;
   assertOrdersBulkWorkflowHandlesPartialResults();
-  if (process.env.BACKY_ORDERS_SOURCE_ONLY === '1') {
+  if (SOURCE_ONLY_MODE) {
+    console.log(JSON.stringify({
+      ok: true,
+      mode: 'orders-source-only',
+      guard: 'orders-commerce-provider-certification',
+      contracts: [
+        'orders-provider-certification-ui',
+        'order-analytics-provider-certification-api',
+        'order-status-handoff-api',
+        'commerce-order-management-sdk',
+      ],
+    }));
     return;
   }
 
@@ -3365,6 +3538,8 @@ const main = async () => {
     const rawCustomerId = String(createdOrder.values?.customerid || '');
     const rawCheckoutSession = String(createdOrder.values?.checkoutsessionid || '');
     const rawPaymentReference = String(createdOrder.values?.paymentreference || '');
+    const rawDownloadUrl = String(JSON.parse(createdOrder.values?.items || '[]')?.[0]?.downloadUrl || '');
+    const rawDownloadMediaId = String(JSON.parse(createdOrder.values?.items || '[]')?.[0]?.downloadMediaId || '');
     assert(statusHandoff?.schemaVersion === 'backy.order-status-handoff.v1', `Status handoff endpoint returned wrong schema: ${JSON.stringify(statusHandoffPayload).slice(0, 700)}`);
     assert(statusHandoff.source === 'admin-order-status-handoff-api', `Status handoff endpoint returned wrong source: ${JSON.stringify(statusHandoff).slice(0, 700)}`);
     assert(statusHandoff.order?.orderNumber === orderNumber, `Status handoff endpoint returned the wrong order: ${JSON.stringify(statusHandoff).slice(0, 700)}`);
@@ -3375,10 +3550,16 @@ const main = async () => {
     assert(!rawCustomerId || !statusHandoffText.includes(rawCustomerId), 'Status handoff endpoint must not include the raw internal customer id');
     assert(!rawCheckoutSession || !statusHandoffText.includes(rawCheckoutSession), 'Status handoff endpoint must not include the raw checkout session id');
     assert(!rawPaymentReference || !statusHandoffText.includes(rawPaymentReference), 'Status handoff endpoint must not include the raw payment reference');
+    assert(!rawDownloadUrl || !statusHandoffText.includes(rawDownloadUrl), 'Status handoff endpoint must not include raw digital download URLs');
+    assert(!rawDownloadMediaId || !statusHandoffText.includes(rawDownloadMediaId), 'Status handoff endpoint must not include raw digital download media ids');
+    assert(statusHandoff.digitalDelivery?.schemaVersion === 'backy.order-digital-delivery-handoff.v1' && statusHandoff.digitalDelivery.itemCount === 1 && statusHandoff.digitalDelivery.configuredItemCount === 1, `Status handoff endpoint did not expose safe digital delivery status: ${JSON.stringify(statusHandoff.digitalDelivery).slice(0, 700)}`);
+    assert(statusHandoff.digitalDelivery.includesDownloadUrls === false && statusHandoff.digitalDelivery.includesDownloadMediaIds === false, `Status handoff digital delivery privacy flags regressed: ${JSON.stringify(statusHandoff.digitalDelivery)}`);
+    assert(statusHandoff.frontendBindings?.safeBindingPaths?.includes('digitalDelivery.status'), `Status handoff frontend bindings must expose digital delivery status: ${JSON.stringify(statusHandoff.frontendBindings)}`);
     assert(statusHandoff.privacy?.customerSafeFieldsOnly === true, `Status handoff endpoint did not report customer-safe privacy: ${JSON.stringify(statusHandoff.privacy)}`);
-    assert(statusHandoff.privacy?.includesProviderExecutionIds === false && statusHandoff.privacy?.includesPaymentReferences === false, `Status handoff endpoint privacy flags regressed: ${JSON.stringify(statusHandoff.privacy)}`);
-    assert(statusHandoff.privacy?.excludedFields?.includes('providerrefundid') && statusHandoff.privacy?.excludedFields?.includes('shippinglabelid'), `Status handoff endpoint did not exclude provider/shipping references: ${JSON.stringify(statusHandoff.privacy)}`);
+    assert(statusHandoff.privacy?.includesProviderExecutionIds === false && statusHandoff.privacy?.includesPaymentReferences === false && statusHandoff.privacy?.includesDigitalDeliveryUrls === false, `Status handoff endpoint privacy flags regressed: ${JSON.stringify(statusHandoff.privacy)}`);
+    assert(statusHandoff.privacy?.excludedFields?.includes('providerrefundid') && statusHandoff.privacy?.excludedFields?.includes('shippinglabelid') && statusHandoff.privacy?.excludedFields?.includes('downloadurl'), `Status handoff endpoint did not exclude provider/shipping/digital references: ${JSON.stringify(statusHandoff.privacy)}`);
     assert(statusHandoff.endpoints?.adminStatusHandoff?.includes('/status-handoff'), `Status handoff endpoint did not expose its admin handoff URL: ${JSON.stringify(statusHandoff.endpoints)}`);
+    assert(statusHandoff.endpoints?.adminOrderDetail?.includes('/collections/') && statusHandoff.endpoints.adminOrderDetail.includes('/records/'), `Status handoff endpoint did not expose its admin order detail URL: ${JSON.stringify(statusHandoff.endpoints)}`);
     assert(!('record' in (statusHandoffPayload.data || {})), `Status handoff endpoint must not return the raw order record: ${JSON.stringify(statusHandoffPayload).slice(0, 700)}`);
 
     const initialAnalyticsPayload = await requestApi(`/api/admin/sites/${SITE_ID}/commerce/orders/analytics`);
@@ -3392,6 +3573,23 @@ const main = async () => {
     assert(initialProviderCertification.certificationEvidence.coverage?.total === 7, `Order analytics provider certification must enumerate order scenarios: ${JSON.stringify(initialProviderCertification.certificationEvidence).slice(0, 700)}`);
     assert(initialProviderCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === 'checkout-settlement'), `Order analytics provider certification missing checkout scenario: ${JSON.stringify(initialProviderCertification.certificationEvidence).slice(0, 700)}`);
     assert(initialProviderCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === 'provider-refund'), `Order analytics provider certification missing refund scenario: ${JSON.stringify(initialProviderCertification.certificationEvidence).slice(0, 700)}`);
+    assert(initialProviderCertification.operatorEvidencePacket?.schemaVersion === 'backy.order-provider-certification-evidence-packet.v1', `Order analytics provider certification missing operator evidence packet: ${JSON.stringify(initialProviderCertification).slice(0, 700)}`);
+    assert(initialProviderCertification.operatorEvidencePacket.operatorArtifacts?.some((artifact) => artifact.key === 'payment-refunds'), `Order analytics provider evidence packet missing payment/refund artifact: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
+    assert(initialProviderCertification.operatorEvidencePacket.operatorArtifacts?.some((artifact) => artifact.key === 'webhook-reconciliation'), `Order analytics provider evidence packet missing webhook/reconciliation artifact: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
+    assert(initialProviderCertification.operatorEvidencePacket.scenarioAttachments?.some((scenario) => scenario.key === 'provider-refund'), `Order analytics provider evidence packet missing refund scenario attachment: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
+    assert(
+      initialProviderCertification.operatorEvidencePacket.commandPreview?.targetInputs?.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
+        initialProviderCertification.operatorEvidencePacket.commandPreview?.targetInputs?.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+        initialProviderCertification.operatorEvidencePacket.target?.siteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
+        initialProviderCertification.operatorEvidencePacket.target?.siteId === SITE_ID,
+      `Order analytics provider evidence packet missing site-targeted command preview: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`,
+    );
+    assert(
+      initialProviderCertification.operatorEvidencePacket.redactionPolicy?.includesProviderSecrets === false &&
+        initialProviderCertification.operatorEvidencePacket.redactionPolicy?.includesRawOrderPayloads === false,
+      `Order analytics provider evidence packet redaction policy regressed: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket?.redactionPolicy).slice(0, 700)}`,
+    );
+    assert(initialProviderCertification.operatorEvidencePacket.secretHandling?.includes('Redacted operator attachment manifest only'), `Order analytics provider evidence packet missing secret boundary: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
     assert(typeof initialProviderCertification.secretHandling === 'string' && initialProviderCertification.secretHandling.includes('Provider credentials stay in server environment/configuration'), `Order analytics provider certification must preserve non-secret boundary: ${JSON.stringify(initialProviderCertification).slice(0, 700)}`);
     assert(initialAnalytics.orderCount >= 1, `Order analytics did not count the created order: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);
     assert(initialAnalytics.payment?.pending?.count >= 1, `Order analytics did not report pending payment state: ${JSON.stringify(initialAnalytics).slice(0, 500)}`);

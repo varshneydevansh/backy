@@ -326,9 +326,6 @@ function TeamsPage() {
     if (blockReason) {
       throw new Error(blockReason);
     }
-    const confirmed = window.confirm('Remove this member from the team?');
-    if (!confirmed) return;
-
     await removeTeamMember(teamId, memberId);
     setLatestInviteDelivery(null);
     await refreshAfterMutation('Team member removed.');

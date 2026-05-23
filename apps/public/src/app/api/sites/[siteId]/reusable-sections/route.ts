@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listReusableSections } from '@/lib/backyStore';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -32,23 +33,9 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
-const reusableSectionFrontendDesign = (section: { metadata?: Record<string, unknown> }) => {
-  const metadata = section.metadata;
-  if (!metadata || typeof metadata.frontendDesignTemplateId !== 'string') {
-    return undefined;
-  }
-
-  return {
-    templateId: metadata.frontendDesignTemplateId,
-    templateName: typeof metadata.frontendDesignTemplateName === 'string' ? metadata.frontendDesignTemplateName : undefined,
-    routePattern: typeof metadata.frontendDesignRoutePattern === 'string' ? metadata.frontendDesignRoutePattern : undefined,
-    source: metadata.frontendDesignSource,
-    chrome: metadata.frontendDesignChrome,
-    tokens: metadata.frontendDesignTokens,
-    customCss: typeof metadata.frontendDesignCustomCss === 'string' ? metadata.frontendDesignCustomCss : undefined,
-    bindingHints: Array.isArray(metadata.frontendDesignBindingHints) ? metadata.frontendDesignBindingHints : [],
-  };
-};
+const reusableSectionFrontendDesign = (section: { metadata?: unknown }) => (
+  frontendDesignProvenanceFromMetadata(section.metadata)
+);
 
 const publicReusableSection = <TSection extends { metadata?: Record<string, unknown> }>(section: TSection) => ({
   ...section,

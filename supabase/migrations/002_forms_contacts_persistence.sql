@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS public.form_submissions (
   user_agent TEXT,
   request_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending',
-  reviewed_by UUID REFERENCES public.profiles(id),
+  reviewed_by TEXT,
   reviewed_at TIMESTAMPTZ,
   admin_notes TEXT,
   collection_record JSONB,

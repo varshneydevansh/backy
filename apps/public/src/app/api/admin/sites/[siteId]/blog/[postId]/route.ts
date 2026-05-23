@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-  canvasElementsToBackyContentDocument,
+  canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
   type BackyJsonObject,
   type BackyContentDocument,
@@ -29,6 +29,7 @@ import {
   updateAdminBlogPost,
 } from "@/lib/backyStore";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import { normalizeInputFromDirectFrontendDesignEnvelope } from "@/lib/frontendDesignContract";
 import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
@@ -163,33 +164,15 @@ const contentDocumentFromInput = (
   if (rawContent === undefined) {
     return undefined;
   }
-  if (isBackyContentDocument(rawContent)) {
-    return rawContent;
-  }
-  if (
-    isRecord(rawContent) &&
-    isBackyContentDocument(rawContent.contentDocument)
-  ) {
-    return rawContent.contentDocument;
-  }
-
-  return canvasElementsToBackyContentDocument({
+  return canvasContentPayloadToBackyContentDocument({
     id: fallback.id,
     kind: "post",
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements:
-      isRecord(rawContent) && Array.isArray(rawContent.elements)
-        ? rawContent.elements
-        : Array.isArray(rawContent)
-          ? rawContent
-          : [],
-    canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
-    customCSS:
-      isRecord(rawContent) && typeof rawContent.customCSS === "string"
-        ? rawContent.customCSS
-        : undefined,
+    version: fallback.content.version,
+    rawContent,
+    fallbackDocument: fallback.content,
   });
 };
 
@@ -262,7 +245,21 @@ const adminPostFromRepositoryPost = (post: BackyPost) => {
         typeof post.content.metadata?.customCSS === "string"
           ? post.content.metadata.customCSS
           : undefined,
+      customJS:
+        typeof post.content.metadata?.customJS === "string"
+          ? post.content.metadata.customJS
+          : undefined,
       contentDocument: post.content,
+      themeTokenRefs: post.content.themeTokenRefs,
+      assets: post.content.assets,
+      animations: Array.isArray(post.content.metadata?.animations) || isRecord(post.content.metadata?.animations)
+        ? post.content.metadata.animations
+        : undefined,
+      interactions: post.content.interactions,
+      dataBindings: post.content.dataBindings,
+      editableMap: post.content.editableMap,
+      seo: post.content.seo,
+      metadata: post.content.metadata,
     },
   };
 };
@@ -440,7 +437,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const body = await parseJsonBody(request);
+      const body = normalizeInputFromDirectFrontendDesignEnvelope(
+        await parseJsonBody(request),
+      );
       const statusValidationError = postStatusValidationError(body, requestId);
       if (statusValidationError) {
         return statusValidationError;
@@ -540,6 +539,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           body.revisionNote.trim().length > 0
             ? body.revisionNote
             : "Before update",
+        operation: "update",
         createdBy: request.headers.get("x-backy-actor") || "admin",
       });
       const updated = await repositories.posts.update(site.id, post.id, {
@@ -624,7 +624,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "POST_NOT_FOUND", "Post not found", requestId);
     }
 
-    const body = await parseJsonBody(request);
+    const body = normalizeInputFromDirectFrontendDesignEnvelope(
+      await parseJsonBody(request),
+    );
     const statusValidationError = postStatusValidationError(body, requestId);
     if (statusValidationError) {
       return statusValidationError;

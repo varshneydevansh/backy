@@ -25,6 +25,8 @@ import type {
   BackyManifestBlogRuntimeModule,
   BackyManifestBlogTag,
   BackyManifestCommerceRuntimeModule,
+  BackyManifestContentLifecycleCommands,
+  BackyManifestContentManagementPolicy,
   BackyManifestCollectionSchema,
   BackyManifestCollectionsRuntimeModule,
   BackyAdminSettings,
@@ -74,6 +76,8 @@ import type {
   BackyAdminBlogCategoryResponse,
   BackyAdminBlogPostDeleteResponse,
   BackyAdminBlogPostPreviewResponse,
+  BackyAdminBlogPostRollbackInput,
+  BackyAdminBlogPostRevision,
   BackyAdminBlogPostReadinessResponse,
   BackyAdminBlogPostResponse,
   BackyAdminBlogPostRevisionsResponse,
@@ -141,6 +145,8 @@ import type {
   BackyAdminMediaVersionsResponse,
   BackyAdminPageDeleteResponse,
   BackyAdminPagePreviewResponse,
+  BackyAdminPageRollbackInput,
+  BackyAdminPageRevision,
   BackyAdminPageReadinessResponse,
   BackyAdminPageResponse,
   BackyAdminPageRevisionsResponse,
@@ -151,6 +157,8 @@ import type {
   BackyMediaSignedUrlResponse,
     BackySiteSettingsResponse,
     BackyManifestDeliveryDiscovery,
+    BackyCompletionArtifactVerifier,
+    BackyCompletionEvidenceArtifact,
     BackyCompletionStatus,
     BackyFrontendDatabaseCertification,
   BackyFrontendLaunchReadiness,
@@ -167,6 +175,7 @@ import type {
   BackySiteCommentsResponse,
   BackyCommerceOrderInput,
   BackyCommerceOrderAnalyticsResponse,
+  BackyCommerceOrderStatusAccess,
   BackyCommerceOrderStatusHandoffResponse,
   BackyCommerceOrderFulfillmentResponse,
   BackyCommerceOrderProviderRefundResponse,
@@ -205,11 +214,16 @@ import type {
   BackyAdminFormSubmissionsResponse,
   BackyFormSubmissionInput,
   BackyInteractiveRuntimeEventInput,
+  BackyContentAddElementResult,
+  BackyContentRevisionBranchMetadata,
+  BackyContentDeleteElementsResult,
+  BackyContentDuplicateElementResult,
   BackyContentElementDescriptor,
   BackyContentEditableFieldPatch,
   BackyContentEditableMapPatch,
   BackyContentElementPatch,
   BackyContentGroupResult,
+  BackyContentTransformElementsResult,
   BackyContentUngroupResult,
   BackyEditableContent,
   BackyLiveManagedBlogPostResponse,
@@ -217,6 +231,7 @@ import type {
   BackyLiveManagedPageResponse,
   BackyLiveManagedPageUpdateInput,
   BackyLiveManagementRequestOptions,
+  BackyManifestEditorCommandRegistry,
   BackyManifestFormDefinition,
   BackyManifestFormsRuntimeModule,
   BackyManifestLiveManagementModule,
@@ -231,6 +246,7 @@ import type {
   GeneratedBackyElementAction,
   GeneratedBackyElementActions,
   GeneratedBackyPublicRenderPayloadBindingSlot,
+  GeneratedBackyPublicRenderPayloadProductDesignReadiness,
   GeneratedBackyFrontendDesignContract,
     GeneratedBackyFrontendDesignProvenance,
     GeneratedBackyFrontendManifest,
@@ -245,7 +261,7 @@ import type {
   GeneratedBackyInteractiveRenderCapabilities,
     GeneratedBackyOpenApiBackyContentAssetRef,
     GeneratedBackyOpenApiBackyCompletionStatus,
-    GeneratedBackyOpenApiBackyContentDocument,
+  GeneratedBackyOpenApiBackyContentDocument,
   GeneratedBackyOpenApiBackyContentElement,
   GeneratedBackyOpenApiBackyContentElementAccessibility,
   GeneratedBackyOpenApiBackyDataBinding,
@@ -253,6 +269,23 @@ import type {
   GeneratedBackyOpenApiBackyEditableMapEntry,
   GeneratedBackyOpenApiBackyElementAction,
   GeneratedBackyOpenApiBackyReusableSectionContent,
+  GeneratedBackyOpenApiAdminSettings,
+  GeneratedBackyOpenApiAdminSettingsActionEnvelope,
+  GeneratedBackyOpenApiAdminSettingsActionRequest,
+  GeneratedBackyOpenApiAdminSettingsEnvelope,
+  GeneratedBackyOpenApiAdminSettingsMediaStorageHandoff,
+  GeneratedBackyOpenApiAdminSettingsThemeDesignImpact,
+  GeneratedBackyOpenApiAdminSettingsProviderCertification,
+  GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidence,
+  GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidencePacket,
+  GeneratedBackyOpenApiAdminSettingsUpdateRequest,
+  GeneratedBackyOpenApiAdminBlogPostRollbackRequest,
+  GeneratedBackyOpenApiAdminBlogPostRevision,
+  GeneratedBackyOpenApiAdminBlogPostRevisionsEnvelope,
+  GeneratedBackyOpenApiAdminPageRollbackRequest,
+  GeneratedBackyOpenApiAdminPageRevision,
+  GeneratedBackyOpenApiAdminPageRevisionsEnvelope,
+  GeneratedBackyOpenApiAdminSiteSettingsEnvelope,
   GeneratedBackyOpenApiBlogAuthorListEnvelope,
   GeneratedBackyOpenApiBlogAuthorResource,
   GeneratedBackyOpenApiBlogCategoryListEnvelope,
@@ -282,11 +315,21 @@ import type {
   GeneratedBackyOpenApiCommentUpdateRequest,
   GeneratedBackyOpenApiCommentsEnvelope,
   GeneratedBackyOpenApiCommerceCatalogEnvelope,
+  GeneratedBackyOpenApiCommerceOrderAnalyticsEnvelope,
+  GeneratedBackyOpenApiCommerceOrderAnalyticsProviderCertification,
   GeneratedBackyOpenApiCommerceOrderContractEnvelope,
   GeneratedBackyOpenApiCommerceOrderCreateRequest,
   GeneratedBackyOpenApiCommerceOrderEnvelope,
+  GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidence,
+  GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidencePacket,
+  GeneratedBackyOpenApiCommerceOrderStatusAccess,
+  GeneratedBackyOpenApiCommerceOrderStatusHandoffEnvelope,
   GeneratedBackyOpenApiCommerceProduct,
   GeneratedBackyOpenApiCommerceProductDesign,
+  GeneratedBackyOpenApiCommerceProductDesignReadiness,
+  GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope,
+  GeneratedBackyOpenApiCommerceProductSubscriptionActionEnvelope,
+  GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope,
   GeneratedBackyOpenApiCommerceManagementPolicy,
   GeneratedBackyOpenApiCommerceProviderCertification,
   GeneratedBackyOpenApiCommerceStorefrontContract,
@@ -304,6 +347,7 @@ import type {
   GeneratedBackyOpenApiCollectionSchema,
   GeneratedBackyOpenApiComponentName,
   GeneratedBackyOpenApiComponents,
+  GeneratedBackyOpenApiContentRevisionBranchMetadata,
   GeneratedBackyOpenApiDynamicItemRoute,
   GeneratedBackyOpenApiDynamicItemRouteResource,
   GeneratedBackyOpenApiDynamicListRoute,
@@ -312,6 +356,7 @@ import type {
   GeneratedBackyOpenApiEventsEnvelope,
   GeneratedBackyOpenApiFontManifestEnvelope,
   GeneratedBackyOpenApiFontVariant,
+  GeneratedBackyOpenApiFrontendDatabaseCertificationHandoff,
   GeneratedBackyOpenApiFormCollectionRecordError,
   GeneratedBackyOpenApiFormCollectionRecordLink,
   GeneratedBackyOpenApiFormContact,
@@ -337,6 +382,7 @@ import type {
   GeneratedBackyOpenApiGoneRoute,
   GeneratedBackyOpenApiGoneRouteResolveEnvelope,
   GeneratedBackyOpenApiInteractiveComponentControl,
+  GeneratedBackyOpenApiInteractiveComponentControlOption,
   GeneratedBackyOpenApiInteractiveComponentFallback,
   GeneratedBackyOpenApiInteractiveComponentIntegrity,
   GeneratedBackyOpenApiInteractiveComponentManifestContract,
@@ -395,9 +441,11 @@ import type {
   GeneratedBackyRenderNavigationLayout,
   GeneratedBackyPublicRenderPayload,
   GeneratedBackyPublicRenderPayloadEnvelope,
+  GeneratedBackyPublicRenderPayloadFontVariant,
   GeneratedBackyThemeTokens,
 } from "../src/index";
 import {
+  addBackyContentElement,
   buildBackyCommentInput,
   buildBackyCommentReportInput,
   buildBackyCollectionRecordWriteInput,
@@ -408,6 +456,8 @@ import {
   buildBackyMediaSignedUrlInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   buildBackyLiveManagedPageEditableMapUpdate,
+  deleteBackyContentElements,
+  duplicateBackyContentElement,
   findBackyContentElement,
   generatedBackyContractTypeSources,
   groupBackyContentElements,
@@ -419,6 +469,7 @@ import {
   patchBackyContentEditableMapValues,
   patchBackyContentElement,
   patchBackyContentElements,
+  transformBackyContentElements,
   ungroupBackyContentElements,
 } from "../src/index";
 
@@ -955,8 +1006,19 @@ type AdminPageRevisionsMethodReturnsContract = Assert<
     BackyAdminPageRevisionsResponse
   >
 >;
+type AdminPageRevisionBranchMetadataContract = Assert<
+  Equal<
+    BackyAdminPageRevision["branchMetadata"]["schemaVersion"],
+    "backy.content-revision-branch-metadata.v1"
+  >
+>;
 type RollbackAdminPageMethodReturnsContract = Assert<
   Equal<AwaitedReturn<BackyClient["rollbackAdminPage"]>, BackyAdminPageResponse>
+>;
+type AdminPageRollbackInputContract = Assert<
+  BackyAdminPageRollbackInput extends GeneratedBackyOpenApiAdminPageRollbackRequest
+    ? true
+    : false
 >;
 type AdminBlogCategoriesMethodReturnsContract = Assert<
   Equal<
@@ -1072,11 +1134,22 @@ type AdminBlogPostRevisionsMethodReturnsContract = Assert<
     BackyAdminBlogPostRevisionsResponse
   >
 >;
+type AdminBlogPostRevisionBranchMetadataContract = Assert<
+  Equal<
+    BackyAdminBlogPostRevision["branchMetadata"]["schemaVersion"],
+    "backy.content-revision-branch-metadata.v1"
+  >
+>;
 type RollbackAdminBlogPostMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["rollbackAdminBlogPost"]>,
     BackyAdminBlogPostResponse
   >
+>;
+type AdminBlogPostRollbackInputContract = Assert<
+  BackyAdminBlogPostRollbackInput extends GeneratedBackyOpenApiAdminBlogPostRollbackRequest
+    ? true
+    : false
 >;
 type AdminCollectionsMethodReturnsContract = Assert<
   Equal<
@@ -1499,6 +1572,18 @@ type CommerceOrderStatusHandoffMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["commerceOrderStatusHandoff"]>,
     BackyCommerceOrderStatusHandoffResponse
+  >
+>;
+type CommerceOrderPublicStatusHandoffMethodReturnsContract = Assert<
+  Equal<
+    AwaitedReturn<BackyClient["commerceOrderPublicStatusHandoff"]>,
+    BackyCommerceOrderStatusHandoffResponse
+  >
+>;
+type CommerceOrderStatusAccessGeneratedContract = Assert<
+  Equal<
+    BackyCommerceOrderStatusAccess,
+    GeneratedBackyOpenApiCommerceOrderStatusAccess & Record<string, unknown>
   >
 >;
 type CommerceProductProviderSyncMethodReturnsContract = Assert<
@@ -2010,6 +2095,18 @@ const frontendDatabaseCertification = {
 } satisfies GeneratedBackyFrontendManifestDatabaseCertification;
 
 const convenienceFrontendDatabaseCertification = frontendDatabaseCertification satisfies BackyFrontendDatabaseCertification;
+
+const sdkSiteFrontendDatabaseCertification = {
+  ...frontendDatabaseCertification,
+  generatedAt: "2026-05-22T00:00:00.000Z",
+  source: "admin-site-settings-api",
+} satisfies GeneratedBackyOpenApiFrontendDatabaseCertificationHandoff;
+
+const sdkAdminFrontendDatabaseCertification = {
+  ...frontendDatabaseCertification,
+  generatedAt: "2026-05-22T00:00:00.000Z",
+  source: "admin-settings-api",
+} satisfies GeneratedBackyOpenApiFrontendDatabaseCertificationHandoff;
 
 const sdkAdminSite = {
   id: "site_demo",
@@ -2529,6 +2626,180 @@ const sdkAdminInteractiveComponentRollbackEnvelope = {
   },
 } satisfies BackyAdminInteractiveComponentRollbackResponse;
 
+const sdkAdminSettingsProviderCertificationEvidence = {
+  schemaVersion: "backy.settings-provider-certification-evidence.v1",
+  status: "attention",
+  requiredGate:
+    "BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:settings-provider-certification",
+  coverage: {
+    covered: 4,
+    total: 8,
+    missing: ["storage-media"],
+  },
+  scenarios: [
+    {
+      key: "storage-media",
+      label: "Storage and media delivery",
+      status: "missing",
+      evidenceCount: 0,
+      expectedEvidence: ["storage provisioning probe"],
+      nextAction: "Run provider certification.",
+    },
+  ],
+  secretHandling:
+    "Settings provider certification evidence reports scenario names and counts only; provider credentials and database URLs stay private.",
+} satisfies GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidence;
+
+const sdkAdminSettingsProviderCertificationEvidencePacket = {
+  schemaVersion: "backy.settings-provider-certification-evidence-packet.v1",
+  generatedAt: "2026-05-21T00:00:00.000Z",
+  status: "needs-runtime-inputs",
+  selectedFamilies: ["storage-media"],
+  selectedProviderAliases: {
+    storage: "supabase-storage",
+  },
+  runtimeReadiness: {
+    localRuntimeInputsConfigured: false,
+    missingInputAliases: ["BACKY_STORAGE_PROVIDER"],
+    missingSelectedFamilies: ["storage-media"],
+  },
+  operatorArtifacts: [
+    {
+      key: "storage-media",
+      family: "Storage and media delivery",
+      providerAlias: "Supabase storage",
+      status: "needs-runtime-inputs",
+      requiredInputs: ["BACKY_STORAGE_PROVIDER"],
+      expectedArtifacts: ["storage probe"],
+      captureSource: "storage provisioning probe",
+      redaction: "No provider secrets.",
+    },
+  ],
+  scenarioAttachments: [
+    {
+      key: "storage-media",
+      label: "Storage and media delivery",
+      status: "missing",
+      evidenceCount: 0,
+      expectedEvidence: ["storage probe"],
+      nextAction: "Run provider certification.",
+    },
+  ],
+  commandPreview: {
+    command: "npm run ci:settings-provider-certification",
+    envTemplate: "BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1\nBACKY_STORAGE_PROVIDER=<provider>",
+    requiredAliases: ["BACKY_STORAGE_PROVIDER"],
+    targetInputs: [
+      "BACKY_SETTINGS_CERTIFICATION_BASE_URL",
+      "BACKY_SETTINGS_CERTIFY_SITE_ID",
+      "BACKY_COMMERCE_CERTIFY_SITE_ID",
+    ],
+  },
+  target: {
+    siteId: "site-demo",
+    settingsAdminApi: "/api/admin/settings?certificationSiteId={siteId}",
+    siteScopedSettingsApi: "/api/admin/sites/{siteId}/settings",
+    settingsApi: "/api/admin/sites/{siteId}/settings",
+    settingsSiteSelectorEnv: "BACKY_SETTINGS_CERTIFY_SITE_ID",
+    commerceSiteSelectorEnv: "BACKY_COMMERCE_CERTIFY_SITE_ID",
+    externalBaseUrl: null,
+    publicApiOrigin: null,
+  },
+  redactionPolicy: {
+    includesProviderSecrets: false,
+    includesDatabaseUrls: false,
+    includesServiceRoleKeys: false,
+    includesVercelTokens: false,
+    includesNotificationSecrets: false,
+    includesCommerceSecrets: false,
+    includesCustomerOrOrderPayloads: false,
+    allowedEvidence: ["scenario labels", "status counts", "non-secret provider aliases"],
+  },
+  secretHandling: "Redacted operator attachment manifest only.",
+} satisfies GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidencePacket;
+
+const sdkAdminSettingsProviderCertification = {
+  generatedAt: "2026-05-21T00:00:00.000Z",
+  schemaVersion: "backy.settings-provider-certification-handoff.v1",
+  status: "external-live-provider-gate",
+  settingsGate: "npm run ci:settings-provider-certification",
+  commerceGate: "npm run ci:commerce-provider-certification",
+  localPreflight: "npm run test:settings-provider-certification-preflight-contract",
+  releasePreflight: "npm run test:release-certification-preflight-contract",
+  runtimeEvidence: {
+    liveProviderGateRequired: true,
+    localRuntimeInputsConfigured: false,
+    missingInputAliases: ["BACKY_STORAGE_PROVIDER"],
+  },
+  scenarioEvidence: sdkAdminSettingsProviderCertificationEvidence,
+  operatorEvidencePacket: sdkAdminSettingsProviderCertificationEvidencePacket,
+  operatorCommandTemplate: {
+    command: "npm run ci:settings-provider-certification",
+    envTemplate: "BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1\nBACKY_STORAGE_PROVIDER=<provider>",
+    requiredInputAliases: ["BACKY_STORAGE_PROVIDER"],
+    targetInputs: ["BACKY_SETTINGS_CERTIFICATION_BASE_URL"],
+  },
+  operatorEnvTemplate: {
+    schemaVersion: "backy.settings-provider-certification-env-template.v1",
+    format: "shell-env",
+    fileName: ".env.backy-settings-provider-certification",
+    body: "BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1\nBACKY_STORAGE_PROVIDER=<provider>",
+    secretHandling:
+      "Generated template values are non-secret aliases and placeholders.",
+  },
+  groups: [
+    {
+      family: "storage-media",
+      providers: ["supabase-storage", "s3", "r2"],
+      gate: "npm run ci:settings-provider-certification",
+      requiredInputs: ["BACKY_STORAGE_PROVIDER"],
+      evidence: "storage provisioning and delivery probe",
+    },
+  ],
+  secretHandling:
+    "Provider credentials, database URLs, service-role keys, Vercel tokens, notification secrets, commerce secrets, and customer/order payloads are never returned.",
+} satisfies GeneratedBackyOpenApiAdminSettingsProviderCertification;
+
+const sdkAdminSettingsUpdateRequest = {
+  deliveryMode: "custom-frontend",
+  storage: {
+    provider: "supabase-storage",
+  },
+} satisfies GeneratedBackyOpenApiAdminSettingsUpdateRequest;
+
+const sdkAdminSettingsActionRequest = {
+  action: "media-storage-secret-manager",
+  mode: "plan",
+  dryRun: true,
+  targetEnvironments: ["preview"],
+} satisfies GeneratedBackyOpenApiAdminSettingsActionRequest;
+
+const sdkAdminCompletionStatus = {
+  schemaVersion: "backy.completion-status.v1",
+  status: "external-gates-required",
+  audit: {
+    source: "specs/page-completion-audit/backy-page-surface-audit.md",
+    ready: 41,
+    partial: 4,
+    prototype: 0,
+    missing: 0,
+    total: 45,
+    readyPercent: 91,
+  },
+  surfaces: [],
+  surfaceRunbooks: [],
+  gates: [],
+  nextAction: "Run the Settings provider gate and attach the redacted evidence packet.",
+  recommendedCommands: ["npm run ci:settings-provider-certification"],
+  localPreflight: "npm run test:partial-gate-preflights",
+  privacy: {
+    includesSecretValues: false,
+    exposesOnlyAliasPresence: true,
+    secretHandling:
+      "Completion status exposes only alias-presence booleans, provider-family names, workflow paths, and evidence schema names; never raw secrets, database URLs, provider tokens, service-role keys, or customer/order payloads.",
+  },
+} satisfies GeneratedBackyOpenApiBackyCompletionStatus;
+
 const sdkAdminSettings = {
   schemaVersion: "backy.admin-settings.v1",
   scope: {
@@ -2540,32 +2811,197 @@ const sdkAdminSettings = {
     workspaceSettings: "/api/admin/settings",
     siteSettings: "/api/admin/sites/:siteId/settings",
   },
-  deliveryMode: "custom-frontend",
+  deliveryMode: sdkAdminSettingsUpdateRequest.deliveryMode,
   apiKeys: {
     publicApiKey: "pk_demo",
     adminApiKey: "",
+  },
+  storage: sdkAdminSettingsUpdateRequest.storage,
+  auth: {
+    providers: ["password"],
+  },
+  integrations: {
+    vercel: false,
+  },
+  runtimeStorage: {
+    provider: "supabase-storage",
+    configured: false,
   },
   runtimeDatabase: {
     mode: "database",
     provider: "postgres",
   },
-  providerCertification: {
-    schemaVersion: "backy.settings-provider-certification-handoff.v1",
-    status: "external-live-provider-gate",
-    settingsGate: "npm run ci:settings-provider-certification",
-    scenarioEvidence: {
-      schemaVersion: "backy.settings-provider-certification-evidence.v1",
-      status: "attention",
-      coverage: {
-        covered: 4,
-        total: 8,
-        missing: ["storage-media"],
-      },
-      scenarios: [],
-    },
+  runtimeSupabase: {
+    configured: false,
   },
-  frontendDatabaseCertification,
-} satisfies BackyAdminSettings;
+  runtimeMediaScanner: {
+    configured: false,
+  },
+  runtimeVercel: {
+    configured: false,
+  },
+  runtimeNotifications: {
+    configured: false,
+  },
+  runtimeCommerce: {
+    configured: false,
+  },
+  runtimeInteractiveComponents: {
+    configured: true,
+  },
+  runtimePublicApi: {
+    corsConfigured: false,
+  },
+  completionStatus: sdkAdminCompletionStatus,
+  mediaStorageHandoff: {
+    generatedAt: "2026-05-22T00:00:00.000Z",
+    schemaVersion: "backy.media-storage-handoff.v1",
+    status: "needs-runtime-env",
+    provider: {
+      selected: "supabase",
+      bucket: "media",
+      publicBaseUrl: "https://project.supabase.co/storage/v1/object/public/media",
+      pathPrefix: "sites/{siteId}",
+      runtime: {
+        provider: "supabase",
+        configured: false,
+      },
+      supabase: {
+        configured: false,
+      },
+    },
+    policies: {
+      privateFilesEnabled: true,
+      imageTransformsEnabled: true,
+      maxFileSizeMb: 128,
+      workspaceStorageLimitGb: 512,
+      warningThresholdPercent: 85,
+      allowedFileTypes: "image/*,font/*,application/pdf",
+    },
+    endpointTemplates: {
+      adminMediaList: "/api/admin/sites/{siteId}/media",
+      adminMediaUpload: "/api/admin/sites/{siteId}/media",
+      adminSignedUrl: "/api/admin/sites/{siteId}/media/{mediaId}/signed-url",
+      publicMediaList: "/api/sites/{siteId}/media",
+      publicMediaFolders: "/api/sites/{siteId}/media/folders",
+      publicFontManifest: "/api/sites/{siteId}/media/fonts",
+      publicMediaDetail: "/api/sites/{siteId}/media/{mediaId}",
+      publicMediaFile: "/api/sites/{siteId}/media/{mediaId}/file",
+      publicMediaTransform: "/api/sites/{siteId}/media/{mediaId}/transform",
+    },
+    contracts: {
+      organization: "backy.media.organization.v1",
+      references: "backy.media.references.v1",
+      editableMetadata: "backy.media.editable-metadata.v1",
+      deliveryPolicy: "MediaDeliveryPolicy",
+      fileCategories: "backy.media-file-categories.v1",
+    },
+    designStateUsage: {
+      preservedFields: ["frontendDesignAssets", "element.props.mediaOrganization"],
+      editableSurfaces: ["pages", "blog", "products"],
+      customFrontendUses: ["image picker", "private signed delivery"],
+    },
+    runtimeGate: {
+      certificationCommand: "npm run ci:settings-provider-certification",
+      sourceOnlyGuard: "BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin",
+      missingRuntimeAliases: ["BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER"],
+    },
+    privacy: {
+      includesSecretValues: false,
+      exposesSecretReferencesOnly: true,
+      secretReferences: {
+        supabaseServiceRole: "env:BACKY_SUPABASE_SERVICE_ROLE_KEY",
+      },
+      excludes: ["raw provider credentials", "signed URL tokens"],
+    },
+  } satisfies GeneratedBackyOpenApiAdminSettingsMediaStorageHandoff,
+  themeDesignImpact: {
+    generatedAt: "2026-05-22T00:00:00.000Z",
+    schemaVersion: "backy.settings-theme-design-impact.v1",
+    status: "ready",
+    source: "admin-settings-api",
+    themeContract: {
+      schemaVersion: "backy.theme.v1",
+      colors: {
+        primary: "#0f766e",
+        secondary: "#2563eb",
+        background: "#ffffff",
+        surface: "#f8fafc",
+        text: "#0f172a",
+        mutedText: "#64748b",
+      },
+      typography: {
+        heading: "inter",
+        body: "inter",
+        mono: "jetbrains-mono",
+        baseFontSize: 16,
+      },
+      layout: {
+        radius: 8,
+        spacingUnit: 4,
+      },
+      motion: {
+        preset: "subtle",
+      },
+      cssVariables: {
+        "--backy-color-primary": "#0f766e",
+        "--backy-motion-preset": "subtle",
+      },
+    },
+    impact: {
+      colorTokenCount: 6,
+      typographyTokenCount: 4,
+      cssVariableCount: 12,
+      invalidControlCount: 0,
+      invalidControls: [],
+    },
+    motion: {
+      preset: "subtle",
+      bindingPaths: [
+        "content.themeTokenRefs.motion",
+        "element.animation.tokenRefs.duration",
+        "element.animation.tokenRefs.easing",
+      ],
+      animationStateFields: [
+        "content.animations[]",
+        "element.animation",
+        "element.animation.scrollTrigger",
+      ],
+    },
+    designStatePersistence: {
+      tokenSchemaVersion: "backy.theme.v1",
+      tokenRefPaths: [
+        "content.themeTokenRefs",
+        "content.contentDocument.themeTokenRefs",
+        "element.tokenRefs",
+        "document.themeTokenRefs",
+      ],
+      editableSurfaces: ["pages", "blog", "reusable sections", "products"],
+      preservedDesignFields: [
+        "content.elements",
+        "content.contentDocument",
+        "content.animations",
+        "content.themeTokenRefs",
+      ],
+    },
+    frontendBindings: {
+      publicManifestThemeModule: "/api/sites/{siteId}/manifest#data.modules.theme",
+      publicOpenApiThemeSchema: "/api/sites/{siteId}/openapi#/components/schemas/BackyThemeTokens",
+      adminSettingsApi: "/api/admin/settings#data.settings.themeDesignImpact",
+      settingsHandoffPath: "settingsHandoff.themeDesignImpact",
+      cssVariableSelector: ":root, [data-backy-theme]",
+    },
+    privacy: {
+      includesSecretValues: false,
+      includesAdminApiKeys: false,
+      includesProviderCredentials: false,
+      includesPrivateContent: false,
+      note: "Theme design impact only exports non-secret design tokens, token reference paths, and editable design-state field names.",
+    },
+  } satisfies GeneratedBackyOpenApiAdminSettingsThemeDesignImpact,
+  providerCertification: sdkAdminSettingsProviderCertification,
+  frontendDatabaseCertification: sdkAdminFrontendDatabaseCertification,
+} satisfies BackyAdminSettings & GeneratedBackyOpenApiAdminSettings;
 
 const sdkAdminSettingsEnvelope = {
   success: true,
@@ -2573,7 +3009,21 @@ const sdkAdminSettingsEnvelope = {
   data: {
     settings: sdkAdminSettings,
   },
-} satisfies BackyAdminSettingsResponse;
+} satisfies BackyAdminSettingsResponse & GeneratedBackyOpenApiAdminSettingsEnvelope;
+
+const sdkAdminSettingsActionEnvelope = {
+  success: true,
+  requestId: "req_admin_settings_action",
+  data: {
+    settings: sdkAdminSettings,
+    requestedAction: sdkAdminSettingsActionRequest.action,
+    status: "ready",
+    summary: "Settings action is typed by the generated OpenAPI contract.",
+    operations: [],
+    generatedAt: "2026-05-22T00:00:00.000Z",
+  },
+} satisfies BackyAdminSettingsActionResponse &
+  GeneratedBackyOpenApiAdminSettingsActionEnvelope;
 
 const sdkSiteSettings = {
   schemaVersion: "backy.site-settings-scope.v1",
@@ -2581,6 +3031,7 @@ const sdkSiteSettings = {
     level: "site",
     siteId: "site_demo",
     siteSlug: "demo",
+    teamId: "team_demo",
     workspaceSettingsScope: "global",
     siteSettingsScope: "site",
   },
@@ -2602,7 +3053,23 @@ const sdkSiteSettings = {
       },
     },
   },
-  frontendDatabaseCertification,
+  frontendDatabaseCertification: sdkSiteFrontendDatabaseCertification,
+  mediaStorageHandoff: {
+    ...sdkAdminSettings.mediaStorageHandoff,
+    source: "admin-site-settings-api",
+    selectedSiteId: "site_demo",
+    siteEndpoints: {
+      adminMediaList: "/api/admin/sites/site_demo/media",
+      adminMediaUpload: "/api/admin/sites/site_demo/media",
+      adminSignedUrl: "/api/admin/sites/site_demo/media/{mediaId}/signed-url",
+      publicMediaList: "/api/sites/site_demo/media",
+      publicMediaFolders: "/api/sites/site_demo/media/folders",
+      publicFontManifest: "/api/sites/site_demo/media/fonts",
+      publicMediaDetail: "/api/sites/site_demo/media/{mediaId}",
+      publicMediaFile: "/api/sites/site_demo/media/{mediaId}/file",
+      publicMediaTransform: "/api/sites/site_demo/media/{mediaId}/transform",
+    },
+  },
   endpoints: {
     workspaceSettings: "/api/admin/settings",
     siteSettings: "/api/admin/sites/site_demo/settings",
@@ -2616,7 +3083,8 @@ const sdkSiteSettingsEnvelope = {
   data: {
     settings: sdkSiteSettings,
   },
-} satisfies BackySiteSettingsResponse;
+} satisfies BackySiteSettingsResponse &
+  GeneratedBackyOpenApiAdminSiteSettingsEnvelope;
 
 const sdkAdminNavigationEnvelope = {
   success: true,
@@ -3299,6 +3767,37 @@ const sdkAdminPagePreviewEnvelope = {
   },
 } satisfies BackyAdminPagePreviewResponse;
 
+const sdkAdminPageRevisionBranchMetadata = {
+  schemaVersion: "backy.content-revision-branch-metadata.v1",
+  source: "admin-page-revisions-api",
+  targetType: "page",
+  position: 1,
+  total: 2,
+  order: "newest-first",
+  branchId: "trunk",
+  branchLabel: "Main timeline",
+  branchLane: 0,
+  branchRole: "trunk",
+  chronologicalParentId: "rev_home_0",
+  chronologicalChildId: null,
+  restoreTargetRevisionId: null,
+  restoreTargetPosition: null,
+  restoreTargetInWindow: false,
+  restoreEdgeId: null,
+  branchPointRevisionId: null,
+	  inference: {
+	    source: "revision-note-and-order",
+	    lineageSource: "persisted-revision-lineage",
+	    rollbackNotePattern: "\\b(?:rollback|restore)\\s+to\\s+([a-zA-Z0-9_-]+)",
+	    confidence: "explicit-api-metadata",
+	    persistedFields: ["id", "targetType", "targetId", "snapshot", "note", "parentRevisionId", "operation", "restoreTargetRevisionId", "metadata", "createdAt", "createdBy"],
+	    limitation: "Branch metadata is normalized from persisted parent revision, operation, and restore target fields, with revision order used only for child links and legacy rows.",
+	  },
+} satisfies GeneratedBackyOpenApiContentRevisionBranchMetadata;
+
+const sdkAdminPageRevisionBranchMetadataForSdk = sdkAdminPageRevisionBranchMetadata satisfies BackyContentRevisionBranchMetadata;
+void sdkAdminPageRevisionBranchMetadataForSdk;
+
 const sdkAdminPageRevisionsEnvelope = {
   success: true,
   requestId: "req_admin_page_revisions",
@@ -3306,8 +3805,29 @@ const sdkAdminPageRevisionsEnvelope = {
     revisions: [
       {
         id: "rev_home_1",
+        siteId: "site_demo",
         targetType: "page",
         targetId: "page_home",
+        snapshot: {
+          id: "page_home",
+          siteId: "site_demo",
+          title: "Home",
+          slug: "home",
+          status: "draft",
+	        },
+	        note: "Before publish",
+	        parentRevisionId: "rev_home_0",
+	        operation: "publish",
+	        restoreTargetRevisionId: null,
+	        metadata: {
+	          schemaVersion: "backy.content-revision-metadata.v1",
+	          operation: "publish",
+	          parentRevisionId: "rev_home_0",
+	          restoreTargetRevisionId: null,
+	        },
+	        createdBy: "admin",
+        createdAt: "2026-05-21T00:00:00.000Z",
+        branchMetadata: sdkAdminPageRevisionBranchMetadata,
       },
     ],
     pagination: {
@@ -3318,6 +3838,20 @@ const sdkAdminPageRevisionsEnvelope = {
     },
   },
 } satisfies BackyAdminPageRevisionsResponse;
+
+const sdkAdminPageRollbackInput = {
+  revisionId: "rev_home_1",
+  requestId: "req_admin_page_rollback",
+} satisfies BackyAdminPageRollbackInput;
+const sdkOpenApiAdminPageRollbackRequest = sdkAdminPageRollbackInput satisfies GeneratedBackyOpenApiAdminPageRollbackRequest;
+void sdkOpenApiAdminPageRollbackRequest;
+
+const sdkOpenApiAdminPageRevisionBranchMetadata = sdkAdminPageRevisionBranchMetadata satisfies GeneratedBackyOpenApiContentRevisionBranchMetadata;
+const sdkOpenApiAdminPageRevision = sdkAdminPageRevisionsEnvelope.data.revisions[0] satisfies GeneratedBackyOpenApiAdminPageRevision;
+const sdkOpenApiAdminPageRevisionsEnvelope = sdkAdminPageRevisionsEnvelope satisfies GeneratedBackyOpenApiAdminPageRevisionsEnvelope;
+void sdkOpenApiAdminPageRevisionBranchMetadata;
+void sdkOpenApiAdminPageRevision;
+void sdkOpenApiAdminPageRevisionsEnvelope;
 
 const sdkAdminBlogCategory = {
   id: "category_updates",
@@ -3515,6 +4049,37 @@ const sdkAdminBlogPostPreviewEnvelope = {
   },
 } satisfies BackyAdminBlogPostPreviewResponse;
 
+const sdkAdminBlogPostRevisionBranchMetadata = {
+  schemaVersion: "backy.content-revision-branch-metadata.v1",
+  source: "admin-blog-revisions-api",
+  targetType: "post",
+  position: 1,
+  total: 2,
+  order: "newest-first",
+  branchId: "trunk",
+  branchLabel: "Main timeline",
+  branchLane: 0,
+  branchRole: "trunk",
+  chronologicalParentId: "rev_post_0",
+  chronologicalChildId: null,
+  restoreTargetRevisionId: null,
+  restoreTargetPosition: null,
+  restoreTargetInWindow: false,
+  restoreEdgeId: null,
+  branchPointRevisionId: null,
+	  inference: {
+	    source: "revision-note-and-order",
+	    lineageSource: "persisted-revision-lineage",
+	    rollbackNotePattern: "\\b(?:rollback|restore)\\s+to\\s+([a-zA-Z0-9_-]+)",
+	    confidence: "explicit-api-metadata",
+	    persistedFields: ["id", "targetType", "targetId", "snapshot", "note", "parentRevisionId", "operation", "restoreTargetRevisionId", "metadata", "createdAt", "createdBy"],
+	    limitation: "Branch metadata is normalized from persisted parent revision, operation, and restore target fields, with revision order used only for child links and legacy rows.",
+	  },
+} satisfies GeneratedBackyOpenApiContentRevisionBranchMetadata;
+
+const sdkAdminBlogPostRevisionBranchMetadataForSdk = sdkAdminBlogPostRevisionBranchMetadata satisfies BackyContentRevisionBranchMetadata;
+void sdkAdminBlogPostRevisionBranchMetadataForSdk;
+
 const sdkAdminBlogPostRevisionsEnvelope = {
   success: true,
   requestId: "req_admin_blog_post_revisions",
@@ -3522,8 +4087,29 @@ const sdkAdminBlogPostRevisionsEnvelope = {
     revisions: [
       {
         id: "rev_post_1",
+        siteId: "site_demo",
         targetType: "post",
         targetId: "post_launch",
+        snapshot: {
+          id: "post_launch",
+          siteId: "site_demo",
+          title: "Launch notes",
+          slug: "launch-notes",
+          status: "draft",
+	        },
+	        note: "Before publish",
+	        parentRevisionId: "rev_post_0",
+	        operation: "publish",
+	        restoreTargetRevisionId: null,
+	        metadata: {
+	          schemaVersion: "backy.content-revision-metadata.v1",
+	          operation: "publish",
+	          parentRevisionId: "rev_post_0",
+	          restoreTargetRevisionId: null,
+	        },
+	        createdBy: "admin",
+        createdAt: "2026-05-21T00:00:00.000Z",
+        branchMetadata: sdkAdminBlogPostRevisionBranchMetadata,
       },
     ],
     pagination: {
@@ -3534,6 +4120,20 @@ const sdkAdminBlogPostRevisionsEnvelope = {
     },
   },
 } satisfies BackyAdminBlogPostRevisionsResponse;
+
+const sdkAdminBlogPostRollbackInput = {
+  revisionId: "rev_post_1",
+  requestId: "req_admin_blog_post_rollback",
+} satisfies BackyAdminBlogPostRollbackInput;
+const sdkOpenApiAdminBlogPostRollbackRequest = sdkAdminBlogPostRollbackInput satisfies GeneratedBackyOpenApiAdminBlogPostRollbackRequest;
+void sdkOpenApiAdminBlogPostRollbackRequest;
+
+const sdkOpenApiAdminBlogPostRevisionBranchMetadata = sdkAdminBlogPostRevisionBranchMetadata satisfies GeneratedBackyOpenApiContentRevisionBranchMetadata;
+const sdkOpenApiAdminBlogPostRevision = sdkAdminBlogPostRevisionsEnvelope.data.revisions[0] satisfies GeneratedBackyOpenApiAdminBlogPostRevision;
+const sdkOpenApiAdminBlogPostRevisionsEnvelope = sdkAdminBlogPostRevisionsEnvelope satisfies GeneratedBackyOpenApiAdminBlogPostRevisionsEnvelope;
+void sdkOpenApiAdminBlogPostRevisionBranchMetadata;
+void sdkOpenApiAdminBlogPostRevision;
+void sdkOpenApiAdminBlogPostRevisionsEnvelope;
 
 const sdkAdminCollection = {
   id: "collection_projects",
@@ -3942,6 +4542,24 @@ const sdkAdminReusableSection = {
       width: 1200,
       height: 420,
     },
+    contentDocument: {
+      schemaVersion: "backy.content.v1",
+      id: "section_hero_document",
+      kind: "template",
+      version: "1",
+      elements: [],
+      editableMap: {},
+    },
+    themeTokenRefs: {
+      "hero-heading.color": "colors.text",
+    },
+    assets: [{ id: "hero-bg", mediaId: "media_hero", role: "section.background" }],
+    animations: [{ id: "hero-enter", timeline: "hero-enter" }],
+    interactions: [{ id: "hero-hover", trigger: "hover" }],
+    dataBindings: { heading: { source: "section.heading" } },
+    editableMap: { heading: { elementId: "hero-heading" } },
+    seo: { title: "Reusable Hero" },
+    metadata: { templateKind: "reusable-section" },
   },
   metadata: {
     reusableSection: {
@@ -4188,6 +4806,50 @@ const sdkCommerceProviderCertification = {
     secretHandling:
       "Replace placeholders with CI/local shell secrets before execution.",
   },
+  operatorEvidencePacket: {
+    schemaVersion: "backy.commerce-provider-certification-evidence-packet.v1",
+    generatedAt: "2026-05-21T00:00:00.000Z",
+    selectedSiteId: "site_demo",
+    status: "needs-credentials",
+    selectedFamilies: ["payment-checkout", "catalog-sync"],
+    runtimeReadiness: {
+      loaded: true,
+      configuredFamilies: [],
+      missingSelectedFamilies: ["payment-checkout"],
+    },
+    operatorArtifacts: [
+      {
+        key: "payment-checkout",
+        family: "Payment checkout",
+        providerAlias: "Auto payment provider",
+        status: "needs-credentials",
+        requiredInputs: ["BACKY_STRIPE_SECRET_KEY"],
+        expectedArtifacts: ["checkout settlement"],
+        captureSource: "public checkout intake",
+        redaction: "No provider secrets.",
+      },
+    ],
+    scenarioAttachments: [
+      {
+        key: "checkout-settlement",
+        label: "Checkout settlement",
+        status: "missing",
+        evidenceCount: 0,
+        expectedEvidence: ["paid checkout"],
+        nextAction: "Run provider certification.",
+      },
+    ],
+    commandPreview: {
+      command: "npm run ci:commerce-provider-certification",
+      requiredInputs: ["BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1"],
+      targetInputs: ["BACKY_COMMERCE_CERTIFICATION_BASE_URL"],
+    },
+    redactionPolicy: {
+      includesProviderSecrets: false,
+      includesCustomerPayloads: false,
+    },
+    secretHandling: "Redacted operator attachment manifest only.",
+  },
   runtime: {
     paymentConfigured: false,
     taxConfigured: false,
@@ -4211,6 +4873,142 @@ const sdkCommerceProviderCertification = {
   ],
 } satisfies BackyCommerceProviderCertification;
 
+const sdkCommerceOrderProviderCertificationEvidence = {
+  schemaVersion: "backy.order-provider-certification-evidence.v1",
+  status: "attention",
+  requiredGate:
+    "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification",
+  coverage: {
+    covered: 1,
+    total: 7,
+    missing: ["provider-refund", "webhook-reconciliation"],
+  },
+  scenarios: [
+    {
+      key: "checkout-settlement",
+      label: "Checkout settlement",
+      expectedEvidence: ["paid checkout order", "payment provider reference"],
+      nextAction: "Run a live checkout and verify paid provider evidence.",
+      evidenceCount: 1,
+      status: "covered",
+    },
+    {
+      key: "provider-refund",
+      label: "Provider refund",
+      expectedEvidence: ["provider refund id", "refund status refresh"],
+      nextAction: "Execute and refresh a live provider refund.",
+      evidenceCount: 0,
+      status: "missing",
+    },
+  ],
+  secretHandling:
+    "Order certification evidence reports scenario names and counts only.",
+} satisfies GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidence;
+
+const sdkCommerceOrderProviderCertificationEvidencePacket = {
+  schemaVersion: "backy.order-provider-certification-evidence-packet.v1",
+  generatedAt: "2026-05-21T00:00:00.000Z",
+  selectedSiteId: "site_demo",
+  status: "needs-credentials",
+  selectedFamilies: ["payment-refunds", "shipping-labels"],
+  selectedProviderAliases: {
+    "payment-refunds": "Auto payment/refund provider",
+    "shipping-labels": "Auto shipping provider",
+  },
+  runtimeReadiness: {
+    loaded: true,
+    configuredFamilies: ["payment"],
+    missingSelectedFamilies: ["shipping-labels"],
+  },
+  operatorArtifacts: [
+    {
+      key: "payment-refunds",
+      family: "Payment settlement and refunds",
+      providerAlias: "Auto payment/refund provider",
+      status: "ready-to-run",
+      requiredInputs: ["BACKY_STRIPE_SECRET_KEY"],
+      expectedArtifacts: ["paid checkout order", "provider refund id"],
+      captureSource:
+        "public checkout intake, private order record, and provider-refund endpoint",
+      redaction:
+        "Attach ids, timestamps, totals, and status codes only; remove provider secrets and customer payloads.",
+    },
+  ],
+  scenarioAttachments: [
+    {
+      key: "checkout-settlement",
+      label: "Checkout settlement",
+      status: "covered",
+      evidenceCount: 1,
+      expectedEvidence: ["paid checkout order", "payment provider reference"],
+      nextAction: "Run provider certification.",
+    },
+  ],
+  commandPreview: {
+    command: "npm run ci:commerce-provider-certification",
+    requiredInputs: ["BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1"],
+    targetInputs: ["BACKY_COMMERCE_CERTIFICATION_BASE_URL"],
+  },
+  redactionPolicy: {
+    includesProviderSecrets: false,
+    includesCustomerPayloads: false,
+    includesRawOrderPayloads: false,
+    includesPaymentReferences: false,
+    includesAddresses: false,
+    includesWebhookBodies: false,
+    allowedEvidence: [
+      "provider ids and aliases",
+      "timestamped CI/preflight logs",
+      "quote totals and adjustment names",
+    ],
+  },
+  secretHandling:
+    "Redacted operator attachment manifest only; provider credentials and order payloads stay out of API JSON.",
+} satisfies GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidencePacket;
+
+const sdkCommerceOrderAnalyticsProviderCertification = {
+  ...sdkCommerceProviderCertification,
+  generatedAt: "2026-05-21T00:00:00.000Z",
+  selectedSiteId: "site_demo",
+  site: {
+    id: "site_demo",
+    slug: "demo",
+    name: "Demo",
+    status: "published",
+  },
+  source: "admin-order-analytics-api",
+  operatorGate:
+    "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification",
+  analyticsSchemaVersion: "backy.order-analytics.v1",
+  endpointEvidence: {
+    analytics: "/api/admin/sites/site_demo/commerce/orders/analytics",
+    quote: "/api/admin/sites/site_demo/commerce/orders/{orderId}/quote",
+    shippingLabel:
+      "/api/admin/sites/site_demo/commerce/orders/{orderId}/shipping-label",
+    fulfillment:
+      "/api/admin/sites/site_demo/commerce/orders/{orderId}/fulfillment",
+    tracking: "/api/admin/sites/site_demo/commerce/orders/{orderId}/tracking",
+    providerRefund:
+      "/api/admin/sites/site_demo/commerce/orders/{orderId}/provider-refund",
+    commerceWebhook: "/api/sites/site_demo/commerce/webhook",
+    siteReconciliation: "/api/admin/sites/site_demo/commerce/reconcile",
+    platformReconciliation: "/api/admin/commerce/reconcile",
+    reconciliationReadiness: "/api/admin/commerce/reconcile/readiness",
+    checkoutIntake: "/api/sites/site_demo/commerce/orders",
+  },
+  providerAnalytics: {
+    paymentProviders: [],
+    refundProviders: [],
+    fulfillmentProviders: [],
+    shippingLabelProviders: [],
+    attention: {},
+  },
+  certificationEvidence: sdkCommerceOrderProviderCertificationEvidence,
+  operatorEvidencePacket: sdkCommerceOrderProviderCertificationEvidencePacket,
+  secretHandling:
+    "Provider credentials stay in server environment/configuration; order analytics exposes only non-secret readiness.",
+} satisfies GeneratedBackyOpenApiCommerceOrderAnalyticsProviderCertification;
+
 const sdkCommerceOrderAnalyticsEnvelope = {
   success: true,
   requestId: "req_order_analytics",
@@ -4227,39 +5025,111 @@ const sdkCommerceOrderAnalyticsEnvelope = {
     },
     analytics: {
       schemaVersion: "backy.order-analytics.v1",
-      totals: {
-        orders: 12,
-      },
+      generatedAt: "2026-05-21T00:00:00.000Z",
+      recordLimit: 1000,
+      orderCount: 12,
       revenue: {
-        currency: "USD",
-        gross: 12345,
+        grossTotal: 12345,
+        paidTotal: 10000,
+        pendingTotal: 1200,
+        failedTotal: 0,
+        refundedTotal: 1145,
+        refundAmountTotal: 250,
+        taxTotal: 720,
+        shippingTotal: 180,
+        discountTotal: 100,
+        averageOrderValue: 1028.75,
+        paidAverageOrderValue: 1000,
       },
-    },
-    providerCertification: {
-      ...sdkCommerceProviderCertification,
-      scenarioEvidence: {
-        schemaVersion: "backy.order-provider-certification-evidence.v1",
-        status: "attention",
-        coverage: {
-          covered: 3,
-          total: 7,
-          missing: ["provider-refunds"],
+      payment: {
+        pending: { count: 2, total: 1200 },
+        paid: { count: 10, total: 10000 },
+        failed: { count: 0, total: 0 },
+        refunded: { count: 1, total: 1145 },
+      },
+      fulfillment: {
+        unfulfilled: { count: 4, total: 3200 },
+        processing: { count: 3, total: 2800 },
+        fulfilled: { count: 5, total: 6345 },
+        cancelled: { count: 0, total: 0 },
+      },
+      operations: {
+        fulfillmentBacklogCount: 2,
+        paymentAttentionCount: 2,
+        refundCount: 1,
+      },
+      providerOperations: {
+        paymentProviders: [
+          {
+            provider: "stripe",
+            count: 10,
+            total: 10000,
+            statuses: { paid: 10 },
+          },
+        ],
+        refundProviders: [],
+        fulfillmentProviders: [],
+        shippingLabelProviders: [],
+        attention: {
+          providerRefundPendingCount: 0,
+          providerRefundFailureCount: 0,
         },
-        scenarios: [],
       },
+      sources: [{ source: "web", count: 10, total: 10000 }],
+      currencies: [{ currency: "USD", count: 12, total: 12345 }],
+      trend: [
+        {
+          date: "2026-05-21",
+          orders: 3,
+          paid: 2,
+          grossTotal: 3000,
+          paidTotal: 2000,
+        },
+      ],
+      recentOrders: [
+        {
+          id: "order_1",
+          slug: "order-1",
+          status: "published",
+          orderNumber: "ORD-1",
+          customerName: "Test Customer",
+          total: 100,
+          currency: "USD",
+          paymentStatus: "paid",
+          fulfillmentStatus: "processing",
+          orderSource: "web",
+          subscriptionReference: "",
+          updatedAt: "2026-05-21T00:00:00.000Z",
+        },
+      ],
     },
+    providerCertification: sdkCommerceOrderAnalyticsProviderCertification,
   },
-} satisfies BackyCommerceOrderAnalyticsResponse;
+} satisfies BackyCommerceOrderAnalyticsResponse &
+  GeneratedBackyOpenApiCommerceOrderAnalyticsEnvelope;
 
 const sdkCommerceProductProviderSyncEnvelope = {
   success: true,
   requestId: "req_product_provider_sync",
   data: {
     sync: {
-      schemaVersion: "backy.commerce-product-sync.v1",
       provider: "stripe",
       status: "handoff",
       executionMode: "manual-handoff",
+      syncedAt: "2026-05-21T00:00:00.000Z",
+      requestId: "req_product_provider_sync",
+      reason: "Provider credentials are not configured.",
+      product: {
+        id: null,
+        name: "Starter Template",
+        active: true,
+      },
+      price: {
+        id: null,
+        currency: "usd",
+        unitAmount: 2900,
+        recurring: null,
+      },
     },
     product: {
       id: "product_starter",
@@ -4282,8 +5152,125 @@ const sdkCommerceProductProviderSyncEnvelope = {
         scenarios: [],
       },
     },
+    storefrontHandoff: {
+      schemaVersion: "backy.product-storefront-handoff.v1",
+      generatedAt: "2026-05-21T00:00:00.000Z",
+      source: "admin-product-provider-sync-api",
+      selectedSiteId: "site_demo",
+      selectedProductId: "product_starter",
+      product: {
+        id: "product_starter",
+        slug: "starter-template",
+        status: "published",
+        title: "Starter Template",
+        sku: "STARTER",
+        productType: "digital",
+      },
+      endpoints: {
+        catalog: "/api/sites/site_demo/commerce/catalog",
+        product: "/api/sites/site_demo/commerce/catalog?slug=starter-template",
+        orderIntake: "/api/sites/site_demo/commerce/orders",
+        events: "/api/sites/site_demo/events?kind=commerce-product",
+        providerSync:
+          "/api/admin/sites/site_demo/commerce/products/product_starter/provider-sync",
+      },
+      pricing: {
+        price: 29,
+        compareAtPrice: null,
+        currency: "USD",
+      },
+      inventory: {},
+      media: {},
+      merchandising: {},
+      design: null,
+      designReadiness: {
+        schemaVersion: "backy.product-design-readiness.v1",
+        status: "attention",
+        templateId: null,
+        hasDesign: false,
+        hasContentDocument: false,
+        hasEditableMap: false,
+        hasDataBindings: false,
+        counts: {
+          elements: 0,
+          animations: 0,
+          assets: 0,
+          bindingHints: 0,
+        },
+        missing: [
+          "templateId",
+          "contentDocumentOrElements",
+          "editableMapOrDataBindings",
+        ],
+        detail:
+          "Product has no custom frontend design envelope; custom frontends can render catalog data but cannot reopen the product page as an editable design.",
+        nextAction:
+          "Attach a product frontend template or save contentDocument/elements plus editableMap/dataBindings so external builders can edit the product page design.",
+        evidence: [
+          "template=missing",
+          "elements=0",
+          "animations=0",
+          "assets=0",
+          "contentDocument=missing",
+          "editableMap=missing",
+          "dataBindings=missing",
+          "bindingHints=0",
+        ],
+        secretHandling:
+          "Design readiness reports counts, booleans, and editable design-state presence only.",
+      },
+      delivery: {},
+      subscription: {},
+      checkout: {
+        orderIntakeReady: true,
+        directCheckoutUrlConfigured: false,
+        mode: "backy-order-intake",
+      },
+      providerSync: {
+        provider: "stripe",
+        status: "handoff",
+        executionMode: "manual-handoff",
+        syncedAt: "2026-05-21T00:00:00.000Z",
+        hasProviderProductReference: false,
+        hasProviderPriceReference: false,
+        hasError: false,
+      },
+      launchReadiness: {
+        schemaVersion: "backy.product-launch-readiness.v1",
+        status: "attention",
+        score: 75,
+        readyCount: 6,
+        totalChecks: 8,
+        blockerCount: 0,
+        attentionCount: 2,
+        checks: [
+          {
+            key: "frontend-design",
+            label: "Custom frontend design",
+            status: "attention",
+            detail: "No editable product design envelope is attached.",
+            action: "Attach a product frontend template.",
+            evidence: ["template=missing"],
+          },
+        ],
+        nextSteps: [],
+      },
+      privacy: {
+        customerSafeFieldsOnly: true,
+        includesProviderSecrets: false,
+        includesProviderResponses: false,
+        includesPrivateOrders: false,
+        includesCustomerPayloads: false,
+        includesDigitalDeliveryUrl: false,
+        includesRawCheckoutSessions: false,
+        excludedFields: ["providerPayload", "privateOrders"],
+      },
+      secretHandling:
+        "Provider credentials and private order payloads stay server-side.",
+    },
   },
-} satisfies BackyCommerceProductProviderSyncResponse;
+} satisfies BackyCommerceProductProviderSyncResponse &
+  GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope;
 
 const sdkCommerceOrderQuoteEnvelope = {
   success: true,
@@ -4309,7 +5296,17 @@ const sdkCommerceOrderQuoteEnvelope = {
       shippingAmount: 5,
       total: 102.5,
       currency: "USD",
+      discountCode: "WELCOME10",
+      discountRate: 0.1,
+      taxLines: [],
+      shippingLines: [],
+      discountLines: [],
       providerAdjustments: [],
+      pricing: {
+        taxes: true,
+        shipping: true,
+        discounts: true,
+      },
       calculatedAt: "2026-05-21T00:00:00.000Z",
     },
   },
@@ -4425,30 +5422,121 @@ const sdkCommerceProductSubscriptionsEnvelope = {
     },
     lifecycle: {
       schemaVersion: "backy.product-subscription-lifecycle.v1",
+      generatedAt: "2026-05-21T00:00:00.000Z",
       product: {
         id: "product_starter",
         slug: "starter-template",
+        title: "Starter template",
+        sku: "STARTER",
+        subscription: {
+          enabled: true,
+          interval: "month",
+        },
       },
       summary: {
+        total: 5,
         active: 4,
+        renewals: 0,
         dunning: 1,
+        paused: 0,
+        trialEnding: 0,
+        cancelled: 0,
+        pending: 0,
+        revenue: 129,
+        units: 5,
       },
       actionPlan: {
         schemaVersion: "backy.product-subscription-action-plan-summary.v1",
+        attentionRequired: 1,
+        executableNow: 0,
+        handoffRequired: 1,
+        retryRecommended: 0,
       },
-      subscriptions: [],
+      subscriptions: [
+        {
+          id: "order_1001",
+          slug: "order-1001",
+          orderNumber: "1001",
+          customerName: "Ada Lovelace",
+          customerEmail: "ada@example.test",
+          paymentProvider: "stripe",
+          paymentStatus: "paid",
+          fulfillmentStatus: "unfulfilled",
+          lifecycleStatus: "active",
+          subscriptionReference: "sub_1001",
+          actionExecutionMode: "handoff",
+          actionExecutionModes: {
+            pause: "handoff",
+            resume: "handoff",
+            cancel: "handoff",
+          },
+          actionPlan: {
+            schemaVersion: "backy.product-subscription-action-plan.v1",
+          },
+          actionHistory: [],
+          lastAction: null,
+          checkoutSessionId: "cs_1001",
+          total: 29,
+          currency: "USD",
+          productUnits: 1,
+          productRevenue: 29,
+          updatedAt: "2026-05-21T00:00:00.000Z",
+          matchedItems: [],
+        },
+      ],
       execution: {
         schemaVersion: "backy.product-subscription-execution-readiness.v1",
+        actionEndpoint:
+          "/api/admin/sites/:siteId/commerce/products/:productId/subscriptions/:orderId/action",
+        supportedActions: ["pause", "resume", "cancel"],
+        providers: [
+          {
+            provider: "stripe",
+            executionMode: "stripe-api",
+            configured: false,
+            referencePattern: "sub_*",
+            executableSubscriptions: 0,
+            blocker: "Configure Stripe credentials for direct actions.",
+          },
+        ],
+        summary: {
+          executableSubscriptions: 0,
+          handoffSubscriptions: 1,
+        },
       },
       certification: {
         schemaVersion: "backy.product-subscription-certification.v1",
+        status: "attention",
+        requiredGate: "npm run ci:commerce-provider-certification",
+        coverage: {
+          covered: 1,
+          total: 7,
+          missing: ["renewal"],
+        },
+        scenarios: [
+          {
+            key: "renewal",
+            label: "Renewal",
+            evidenceCount: 0,
+            expectedEvidence: ["invoice.payment_succeeded"],
+            nextAction: "Run provider certification.",
+            status: "missing",
+          },
+        ],
+        providerFamilies: ["stripe", "http", "manual-handoff"],
+        secretHandling:
+          "Provider secrets, customer payloads, and raw order values stay private.",
       },
       contract: {
+        ordersApi: "/api/admin/sites/:siteId/commerce/orders",
+        webhookApi: "/api/sites/:siteId/commerce/webhook",
         reconciliationApi: "/api/admin/sites/:siteId/commerce/reconcile",
+        supportedLifecycleEvents: ["customer.subscription.deleted"],
       },
     },
   },
-} satisfies BackyCommerceProductSubscriptionsResponse;
+} satisfies BackyCommerceProductSubscriptionsResponse &
+  GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope;
 
 const sdkCommerceProductSubscriptionActionEnvelope = {
   success: true,
@@ -4484,7 +5572,8 @@ const sdkCommerceProductSubscriptionActionEnvelope = {
       values: {},
     },
   },
-} satisfies BackyCommerceProductSubscriptionActionResponse;
+} satisfies BackyCommerceProductSubscriptionActionResponse &
+  GeneratedBackyOpenApiCommerceProductSubscriptionActionEnvelope;
 
 const sdkCommerceReconciliationEnvelope = {
   success: true,
@@ -4519,6 +5608,7 @@ const frontendLaunchReadiness = {
     reusableSections: 1,
     forms: 1,
     media: 4,
+    fonts: 2,
   },
   checks: [
     {
@@ -4527,6 +5617,42 @@ const frontendLaunchReadiness = {
       status: "ready",
       detail: "Route and endpoint contracts are advertised.",
       nextAction: "Use manifest, resolve, render, and OpenAPI contracts before hardcoding routes.",
+    },
+    {
+      key: "content-design-modules",
+      label: "CMS, design, and reusable content",
+      status: "ready",
+      detail: "Pages, blog posts, collections, and reusable sections are discoverable.",
+      nextAction: "Publish representative content modules for custom frontend rendering.",
+    },
+    {
+      key: "media-font-delivery",
+      label: "Media, files, and fonts",
+      status: "ready",
+      detail: "Public media and font assets are discoverable.",
+      nextAction: "Use the media and font endpoints for custom frontend assets.",
+    },
+    {
+      key: "visitor-interactions",
+      label: "Forms, comments, and events",
+      status: "ready",
+      detail: "Interaction endpoints are advertised without exposing private submissions.",
+      nextAction: "Bind frontend forms/comments to Backy public endpoints.",
+    },
+    {
+      key: "commerce-handoff",
+      label: "Commerce and provider handoff",
+      status: "attention",
+      detail: "Commerce storefront contracts are documented while provider certification remains separate.",
+      nextAction: "Attach commerce provider certification before marking storefront checkout complete.",
+      gate: "npm run ci:commerce-provider-certification",
+    },
+    {
+      key: "live-management",
+      label: "Preview and live management",
+      status: "ready",
+      detail: "Preview and live-management endpoint templates are available to authenticated editors.",
+      nextAction: "Use live-management endpoint templates for frontend editing overlays.",
     },
     {
       key: "database-certification",
@@ -4556,20 +5682,68 @@ const frontendLaunchReadiness = {
 
 const convenienceFrontendLaunchReadiness = frontendLaunchReadiness satisfies BackyFrontendLaunchReadiness;
 
+const settingsCompletionEvidenceArtifacts = [
+  {
+    key: "settings-provider-certification-json",
+    label: "Settings provider certification evidence",
+    workflow: ".github/workflows/settings-provider-certification.yml",
+    alternateWorkflows: [".github/workflows/backy-release-certification.yml"],
+    artifactName: "backy-settings-provider-certification-evidence",
+    path: "artifacts/backy-settings-provider-certification.json",
+    schemaVersion: "backy.settings-provider-certification-artifact.v1",
+    producerEnv: "BACKY_SETTINGS_CERTIFICATION_OUTPUT",
+    requiredForReady: true,
+    includesSecretValues: false,
+  },
+] satisfies BackyCompletionEvidenceArtifact[];
+
+const commerceCompletionEvidenceArtifacts = [
+  {
+    key: "commerce-provider-certification-json",
+    label: "Commerce provider certification evidence",
+    workflow: ".github/workflows/commerce-provider-certification.yml",
+    alternateWorkflows: [".github/workflows/settings-provider-certification.yml", ".github/workflows/backy-release-certification.yml"],
+    artifactName: "backy-commerce-provider-certification-evidence",
+    path: "artifacts/backy-commerce-provider-certification.json",
+    schemaVersion: "backy.commerce-provider-certification-artifact.v1",
+    producerEnv: "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+    requiredForReady: true,
+    includesSecretValues: false,
+  },
+] satisfies BackyCompletionEvidenceArtifact[];
+
+const settingsCompletionArtifactVerifier = {
+  command: "npm run doctor:release-certification",
+  requiredEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
+  pathEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT",
+  schemaVersion: "backy.settings-provider-certification-artifact.v1",
+  validates: ["file exists", "valid JSON", "ok: true", "artifact schema version", "no-secret boundary", "no raw secret-like values", "apiHandoffs.settingsAdminApi present", "apiHandoffs.siteScopedSettingsApi present", "settingsApiHandoffSchemaReady", "settingsApiHandoffSiteTargetReady", "settingsApiHandoffTargetSiteId", "settingsApiHandoffSettingsSiteSelectorEnv", "settingsApiHandoffCommerceSiteSelectorEnv", "settingsApiHandoffReady", "siteSettingsApiHandoffReady", "settingsScenarioEvidenceReady", "settingsEvidencePacketReady", "settingsCompletionStatusReady"],
+  includesSecretValues: false,
+} as const satisfies BackyCompletionArtifactVerifier;
+
+const commerceCompletionArtifactVerifier = {
+  command: "npm run doctor:release-certification",
+  requiredEnv: "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
+  pathEnv: "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT",
+  schemaVersion: "backy.commerce-provider-certification-artifact.v1",
+  validates: ["file exists", "valid JSON", "ok: true", "artifact schema version", "no-secret boundary", "no raw secret-like values", "apiHandoffs present", "apiHandoffs.publicApis present", "apiHandoffReady", "publicCommerceApiHandoffReady", "productApiHandoffSchemaReady", "productApiHandoffSiteTargetReady", "productApiHandoffTargetSiteId", "productApiHandoffReady", "orderApiHandoffSchemaReady", "orderApiHandoffSiteTargetReady", "orderApiHandoffTargetSiteId", "orderApiHandoffReady", "commerceApiHandoffSiteSelectorEnv"],
+  includesSecretValues: false,
+} as const satisfies BackyCompletionArtifactVerifier;
+
 const completionStatus = {
   schemaVersion: "backy.completion-status.v1",
   generatedAt: "2026-05-21T00:00:00.000Z",
   status: "external-gates-required",
   summary:
-    "Backy core backend/editor/API parity is implemented for the audited local scope; the remaining Partial rows require disposable database or live provider certification evidence.",
+    "Backy core backend/editor/API parity is implemented for the audited local scope; Forms and SDK database gates are certified, and the remaining Partial rows require live provider certification evidence.",
   audit: {
     source: "specs/page-completion-audit/backy-page-surface-audit.md",
-    ready: 39,
-    partial: 6,
+    ready: 41,
+    partial: 4,
     prototype: 0,
     missing: 0,
     total: 45,
-    readyPercent: 87,
+    readyPercent: 91,
   },
   surfaces: [
     {
@@ -4587,13 +5761,6 @@ const completionStatus = {
       gate: "npm run ci:commerce-provider-certification",
     },
     {
-      key: "forms",
-      label: "/forms",
-      status: "partial",
-      blocker: "forms-postgres",
-      gate: "npm run ci:forms-postgres",
-    },
-    {
       key: "settings",
       label: "/settings",
       status: "partial",
@@ -4607,25 +5774,186 @@ const completionStatus = {
       blocker: "settings-provider-certification",
       gate: "npm run ci:settings-provider-certification",
     },
+  ],
+  surfaceRunbooks: [
     {
-      key: "frontend-contracts",
-      label: "Frontend manifest/OpenAPI/SDK APIs",
-      status: "partial",
-      blocker: "sdk-postgres",
-      gate: "npm run ci:sdk-postgres-smoke",
+      key: "settings",
+      label: "/settings",
+      gate: "settings-provider-certification",
+      command: "npm run ci:settings-provider-certification",
+      preflight: "npm run test:settings-provider-certification-preflight-contract",
+      workflow: ".github/workflows/settings-provider-certification.yml",
+      targetInputs: [
+        "BACKY_SETTINGS_CERTIFICATION_BASE_URL",
+        "BACKY_SETTINGS_CERTIFY_SITE_ID",
+        "BACKY_COMMERCE_CERTIFICATION_BASE_URL",
+        "BACKY_COMMERCE_CERTIFY_SITE_ID",
+        "BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY",
+      ],
+      evidencePacketSchema: "backy.settings-provider-certification-evidence-packet.v1",
+      evidenceApi: "/api/admin/settings data.settings.providerCertification.operatorEvidencePacket",
+      evidenceUiPanel: "settings-provider-certification-evidence-packet",
+      sourceOnlyGuard: "BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin",
+      proofSources: [
+        "GET /api/admin/settings",
+        "apps/admin/src/routes/settings.tsx",
+        "scripts/settings-provider-certification-preflight-contract-smoke.mjs",
+      ],
+      expectedArtifacts: [
+        "provider runtime alias summary",
+        "operator evidence packet",
+        "artifacts/backy-settings-provider-certification.json",
+        "backy-settings-provider-certification-evidence",
+        "Settings provider workflow summary",
+        "release doctor summary",
+	      ],
+	      evidenceArtifacts: settingsCompletionEvidenceArtifacts,
+	      artifactVerifier: settingsCompletionArtifactVerifier,
+	      runtime: {
+        configuredFamilies: [],
+        missingFamilies: ["database", "supabase", "storage", "vercel", "notifications", "commerce"],
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ["database URLs", "provider credentials", "service-role keys", "Vercel tokens", "notification secrets", "commerce secrets"],
+      },
+      nextAction: "Configure database, supabase, storage, vercel, notifications, commerce provider aliases, then run npm run ci:settings-provider-certification.",
+    },
+    {
+      key: "settings-admin-apis",
+      label: "Settings admin APIs",
+      gate: "settings-provider-certification",
+      command: "npm run ci:settings-provider-certification",
+      preflight: "npm run test:settings-provider-certification-preflight-contract",
+      workflow: ".github/workflows/settings-provider-certification.yml",
+      targetInputs: [
+        "BACKY_SETTINGS_CERTIFICATION_BASE_URL",
+        "BACKY_SETTINGS_CERTIFY_SITE_ID",
+        "BACKY_COMMERCE_CERTIFY_SITE_ID",
+        "BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY",
+      ],
+      evidencePacketSchema: "backy.settings-provider-certification-evidence-packet.v1",
+      evidenceApi: "/api/admin/settings providerCertification plus site OpenAPI AdminSettingsProviderCertification",
+      evidenceUiPanel: "settings-provider-certification-evidence-packet",
+      sourceOnlyGuard: "BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin",
+      proofSources: [
+        "GET /api/admin/settings",
+        "/api/sites/{siteId}/openapi AdminSettingsProviderCertification",
+        "packages/sdk-js/src/generated-contract-types.ts",
+      ],
+      expectedArtifacts: [
+        "typed AdminSettings providerCertification response",
+        "operator evidence packet",
+        "artifacts/backy-settings-provider-certification.json",
+        "backy-settings-provider-certification-evidence",
+        "Settings API no-secret response headers",
+	      ],
+	      evidenceArtifacts: settingsCompletionEvidenceArtifacts,
+	      artifactVerifier: settingsCompletionArtifactVerifier,
+	      runtime: {
+        configuredFamilies: [],
+        missingFamilies: ["database", "supabase", "storage", "vercel", "notifications", "commerce"],
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ["admin key values", "database URLs", "provider credentials", "service-role keys"],
+      },
+      nextAction: "Configure database, supabase, storage, vercel, notifications, commerce provider aliases, then re-run the Settings admin API provider gate.",
+    },
+    {
+      key: "products",
+      label: "/products",
+      gate: "commerce-provider-certification",
+      command: "npm run ci:commerce-provider-certification",
+      preflight: "npm run test:commerce-provider-certification-preflight-contract",
+      workflow: ".github/workflows/commerce-provider-certification.yml",
+      targetInputs: [
+        "BACKY_COMMERCE_CERTIFICATION_BASE_URL",
+        "BACKY_COMMERCE_CERTIFY_SITE_ID",
+        "BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY",
+      ],
+      evidencePacketSchema: "backy.commerce-provider-certification-evidence-packet.v1",
+      evidenceApi: "/api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync data.providerCertification.operatorEvidencePacket",
+      evidenceUiPanel: "products-provider-certification-evidence-packet",
+      sourceOnlyGuard: "BACKY_COMMERCE_SOURCE_ONLY=1 npm run test:commerce --workspace @backy-cms/admin",
+      proofSources: [
+        "apps/admin/src/routes/products.tsx",
+        "GET/POST /api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync",
+        "scripts/commerce-provider-certification-preflight-contract-smoke.mjs",
+      ],
+      expectedArtifacts: [
+        "product provider-sync evidence",
+        "artifacts/backy-commerce-provider-certification.json",
+        "backy-commerce-provider-certification-evidence",
+        "product storefront handoff",
+        "provider catalog sync proof",
+        "subscription lifecycle proof when selected",
+	      ],
+	      evidenceArtifacts: commerceCompletionEvidenceArtifacts,
+	      artifactVerifier: commerceCompletionArtifactVerifier,
+	      runtime: {
+        configuredFamilies: [],
+        missingFamilies: ["payment", "tax", "shipping", "discount", "catalog", "subscription", "webhook"],
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ["provider secrets", "raw provider responses", "private orders", "customer payloads", "digital delivery URLs"],
+      },
+      nextAction: "Configure payment, tax, shipping, discount, catalog, subscription, webhook commerce provider aliases, then run npm run ci:commerce-provider-certification.",
+    },
+    {
+      key: "orders",
+      label: "/orders",
+      gate: "commerce-provider-certification",
+      command: "npm run ci:commerce-provider-certification",
+      preflight: "npm run test:commerce-provider-certification-preflight-contract",
+      workflow: ".github/workflows/commerce-provider-certification.yml",
+      targetInputs: [
+        "BACKY_COMMERCE_CERTIFICATION_BASE_URL",
+        "BACKY_COMMERCE_CERTIFY_SITE_ID",
+        "BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY",
+      ],
+      evidencePacketSchema: "backy.order-provider-certification-evidence-packet.v1",
+      evidenceApi: "/api/admin/sites/{siteId}/commerce/orders/analytics data.providerCertification.operatorEvidencePacket",
+      evidenceUiPanel: "orders-provider-certification-evidence-packet",
+      sourceOnlyGuard: "BACKY_ORDERS_SOURCE_ONLY=1 npm run test:orders --workspace @backy-cms/admin",
+      proofSources: [
+        "apps/admin/src/routes/orders.tsx",
+        "GET /api/admin/sites/{siteId}/commerce/orders/analytics",
+        "scripts/commerce-provider-certification-preflight-contract-smoke.mjs",
+      ],
+      expectedArtifacts: [
+        "order analytics provider evidence",
+        "artifacts/backy-commerce-provider-certification.json",
+        "backy-commerce-provider-certification-evidence",
+        "status handoff evidence",
+        "quote/tracking/fulfillment/refund proof",
+        "webhook/reconciliation proof",
+	      ],
+	      evidenceArtifacts: commerceCompletionEvidenceArtifacts,
+	      artifactVerifier: commerceCompletionArtifactVerifier,
+	      runtime: {
+        configuredFamilies: [],
+        missingFamilies: ["payment", "tax", "shipping", "discount", "catalog", "subscription", "webhook"],
+      },
+      secretBoundary: {
+        includesSecretValues: false,
+        excludes: ["provider secrets", "customer payloads", "raw order payloads", "payment references", "addresses", "webhook bodies"],
+      },
+      nextAction: "Configure payment, tax, shipping, discount, catalog, subscription, webhook commerce provider aliases, then run npm run ci:commerce-provider-certification.",
     },
   ],
-  gates: [
+  certifiedGates: [
     {
       key: "forms-postgres",
       label: "Forms Supabase/Postgres persistence",
-      status: "blocked-missing-inputs",
+      status: "certified",
       command: "npm run ci:forms-postgres",
-      preflight: "npm run test:forms-postgres-preflight-contract",
-      disposableGuard: "npm run test:forms-postgres-disposable-guard",
       workflow: ".github/workflows/forms-postgres-contract.yml",
       affectedSurfaces: ["/forms"],
-      requiredEnvAliases: ["BACKY_DATABASE_URL", "DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"],
+      certifiedAt: "2026-05-21",
+      evidence:
+        "Passed against a migrated disposable local Postgres target with form definition, submission, contact, spam/consent, moderation, promotion, and cleanup coverage.",
       runtime: {
         databaseUrlConfigured: false,
         disposableDatabaseConfirmed: false,
@@ -4635,19 +5963,21 @@ const completionStatus = {
     {
       key: "sdk-postgres",
       label: "Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke",
-      status: "blocked-missing-inputs",
+      status: "certified",
       command: "npm run ci:sdk-postgres-smoke",
-      preflight: "npm run test:sdk-postgres-preflight-contract",
-      disposableGuard: "npm run test:sdk-postgres-disposable-guard",
       workflow: ".github/workflows/sdk-postgres-smoke.yml",
       affectedSurfaces: ["Frontend manifest/OpenAPI/SDK APIs"],
-      requiredEnvAliases: ["BACKY_DATABASE_URL", "DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true", "BACKY_SDK_REQUIRE_DATABASE=1"],
+      certifiedAt: "2026-05-21",
+      evidence:
+        "Passed against a migrated disposable local Postgres target with database-mode discovery, manifest, OpenAPI, render, media, CMS, forms, comments, events, commerce, and SDK write-flow coverage.",
       runtime: {
         databaseUrlConfigured: false,
         disposableDatabaseConfirmed: false,
         missing: ["BACKY_DATABASE_URL or DATABASE_URL", "BACKY_DATABASE_DISPOSABLE_CONFIRMED=true"],
       },
     },
+  ],
+  gates: [
     {
       key: "settings-provider-certification",
       label: "Settings live provider certification",
@@ -4693,10 +6023,8 @@ const completionStatus = {
     },
   ],
   nextAction:
-    "Configure BACKY_DATABASE_URL or DATABASE_URL, BACKY_DATABASE_DISPOSABLE_CONFIRMED=true and run npm run ci:forms-postgres.",
+    "Configure the missing provider families and run npm run ci:settings-provider-certification.",
   recommendedCommands: [
-    "npm run ci:forms-postgres",
-    "npm run ci:sdk-postgres-smoke",
     "npm run ci:settings-provider-certification",
     "npm run ci:commerce-provider-certification",
   ],
@@ -4755,6 +6083,38 @@ const element = {
   children: [],
   props: {
     rounds: 4,
+    mediaId: "media_hero",
+    fontMediaId: "media_font_inter",
+    imageFocalPoint: { x: 50, y: 42 },
+  },
+  assetIds: ["media_hero", "media_font_inter"],
+  tokenRefs: {
+    "styles.color": "colors.primary",
+  },
+  responsive: {
+    mobile: {
+      x: 24,
+      width: 320,
+      props: {
+        content: "Mobile rounds",
+      },
+      styles: {
+        color: "#111827",
+      },
+      tokenRefs: {
+        "styles.color": "colors.primary",
+      },
+    },
+  },
+  animation: {
+    type: "fadeIn",
+    duration: 0.2,
+    easing: "cubic-bezier(0.2, 0, 0, 1)",
+    trigger: "load",
+    tokenRefs: {
+      duration: "motion.duration.normal",
+      easing: "motion.easing.standard",
+    },
   },
   controls: [interactiveControl],
   fallback: interactiveFallback,
@@ -4852,6 +6212,86 @@ const patchedEditableContent = patchBackyContentElement(
   editableContentForHelpers,
   editableElementPatch,
 );
+const mediaPatchedEditableContent = patchBackyContentElement(
+  editableContentForHelpers,
+  {
+    elementId: "interactive-rounds",
+    changes: {
+      "props.mediaId": "media_alt",
+      "props.mediaIds": ["media_gallery_alt"],
+      "props.backgroundMediaIds": ["media_background_alt"],
+      "props.posterMediaIds": ["media_poster_alt"],
+      "props.fontMediaId": "media_font_alt",
+      "props.fontMediaIds": ["media_font_gallery_alt"],
+    },
+  },
+);
+const mediaPatchedEditableElement = mediaPatchedEditableContent
+  ? findBackyContentElement(mediaPatchedEditableContent, "interactive-rounds")
+  : null;
+const mediaPatchedEditableAssetIds = Array.isArray(mediaPatchedEditableElement?.assetIds)
+  ? mediaPatchedEditableElement.assetIds
+  : [];
+const responsivePatchedEditableContent = patchBackyContentEditableFields(
+  editableContentForHelpers,
+  [
+    {
+      elementId: "interactive-rounds",
+      field: "responsive.mobile.styles.color",
+      value: "#0f172a",
+    },
+    {
+      elementId: "interactive-rounds",
+      field: "tokenRefs.styles.color",
+      value: "colors.text",
+    },
+    {
+      elementId: "interactive-rounds",
+      field: "responsive.mobile.props.content",
+      value: "Mobile rounds edited from a custom frontend",
+    },
+    {
+      elementId: "interactive-rounds",
+      field: "responsive.mobile.props.mediaId",
+      value: "media_mobile_hero",
+    },
+    {
+      elementId: "interactive-rounds",
+      field: "responsive.mobile.props.mediaIds",
+      value: ["media_mobile_gallery"],
+    },
+    {
+      elementId: "interactive-rounds",
+      field: "responsive.mobile.props.posterMediaIds",
+      value: ["media_mobile_poster"],
+    },
+    {
+      elementId: "interactive-rounds",
+      field: "responsive.tablet.width",
+      value: 520,
+    },
+  ],
+);
+const responsiveEditableMapForContentHelpers = {
+  "interactive.mobile.color": {
+    elementId: "interactive-rounds",
+    targetPath: "responsive.mobile.styles.color",
+    editable: true,
+  },
+  "interactive.mobile.token-color": {
+    elementId: "interactive-rounds",
+    targetPath: "responsive.mobile.tokenRefs.styles.color",
+    editable: true,
+  },
+};
+const responsiveEditableMapPatchedContent = patchBackyContentEditableMapValues(
+  editableContentForHelpers,
+  responsiveEditableMapForContentHelpers,
+  {
+    "interactive.mobile.color": "#111827",
+    "interactive.mobile.token-color": "colors.primary",
+  },
+);
 const foundEditableElement = findBackyContentElement(
   editableContentForHelpers,
   "interactive-rounds",
@@ -4872,6 +6312,41 @@ const bulkPatchedEditableContent = patchBackyContentElements(
 const editableElementDescriptors = listBackyContentElements(
   editableContentForHelpers,
 ) satisfies BackyContentElementDescriptor[];
+const addedEditableElement: BackyContentAddElementResult | null = addBackyContentElement(
+  editableContentForHelpers,
+  {
+    id: "helper-added-button",
+    type: "button",
+    x: 32,
+    y: 172,
+    width: 180,
+    height: 44,
+    props: { label: "Added" },
+  },
+  { parentId: "helper-card", index: 2 },
+);
+const duplicatedEditableElement: BackyContentDuplicateElementResult | null = addedEditableElement
+  ? duplicateBackyContentElement(
+    addedEditableElement.content,
+    "helper-added-button",
+    { duplicateId: "helper-added-button-copy", idSuffix: "helper-copy" },
+  )
+  : null;
+const transformedEditableElement: BackyContentTransformElementsResult | null = duplicatedEditableElement
+  ? transformBackyContentElements(
+    duplicatedEditableElement.content,
+    [
+      { elementId: "helper-added-button-copy", deltaX: 16, width: 220 },
+      { elementId: "helper-card-title", y: 24, breakpoint: "mobile" },
+    ],
+  )
+  : null;
+const deletedEditableElement: BackyContentDeleteElementsResult | null = transformedEditableElement
+  ? deleteBackyContentElements(
+    transformedEditableElement.content,
+    ["helper-added-button-copy"],
+  )
+  : null;
 const editableMapFieldPatch = {
   elementId: "interactive-rounds",
   field: "props.rounds",
@@ -4962,6 +6437,11 @@ const liveManagedPostUpdateFromEditableMap =
   );
 
 void patchedEditableContent;
+void mediaPatchedEditableContent;
+void mediaPatchedEditableElement;
+void mediaPatchedEditableAssetIds;
+void responsivePatchedEditableContent;
+void responsiveEditableMapPatchedContent;
 void foundEditableElement;
 void bulkPatchedEditableContent;
 void editableElementDescriptors;
@@ -4994,14 +6474,48 @@ const renderMediaAsset = {
 
 const renderFontAsset = {
   id: "font_inter",
+  mediaId: "media_font_inter_regular",
   family: "Inter",
   source: "uploaded",
   url: "/media/fonts/inter.woff2",
-  weights: ["400"],
-  styles: ["normal"],
+  weights: ["400", "700"],
+  styles: ["normal", "italic"],
   fallbackStack: "system-ui, sans-serif",
   display: "swap",
   cssFamily: '"Inter", system-ui, sans-serif',
+  assetIds: ["media_font_inter_regular", "media_font_inter_italic"],
+  variants: [
+    {
+      id: "media_font_inter_regular:400:normal",
+      mediaId: "media_font_inter_regular",
+      family: "Inter",
+      weight: "400",
+      style: "normal",
+      display: "swap",
+      fallbackStack: "system-ui, sans-serif",
+      cssFamily: '"Inter", system-ui, sans-serif',
+      url: "/media/fonts/inter.woff2",
+      mimeType: "font/woff2",
+      originalName: "inter-regular.woff2",
+      folderId: "folder_fonts",
+      tags: ["brand-font"],
+    },
+    {
+      id: "media_font_inter_italic:700:italic",
+      mediaId: "media_font_inter_italic",
+      family: "Inter",
+      weight: "700",
+      style: "italic",
+      display: "optional",
+      fallbackStack: "system-ui, sans-serif",
+      cssFamily: '"Inter", system-ui, sans-serif',
+      url: "/media/fonts/inter-700-italic.woff2",
+      mimeType: "font/woff2",
+      originalName: "inter-700-italic.woff2",
+      folderId: "folder_fonts",
+      tags: ["brand-font", "italic"],
+    } satisfies GeneratedBackyPublicRenderPayloadFontVariant,
+  ],
 } satisfies GeneratedBackyRenderFontAsset;
 
 const renderForm = {
@@ -5119,6 +6633,27 @@ const renderFrontendDesign = {
   content: frontendDesignProvenance,
 } satisfies GeneratedBackyRenderFrontendDesign;
 
+const renderProductDesignReadiness = {
+  schemaVersion: "backy.product-design-readiness.v1",
+  status: "ready",
+  templateId: "product-template",
+  hasDesign: true,
+  hasContentDocument: true,
+  hasEditableMap: true,
+  hasDataBindings: true,
+  counts: {
+    elements: 2,
+    animations: 1,
+    assets: 1,
+    bindingHints: 1,
+  },
+  missing: [],
+  detail: "Product carries editable custom frontend design state.",
+  nextAction: "Keep the product template and editable map attached.",
+  evidence: ["template=product-template", "animations=1"],
+  secretHandling: "Design readiness excludes provider secrets and private order data.",
+} satisfies GeneratedBackyPublicRenderPayloadProductDesignReadiness;
+
 const renderPayload = {
   site: {
     id: "site_demo",
@@ -5143,7 +6678,84 @@ const renderPayload = {
     schemaVersion: "backy.content.v1",
     id: "page_home",
     kind: "page",
+    title: "Home",
+    version: "2026-05-22T00:00:00.000Z",
     elements: [element],
+    customCSS: ".hero{color:#111827}",
+    customJS: "window.backyHeroReady=true;",
+    contentDocument: {
+      schemaVersion: "backy.content.v1",
+      id: "page_home",
+      kind: "page",
+      title: "Home",
+      version: "2026-05-22T00:00:00.000Z",
+      elements: [element],
+      themeTokenRefs: {
+        color: "colors.primary",
+      },
+      assets: {
+        media: [
+          {
+            id: "media_hero",
+            type: "image",
+            url: "/api/sites/site_demo/media/media_hero/file",
+          },
+        ],
+      },
+      interactions: {
+        actions: {
+          schemaVersion: "backy.actions.v1",
+          actions: [],
+        },
+      },
+      seo: {
+        title: "Home",
+      },
+      dataBindings: {
+        datasets: [],
+        bindings: [],
+      },
+      editableMap,
+      metadata: {
+        customCSS: ".hero{color:#111827}",
+      },
+    },
+    themeTokenRefs: {
+      color: "colors.primary",
+    },
+    assets: {
+      media: [
+        {
+          id: "media_hero",
+          type: "image",
+          url: "/api/sites/site_demo/media/media_hero/file",
+        },
+      ],
+    },
+    animations: [
+      {
+        id: "hero-intro",
+        targetId: "hero",
+        type: "fadeIn",
+      },
+    ],
+    interactions: {
+      actions: {
+        schemaVersion: "backy.actions.v1",
+        actions: [],
+      },
+    },
+    dataBindings: {
+      datasets: [],
+      bindings: [],
+    },
+    editableMap,
+    seo: {
+      title: "Home",
+    },
+    metadata: {
+      editor: "custom-frontend",
+    },
   },
   assets: {
     media: [renderMediaAsset],
@@ -5164,6 +6776,31 @@ const renderPayload = {
   },
   dataBindings: bindings,
   editableMap,
+} satisfies GeneratedBackyPublicRenderPayload;
+
+const dynamicProductRenderPayload = {
+  ...renderPayload,
+  route: {
+    type: "dynamicItem",
+    path: "/products/sdk-product",
+    status: "published",
+    canonical: "/products/sdk-product",
+    params: {
+      collectionSlug: "products",
+      recordSlug: "sdk-product",
+    },
+    resource: {
+      id: "product_sdk",
+      kind: "dynamicItem",
+      collectionSlug: "products",
+      designReadiness: renderProductDesignReadiness,
+    },
+  },
+  content: {
+    ...renderPayload.content,
+    id: "product_sdk",
+    kind: "dynamicItem",
+  },
 } satisfies GeneratedBackyPublicRenderPayload;
 
 const renderEnvelope = {
@@ -5496,6 +7133,33 @@ const sdkManifestMediaManagementPolicy = {
     "fontDisplay",
     "uploadedBy",
   ],
+  filters: {
+    types: ["image", "video", "audio", "document", "file", "font", "other", "all"],
+    typeAliases: {
+      file: ["document", "other"],
+    },
+    visibility: ["public", "private", "all"],
+    scopes: ["global", "page", "post", "all"],
+    queryParams: [
+      "type",
+      "visibility",
+      "scope",
+      "global",
+      "search",
+      "tag",
+      "folderId",
+      "pageId",
+      "postId",
+      "blogId",
+      "limit",
+      "offset",
+    ],
+    maxLimit: 100,
+    aliases: {
+      blogId: "postId",
+      fileType: "file",
+    },
+  },
   sdkHelpers: {
     list: "adminMedia",
     upload: "uploadMedia",
@@ -5534,6 +7198,301 @@ const sdkManifestMediaManagementPolicy = {
   secretHandling:
     "Upload requests are authenticated admin multipart requests; private delivery uses short-lived signed URLs and never publishes private file tokens in manifest responses.",
 } satisfies BackyManifestMediaModule["managementPolicy"];
+
+const sdkManifestContentLifecycle = {
+  schemaVersion: "backy.content-lifecycle-commands.v1",
+  cloneField: "frontendDesignTemplateId",
+  permissions: {
+    read: "pages.view",
+    create: "pages.edit",
+    update: "pages.edit",
+    delete: "pages.delete",
+    publish: "pages.publish",
+  },
+  sdkHelpers: {
+    listPages: "adminPages",
+    createPage: "createAdminPage",
+    readPage: "adminPage",
+    updatePage: "updateAdminPage",
+    deletePage: "deleteAdminPage",
+    pageReadiness: "adminPageReadiness",
+    publishPage: "publishAdminPage",
+    archivePage: "archiveAdminPage",
+    createPagePreview: "createAdminPagePreviewToken",
+    pageRevisions: "adminPageRevisions",
+    rollbackPage: "rollbackAdminPage",
+    listPosts: "adminBlogPosts",
+    createPost: "createAdminBlogPost",
+    readPost: "adminBlogPost",
+    updatePost: "updateAdminBlogPost",
+    deletePost: "deleteAdminBlogPost",
+    postReadiness: "adminBlogPostReadiness",
+    publishPost: "publishAdminBlogPost",
+    archivePost: "archiveAdminBlogPost",
+    createPostPreview: "createAdminBlogPostPreviewToken",
+    postRevisions: "adminBlogPostRevisions",
+    rollbackPost: "rollbackAdminBlogPost",
+  },
+  requestBodies: {
+    createPage: {
+      templateClone: "{ title, slug?, status?, frontendDesignTemplateId?, content?, meta? }",
+      designState: "content may carry elements, contentDocument, customCSS, customJS, themeTokenRefs, assets, animations, interactions, dataBindings, editableMap, seo, and metadata.",
+    },
+    createPost: {
+      templateClone: "{ title, slug?, status?, frontendDesignTemplateId?, content?, meta?, excerpt?, authorId?, categoryIds?, tagIds? }",
+      designState: "content may carry elements, contentDocument, customCSS, customJS, themeTokenRefs, assets, animations, interactions, dataBindings, editableMap, seo, and metadata.",
+    },
+  },
+  responseContracts: {
+    pageRevisions: "backy.admin-page-revisions.v1",
+    postRevisions: "backy.admin-blog-post-revisions.v1",
+    revisionBranchMetadata: "backy.content-revision-branch-metadata.v1",
+    branchMetadataField: "revision.branchMetadata",
+    pageRollbackRequest: "backy.admin-page-rollback-request.v1",
+    postRollbackRequest: "backy.admin-blog-post-rollback-request.v1",
+  } as const,
+} satisfies BackyManifestContentLifecycleCommands;
+
+const sdkManifestEditorCommandRegistry = {
+  schemaVersion: "backy.editor-command-registry.v1",
+  source: "live-management-discovery",
+  generatedFrom: "page-editor",
+  stateModel: {
+    runtimeState: "computed-by-editor-client",
+    stateValues: ["ready", "disabled", "hidden"],
+    reasonField: "reason",
+    selectionFields: ["selectedIds", "selectedEntriesShareParent"],
+    clipboardFields: ["clipboardElements", "pasteTargetMode"],
+    documentFields: ["canEdit", "canPublish", "isSaving", "isPreview"],
+  },
+  categories: [
+    {
+      id: "composition",
+      label: "Composition",
+      commandIds: ["group-selection", "ungroup-selection"],
+    },
+    {
+      id: "layer-state",
+      label: "Layer state",
+      commandIds: ["toggle-selection-visibility"],
+    },
+    {
+      id: "view",
+      label: "View",
+      commandIds: ["toggle-grid"],
+    },
+    {
+      id: "workflow",
+      label: "Workflow",
+      commandIds: ["save-page"],
+    },
+  ],
+  commands: [
+    {
+      id: "group-selection",
+      label: "Group selected sibling layers",
+      category: "composition",
+      targetScope: "selected-sibling-scope",
+      shortcut: "Cmd/Ctrl+G",
+      ariaKeyshortcuts: "Control+G Meta+G",
+      testId: "editor-group-selection",
+      minSelected: 2,
+      sameParentRequired: true,
+      unlockedRequired: true,
+      sdkHelper: "groupBackyContentElements",
+      stateRule: "ready when at least two selected layers are unlocked siblings",
+    },
+    {
+      id: "toggle-selection-visibility",
+      label: "Toggle selected layer visibility",
+      category: "layer-state",
+      targetScope: "selected-layers",
+      testId: "editor-toggle-selection-visibility",
+      minSelected: 1,
+      unlockedRequired: true,
+      sdkHelper: "patchBackyContentElements",
+      targetPaths: ["visible"],
+      stateRule: "ready when selected layers are not locked",
+    },
+    {
+      id: "toggle-grid",
+      label: "Toggle grid visibility",
+      category: "view",
+      targetScope: "viewport",
+      shortcut: "G",
+      ariaKeyshortcuts: "G",
+      testId: "editor-grid-visibility-toggle",
+      stateRule: "ready outside preview mode",
+    },
+    {
+      id: "save-page",
+      label: "Save page, post, or section",
+      category: "workflow",
+      targetScope: "document",
+      shortcut: "Ctrl+S",
+      testId: "editor-save-page",
+      apiHelper: "updateAdminPage or updateAdminBlogPost",
+      stateRule: "ready when save controls are visible, the editor is not saving, and canEdit is true",
+    },
+  ],
+  privacy: {
+    includesSecretValues: false,
+    includesAdminSessionValues: false,
+    endpointTemplatesOnly: true,
+  },
+} satisfies BackyManifestEditorCommandRegistry;
+
+const sdkManifestPagesManagementPolicy = {
+  schemaVersion: "backy.pages-management.v1" as "backy.pages-management.v1",
+  cloneField: "frontendDesignTemplateId",
+  endpoints: {
+    list: "/api/admin/sites/site_demo/pages",
+    create: "/api/admin/sites/site_demo/pages",
+    detail: "/api/admin/sites/site_demo/pages/{pageId}",
+    readiness: "/api/admin/sites/site_demo/pages/{pageId}/readiness",
+    publish: "/api/admin/sites/site_demo/pages/{pageId}/publish",
+    archive: "/api/admin/sites/site_demo/pages/{pageId}/archive",
+    preview: "/api/admin/sites/site_demo/pages/{pageId}/preview",
+    revisions: "/api/admin/sites/site_demo/pages/{pageId}/revisions",
+    rollback: "/api/admin/sites/site_demo/pages/{pageId}/rollback",
+    templateRegistry: "/api/admin/sites/site_demo/templates?type=page",
+  },
+  methods: {
+    list: "GET",
+    create: "POST",
+    read: "GET",
+    update: "PATCH",
+    delete: "DELETE",
+    readiness: "GET",
+    publish: "POST",
+    archive: "POST",
+    preview: "POST",
+    revisions: "GET",
+    rollback: "POST",
+  },
+  auth: {
+    modes: ["session", "api-key"],
+    headers: ["Authorization", "x-backy-admin-session", "x-backy-admin-key", "x-api-key"],
+    requiredPermissions: {
+      read: "pages.view",
+      create: "pages.edit",
+      update: "pages.edit",
+      delete: "pages.delete",
+      publish: "pages.publish",
+    },
+    siteScope: true,
+  },
+  sdkHelpers: {
+    list: "adminPages",
+    create: "createAdminPage" as "createAdminPage",
+    read: "adminPage",
+    update: "updateAdminPage",
+    delete: "deleteAdminPage",
+    readiness: "adminPageReadiness",
+    publish: "publishAdminPage",
+    archive: "archiveAdminPage",
+    preview: "createAdminPagePreviewToken" as "createAdminPagePreviewToken",
+    revisions: "adminPageRevisions",
+    rollback: "rollbackAdminPage",
+  } as const,
+  responseContracts: {
+    list: "backy.admin-pages.v1",
+    detail: "backy.admin-page.v1",
+    readiness: "backy.page-readiness.v1",
+    preview: "backy.preview-token.v1",
+    revisions: "backy.admin-page-revisions.v1",
+    revisionBranchMetadata: "backy.content-revision-branch-metadata.v1",
+  },
+  designState: {
+    acceptsContentDocument: true,
+    acceptsCanvasElements: true,
+    acceptsFrontendDesignTemplateId: true,
+    preservesCustomCssJs: true,
+    preservesAssetsAnimationsInteractions: true,
+    preservesEditableMapAndDataBindings: true,
+  },
+  privacy: {
+    routesRequireAuthenticatedAdmin: true,
+    publicManifestExposesEndpointTemplatesOnly: true,
+    adminSessionsAndApiKeysNeverReturned: true,
+  },
+} satisfies BackyManifestContentManagementPolicy;
+
+const sdkManifestBlogManagementPolicy = {
+  schemaVersion: "backy.blog-management.v1" as "backy.blog-management.v1",
+  cloneField: "frontendDesignTemplateId",
+  endpoints: {
+    list: "/api/admin/sites/site_demo/blog",
+    create: "/api/admin/sites/site_demo/blog",
+    detail: "/api/admin/sites/site_demo/blog/{postId}",
+    readiness: "/api/admin/sites/site_demo/blog/{postId}/readiness",
+    publish: "/api/admin/sites/site_demo/blog/{postId}/publish",
+    archive: "/api/admin/sites/site_demo/blog/{postId}/archive",
+    preview: "/api/admin/sites/site_demo/blog/{postId}/preview",
+    revisions: "/api/admin/sites/site_demo/blog/{postId}/revisions",
+    rollback: "/api/admin/sites/site_demo/blog/{postId}/rollback",
+    templateRegistry: "/api/admin/sites/site_demo/templates?type=blogPost",
+  },
+  methods: {
+    list: "GET",
+    create: "POST",
+    read: "GET",
+    update: "PATCH",
+    delete: "DELETE",
+    readiness: "GET",
+    publish: "POST",
+    archive: "POST",
+    preview: "POST",
+    revisions: "GET",
+    rollback: "POST",
+  },
+  auth: {
+    modes: ["session", "api-key"],
+    headers: ["Authorization", "x-backy-admin-session", "x-backy-admin-key", "x-api-key"],
+    requiredPermissions: {
+      read: "pages.view",
+      create: "pages.edit",
+      update: "pages.edit",
+      delete: "pages.delete",
+      publish: "pages.publish",
+    },
+    siteScope: true,
+  },
+  sdkHelpers: {
+    list: "adminBlogPosts",
+    create: "createAdminBlogPost" as "createAdminBlogPost",
+    read: "adminBlogPost",
+    update: "updateAdminBlogPost",
+    delete: "deleteAdminBlogPost",
+    readiness: "adminBlogPostReadiness",
+    publish: "publishAdminBlogPost",
+    archive: "archiveAdminBlogPost",
+    preview: "createAdminBlogPostPreviewToken" as "createAdminBlogPostPreviewToken",
+    revisions: "adminBlogPostRevisions",
+    rollback: "rollbackAdminBlogPost",
+  } as const,
+  responseContracts: {
+    list: "backy.admin-blog-posts.v1",
+    detail: "backy.admin-blog-post.v1",
+    readiness: "backy.blog-post-readiness.v1",
+    preview: "backy.preview-token.v1",
+    revisions: "backy.admin-blog-post-revisions.v1",
+    revisionBranchMetadata: "backy.content-revision-branch-metadata.v1",
+  },
+  designState: {
+    acceptsContentDocument: true,
+    acceptsCanvasElements: true,
+    acceptsFrontendDesignTemplateId: true,
+    preservesCustomCssJs: true,
+    preservesAssetsAnimationsInteractions: true,
+    preservesEditableMapAndDataBindings: true,
+  },
+  privacy: {
+    routesRequireAuthenticatedAdmin: true,
+    publicManifestExposesEndpointTemplatesOnly: true,
+    adminSessionsAndApiKeysNeverReturned: true,
+  },
+} satisfies BackyManifestContentManagementPolicy;
 
 const manifest = {
   schemaVersion: "backy.frontend-manifest.v1",
@@ -5699,9 +7658,21 @@ const manifest = {
         "--backy-font-heading": "Inter",
         "--backy-spacing-md": "16px",
       },
+      tokenReferences: {
+        "colors.primary": "var(--backy-color-primary)",
+        "typography.families.heading": "var(--backy-font-heading)",
+      },
+      styleSheet: ":root,\n[data-backy-theme] {\n  --backy-color-primary: #111111;\n}",
       selectors: {
         root: ":root",
         scoped: "[data-backy-theme]",
+      },
+      inheritance: {
+        elementTokenRefPath: "tokenRefs",
+        documentTokenRefPath: "themeTokenRefs",
+        legacyElementTokenRefPath: "themeTokenRefs",
+        fallbackOrder: ["element.tokenRefs", "element.styles", "element.props", "document.themeTokenRefs", "site.theme"],
+        supportedElementPaths: ["styles.color", "styles.backgroundColor", "styles.fontFamily"],
       },
       editableFields: ["colors.primary", "fonts.heading", "spacing.unit", "customCSS"],
       capabilities: {
@@ -5711,21 +7682,51 @@ const manifest = {
         spacingScale: true,
         liveEditable: true,
         frontendDesignOverrides: true,
+        styleSheet: true,
+        tokenReferences: true,
+        perBlockTokenRefs: true,
+        animationTokenRefs: true,
       },
     },
     liveManagement: {
       schemaVersion: "backy.live-management.v1",
       enabled: true,
       endpoints: {
+        pages: "/api/admin/sites/site_demo/pages",
+        pageCreate: "/api/admin/sites/site_demo/pages",
+        pageDetail: "/api/admin/sites/site_demo/pages/{pageId}",
+        pageReadiness: "/api/admin/sites/site_demo/pages/{pageId}/readiness",
+        pagePublish: "/api/admin/sites/site_demo/pages/{pageId}/publish",
+        pageArchive: "/api/admin/sites/site_demo/pages/{pageId}/archive",
+        pagePreview: "/api/admin/sites/site_demo/pages/{pageId}/preview",
+        pageRevisions: "/api/admin/sites/site_demo/pages/{pageId}/revisions",
+        pageRollback: "/api/admin/sites/site_demo/pages/{pageId}/rollback",
         page: "/api/sites/site_demo/manage/pages/{pageId}",
+        posts: "/api/admin/sites/site_demo/blog",
+        postCreate: "/api/admin/sites/site_demo/blog",
+        postDetail: "/api/admin/sites/site_demo/blog/{postId}",
+        postReadiness: "/api/admin/sites/site_demo/blog/{postId}/readiness",
+        postPublish: "/api/admin/sites/site_demo/blog/{postId}/publish",
+        postArchive: "/api/admin/sites/site_demo/blog/{postId}/archive",
+        postPreview: "/api/admin/sites/site_demo/blog/{postId}/preview",
+        postRevisions: "/api/admin/sites/site_demo/blog/{postId}/revisions",
+        postRollback: "/api/admin/sites/site_demo/blog/{postId}/rollback",
         post: "/api/sites/site_demo/manage/blog/{postId}",
         render: "/api/sites/site_demo/render?path={path}",
         editableMapSchema:
           "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
       },
       methods: {
+        list: "GET",
         read: "GET",
+        create: "POST",
         update: "PATCH",
+        delete: "DELETE",
+        publish: "POST",
+        archive: "POST",
+        preview: "POST",
+        revisions: "GET",
+        rollback: "POST",
       },
       auth: {
         modes: ["session", "api-key"],
@@ -5746,15 +7747,124 @@ const manifest = {
         cacheInvalidation: true,
         auditTrail: true,
         webhookDelivery: true,
+        authenticatedContentLifecycle: true,
+        pageLifecycle: true,
+        postLifecycle: true,
+        templateCloning: true,
+        previewTokenCreation: true,
+        revisionHistory: true,
         editorComposition: true,
         editorGrouping: true,
+        mediaAssetRefs: true,
+        fontAssetRefs: true,
+        elementAssetIds: true,
+        tokenRefs: true,
+        animation: true,
+        animationTokenRefs: true,
       },
-      editableTargets: ["props.content", "props.href", "props.formId", "props.label", "props.options", "styles.color"],
+      editableTargets: [
+        "props.content",
+        "props.href",
+        "props.target",
+        "props.download",
+        "props.src",
+        "props.fileId",
+        "props.fileIds",
+        "props.fileMediaId",
+        "props.fileMediaIds",
+        "props.downloadMediaId",
+        "props.downloadMediaIds",
+        "props.fileMediaUrl",
+        "props.fileUrl",
+        "props.fileMediaName",
+        "props.fileMediaType",
+        "props.fileMediaVisibility",
+        "props.fileDownloadDisposition",
+        "props.fileSignedUrlRequired",
+        "props.fileSignedUrlEndpoint",
+        "props.fileName",
+        "props.mediaId",
+        "props.mediaIds",
+        "props.backgroundMediaIds",
+        "props.posterMediaIds",
+        "props.fontMediaId",
+        "props.fontMediaIds",
+        "props.imageFocalPoint",
+        "props.fontRegistration",
+        "props.formId",
+        "props.fieldBackgroundColor",
+        "props.submitBackgroundColor",
+        "props.label",
+        "props.options",
+        "props.backgroundColor",
+        "props.borderWidth",
+        "props.textAlign",
+        "props.actionPreset",
+        "props.underline",
+        "styles.color",
+        "styles.boxShadow",
+        "tokenRefs.styles.color",
+        "tokenRefs.styles.boxShadow",
+        "animation.type",
+        "animation.duration",
+        "animation.scrollTrigger.start",
+        "animation.scrollTrigger.scrub",
+        "animation.from",
+        "animation.to",
+        "animation.tokenRefs.duration",
+        "actions",
+        "dataBindings",
+        "bindingSlots",
+        "assetIds",
+        "responsive.mobile.props.fileId",
+        "responsive.mobile.props.fileIds",
+        "responsive.mobile.props.fileMediaId",
+        "responsive.mobile.props.fileMediaIds",
+        "responsive.mobile.props.downloadMediaId",
+        "responsive.mobile.props.downloadMediaIds",
+        "responsive.mobile.props.fileMediaUrl",
+        "responsive.mobile.props.fileUrl",
+        "responsive.mobile.props.fileMediaName",
+        "responsive.mobile.props.fileMediaType",
+        "responsive.mobile.props.fileMediaVisibility",
+        "responsive.mobile.props.fileDownloadDisposition",
+        "responsive.mobile.props.fileSignedUrlRequired",
+        "responsive.mobile.props.fileSignedUrlEndpoint",
+        "responsive.mobile.props.fileName",
+        "responsive.mobile.props.backgroundColor",
+        "responsive.mobile.styles.boxShadow",
+        "responsive.mobile.props.mediaIds",
+        "responsive.mobile.props.posterMediaIds",
+        "responsive.tablet.props.fileId",
+        "responsive.tablet.props.fileIds",
+        "responsive.tablet.props.fileMediaId",
+        "responsive.tablet.props.fileMediaIds",
+        "responsive.tablet.props.downloadMediaId",
+        "responsive.tablet.props.downloadMediaIds",
+        "responsive.tablet.props.fileMediaUrl",
+        "responsive.tablet.props.fileUrl",
+        "responsive.tablet.props.fileMediaName",
+        "responsive.tablet.props.fileMediaType",
+        "responsive.tablet.props.fileMediaVisibility",
+        "responsive.tablet.props.fileDownloadDisposition",
+        "responsive.tablet.props.fileSignedUrlRequired",
+        "responsive.tablet.props.fileSignedUrlEndpoint",
+        "responsive.tablet.props.fileName",
+        "responsive.tablet.props.borderWidth",
+        "responsive.tablet.tokenRefs.styles.boxShadow",
+        "responsive.mobile.x",
+        "responsive.tablet.width",
+      ],
+      lifecycle: sdkManifestContentLifecycle,
       editorComposition: {
         schemaVersion: "backy.editor-composition-commands.v1",
         sdkHelpers: {
           listElements: "listBackyContentElements",
           findElement: "findBackyContentElement",
+          addElement: "addBackyContentElement",
+          duplicateElement: "duplicateBackyContentElement",
+          deleteElements: "deleteBackyContentElements",
+          transformElements: "transformBackyContentElements",
           group: "groupBackyContentElements",
           ungroup: "ungroupBackyContentElements",
           patchElement: "patchBackyContentElement",
@@ -5763,6 +7873,61 @@ const manifest = {
           buildBlogPostUpdate: "buildBackyLiveManagedBlogPostEditableMapUpdate",
         },
         commands: [
+          {
+            id: "add",
+            label: "Add an element to the canvas or selected parent layer",
+            shortcut: "Insert",
+            sdkHelper: "addBackyContentElement",
+            minSelected: 0,
+            sameParentRequired: false,
+            unlockedRequired: true,
+            mutates: ["children", "parentId", "zIndex"],
+            preservesResponsiveGeometry: true,
+          },
+          {
+            id: "duplicate",
+            label: "Duplicate the selected element tree",
+            shortcut: "Cmd/Ctrl+D",
+            sdkHelper: "duplicateBackyContentElement",
+            minSelected: 1,
+            sameParentRequired: false,
+            unlockedRequired: true,
+            mutates: ["id", "parentId", "children", "layout"],
+            preservesResponsiveGeometry: true,
+          },
+          {
+            id: "delete",
+            label: "Delete selected unlocked element trees",
+            shortcut: "Delete/Backspace",
+            sdkHelper: "deleteBackyContentElements",
+            minSelected: 1,
+            sameParentRequired: false,
+            unlockedRequired: true,
+            mutates: ["children"],
+            preservesResponsiveGeometry: true,
+          },
+          {
+            id: "move",
+            label: "Move selected elements on desktop or responsive breakpoints",
+            shortcut: "Arrow keys / drag",
+            sdkHelper: "transformBackyContentElements",
+            minSelected: 1,
+            sameParentRequired: false,
+            unlockedRequired: true,
+            mutates: ["layout.x", "layout.y", "responsive.tablet", "responsive.mobile"],
+            preservesResponsiveGeometry: true,
+          },
+          {
+            id: "resize",
+            label: "Resize selected elements on desktop or responsive breakpoints",
+            shortcut: "Drag handles",
+            sdkHelper: "transformBackyContentElements",
+            minSelected: 1,
+            sameParentRequired: false,
+            unlockedRequired: true,
+            mutates: ["layout.width", "layout.height", "responsive.tablet", "responsive.mobile"],
+            preservesResponsiveGeometry: true,
+          },
           {
             id: "group",
             label: "Group selected sibling layers",
@@ -5785,8 +7950,9 @@ const manifest = {
             editorGroupRequired: true,
             preservesResponsiveGeometry: true,
           },
-        ],
-        constraints: {
+	        ],
+	        commandRegistry: sdkManifestEditorCommandRegistry,
+	        constraints: {
           sameParentRequired: true,
           lockedLayersBlocked: true,
           editorGroupMarker: "props.editorGroup",
@@ -5823,6 +7989,15 @@ const manifest = {
         resolve: "/api/sites/site_demo/resolve?path={path}",
         render: "/api/sites/site_demo/render?path={path}",
         liveManage: "/api/sites/site_demo/manage/pages/{pageId}",
+        adminList: "/api/admin/sites/site_demo/pages",
+        adminCreate: "/api/admin/sites/site_demo/pages",
+        adminDetail: "/api/admin/sites/site_demo/pages/{pageId}",
+        adminReadiness: "/api/admin/sites/site_demo/pages/{pageId}/readiness",
+        adminPublish: "/api/admin/sites/site_demo/pages/{pageId}/publish",
+        adminArchive: "/api/admin/sites/site_demo/pages/{pageId}/archive",
+        adminPreview: "/api/admin/sites/site_demo/pages/{pageId}/preview",
+        adminRevisions: "/api/admin/sites/site_demo/pages/{pageId}/revisions",
+        adminRollback: "/api/admin/sites/site_demo/pages/{pageId}/rollback",
       },
       methods: {
         list: "GET",
@@ -5831,6 +8006,16 @@ const manifest = {
         render: "GET",
         liveManageRead: "GET",
         liveManageUpdate: "PATCH",
+        adminList: "GET",
+        adminCreate: "POST",
+        adminRead: "GET",
+        adminUpdate: "PATCH",
+        adminDelete: "DELETE",
+        adminPublish: "POST",
+        adminArchive: "POST",
+        adminPreview: "POST",
+        adminRevisions: "GET",
+        adminRollback: "POST",
       },
       capabilities: {
         publicList: true,
@@ -5841,9 +8026,16 @@ const manifest = {
         frontendDesignProvenance: false,
         previewTokens: true,
         liveManagement: true,
+        authenticatedManagement: true,
+        pageCreation: true,
+        templateCloning: true,
+        readinessChecks: true,
+        publishArchive: true,
+        revisionHistory: true,
         conditionalRequests: true,
         cacheablePages: true,
       },
+      managementPolicy: sdkManifestPagesManagementPolicy,
       cache: {
         list: "public-discovery",
         detail: "public-discovery",
@@ -5911,6 +8103,15 @@ const manifest = {
         list: "/api/sites/site_demo/blog",
         detail: "/api/sites/site_demo/blog?slug={slug}",
         liveManage: "/api/sites/site_demo/manage/blog/{postId}",
+        adminList: "/api/admin/sites/site_demo/blog",
+        adminCreate: "/api/admin/sites/site_demo/blog",
+        adminDetail: "/api/admin/sites/site_demo/blog/{postId}",
+        adminReadiness: "/api/admin/sites/site_demo/blog/{postId}/readiness",
+        adminPublish: "/api/admin/sites/site_demo/blog/{postId}/publish",
+        adminArchive: "/api/admin/sites/site_demo/blog/{postId}/archive",
+        adminPreview: "/api/admin/sites/site_demo/blog/{postId}/preview",
+        adminRevisions: "/api/admin/sites/site_demo/blog/{postId}/revisions",
+        adminRollback: "/api/admin/sites/site_demo/blog/{postId}/rollback",
         rss: "/api/sites/site_demo/blog/rss",
         categories: "/api/sites/site_demo/blog/categories",
         tags: "/api/sites/site_demo/blog/tags",
@@ -5923,6 +8124,16 @@ const manifest = {
         detail: "GET",
         liveManageRead: "GET",
         liveManageUpdate: "PATCH",
+        adminList: "GET",
+        adminCreate: "POST",
+        adminRead: "GET",
+        adminUpdate: "PATCH",
+        adminDelete: "DELETE",
+        adminPublish: "POST",
+        adminArchive: "POST",
+        adminPreview: "POST",
+        adminRevisions: "GET",
+        adminRollback: "POST",
         rss: "GET",
         categories: "GET",
         tags: "GET",
@@ -5942,9 +8153,16 @@ const manifest = {
         frontendDesignProvenance: true,
         previewTokens: true,
         liveManagement: true,
+        authenticatedManagement: true,
+        postCreation: true,
+        templateCloning: true,
+        readinessChecks: true,
+        publishArchive: true,
+        revisionHistory: true,
         conditionalRequests: true,
         cacheablePosts: true,
       },
+      managementPolicy: sdkManifestBlogManagementPolicy,
       cache: {
         list: "public-discovery",
         detail: "public-discovery",
@@ -6328,7 +8546,7 @@ const manifest = {
       filters: {
         types: ["image", "font"],
         typeAliases: {
-          file: "document",
+          file: ["document", "other"],
         },
         visibility: ["public", "private"],
         scopes: ["global", "page", "post"],
@@ -6338,7 +8556,7 @@ const manifest = {
           q: "search",
           folder: "folderId",
           blogId: "postId",
-          fileType: "document",
+          fileType: "file",
         },
       },
       methods: {
@@ -6826,6 +9044,15 @@ const sdkManifestPagesRuntime = {
     resolve: "/api/sites/site_demo/resolve?path={path}",
     render: "/api/sites/site_demo/render?path={path}",
     liveManage: "/api/sites/site_demo/manage/pages/{pageId}",
+    adminList: "/api/admin/sites/site_demo/pages",
+    adminCreate: "/api/admin/sites/site_demo/pages",
+    adminDetail: "/api/admin/sites/site_demo/pages/{pageId}",
+    adminReadiness: "/api/admin/sites/site_demo/pages/{pageId}/readiness",
+    adminPublish: "/api/admin/sites/site_demo/pages/{pageId}/publish",
+    adminArchive: "/api/admin/sites/site_demo/pages/{pageId}/archive",
+    adminPreview: "/api/admin/sites/site_demo/pages/{pageId}/preview",
+    adminRevisions: "/api/admin/sites/site_demo/pages/{pageId}/revisions",
+    adminRollback: "/api/admin/sites/site_demo/pages/{pageId}/rollback",
   },
   methods: {
     list: "GET",
@@ -6834,6 +9061,16 @@ const sdkManifestPagesRuntime = {
     render: "GET",
     liveManageRead: "GET",
     liveManageUpdate: "PATCH",
+    adminList: "GET",
+    adminCreate: "POST",
+    adminRead: "GET",
+    adminUpdate: "PATCH",
+    adminDelete: "DELETE",
+    adminPublish: "POST",
+    adminArchive: "POST",
+    adminPreview: "POST",
+    adminRevisions: "GET",
+    adminRollback: "POST",
   },
   capabilities: {
     publicList: true,
@@ -6844,9 +9081,16 @@ const sdkManifestPagesRuntime = {
     frontendDesignProvenance: true,
     previewTokens: true,
     liveManagement: true,
+    authenticatedManagement: true,
+    pageCreation: true,
+    templateCloning: true,
+    readinessChecks: true,
+    publishArchive: true,
+    revisionHistory: true,
     conditionalRequests: true,
     cacheablePages: true,
   },
+  managementPolicy: sdkManifestPagesManagementPolicy,
   cache: {
     list: "public-discovery",
     detail: "public-discovery",
@@ -6930,6 +9174,15 @@ const sdkManifestBlogRuntime = {
     list: "/api/sites/site_demo/blog",
     detail: "/api/sites/site_demo/blog?slug={slug}",
     liveManage: "/api/sites/site_demo/manage/blog/{postId}",
+    adminList: "/api/admin/sites/site_demo/blog",
+    adminCreate: "/api/admin/sites/site_demo/blog",
+    adminDetail: "/api/admin/sites/site_demo/blog/{postId}",
+    adminReadiness: "/api/admin/sites/site_demo/blog/{postId}/readiness",
+    adminPublish: "/api/admin/sites/site_demo/blog/{postId}/publish",
+    adminArchive: "/api/admin/sites/site_demo/blog/{postId}/archive",
+    adminPreview: "/api/admin/sites/site_demo/blog/{postId}/preview",
+    adminRevisions: "/api/admin/sites/site_demo/blog/{postId}/revisions",
+    adminRollback: "/api/admin/sites/site_demo/blog/{postId}/rollback",
     rss: "/api/sites/site_demo/blog/rss",
     categories: "/api/sites/site_demo/blog/categories",
     tags: "/api/sites/site_demo/blog/tags",
@@ -6942,6 +9195,16 @@ const sdkManifestBlogRuntime = {
     detail: "GET",
     liveManageRead: "GET",
     liveManageUpdate: "PATCH",
+    adminList: "GET",
+    adminCreate: "POST",
+    adminRead: "GET",
+    adminUpdate: "PATCH",
+    adminDelete: "DELETE",
+    adminPublish: "POST",
+    adminArchive: "POST",
+    adminPreview: "POST",
+    adminRevisions: "GET",
+    adminRollback: "POST",
     rss: "GET",
     categories: "GET",
     tags: "GET",
@@ -6961,9 +9224,16 @@ const sdkManifestBlogRuntime = {
     frontendDesignProvenance: true,
     previewTokens: true,
     liveManagement: true,
+    authenticatedManagement: true,
+    postCreation: true,
+    templateCloning: true,
+    readinessChecks: true,
+    publishArchive: true,
+    revisionHistory: true,
     conditionalRequests: true,
     cacheablePosts: true,
   },
+  managementPolicy: sdkManifestBlogManagementPolicy,
   cache: {
     list: "public-discovery",
     detail: "public-discovery",
@@ -7204,7 +9474,7 @@ const sdkManifestMedia = {
   filters: {
     types: ["font", "image"],
     typeAliases: {
-      file: "document",
+      file: ["document", "other"],
     },
     visibility: ["public", "private"],
     scopes: ["global", "page", "post"],
@@ -7214,7 +9484,7 @@ const sdkManifestMedia = {
       q: "search",
       folder: "folderId",
       blogId: "postId",
-      fileType: "document",
+      fileType: "file",
     },
   },
   methods: {
@@ -7414,6 +9684,7 @@ function createSdkManifestCommerceManagementPolicy() {
     orderShippingLabel: "backy.shipping-label.v1",
     orderProviderRefund: "backy.provider-refund.v1",
     productProviderSync: "backy.commerce-product-sync.v1",
+    productStorefrontHandoff: "backy.product-storefront-handoff.v1",
     productSubscriptions: "backy.product-subscription-lifecycle.v1",
     productSubscriptionAction: "backy.product-subscription-action.v1",
     siteReconciliation: "backy.commerce-reconciliation.v1",
@@ -7425,6 +9696,7 @@ function createSdkManifestCommerceManagementPolicy() {
     productCatalogCanBePublic: true,
     ordersRemainPrivate: true,
     orderStatusHandoffMasksCustomerContact: true,
+    productStorefrontHandoffExcludesPrivateData: true,
     providerOperationPayloadsMayContainCustomerData: true,
     providerSecretsNeverReturned: true,
     rawProviderResponsesStayPrivate: true,
@@ -7569,9 +9841,21 @@ const sdkManifestTheme = {
     "--backy-color-primary": "#111111",
     "--backy-font-heading": "Inter",
   },
+  tokenReferences: {
+    "colors.primary": "var(--backy-color-primary)",
+    "typography.families.heading": "var(--backy-font-heading)",
+  },
+  styleSheet: ":root,\n[data-backy-theme] {\n  --backy-color-primary: #111111;\n}",
   selectors: {
     root: ":root",
     scoped: "[data-backy-theme]",
+  },
+  inheritance: {
+    elementTokenRefPath: "tokenRefs",
+    documentTokenRefPath: "themeTokenRefs",
+    legacyElementTokenRefPath: "themeTokenRefs",
+    fallbackOrder: ["element.tokenRefs", "element.styles", "element.props", "document.themeTokenRefs", "site.theme"],
+    supportedElementPaths: ["styles.color", "styles.backgroundColor", "styles.fontFamily"],
   },
   editableFields: ["colors.primary", "fonts.heading", "spacing.unit", "customCSS"],
   capabilities: {
@@ -7581,6 +9865,10 @@ const sdkManifestTheme = {
     spacingScale: true,
     liveEditable: true,
     frontendDesignOverrides: true,
+    styleSheet: true,
+    tokenReferences: true,
+    perBlockTokenRefs: true,
+    animationTokenRefs: true,
   },
 } satisfies BackyManifestThemeModule;
 
@@ -7588,15 +9876,41 @@ const sdkManifestLiveManagement = {
   schemaVersion: "backy.live-management.v1",
   enabled: true,
   endpoints: {
+    pages: "/api/admin/sites/site_demo/pages",
+    pageCreate: "/api/admin/sites/site_demo/pages",
+    pageDetail: "/api/admin/sites/site_demo/pages/{pageId}",
+    pageReadiness: "/api/admin/sites/site_demo/pages/{pageId}/readiness",
+    pagePublish: "/api/admin/sites/site_demo/pages/{pageId}/publish",
+    pageArchive: "/api/admin/sites/site_demo/pages/{pageId}/archive",
+    pagePreview: "/api/admin/sites/site_demo/pages/{pageId}/preview",
+    pageRevisions: "/api/admin/sites/site_demo/pages/{pageId}/revisions",
+    pageRollback: "/api/admin/sites/site_demo/pages/{pageId}/rollback",
     page: "/api/sites/site_demo/manage/pages/{pageId}",
+    posts: "/api/admin/sites/site_demo/blog",
+    postCreate: "/api/admin/sites/site_demo/blog",
+    postDetail: "/api/admin/sites/site_demo/blog/{postId}",
+    postReadiness: "/api/admin/sites/site_demo/blog/{postId}/readiness",
+    postPublish: "/api/admin/sites/site_demo/blog/{postId}/publish",
+    postArchive: "/api/admin/sites/site_demo/blog/{postId}/archive",
+    postPreview: "/api/admin/sites/site_demo/blog/{postId}/preview",
+    postRevisions: "/api/admin/sites/site_demo/blog/{postId}/revisions",
+    postRollback: "/api/admin/sites/site_demo/blog/{postId}/rollback",
     post: "/api/sites/site_demo/manage/blog/{postId}",
     render: "/api/sites/site_demo/render?path={path}",
     editableMapSchema:
       "https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json",
   },
   methods: {
+    list: "GET",
     read: "GET",
+    create: "POST",
     update: "PATCH",
+    delete: "DELETE",
+    publish: "POST",
+    archive: "POST",
+    preview: "POST",
+    revisions: "GET",
+    rollback: "POST",
   },
   auth: {
     modes: ["session", "api-key"],
@@ -7617,15 +9931,124 @@ const sdkManifestLiveManagement = {
     cacheInvalidation: true,
     auditTrail: true,
     webhookDelivery: true,
+    authenticatedContentLifecycle: true,
+    pageLifecycle: true,
+    postLifecycle: true,
+    templateCloning: true,
+    previewTokenCreation: true,
+    revisionHistory: true,
     editorComposition: true,
     editorGrouping: true,
+    mediaAssetRefs: true,
+    fontAssetRefs: true,
+    elementAssetIds: true,
+    tokenRefs: true,
+    animation: true,
+    animationTokenRefs: true,
   },
-  editableTargets: ["props.content", "props.href", "props.formId", "props.label", "props.options", "styles.color"],
+  editableTargets: [
+    "props.content",
+    "props.href",
+    "props.target",
+    "props.download",
+    "props.src",
+    "props.fileId",
+    "props.fileIds",
+    "props.fileMediaId",
+    "props.fileMediaIds",
+    "props.downloadMediaId",
+    "props.downloadMediaIds",
+    "props.fileMediaUrl",
+    "props.fileUrl",
+    "props.fileMediaName",
+    "props.fileMediaType",
+    "props.fileMediaVisibility",
+    "props.fileDownloadDisposition",
+    "props.fileSignedUrlRequired",
+    "props.fileSignedUrlEndpoint",
+    "props.fileName",
+    "props.mediaId",
+    "props.mediaIds",
+    "props.backgroundMediaIds",
+    "props.posterMediaIds",
+    "props.fontMediaId",
+    "props.fontMediaIds",
+    "props.imageFocalPoint",
+    "props.fontRegistration",
+    "props.formId",
+    "props.fieldBackgroundColor",
+    "props.submitBackgroundColor",
+    "props.label",
+    "props.options",
+    "props.backgroundColor",
+    "props.borderWidth",
+    "props.textAlign",
+    "props.actionPreset",
+    "props.underline",
+    "styles.color",
+    "styles.boxShadow",
+    "tokenRefs.styles.color",
+    "tokenRefs.styles.boxShadow",
+    "animation.type",
+    "animation.duration",
+    "animation.scrollTrigger.start",
+    "animation.scrollTrigger.scrub",
+    "animation.from",
+    "animation.to",
+    "animation.tokenRefs.duration",
+    "actions",
+    "dataBindings",
+    "bindingSlots",
+    "assetIds",
+    "responsive.mobile.props.fileId",
+    "responsive.mobile.props.fileIds",
+    "responsive.mobile.props.fileMediaId",
+    "responsive.mobile.props.fileMediaIds",
+    "responsive.mobile.props.downloadMediaId",
+    "responsive.mobile.props.downloadMediaIds",
+    "responsive.mobile.props.fileMediaUrl",
+    "responsive.mobile.props.fileUrl",
+    "responsive.mobile.props.fileMediaName",
+    "responsive.mobile.props.fileMediaType",
+    "responsive.mobile.props.fileMediaVisibility",
+    "responsive.mobile.props.fileDownloadDisposition",
+    "responsive.mobile.props.fileSignedUrlRequired",
+    "responsive.mobile.props.fileSignedUrlEndpoint",
+    "responsive.mobile.props.fileName",
+    "responsive.mobile.props.backgroundColor",
+    "responsive.mobile.styles.boxShadow",
+    "responsive.mobile.props.mediaIds",
+    "responsive.mobile.props.posterMediaIds",
+    "responsive.tablet.props.fileId",
+    "responsive.tablet.props.fileIds",
+    "responsive.tablet.props.fileMediaId",
+    "responsive.tablet.props.fileMediaIds",
+    "responsive.tablet.props.downloadMediaId",
+    "responsive.tablet.props.downloadMediaIds",
+    "responsive.tablet.props.fileMediaUrl",
+    "responsive.tablet.props.fileUrl",
+    "responsive.tablet.props.fileMediaName",
+    "responsive.tablet.props.fileMediaType",
+    "responsive.tablet.props.fileMediaVisibility",
+    "responsive.tablet.props.fileDownloadDisposition",
+    "responsive.tablet.props.fileSignedUrlRequired",
+    "responsive.tablet.props.fileSignedUrlEndpoint",
+    "responsive.tablet.props.fileName",
+    "responsive.tablet.props.borderWidth",
+    "responsive.tablet.tokenRefs.styles.boxShadow",
+    "responsive.mobile.x",
+    "responsive.tablet.width",
+  ],
+  lifecycle: sdkManifestContentLifecycle,
   editorComposition: {
     schemaVersion: "backy.editor-composition-commands.v1",
     sdkHelpers: {
       listElements: "listBackyContentElements",
       findElement: "findBackyContentElement",
+      addElement: "addBackyContentElement",
+      duplicateElement: "duplicateBackyContentElement",
+      deleteElements: "deleteBackyContentElements",
+      transformElements: "transformBackyContentElements",
       group: "groupBackyContentElements",
       ungroup: "ungroupBackyContentElements",
       patchElement: "patchBackyContentElement",
@@ -7634,6 +10057,61 @@ const sdkManifestLiveManagement = {
       buildBlogPostUpdate: "buildBackyLiveManagedBlogPostEditableMapUpdate",
     },
     commands: [
+      {
+        id: "add",
+        label: "Add an element to the canvas or selected parent layer",
+        shortcut: "Insert",
+        sdkHelper: "addBackyContentElement",
+        minSelected: 0,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["children", "parentId", "zIndex"],
+        preservesResponsiveGeometry: true,
+      },
+      {
+        id: "duplicate",
+        label: "Duplicate the selected element tree",
+        shortcut: "Cmd/Ctrl+D",
+        sdkHelper: "duplicateBackyContentElement",
+        minSelected: 1,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["id", "parentId", "children", "layout"],
+        preservesResponsiveGeometry: true,
+      },
+      {
+        id: "delete",
+        label: "Delete selected unlocked element trees",
+        shortcut: "Delete/Backspace",
+        sdkHelper: "deleteBackyContentElements",
+        minSelected: 1,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["children"],
+        preservesResponsiveGeometry: true,
+      },
+      {
+        id: "move",
+        label: "Move selected elements on desktop or responsive breakpoints",
+        shortcut: "Arrow keys / drag",
+        sdkHelper: "transformBackyContentElements",
+        minSelected: 1,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["layout.x", "layout.y", "responsive.tablet", "responsive.mobile"],
+        preservesResponsiveGeometry: true,
+      },
+      {
+        id: "resize",
+        label: "Resize selected elements on desktop or responsive breakpoints",
+        shortcut: "Drag handles",
+        sdkHelper: "transformBackyContentElements",
+        minSelected: 1,
+        sameParentRequired: false,
+        unlockedRequired: true,
+        mutates: ["layout.width", "layout.height", "responsive.tablet", "responsive.mobile"],
+        preservesResponsiveGeometry: true,
+      },
       {
         id: "group",
         label: "Group selected sibling layers",
@@ -7656,8 +10134,9 @@ const sdkManifestLiveManagement = {
         editorGroupRequired: true,
         preservesResponsiveGeometry: true,
       },
-    ],
-    constraints: {
+	    ],
+	    commandRegistry: sdkManifestEditorCommandRegistry,
+	    constraints: {
       sameParentRequired: true,
       lockedLayersBlocked: true,
       editorGroupMarker: "props.editorGroup",
@@ -8004,6 +10483,27 @@ const dynamicListRouteResource = {
   recordCount: 3,
 } satisfies GeneratedBackyOpenApiDynamicListRouteResource;
 
+const openApiProductDesignReadiness = {
+  schemaVersion: "backy.product-design-readiness.v1",
+  status: "ready",
+  templateId: "product-template",
+  hasDesign: true,
+  hasContentDocument: true,
+  hasEditableMap: true,
+  hasDataBindings: true,
+  counts: {
+    elements: 2,
+    animations: 1,
+    assets: 1,
+    bindingHints: 1,
+  },
+  missing: [],
+  detail: "Product carries editable custom frontend design state.",
+  nextAction: "Keep the product template and editable map attached.",
+  evidence: ["template=product-template", "animations=1"],
+  secretHandling: "Design readiness excludes provider secrets and private order data.",
+} satisfies GeneratedBackyOpenApiCommerceProductDesignReadiness;
+
 const dynamicItemRouteResource = {
   id: "record_getting_started",
   kind: "dynamicItem",
@@ -8016,6 +10516,7 @@ const dynamicItemRouteResource = {
     "/api/sites/site_demo/collections/collection_docs/records?slug=getting-started",
   renderUrl: "/api/sites/site_demo/render?path=%2Fdocs%2Fgetting-started",
   hostedPath: "/docs/getting-started",
+  designReadiness: openApiProductDesignReadiness,
 } satisfies GeneratedBackyOpenApiDynamicItemRouteResource;
 
 const pageRoute = {
@@ -8422,11 +10923,6 @@ const sdkFormSubmissionInput = buildBackyFormSubmissionInput(
     },
     pageId: "page_contact",
     requestId: "sdk-form-submit",
-    contactShareOverride: {
-      enabled: true,
-      emailField: "Your email",
-      notesField: "Your message",
-    },
     captcha: {
       token: "captcha-token",
     },
@@ -8904,8 +11400,10 @@ const mediaReferences = {
   scopes: ["page"],
   pageIds: ["page_home"],
   postIds: [],
+  collectionRecordIds: [],
   pages: [mediaReferenceTarget],
   posts: [],
+  collectionRecords: [],
   usageTypes: ["hero-image"],
   totalBindings: 1,
 } satisfies GeneratedBackyOpenApiMediaReferences;
@@ -8925,15 +11423,33 @@ const mediaEditableMetadata = {
   },
 } satisfies GeneratedBackyOpenApiMediaEditableMetadata;
 
+const mediaOrganization = {
+  schemaVersion: "backy.media.organization.v1",
+  folderId: "folder_brand",
+  folderName: "Brand",
+  folderPath: "Assets/Brand",
+  folderSegments: ["Assets", "Brand"],
+  folderAncestors: [
+    { id: "folder_assets", name: "Assets", parentId: null, sortOrder: 0 },
+    { id: "folder_brand", name: "Brand", parentId: "folder_assets", sortOrder: 10 },
+  ],
+  folderDepth: 1,
+  folderSortOrder: 10,
+  root: false,
+  missingFolder: false,
+} satisfies NonNullable<GeneratedBackyOpenApiMediaAsset["organization"]>;
+
 const mediaAsset = {
   id: "media_hero",
   type: "image",
   url: "/media/hero.webp",
   visibility: "public",
+  organization: mediaOrganization,
   references: mediaReferences,
   referenceSummary: {
     pageCount: 1,
     postCount: 0,
+    collectionRecordCount: 0,
     usageTypes: ["hero-image"],
     global: false,
     scoped: true,
@@ -8967,6 +11483,18 @@ const genericFileMediaAsset = {
   type: "other",
   url: "/media/export.zip",
   visibility: "public",
+  organization: {
+    schemaVersion: "backy.media.organization.v1",
+    folderId: null,
+    folderName: "Root",
+    folderPath: "Root",
+    folderSegments: [],
+    folderAncestors: [],
+    folderDepth: -1,
+    folderSortOrder: null,
+    root: true,
+    missingFolder: false,
+  },
 } satisfies GeneratedBackyOpenApiMediaAsset;
 
 const sdkGenericFileMediaAsset = {
@@ -9717,12 +12245,123 @@ const commerceProductDesign = {
   chrome: {},
   tokens: {},
   customCss: ".product-hero { display: grid; }",
+  customJs: "window.__backyProductReady = true;",
+  contentDocument: {
+    schemaVersion: "backy.content.v1",
+    elements: [
+      {
+        id: "product-hero",
+        type: "section",
+        animation: {
+          preset: "fade-up",
+        },
+      },
+    ],
+    canvasSize: { width: 1440, height: 900 },
+    editableMap: {},
+    metadata: {
+      templateKind: "product-detail",
+    },
+  },
+  elements: [
+    {
+      id: "product-hero",
+      type: "section",
+      animation: {
+        preset: "fade-up",
+      },
+    },
+  ],
+  canvasSize: { width: 1440, height: 900 },
+  themeTokenRefs: {
+    cta: "colors.primary",
+  },
+  assets: [
+    {
+      id: "product-hero-image",
+      kind: "image",
+    },
+  ],
+  interactions: [
+    {
+      trigger: "hover",
+      target: "product-card",
+    },
+  ],
+  dataBindings: {
+    title: {
+      source: "product.title",
+    },
+  },
+  editableMap: {
+    "product.title": {
+      elementId: "product-title",
+      targetPath: "props.content",
+    },
+  },
+  seo: {
+    title: "Starter template",
+  },
+  metadata: {
+    templateKind: "product-detail",
+  },
   bindingHints: [
     {
       field: "title",
       target: "hero.title",
     },
   ],
+  frontendDesignCustomJs: "window.__backyProductReady = true;",
+  frontendDesignContentDocument: {
+    schemaVersion: "backy.content.v1",
+    elements: [],
+  },
+  frontendDesignElements: [
+    {
+      id: "product-title",
+      type: "heading",
+    },
+  ],
+  frontendDesignCanvasSize: { width: 1440, height: 900 },
+  frontendDesignThemeTokenRefs: {
+    cta: "colors.primary",
+  },
+  frontendDesignAssets: [
+    {
+      id: "product-hero-image",
+      kind: "image",
+    },
+  ],
+  frontendDesignAnimations: [
+    {
+      id: "product-hero-intro",
+      trigger: "load",
+      target: "product-title",
+    },
+  ],
+  frontendDesignInteractions: [
+    {
+      trigger: "hover",
+      target: "product-card",
+    },
+  ],
+  frontendDesignDataBindings: {
+    title: {
+      source: "product.title",
+    },
+  },
+  frontendDesignEditableMap: {
+    "product.title": {
+      elementId: "product-title",
+      targetPath: "props.content",
+    },
+  },
+  frontendDesignSeo: {
+    title: "Starter template",
+  },
+  frontendDesignMetadata: {
+    templateKind: "product-detail",
+  },
 } satisfies GeneratedBackyOpenApiCommerceProductDesign;
 
 const commerceProduct = {
@@ -9923,8 +12562,168 @@ const commerceOrderEnvelope = {
         quantity: 1,
       },
     ],
+    statusHandoff: {
+      schemaVersion: "backy.order-status-handoff.v1",
+      generatedAt: "2026-05-17T00:00:00.000Z",
+      source: "public-commerce-order-intake-api",
+      status: "attention",
+      score: 86,
+      selectedSiteId: "site_demo",
+      order: {
+        id: "order_1",
+        slug: "ord-1001",
+        orderNumber: "BCK-1001",
+        recordStatus: "published",
+        total: 4900,
+        currency: "USD",
+        itemCount: 1,
+        orderStatus: "open",
+        paymentStatus: "pending",
+        fulfillmentStatus: "unfulfilled",
+        createdAt: "2026-05-17T00:00:00.000Z",
+        updatedAt: "2026-05-17T00:00:00.000Z",
+      },
+      customer: {
+        displayName: "SDK Customer",
+        maskedEmail: "sd***@example.com",
+        maskedPhone: "***-0100",
+        customerProfileLinked: true,
+        customerProfileSlug: "",
+        customerProfileStatus: "customer",
+      },
+      tracking: {
+        carrier: "",
+        trackingNumber: "",
+        trackingUrl: "",
+        trackingStatus: "",
+        trackingLastCheckedAt: "",
+        fulfilledAt: "",
+        shippingLabelStatus: "none",
+        shippingLabelProvider: "",
+        shippingLabelReferencePresent: false,
+      },
+      refund: {
+        refundAmount: 0,
+        refundReasonPresent: false,
+        providerRefundStatus: "none",
+        providerRefundProvider: "",
+        providerRefundReferencePresent: false,
+        providerRefundRequestedAt: "",
+        providerRefundCompletedAt: "",
+      },
+      digitalDelivery: {
+        schemaVersion: "backy.order-digital-delivery-handoff.v1",
+        itemCount: 0,
+        configuredItemCount: 0,
+        pendingItemCount: 0,
+        status: "not-applicable",
+        customerAction: "No digital delivery items were detected for this order.",
+        customerSafeFieldsOnly: true,
+        includesDownloadUrls: false,
+        includesDownloadMediaIds: false,
+      },
+      endpoints: {
+        checkoutIntake: "https://example.com/api/sites/site_demo/commerce/orders",
+        publicStatusHandoff:
+          "https://example.com/api/sites/site_demo/commerce/orders?orderId=order_1",
+        adminStatusHandoff:
+          "https://example.com/api/admin/sites/site_demo/commerce/orders/order_1/status-handoff",
+        adminOrderDetail:
+          "https://example.com/api/admin/sites/site_demo/collections/orders/records/order_1",
+        adminTracking:
+          "https://example.com/api/admin/sites/site_demo/commerce/orders/order_1/tracking",
+        adminProviderRefund:
+          "https://example.com/api/admin/sites/site_demo/commerce/orders/order_1/provider-refund",
+      },
+      frontendBindings: {
+        schemaVersion: "backy.order-status-frontend-bindings.v1",
+        targetViews: ["order-confirmation", "order-tracking"],
+        dataset: {
+          key: "orderStatusHandoff",
+          source: "public-commerce-order-intake-api",
+          endpoint: "https://example.com/api/sites/site_demo/commerce/orders",
+          selectedOrderId: "order_1",
+          selectedOrderSlug: "ord-1001",
+          auth: "post-checkout-response",
+          refreshMethod: "POST-response",
+        },
+        safeBindingPaths: [
+          "order.orderNumber",
+          "order.paymentStatus",
+          "digitalDelivery.status",
+        ],
+        maskedBindingPaths: ["customer.maskedEmail", "customer.maskedPhone"],
+        editableRegions: [
+          {
+            key: "confirmation-summary",
+            targetViews: ["order-confirmation"],
+          },
+        ],
+        actionBindings: [
+          {
+            key: "use-checkout-status-handoff",
+            method: "POST-response",
+          },
+        ],
+      },
+      privacy: {
+        publicCollectionReadBlocked: true,
+        customerSafeFieldsOnly: true,
+        includesRawCustomerContact: false,
+        includesProviderExecutionIds: false,
+        includesPaymentReferences: false,
+        includesAddresses: false,
+        includesInternalNotes: false,
+        includesDigitalDeliveryUrls: false,
+        includesDownloadMediaIds: false,
+        excludedFields: ["email", "paymentreference", "downloadurl"],
+      },
+      actionPlan: {
+        recommendedAction: "confirm-payment",
+      },
+      checks: [
+        {
+          key: "payment-status",
+          status: "attention",
+        },
+      ],
+      nextSteps: ["Payment is still pending."],
+    },
+    statusAccess: {
+      schemaVersion: "backy.order-status-access.v1",
+      auth: "status-token",
+      tokenReturnedOnce: true,
+      statusToken: "status_token_demo",
+      tokenStorage:
+        "store-in-customer-session-or-email-link; Backy stores only statusaccesstokenhash",
+      tokenExpiresAt: "2026-08-15T00:00:00.000Z",
+      orderId: "order_1",
+      orderSlug: "ord-1001",
+      endpoint:
+        "https://example.com/api/sites/site_demo/commerce/orders?orderId=order_1",
+      endpointTemplate:
+        "https://example.com/api/sites/site_demo/commerce/orders?orderId=order_1&statusToken={statusToken}",
+      refreshMethod: "GET",
+      responseContract: "backy.order-status-handoff.v1",
+      privacy: {
+        rawTokenStoredByBacky: false,
+        tokenHashField: "statusaccesstokenhash",
+        includesRawOrder: false,
+        customerSafeFieldsOnly: true,
+      },
+    },
   },
 } satisfies GeneratedBackyOpenApiCommerceOrderEnvelope;
+
+const commerceOrderStatusHandoffEnvelope = {
+  success: true,
+  requestId: "req_order_status_handoff",
+  data: {
+    schemaVersion: "backy.order-status-handoff.v1",
+    statusHandoff: commerceOrderEnvelope.data.statusHandoff,
+    statusAccess: commerceOrderEnvelope.data.statusAccess,
+  },
+} satisfies GeneratedBackyOpenApiCommerceOrderStatusHandoffEnvelope;
 
 const commerceWebhookRequest = {
   id: "evt_checkout_completed",
@@ -10052,6 +12851,20 @@ const openApiContentElement = {
   dataBindings: [openApiDataBinding],
   accessibility: openApiContentElementAccessibility,
   assetIds: [openApiContentAssetRef.id],
+  animation: {
+    type: "slideIn",
+    duration: 0.32,
+    direction: "up",
+    trigger: "scroll",
+    scrollTrigger: {
+      start: "top 85%",
+      scrub: false,
+    },
+    tokenRefs: {
+      duration: "motion.duration.slow",
+      easing: "motion.easing.standard",
+    },
+  },
 } satisfies GeneratedBackyOpenApiBackyContentElement;
 
 const openApiContentDocument = {
@@ -10069,6 +12882,59 @@ const openApiContentDocument = {
   },
 } satisfies GeneratedBackyOpenApiBackyContentDocument;
 
+const pageDesignStateUpdate = {
+  expectedUpdatedAt: "2026-05-21T12:00:00.000Z",
+  content: {
+    elements: [openApiContentElement],
+    canvasSize: {
+      width: 1200,
+      height: 900,
+    },
+    customCSS: ".hero { min-height: 70vh; }",
+    customJS: "window.__backyHeroReady = true;",
+    themeTokenRefs: {
+      primary: "colors.primary",
+    },
+    assets: {
+      media: [openApiContentAssetRef],
+    },
+    animations: [
+      {
+        id: "hero-enter",
+        target: "hero-title",
+        timeline: ["hero-intro"],
+      },
+    ],
+    interactions: {
+      actions: {
+        schemaVersion: "backy.actions.v1",
+        actions: [openApiElementAction],
+      },
+    },
+    seo: {
+      title: "Designed page",
+    },
+    dataBindings: {
+      datasets: [{ id: "dataset_docs", collectionId: "docs" }],
+      bindings: [openApiDataBinding],
+    },
+    editableMap: {
+      "section-title.text": openApiEditableMapEntry,
+    },
+    metadata: {
+      editorState: {
+        selectedBreakpoint: "desktop",
+        animationTimeline: "hero-intro",
+      },
+    },
+    contentDocument: openApiContentDocument,
+  },
+} satisfies GeneratedBackyOpenApiPageUpdateRequest;
+
+const blogDesignStateUpdate = {
+  content: pageDesignStateUpdate.content,
+} satisfies GeneratedBackyOpenApiBlogPostUpdateRequest;
+
 const reusableSectionContent = {
   elements: [openApiContentElement],
   canvasSize: {
@@ -10077,6 +12943,46 @@ const reusableSectionContent = {
   },
   customCSS: ".docs-header { color: var(--backy-color-text); }",
   contentDocument: openApiContentDocument,
+  themeTokenRefs: {
+    "docs-header.color": "colors.text",
+  },
+  assets: [
+    {
+      id: "docs-header-bg",
+      mediaId: "media_docs_header",
+      role: "section.background",
+    },
+  ],
+  animations: [
+    {
+      id: "docs-header-intro",
+      timeline: "docs-header-intro",
+    },
+  ],
+  interactions: [
+    {
+      id: "docs-header-hover",
+      trigger: "hover",
+    },
+  ],
+  dataBindings: {
+    heading: {
+      source: "section.heading",
+      targetPath: "elements.hero-heading.props.text",
+    },
+  },
+  editableMap: {
+    heading: {
+      elementId: "hero-heading",
+      path: "props.text",
+    },
+  },
+  seo: {
+    title: "Docs header",
+  },
+  metadata: {
+    templateKind: "reusable-section",
+  },
 } satisfies GeneratedBackyOpenApiBackyReusableSectionContent;
 
 const reusableSection = {
@@ -10089,6 +12995,9 @@ const reusableSection = {
   tags: ["docs"],
   content: reusableSectionContent,
 } satisfies GeneratedBackyOpenApiReusableSection;
+
+void pageDesignStateUpdate;
+void blogDesignStateUpdate;
 
 const pageResource = {
   id: "page_docs",
@@ -10405,6 +13314,13 @@ const frontendDesignEnvelope = {
   },
 } satisfies GeneratedBackyOpenApiFrontendDesignEnvelope;
 
+const interactiveControlOptions = [
+  "slow",
+  3,
+  true,
+  { label: "Automatic", value: "auto" },
+] satisfies GeneratedBackyOpenApiInteractiveComponentControlOption[];
+
 const interactiveRegistryEntry = {
   componentKey: "backy.custom.sandboxed",
   displayName: "Sandboxed custom component",
@@ -10422,8 +13338,30 @@ const interactiveRegistryEntry = {
       key: "speed",
       label: "Speed",
       type: "select",
-      options: ["slow", "normal", "fast"],
+      options: interactiveControlOptions,
       defaultValue: "normal",
+    },
+    {
+      key: "displayMode",
+      label: "Display mode",
+      type: "radio",
+      options: [
+        { label: "Compact", value: "compact" },
+        { label: "Detailed", value: "detailed" },
+      ],
+      defaultValue: "compact",
+    },
+    {
+      key: "caption",
+      label: "Caption",
+      type: "textarea",
+      defaultValue: "Accessible fallback caption.",
+    },
+    {
+      key: "runtimeConfig",
+      label: "Runtime config",
+      type: "json",
+      defaultValue: { reducedMotionFallback: true },
     },
   ],
   fallback: {
@@ -11216,6 +14154,7 @@ void sdkAdminFormContactDeleteEnvelope;
 void mediaReferenceTarget;
 void mediaReferences;
 void mediaEditableMetadata;
+void mediaOrganization;
 void mediaAsset;
 void genericFileMediaAsset;
 void sdkGenericFileMediaAsset;

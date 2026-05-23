@@ -321,7 +321,8 @@
             "collections": { "type": "integer", "minimum": 0 },
             "reusableSections": { "type": "integer", "minimum": 0 },
             "forms": { "type": "integer", "minimum": 0 },
-            "media": { "type": "integer", "minimum": 0 }
+            "media": { "type": "integer", "minimum": 0 },
+            "fonts": { "type": "integer", "minimum": 0 }
           }
         },
         "checks": {
@@ -380,19 +381,19 @@
             "additionalProperties": true,
             "properties": {
               "source": { "const": "specs/page-completion-audit/backy-page-surface-audit.md" },
-              "ready": { "const": 39 },
-              "partial": { "const": 6 },
+              "ready": { "const": 41 },
+              "partial": { "const": 4 },
               "prototype": { "const": 0 },
               "missing": { "const": 0 },
               "total": { "const": 45 },
-              "readyPercent": { "const": 87 }
+              "readyPercent": { "const": 91 }
             },
             "required": ["source", "ready", "partial", "prototype", "missing", "total", "readyPercent"]
           },
-          "surfaces": {
-            "type": "array",
-            "items": {
-              "type": "object",
+	          "surfaces": {
+	            "type": "array",
+	            "items": {
+	              "type": "object",
               "additionalProperties": true,
               "properties": {
                 "key": { "type": "string", "minLength": 1 },
@@ -402,8 +403,144 @@
                 "gate": { "type": "string", "minLength": 1 }
               },
               "required": ["key", "label", "status", "blocker", "gate"]
+	            },
+	            "minItems": 4
+	          },
+	          "surfaceRunbooks": {
+	            "type": "array",
+	            "items": {
+	              "type": "object",
+	              "additionalProperties": true,
+	              "properties": {
+	                "key": { "enum": ["settings", "settings-admin-apis", "products", "orders"] },
+	                "label": { "type": "string", "minLength": 1 },
+	                "gate": { "enum": ["settings-provider-certification", "commerce-provider-certification"] },
+	                "command": { "type": "string", "minLength": 1 },
+	                "preflight": { "type": "string", "minLength": 1 },
+	                "workflow": { "type": "string", "minLength": 1 },
+	                "targetInputs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+	                "evidencePacketSchema": {
+	                  "enum": [
+	                    "backy.settings-provider-certification-evidence-packet.v1",
+	                    "backy.commerce-provider-certification-evidence-packet.v1",
+	                    "backy.order-provider-certification-evidence-packet.v1"
+	                  ]
+	                },
+	                "evidenceApi": { "type": "string", "minLength": 1 },
+	                "evidenceUiPanel": { "type": "string", "minLength": 1 },
+	                "sourceOnlyGuard": { "type": "string", "minLength": 1 },
+	                "proofSources": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+	                "expectedArtifacts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+		                "evidenceArtifacts": {
+		                  "type": "array",
+		                  "minItems": 1,
+	                  "items": {
+	                    "type": "object",
+	                    "additionalProperties": true,
+	                    "properties": {
+	                      "key": { "enum": ["settings-provider-certification-json", "commerce-provider-certification-json"] },
+	                      "label": { "type": "string", "minLength": 1 },
+	                      "workflow": { "type": "string", "minLength": 1 },
+	                      "alternateWorkflows": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+	                      "artifactName": {
+	                        "enum": [
+	                          "backy-settings-provider-certification-evidence",
+	                          "backy-commerce-provider-certification-evidence"
+	                        ]
+	                      },
+	                      "path": {
+	                        "enum": [
+	                          "artifacts/backy-settings-provider-certification.json",
+	                          "artifacts/backy-commerce-provider-certification.json"
+	                        ]
+	                      },
+	                      "schemaVersion": {
+	                        "enum": [
+	                          "backy.settings-provider-certification-artifact.v1",
+	                          "backy.commerce-provider-certification-artifact.v1"
+	                        ]
+	                      },
+	                      "producerEnv": {
+	                        "enum": [
+	                          "BACKY_SETTINGS_CERTIFICATION_OUTPUT",
+	                          "BACKY_COMMERCE_CERTIFICATION_OUTPUT"
+	                        ]
+	                      },
+	                      "requiredForReady": { "const": true },
+	                      "includesSecretValues": { "const": false }
+	                    },
+		                    "required": ["key", "label", "workflow", "artifactName", "path", "schemaVersion", "producerEnv", "requiredForReady", "includesSecretValues"]
+		                  }
+		                },
+		                "artifactVerifier": {
+		                  "type": "object",
+		                  "additionalProperties": true,
+		                  "properties": {
+		                    "command": { "const": "npm run doctor:release-certification" },
+			                    "requiredEnv": {
+			                      "enum": [
+			                        "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
+			                        "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1"
+			                      ]
+			                    },
+			                    "pathEnv": {
+			                      "enum": [
+			                        "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT",
+			                        "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT"
+			                      ]
+			                    },
+		                    "schemaVersion": {
+		                      "enum": [
+		                        "backy.settings-provider-certification-artifact.v1",
+		                        "backy.commerce-provider-certification-artifact.v1"
+		                      ]
+		                    },
+			                    "validates": {
+			                      "type": "array",
+			                      "items": { "type": "string", "minLength": 1 },
+			                      "allOf": [
+			                        { "contains": { "const": "no-secret boundary" } },
+			                        { "contains": { "const": "no raw secret-like values" } }
+			                      ]
+			                    },
+		                    "includesSecretValues": { "const": false }
+		                  },
+		                  "required": ["command", "requiredEnv", "pathEnv", "schemaVersion", "validates", "includesSecretValues"]
+		                },
+		                "runtime": { "type": "object", "additionalProperties": true },
+	                "secretBoundary": {
+	                  "type": "object",
+	                  "additionalProperties": true,
+	                  "properties": {
+	                    "includesSecretValues": { "const": false },
+	                    "excludes": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+	                  },
+	                  "required": ["includesSecretValues", "excludes"]
+	                },
+	                "nextAction": { "type": "string", "minLength": 1 }
+	              },
+	              "required": ["key", "label", "gate", "command", "preflight", "workflow", "targetInputs", "evidencePacketSchema", "evidenceApi", "evidenceUiPanel", "sourceOnlyGuard", "proofSources", "expectedArtifacts", "evidenceArtifacts", "artifactVerifier", "runtime", "secretBoundary", "nextAction"]
+	            },
+	            "minItems": 4
+	          },
+	          "certifiedGates": {
+	            "type": "array",
+	            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "key": { "enum": ["forms-postgres", "sdk-postgres"] },
+                "label": { "type": "string", "minLength": 1 },
+                "status": { "const": "certified" },
+                "command": { "type": "string", "minLength": 1 },
+                "workflow": { "type": "string", "minLength": 1 },
+                "affectedSurfaces": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+                "certifiedAt": { "type": "string", "minLength": 1 },
+                "evidence": { "type": "string", "minLength": 1 }
+              },
+              "required": ["key", "label", "status", "command", "workflow", "affectedSurfaces", "certifiedAt", "evidence"]
             },
-            "minItems": 6
+            "minItems": 2
           },
           "gates": {
             "type": "array",
@@ -413,8 +550,6 @@
               "properties": {
                 "key": {
                   "enum": [
-                    "forms-postgres",
-                    "sdk-postgres",
                     "settings-provider-certification",
                     "commerce-provider-certification"
                   ]
@@ -431,10 +566,10 @@
               },
               "required": ["key", "label", "status", "command", "workflow", "affectedSurfaces", "requiredEnvAliases", "runtime"]
             },
-            "minItems": 4
+            "minItems": 2
           },
           "nextAction": { "type": "string", "minLength": 1 },
-          "recommendedCommands": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 4 },
+          "recommendedCommands": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 2 },
           "localPreflight": { "const": "npm run test:partial-gate-preflights" },
           "privacy": {
             "type": "object",
@@ -447,8 +582,8 @@
             "required": ["includesSecretValues", "exposesOnlyAliasPresence", "secretHandling"]
           }
         },
-        "required": ["schemaVersion", "status", "audit", "surfaces", "gates", "nextAction", "recommendedCommands", "localPreflight", "privacy"]
-      },
+	        "required": ["schemaVersion", "status", "audit", "surfaces", "surfaceRunbooks", "gates", "nextAction", "recommendedCommands", "localPreflight", "privacy"]
+	      },
       "navigationItem": {
       "type": "object",
       "additionalProperties": true,
@@ -522,7 +657,8 @@
                         "spacing": { "type": "object", "additionalProperties": true },
                         "radii": { "type": "object", "additionalProperties": true },
                         "shadows": { "type": "object", "additionalProperties": true },
-                        "customCss": { "type": "string" }
+                        "customCss": { "type": "string" },
+                        "customCSS": { "type": "string" }
                       }
                     },
                     "chrome": {
@@ -569,7 +705,22 @@
                           "elementId": { "type": "string" },
                           "role": { "type": "string" },
                           "binding": { "type": "string" },
-                          "fields": { "type": "array", "items": { "type": "string" } }
+                          "fields": { "type": "array", "items": { "type": "string" } },
+                          "field": { "type": "string" },
+                          "targetPath": { "type": "string" },
+                          "token": { "type": "string" },
+                          "editable": { "type": "boolean" },
+                          "permission": { "type": "string" },
+                          "label": { "type": "string" },
+                          "valueType": {
+                            "enum": ["string", "richText", "number", "boolean", "color", "image", "video", "audio", "file", "url", "json"]
+                          },
+                          "scope": {
+                            "enum": ["site", "page", "post", "template", "element", "collectionRecord"]
+                          },
+                          "collectionId": { "type": "string" },
+                          "recordId": { "type": "string" },
+                          "sourceField": { "type": "string" }
                         }
                       }
                     },
@@ -854,6 +1005,11 @@
                   "type": "object",
                   "additionalProperties": { "type": "string" }
                 },
+                "tokenReferences": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                },
+                "styleSheet": { "type": "string", "minLength": 1 },
                 "selectors": {
                   "type": "object",
                   "additionalProperties": true,
@@ -862,6 +1018,24 @@
                     "scoped": { "type": "string", "minLength": 1 }
                   },
                   "required": ["root", "scoped"]
+                },
+                "inheritance": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "elementTokenRefPath": { "const": "tokenRefs" },
+                    "documentTokenRefPath": { "const": "themeTokenRefs" },
+                    "legacyElementTokenRefPath": { "const": "themeTokenRefs" },
+                    "fallbackOrder": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 }
+                    },
+                    "supportedElementPaths": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  "required": ["elementTokenRefPath", "fallbackOrder", "supportedElementPaths"]
                 },
                 "editableFields": {
                   "type": "array",
@@ -876,12 +1050,16 @@
                     "typographyFamilies": { "type": "boolean" },
                     "spacingScale": { "type": "boolean" },
                     "liveEditable": { "type": "boolean" },
-                    "frontendDesignOverrides": { "type": "boolean" }
+                    "frontendDesignOverrides": { "type": "boolean" },
+                    "styleSheet": { "type": "boolean" },
+                    "tokenReferences": { "type": "boolean" },
+                    "perBlockTokenRefs": { "type": "boolean" },
+                    "animationTokenRefs": { "type": "boolean" }
                   },
-                  "required": ["cssVariables", "customCss", "typographyFamilies", "spacingScale", "liveEditable", "frontendDesignOverrides"]
+                  "required": ["cssVariables", "customCss", "typographyFamilies", "spacingScale", "liveEditable", "frontendDesignOverrides", "styleSheet", "tokenReferences", "perBlockTokenRefs", "animationTokenRefs"]
                 }
               },
-              "required": ["schemaVersion", "tokenSchemaVersion", "tokens", "cssVariables", "selectors", "editableFields", "capabilities"]
+              "required": ["schemaVersion", "tokenSchemaVersion", "tokens", "cssVariables", "tokenReferences", "styleSheet", "selectors", "inheritance", "editableFields", "capabilities"]
             },
             "liveManagement": {
               "type": "object",
@@ -947,6 +1125,13 @@
                     "cacheInvalidation": { "type": "boolean" },
                     "auditTrail": { "type": "boolean" },
                     "webhookDelivery": { "type": "boolean" },
+                    "inlineMedia": { "type": "boolean" },
+                    "mediaAssetRefs": { "type": "boolean" },
+                    "fontAssetRefs": { "type": "boolean" },
+                    "elementAssetIds": { "type": "boolean" },
+                    "tokenRefs": { "type": "boolean" },
+                    "animation": { "type": "boolean" },
+                    "animationTokenRefs": { "type": "boolean" },
                     "editorComposition": { "type": "boolean" },
                     "editorGrouping": { "type": "boolean" }
                   },
@@ -954,7 +1139,67 @@
                 },
                 "editableTargets": {
                   "type": "array",
-                  "items": { "type": "string", "minLength": 1 }
+                  "items": { "type": "string", "minLength": 1 },
+                  "allOf": [
+                    { "contains": { "const": "props.formId" } },
+                    { "contains": { "const": "props.mediaId" } },
+                    { "contains": { "const": "props.mediaIds" } },
+                    { "contains": { "const": "props.backgroundMediaIds" } },
+                    { "contains": { "const": "props.posterMediaIds" } },
+                    { "contains": { "const": "props.fontMediaId" } },
+                    { "contains": { "const": "props.fontMediaIds" } },
+                    { "contains": { "const": "assetIds" } },
+                    { "contains": { "const": "animation.type" } },
+                    { "contains": { "const": "animation.from" } },
+                    { "contains": { "const": "animation.to" } },
+                    { "contains": { "const": "animation.tokenRefs.duration" } },
+                    { "contains": { "const": "responsive.mobile.x" } },
+                    { "contains": { "const": "responsive.mobile.props.posterMediaIds" } },
+                    { "contains": { "const": "responsive.tablet.width" } }
+                  ]
+                },
+                "lifecycle": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.content-lifecycle-commands.v1" },
+                    "cloneField": { "const": "frontendDesignTemplateId" },
+                    "permissions": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "create": { "const": "pages.edit" },
+                        "publish": { "const": "pages.publish" }
+                      },
+                      "required": ["create", "publish"]
+                    },
+                    "sdkHelpers": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "createPage": { "const": "createAdminPage" },
+                        "createPost": { "const": "createAdminBlogPost" },
+                        "createPagePreview": { "const": "createAdminPagePreviewToken" },
+                        "createPostPreview": { "const": "createAdminBlogPostPreviewToken" }
+                      },
+                      "required": ["createPage", "createPost", "createPagePreview", "createPostPreview"]
+                    },
+                    "requestBodies": { "type": "object", "additionalProperties": true },
+                    "responseContracts": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "pageRevisions": { "const": "backy.admin-page-revisions.v1" },
+                        "postRevisions": { "const": "backy.admin-blog-post-revisions.v1" },
+                        "revisionBranchMetadata": { "const": "backy.content-revision-branch-metadata.v1" },
+                        "branchMetadataField": { "const": "revision.branchMetadata" },
+                        "pageRollbackRequest": { "const": "backy.admin-page-rollback-request.v1" },
+                        "postRollbackRequest": { "const": "backy.admin-blog-post-rollback-request.v1" }
+                      },
+                      "required": ["pageRevisions", "postRevisions", "revisionBranchMetadata", "branchMetadataField", "pageRollbackRequest", "postRollbackRequest"]
+                    }
+                  },
+                  "required": ["schemaVersion", "cloneField", "permissions", "sdkHelpers", "requestBodies", "responseContracts"]
                 },
                 "editorComposition": {
                   "type": "object",
@@ -967,6 +1212,10 @@
                       "properties": {
                         "listElements": { "const": "listBackyContentElements" },
                         "findElement": { "const": "findBackyContentElement" },
+                        "addElement": { "const": "addBackyContentElement" },
+                        "duplicateElement": { "const": "duplicateBackyContentElement" },
+                        "deleteElements": { "const": "deleteBackyContentElements" },
+                        "transformElements": { "const": "transformBackyContentElements" },
                         "group": { "const": "groupBackyContentElements" },
                         "ungroup": { "const": "ungroupBackyContentElements" },
                         "patchElement": { "const": "patchBackyContentElement" },
@@ -974,28 +1223,118 @@
                         "buildPageUpdate": { "const": "buildBackyLiveManagedPageEditableMapUpdate" },
                         "buildBlogPostUpdate": { "const": "buildBackyLiveManagedBlogPostEditableMapUpdate" }
                       },
-                      "required": ["listElements", "findElement", "group", "ungroup", "patchElement", "patchElements", "buildPageUpdate", "buildBlogPostUpdate"]
+                      "required": ["listElements", "findElement", "addElement", "duplicateElement", "deleteElements", "transformElements", "group", "ungroup", "patchElement", "patchElements", "buildPageUpdate", "buildBlogPostUpdate"]
                     },
                     "commands": {
                       "type": "array",
-                      "minItems": 2,
+                      "minItems": 7,
                       "items": {
                         "type": "object",
                         "additionalProperties": true,
                         "properties": {
-                          "id": { "enum": ["group", "ungroup"] },
+                          "id": { "enum": ["add", "duplicate", "delete", "move", "resize", "group", "ungroup"] },
                           "label": { "type": "string", "minLength": 1 },
                           "shortcut": { "type": "string", "minLength": 1 },
-                          "sdkHelper": { "enum": ["groupBackyContentElements", "ungroupBackyContentElements"] },
-                          "minSelected": { "type": "integer", "minimum": 1 },
+                          "sdkHelper": {
+                            "enum": [
+                              "addBackyContentElement",
+                              "duplicateBackyContentElement",
+                              "deleteBackyContentElements",
+                              "transformBackyContentElements",
+                              "groupBackyContentElements",
+                              "ungroupBackyContentElements"
+                            ]
+                          },
+                          "minSelected": { "type": "integer", "minimum": 0 },
                           "sameParentRequired": { "type": "boolean" },
                           "unlockedRequired": { "type": "boolean" },
+                          "mutates": { "type": "array", "items": { "type": "string" } },
                           "createsEditorGroup": { "type": "boolean" },
                           "editorGroupRequired": { "type": "boolean" },
                           "preservesResponsiveGeometry": { "type": "boolean" }
                         },
                         "required": ["id", "label", "shortcut", "sdkHelper", "minSelected", "sameParentRequired", "unlockedRequired", "preservesResponsiveGeometry"]
                       }
+                    },
+                    "commandRegistry": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "schemaVersion": { "const": "backy.editor-command-registry.v1" },
+                        "source": { "const": "live-management-discovery" },
+                        "generatedFrom": { "const": "page-editor" },
+                        "stateModel": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "runtimeState": { "const": "computed-by-editor-client" },
+                            "stateValues": {
+                              "type": "array",
+                              "items": { "enum": ["ready", "disabled", "hidden"] },
+                              "contains": { "const": "ready" }
+                            },
+                            "reasonField": { "const": "reason" },
+                            "selectionFields": { "type": "array", "items": { "type": "string" } },
+                            "clipboardFields": { "type": "array", "items": { "type": "string" } },
+                            "documentFields": { "type": "array", "items": { "type": "string" } }
+                          },
+                          "required": ["runtimeState", "stateValues", "reasonField", "selectionFields", "clipboardFields", "documentFields"]
+                        },
+                        "categories": {
+                          "type": "array",
+                          "minItems": 8,
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": { "type": "string", "minLength": 1 },
+                              "label": { "type": "string", "minLength": 1 },
+                              "commandIds": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+                            },
+                            "required": ["id", "label", "commandIds"]
+                          }
+                        },
+                        "commands": {
+                          "type": "array",
+                          "minItems": 30,
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "properties": {
+                              "id": { "type": "string", "minLength": 1 },
+                              "label": { "type": "string", "minLength": 1 },
+                              "category": {
+                                "enum": ["history", "selection", "clipboard", "composition", "layer-state", "layer-order", "layout", "view", "shell", "workflow"]
+                              },
+                              "targetScope": {
+                                "enum": ["canvas", "selected-layer", "selected-layers", "selected-sibling-scope", "selected-child-scope", "selected-container", "viewport", "shell", "document"]
+                              },
+                              "testId": { "type": "string", "minLength": 1 },
+                              "shortcut": { "type": "string", "minLength": 1 },
+                              "ariaKeyshortcuts": { "type": "string", "minLength": 1 },
+                              "sdkHelper": { "type": "string", "minLength": 1 },
+                              "apiHelper": { "type": "string", "minLength": 1 },
+                              "stateRule": { "type": "string", "minLength": 1 },
+                              "minSelected": { "type": "integer", "minimum": 0 },
+                              "sameParentRequired": { "type": "boolean" },
+                              "unlockedRequired": { "type": "boolean" },
+                              "editorGroupRequired": { "type": "boolean" },
+                              "targetPaths": { "type": "array", "items": { "type": "string" } },
+                              "mutates": { "type": "array", "items": { "type": "string" } }
+                            },
+                            "required": ["id", "label", "category", "targetScope", "testId", "stateRule"]
+                          }
+                        },
+                        "privacy": {
+                          "type": "object",
+                          "properties": {
+                            "includesSecretValues": { "const": false },
+                            "includesAdminSessionValues": { "const": false },
+                            "endpointTemplatesOnly": { "const": true }
+                          },
+                          "required": ["includesSecretValues", "includesAdminSessionValues", "endpointTemplatesOnly"]
+                        }
+                      },
+                      "required": ["schemaVersion", "source", "generatedFrom", "stateModel", "categories", "commands", "privacy"]
                     },
                     "constraints": {
                       "type": "object",
@@ -1014,7 +1353,7 @@
                       "required": ["sameParentRequired", "lockedLayersBlocked", "editorGroupMarker", "responsiveBreakpoints", "updateTarget"]
                     }
                   },
-                  "required": ["schemaVersion", "sdkHelpers", "commands", "constraints"]
+                  "required": ["schemaVersion", "sdkHelpers", "commands", "commandRegistry", "constraints"]
                 },
                 "updateBody": {
                   "type": "object",
@@ -1038,7 +1377,7 @@
                   "required": ["conflict", "postConflict", "forbidden", "postForbidden", "validation"]
                 }
               },
-              "required": ["schemaVersion", "enabled", "endpoints", "methods", "auth", "capabilities", "editableTargets", "editorComposition", "updateBody", "errors"]
+              "required": ["schemaVersion", "enabled", "endpoints", "methods", "auth", "capabilities", "editableTargets", "lifecycle", "editorComposition", "updateBody", "errors"]
             },
             "pages": {
               "type": "object",
@@ -1095,9 +1434,13 @@
                     "detail": { "type": "string", "minLength": 1 },
                     "resolve": { "type": "string", "minLength": 1 },
                     "render": { "type": "string", "minLength": 1 },
-                    "liveManage": { "type": "string", "minLength": 1 }
+                    "liveManage": { "type": "string", "minLength": 1 },
+                    "adminCreate": { "type": "string", "minLength": 1 },
+                    "adminDetail": { "type": "string", "minLength": 1 },
+                    "adminPreview": { "type": "string", "minLength": 1 },
+                    "adminRollback": { "type": "string", "minLength": 1 }
                   },
-                  "required": ["list", "detail", "resolve", "render", "liveManage"]
+                  "required": ["list", "detail", "resolve", "render", "liveManage", "adminCreate", "adminDetail", "adminPreview", "adminRollback"]
                 },
                 "methods": {
                   "type": "object",
@@ -1108,9 +1451,14 @@
                     "resolve": { "const": "GET" },
                     "render": { "const": "GET" },
                     "liveManageRead": { "const": "GET" },
-                    "liveManageUpdate": { "const": "PATCH" }
+                    "liveManageUpdate": { "const": "PATCH" },
+                    "adminCreate": { "const": "POST" },
+                    "adminUpdate": { "const": "PATCH" },
+                    "adminDelete": { "const": "DELETE" },
+                    "adminPreview": { "const": "POST" },
+                    "adminRollback": { "const": "POST" }
                   },
-                  "required": ["list", "detail", "resolve", "render", "liveManageRead", "liveManageUpdate"]
+                  "required": ["list", "detail", "resolve", "render", "liveManageRead", "liveManageUpdate", "adminCreate", "adminUpdate", "adminDelete", "adminPreview", "adminRollback"]
                 },
                 "capabilities": {
                   "type": "object",
@@ -1124,10 +1472,81 @@
                     "frontendDesignProvenance": { "type": "boolean" },
                     "previewTokens": { "type": "boolean" },
                     "liveManagement": { "type": "boolean" },
+                    "authenticatedManagement": { "const": true },
+                    "pageCreation": { "const": true },
+                    "templateCloning": { "const": true },
+                    "readinessChecks": { "const": true },
+                    "publishArchive": { "const": true },
+                    "revisionHistory": { "const": true },
                     "conditionalRequests": { "type": "boolean" },
                     "cacheablePages": { "type": "boolean" }
                   },
-                  "required": ["publicList", "publicDetail", "renderPayload", "routeResolve", "seoMetadata", "frontendDesignProvenance", "previewTokens", "liveManagement", "conditionalRequests", "cacheablePages"]
+                  "required": ["publicList", "publicDetail", "renderPayload", "routeResolve", "seoMetadata", "frontendDesignProvenance", "previewTokens", "liveManagement", "authenticatedManagement", "pageCreation", "templateCloning", "readinessChecks", "publishArchive", "revisionHistory", "conditionalRequests", "cacheablePages"]
+                },
+                "managementPolicy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.pages-management.v1" },
+                    "cloneField": { "const": "frontendDesignTemplateId" },
+                    "endpoints": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "create": { "type": "string", "minLength": 1 },
+                        "detail": { "type": "string", "minLength": 1 },
+                        "templateRegistry": { "type": "string", "minLength": 1 }
+                      },
+                      "required": ["create", "detail", "templateRegistry"]
+                    },
+                    "methods": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "create": { "const": "POST" },
+                        "update": { "const": "PATCH" },
+                        "delete": { "const": "DELETE" }
+                      },
+                      "required": ["create", "update", "delete"]
+                    },
+                    "auth": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "requiredPermissions": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "create": { "const": "pages.edit" },
+                            "publish": { "const": "pages.publish" }
+                          },
+                          "required": ["create", "publish"]
+                        }
+                      },
+                      "required": ["requiredPermissions"]
+                    },
+                    "sdkHelpers": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "create": { "const": "createAdminPage" },
+                        "preview": { "const": "createAdminPagePreviewToken" },
+                        "rollback": { "const": "rollbackAdminPage" }
+                      },
+                      "required": ["create", "preview", "rollback"]
+                    },
+                    "designState": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "acceptsFrontendDesignTemplateId": { "const": true },
+                        "preservesAssetsAnimationsInteractions": { "const": true },
+                        "preservesEditableMapAndDataBindings": { "const": true }
+                      },
+                      "required": ["acceptsFrontendDesignTemplateId", "preservesAssetsAnimationsInteractions", "preservesEditableMapAndDataBindings"]
+                    }
+                  },
+                  "required": ["schemaVersion", "cloneField", "endpoints", "methods", "auth", "sdkHelpers", "designState"]
                 },
                 "cache": {
                   "type": "object",
@@ -1173,7 +1592,7 @@
                   "required": ["page", "renderPayload", "seo", "notFound", "invalidLimit", "invalidOffset"]
                 }
               },
-              "required": ["schemaVersion", "count", "publishedCount", "scheduledCount", "homepagePath", "paths", "endpoints", "methods", "capabilities", "cache", "privacy", "filters", "schemas"]
+              "required": ["schemaVersion", "count", "publishedCount", "scheduledCount", "homepagePath", "paths", "endpoints", "methods", "capabilities", "managementPolicy", "cache", "privacy", "filters", "schemas"]
             },
             "blog": {
               "type": "object",
@@ -1316,6 +1735,10 @@
                     "list": { "type": "string", "minLength": 1 },
                     "detail": { "type": "string", "minLength": 1 },
                     "liveManage": { "type": "string", "minLength": 1 },
+                    "adminCreate": { "type": "string", "minLength": 1 },
+                    "adminDetail": { "type": "string", "minLength": 1 },
+                    "adminPreview": { "type": "string", "minLength": 1 },
+                    "adminRollback": { "type": "string", "minLength": 1 },
                     "rss": { "type": "string", "minLength": 1 },
                     "categories": { "type": "string", "minLength": 1 },
                     "tags": { "type": "string", "minLength": 1 },
@@ -1323,7 +1746,7 @@
                     "resolve": { "type": "string", "minLength": 1 },
                     "render": { "type": "string", "minLength": 1 }
                   },
-                  "required": ["list", "detail", "liveManage", "rss", "categories", "tags", "authors", "resolve", "render"]
+                  "required": ["list", "detail", "liveManage", "adminCreate", "adminDetail", "adminPreview", "adminRollback", "rss", "categories", "tags", "authors", "resolve", "render"]
                 },
                 "methods": {
                   "type": "object",
@@ -1333,6 +1756,11 @@
                     "detail": { "const": "GET" },
                     "liveManageRead": { "const": "GET" },
                     "liveManageUpdate": { "const": "PATCH" },
+                    "adminCreate": { "const": "POST" },
+                    "adminUpdate": { "const": "PATCH" },
+                    "adminDelete": { "const": "DELETE" },
+                    "adminPreview": { "const": "POST" },
+                    "adminRollback": { "const": "POST" },
                     "rss": { "const": "GET" },
                     "categories": { "const": "GET" },
                     "tags": { "const": "GET" },
@@ -1340,7 +1768,7 @@
                     "resolve": { "const": "GET" },
                     "render": { "const": "GET" }
                   },
-                  "required": ["list", "detail", "liveManageRead", "liveManageUpdate", "rss", "categories", "tags", "authors", "resolve", "render"]
+                  "required": ["list", "detail", "liveManageRead", "liveManageUpdate", "adminCreate", "adminUpdate", "adminDelete", "adminPreview", "adminRollback", "rss", "categories", "tags", "authors", "resolve", "render"]
                 },
                 "capabilities": {
                   "type": "object",
@@ -1357,10 +1785,81 @@
                     "frontendDesignProvenance": { "type": "boolean" },
                     "previewTokens": { "type": "boolean" },
                     "liveManagement": { "type": "boolean" },
+                    "authenticatedManagement": { "const": true },
+                    "postCreation": { "const": true },
+                    "templateCloning": { "const": true },
+                    "readinessChecks": { "const": true },
+                    "publishArchive": { "const": true },
+                    "revisionHistory": { "const": true },
                     "conditionalRequests": { "type": "boolean" },
                     "cacheablePosts": { "type": "boolean" }
                   },
-                  "required": ["publicList", "publicDetail", "taxonomyFilters", "archiveFilters", "searchFilters", "rssFeed", "renderPayload", "routeResolve", "frontendDesignProvenance", "previewTokens", "liveManagement", "conditionalRequests", "cacheablePosts"]
+                  "required": ["publicList", "publicDetail", "taxonomyFilters", "archiveFilters", "searchFilters", "rssFeed", "renderPayload", "routeResolve", "frontendDesignProvenance", "previewTokens", "liveManagement", "authenticatedManagement", "postCreation", "templateCloning", "readinessChecks", "publishArchive", "revisionHistory", "conditionalRequests", "cacheablePosts"]
+                },
+                "managementPolicy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.blog-management.v1" },
+                    "cloneField": { "const": "frontendDesignTemplateId" },
+                    "endpoints": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "create": { "type": "string", "minLength": 1 },
+                        "detail": { "type": "string", "minLength": 1 },
+                        "templateRegistry": { "type": "string", "minLength": 1 }
+                      },
+                      "required": ["create", "detail", "templateRegistry"]
+                    },
+                    "methods": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "create": { "const": "POST" },
+                        "update": { "const": "PATCH" },
+                        "delete": { "const": "DELETE" }
+                      },
+                      "required": ["create", "update", "delete"]
+                    },
+                    "auth": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "requiredPermissions": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "create": { "const": "pages.edit" },
+                            "publish": { "const": "pages.publish" }
+                          },
+                          "required": ["create", "publish"]
+                        }
+                      },
+                      "required": ["requiredPermissions"]
+                    },
+                    "sdkHelpers": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "create": { "const": "createAdminBlogPost" },
+                        "preview": { "const": "createAdminBlogPostPreviewToken" },
+                        "rollback": { "const": "rollbackAdminBlogPost" }
+                      },
+                      "required": ["create", "preview", "rollback"]
+                    },
+                    "designState": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "acceptsFrontendDesignTemplateId": { "const": true },
+                        "preservesAssetsAnimationsInteractions": { "const": true },
+                        "preservesEditableMapAndDataBindings": { "const": true }
+                      },
+                      "required": ["acceptsFrontendDesignTemplateId", "preservesAssetsAnimationsInteractions", "preservesEditableMapAndDataBindings"]
+                    }
+                  },
+                  "required": ["schemaVersion", "cloneField", "endpoints", "methods", "auth", "sdkHelpers", "designState"]
                 },
                 "cache": {
                   "type": "object",
@@ -1412,7 +1911,7 @@
                   "required": ["post", "feed", "renderPayload", "notFound", "invalidLimit", "invalidOffset", "invalidStatus", "invalidArchiveYear", "invalidArchiveMonth"]
                 }
               },
-              "required": ["schemaVersion", "count", "publishedCount", "scheduledCount", "categoryCount", "tagCount", "authorCount", "feedCount", "paths", "endpoints", "methods", "capabilities", "cache", "privacy", "filters", "schemas"]
+              "required": ["schemaVersion", "count", "publishedCount", "scheduledCount", "categoryCount", "tagCount", "authorCount", "feedCount", "paths", "endpoints", "methods", "capabilities", "managementPolicy", "cache", "privacy", "filters", "schemas"]
             },
             "collections": {
               "type": "array",
@@ -2174,7 +2673,11 @@
                       "type": "object",
                       "additionalProperties": true,
                       "properties": {
-                        "file": { "const": "document" }
+                        "file": {
+                          "type": "array",
+                          "items": { "enum": ["document", "other"] },
+                          "contains": { "const": "document" }
+                        }
                       }
                     },
                     "visibility": { "type": "array", "items": { "enum": ["public", "private"] } },
@@ -2192,7 +2695,7 @@
                         "q": { "const": "search" },
                         "folder": { "const": "folderId" },
                         "blogId": { "const": "postId" },
-                        "fileType": { "const": "document" }
+                        "fileType": { "const": "file" }
                       }
                     }
                   },
@@ -2317,6 +2820,46 @@
                       "items": { "type": "string", "minLength": 1 },
                       "contains": { "const": "file" }
                     },
+                    "filters": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "types": {
+                          "type": "array",
+                          "items": { "enum": ["image", "video", "audio", "document", "file", "font", "other", "all"] }
+                        },
+                        "typeAliases": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "file": {
+                              "type": "array",
+                              "items": { "enum": ["document", "other"] },
+                              "contains": { "const": "document" }
+                            }
+                          },
+                          "required": ["file"]
+                        },
+                        "visibility": { "type": "array", "items": { "enum": ["public", "private", "all"] } },
+                        "scopes": { "type": "array", "items": { "enum": ["global", "page", "post", "all"] } },
+                        "queryParams": {
+                          "type": "array",
+                          "items": { "type": "string", "minLength": 1 },
+                          "contains": { "const": "folderId" }
+                        },
+                        "maxLimit": { "const": 100 },
+                        "aliases": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "blogId": { "const": "postId" },
+                            "fileType": { "const": "file" }
+                          },
+                          "required": ["blogId", "fileType"]
+                        }
+                      },
+                      "required": ["types", "typeAliases", "visibility", "scopes", "queryParams", "maxLimit", "aliases"]
+                    },
                     "sdkHelpers": {
                       "type": "object",
                       "additionalProperties": true,
@@ -2344,7 +2887,7 @@
                     "auditing": { "type": "object", "additionalProperties": true },
                     "secretHandling": { "type": "string", "minLength": 1 }
                   },
-                  "required": ["schemaVersion", "endpoints", "methods", "auth", "uploadFields", "sdkHelpers", "responseContracts", "auditing", "secretHandling"]
+                  "required": ["schemaVersion", "endpoints", "methods", "auth", "uploadFields", "filters", "sdkHelpers", "responseContracts", "auditing", "secretHandling"]
                 },
                 "schemas": {
                   "type": "object",
@@ -2727,7 +3270,25 @@
                       "required": ["modes", "headers", "requiredPermissions", "siteScope", "platformEndpoints"]
                     },
                     "sdkHelpers": { "type": "object", "additionalProperties": true },
-                    "responseContracts": { "type": "object", "additionalProperties": true },
+                    "responseContracts": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "orderAnalytics": { "const": "backy.order-analytics.v1" },
+                        "orderStatusHandoff": { "const": "backy.order-status-handoff.v1" },
+                        "orderQuote": { "const": "backy.order-quote.v1" },
+                        "orderTracking": { "const": "backy.tracking.v1" },
+                        "orderFulfillment": { "const": "backy.fulfillment-dispatch.v1" },
+                        "orderShippingLabel": { "const": "backy.shipping-label.v1" },
+                        "orderProviderRefund": { "const": "backy.provider-refund.v1" },
+                        "productProviderSync": { "const": "backy.commerce-product-sync.v1" },
+                        "productStorefrontHandoff": { "const": "backy.product-storefront-handoff.v1" },
+                        "productSubscriptions": { "const": "backy.product-subscription-lifecycle.v1" },
+                        "productSubscriptionAction": { "const": "backy.product-subscription-action.v1" },
+                        "providerCertification": { "const": "backy.commerce-provider-certification-handoff.v1" }
+                      },
+                      "required": ["orderAnalytics", "orderStatusHandoff", "orderQuote", "orderTracking", "orderFulfillment", "orderShippingLabel", "orderProviderRefund", "productProviderSync", "productStorefrontHandoff", "productSubscriptions", "productSubscriptionAction", "providerCertification"]
+                    },
                     "privacy": {
                       "type": "object",
                       "additionalProperties": true,
@@ -2735,11 +3296,12 @@
                         "productCatalogCanBePublic": { "const": true },
                         "ordersRemainPrivate": { "const": true },
                         "orderStatusHandoffMasksCustomerContact": { "const": true },
+                        "productStorefrontHandoffExcludesPrivateData": { "const": true },
                         "providerOperationPayloadsMayContainCustomerData": { "const": true },
                         "providerSecretsNeverReturned": { "const": true },
                         "rawProviderResponsesStayPrivate": { "const": true }
                       },
-                      "required": ["productCatalogCanBePublic", "ordersRemainPrivate", "orderStatusHandoffMasksCustomerContact", "providerOperationPayloadsMayContainCustomerData", "providerSecretsNeverReturned", "rawProviderResponsesStayPrivate"]
+                      "required": ["productCatalogCanBePublic", "ordersRemainPrivate", "orderStatusHandoffMasksCustomerContact", "productStorefrontHandoffExcludesPrivateData", "providerOperationPayloadsMayContainCustomerData", "providerSecretsNeverReturned", "rawProviderResponsesStayPrivate"]
                     },
                     "secretHandling": { "type": "string", "minLength": 1 }
                   },

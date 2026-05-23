@@ -5,11 +5,10 @@
  * to the editor. It uses createPortal to render into a container in PropertyPanel.
  */
 
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditorRef } from '@udecode/plate/react';
 import { Editor, Transforms, Element as SlateElement, Range } from 'slate';
-import { useState } from 'react';
 import {
     Bold, Italic, Underline, Strikethrough, Code,
     Link, List, ListOrdered, Image,
@@ -17,6 +16,9 @@ import {
     Table, Palette, Highlighter, Smile,
 } from 'lucide-react';
 import { cn } from '../utils';
+import { ColorPicker } from './ColorPicker';
+
+type InsertMode = 'link' | 'image';
 
 // --- Helpers ---
 const isMarkActive = (editor: any, format: string) => {
@@ -34,6 +36,26 @@ const toggleMark = (editor: any, format: string) => {
     } else {
         Editor.addMark(editor, format, true);
     }
+};
+
+const markValue = (editor: any, format: string): string | undefined => {
+    try {
+        const marks = Editor.marks(editor) as Record<string, unknown> | null;
+        const value = marks?.[format];
+        return typeof value === 'string' ? value : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
+const setMarkValue = (editor: any, format: string, value: string) => {
+    const nextValue = value.trim();
+    if (!nextValue) {
+        Editor.removeMark(editor, format);
+        return;
+    }
+
+    Editor.addMark(editor, format, nextValue);
 };
 
 const setAlign = (editor: any, align: string) => {
@@ -62,6 +84,15 @@ const runWithSelection = (editor: any, action: () => void) => {
     action();
 };
 
+const normalizeUrl = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (/^(#|\/|mailto:|tel:)/i.test(trimmed) || /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+        return trimmed;
+    }
+    return `https://${trimmed}`;
+};
+
 // --- Button ---
 const Btn = ({
     onClick,
@@ -85,52 +116,11 @@ const Btn = ({
             className
         )}
         title={title}
+        aria-label={title}
     >
         {children}
     </button>
 );
-
-// --- Color Picker ---
-const ColorPicker = ({
-    isOpen,
-    onClose,
-    onSelect,
-}: {
-    isOpen: boolean;
-    onClose: () => void;
-    onSelect: (color: string) => void;
-}) => {
-    if (!isOpen) return null;
-
-    const colors = [
-        '#000000', '#434343', '#666666', '#999999', '#cccccc', '#ffffff',
-        '#ff0000', '#ff6600', '#ffcc00', '#33cc33', '#0066ff', '#9900ff',
-        '#ff99cc', '#ffcc99', '#ffff99', '#ccffcc', '#99ccff', '#cc99ff',
-    ];
-
-    return (
-        <>
-            <div className="fixed inset-0 z-40" onMouseDown={(e) => { e.preventDefault(); onClose(); }} />
-            <div className="absolute left-0 bottom-full mb-1 bg-popover rounded-lg shadow-xl border z-50 p-2 w-[140px]">
-                <div className="grid grid-cols-6 gap-1">
-                    {colors.map(color => (
-                        <button
-                            key={color}
-                            type="button"
-                            onMouseDown={(e) => {
-                                e.preventDefault();
-                                onSelect(color);
-                                onClose();
-                            }}
-                            className="w-5 h-5 rounded border border-border/50 hover:scale-110 transition-transform"
-                            style={{ backgroundColor: color }}
-                        />
-                    ))}
-                </div>
-            </div>
-        </>
-    );
-};
 
 // ID for the portal container in PropertyPanel
 export const PORTAL_TOOLBAR_CONTAINER_ID = 'rich-text-toolbar-portal';
@@ -138,14 +128,51 @@ export const PORTAL_TOOLBAR_CONTAINER_ID = 'rich-text-toolbar-portal';
 // --- Main Portal Toolbar ---
 export const PortalToolbar = () => {
     const editor = useEditorRef() as any;
-    const [showTextColor, setShowTextColor] = useState(false);
-    const [showHighlight, setShowHighlight] = useState(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [insertMode, setInsertMode] = useState<InsertMode | null>(null);
+    const [insertUrl, setInsertUrl] = useState('');
+    const savedSelectionRef = useRef<Range | null>(null);
 
     const insertEmoji = (emoji: string) => {
         runWithSelection(editor, () => {
             Transforms.insertText(editor, emoji);
         });
+    };
+
+    const openInsertForm = (mode: InsertMode) => {
+        savedSelectionRef.current = editor?.selection && Range.isRange(editor.selection) ? { ...editor.selection } : null;
+        setInsertMode(mode);
+        setInsertUrl(mode === 'link' ? 'https://' : '');
+    };
+
+    const closeInsertForm = () => {
+        setInsertMode(null);
+        setInsertUrl('');
+        savedSelectionRef.current = null;
+    };
+
+    const submitInsertForm = () => {
+        const normalizedUrl = normalizeUrl(insertUrl);
+        if (!normalizedUrl || !savedSelectionRef.current) {
+            return;
+        }
+
+        try {
+            Transforms.select(editor, savedSelectionRef.current);
+        } catch {
+            return;
+        }
+
+        if (insertMode === 'link') {
+            Transforms.wrapNodes(editor as any, { type: 'a', url: normalizedUrl, children: [] } as any, { split: true });
+            closeInsertForm();
+            return;
+        }
+
+        if (insertMode === 'image') {
+            Transforms.insertNodes(editor as any, { type: 'img', url: normalizedUrl, children: [{ text: '' }] } as any);
+            closeInsertForm();
+        }
     };
 
     // Find the portal container
@@ -180,24 +207,22 @@ const toolbar = (
                 <div className="w-px h-5 bg-border/50 mx-1" />
 
                 <div className="relative">
-                    <Btn onClick={() => setShowTextColor(!showTextColor)} title="Text Color">
-                        <Palette className="w-3.5 h-3.5" />
-                    </Btn>
                     <ColorPicker
-                        isOpen={showTextColor}
-                        onClose={() => setShowTextColor(false)}
-                        onSelect={(c) => runWithSelection(editor, () => Editor.addMark(editor as any, 'color', c))}
+                        value={markValue(editor, 'color')}
+                        onChange={(color) => runWithSelection(editor, () => setMarkValue(editor as any, 'color', color))}
+                        icon={<Palette className="w-3.5 h-3.5" />}
+                        tooltip="Text Color"
+                        testId="backy-editor-portal-text-color"
                     />
                 </div>
 
                 <div className="relative">
-                    <Btn onClick={() => setShowHighlight(!showHighlight)} title="Highlight">
-                        <Highlighter className="w-3.5 h-3.5" />
-                    </Btn>
                     <ColorPicker
-                        isOpen={showHighlight}
-                        onClose={() => setShowHighlight(false)}
-                        onSelect={(c) => runWithSelection(editor, () => Editor.addMark(editor as any, 'backgroundColor', c))}
+                        value={markValue(editor, 'backgroundColor')}
+                        onChange={(color) => runWithSelection(editor, () => setMarkValue(editor as any, 'backgroundColor', color))}
+                        icon={<Highlighter className="w-3.5 h-3.5" />}
+                        tooltip="Highlight"
+                        testId="backy-editor-portal-highlight-color"
                     />
                 </div>
             </div>
@@ -286,14 +311,10 @@ const toolbar = (
                         type="button"
                         onMouseDown={(e) => {
                             e.preventDefault();
-                            const url = prompt('Link URL:');
-                            if (url) {
-                                runWithSelection(editor, () => {
-                                    Transforms.wrapNodes(editor as any, { type: 'a', url, children: [] } as any, { split: true });
-                                });
-                            }
+                            openInsertForm('link');
                         }}
                         className="flex-1 px-2 py-1.5 text-xs rounded-md border bg-background hover:bg-accent flex items-center justify-center gap-1"
+                        data-testid="backy-editor-portal-link-open"
                     >
                         <Link className="w-3 h-3" /> Link
                     </button>
@@ -301,14 +322,10 @@ const toolbar = (
                         type="button"
                         onMouseDown={(e) => {
                             e.preventDefault();
-                            const url = prompt('Image URL:');
-                            if (url) {
-                                runWithSelection(editor, () => {
-                                    Transforms.insertNodes(editor as any, { type: 'img', url, children: [{ text: '' }] } as any);
-                                });
-                            }
+                            openInsertForm('image');
                         }}
                         className="flex-1 px-2 py-1.5 text-xs rounded-md border bg-background hover:bg-accent flex items-center justify-center gap-1"
+                        data-testid="backy-editor-portal-image-open"
                     >
                         <Image className="w-3 h-3" /> Image
                     </button>
@@ -366,6 +383,41 @@ const toolbar = (
                         ) : null}
                     </div>
                 </div>
+                {insertMode ? (
+                    <form
+                        className="mt-2 flex items-center gap-1 rounded-md border border-border bg-background p-1"
+                        data-testid={`backy-editor-portal-${insertMode}-form`}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            submitInsertForm();
+                        }}
+                    >
+                        <input
+                            type="url"
+                            value={insertUrl}
+                            onChange={(event) => setInsertUrl(event.target.value)}
+                            placeholder={insertMode === 'link' ? 'https://example.com' : 'Image URL'}
+                            className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
+                            data-testid={`backy-editor-portal-${insertMode}-input`}
+                        />
+                        <button
+                            type="submit"
+                            className="rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                            data-testid={`backy-editor-portal-${insertMode}-insert`}
+                        >
+                            Insert
+                        </button>
+                        <button
+                            type="button"
+                            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                            data-testid={`backy-editor-portal-${insertMode}-cancel`}
+                            onClick={closeInsertForm}
+                        >
+                            ×
+                        </button>
+                    </form>
+                ) : null}
             </div>
         </div>
     );

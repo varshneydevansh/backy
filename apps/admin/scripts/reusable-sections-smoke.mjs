@@ -52,6 +52,22 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes('Load workflow state to inspect saved versions before restoring a captured section.'), 'Reusable sections unloaded version history must explain the next action');
   assert(source.includes('title="No frontend section templates captured"'), 'Reusable sections frontend contract panel must keep the empty template title visible');
   assert(source.includes('Save section templates in the connected frontend design contract to create reusable editor blocks'), 'Reusable sections frontend template empty state must explain how templates are captured');
+  assert(source.includes('frontendDesignCustomJs'), 'Reusable sections frontend metadata must retain custom JS provenance for custom frontend hydration');
+  assert(source.includes('frontendDesignContentDocument'), 'Reusable sections frontend metadata must retain the content-document snapshot');
+  assert(source.includes('frontendDesignThemeTokenRefs'), 'Reusable sections frontend metadata must retain token-reference provenance');
+  assert(source.includes('frontendDesignAnimations'), 'Reusable sections frontend metadata must retain animation provenance');
+  assert(source.includes('frontendDesignInteractions'), 'Reusable sections frontend metadata must retain interaction provenance');
+  assert(source.includes('frontendDesignDataBindings'), 'Reusable sections frontend metadata must retain data-binding provenance');
+  assert(source.includes('frontendDesignEditableMap'), 'Reusable sections frontend metadata must retain editable-map provenance');
+  assert(source.includes('frontendDesignSeo'), 'Reusable sections frontend metadata must retain SEO provenance');
+  assert(source.includes('frontendDesignMetadata'), 'Reusable sections frontend metadata must retain template metadata provenance');
+  assert(source.includes('const [sectionFormSubmitted, setSectionFormSubmitted] = useState(false);'), 'Reusable sections route must track submitted state for inline validation');
+  assert(source.includes('const reusableSectionContentValidationError = (rawJson: string): string | null =>'), 'Reusable sections route must expose reusable content validation for inline errors');
+  assert(source.includes('<form onSubmit={handleFormSubmit} className="space-y-4" noValidate>'), 'Reusable sections form must opt out of browser validation for custom inline errors');
+  assert(source.includes('data-testid="reusable-section-name-error"'), 'Reusable sections route must render a stable name inline error');
+  assert(source.includes('data-testid="reusable-section-content-error"'), 'Reusable sections route must render a stable content JSON inline error');
+  assert(source.includes("setError('Fix required reusable section fields before saving.')"), 'Reusable sections route must block invalid saves with focused validation copy');
+  assert(/disabled=\{isBusy \|\| !canEditSections\}[\s\S]{0,500}data-testid="reusable-section-save"/.test(source), 'Reusable sections save button must stay reachable for custom inline validation');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -201,7 +217,80 @@ const smokeFrontendDesignContract = () => ({
         tags: ['hero', 'smoke', 'frontend-contract'],
         canvasSize: { width: 1200, height: 540 },
         customCSS: '.smoke-contract-hero { color: var(--backy-smoke-section-primary); }',
-        customJS: '',
+        customJS: 'window.__backySmokeSectionHydrated = true;',
+        contentDocument: {
+          schemaVersion: 'backy.content.v1',
+          id: 'smoke-section-content-document',
+          kind: 'template',
+          version: '1',
+          elements: [
+            {
+              id: 'smoke-section-document-root',
+              type: 'section',
+              props: { content: 'Document snapshot for section template' },
+              children: [],
+            },
+          ],
+          editableMap: {},
+          metadata: {
+            canvasSize: { width: 1200, height: 540 },
+            customJS: 'window.__backySmokeSectionDocument = true;',
+          },
+        },
+        themeTokenRefs: {
+          'smoke-section-root.backgroundColor': 'colors.surface',
+          'smoke-section-heading.color': 'colors.text',
+        },
+        assets: [
+          {
+            id: 'smoke-section-asset',
+            type: 'image',
+            role: 'hero-background',
+            alt: 'Reusable section smoke asset',
+          },
+        ],
+        animations: [
+          {
+            id: 'smoke-section-intro',
+            timeline: 'section-intro',
+            targetElementId: 'smoke-section-root',
+            trigger: 'load',
+            keyframes: [
+              { opacity: 0, transform: 'translateY(24px)' },
+              { opacity: 1, transform: 'translateY(0)' },
+            ],
+          },
+        ],
+        interactions: [
+          {
+            id: 'smoke-section-hover',
+            trigger: 'hover',
+            targetElementId: 'smoke-section-root',
+            action: 'class.toggle',
+            value: 'is-active',
+          },
+        ],
+        dataBindings: {
+          sectionHeading: {
+            source: 'sections.smokeHero.heading',
+            targetPath: 'elements.smoke-section-heading.props.content',
+          },
+        },
+        editableMap: {
+          'section.heading': {
+            elementId: 'smoke-section-heading',
+            targetPath: 'props.content',
+            label: 'Hero heading',
+          },
+        },
+        seo: {
+          title: 'Smoke reusable section',
+          description: 'Reusable section design provenance smoke template.',
+        },
+        metadata: {
+          templateKind: 'reusable-section',
+          importedFrom: 'smoke-frontend-design-contract',
+        },
         elements: [
           {
             id: 'smoke-section-root',
@@ -828,8 +917,27 @@ const createFrontendTemplateSectionThroughUi = async (client) => {
       assert(created.metadata?.frontendDesignChrome?.header?.component === 'SmokeSectionsHeader', `Frontend chrome snapshot missing: ${JSON.stringify(created.metadata)}`);
       assert(created.metadata?.frontendDesignTokens?.fonts?.heading === 'Inter', `Frontend token snapshot missing: ${JSON.stringify(created.metadata)}`);
       assert(Array.isArray(created.metadata?.frontendDesignBindingHints) && created.metadata.frontendDesignBindingHints.length === 3, `Frontend binding hints missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignCustomJs?.includes('__backySmokeSectionHydrated'), `Frontend custom JS provenance missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignContentDocument?.schemaVersion === 'backy.content.v1', `Frontend content document provenance missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignThemeTokenRefs?.['smoke-section-heading.color'] === 'colors.text', `Frontend theme-token refs missing: ${JSON.stringify(created.metadata)}`);
+      assert(Array.isArray(created.metadata?.frontendDesignAssets) && created.metadata.frontendDesignAssets[0]?.id === 'smoke-section-asset', `Frontend asset provenance missing: ${JSON.stringify(created.metadata)}`);
+      assert(Array.isArray(created.metadata?.frontendDesignAnimations) && created.metadata.frontendDesignAnimations[0]?.timeline === 'section-intro', `Frontend animation provenance missing: ${JSON.stringify(created.metadata)}`);
+      assert(Array.isArray(created.metadata?.frontendDesignInteractions) && created.metadata.frontendDesignInteractions[0]?.trigger === 'hover', `Frontend interaction provenance missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignDataBindings?.sectionHeading?.targetPath === 'elements.smoke-section-heading.props.content', `Frontend data-binding provenance missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignEditableMap?.['section.heading']?.elementId === 'smoke-section-heading', `Frontend editable-map provenance missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignSeo?.title === 'Smoke reusable section', `Frontend SEO provenance missing: ${JSON.stringify(created.metadata)}`);
+      assert(created.metadata?.frontendDesignMetadata?.templateKind === 'reusable-section', `Frontend template metadata missing: ${JSON.stringify(created.metadata)}`);
       assert(created.content?.canvasSize?.width === 1200 && created.content?.canvasSize?.height === 540, `Frontend canvas size was not retained: ${JSON.stringify(created.content?.canvasSize)}`);
       assert(created.content?.customCSS?.includes('smoke-contract-hero'), `Frontend custom CSS was not retained: ${created.content?.customCSS}`);
+      assert(created.content?.customJS?.includes('__backySmokeSectionHydrated'), `Frontend custom JS was not retained: ${created.content?.customJS}`);
+      assert(created.content?.contentDocument?.schemaVersion === 'backy.content.v1', `Frontend content document was not retained: ${JSON.stringify(created.content?.contentDocument)}`);
+      assert(Array.isArray(created.content?.animations) && created.content.animations[0]?.timeline === 'section-intro', `Frontend animations were not retained: ${JSON.stringify(created.content?.animations)}`);
+      assert(created.content?.themeTokenRefs?.['smoke-section-heading.color'] === 'colors.text', `Frontend theme-token refs were not retained: ${JSON.stringify(created.content?.themeTokenRefs)}`);
+      assert(Array.isArray(created.content?.assets) && created.content.assets[0]?.id === 'smoke-section-asset', `Frontend assets were not retained: ${JSON.stringify(created.content?.assets)}`);
+      assert(created.content?.dataBindings?.sectionHeading?.targetPath === 'elements.smoke-section-heading.props.content', `Frontend data bindings were not retained: ${JSON.stringify(created.content?.dataBindings)}`);
+      assert(created.content?.editableMap?.['section.heading']?.elementId === 'smoke-section-heading', `Frontend editable map was not retained: ${JSON.stringify(created.content?.editableMap)}`);
+      assert(created.content?.seo?.title === 'Smoke reusable section', `Frontend SEO was not retained: ${JSON.stringify(created.content?.seo)}`);
+      assert(created.content?.metadata?.templateKind === 'reusable-section', `Frontend metadata was not retained: ${JSON.stringify(created.content?.metadata)}`);
       assert(created.content?.elements?.[0]?.id === 'smoke-section-root', `Frontend root element was not retained: ${JSON.stringify(created.content?.elements)}`);
       assert(created.content?.elements?.[0]?.children?.length === 2, `Frontend child elements were not retained: ${JSON.stringify(created.content?.elements?.[0]?.children)}`);
       return created;
@@ -1125,6 +1233,11 @@ const main = async () => {
 
   try {
     assertReusableSectionsRouteSourceContract();
+    if (process.env.BACKY_REUSABLE_SECTIONS_SOURCE_ONLY === '1') {
+      console.log(JSON.stringify({ ok: true, mode: 'source-only', route: 'reusable-sections' }, null, 2));
+      return;
+    }
+
     await loginAdminApi();
     originalFrontendDesign = await getFrontendDesign();
     await patchFrontendDesign(smokeFrontendDesignContract());

@@ -35,11 +35,16 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import {
+  removeRepositoryCollectionRecordMediaReferences,
+  syncRepositoryCollectionRecordMediaReferences,
+} from "@/lib/repositoryMediaReferenceSync";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 import {
   applyDemoOrderInventoryRestore,
   applyRepositoryOrderInventoryRestore,
 } from "@/lib/orderInventoryRestore";
+import { normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope } from "@/lib/frontendDesignContract";
 
 export const runtime = "nodejs";
 
@@ -406,13 +411,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const body = await parseJsonBody(request);
+      const body = normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope(
+        await parseJsonBody(request),
+      );
+      const submittedValues = toRecord(body.values);
       const values =
         body.values === undefined
           ? record.values
           : normalizeCollectionRecordMediaValues(
               collection,
-              toRecord(body.values),
+              {
+                ...toRecord(record.values),
+                ...submittedValues,
+              },
             );
       const nextSlug = body.slug === undefined ? "" : normalizeSlug(body.slug);
       const nextScheduledAt =
@@ -489,6 +500,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         collection,
         before: record,
         after: updated,
+      });
+      await syncRepositoryCollectionRecordMediaReferences({
+        mediaRepository: repositories.media,
+        siteId: site.id,
+        collectionId: collection.id,
+        recordId: updated.id,
+        values: updated.values,
       });
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
@@ -573,7 +591,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const body = await parseJsonBody(request);
+    const body = normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope(
+      await parseJsonBody(request),
+    );
     const values =
       body.values === undefined
         ? {}
@@ -769,6 +789,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           requestId,
         );
       }
+      await removeRepositoryCollectionRecordMediaReferences({
+        mediaRepository: repositories.media,
+        siteId: site.id,
+        collectionId: collection.id,
+        recordId: record.id,
+      });
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
         {

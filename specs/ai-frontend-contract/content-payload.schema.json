@@ -15,6 +15,7 @@
         "id": { "type": "string", "minLength": 1 },
         "type": { "type": "string", "minLength": 1 },
         "name": { "type": "string" },
+        "parentId": { "type": "string", "minLength": 1 },
         "componentKey": { "type": "string", "minLength": 1 },
         "version": { "type": "string", "minLength": 1 },
         "controls": {
@@ -33,6 +34,8 @@
         "height": { "type": "number" },
         "zIndex": { "type": "number" },
         "rotation": { "type": "number" },
+        "visible": { "type": "boolean" },
+        "locked": { "type": "boolean" },
         "props": {
           "type": "object",
           "additionalProperties": true
@@ -40,6 +43,17 @@
         "styles": {
           "type": "object",
           "additionalProperties": true
+        },
+        "tokenRefs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "animation": {
+          "$ref": "#/$defs/animation"
+        },
+        "assetIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
         },
         "responsive": {
           "type": "object",
@@ -84,9 +98,47 @@
         "permissions": {
           "type": "object",
           "additionalProperties": { "type": "boolean" }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
         }
       },
       "required": ["id", "type", "children", "props"]
+    },
+    "animation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "type": { "enum": ["fadeIn", "slideIn", "scaleIn", "bounce", "rotate", "custom"] },
+        "duration": { "type": "number" },
+        "delay": { "type": "number" },
+        "easing": { "type": "string" },
+        "direction": { "enum": ["left", "right", "up", "down"] },
+        "trigger": { "enum": ["load", "scroll", "hover"] },
+        "scrollTrigger": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "start": { "type": "string" },
+            "end": { "type": "string" },
+            "scrub": { "type": "boolean" }
+          }
+        },
+        "from": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "to": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "tokenRefs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["type", "duration"]
     },
     "bindingSlot": {
       "type": "object",
@@ -181,11 +233,36 @@
       },
       "required": ["id", "siteId", "type", "mimeType", "filename", "url", "scope", "visibility"]
     },
+    "fontVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "mediaId": { "type": "string", "minLength": 1 },
+        "family": { "type": "string", "minLength": 1 },
+        "weight": { "type": ["number", "string"] },
+        "style": { "enum": ["normal", "italic", "oblique"] },
+        "display": { "enum": ["auto", "block", "swap", "fallback", "optional"] },
+        "fallbackStack": { "type": "string" },
+        "cssFamily": { "type": "string" },
+        "url": { "type": "string", "minLength": 1 },
+        "mimeType": { "type": "string" },
+        "sizeBytes": { "type": "integer", "minimum": 0 },
+        "originalName": { "type": "string" },
+        "folderId": { "type": ["string", "null"] },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "family", "url"]
+    },
     "fontAsset": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "minLength": 1 },
+        "mediaId": { "type": "string", "minLength": 1 },
         "family": { "type": "string", "minLength": 1 },
         "source": { "enum": ["system", "google", "uploaded", "external"] },
         "url": { "type": "string" },
@@ -199,9 +276,114 @@
         },
         "fallbackStack": { "type": "string" },
         "display": { "enum": ["auto", "block", "swap", "fallback", "optional"] },
-        "cssFamily": { "type": "string" }
+        "cssFamily": { "type": "string" },
+        "assetIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "variants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fontVariant" }
+        }
       },
       "required": ["id", "family", "source"]
+    },
+    "contentAssetRef": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "url": { "type": "string" },
+        "alt": { "type": "string" },
+        "title": { "type": "string" },
+        "caption": { "type": "string" },
+        "visibility": { "type": "string" },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["id", "type"]
+    },
+    "contentDocument": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schemaVersion": { "const": "backy.content.v1" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["page", "post", "template", "dynamicList", "dynamicItem"] },
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "locale": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "version": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "additionalProperties": true
+            }
+          ]
+        },
+        "elements": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/element" }
+        },
+        "themeTokenRefs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "assets": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "media": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/contentAssetRef" }
+            },
+            "fonts": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/contentAssetRef" }
+            }
+          }
+        },
+        "interactions": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "seo": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "dataBindings": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "datasets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "bindings": {
+              "type": "array",
+              "items": {
+                "$ref": "data-bindings.schema.json#/$defs/binding"
+              }
+            }
+          }
+        },
+        "editableMap": {
+          "$ref": "editable-map.schema.json"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "required": ["schemaVersion", "id", "kind", "version", "elements", "editableMap"]
     },
     "form": {
       "type": "object",
@@ -363,7 +545,7 @@
       "oneOf": [
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "templateId": { "type": "string", "minLength": 1 },
             "templateName": { "type": "string" },
@@ -372,12 +554,90 @@
             "chrome": { "type": "object", "additionalProperties": true },
             "tokens": { "type": "object", "additionalProperties": true },
             "customCss": { "type": "string" },
+            "customCSS": { "type": "string" },
+            "customJs": { "type": "string" },
+            "customJS": { "type": "string" },
+            "contentDocument": { "type": "object", "additionalProperties": true },
+            "elements": {
+              "type": "array",
+              "items": { "type": "object", "additionalProperties": true }
+            },
+            "canvasSize": { "type": "object", "additionalProperties": true },
+            "themeTokenRefs": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "assets": {
+              "oneOf": [
+                { "type": "array", "items": {} },
+                { "type": "object", "additionalProperties": true }
+              ]
+            },
+            "animations": {
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": { "type": "object", "additionalProperties": true }
+                },
+                { "type": "object", "additionalProperties": true }
+              ]
+            },
+            "interactions": {
+              "oneOf": [
+                { "type": "array", "items": {} },
+                { "type": "object", "additionalProperties": true }
+              ]
+            },
+            "dataBindings": { "type": "object", "additionalProperties": true },
+            "editableMap": { "type": "object", "additionalProperties": true },
+            "seo": { "type": "object", "additionalProperties": true },
+            "metadata": { "type": "object", "additionalProperties": true },
+            "fieldKeyMap": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
             "bindingHints": { "type": "array" }
           },
           "required": ["templateId"]
         },
         { "type": "null" }
       ]
+    },
+    "productDesignReadiness": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schemaVersion": { "const": "backy.product-design-readiness.v1" },
+        "status": { "enum": ["ready", "attention", "blocked"] },
+        "templateId": { "type": ["string", "null"] },
+        "hasDesign": { "type": "boolean" },
+        "hasContentDocument": { "type": "boolean" },
+        "hasEditableMap": { "type": "boolean" },
+        "hasDataBindings": { "type": "boolean" },
+        "counts": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "elements": { "type": "integer", "minimum": 0 },
+            "animations": { "type": "integer", "minimum": 0 },
+            "assets": { "type": "integer", "minimum": 0 },
+            "bindingHints": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["elements", "animations", "assets", "bindingHints"]
+        },
+        "missing": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "detail": { "type": "string" },
+        "nextAction": { "type": "string" },
+        "evidence": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "secretHandling": { "type": "string" }
+      },
+      "required": ["schemaVersion", "status", "templateId", "hasDesign", "hasContentDocument", "hasEditableMap", "hasDataBindings", "counts", "missing", "detail", "nextAction", "evidence", "secretHandling"]
     },
     "renderFrontendDesign": {
       "type": "object",
@@ -430,6 +690,13 @@
                 },
                 { "type": "null" }
               ]
+            },
+            "resource": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "designReadiness": { "$ref": "#/$defs/productDesignReadiness" }
+              }
             }
           },
           "required": ["type", "path", "status", "canonical"]
@@ -468,6 +735,54 @@
             "elements": {
               "type": "array",
               "items": { "$ref": "#/$defs/element" }
+            },
+            "customCSS": { "type": "string" },
+            "customJS": { "type": "string" },
+            "contentDocument": {
+              "$ref": "#/$defs/contentDocument"
+            },
+            "themeTokenRefs": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "assets": {
+              "oneOf": [
+                { "type": "array", "items": {} },
+                { "type": "object", "additionalProperties": true }
+              ]
+            },
+            "animations": {
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                { "type": "object", "additionalProperties": true }
+              ]
+            },
+            "interactions": {
+              "oneOf": [
+                { "type": "array", "items": {} },
+                { "type": "object", "additionalProperties": true }
+              ]
+            },
+            "seo": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "dataBindings": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "editableMap": {
+              "$ref": "editable-map.schema.json"
+            },
+            "metadata": {
+              "type": "object",
+              "additionalProperties": true
             }
           },
           "required": ["schemaVersion", "id", "kind", "elements"]

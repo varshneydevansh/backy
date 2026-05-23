@@ -7,12 +7,12 @@
 
 ## 0) Executive decision
 
-Backy is not yet at full Wix/Canva/WordPress parity, but the current audit has moved most primary admin/editor/API surfaces out of prototype status. The canonical page-surface audit is `specs/page-completion-audit/backy-page-surface-audit.md`, currently tracking 39 Ready / 6 Partial / 0 Prototype / 0 Missing.
+Backy is not yet at full Wix/Canva/WordPress parity, but the current audit has moved most primary admin/editor/API surfaces out of prototype status. The canonical page-surface audit is `specs/page-completion-audit/backy-page-surface-audit.md`, currently tracking 41 Ready / 4 Partial / 0 Prototype / 0 Missing.
 
 The active blockers are now narrower and should be closed one page or gate at a time:
 
-1. Run the configured Supabase/Postgres service-data gates for Forms and SDK manifests against a disposable migrated database.
-2. Certify live Settings and Commerce providers, including Supabase, Vercel, storage, notification, payment, tax, shipping, discount, catalog, subscription, and provider-managed webhook families.
+1. Certify live Settings and Commerce providers, including Supabase, Vercel, storage, notification, payment, tax, shipping, discount, catalog, subscription, and provider-managed webhook families.
+2. Keep the now-certified Forms and SDK Supabase/Postgres service-data gates in release regression paths.
 3. Keep editor parity protected with focused regression guards for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress.
 4. Keep product/order live-provider certification separate from mock-provider CI so real TaxJar/Avalara/EasyPost/Shippo/Stripe-discount/subscription behavior is proven without leaking provider secrets.
 
@@ -47,7 +47,7 @@ It explicitly excludes:
 
 ### 2.2 Current blockers (high priority)
 
-1. live Supabase/Postgres certification has not been run in this environment for the remaining database-gated surfaces
+1. Forms and SDK Supabase/Postgres certification passed on 2026-05-21; keep those gates in release regression paths
 2. live provider certification is still required before Settings, Products, Orders, and external connector APIs can be marked production-certified
 3. product/order subscription and provider-managed tax/shipping/discount workflows still need deeper real-provider execution evidence beyond mock-provider coverage
 4. editor parity is locally guarded for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress; remaining launch blockers are external certification gates
@@ -114,17 +114,17 @@ It explicitly excludes:
 
 1. External certification, not local button wiring, is the active blocker:
    1. editor save, undo/redo, page settings, publish/archive, media, blog, forms, and comment workflows are locally guarded by focused smoke suites
-   2. the remaining Forms/Contacts and public SDK risks require the disposable Supabase/Postgres service-data gates
+   2. Forms/Contacts and public SDK database-mode risks are now covered by the disposable Supabase/Postgres service-data gates passed on 2026-05-21
    3. the remaining Settings, Products, and Orders risks require live provider certification
 2. UI polish should continue as regression hardening:
    1. keep accessibility labels, visible state text, and toggle helper copy covered as new controls ship
    2. keep cross-browser visual checks and additional composed-template permutations as optional launch-hardening breadth
-3. Forms and comments are Ready locally with database-service certification pending:
+3. Forms and comments are Ready with database-service certification passed:
    1. form builder, reusable embed blocks, public submission, moderation, delivery retry, consent/retention, analytics, and contacts are implemented for the local product scope
    2. comments include moderation queues, status pipelines, bulk actions, reporting, blocklists, replies, export, analytics, and delivery retry
-4. Public API parity is locally guarded:
+4. Public API parity is locally and database-mode guarded:
    1. public render, manifest, OpenAPI, generated SDK, media, forms, comments, commerce, reusable-section, and interactive component contracts are guarded
-   2. database-mode certification remains pending until `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` runs against a migrated disposable Supabase/Postgres service
+   2. database-mode certification passed when `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` ran against a migrated disposable Postgres service on 2026-05-21
 
 ## 5) Page-by-page completion checklist (admin)
 

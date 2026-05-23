@@ -58,7 +58,7 @@ import {
   type OrderAnalytics,
   type OrderDeliveryEvent,
 } from '@/lib/adminContentApi';
-import { useStore, type ContentStatus } from '@/stores/mockStore';
+import { useStore, type ContentStatus, type MediaAsset } from '@/stores/mockStore';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
@@ -431,6 +431,11 @@ type ProductProviderCertificationDiscountProvider = (typeof PRODUCT_PROVIDER_CER
 type ProductProviderCertificationCatalogProvider = (typeof PRODUCT_PROVIDER_CERTIFICATION_CATALOG_PROVIDER_OPTIONS)[number]['value'];
 type ProductProviderCertificationSubscriptionProvider = (typeof PRODUCT_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS)[number]['value'];
 type ProductProviderCertificationWebhookProvider = (typeof PRODUCT_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS)[number]['value'];
+type ProductProviderCertificationEvidencePacketStatus =
+  | 'no-family-selected'
+  | 'needs-credentials'
+  | 'needs-scenario-evidence'
+  | 'evidence-complete';
 
 type ProductProviderCertificationCommandOptions = {
   certifyPayment: boolean;
@@ -447,9 +452,62 @@ type ProductProviderCertificationCommandOptions = {
   subscriptionProvider: ProductProviderCertificationSubscriptionProvider;
   certifyWebhooks: boolean;
   webhookProvider: ProductProviderCertificationWebhookProvider;
+  siteId: string;
   externalBaseUrl: string;
   includeReleaseDoctor: boolean;
 };
+
+interface ProductProviderCertificationEvidencePacket {
+  schemaVersion: 'backy.commerce-provider-certification-evidence-packet.v1';
+  generatedAt: string;
+  selectedSiteId: string;
+  status: ProductProviderCertificationEvidencePacketStatus;
+  selectedFamilies: string[];
+  selectedProviderAliases: Record<string, string>;
+  runtimeReadiness: {
+    loaded: boolean;
+    configuredFamilies: string[];
+    missingSelectedFamilies: string[];
+  };
+  operatorArtifacts: Array<{
+    key: string;
+    family: string;
+    providerAlias: string;
+    status: 'ready-to-run' | 'needs-credentials';
+    requiredInputs: string[];
+    expectedArtifacts: string[];
+    captureSource: string;
+    redaction: string;
+  }>;
+  scenarioAttachments: Array<{
+    key: string;
+    label: string;
+    status: 'covered' | 'missing';
+    evidenceCount: number;
+    expectedEvidence: string[];
+    nextAction: string;
+  }>;
+  commandPreview: {
+    command: string;
+    requiredInputs: string[];
+    targetInputs: string[];
+  };
+  target: {
+    siteId: string;
+    siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID';
+    productProviderSyncApi: string;
+    orderAnalyticsApi: string;
+    publicCatalogApi: string;
+  };
+  redactionPolicy: {
+    includesProviderSecrets: false;
+    includesCustomerPayloads: false;
+    includesPrivateOrderPayloads: false;
+    includesWebhookBodies: false;
+    allowedEvidence: string[];
+  };
+  secretHandling: string;
+}
 
 const DEFAULT_PRODUCT_PROVIDER_CERTIFICATION_COMMAND_OPTIONS = {
   certifyPayment: true,
@@ -466,6 +524,7 @@ const DEFAULT_PRODUCT_PROVIDER_CERTIFICATION_COMMAND_OPTIONS = {
   subscriptionProvider: 'auto',
   certifyWebhooks: true,
   webhookProvider: 'auto',
+  siteId: 'site-demo',
   externalBaseUrl: '',
   includeReleaseDoctor: true,
 } satisfies ProductProviderCertificationCommandOptions;
@@ -476,6 +535,10 @@ const quoteProductEnvTemplateValue = (value: string): string => (
 );
 const productBoolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
 const uniqueProductCertificationInputs = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
+const productProviderCertificationOptionLabel = <Value extends string>(
+  options: ReadonlyArray<{ readonly value: Value; readonly label: string }>,
+  value: Value,
+): string => options.find((option) => option.value === value)?.label || value;
 const hasProductProviderCertificationFamily = (options: ProductProviderCertificationCommandOptions): boolean => (
   options.certifyPayment ||
   options.certifyTax ||
@@ -579,8 +642,10 @@ const buildProductProviderCertificationEnvEntries = (
 ): Array<[string, string]> => {
   const selectedFamily = hasProductProviderCertificationFamily(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/+$/, '');
+  const siteId = options.siteId.trim() || 'site-demo';
   const envEntries: Array<[string, string]> = [
     ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', productBoolEnv(selectedFamily)],
+    ['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId],
     ['BACKY_COMMERCE_CERTIFY_PAYMENT', productBoolEnv(options.certifyPayment)],
     ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', options.paymentProvider],
     ['BACKY_COMMERCE_CERTIFY_TAX', productBoolEnv(options.certifyTax)],
@@ -653,6 +718,7 @@ const buildProductProviderCertificationRequiredInputs = (options: ProductProvide
   const externalBaseUrl = options.externalBaseUrl.trim();
   return uniqueProductCertificationInputs([
     hasProductProviderCertificationFamily(options) ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+    hasProductProviderCertificationFamily(options) ? 'BACKY_COMMERCE_CERTIFY_SITE_ID' : '',
     options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT=1' : '',
     options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER' : '',
     ...(options.certifyPayment ? PRODUCT_PROVIDER_CERTIFICATION_PAYMENT_INPUTS[options.paymentProvider] : []),
@@ -696,6 +762,7 @@ const PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   requiredInputs: buildProductProviderCertificationRequiredInputs(DEFAULT_PRODUCT_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
   targetInputs: [
     'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'BACKY_COMMERCE_CERTIFY_SITE_ID',
     'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
   ],
   secretHandling: 'Provider credential values stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
@@ -766,6 +833,15 @@ interface ProductFormState {
   inventoryPolicy: 'deny' | 'continue' | 'preorder';
   productType: 'physical' | 'digital' | 'service';
   downloadUrl: string;
+  downloadMediaId: string;
+  downloadMediaName: string;
+  downloadMediaType: string;
+  downloadMediaFolderId: string;
+  downloadMediaFolderPath: string;
+  downloadMediaVisibility: string;
+  downloadMediaScope: string;
+  downloadMediaScopeTargetId: string;
+  downloadMediaOrganization: Record<string, unknown> | null;
   checkoutUrl: string;
   subscriptionEnabled: boolean;
   subscriptionInterval: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
@@ -933,6 +1009,107 @@ interface ProductLaunchReadiness {
   };
 }
 
+interface ProductDesignReadiness {
+  schemaVersion: 'backy.product-design-readiness.v1';
+  status: ProductLaunchReadinessStatus;
+  templateId: string | null;
+  hasDesign: boolean;
+  hasContentDocument: boolean;
+  hasEditableMap: boolean;
+  hasDataBindings: boolean;
+  counts: {
+    elements: number;
+    animations: number;
+    assets: number;
+    bindingHints: number;
+  };
+  missing: string[];
+  detail: string;
+  nextAction: string;
+  evidence: string[];
+  secretHandling: string;
+}
+
+interface ProductSellabilityImpact {
+  schemaVersion: 'backy.product-sellability-impact.v1';
+  generatedAt: string;
+  selectedSiteId: string;
+  product: {
+    id: string | null;
+    slug: string | null;
+    title: string;
+    sku: string;
+    status: string;
+    scheduledAt: string | null;
+    path: string | null;
+    productType: ProductFormState['productType'] | null;
+  };
+  readiness: {
+    schemaVersion: ProductLaunchReadiness['schemaVersion'];
+    status: ProductLaunchReadinessStatus;
+    score: number;
+    blockerCount: number;
+    attentionCount: number;
+    blockingChecks: ProductLaunchReadinessCheck[];
+    attentionChecks: ProductLaunchReadinessCheck[];
+  };
+  storefront: {
+    catalogApi: string;
+    productApi: string;
+    orderIntakeApi: string;
+    productApiReady: boolean;
+    orderIntakeReady: boolean;
+  };
+  pricing: {
+    price: number;
+    currency: string;
+    ready: boolean;
+  } | null;
+  inventory: {
+    inventory: number;
+    lowStockThreshold: number;
+    inventoryPolicy: ProductFormState['inventoryPolicy'];
+    inStock: boolean;
+    lowStock: boolean;
+    outOfStock: boolean;
+  } | null;
+  delivery: {
+    productType: ProductFormState['productType'] | null;
+    shippingRequired: boolean;
+    shippingProfile: string;
+    weight: number | null;
+    downloadMediaConfigured: boolean;
+    downloadUrlConfigured: boolean;
+  } | null;
+  checkout: {
+    orderIntakeReady: boolean;
+    directCheckoutUrlConfigured: boolean;
+    mode: 'backy-order-intake' | 'direct-checkout-url' | 'missing';
+  };
+  designReadiness: ProductDesignReadiness;
+  providerSync: {
+    provider: string;
+    status: string;
+    executionMode: string;
+    syncedAt: string | null;
+    hasProviderProductReference: boolean;
+    hasProviderPriceReference: boolean;
+  };
+  actions: {
+    publish: { allowed: boolean; disabledReason: string | null };
+    archive: { allowed: boolean; disabledReason: string | null };
+    providerSync: { allowed: boolean; disabledReason: string | null };
+    storefrontHandoff: { allowed: boolean; disabledReason: string | null };
+  };
+  privacy: {
+    includesProviderSecrets: boolean;
+    includesPrivateOrders: boolean;
+    includesCustomerPayloads: boolean;
+    includesDigitalDeliveryUrl: boolean;
+    note: string;
+  };
+}
+
 interface ProductStorefrontHandoff {
   schemaVersion: 'backy.product-storefront-handoff.v1';
   generatedAt: string;
@@ -950,6 +1127,7 @@ interface ProductStorefrontHandoff {
     product: string;
     orderIntake: string;
     events: string;
+    providerSync: string;
   };
   pricing: {
     price: number;
@@ -976,6 +1154,8 @@ interface ProductStorefrontHandoff {
     seoTitle: string;
     descriptionChars: number;
   } | null;
+  design: Record<string, unknown> | null;
+  designReadiness: ProductDesignReadiness;
   delivery: {
     shippingRequired: boolean;
     shippingProfile: string;
@@ -1001,6 +1181,7 @@ interface ProductStorefrontHandoff {
     hasProviderProductReference: boolean;
     hasProviderPriceReference: boolean;
   };
+  sellabilityImpact: ProductSellabilityImpact;
   launchReadiness: {
     schemaVersion: ProductLaunchReadiness['schemaVersion'];
     status: ProductLaunchReadinessStatus;
@@ -1012,8 +1193,11 @@ interface ProductStorefrontHandoff {
   privacy: {
     customerSafeFieldsOnly: boolean;
     includesProviderSecrets: boolean;
+    includesProviderResponses: boolean;
     includesPrivateOrders: boolean;
+    includesCustomerPayloads: boolean;
     includesDigitalDeliveryUrl: boolean;
+    includesRawCheckoutSessions: boolean;
     excludedFields: string[];
   };
 }
@@ -1037,6 +1221,15 @@ const PRODUCT_VALUE_KEYS = {
   inventoryPolicy: 'inventorypolicy',
   productType: 'producttype',
   downloadUrl: 'downloadurl',
+  downloadMediaId: 'downloadmediaid',
+  downloadMediaName: 'downloadmedianame',
+  downloadMediaType: 'downloadmediatype',
+  downloadMediaFolderId: 'downloadmediafolderid',
+  downloadMediaFolderPath: 'downloadmediafolderpath',
+  downloadMediaVisibility: 'downloadmediavisibility',
+  downloadMediaScope: 'downloadmediascope',
+  downloadMediaScopeTargetId: 'downloadmediascopetargetid',
+  downloadMediaOrganization: 'downloadmediaorganization',
   checkoutUrl: 'checkouturl',
   subscriptionEnabled: 'subscriptionenabled',
   subscriptionInterval: 'subscriptioninterval',
@@ -1121,6 +1314,15 @@ const PRODUCT_FIELDS: CollectionField[] = [
   { key: productFieldKey('inventoryPolicy'), label: 'Inventory Policy', type: 'select', required: false, unique: false, sortOrder: 90, options: ['deny', 'continue', 'preorder'], defaultValue: 'deny' },
   { key: productFieldKey('productType'), label: 'Product Type', type: 'select', required: true, unique: false, sortOrder: 100, options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
   { key: productFieldKey('downloadUrl'), label: 'Digital Delivery URL', type: 'url', required: false, unique: false, sortOrder: 110 },
+  { key: productFieldKey('downloadMediaId'), label: 'Digital Delivery Media ID', type: 'text', required: false, unique: false, sortOrder: 111 },
+  { key: productFieldKey('downloadMediaName'), label: 'Digital Delivery Media Name', type: 'text', required: false, unique: false, sortOrder: 112 },
+  { key: productFieldKey('downloadMediaType'), label: 'Digital Delivery Media Type', type: 'text', required: false, unique: false, sortOrder: 113 },
+  { key: productFieldKey('downloadMediaFolderId'), label: 'Digital Delivery Folder ID', type: 'text', required: false, unique: false, sortOrder: 114 },
+  { key: productFieldKey('downloadMediaFolderPath'), label: 'Digital Delivery Folder Path', type: 'text', required: false, unique: false, sortOrder: 115 },
+  { key: productFieldKey('downloadMediaVisibility'), label: 'Digital Delivery Visibility', type: 'text', required: false, unique: false, sortOrder: 116 },
+  { key: productFieldKey('downloadMediaScope'), label: 'Digital Delivery Scope', type: 'text', required: false, unique: false, sortOrder: 117 },
+  { key: productFieldKey('downloadMediaScopeTargetId'), label: 'Digital Delivery Scope Target', type: 'text', required: false, unique: false, sortOrder: 118 },
+  { key: productFieldKey('downloadMediaOrganization'), label: 'Digital Delivery Organization', type: 'json', required: false, unique: false, sortOrder: 119 },
   { key: productFieldKey('checkoutUrl'), label: 'Checkout URL', type: 'url', required: false, unique: false, sortOrder: 120 },
   { key: productFieldKey('subscriptionEnabled'), label: 'Subscription Enabled', type: 'boolean', required: false, unique: false, sortOrder: 130, defaultValue: false },
   { key: productFieldKey('subscriptionInterval'), label: 'Subscription Interval', type: 'select', required: false, unique: false, sortOrder: 140, options: ['weekly', 'monthly', 'quarterly', 'yearly'], defaultValue: 'monthly' },
@@ -1166,6 +1368,13 @@ const PRODUCT_EXPORT_COLUMNS = [
   'gallery_images',
   'gallery_image_count',
   'download_url',
+  'download_media_id',
+  'download_media_name',
+  'download_media_type',
+  'download_media_folder_path',
+  'download_media_visibility',
+  'download_media_scope',
+  'download_media_scope_target_id',
   'checkout_url',
   'subscription_enabled',
   'subscription_interval',
@@ -1211,6 +1420,15 @@ const PRODUCT_IMPORT_COLUMNS = [
   productFieldKey('inventoryPolicy'),
   productFieldKey('productType'),
   productFieldKey('downloadUrl'),
+  productFieldKey('downloadMediaId'),
+  productFieldKey('downloadMediaName'),
+  productFieldKey('downloadMediaType'),
+  productFieldKey('downloadMediaFolderId'),
+  productFieldKey('downloadMediaFolderPath'),
+  productFieldKey('downloadMediaVisibility'),
+  productFieldKey('downloadMediaScope'),
+  productFieldKey('downloadMediaScopeTargetId'),
+  productFieldKey('downloadMediaOrganization'),
   productFieldKey('checkoutUrl'),
   productFieldKey('subscriptionEnabled'),
   productFieldKey('subscriptionInterval'),
@@ -1292,7 +1510,7 @@ const PRODUCT_FRONTEND_SYSTEMS = [
   {
     key: 'media',
     title: 'Product media',
-    detail: 'Image URLs sourced from Backy media, with future gallery and downloadable/private file support.',
+    detail: 'Image, gallery, and digital-delivery media are sourced from Backy media with stable media IDs for reference tracking.',
   },
 ] as const;
 
@@ -1330,7 +1548,7 @@ const PRODUCT_PAGE_BINDING_TARGETS = [
   {
     key: 'product-media',
     title: 'Product media fields',
-    detail: 'Use central media URLs for primary images, galleries, and digital delivery/download references.',
+    detail: 'Use central media URLs and stable media IDs for primary images, galleries, and digital delivery/download references.',
   },
 ] as const;
 
@@ -1347,6 +1565,15 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   inventoryPolicy: 'deny',
   productType: 'physical',
   downloadUrl: '',
+  downloadMediaId: '',
+  downloadMediaName: '',
+  downloadMediaType: '',
+  downloadMediaFolderId: '',
+  downloadMediaFolderPath: '',
+  downloadMediaVisibility: '',
+  downloadMediaScope: '',
+  downloadMediaScopeTargetId: '',
+  downloadMediaOrganization: null,
   checkoutUrl: '',
   subscriptionEnabled: false,
   subscriptionInterval: 'monthly',
@@ -1369,6 +1596,52 @@ const EMPTY_PRODUCT_FORM: ProductFormState = {
   featured: false,
   taxable: true,
 };
+
+type ProductDownloadMediaMetadataState = Pick<
+  ProductFormState,
+  | 'downloadMediaId'
+  | 'downloadMediaName'
+  | 'downloadMediaType'
+  | 'downloadMediaFolderId'
+  | 'downloadMediaFolderPath'
+  | 'downloadMediaVisibility'
+  | 'downloadMediaScope'
+  | 'downloadMediaScopeTargetId'
+  | 'downloadMediaOrganization'
+>;
+
+const productMediaAttachmentUrl = (mediaId: string, siteId: string): string => {
+  const fileUrl = getPublicMediaFileUrl(mediaId, siteId);
+  return `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}disposition=attachment`;
+};
+
+const clearProductDownloadMediaState = (): ProductDownloadMediaMetadataState => ({
+  downloadMediaId: '',
+  downloadMediaName: '',
+  downloadMediaType: '',
+  downloadMediaFolderId: '',
+  downloadMediaFolderPath: '',
+  downloadMediaVisibility: '',
+  downloadMediaScope: '',
+  downloadMediaScopeTargetId: '',
+  downloadMediaOrganization: null,
+});
+
+const productDownloadMediaState = (
+  asset: MediaAsset,
+  activeSiteId: string,
+): ProductDownloadMediaMetadataState & Pick<ProductFormState, 'downloadUrl'> => ({
+  downloadUrl: productMediaAttachmentUrl(asset.id, activeSiteId),
+  downloadMediaId: asset.id,
+  downloadMediaName: asset.name,
+  downloadMediaType: asset.type,
+  downloadMediaFolderId: asset.folderId || '',
+  downloadMediaFolderPath: asset.organization?.folderPath || '',
+  downloadMediaVisibility: asset.visibility || 'public',
+  downloadMediaScope: asset.scope || 'global',
+  downloadMediaScopeTargetId: asset.scopeTargetId || '',
+  downloadMediaOrganization: asset.organization ? { ...asset.organization } : null,
+});
 
 function ProductsRoute() {
   const navigate = useNavigate();
@@ -1435,6 +1708,10 @@ function ProductsRoute() {
   });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [productFormSubmitted, setProductFormSubmitted] = useState(false);
+  const [variantDraftSubmitted, setVariantDraftSubmitted] = useState(false);
+  const [variantMatrixSubmitted, setVariantMatrixSubmitted] = useState(false);
+  const [galleryImageSubmitted, setGalleryImageSubmitted] = useState(false);
   const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
   const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
   const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
@@ -1466,18 +1743,6 @@ function ProductsRoute() {
   const canExportProducts = canViewCommerce && canExportCollections;
   const canDeleteProducts = canDeleteCommerce && canDeleteCollections;
   const providerCertificationHasSelectedFamily = hasProductProviderCertificationFamily(providerCertificationCommandOptions);
-  const providerCertificationCommand = useMemo(
-    () => buildProductProviderCertificationCommand(providerCertificationCommandOptions),
-    [providerCertificationCommandOptions],
-  );
-  const providerCertificationEnvTemplate = useMemo(
-    () => buildProductProviderCertificationEnvTemplate(providerCertificationCommandOptions),
-    [providerCertificationCommandOptions],
-  );
-  const providerCertificationRequiredInputs = useMemo(
-    () => buildProductProviderCertificationRequiredInputs(providerCertificationCommandOptions),
-    [providerCertificationCommandOptions],
-  );
   const updateProviderCertificationCommandOptions = (next: Partial<ProductProviderCertificationCommandOptions>) => {
     setProviderCertificationCommandOptions((current) => ({
       ...current,
@@ -1510,6 +1775,22 @@ function ProductsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const providerCertificationTargetOptions = useMemo<ProductProviderCertificationCommandOptions>(
+    () => ({ ...providerCertificationCommandOptions, siteId: activeSiteId }),
+    [activeSiteId, providerCertificationCommandOptions],
+  );
+  const providerCertificationCommand = useMemo(
+    () => buildProductProviderCertificationCommand(providerCertificationTargetOptions),
+    [providerCertificationTargetOptions],
+  );
+  const providerCertificationEnvTemplate = useMemo(
+    () => buildProductProviderCertificationEnvTemplate(providerCertificationTargetOptions),
+    [providerCertificationTargetOptions],
+  );
+  const providerCertificationRequiredInputs = useMemo(
+    () => buildProductProviderCertificationRequiredInputs(providerCertificationTargetOptions),
+    [providerCertificationTargetOptions],
+  );
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const customerCollectionSearch = useMemo(() => ({
     siteId: activeSiteId,
@@ -1727,6 +2008,9 @@ function ProductsRoute() {
         : commerceProductDetailUrl,
       orderIntakeApi: commerceOrderContractUrl,
       productEventsApi: productNotificationEventsUrl,
+      providerSyncApi: selectedProduct
+        ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/${encodeURIComponent(selectedProduct.id)}/provider-sync`
+        : `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/products/{productId}/provider-sync`,
       orderIntakeReady,
     }),
     [
@@ -1736,6 +2020,7 @@ function ProductsRoute() {
       commerceProductDetailUrl,
       orderIntakeReady,
       productNotificationEventsUrl,
+      publicBaseUrl,
       selectedProduct,
       selectedProductLaunchReadiness,
       selectedProductProviderSync,
@@ -1765,6 +2050,56 @@ function ProductsRoute() {
     () => parseProductVariants(formState.variants),
     [formState.variants],
   );
+  const variantDraftPriceValue = Number(variantDraft.price);
+  const variantDraftInventoryValue = Number(variantDraft.inventory);
+  const variantDraftIdentityMissing = !variantDraft.title.trim() && !variantDraft.option.trim();
+  const variantDraftPriceInvalid = Boolean(variantDraft.price.trim()) && (
+    !Number.isFinite(variantDraftPriceValue) || variantDraftPriceValue < 0
+  );
+  const variantDraftInventoryInvalid = Boolean(variantDraft.inventory.trim()) && (
+    !Number.isFinite(variantDraftInventoryValue) ||
+    variantDraftInventoryValue < 0 ||
+    !Number.isInteger(variantDraftInventoryValue)
+  );
+  const variantDraftIdentityInlineError = variantDraftSubmitted && variantDraftIdentityMissing
+    ? 'Add a variant name or option before adding it to the product.'
+    : null;
+  const variantDraftPriceInlineError = variantDraftSubmitted && variantDraftPriceInvalid
+    ? 'Use a variant price of 0 or more.'
+    : null;
+  const variantDraftInventoryInlineError = variantDraftSubmitted && variantDraftInventoryInvalid
+    ? 'Use a whole-number stock value of 0 or more.'
+    : null;
+  const variantDraftInvalid = Boolean(variantDraftIdentityMissing || variantDraftPriceInvalid || variantDraftInventoryInvalid);
+  const optionMatrixPriceValue = Number(optionMatrixDraft.price);
+  const optionMatrixInventoryValue = Number(optionMatrixDraft.inventory);
+  const optionMatrixOptionsMissing = parseProductOptionGroups(optionMatrixDraft.options).length === 0;
+  const optionMatrixPriceInvalid = Boolean(optionMatrixDraft.price.trim()) && (
+    !Number.isFinite(optionMatrixPriceValue) || optionMatrixPriceValue < 0
+  );
+  const optionMatrixInventoryInvalid = Boolean(optionMatrixDraft.inventory.trim()) && (
+    !Number.isFinite(optionMatrixInventoryValue) ||
+    optionMatrixInventoryValue < 0 ||
+    !Number.isInteger(optionMatrixInventoryValue)
+  );
+  const optionMatrixInlineError = variantMatrixSubmitted && optionMatrixOptionsMissing
+    ? 'Add option groups like "Size: S, M" before generating variants.'
+    : null;
+  const optionMatrixPriceInlineError = variantMatrixSubmitted && optionMatrixPriceInvalid
+    ? 'Use a matrix price of 0 or more.'
+    : null;
+  const optionMatrixInventoryInlineError = variantMatrixSubmitted && optionMatrixInventoryInvalid
+    ? 'Use a whole-number matrix stock value of 0 or more.'
+    : null;
+  const optionMatrixInvalid = Boolean(optionMatrixOptionsMissing || optionMatrixPriceInvalid || optionMatrixInventoryInvalid);
+  const galleryImageDraftValue = galleryImageDraft.trim();
+  const galleryImageInlineError = galleryImageSubmitted
+    ? !galleryImageDraftValue
+      ? 'Add a gallery image URL before adding it to the product.'
+      : galleryImageUrls.includes(galleryImageDraftValue)
+        ? 'That image is already in this product gallery.'
+        : null
+    : null;
   const productCategories = useMemo(() => (
     [...new Set(products.map((product) => String(readProductValue(product.values, 'category', '') || '').trim()).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b))
@@ -2089,6 +2424,16 @@ function ProductsRoute() {
     products,
   ]);
   const scheduledProductDateError = getScheduledProductDateError(formState.status, formState.scheduledAt);
+  const productTitleInlineError = productFormSubmitted && !formState.title.trim()
+    ? 'Add a product title so storefront cards, product pages, and APIs have a display name.'
+    : null;
+  const productSkuInlineError = productFormSubmitted && !formState.sku.trim()
+    ? 'Add a unique SKU so orders, inventory, and provider catalog sync can reference this product.'
+    : null;
+  const scheduledProductInlineError = productFormSubmitted && scheduledProductDateError
+    ? scheduledProductDateError
+    : null;
+  const productIdentityMissing = !formState.title.trim() || !formState.sku.trim();
   const minimumScheduledAt = toDateTimeLocalValue(new Date(Date.now() + 60_000).toISOString());
   const providerRuntimeEvidence = useMemo(() => {
     const paymentConfigured = Boolean(
@@ -2286,6 +2631,238 @@ function ProductsRoute() {
     providerRuntimeEvidence.webhookSecretConfigured,
     selectedProductLifecycle,
   ]);
+  const providerCertificationEvidencePacket = useMemo<ProductProviderCertificationEvidencePacket>(() => {
+    const familyArtifacts = [
+      {
+        key: 'payment-checkout',
+        family: 'Payment checkout',
+        selected: providerCertificationCommandOptions.certifyPayment,
+        runtimeConfigured: providerRuntimeEvidence.paymentConfigured,
+        providerAlias: productProviderCertificationOptionLabel(
+          PRODUCT_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.paymentProvider,
+        ),
+        requiredInputs: PRODUCT_PROVIDER_CERTIFICATION_PAYMENT_INPUTS[providerCertificationCommandOptions.paymentProvider],
+        expectedArtifacts: [
+          'checkout session id/reference',
+          'paid private order id',
+          'payment provider reference',
+          'non-secret webhook settlement event name',
+        ],
+        captureSource: 'public order intake response, private order record, and signed webhook readback',
+      },
+      {
+        key: 'tax-quotes',
+        family: 'Tax quotes',
+        selected: providerCertificationCommandOptions.certifyTax,
+        runtimeConfigured: providerRuntimeEvidence.taxConfigured,
+        providerAlias: productProviderCertificationOptionLabel(
+          PRODUCT_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.taxProvider,
+        ),
+        requiredInputs: PRODUCT_PROVIDER_CERTIFICATION_TAX_INPUTS[providerCertificationCommandOptions.taxProvider],
+        expectedArtifacts: [
+          'tax provider alias',
+          'quote request target',
+          'returned tax amount',
+          'persisted order tax total',
+        ],
+        captureSource: 'checkout quote response and private order totals',
+      },
+      {
+        key: 'shipping-rates',
+        family: 'Shipping rates',
+        selected: providerCertificationCommandOptions.certifyShipping,
+        runtimeConfigured: providerRuntimeEvidence.shippingConfigured,
+        providerAlias: productProviderCertificationOptionLabel(
+          PRODUCT_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.shippingProvider,
+        ),
+        requiredInputs: PRODUCT_PROVIDER_CERTIFICATION_SHIPPING_INPUTS[providerCertificationCommandOptions.shippingProvider],
+        expectedArtifacts: [
+          'carrier/provider alias',
+          'rate id/reference',
+          'returned shipping amount',
+          'label/tracking reference when enabled',
+        ],
+        captureSource: 'checkout quote response, shipping adjustment metadata, and carrier label response',
+      },
+      {
+        key: 'discount-quotes',
+        family: 'Discount quotes',
+        selected: providerCertificationCommandOptions.certifyDiscount,
+        runtimeConfigured: providerRuntimeEvidence.discountConfigured,
+        providerAlias: productProviderCertificationOptionLabel(
+          PRODUCT_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.discountProvider,
+        ),
+        requiredInputs: PRODUCT_PROVIDER_CERTIFICATION_DISCOUNT_INPUTS[providerCertificationCommandOptions.discountProvider],
+        expectedArtifacts: [
+          'promotion or coupon code',
+          'discount provider alias',
+          'returned discount amount',
+          'persisted order discount total',
+        ],
+        captureSource: 'checkout quote response and private order discount fields',
+      },
+      {
+        key: 'catalog-sync',
+        family: 'Catalog sync',
+        selected: providerCertificationCommandOptions.certifyCatalog,
+        runtimeConfigured: providerRuntimeEvidence.catalogSyncConfigured,
+        providerAlias: productProviderCertificationOptionLabel(
+          PRODUCT_PROVIDER_CERTIFICATION_CATALOG_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.catalogProvider,
+        ),
+        requiredInputs: PRODUCT_PROVIDER_CERTIFICATION_CATALOG_INPUTS[providerCertificationCommandOptions.catalogProvider],
+        expectedArtifacts: [
+          'provider product id/reference',
+          'provider price/variant id/reference',
+          'sync status',
+          'synced timestamp',
+        ],
+        captureSource: 'admin provider-sync response and stored providersync metadata',
+      },
+      {
+        key: 'subscription-lifecycle',
+        family: 'Subscription lifecycle',
+        selected: providerCertificationCommandOptions.certifySubscriptions,
+        runtimeConfigured: providerRuntimeEvidence.subscriptionConfigured,
+        providerAlias: productProviderCertificationOptionLabel(
+          PRODUCT_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.subscriptionProvider,
+        ),
+        requiredInputs: PRODUCT_PROVIDER_CERTIFICATION_SUBSCRIPTION_INPUTS[providerCertificationCommandOptions.subscriptionProvider],
+        expectedArtifacts: [
+          'subscription checkout reference',
+          'renewal or dunning event',
+          'pause/resume/cancel action result',
+          'lifecycle endpoint coverage summary',
+        ],
+        captureSource: 'product subscription lifecycle endpoint and subscription action response',
+      },
+      {
+        key: 'webhook-settlement',
+        family: 'Webhooks',
+        selected: providerCertificationCommandOptions.certifyWebhooks,
+        runtimeConfigured: providerRuntimeEvidence.webhookSecretConfigured,
+        providerAlias: productProviderCertificationOptionLabel(
+          PRODUCT_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.webhookProvider,
+        ),
+        requiredInputs: PRODUCT_PROVIDER_CERTIFICATION_WEBHOOK_INPUTS[providerCertificationCommandOptions.webhookProvider],
+        expectedArtifacts: [
+          'signed webhook provider alias',
+          'accepted webhook event name',
+          'idempotent order update result',
+          'commerce-webhook event readback',
+        ],
+        captureSource: 'commerce webhook POST response and /events?kind=commerce-webhook readback',
+      },
+    ];
+    const selectedArtifacts = familyArtifacts.filter((artifact) => artifact.selected);
+    const missingSelectedFamilies = selectedArtifacts
+      .filter((artifact) => !artifact.runtimeConfigured)
+      .map((artifact) => artifact.key);
+    const status: ProductProviderCertificationEvidencePacketStatus = selectedArtifacts.length === 0
+      ? 'no-family-selected'
+      : (!providerRuntimeEvidence.loaded || missingSelectedFamilies.length > 0)
+        ? 'needs-credentials'
+        : productProviderCertificationEvidence.status === 'ready'
+          ? 'evidence-complete'
+          : 'needs-scenario-evidence';
+
+    return {
+      schemaVersion: 'backy.commerce-provider-certification-evidence-packet.v1',
+      generatedAt: new Date().toISOString(),
+      selectedSiteId: activeSiteId,
+      status,
+      selectedFamilies: selectedArtifacts.map((artifact) => artifact.key),
+      selectedProviderAliases: Object.fromEntries(selectedArtifacts.map((artifact) => [
+        artifact.key,
+        artifact.providerAlias,
+      ])),
+      runtimeReadiness: {
+        loaded: providerRuntimeEvidence.loaded,
+        configuredFamilies: providerRuntimeEvidence.configuredFamilies,
+        missingSelectedFamilies,
+      },
+      operatorArtifacts: selectedArtifacts.map((artifact) => ({
+        key: artifact.key,
+        family: artifact.family,
+        providerAlias: artifact.providerAlias,
+        status: providerRuntimeEvidence.loaded && artifact.runtimeConfigured ? 'ready-to-run' : 'needs-credentials',
+        requiredInputs: artifact.requiredInputs,
+        expectedArtifacts: artifact.expectedArtifacts,
+        captureSource: artifact.captureSource,
+        redaction: 'Attach ids, timestamps, event names, totals, and status codes only; remove provider secrets, raw customer payloads, private order payloads, and full webhook bodies.',
+      })),
+      scenarioAttachments: productProviderCertificationEvidence.scenarios.map((scenario) => ({
+        key: scenario.key,
+        label: scenario.label,
+        status: scenario.status,
+        evidenceCount: scenario.evidenceCount,
+        expectedEvidence: [...scenario.expectedEvidence],
+        nextAction: scenario.nextAction,
+      })),
+      commandPreview: {
+        command: providerCertificationCommand,
+        requiredInputs: providerCertificationRequiredInputs,
+        targetInputs: PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs,
+      },
+      target: {
+        siteId: activeSiteId,
+        siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+        productProviderSyncApi: `/api/admin/sites/${activeSiteId}/commerce/products/{productId}/provider-sync`,
+        orderAnalyticsApi: `/api/admin/sites/${activeSiteId}/commerce/orders/analytics`,
+        publicCatalogApi: `/api/sites/${activeSiteId}/commerce/catalog`,
+      },
+      redactionPolicy: {
+        includesProviderSecrets: false,
+        includesCustomerPayloads: false,
+        includesPrivateOrderPayloads: false,
+        includesWebhookBodies: false,
+        allowedEvidence: [
+          'provider ids and references',
+          'timestamped CI/preflight logs',
+          'quote totals and adjustment names',
+          'webhook event names and accepted status codes',
+          'scenario counts and coverage state',
+          'non-secret provider family names',
+        ],
+      },
+      secretHandling: 'Redacted operator attachment manifest only; provider credentials, raw customer data, raw private orders, and webhook bodies stay out of copied JSON.',
+    };
+  }, [
+    activeSiteId,
+    productProviderCertificationEvidence.scenarios,
+    productProviderCertificationEvidence.status,
+    providerCertificationCommand,
+    providerCertificationCommandOptions.catalogProvider,
+    providerCertificationCommandOptions.certifyCatalog,
+    providerCertificationCommandOptions.certifyDiscount,
+    providerCertificationCommandOptions.certifyPayment,
+    providerCertificationCommandOptions.certifyShipping,
+    providerCertificationCommandOptions.certifySubscriptions,
+    providerCertificationCommandOptions.certifyTax,
+    providerCertificationCommandOptions.certifyWebhooks,
+    providerCertificationCommandOptions.discountProvider,
+    providerCertificationCommandOptions.paymentProvider,
+    providerCertificationCommandOptions.shippingProvider,
+    providerCertificationCommandOptions.subscriptionProvider,
+    providerCertificationCommandOptions.taxProvider,
+    providerCertificationCommandOptions.webhookProvider,
+    providerCertificationRequiredInputs,
+    providerRuntimeEvidence.catalogSyncConfigured,
+    providerRuntimeEvidence.configuredFamilies,
+    providerRuntimeEvidence.discountConfigured,
+    providerRuntimeEvidence.loaded,
+    providerRuntimeEvidence.paymentConfigured,
+    providerRuntimeEvidence.shippingConfigured,
+    providerRuntimeEvidence.subscriptionConfigured,
+    providerRuntimeEvidence.taxConfigured,
+    providerRuntimeEvidence.webhookSecretConfigured,
+  ]);
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -2317,6 +2894,7 @@ function ProductsRoute() {
     preflightGates: [...PRODUCT_PROVIDER_CERTIFICATION_PREFLIGHT_GATES],
     providerSelectors: [...PRODUCT_PROVIDER_CERTIFICATION_SELECTORS],
     evidenceExpectations: [...PRODUCT_PROVIDER_CERTIFICATION_EVIDENCE_EXPECTATIONS],
+    operatorEvidencePacket: providerCertificationEvidencePacket,
     secretHandling: 'Provider credentials stay in server environment/configuration; product records and handoff manifests only expose non-secret readiness evidence.',
     catalogEvidence: {
       apiReady: productApiReady,
@@ -2357,6 +2935,7 @@ function ProductsRoute() {
     orderIntakeReady,
     productApiReady,
     productProviderCertificationEvidence,
+    providerCertificationEvidencePacket,
     providerCertificationCommand,
     providerCertificationEnvTemplate,
     providerCertificationRequiredInputs,
@@ -2503,7 +3082,7 @@ function ProductsRoute() {
       productPageTemplates: productPageTemplateBriefs.map((brief) => brief.manifest),
       canvasBlocks: ['product-card', 'product-grid', 'product-detail', 'variant-selector', 'cart-button', 'checkout-button', 'related-products'],
       requiredFields: [productFieldKey('title'), 'slug', productFieldKey('sku'), productFieldKey('price'), productFieldKey('currency'), productFieldKey('inventory'), productFieldKey('productType'), productFieldKey('checkoutUrl')],
-      optionalFields: [productFieldKey('compareAtPrice'), productFieldKey('variants'), productFieldKey('galleryImages'), productFieldKey('downloadUrl'), productFieldKey('subscriptionEnabled'), productFieldKey('subscriptionInterval'), productFieldKey('subscriptionTrialDays'), productFieldKey('shippingProfile'), productFieldKey('taxClass'), productFieldKey('discountCode'), productFieldKey('returnPolicy'), productFieldKey('category'), productFieldKey('tags'), productFieldKey('vendor'), productFieldKey('seoTitle'), productFieldKey('featured'), productFieldKey('taxable')],
+      optionalFields: [productFieldKey('compareAtPrice'), productFieldKey('variants'), productFieldKey('galleryImages'), productFieldKey('downloadUrl'), productFieldKey('downloadMediaId'), productFieldKey('downloadMediaName'), productFieldKey('downloadMediaType'), productFieldKey('downloadMediaFolderPath'), productFieldKey('downloadMediaVisibility'), productFieldKey('downloadMediaScope'), productFieldKey('subscriptionEnabled'), productFieldKey('subscriptionInterval'), productFieldKey('subscriptionTrialDays'), productFieldKey('shippingProfile'), productFieldKey('taxClass'), productFieldKey('discountCode'), productFieldKey('returnPolicy'), productFieldKey('category'), productFieldKey('tags'), productFieldKey('vendor'), productFieldKey('seoTitle'), productFieldKey('featured'), productFieldKey('taxable')],
     },
     frontendSystems: PRODUCT_FRONTEND_SYSTEMS,
     readiness: {
@@ -2617,6 +3196,12 @@ function ProductsRoute() {
       inventoryPolicy: asInventoryPolicy(readProductValue(product.values, 'inventoryPolicy')),
       weight: readProductValue(product.values, 'weight') === null || readProductValue(product.values, 'weight') === undefined ? null : toNumber(readProductValue(product.values, 'weight')),
       downloadUrl: String(readProductValue(product.values, 'downloadUrl', '') || ''),
+      downloadMediaId: String(readProductValue(product.values, 'downloadMediaId', '') || ''),
+      downloadMediaName: String(readProductValue(product.values, 'downloadMediaName', '') || ''),
+      downloadMediaType: String(readProductValue(product.values, 'downloadMediaType', '') || ''),
+      downloadMediaFolderPath: String(readProductValue(product.values, 'downloadMediaFolderPath', '') || ''),
+      downloadMediaVisibility: String(readProductValue(product.values, 'downloadMediaVisibility', '') || ''),
+      downloadMediaScope: String(readProductValue(product.values, 'downloadMediaScope', '') || ''),
       checkoutUrl: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
       subscription: {
         enabled: Boolean(readProductValue(product.values, 'subscriptionEnabled')),
@@ -2673,12 +3258,20 @@ function ProductsRoute() {
   ]);
   const productHandoffText = useMemo(() => JSON.stringify(productHandoff, null, 2), [productHandoff]);
   const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationSummary, null, 2), [providerCertificationSummary]);
+  const providerCertificationEvidencePacketText = useMemo(
+    () => JSON.stringify(providerCertificationEvidencePacket, null, 2),
+    [providerCertificationEvidencePacket],
+  );
   const selectedProductLaunchReadinessText = useMemo(
     () => JSON.stringify(selectedProductLaunchReadiness, null, 2),
     [selectedProductLaunchReadiness],
   );
   const selectedProductStorefrontHandoffText = useMemo(
     () => JSON.stringify(selectedProductStorefrontHandoff, null, 2),
+    [selectedProductStorefrontHandoff],
+  );
+  const selectedProductSellabilityImpactText = useMemo(
+    () => JSON.stringify(selectedProductStorefrontHandoff.sellabilityImpact, null, 2),
     [selectedProductStorefrontHandoff],
   );
   const productsRouteSearch = useMemo<ProductsSearch>(() => ({
@@ -3122,6 +3715,7 @@ function ProductsRoute() {
   useEffect(() => {
     if (!selectedProduct) return;
     setFormState(productToForm(selectedProduct));
+    setProductFormSubmitted(false);
   }, [selectedProduct]);
 
   useEffect(() => {
@@ -3154,6 +3748,7 @@ function ProductsRoute() {
   const clearProductEditorState = () => {
     setSelectedProductId(null);
     setFormState(EMPTY_PRODUCT_FORM);
+    setProductFormSubmitted(false);
     setGalleryImageDraft('');
     setVariantDraft({
       title: '',
@@ -3233,7 +3828,27 @@ function ProductsRoute() {
 
     setGalleryImages([...galleryImageUrls, normalizedUrl]);
     setGalleryImageDraft('');
+    setGalleryImageSubmitted(false);
+    setError(null);
     return true;
+  };
+
+  const addGalleryImageDraft = () => {
+    setGalleryImageSubmitted(true);
+    if (isProductsBusy) return;
+    if (!canEditProducts) return;
+
+    if (!galleryImageDraftValue || galleryImageUrls.includes(galleryImageDraftValue)) {
+      setError('Fix gallery image URL before adding.');
+      setNotice(null);
+      return;
+    }
+
+    if (addGalleryImageUrl(galleryImageDraftValue)) {
+      setGalleryImageSubmitted(false);
+      setError(null);
+      setNotice('Gallery image added.');
+    }
   };
 
   const removeGalleryImageUrl = (url: string) => {
@@ -3258,6 +3873,7 @@ function ProductsRoute() {
   };
 
   const addProductVariant = () => {
+    setVariantDraftSubmitted(true);
     if (isProductsBusy) return;
     if (!canEditProducts) return;
 
@@ -3265,7 +3881,16 @@ function ProductsRoute() {
     const sku = variantDraft.sku.trim();
     const option = variantDraft.option.trim();
 
-    if ((!title && !option) || productVariants.length >= PRODUCT_VARIANT_LIMIT) return;
+    if (variantDraftInvalid) {
+      setError('Fix product variant fields before adding.');
+      setNotice(null);
+      return;
+    }
+
+    if (productVariants.length >= PRODUCT_VARIANT_LIMIT) {
+      setNotice(`Products support up to ${PRODUCT_VARIANT_LIMIT} variants. Remove a variant before adding another.`);
+      return;
+    }
 
     setProductVariants([
       ...productVariants,
@@ -3279,6 +3904,8 @@ function ProductsRoute() {
       },
     ]);
     resetVariantDraft();
+    setVariantDraftSubmitted(false);
+    setError(null);
   };
 
   const removeProductVariant = (variantId: string) => {
@@ -3289,8 +3916,20 @@ function ProductsRoute() {
   };
 
   const generateVariantMatrix = () => {
+    setVariantMatrixSubmitted(true);
     if (isProductsBusy) return;
     if (!canEditProducts) return;
+
+    if (optionMatrixInvalid) {
+      setError('Fix option matrix fields before generating variants.');
+      setNotice(null);
+      return;
+    }
+
+    if (productVariants.length >= PRODUCT_VARIANT_LIMIT) {
+      setNotice(`Products support up to ${PRODUCT_VARIANT_LIMIT} variants. Remove variants before generating more.`);
+      return;
+    }
 
     const generated = buildProductVariantMatrix({
       optionInput: optionMatrixDraft.options,
@@ -3312,6 +3951,7 @@ function ProductsRoute() {
       setNotice(`Generated ${generated.length} product variant${generated.length === 1 ? '' : 's'} from option matrix.`);
     }
     setError(null);
+    setVariantMatrixSubmitted(false);
     setProductVariants(nextVariants);
   };
 
@@ -3443,8 +4083,10 @@ function ProductsRoute() {
       return;
     }
 
-    if (!formState.title.trim() || !formState.sku.trim()) {
-      setError('Add a product title and SKU before saving.');
+    setProductFormSubmitted(true);
+
+    if (productIdentityMissing) {
+      setError('Fix product identity fields before saving.');
       setNotice(null);
       return;
     }
@@ -3480,6 +4122,15 @@ function ProductsRoute() {
         [productFieldKey('inventoryPolicy')]: formState.inventoryPolicy,
         [productFieldKey('productType')]: formState.productType,
         [productFieldKey('downloadUrl')]: formState.downloadUrl.trim(),
+        [productFieldKey('downloadMediaId')]: formState.downloadMediaId.trim(),
+        [productFieldKey('downloadMediaName')]: formState.downloadMediaName.trim(),
+        [productFieldKey('downloadMediaType')]: formState.downloadMediaType.trim(),
+        [productFieldKey('downloadMediaFolderId')]: formState.downloadMediaFolderId.trim(),
+        [productFieldKey('downloadMediaFolderPath')]: formState.downloadMediaFolderPath.trim(),
+        [productFieldKey('downloadMediaVisibility')]: formState.downloadMediaVisibility.trim(),
+        [productFieldKey('downloadMediaScope')]: formState.downloadMediaScope.trim(),
+        [productFieldKey('downloadMediaScopeTargetId')]: formState.downloadMediaScopeTargetId.trim(),
+        [productFieldKey('downloadMediaOrganization')]: formState.downloadMediaOrganization,
         [productFieldKey('checkoutUrl')]: formState.checkoutUrl.trim(),
         [productFieldKey('subscriptionEnabled')]: formState.subscriptionEnabled,
         [productFieldKey('subscriptionInterval')]: formState.subscriptionInterval,
@@ -3517,6 +4168,7 @@ function ProductsRoute() {
       }
       setSelectedProductId(saved.id);
       updateProductsRouteSearch({ productId: saved.id });
+      setProductFormSubmitted(false);
       setNotice(selectedProduct ? 'Product updated.' : 'Product created.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save product');
@@ -4274,13 +4926,16 @@ function ProductsRoute() {
             {frontendProductTemplateBlueprints.length > 0 ? (
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {frontendProductTemplateBlueprints.map(({ template, blueprint }) => {
+                  const designValues = buildFrontendProductTemplateValues(template, frontendDesign);
                   const values = {
                     ...blueprint.values,
-                    ...buildFrontendProductTemplateValues(template, frontendDesign),
+                    ...designValues,
                   };
+                  const designReadiness = buildProductDesignReadiness(designValues);
                   const manifestText = JSON.stringify({
                     schemaVersion: 'backy.frontend-product-template.v1',
                     template,
+                    designReadiness,
                     product: {
                       slug: blueprint.slug,
                       status: 'draft',
@@ -4314,6 +4969,29 @@ function ProductsRoute() {
                         {template.routePattern ? (
                           <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">{template.routePattern}</span>
                         ) : null}
+                      </div>
+                      <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs" data-testid="products-frontend-template-design-readiness">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium text-foreground">Editable design state</span>
+                          <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', productLaunchReadinessBadgeClass(designReadiness.status))}>
+                            {formatProductLaunchReadinessStatus(designReadiness.status)}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <span className="rounded bg-background px-2 py-1 text-muted-foreground">{designReadiness.counts.elements} elements</span>
+                          <span className="rounded bg-background px-2 py-1 text-muted-foreground">{designReadiness.counts.animations} animations</span>
+                          <span className="rounded bg-background px-2 py-1 text-muted-foreground">{designReadiness.counts.assets} assets</span>
+                          <span className="rounded bg-background px-2 py-1 text-muted-foreground">{designReadiness.counts.bindingHints} bindings</span>
+                        </div>
+                        {designReadiness.missing.length > 0 ? (
+                          <div className="mt-2 text-[11px] text-amber-700">
+                            Missing {designReadiness.missing.join(', ')}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-[11px] text-muted-foreground">
+                            Template carries content, animation, and editable binding state into the created product record.
+                          </div>
+                        )}
                       </div>
                       <div className="mt-4 grid gap-2 text-xs">
                         <div className="flex items-center justify-between gap-3 rounded border border-border bg-muted/40 px-2.5 py-2">
@@ -4929,7 +5607,12 @@ function ProductsRoute() {
                         </span>
                       </label>
                     </div>
-                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_260px]">
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_minmax(0,1fr)_260px]">
+                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="products-provider-certification-site-target">
+                        <span className="font-semibold text-foreground">Certification site id</span>
+                        <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{activeSiteId}</div>
+                        <div className="mt-1 text-[11px] leading-4 text-muted-foreground">Emits BACKY_COMMERCE_CERTIFY_SITE_ID.</div>
+                      </div>
                       <label className="text-xs">
                         <span className="font-semibold text-foreground">External target URL</span>
                         <input
@@ -5086,6 +5769,121 @@ function ProductsRoute() {
                     </div>
                     <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
                       {productProviderCertificationEvidence.secretHandling}
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="products-provider-certification-evidence-packet">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-foreground">Certification evidence packet</div>
+                        <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                          Redacted operator attachment manifest for the selected provider families, required inputs, scenario attachments, and capture sources.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                          {providerCertificationEvidencePacket.schemaVersion}
+                        </span>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                          providerCertificationEvidencePacket.status === 'evidence-complete'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : providerCertificationEvidencePacket.status === 'needs-credentials'
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-amber-50 text-amber-700',
+                        )}>
+                          {providerCertificationEvidencePacket.status}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyText(providerCertificationEvidencePacketText, 'Products provider certification evidence packet')}
+                          disabled={isProductsAccessBusy || !canExportProducts || !providerCertificationHasSelectedFamily}
+                          title={!canExportProducts ? exportPermissionTitle : !providerCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined}
+                          iconStart={<Copy className="size-4" />}
+                          data-testid="products-provider-certification-evidence-packet-copy-button"
+                        >
+                          Copy evidence packet
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Selected families</div>
+                        <div className="mt-1 text-sm font-semibold text-foreground">{providerCertificationEvidencePacket.selectedFamilies.length}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {providerCertificationEvidencePacket.selectedFamilies.length > 0 ? providerCertificationEvidencePacket.selectedFamilies.map((family) => (
+                            <span key={family} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                              {family}
+                            </span>
+                          )) : (
+                            <span className="text-[11px] text-muted-foreground">No families selected</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Credential gaps</div>
+                        <div className="mt-1 text-sm font-semibold text-foreground">{providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length}</div>
+                        <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                          {providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length > 0
+                            ? providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.join(', ')
+                            : 'Selected families have runtime credential evidence.'}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Scenario attachments</div>
+                        <div className="mt-1 text-sm font-semibold text-foreground">
+                          {providerCertificationEvidencePacket.scenarioAttachments.filter((scenario) => scenario.status === 'covered').length}/{providerCertificationEvidencePacket.scenarioAttachments.length}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                          {providerCertificationEvidencePacket.redactionPolicy.allowedEvidence.slice(0, 3).join(' | ')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                      {providerCertificationEvidencePacket.operatorArtifacts.map((artifact) => (
+                        <div key={artifact.key} className="rounded-md border border-border bg-card px-3 py-2">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <div className="font-medium text-foreground">{artifact.family}</div>
+                              <div className="mt-0.5 text-[11px] text-muted-foreground">{artifact.providerAlias} · {artifact.captureSource}</div>
+                            </div>
+                            <span className={cn(
+                              'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                              artifact.status === 'ready-to-run' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
+                            )}>
+                              {artifact.status}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {artifact.expectedArtifacts.map((expectedArtifact) => (
+                              <span key={`${artifact.key}-${expectedArtifact}`} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {expectedArtifact}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Scenario attachments</div>
+                      <div className="mt-2 grid gap-1 md:grid-cols-2 xl:grid-cols-4">
+                        {providerCertificationEvidencePacket.scenarioAttachments.map((scenario) => (
+                          <div key={scenario.key} className="rounded bg-background px-2 py-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-foreground">{scenario.label}</span>
+                              <span className={cn(
+                                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
+                                scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                              )}>
+                                {scenario.evidenceCount}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                      {providerCertificationEvidencePacket.secretHandling}
                     </div>
                   </div>
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -6011,7 +6809,7 @@ function ProductsRoute() {
               icon={<Package className="size-4" />}
             />
             <PanelContent>
-              <form onSubmit={saveProduct}>
+              <form onSubmit={saveProduct} noValidate>
                 <fieldset disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} className={cn('space-y-4', (isProductsAccessBusy || !canEditProducts) && 'opacity-70')}>
                 <Field label="Title">
                   <input
@@ -6022,9 +6820,17 @@ function ProductsRoute() {
                       slug: current.slug || slugify(event.target.value),
                     }))}
                     required
+                    aria-invalid={Boolean(productTitleInlineError)}
+                    aria-describedby={productTitleInlineError ? 'products-title-error' : undefined}
+                    data-testid="products-title-input"
                     className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     placeholder="Backy Pro Template"
                   />
+                  {productTitleInlineError ? (
+                    <span id="products-title-error" className="block text-xs text-destructive" data-testid="products-title-error">
+                      {productTitleInlineError}
+                    </span>
+                  ) : null}
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Slug">
@@ -6040,9 +6846,17 @@ function ProductsRoute() {
                       value={formState.sku}
                       onChange={(event) => setFormState((current) => ({ ...current, sku: event.target.value }))}
                       required
+                      aria-invalid={Boolean(productSkuInlineError)}
+                      aria-describedby={productSkuInlineError ? 'products-sku-error' : undefined}
+                      data-testid="products-sku-input"
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                       placeholder="BKY-001"
                     />
+                    {productSkuInlineError ? (
+                      <span id="products-sku-error" className="block text-xs text-destructive" data-testid="products-sku-error">
+                        {productSkuInlineError}
+                      </span>
+                    ) : null}
                   </Field>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -6120,6 +6934,9 @@ function ProductsRoute() {
                       aria-label="Variant title"
                       value={variantDraft.title}
                       onChange={(event) => setVariantDraft((current) => ({ ...current, title: event.target.value }))}
+                      aria-invalid={Boolean(variantDraftIdentityInlineError)}
+                      aria-describedby={variantDraftIdentityInlineError ? 'products-variant-identity-error' : undefined}
+                      data-testid="products-variant-title-input"
                       className="rounded-lg border bg-background px-3 py-2.5 text-sm"
                       placeholder="Variant name"
                     />
@@ -6127,6 +6944,9 @@ function ProductsRoute() {
                       aria-label="Variant option"
                       value={variantDraft.option}
                       onChange={(event) => setVariantDraft((current) => ({ ...current, option: event.target.value }))}
+                      aria-invalid={Boolean(variantDraftIdentityInlineError)}
+                      aria-describedby={variantDraftIdentityInlineError ? 'products-variant-identity-error' : undefined}
+                      data-testid="products-variant-option-input"
                       className="rounded-lg border bg-background px-3 py-2.5 text-sm"
                       placeholder="Size, tier, color"
                     />
@@ -6137,6 +6957,9 @@ function ProductsRoute() {
                       step="0.01"
                       value={variantDraft.price}
                       onChange={(event) => setVariantDraft((current) => ({ ...current, price: event.target.value }))}
+                      aria-invalid={Boolean(variantDraftPriceInlineError)}
+                      aria-describedby={variantDraftPriceInlineError ? 'products-variant-price-error' : undefined}
+                      data-testid="products-variant-price-input"
                       className="rounded-lg border bg-background px-3 py-2.5 text-sm"
                       placeholder="Price"
                     />
@@ -6146,17 +6969,36 @@ function ProductsRoute() {
                       min="0"
                       value={variantDraft.inventory}
                       onChange={(event) => setVariantDraft((current) => ({ ...current, inventory: event.target.value }))}
+                      aria-invalid={Boolean(variantDraftInventoryInlineError)}
+                      aria-describedby={variantDraftInventoryInlineError ? 'products-variant-inventory-error' : undefined}
+                      data-testid="products-variant-inventory-input"
                       className="rounded-lg border bg-background px-3 py-2.5 text-sm"
                       placeholder="Stock"
                     />
                     <Button
                       variant="outline"
                       onClick={addProductVariant}
-                      disabled={(!variantDraft.title.trim() && !variantDraft.option.trim()) || productVariants.length >= PRODUCT_VARIANT_LIMIT}
+                      disabled={productVariants.length >= PRODUCT_VARIANT_LIMIT || isProductsAccessBusy || !canEditProducts}
+                      data-testid="products-variant-add"
                     >
                       Add
                     </Button>
                   </div>
+                  {(variantDraftIdentityInlineError || variantDraftPriceInlineError || variantDraftInventoryInlineError) ? (
+                    <div className="grid gap-1 text-xs text-destructive md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_110px_110px_auto]">
+                      <span id="products-variant-identity-error" data-testid="products-variant-identity-error">
+                        {variantDraftIdentityInlineError}
+                      </span>
+                      <span aria-hidden="true" />
+                      <span id="products-variant-price-error" data-testid="products-variant-price-error">
+                        {variantDraftPriceInlineError}
+                      </span>
+                      <span id="products-variant-inventory-error" data-testid="products-variant-inventory-error">
+                        {variantDraftInventoryInlineError}
+                      </span>
+                      <span aria-hidden="true" />
+                    </div>
+                  ) : null}
                   <input
                     aria-label="Variant SKU"
                     value={variantDraft.sku}
@@ -6187,10 +7029,21 @@ function ProductsRoute() {
                       aria-label="Variant option matrix"
                       value={optionMatrixDraft.options}
                       onChange={(event) => setOptionMatrixDraft((current) => ({ ...current, options: event.target.value }))}
+                      aria-invalid={Boolean(optionMatrixInlineError)}
+                      aria-describedby={optionMatrixInlineError ? 'products-variant-matrix-options-error' : undefined}
                       className="mt-3 min-h-20 w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm"
                       placeholder={'Size: S, M, L\nColor: Black, White'}
                       disabled={isProductsAccessBusy || !canEditProducts}
                     />
+                    {optionMatrixInlineError ? (
+                      <p
+                        id="products-variant-matrix-options-error"
+                        className="mt-1 text-xs text-destructive"
+                        data-testid="products-variant-matrix-options-error"
+                      >
+                        {optionMatrixInlineError}
+                      </p>
+                    ) : null}
                     <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_120px_120px_auto]">
                       <input
                         data-testid="products-variant-matrix-sku-prefix"
@@ -6209,6 +7062,8 @@ function ProductsRoute() {
                         step="0.01"
                         value={optionMatrixDraft.price}
                         onChange={(event) => setOptionMatrixDraft((current) => ({ ...current, price: event.target.value }))}
+                        aria-invalid={Boolean(optionMatrixPriceInlineError)}
+                        aria-describedby={optionMatrixPriceInlineError ? 'products-variant-matrix-price-error' : undefined}
                         className="rounded-lg border bg-background px-3 py-2.5 text-sm"
                         placeholder="Price"
                         disabled={isProductsAccessBusy || !canEditProducts}
@@ -6220,6 +7075,8 @@ function ProductsRoute() {
                         min="0"
                         value={optionMatrixDraft.inventory}
                         onChange={(event) => setOptionMatrixDraft((current) => ({ ...current, inventory: event.target.value }))}
+                        aria-invalid={Boolean(optionMatrixInventoryInlineError)}
+                        aria-describedby={optionMatrixInventoryInlineError ? 'products-variant-matrix-inventory-error' : undefined}
                         className="rounded-lg border bg-background px-3 py-2.5 text-sm"
                         placeholder="Stock"
                         disabled={isProductsAccessBusy || !canEditProducts}
@@ -6227,12 +7084,24 @@ function ProductsRoute() {
                       <Button
                         variant="outline"
                         onClick={generateVariantMatrix}
-                        disabled={!optionMatrixDraft.options.trim() || productVariants.length >= PRODUCT_VARIANT_LIMIT || isProductsAccessBusy || !canEditProducts}
+                        disabled={productVariants.length >= PRODUCT_VARIANT_LIMIT || isProductsAccessBusy || !canEditProducts}
                         data-testid="products-variant-matrix-generate"
                       >
                         Generate
                       </Button>
                     </div>
+                    {(optionMatrixPriceInlineError || optionMatrixInventoryInlineError) ? (
+                      <div className="mt-1 grid gap-1 text-xs text-destructive md:grid-cols-[minmax(0,1fr)_120px_120px_auto]">
+                        <span aria-hidden="true" />
+                        <span id="products-variant-matrix-price-error" data-testid="products-variant-matrix-price-error">
+                          {optionMatrixPriceInlineError}
+                        </span>
+                        <span id="products-variant-matrix-inventory-error" data-testid="products-variant-matrix-inventory-error">
+                          {optionMatrixInventoryInlineError}
+                        </span>
+                        <span aria-hidden="true" />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -6304,7 +7173,11 @@ function ProductsRoute() {
                       <input
                         aria-label="Digital delivery URL"
                         value={formState.downloadUrl}
-                        onChange={(event) => setFormState((current) => ({ ...current, downloadUrl: event.target.value }))}
+                        onChange={(event) => setFormState((current) => ({
+                          ...current,
+                          ...clearProductDownloadMediaState(),
+                          downloadUrl: event.target.value,
+                        }))}
                         className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2.5 text-sm"
                         placeholder="https://downloads.example.com/product.zip"
                       />
@@ -6312,6 +7185,34 @@ function ProductsRoute() {
                         File
                       </Button>
                     </div>
+                    {formState.downloadMediaId ? (
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2" data-testid="products-download-media-binding">
+                        <div className="min-w-0 text-xs">
+                          <div className="truncate font-medium text-foreground">{formState.downloadMediaName || formState.downloadMediaId}</div>
+                          <div className="mt-0.5 truncate text-muted-foreground">
+                            {[
+                              formState.downloadMediaId,
+                              formState.downloadMediaType || 'file',
+                              formState.downloadMediaFolderPath,
+                              formState.downloadMediaVisibility,
+                              formState.downloadMediaScope,
+                            ].filter(Boolean).join(' · ')}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setFormState((current) => ({
+                            ...current,
+                            ...clearProductDownloadMediaState(),
+                          }))}
+                          disabled={isProductsAccessBusy || !canEditProducts}
+                          data-testid="products-download-media-clear"
+                        >
+                          Clear binding
+                        </Button>
+                      </div>
+                    ) : null}
                   </Field>
                   <Field label="Checkout URL">
                     <input
@@ -6732,6 +7633,63 @@ function ProductsRoute() {
                       <div className="mt-1 truncate text-sm font-semibold text-foreground">{selectedProductLaunchReadiness.product.title || 'No product selected'}</div>
                     </div>
                   </div>
+                  <div
+                    className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs"
+                    data-testid="products-sellability-impact"
+                    data-schema-version={selectedProductStorefrontHandoff.sellabilityImpact.schemaVersion}
+                    data-product-status={selectedProductStorefrontHandoff.sellabilityImpact.product.status}
+                    data-blocker-count={selectedProductStorefrontHandoff.sellabilityImpact.readiness.blockerCount}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-foreground">Sellability impact</div>
+                        <div className="mt-0.5 text-muted-foreground">
+                          {selectedProductStorefrontHandoff.sellabilityImpact.product.path || 'No saved product'} · {selectedProductStorefrontHandoff.sellabilityImpact.checkout.mode} · {selectedProductStorefrontHandoff.sellabilityImpact.readiness.blockerCount} blocker{selectedProductStorefrontHandoff.sellabilityImpact.readiness.blockerCount === 1 ? '' : 's'}.
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void copyText(selectedProductSellabilityImpactText, 'Product sellability impact')}
+                        disabled={isProductsAccessBusy || !canExportProducts}
+                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="products-sellability-impact-copy-button"
+                      >
+                        Copy impact
+                      </Button>
+                    </div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-3">
+                      <div>
+                        <span className="font-medium text-foreground">Publish</span>
+                        <div className={selectedProductStorefrontHandoff.sellabilityImpact.actions.publish.allowed ? 'text-emerald-700' : 'text-amber-700'}>
+                          {selectedProductStorefrontHandoff.sellabilityImpact.actions.publish.allowed ? 'Allowed' : selectedProductStorefrontHandoff.sellabilityImpact.actions.publish.disabledReason}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="font-medium text-foreground">Design</span>
+                        <div>{formatProductLaunchReadinessStatus(selectedProductStorefrontHandoff.sellabilityImpact.designReadiness.status)} · {selectedProductStorefrontHandoff.sellabilityImpact.designReadiness.counts.elements} elements</div>
+                      </div>
+                      <div>
+                        <span className="font-medium text-foreground">Provider sync</span>
+                        <div>{selectedProductStorefrontHandoff.sellabilityImpact.providerSync.status} · {selectedProductStorefrontHandoff.sellabilityImpact.providerSync.executionMode}</div>
+                      </div>
+                    </div>
+                    {selectedProductStorefrontHandoff.sellabilityImpact.readiness.blockingChecks.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1" data-testid="products-sellability-impact-blockers">
+                        {selectedProductStorefrontHandoff.sellabilityImpact.readiness.blockingChecks.slice(0, 4).map((check) => (
+                          <span key={check.key} className="rounded bg-red-50 px-1.5 py-0.5 text-red-700">
+                            {check.label}
+                          </span>
+                        ))}
+                        {selectedProductStorefrontHandoff.sellabilityImpact.readiness.blockingChecks.length > 4 ? (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                            +{selectedProductStorefrontHandoff.sellabilityImpact.readiness.blockingChecks.length - 4} more
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="mt-3 grid gap-2 lg:grid-cols-2">
                     {selectedProductLaunchReadiness.checks.map((check) => (
                       <div
@@ -6951,17 +7909,21 @@ function ProductsRoute() {
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
                           event.preventDefault();
-                          addGalleryImageUrl(galleryImageDraft);
+                          addGalleryImageDraft();
                         }
                       }}
+                      aria-invalid={Boolean(galleryImageInlineError)}
+                      aria-describedby={galleryImageInlineError ? 'products-gallery-image-url-error' : undefined}
+                      data-testid="products-gallery-image-url-input"
                       className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2.5 text-sm"
                       placeholder="https://..."
                     />
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => addGalleryImageUrl(galleryImageDraft)}
-                        disabled={!galleryImageDraft.trim() || galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT}
+                        onClick={addGalleryImageDraft}
+                        disabled={galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT || isProductsAccessBusy || !canEditProducts}
+                        data-testid="products-gallery-image-url-add"
                       >
                         Add URL
                       </Button>
@@ -6975,6 +7937,15 @@ function ProductsRoute() {
                       </Button>
                     </div>
                   </div>
+                  {galleryImageInlineError ? (
+                    <p
+                      id="products-gallery-image-url-error"
+                      className="text-xs text-destructive"
+                      data-testid="products-gallery-image-url-error"
+                    >
+                      {galleryImageInlineError}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
                   <Field label="Category">
@@ -7045,12 +8016,20 @@ function ProductsRoute() {
                         value={formState.scheduledAt}
                         min={minimumScheduledAt}
                         onChange={(event) => setFormState((current) => ({ ...current, scheduledAt: event.target.value }))}
-                        aria-invalid={Boolean(scheduledProductDateError)}
+                        aria-invalid={Boolean(scheduledProductInlineError)}
+                        aria-describedby={scheduledProductInlineError ? 'products-scheduled-at-error' : undefined}
+                        data-testid="products-scheduled-at-input"
                         required
                         className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                       />
-                      {scheduledProductDateError ? (
-                        <p className="mt-1 text-xs text-destructive">{scheduledProductDateError}</p>
+                      {scheduledProductInlineError ? (
+                        <p
+                          id="products-scheduled-at-error"
+                          className="mt-1 text-xs text-destructive"
+                          data-testid="products-scheduled-at-error"
+                        >
+                          {scheduledProductInlineError}
+                        </p>
                       ) : null}
                     </Field>
                   )}
@@ -7087,7 +8066,7 @@ function ProductsRoute() {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={resetForm} disabled={isProductsAccessBusy || !canEditProducts}>Clear</Button>
-                  <Button type="submit" variant="primary" disabled={isProductsAccessBusy || !canEditProducts || !formState.title.trim() || !formState.sku.trim() || Boolean(scheduledProductDateError)} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Package className="size-4" />}>
+                  <Button type="submit" variant="primary" disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Package className="size-4" />}>
                     {isSaving ? 'Saving...' : selectedProduct ? 'Save Product' : 'Create Product'}
                   </Button>
                 </div>
@@ -7192,13 +8171,13 @@ function ProductsRoute() {
           if (isProductsBusy) return;
           if (!canEditProducts || !canViewMedia) return;
 
-          const deliveryUrl = asset.url || getPublicMediaFileUrl(asset.id, activeSiteId);
           if (mediaPickerTarget === 'download') {
-            setFormState((current) => ({ ...current, downloadUrl: deliveryUrl }));
-            setNotice(`Attached ${asset.name} to the digital delivery field.`);
+            setFormState((current) => ({ ...current, ...productDownloadMediaState(asset, activeSiteId) }));
+            setNotice(`Attached ${asset.name} (${asset.id}) to the digital delivery field.`);
             return;
           }
 
+          const deliveryUrl = asset.url || getPublicMediaFileUrl(asset.id, activeSiteId);
           if (mediaPickerTarget === 'gallery') {
             if (addGalleryImageUrl(deliveryUrl)) {
               setNotice(`Added ${asset.name} to the product gallery.`);
@@ -7729,6 +8708,17 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
   inventoryPolicy: asInventoryPolicy(readProductValue(product.values, 'inventoryPolicy')),
   productType: asProductType(readProductValue(product.values, 'productType')),
   downloadUrl: String(readProductValue(product.values, 'downloadUrl', '') || ''),
+  downloadMediaId: String(readProductValue(product.values, 'downloadMediaId', '') || ''),
+  downloadMediaName: String(readProductValue(product.values, 'downloadMediaName', '') || ''),
+  downloadMediaType: String(readProductValue(product.values, 'downloadMediaType', '') || ''),
+  downloadMediaFolderId: String(readProductValue(product.values, 'downloadMediaFolderId', '') || ''),
+  downloadMediaFolderPath: String(readProductValue(product.values, 'downloadMediaFolderPath', '') || ''),
+  downloadMediaVisibility: String(readProductValue(product.values, 'downloadMediaVisibility', '') || ''),
+  downloadMediaScope: String(readProductValue(product.values, 'downloadMediaScope', '') || ''),
+  downloadMediaScopeTargetId: String(readProductValue(product.values, 'downloadMediaScopeTargetId', '') || ''),
+  downloadMediaOrganization: isPlainRecord(readProductValue(product.values, 'downloadMediaOrganization'))
+    ? readProductValue(product.values, 'downloadMediaOrganization') as Record<string, unknown>
+    : null,
   checkoutUrl: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
   subscriptionEnabled: Boolean(readProductValue(product.values, 'subscriptionEnabled')),
   subscriptionInterval: asSubscriptionInterval(readProductValue(product.values, 'subscriptionInterval')),
@@ -7754,6 +8744,14 @@ const productToForm = (product: CollectionRecord): ProductFormState => ({
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+);
+
+const cloneJsonRecord = (value: unknown): Record<string, unknown> | undefined => (
+  isPlainRecord(value) ? JSON.parse(JSON.stringify(value)) as Record<string, unknown> : undefined
+);
+
+const cloneJsonArray = <T = unknown>(value: unknown): T[] | undefined => (
+  Array.isArray(value) ? JSON.parse(JSON.stringify(value)) as T[] : undefined
 );
 
 const productProviderSync = (product: CollectionRecord | null): CommerceProductProviderSyncResult | null => {
@@ -7787,6 +8785,14 @@ const optionalBooleanFromRecord = (record: Record<string, unknown> | undefined, 
   const value = record?.[key];
   return typeof value === 'boolean' ? value : undefined;
 };
+
+const optionalRecordFromRecord = (record: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined => (
+  cloneJsonRecord(record?.[key])
+);
+
+const optionalArrayFromRecord = <T = unknown>(record: Record<string, unknown> | undefined, key: string): T[] | undefined => (
+  cloneJsonArray<T>(record?.[key])
+);
 
 const optionalStringListFromRecord = (record: Record<string, unknown> | undefined, key: string): string[] | undefined => {
   const value = record?.[key];
@@ -7840,6 +8846,15 @@ const buildFrontendProductTemplateBlueprint = (template: SiteFrontendDesignTempl
       [productFieldKey('inventoryPolicy')]: asInventoryPolicy(optionalStringFromRecord(content, 'inventoryPolicy')),
       [productFieldKey('productType')]: productType,
       [productFieldKey('downloadUrl')]: optionalStringFromRecord(content, 'downloadUrl') || '',
+      [productFieldKey('downloadMediaId')]: optionalStringFromRecord(content, 'downloadMediaId') || '',
+      [productFieldKey('downloadMediaName')]: optionalStringFromRecord(content, 'downloadMediaName') || '',
+      [productFieldKey('downloadMediaType')]: optionalStringFromRecord(content, 'downloadMediaType') || '',
+      [productFieldKey('downloadMediaFolderId')]: optionalStringFromRecord(content, 'downloadMediaFolderId') || '',
+      [productFieldKey('downloadMediaFolderPath')]: optionalStringFromRecord(content, 'downloadMediaFolderPath') || '',
+      [productFieldKey('downloadMediaVisibility')]: optionalStringFromRecord(content, 'downloadMediaVisibility') || '',
+      [productFieldKey('downloadMediaScope')]: optionalStringFromRecord(content, 'downloadMediaScope') || '',
+      [productFieldKey('downloadMediaScopeTargetId')]: optionalStringFromRecord(content, 'downloadMediaScopeTargetId') || '',
+      [productFieldKey('downloadMediaOrganization')]: optionalRecordFromRecord(content, 'downloadMediaOrganization') || null,
       [productFieldKey('checkoutUrl')]: optionalStringFromRecord(content, 'checkoutUrl') || '',
       [productFieldKey('subscriptionEnabled')]: optionalBooleanFromRecord(content, 'subscriptionEnabled') ?? false,
       [productFieldKey('subscriptionInterval')]: asSubscriptionInterval(optionalStringFromRecord(content, 'subscriptionInterval')),
@@ -7866,16 +8881,52 @@ const buildFrontendProductTemplateBlueprint = (template: SiteFrontendDesignTempl
 const buildFrontendProductTemplateValues = (
   template: SiteFrontendDesignTemplate,
   frontendDesign: SiteFrontendDesignContract | null,
-): Record<string, unknown> => ({
-  frontendDesignTemplateId: template.id,
-  frontendDesignTemplateName: template.name,
-  frontendDesignSource: frontendDesign?.source,
-  frontendDesignBindingHints: template.bindingHints || [],
-  ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
-  ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
-  ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
-  ...(frontendDesign?.tokens?.customCss ? { frontendDesignCustomCss: frontendDesign.tokens.customCss } : {}),
-});
+): Record<string, unknown> => {
+  const content = frontendTemplateContent(template);
+  const metadata = optionalRecordFromRecord(content, 'metadata') || {};
+  const contentDocument = optionalRecordFromRecord(content, 'contentDocument');
+  const elements = optionalArrayFromRecord(content, 'elements');
+  const canvasSize = optionalRecordFromRecord(content, 'canvasSize') || optionalRecordFromRecord(metadata, 'canvasSize');
+  const themeTokenRefs = optionalRecordFromRecord(content, 'themeTokenRefs') || optionalRecordFromRecord(metadata, 'themeTokenRefs');
+  const assets = optionalArrayFromRecord(content, 'assets');
+  const animations = optionalArrayFromRecord(content, 'animations') || optionalArrayFromRecord(metadata, 'animations');
+  const interactions = optionalArrayFromRecord(content, 'interactions');
+  const dataBindings = optionalRecordFromRecord(content, 'dataBindings') || optionalRecordFromRecord(metadata, 'dataBindings');
+  const editableMap = optionalRecordFromRecord(content, 'editableMap') || optionalRecordFromRecord(metadata, 'editableMap') || cloneJsonRecord(frontendDesign?.editableMap);
+  const seo = optionalRecordFromRecord(content, 'seo') || optionalRecordFromRecord(metadata, 'seo');
+  const customCss = optionalStringFromRecord(content, 'customCSS')
+    || optionalStringFromRecord(content, 'customCss')
+    || optionalStringFromRecord(metadata, 'customCSS')
+    || optionalStringFromRecord(metadata, 'customCss')
+    || frontendDesign?.tokens?.customCss;
+  const customJs = optionalStringFromRecord(content, 'customJS')
+    || optionalStringFromRecord(content, 'customJs')
+    || optionalStringFromRecord(metadata, 'customJS')
+    || optionalStringFromRecord(metadata, 'customJs');
+
+  return {
+    frontendDesignTemplateId: template.id,
+    frontendDesignTemplateName: template.name,
+    frontendDesignSource: frontendDesign?.source,
+    frontendDesignBindingHints: template.bindingHints || [],
+    ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
+    ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
+    ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
+    ...(customCss ? { frontendDesignCustomCss: customCss } : {}),
+    ...(customJs ? { frontendDesignCustomJs: customJs } : {}),
+    ...(contentDocument ? { frontendDesignContentDocument: contentDocument } : {}),
+    ...(elements ? { frontendDesignElements: elements } : {}),
+    ...(canvasSize ? { frontendDesignCanvasSize: canvasSize } : {}),
+    ...(themeTokenRefs ? { frontendDesignThemeTokenRefs: themeTokenRefs } : {}),
+    ...(assets ? { frontendDesignAssets: assets } : {}),
+    ...(animations ? { frontendDesignAnimations: animations } : {}),
+    ...(interactions ? { frontendDesignInteractions: interactions } : {}),
+    ...(dataBindings ? { frontendDesignDataBindings: dataBindings } : {}),
+    ...(editableMap ? { frontendDesignEditableMap: editableMap } : {}),
+    ...(seo ? { frontendDesignSeo: seo } : {}),
+    ...(Object.keys(metadata).length > 0 ? { frontendDesignMetadata: metadata } : {}),
+  };
+};
 
 const FRONTEND_PRODUCT_VALUE_KEYS = [
   'frontendDesignTemplateId',
@@ -7886,6 +8937,18 @@ const FRONTEND_PRODUCT_VALUE_KEYS = [
   'frontendDesignTokens',
   'frontendDesignChrome',
   'frontendDesignCustomCss',
+  'frontendDesignCustomJs',
+  'frontendDesignContentDocument',
+  'frontendDesignElements',
+  'frontendDesignCanvasSize',
+  'frontendDesignThemeTokenRefs',
+  'frontendDesignAssets',
+  'frontendDesignAnimations',
+  'frontendDesignInteractions',
+  'frontendDesignDataBindings',
+  'frontendDesignEditableMap',
+  'frontendDesignSeo',
+  'frontendDesignMetadata',
 ] as const;
 
 const PRODUCT_PROVIDER_METADATA_KEYS = [
@@ -7912,11 +8975,65 @@ const getPersistedProductProviderValues = (product: CollectionRecord | null): Re
   );
 };
 
-const getProductFrontendTemplateId = (product: CollectionRecord): string | undefined => (
-  typeof product.values.frontendDesignTemplateId === 'string'
-    ? product.values.frontendDesignTemplateId
-    : undefined
-);
+const getProductFrontendTemplateId = (product: CollectionRecord): string | undefined => {
+  const designEnvelope = optionalRecordFromRecord(product.values, 'design');
+  return optionalStringFromRecord(designEnvelope, 'templateId')
+    || optionalStringFromRecord(designEnvelope, 'frontendDesignTemplateId')
+    || optionalStringFromRecord(product.values, 'frontendDesignTemplateId');
+};
+
+const buildProductStorefrontDesign = (values: Record<string, unknown>): Record<string, unknown> | null => {
+  const designEnvelope = optionalRecordFromRecord(values, 'design');
+  const designValue = (key: string, frontendKey: string): Record<string, unknown> => ({
+    [frontendKey]: designEnvelope?.[key] ?? designEnvelope?.[frontendKey] ?? values[frontendKey],
+  });
+  const templateId = optionalStringFromRecord(designValue('templateId', 'frontendDesignTemplateId'), 'frontendDesignTemplateId');
+  const templateName = optionalStringFromRecord(designValue('templateName', 'frontendDesignTemplateName'), 'frontendDesignTemplateName');
+  const source = optionalRecordFromRecord(designValue('source', 'frontendDesignSource'), 'frontendDesignSource');
+  const bindingHints = optionalArrayFromRecord(designValue('bindingHints', 'frontendDesignBindingHints'), 'frontendDesignBindingHints');
+  const routePattern = optionalStringFromRecord(designValue('routePattern', 'frontendDesignRoutePattern'), 'frontendDesignRoutePattern');
+  const tokens = optionalRecordFromRecord(designValue('tokens', 'frontendDesignTokens'), 'frontendDesignTokens');
+  const chrome = optionalRecordFromRecord(designValue('chrome', 'frontendDesignChrome'), 'frontendDesignChrome');
+  const customCss = optionalStringFromRecord(designValue('customCss', 'frontendDesignCustomCss'), 'frontendDesignCustomCss');
+  const customJs = optionalStringFromRecord(designValue('customJs', 'frontendDesignCustomJs'), 'frontendDesignCustomJs');
+  const contentDocument = optionalRecordFromRecord(designValue('contentDocument', 'frontendDesignContentDocument'), 'frontendDesignContentDocument');
+  const elements = optionalArrayFromRecord(designValue('elements', 'frontendDesignElements'), 'frontendDesignElements');
+  const canvasSize = optionalRecordFromRecord(designValue('canvasSize', 'frontendDesignCanvasSize'), 'frontendDesignCanvasSize');
+  const themeTokenRefs = optionalRecordFromRecord(designValue('themeTokenRefs', 'frontendDesignThemeTokenRefs'), 'frontendDesignThemeTokenRefs');
+  const assets = optionalArrayFromRecord(designValue('assets', 'frontendDesignAssets'), 'frontendDesignAssets');
+  const animations = optionalArrayFromRecord(designValue('animations', 'frontendDesignAnimations'), 'frontendDesignAnimations');
+  const interactions = optionalArrayFromRecord(designValue('interactions', 'frontendDesignInteractions'), 'frontendDesignInteractions');
+  const dataBindings = optionalRecordFromRecord(designValue('dataBindings', 'frontendDesignDataBindings'), 'frontendDesignDataBindings');
+  const editableMap = optionalRecordFromRecord(designValue('editableMap', 'frontendDesignEditableMap'), 'frontendDesignEditableMap');
+  const seo = optionalRecordFromRecord(designValue('seo', 'frontendDesignSeo'), 'frontendDesignSeo');
+  const metadata = optionalRecordFromRecord(designValue('metadata', 'frontendDesignMetadata'), 'frontendDesignMetadata');
+
+  const design = {
+    ...(designEnvelope ? { ...designEnvelope } : {}),
+    ...(templateId ? { templateId, frontendDesignTemplateId: templateId } : {}),
+    ...(templateName ? { templateName, frontendDesignTemplateName: templateName } : {}),
+    ...(source ? { source, frontendDesignSource: source } : {}),
+    ...(bindingHints ? { bindingHints, frontendDesignBindingHints: bindingHints } : {}),
+    ...(routePattern ? { routePattern, frontendDesignRoutePattern: routePattern } : {}),
+    ...(tokens ? { tokens, frontendDesignTokens: tokens } : {}),
+    ...(chrome ? { chrome, frontendDesignChrome: chrome } : {}),
+    ...(customCss ? { customCss, frontendDesignCustomCss: customCss } : {}),
+    ...(customJs ? { customJs, frontendDesignCustomJs: customJs } : {}),
+    ...(contentDocument ? { contentDocument, frontendDesignContentDocument: contentDocument } : {}),
+    ...(elements ? { elements, frontendDesignElements: elements } : {}),
+    ...(canvasSize ? { canvasSize, frontendDesignCanvasSize: canvasSize } : {}),
+    ...(themeTokenRefs ? { themeTokenRefs, frontendDesignThemeTokenRefs: themeTokenRefs } : {}),
+    ...(assets ? { assets, frontendDesignAssets: assets } : {}),
+    ...(animations ? { animations, frontendDesignAnimations: animations } : {}),
+    ...(interactions ? { interactions, frontendDesignInteractions: interactions } : {}),
+    ...(dataBindings ? { dataBindings, frontendDesignDataBindings: dataBindings } : {}),
+    ...(editableMap ? { editableMap, frontendDesignEditableMap: editableMap } : {}),
+    ...(seo ? { seo, frontendDesignSeo: seo } : {}),
+    ...(metadata ? { metadata, frontendDesignMetadata: metadata } : {}),
+  };
+
+  return Object.keys(design).length > 0 ? design : null;
+};
 
 const asProductType = (value: unknown): ProductFormState['productType'] => (
   value === 'digital' || value === 'service' || value === 'physical' ? value : 'physical'
@@ -8097,6 +9214,79 @@ const makeProductLaunchReadiness = ({
   };
 };
 
+const buildProductDesignReadiness = (
+  design: Record<string, unknown> | null,
+): ProductDesignReadiness => {
+  const designTemplateId = optionalStringFromRecord(design || undefined, 'templateId')
+    || optionalStringFromRecord(design || undefined, 'frontendDesignTemplateId');
+  const designElements = optionalArrayFromRecord(design || undefined, 'elements')
+    || optionalArrayFromRecord(design || undefined, 'frontendDesignElements')
+    || [];
+  const designAnimations = optionalArrayFromRecord(design || undefined, 'animations')
+    || optionalArrayFromRecord(design || undefined, 'frontendDesignAnimations')
+    || [];
+  const designAssets = optionalArrayFromRecord(design || undefined, 'assets')
+    || optionalArrayFromRecord(design || undefined, 'frontendDesignAssets')
+    || [];
+  const designEditableMap = optionalRecordFromRecord(design || undefined, 'editableMap')
+    || optionalRecordFromRecord(design || undefined, 'frontendDesignEditableMap');
+  const designDataBindings = optionalRecordFromRecord(design || undefined, 'dataBindings')
+    || optionalRecordFromRecord(design || undefined, 'frontendDesignDataBindings');
+  const designContentDocument = optionalRecordFromRecord(design || undefined, 'contentDocument')
+    || optionalRecordFromRecord(design || undefined, 'frontendDesignContentDocument');
+  const designBindingHints = optionalArrayFromRecord(design || undefined, 'bindingHints')
+    || optionalArrayFromRecord(design || undefined, 'frontendDesignBindingHints')
+    || [];
+  const hasDesign = Boolean(design);
+  const hasContentDocument = Boolean(designContentDocument);
+  const hasEditableMap = Boolean(designEditableMap);
+  const hasDataBindings = Boolean(designDataBindings);
+  const hasContentTree = hasContentDocument || designElements.length > 0;
+  const hasEditableBindings = hasEditableMap || hasDataBindings || designBindingHints.length > 0;
+  const missing = [
+    designTemplateId ? '' : 'templateId',
+    hasContentTree ? '' : 'contentDocumentOrElements',
+    hasEditableBindings ? '' : 'editableMapOrDataBindings',
+  ].filter(Boolean);
+  const status: ProductLaunchReadinessStatus = designTemplateId && hasContentTree && hasEditableBindings
+    ? 'ready'
+    : 'attention';
+
+  return {
+    schemaVersion: 'backy.product-design-readiness.v1',
+    status,
+    templateId: designTemplateId || null,
+    hasDesign,
+    hasContentDocument,
+    hasEditableMap,
+    hasDataBindings,
+    counts: {
+      elements: designElements.length,
+      animations: designAnimations.length,
+      assets: designAssets.length,
+      bindingHints: designBindingHints.length,
+    },
+    missing,
+    detail: status === 'ready'
+      ? `Template ${designTemplateId} exposes ${designElements.length} element${designElements.length === 1 ? '' : 's'}, ${designAnimations.length} animation${designAnimations.length === 1 ? '' : 's'}, and editable product bindings.`
+      : hasDesign
+        ? 'Product has partial frontend design metadata but is missing a template, content tree, editable map, data binding, or binding hints.'
+        : 'No product frontend design envelope is attached; custom frontends can render catalog data but cannot reopen an editable product design from this record.',
+    nextAction: 'Attach a product frontend template or save contentDocument/elements plus editableMap/dataBindings so external builders can edit the product page design.',
+    evidence: [
+      `template=${designTemplateId || 'missing'}`,
+      `elements=${designElements.length}`,
+      `animations=${designAnimations.length}`,
+      `assets=${designAssets.length}`,
+      `contentDocument=${hasContentDocument ? 'present' : 'missing'}`,
+      `editableMap=${hasEditableMap ? 'present' : 'missing'}`,
+      `dataBindings=${hasDataBindings ? 'present' : 'missing'}`,
+      `bindingHints=${designBindingHints.length}`,
+    ],
+    secretHandling: 'Design readiness reports counts, booleans, and editable design-state presence only; provider secrets, private orders, raw customer payloads, and digital delivery URLs are excluded.',
+  };
+};
+
 const buildProductLaunchReadiness = ({
   product,
   providerSync,
@@ -8152,11 +9342,15 @@ const buildProductLaunchReadiness = ({
   const currency = normalizeCurrency(String(readProductValue(values, 'currency', 'USD') || 'USD'));
   const productType = asProductType(readProductValue(values, 'productType'));
   const stockState = getProductStockState(values);
+  const storefrontDesign = buildProductStorefrontDesign(values);
+  const designReadiness = buildProductDesignReadiness(storefrontDesign);
   const imageUrl = String(readProductValue(values, 'imageUrl', '') || '').trim();
   const galleryImages = formatGalleryImages(readProductValue(values, 'galleryImages'));
   const variants = formatProductVariants(readProductValue(values, 'variants'));
   const checkoutUrl = String(readProductValue(values, 'checkoutUrl', '') || '').trim();
   const downloadUrl = String(readProductValue(values, 'downloadUrl', '') || '').trim();
+  const downloadMediaId = String(readProductValue(values, 'downloadMediaId', '') || '').trim();
+  const downloadConfigured = Boolean(downloadUrl || downloadMediaId);
   const shippingRequired = readProductValue(values, 'shippingRequired') !== false;
   const shippingProfile = String(readProductValue(values, 'shippingProfile', '') || '').trim();
   const weight = maybeFiniteNumber(readProductValue(values, 'weight'));
@@ -8178,7 +9372,7 @@ const buildProductLaunchReadiness = ({
       : 'blocked';
 
   const deliveryStatus: ProductLaunchReadinessStatus = productType === 'digital'
-    ? (downloadUrl ? 'ready' : 'blocked')
+    ? (downloadConfigured ? 'ready' : 'blocked')
     : productType === 'physical'
       ? (!shippingRequired || (shippingProfile && weight && weight > 0)
           ? 'ready'
@@ -8265,6 +9459,14 @@ const buildProductLaunchReadiness = ({
       evidence: [`image=${imageUrl ? 'present' : 'missing'}`, `galleryImages=${galleryImages.length}`],
     },
     {
+      key: 'frontend-design',
+      label: 'Custom frontend design',
+      status: designReadiness.status,
+      detail: designReadiness.detail,
+      action: designReadiness.nextAction,
+      evidence: designReadiness.evidence,
+    },
+    {
       key: 'checkout',
       label: 'Checkout handoff',
       status: checkoutReady ? 'ready' : 'blocked',
@@ -8281,7 +9483,7 @@ const buildProductLaunchReadiness = ({
       label: 'Delivery and fulfillment',
       status: deliveryStatus,
       detail: productType === 'digital'
-        ? (downloadUrl ? 'Digital delivery URL is attached.' : 'Digital product is missing a delivery/download URL.')
+        ? (downloadConfigured ? 'Digital delivery media or URL is attached.' : 'Digital product is missing a delivery/download media binding or URL.')
         : productType === 'physical'
           ? (!shippingRequired
               ? 'Physical product is marked as not requiring shipping.'
@@ -8293,8 +9495,8 @@ const buildProductLaunchReadiness = ({
           : shippingRequired
             ? 'Service product is still marked as shippable.'
             : 'Service product delivery does not require physical shipping.',
-      action: 'Add digital delivery URL, shipping profile and weight, or turn off shipping for services.',
-      evidence: [`productType=${productType}`, `shippingRequired=${shippingRequired}`, `shippingProfile=${shippingProfile || 'missing'}`, `downloadUrl=${downloadUrl ? 'present' : 'missing'}`],
+      action: 'Add digital delivery media or URL, shipping profile and weight, or turn off shipping for services.',
+      evidence: [`productType=${productType}`, `shippingRequired=${shippingRequired}`, `shippingProfile=${shippingProfile || 'missing'}`, `downloadUrl=${downloadUrl ? 'present' : 'missing'}`, `downloadMediaId=${downloadMediaId ? 'present' : 'missing'}`],
     },
     {
       key: 'seo-merchandising',
@@ -8339,6 +9541,221 @@ const buildProductLaunchReadiness = ({
   });
 };
 
+const buildProductSellabilityImpact = ({
+  activeSiteId,
+  product,
+  providerSync,
+  launchReadiness,
+  catalogApi,
+  productApi,
+  orderIntakeApi,
+  orderIntakeReady,
+  productApiReady,
+}: {
+  activeSiteId: string;
+  product: CollectionRecord | null;
+  providerSync: CommerceProductProviderSyncResult | null;
+  launchReadiness: ProductLaunchReadiness;
+  catalogApi: string;
+  productApi: string;
+  orderIntakeApi: string;
+  orderIntakeReady: boolean;
+  productApiReady: boolean;
+}): ProductSellabilityImpact => {
+  const generatedAt = new Date().toISOString();
+  const blockingChecks = launchReadiness.checks.filter((check) => check.status === 'blocked');
+  const attentionChecks = launchReadiness.checks.filter((check) => check.status === 'attention');
+  const baseProviderSync = {
+    provider: providerSync?.provider || 'not-run',
+    status: providerSync?.status || 'not-run',
+    executionMode: providerSync?.executionMode || 'none',
+    syncedAt: providerSync?.syncedAt || null,
+    hasProviderProductReference: Boolean(providerSync?.product?.id),
+    hasProviderPriceReference: Boolean(providerSync?.price?.id),
+  };
+
+  if (!product) {
+    return {
+      schemaVersion: 'backy.product-sellability-impact.v1',
+      generatedAt,
+      selectedSiteId: activeSiteId,
+      product: {
+        id: null,
+        slug: null,
+        title: '',
+        sku: '',
+        status: 'not-selected',
+        scheduledAt: null,
+        path: null,
+        productType: null,
+      },
+      readiness: {
+        schemaVersion: launchReadiness.schemaVersion,
+        status: launchReadiness.summary.status,
+        score: launchReadiness.summary.score,
+        blockerCount: launchReadiness.summary.blockerCount,
+        attentionCount: launchReadiness.summary.attentionCount,
+        blockingChecks,
+        attentionChecks,
+      },
+      storefront: {
+        catalogApi,
+        productApi,
+        orderIntakeApi,
+        productApiReady,
+        orderIntakeReady,
+      },
+      pricing: null,
+      inventory: null,
+      delivery: null,
+      checkout: {
+        orderIntakeReady,
+        directCheckoutUrlConfigured: false,
+        mode: orderIntakeReady ? 'backy-order-intake' : 'missing',
+      },
+      designReadiness: buildProductDesignReadiness(null),
+      providerSync: baseProviderSync,
+      actions: {
+        publish: {
+          allowed: false,
+          disabledReason: 'Select an existing product or save the current product before publishing.',
+        },
+        archive: {
+          allowed: false,
+          disabledReason: 'Select an existing product or save the current product before archiving.',
+        },
+        providerSync: {
+          allowed: false,
+          disabledReason: 'Select an existing product or save the current product before syncing provider catalog metadata.',
+        },
+        storefrontHandoff: {
+          allowed: false,
+          disabledReason: 'Select an existing product or save the current product before copying storefront handoff data.',
+        },
+      },
+      privacy: {
+        includesProviderSecrets: false,
+        includesPrivateOrders: false,
+        includesCustomerPayloads: false,
+        includesDigitalDeliveryUrl: false,
+        note: 'This sellability impact exposes product launch metadata, readiness, and action safety only.',
+      },
+    };
+  }
+
+  const values = product.values || {};
+  const title = String(readProductValue(values, 'title', product.slug) || product.slug).trim();
+  const sku = String(readProductValue(values, 'sku', '') || '').trim();
+  const productType = asProductType(readProductValue(values, 'productType'));
+  const price = toNumber(readProductValue(values, 'price'));
+  const currency = normalizeCurrency(String(readProductValue(values, 'currency', 'USD') || 'USD'));
+  const checkoutUrl = String(readProductValue(values, 'checkoutUrl', '') || '').trim();
+  const stockState = getProductStockState(values);
+  const downloadUrlConfigured = Boolean(String(readProductValue(values, 'downloadUrl', '') || '').trim());
+  const downloadMediaConfigured = Boolean(String(readProductValue(values, 'downloadMediaId', '') || '').trim());
+  const designReadiness = buildProductDesignReadiness(buildProductStorefrontDesign(values));
+  const hasLaunchBlockers = launchReadiness.summary.blockerCount > 0;
+  const publishDisabledReason = product.status === 'published'
+    ? 'Product is already published.'
+    : hasLaunchBlockers
+      ? blockingChecks[0]?.action || 'Resolve launch readiness blockers before publishing.'
+      : !productApiReady
+        ? 'Products collection is not ready for public catalog/detail API handoff.'
+        : null;
+  const providerSyncDisabledReason = !sku || price <= 0
+    ? 'Product SKU and a positive price are required before provider catalog sync.'
+    : null;
+
+  return {
+    schemaVersion: 'backy.product-sellability-impact.v1',
+    generatedAt,
+    selectedSiteId: activeSiteId,
+    product: {
+      id: product.id,
+      slug: product.slug,
+      title,
+      sku,
+      status: product.status,
+      scheduledAt: product.scheduledAt || null,
+      path: `/products/${product.slug}`,
+      productType,
+    },
+    readiness: {
+      schemaVersion: launchReadiness.schemaVersion,
+      status: launchReadiness.summary.status,
+      score: launchReadiness.summary.score,
+      blockerCount: launchReadiness.summary.blockerCount,
+      attentionCount: launchReadiness.summary.attentionCount,
+      blockingChecks,
+      attentionChecks,
+    },
+    storefront: {
+      catalogApi,
+      productApi,
+      orderIntakeApi,
+      productApiReady,
+      orderIntakeReady,
+    },
+    pricing: {
+      price,
+      currency,
+      ready: price > 0 && Boolean(currency),
+    },
+    inventory: {
+      inventory: stockState.inventory,
+      lowStockThreshold: stockState.lowStockThreshold,
+      inventoryPolicy: stockState.inventoryPolicy,
+      inStock: stockState.inStock,
+      lowStock: stockState.lowStock,
+      outOfStock: stockState.outOfStock,
+    },
+    delivery: {
+      productType,
+      shippingRequired: readProductValue(values, 'shippingRequired') !== false,
+      shippingProfile: String(readProductValue(values, 'shippingProfile', '') || '').trim(),
+      weight: maybeFiniteNumber(readProductValue(values, 'weight')),
+      downloadMediaConfigured,
+      downloadUrlConfigured,
+    },
+    checkout: {
+      orderIntakeReady,
+      directCheckoutUrlConfigured: Boolean(checkoutUrl),
+      mode: orderIntakeReady
+        ? 'backy-order-intake'
+        : checkoutUrl
+          ? 'direct-checkout-url'
+          : 'missing',
+    },
+    designReadiness,
+    providerSync: baseProviderSync,
+    actions: {
+      publish: {
+        allowed: product.status !== 'published' && !publishDisabledReason,
+        disabledReason: publishDisabledReason,
+      },
+      archive: {
+        allowed: product.status !== 'archived',
+        disabledReason: product.status === 'archived' ? 'Product is already archived.' : null,
+      },
+      providerSync: {
+        allowed: !providerSyncDisabledReason,
+        disabledReason: providerSyncDisabledReason,
+      },
+      storefrontHandoff: {
+        allowed: true,
+        disabledReason: null,
+      },
+    },
+    privacy: {
+      includesProviderSecrets: false,
+      includesPrivateOrders: false,
+      includesCustomerPayloads: false,
+      includesDigitalDeliveryUrl: false,
+      note: 'This sellability impact exposes product launch metadata, readiness, and action safety only.',
+    },
+  };
+};
+
 const buildProductStorefrontHandoff = ({
   activeSiteId,
   product,
@@ -8348,6 +9765,7 @@ const buildProductStorefrontHandoff = ({
   productApi,
   orderIntakeApi,
   productEventsApi,
+  providerSyncApi,
   orderIntakeReady,
 }: {
   activeSiteId: string;
@@ -8358,6 +9776,7 @@ const buildProductStorefrontHandoff = ({
   productApi: string;
   orderIntakeApi: string;
   productEventsApi: string;
+  providerSyncApi: string;
   orderIntakeReady: boolean;
 }): ProductStorefrontHandoff => {
   const base = {
@@ -8369,6 +9788,7 @@ const buildProductStorefrontHandoff = ({
       product: productApi,
       orderIntake: orderIntakeApi,
       events: productEventsApi,
+      providerSync: providerSyncApi,
     },
     checkout: {
       orderIntakeReady,
@@ -8383,6 +9803,17 @@ const buildProductStorefrontHandoff = ({
       hasProviderProductReference: Boolean(providerSync?.product?.id),
       hasProviderPriceReference: Boolean(providerSync?.price?.id),
     },
+    sellabilityImpact: buildProductSellabilityImpact({
+      activeSiteId,
+      product,
+      providerSync,
+      launchReadiness,
+      catalogApi,
+      productApi,
+      orderIntakeApi,
+      orderIntakeReady,
+      productApiReady: launchReadiness.storefront.productApiReady,
+    }),
     launchReadiness: {
       schemaVersion: launchReadiness.schemaVersion,
       status: launchReadiness.summary.status,
@@ -8394,8 +9825,11 @@ const buildProductStorefrontHandoff = ({
     privacy: {
       customerSafeFieldsOnly: true,
       includesProviderSecrets: false,
+      includesProviderResponses: false,
       includesPrivateOrders: false,
+      includesCustomerPayloads: false,
       includesDigitalDeliveryUrl: false,
+      includesRawCheckoutSessions: false,
       excludedFields: [
         'provider credentials',
         'providerResponse',
@@ -8416,6 +9850,8 @@ const buildProductStorefrontHandoff = ({
       inventory: null,
       media: null,
       merchandising: null,
+      design: null,
+      designReadiness: buildProductDesignReadiness(null),
       delivery: null,
       subscription: null,
     };
@@ -8428,8 +9864,13 @@ const buildProductStorefrontHandoff = ({
   const price = toNumber(readProductValue(values, 'price'));
   const compareAtPriceValue = readProductValue(values, 'compareAtPrice');
   const checkoutUrl = String(readProductValue(values, 'checkoutUrl', '') || '').trim();
+  const downloadConfigured = Boolean(
+    String(readProductValue(values, 'downloadUrl', '') || '').trim()
+    || String(readProductValue(values, 'downloadMediaId', '') || '').trim(),
+  );
   const stockState = getProductStockState(values);
   const description = String(readProductValue(values, 'description', '') || '').trim();
+  const design = buildProductStorefrontDesign(values);
 
   return {
     ...base,
@@ -8468,11 +9909,13 @@ const buildProductStorefrontHandoff = ({
       seoTitle: String(readProductValue(values, 'seoTitle', '') || title).trim(),
       descriptionChars: description.length,
     },
+    design,
+    designReadiness: buildProductDesignReadiness(design),
     delivery: {
       shippingRequired: readProductValue(values, 'shippingRequired') !== false,
       shippingProfile: String(readProductValue(values, 'shippingProfile', '') || '').trim(),
       weight: maybeFiniteNumber(readProductValue(values, 'weight')),
-      downloadUrlConfigured: Boolean(String(readProductValue(values, 'downloadUrl', '') || '').trim()),
+      downloadUrlConfigured: downloadConfigured,
       returnPolicyConfigured: Boolean(String(readProductValue(values, 'returnPolicy', '') || '').trim()),
     },
     subscription: {
@@ -8571,6 +10014,13 @@ const productToExportRecord = (
   gallery_images: formatGalleryImages(readProductValue(product.values, 'galleryImages')).join('; '),
   gallery_image_count: formatGalleryImages(readProductValue(product.values, 'galleryImages')).length,
   download_url: String(readProductValue(product.values, 'downloadUrl', '') || ''),
+  download_media_id: String(readProductValue(product.values, 'downloadMediaId', '') || ''),
+  download_media_name: String(readProductValue(product.values, 'downloadMediaName', '') || ''),
+  download_media_type: String(readProductValue(product.values, 'downloadMediaType', '') || ''),
+  download_media_folder_path: String(readProductValue(product.values, 'downloadMediaFolderPath', '') || ''),
+  download_media_visibility: String(readProductValue(product.values, 'downloadMediaVisibility', '') || ''),
+  download_media_scope: String(readProductValue(product.values, 'downloadMediaScope', '') || ''),
+  download_media_scope_target_id: String(readProductValue(product.values, 'downloadMediaScopeTargetId', '') || ''),
   checkout_url: String(readProductValue(product.values, 'checkoutUrl', '') || ''),
   subscription_enabled: Boolean(readProductValue(product.values, 'subscriptionEnabled')),
   subscription_interval: asSubscriptionInterval(readProductValue(product.values, 'subscriptionInterval')),

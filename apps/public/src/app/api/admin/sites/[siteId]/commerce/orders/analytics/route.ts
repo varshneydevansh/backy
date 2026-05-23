@@ -484,6 +484,184 @@ const buildOrderProviderCertificationEvidence = (
   };
 };
 
+const commerceCertificationGroup = (
+  certification: ReturnType<typeof buildCommerceStorefrontContract>['providerCertification'],
+  family: string,
+) => certification.groups.find((group) => group.family === family);
+
+const orderCertificationExpectedEvidence = (
+  certificationEvidence: ReturnType<typeof buildOrderProviderCertificationEvidence>,
+  scenarioKey: string,
+) => {
+  const scenario = certificationEvidence.scenarios.find((item) => item.key === scenarioKey);
+  return scenario ? [...scenario.expectedEvidence] : [];
+};
+
+const orderCertificationScenarioCovered = (
+  certificationEvidence: ReturnType<typeof buildOrderProviderCertificationEvidence>,
+  scenarioKey: string,
+) => certificationEvidence.scenarios.some((scenario) => scenario.key === scenarioKey && scenario.status === 'covered');
+
+const buildOrderProviderCertificationEvidencePacket = ({
+  site,
+  certification,
+  certificationEvidence,
+  analytics,
+}: {
+  site: { id: string };
+  certification: ReturnType<typeof buildCommerceStorefrontContract>['providerCertification'];
+  certificationEvidence: ReturnType<typeof buildOrderProviderCertificationEvidence>;
+  analytics: ReturnType<typeof buildOrderAnalytics>;
+}) => {
+  const checkoutGroup = commerceCertificationGroup(certification, 'Checkout and payment settlement');
+  const taxGroup = commerceCertificationGroup(certification, 'Tax quote providers');
+  const shippingGroup = commerceCertificationGroup(certification, 'Shipping rate, label, and tracking providers');
+  const discountGroup = commerceCertificationGroup(certification, 'Discount quote providers');
+  const subscriptionGroup = commerceCertificationGroup(certification, 'Subscription lifecycle providers');
+  const runtime = certification.runtime;
+  const familyArtifacts = [
+    {
+      key: 'payment-refunds',
+      family: 'Payment settlement and refunds',
+      providerAlias: 'Auto payment/refund provider',
+      ready: runtime.paymentConfigured || analytics.payment.paid.count > 0 || analytics.operations.refundCount > 0,
+      requiredInputs: checkoutGroup?.requiredInputs || ['BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY'],
+      expectedArtifacts: [
+        ...orderCertificationExpectedEvidence(certificationEvidence, 'checkout-settlement'),
+        ...orderCertificationExpectedEvidence(certificationEvidence, 'provider-refund'),
+      ],
+      captureSource: 'public checkout intake, private order record, provider-refund endpoint, and signed refund webhook readback',
+    },
+    {
+      key: 'tax-quotes',
+      family: 'Tax quotes',
+      providerAlias: 'Auto tax provider',
+      ready: runtime.taxConfigured || analytics.revenue.taxTotal > 0,
+      requiredInputs: taxGroup?.requiredInputs || ['BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY'],
+      expectedArtifacts: orderCertificationExpectedEvidence(certificationEvidence, 'quote-recalculation'),
+      captureSource: 'order quote POST/GET response and private order tax totals',
+    },
+    {
+      key: 'shipping-labels',
+      family: 'Shipping quotes, labels, and tracking',
+      providerAlias: 'Auto shipping provider',
+      ready: runtime.shippingConfigured || orderCertificationScenarioCovered(certificationEvidence, 'carrier-label-tracking'),
+      requiredInputs: shippingGroup?.requiredInputs || ['BACKY_EASYPOST_API_KEY or EASYPOST_API_KEY'],
+      expectedArtifacts: orderCertificationExpectedEvidence(certificationEvidence, 'carrier-label-tracking'),
+      captureSource: 'shipping-label endpoint, tracking endpoint, and order shipping-label fields',
+    },
+    {
+      key: 'discount-quotes',
+      family: 'Discount quotes',
+      providerAlias: 'Auto discount provider',
+      ready: runtime.discountConfigured || analytics.revenue.discountTotal > 0,
+      requiredInputs: discountGroup?.requiredInputs || ['BACKY_COMMERCE_DISCOUNT_PROVIDER_URL or COMMERCE_DISCOUNT_PROVIDER_URL'],
+      expectedArtifacts: orderCertificationExpectedEvidence(certificationEvidence, 'quote-recalculation'),
+      captureSource: 'order quote response and private order discount fields',
+    },
+    {
+      key: 'fulfillment-dispatch',
+      family: 'Fulfillment dispatch',
+      providerAlias: 'Settings fulfillment provider',
+      ready: orderCertificationScenarioCovered(certificationEvidence, 'fulfillment-dispatch') || analytics.fulfillment.fulfilled.count > 0,
+      requiredInputs: ['Settings commerce fulfillmentProvider=http plus fulfillmentProviderUrl'],
+      expectedArtifacts: orderCertificationExpectedEvidence(certificationEvidence, 'fulfillment-dispatch'),
+      captureSource: 'fulfillment endpoint response and private order fulfillment fields',
+    },
+    {
+      key: 'subscription-lifecycle',
+      family: 'Subscription lifecycle',
+      providerAlias: 'Auto subscription provider',
+      ready: runtime.subscriptionConfigured || orderCertificationScenarioCovered(certificationEvidence, 'subscription-lifecycle'),
+      requiredInputs: subscriptionGroup?.requiredInputs || ['BACKY_COMMERCE_SUBSCRIPTION_ACTION_URL or COMMERCE_SUBSCRIPTION_ACTION_URL'],
+      expectedArtifacts: orderCertificationExpectedEvidence(certificationEvidence, 'subscription-lifecycle'),
+      captureSource: 'product subscription lifecycle endpoint, order analytics, and signed subscription webhook readback',
+    },
+    {
+      key: 'webhook-reconciliation',
+      family: 'Webhooks and reconciliation',
+      providerAlias: 'Auto webhook provider',
+      ready: runtime.webhookSecretConfigured || orderCertificationScenarioCovered(certificationEvidence, 'webhook-reconciliation'),
+      requiredInputs: ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'],
+      expectedArtifacts: orderCertificationExpectedEvidence(certificationEvidence, 'webhook-reconciliation'),
+      captureSource: 'commerce webhook response, commerce-order events, and reconciliation endpoints',
+    },
+  ];
+  const missingSelectedFamilies = familyArtifacts
+    .filter((artifact) => !artifact.ready)
+    .map((artifact) => artifact.key);
+  const status = missingSelectedFamilies.length > 0
+    ? 'needs-credentials'
+    : certificationEvidence.status === 'ready'
+      ? 'evidence-complete'
+      : 'needs-scenario-evidence';
+
+  return {
+    schemaVersion: 'backy.order-provider-certification-evidence-packet.v1',
+    generatedAt: analytics.generatedAt,
+    selectedSiteId: site.id,
+    status,
+    selectedFamilies: familyArtifacts.map((artifact) => artifact.key),
+    selectedProviderAliases: Object.fromEntries(familyArtifacts.map((artifact) => [
+      artifact.key,
+      artifact.providerAlias,
+    ])),
+    runtimeReadiness: {
+      loaded: true,
+      configuredFamilies: runtime.configuredFamilies,
+      missingSelectedFamilies,
+    },
+    operatorArtifacts: familyArtifacts.map((artifact) => ({
+      key: artifact.key,
+      family: artifact.family,
+      providerAlias: artifact.providerAlias,
+      status: artifact.ready ? 'ready-to-run' : 'needs-credentials',
+      requiredInputs: artifact.requiredInputs,
+      expectedArtifacts: artifact.expectedArtifacts,
+      captureSource: artifact.captureSource,
+      redaction: 'Attach ids, timestamps, event names, totals, and status codes only; remove provider secrets, customer payloads, raw order payloads, addresses, payment references, and webhook bodies.',
+    })),
+    scenarioAttachments: certificationEvidence.scenarios.map((scenario) => ({
+      key: scenario.key,
+      label: scenario.label,
+      status: scenario.status,
+      evidenceCount: scenario.evidenceCount,
+      expectedEvidence: [...scenario.expectedEvidence],
+      nextAction: scenario.nextAction,
+    })),
+    commandPreview: {
+      command: certification.operatorCommandTemplate.command,
+      requiredInputs: certification.operatorCommandTemplate.requiredInputs,
+      targetInputs: certification.operatorCommandTemplate.targetInputs,
+    },
+    target: {
+      siteId: site.id,
+      siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      orderAnalyticsApi: `/api/admin/sites/${site.id}/commerce/orders/analytics`,
+      publicOrderContractApi: `/api/sites/${site.id}/commerce/orders`,
+      productProviderSyncApi: `/api/admin/sites/${site.id}/commerce/products/{productId}/provider-sync`,
+    },
+    redactionPolicy: {
+      includesProviderSecrets: false,
+      includesCustomerPayloads: false,
+      includesRawOrderPayloads: false,
+      includesPaymentReferences: false,
+      includesAddresses: false,
+      includesWebhookBodies: false,
+      allowedEvidence: [
+        'provider ids and aliases',
+        'timestamped CI/preflight logs',
+        'quote totals and adjustment names',
+        'label, tracking, fulfillment, and refund statuses',
+        'webhook event names and accepted status codes',
+        'reconciliation event counts and run modes',
+        'scenario counts and coverage state',
+      ],
+    },
+    secretHandling: 'Redacted operator attachment manifest only; provider credentials, customer payloads, raw order payloads, payment references, addresses, and webhook bodies stay out of API JSON.',
+  };
+};
+
 const buildOrderProviderCertification = ({
   site,
   settings,
@@ -505,6 +683,8 @@ const buildOrderProviderCertification = ({
     hasCatalog,
     hasOrderIntake,
   });
+
+  const certificationEvidence = buildOrderProviderCertificationEvidence(records, analytics);
 
   return {
     ...commerce.providerCertification,
@@ -533,7 +713,13 @@ const buildOrderProviderCertification = ({
       checkoutIntake: `/api/sites/${site.id}/commerce/orders`,
     },
     providerAnalytics: analytics.providerOperations,
-    certificationEvidence: buildOrderProviderCertificationEvidence(records, analytics),
+    certificationEvidence,
+    operatorEvidencePacket: buildOrderProviderCertificationEvidencePacket({
+      site,
+      certification: commerce.providerCertification,
+      certificationEvidence,
+      analytics,
+    }),
     secretHandling: 'Provider credentials stay in server environment/configuration; order analytics exposes only non-secret readiness, scenario counts, endpoint names, and provider-family metadata.',
   };
 };

@@ -15,6 +15,7 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 import { getHostedRouteUrl } from '@/lib/seoDiscovery';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 
 interface RouteParams {
     params: Promise<{
@@ -74,24 +75,6 @@ const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null 
         && Date.parse(item.scheduledAt || '') <= Date.now()
     )
 );
-
-const frontendDesignFromMeta = (value: unknown) => {
-    const meta = isRecord(value) ? value : {};
-    if (typeof meta.frontendDesignTemplateId !== 'string') {
-        return undefined;
-    }
-
-    return {
-        templateId: meta.frontendDesignTemplateId,
-        templateName: typeof meta.frontendDesignTemplateName === 'string' ? meta.frontendDesignTemplateName : undefined,
-        routePattern: typeof meta.frontendDesignRoutePattern === 'string' ? meta.frontendDesignRoutePattern : undefined,
-        source: meta.frontendDesignSource,
-        chrome: meta.frontendDesignChrome,
-        tokens: meta.frontendDesignTokens,
-        customCss: typeof meta.frontendDesignCustomCss === 'string' ? meta.frontendDesignCustomCss : undefined,
-        bindingHints: Array.isArray(meta.frontendDesignBindingHints) ? meta.frontendDesignBindingHints : [],
-    };
-};
 
 const toStringArray = (value: unknown): string[] => (
     Array.isArray(value)
@@ -171,27 +154,43 @@ const publicPage = <
     origin: string,
 ) => ({
     ...page,
-    frontendDesign: frontendDesignFromMeta(page.meta),
+    frontendDesign: frontendDesignProvenanceFromMetadata(page.meta),
     seo: seoFromPage(page, site, origin),
 });
+
+const publicPageContentFromRepositoryDocument = (content: BackyPage['content']) => {
+    const metadata = isRecord(content.metadata) ? content.metadata : {};
+    const canvasSize = isRecord(metadata.canvasSize)
+        ? metadata.canvasSize
+        : { width: 1200, height: 900 };
+
+    return {
+        elements: content.elements,
+        canvasSize,
+        customCSS: typeof metadata.customCSS === 'string' ? metadata.customCSS : undefined,
+        customJS: typeof metadata.customJS === 'string' ? metadata.customJS : undefined,
+        themeTokenRefs: content.themeTokenRefs,
+        assets: content.assets,
+        animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)
+            ? metadata.animations
+            : undefined,
+        interactions: content.interactions,
+        seo: content.seo,
+        dataBindings: content.dataBindings,
+        editableMap: content.editableMap,
+        metadata,
+        contentDocument: content,
+    };
+};
 
 const publicPageFromRepositoryPage = (
     page: BackyPage,
     site: { slug: string; customDomain?: string | null },
     origin: string,
 ) => {
-    const canvasSize = isRecord(page.content.metadata?.canvasSize)
-        ? page.content.metadata.canvasSize
-        : { width: 1200, height: 900 };
-
     return publicPage({
         ...page,
-        content: {
-            elements: page.content.elements,
-            canvasSize,
-            customCSS: typeof page.content.metadata?.customCSS === 'string' ? page.content.metadata.customCSS : undefined,
-            contentDocument: page.content,
-        },
+        content: publicPageContentFromRepositoryDocument(page.content),
     }, site, origin);
 };
 

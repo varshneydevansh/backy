@@ -331,7 +331,7 @@ if (workflow) {
     'npm run doctor:release-certification',
     'Write non-secret Forms database summary',
     'GITHUB_STEP_SUMMARY',
-    '| Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |',
+    '| Certified regression gate | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |',
     '| /forms | npm run ci:forms-postgres | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source |',
     'disposable confirmed:',
     'expected host configured:',

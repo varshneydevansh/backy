@@ -33,7 +33,7 @@ export async function recordAdminAudit(input: {
   const payload: Omit<BackyAuditLogEntry, 'id' | 'createdAt'> = {
     siteId: input.siteId || null,
     teamId: input.teamId || null,
-    actorId: input.actorId || 'admin',
+    actorId: input.actorId || (input.repositories ? null : 'admin'),
     entity: input.entity,
     entityId: input.entityId,
     action: input.action,

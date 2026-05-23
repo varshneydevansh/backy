@@ -219,23 +219,58 @@ type BackyCompletionGate = {
   runtime: Record<string, unknown>;
 };
 
+type BackyCertifiedCompletionGate = {
+  key: 'forms-postgres' | 'sdk-postgres';
+  label: string;
+  status: 'certified';
+  command: string;
+  workflow: string;
+  affectedSurfaces: string[];
+  certifiedAt: string;
+  evidence: string;
+  runtime: Record<string, unknown>;
+};
+
+type BackyCompletionSurfaceRunbook = {
+  key: 'settings' | 'settings-admin-apis' | 'products' | 'orders';
+  label: string;
+  gate: 'settings-provider-certification' | 'commerce-provider-certification';
+  command: string;
+  preflight: string;
+  workflow: string;
+  targetInputs: string[];
+  evidencePacketSchema:
+    | 'backy.settings-provider-certification-evidence-packet.v1'
+    | 'backy.commerce-provider-certification-evidence-packet.v1'
+    | 'backy.order-provider-certification-evidence-packet.v1';
+  evidenceApi: string;
+  evidenceUiPanel: string;
+  sourceOnlyGuard: string;
+  proofSources: string[];
+  expectedArtifacts: string[];
+  runtime: Record<string, unknown>;
+  secretBoundary: {
+    includesSecretValues: false;
+    excludes: string[];
+  };
+  nextAction: string;
+};
+
 const BACKY_COMPLETION_AUDIT = {
   source: 'specs/page-completion-audit/backy-page-surface-audit.md',
-  ready: 39,
-  partial: 6,
+  ready: 41,
+  partial: 4,
   prototype: 0,
   missing: 0,
   total: 45,
-  readyPercent: 87,
+  readyPercent: 91,
 } as const;
 
 const BACKY_COMPLETION_SURFACES = [
   { key: 'products', label: '/products', status: 'partial', blocker: 'commerce-provider-certification', gate: 'npm run ci:commerce-provider-certification' },
   { key: 'orders', label: '/orders', status: 'partial', blocker: 'commerce-provider-certification', gate: 'npm run ci:commerce-provider-certification' },
-  { key: 'forms', label: '/forms', status: 'partial', blocker: 'forms-postgres', gate: 'npm run ci:forms-postgres' },
   { key: 'settings', label: '/settings', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
   { key: 'settings-admin-apis', label: 'Settings admin APIs', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
-  { key: 'frontend-contracts', label: 'Frontend manifest/OpenAPI/SDK APIs', status: 'partial', blocker: 'sdk-postgres', gate: 'npm run ci:sdk-postgres-smoke' },
 ] as const;
 
 const DELIVERY_OPTIONS: Array<{
@@ -616,6 +651,16 @@ const SETTINGS_PROVIDER_CERTIFICATION_GROUPS = [
     evidence: 'Configured provider readiness plus test-notification delivery proof for the selected channel.',
   },
   {
+    family: 'Public API and custom frontend CORS',
+    providers: ['Backy Public API', 'Custom frontend origin', 'Browser CORS preflight'],
+    gate: 'npm run ci:settings-provider-certification',
+    requiredInputs: [
+      'BACKY_CORS_ALLOWED_ORIGINS',
+      'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
+    ],
+    evidence: 'Exact custom frontend origin, OPTIONS preflight, GET origin echo, and exposed Backy contract headers.',
+  },
+  {
     family: 'Commerce providers',
     providers: ['Stripe', 'TaxJar', 'Avalara', 'EasyPost', 'Shippo', 'PayPal', 'Paddle', 'Square', 'Adyen', 'Mollie', 'Razorpay', 'Shopify', 'BigCommerce', 'WooCommerce', 'Etsy', 'Magento'],
     gate: 'npm run ci:commerce-provider-certification',
@@ -694,6 +739,9 @@ type SettingsCertificationCommandOptions = {
   vercelTeamId: string;
   certifyNotification: boolean;
   notificationProvider: SettingsCertificationNotificationProvider;
+  certifyPublicApiCors: boolean;
+  publicApiOrigin: string;
+  siteId: string;
   certifyCommerce: boolean;
   externalBaseUrl: string;
   includeReleaseDoctor: boolean;
@@ -732,6 +780,9 @@ const DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS = {
   vercelTeamId: '',
   certifyNotification: true,
   notificationProvider: 'auto',
+  certifyPublicApiCors: true,
+  publicApiOrigin: '',
+  siteId: 'site-demo',
   certifyCommerce: true,
   externalBaseUrl: '',
   includeReleaseDoctor: true,
@@ -804,6 +855,301 @@ const buildSettingsProviderRuntimeEvidence = ({
     localRuntimeInputsConfigured: missingInputAliases.length === 0,
     liveProviderGateRequired: true,
     secretHandling: 'Provider secret values are never returned; runtime evidence reports booleans, aliases, provider families, and non-secret URLs only.',
+  };
+};
+
+type SettingsProviderCertificationEvidencePacketStatus =
+  | 'no-family-selected'
+  | 'needs-runtime-inputs'
+  | 'needs-scenario-evidence'
+  | 'evidence-complete';
+
+type SettingsProviderCertificationArtifactReadinessKey =
+  | 'storage-media'
+  | 'credential-rotation'
+  | 'vercel-deployment'
+  | 'notification-delivery'
+  | 'public-api-cors'
+  | 'commerce-provider-bridge'
+  | 'release-certification-readiness';
+
+type SettingsProviderCertificationRuntimeEvidence = ReturnType<typeof buildSettingsProviderRuntimeEvidence>;
+
+type SettingsProviderCertificationScenarioEvidence = {
+  schemaVersion: string;
+  status: 'ready' | 'attention';
+  requiredGate: string;
+  coverage: {
+    covered: number;
+    total: number;
+    missing: string[];
+  };
+  scenarios: Array<{
+    key: string;
+    label: string;
+    expectedEvidence: readonly string[];
+    nextAction: string;
+    evidenceCount: number;
+    status: 'covered' | 'missing';
+  }>;
+  secretHandling: string;
+};
+
+const settingsCertificationOptionLabel = <T extends string>(
+  options: Array<{ value: T; label: string }>,
+  value: T,
+): string => options.find((option) => option.value === value)?.label || value;
+
+const settingsProviderCertificationGroup = (family: string) => (
+  SETTINGS_PROVIDER_CERTIFICATION_GROUPS.find((group) => group.family === family)
+);
+
+const settingsProviderCertificationScenarioExpectedEvidence = (scenarioKey: string): string[] => {
+  const scenario = SETTINGS_PROVIDER_CERTIFICATION_SCENARIOS.find((item) => item.key === scenarioKey);
+  return scenario ? [...scenario.expectedEvidence] : [];
+};
+
+const hasSettingsCommerceProviderRuntime = (
+  runtimeCommerce?: SiteSettingsInput['runtimeCommerce'],
+  commerce?: NonNullable<SiteSettingsInput['integrations']>['commerce'],
+): boolean => Boolean(
+  runtimeCommerce?.webhookSecretConfigured ||
+  runtimeCommerce?.stripeSecretConfigured ||
+  runtimeCommerce?.paypalAccessTokenConfigured ||
+  runtimeCommerce?.paddleApiKeyConfigured ||
+  runtimeCommerce?.squareAccessTokenConfigured ||
+  runtimeCommerce?.adyenApiKeyConfigured ||
+  runtimeCommerce?.mollieApiKeyConfigured ||
+  (runtimeCommerce?.razorpayKeyIdConfigured && runtimeCommerce?.razorpayKeySecretConfigured) ||
+  runtimeCommerce?.easyPostApiKeyConfigured ||
+  runtimeCommerce?.shippoApiKeyConfigured ||
+  runtimeCommerce?.shopifyAdminAccessTokenConfigured ||
+  runtimeCommerce?.bigCommerceAccessTokenConfigured ||
+  runtimeCommerce?.wooCommerceConsumerKeyConfigured ||
+  runtimeCommerce?.etsyAccessTokenConfigured ||
+  runtimeCommerce?.magentoAccessTokenConfigured ||
+  commerce?.webhookEventsEnabled ||
+  (commerce?.paymentProvider && commerce.paymentProvider !== 'none') ||
+  commerce?.catalogSyncProvider
+);
+
+const buildSettingsProviderCertificationArtifactReadiness = ({
+  runtimeStorage,
+  runtimeVercel,
+  runtimeNotifications,
+  runtimePublicApi,
+  runtimeCommerce,
+  integrations,
+  runtimeEvidence,
+  scenarioEvidence,
+}: {
+  runtimeStorage?: SiteSettingsInput['runtimeStorage'];
+  runtimeVercel?: SiteSettingsInput['runtimeVercel'];
+  runtimeNotifications?: SiteSettingsInput['runtimeNotifications'];
+  runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
+  runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
+  integrations?: SiteSettingsInput['integrations'];
+  runtimeEvidence: SettingsProviderCertificationRuntimeEvidence;
+  scenarioEvidence: SettingsProviderCertificationScenarioEvidence;
+}): Record<SettingsProviderCertificationArtifactReadinessKey, boolean> => {
+  const storage = integrations?.storage;
+  const vercel = integrations?.vercel;
+  const notifications = integrations?.notifications;
+  const commerce = integrations?.commerce;
+  const scenarioCovered = (key: string) => scenarioEvidence.scenarios.some((scenario) => scenario.key === key && scenario.status === 'covered');
+  const storageReady = Boolean(runtimeStorage?.configured || storage?.provider || storage?.bucket || storage?.publicBaseUrl);
+
+  return {
+    'storage-media': storageReady,
+    'credential-rotation': storageReady,
+    'vercel-deployment': Boolean(runtimeVercel?.configured || vercel?.projectId || vercel?.productionDomain),
+    'notification-delivery': Boolean(runtimeNotifications?.productionReady || runtimeNotifications?.configured || notifications),
+    'public-api-cors': Boolean(runtimePublicApi?.corsAllowedOriginsConfigured && runtimePublicApi.exposedContractHeaders?.length),
+    'commerce-provider-bridge': hasSettingsCommerceProviderRuntime(runtimeCommerce, commerce),
+    'release-certification-readiness': Boolean(runtimeEvidence.localRuntimeInputsConfigured && scenarioCovered('release-certification-readiness')),
+  };
+};
+
+const buildSettingsProviderCertificationEvidencePacket = ({
+  options,
+  command,
+  envTemplate,
+  requiredAliases,
+  runtimeEvidence,
+  scenarioEvidence,
+  artifactReadiness,
+}: {
+  options: SettingsCertificationCommandOptions;
+  command: string;
+  envTemplate: string;
+  requiredAliases: string[];
+  runtimeEvidence: SettingsProviderCertificationRuntimeEvidence;
+  scenarioEvidence: SettingsProviderCertificationScenarioEvidence;
+  artifactReadiness: Record<SettingsProviderCertificationArtifactReadinessKey, boolean>;
+}) => {
+  const storageGroup = settingsProviderCertificationGroup('Storage and media delivery');
+  const vercelGroup = settingsProviderCertificationGroup('Vercel deployment and secrets');
+  const notificationsGroup = settingsProviderCertificationGroup('Notifications');
+  const publicApiGroup = settingsProviderCertificationGroup('Public API and custom frontend CORS');
+  const commerceGroup = settingsProviderCertificationGroup('Commerce providers');
+
+  const familyArtifacts = [
+    {
+      key: 'storage-media',
+      family: 'Storage and media delivery',
+      selected: options.certifyStorage,
+      ready: artifactReadiness['storage-media'],
+      providerAlias: settingsCertificationOptionLabel(SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS, options.storageProvider),
+      requiredInputs: storageGroup ? [...storageGroup.requiredInputs] : ['BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER'],
+      expectedArtifacts: settingsProviderCertificationScenarioExpectedEvidence('storage-media'),
+      captureSource: 'storage provisioning probe, media scanner diagnostics, runtime storage summary, and Settings storage metadata',
+    },
+    {
+      key: 'credential-rotation',
+      family: 'Storage credential rotation',
+      selected: options.certifyRotation,
+      ready: artifactReadiness['credential-rotation'],
+      providerAlias: settingsCertificationOptionLabel(SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS, options.storageProvider),
+      requiredInputs: [
+        ...(storageGroup ? [...storageGroup.requiredInputs] : ['BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER']),
+        'BACKY_*_NEXT_* replacement storage env',
+      ],
+      expectedArtifacts: ['current credential alias readiness', 'replacement credential alias readiness', 'rotation probe result'],
+      captureSource: 'storage credential rotation probe and secret-manager planning response',
+    },
+    {
+      key: 'vercel-deployment',
+      family: 'Vercel deployment and secrets',
+      selected: options.certifyVercelSecrets,
+      ready: artifactReadiness['vercel-deployment'],
+      providerAlias: options.vercelProjectId.trim() || options.vercelTeamId.trim() || 'Vercel project/team selector',
+      requiredInputs: vercelGroup ? [...vercelGroup.requiredInputs] : ['VERCEL_TOKEN or BACKY_VERCEL_TOKEN'],
+      expectedArtifacts: settingsProviderCertificationScenarioExpectedEvidence('vercel-deployment'),
+      captureSource: 'Vercel runtime diagnostics, env secret-manager dry-run, and project/team selector metadata',
+    },
+    {
+      key: 'notification-delivery',
+      family: 'Notification delivery',
+      selected: options.certifyNotification,
+      ready: artifactReadiness['notification-delivery'],
+      providerAlias: settingsCertificationOptionLabel(SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_OPTIONS, options.notificationProvider),
+      requiredInputs: notificationsGroup ? [...notificationsGroup.requiredInputs] : ['BACKY_EMAIL_DELIVERY_ENDPOINT or BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'],
+      expectedArtifacts: settingsProviderCertificationScenarioExpectedEvidence('notification-delivery'),
+      captureSource: 'test notification delivery endpoint, local outbox, Resend, SMTP, or webhook delivery diagnostics',
+    },
+    {
+      key: 'public-api-cors',
+      family: 'Public API and custom frontend CORS',
+      selected: options.certifyPublicApiCors,
+      ready: artifactReadiness['public-api-cors'],
+      providerAlias: options.publicApiOrigin.trim() || 'BACKY_CORS_ALLOWED_ORIGINS',
+      requiredInputs: publicApiGroup ? [...publicApiGroup.requiredInputs] : ['BACKY_CORS_ALLOWED_ORIGINS'],
+      expectedArtifacts: settingsProviderCertificationScenarioExpectedEvidence('public-api-cors'),
+      captureSource: 'Public API/CORS runtime summary, OPTIONS preflight, GET /api/sites origin echo, and exposed Backy contract headers',
+    },
+    {
+      key: 'commerce-provider-bridge',
+      family: 'Commerce provider bridge',
+      selected: options.certifyCommerce,
+      ready: artifactReadiness['commerce-provider-bridge'],
+      providerAlias: 'Nested Commerce provider certification',
+      requiredInputs: commerceGroup ? [...commerceGroup.requiredInputs] : ['BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'],
+      expectedArtifacts: settingsProviderCertificationScenarioExpectedEvidence('commerce-provider-bridge'),
+      captureSource: 'nested commerce provider certification summary and Settings commerce runtime diagnostics',
+    },
+    {
+      key: 'release-certification-readiness',
+      family: 'Release certification readiness',
+      selected: options.includeReleaseDoctor,
+      ready: artifactReadiness['release-certification-readiness'],
+      providerAlias: 'Release doctor',
+      requiredInputs: [
+        'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1',
+        'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
+        'npm run doctor:release-certification',
+      ],
+      expectedArtifacts: settingsProviderCertificationScenarioExpectedEvidence('release-certification-readiness'),
+      captureSource: 'release certification doctor output, missing-alias summary, and selected provider-family flags',
+    },
+  ];
+  const selectedArtifacts = familyArtifacts.filter((artifact) => artifact.selected);
+  const missingSelectedFamilies = selectedArtifacts
+    .filter((artifact) => !artifact.ready)
+    .map((artifact) => artifact.key);
+  const status: SettingsProviderCertificationEvidencePacketStatus = selectedArtifacts.length === 0
+    ? 'no-family-selected'
+    : missingSelectedFamilies.length > 0
+      ? 'needs-runtime-inputs'
+      : scenarioEvidence.status === 'ready'
+        ? 'evidence-complete'
+        : 'needs-scenario-evidence';
+
+  return {
+    schemaVersion: 'backy.settings-provider-certification-evidence-packet.v1',
+    generatedAt: new Date().toISOString(),
+    status,
+    selectedFamilies: selectedArtifacts.map((artifact) => artifact.key),
+    selectedProviderAliases: Object.fromEntries(selectedArtifacts.map((artifact) => [
+      artifact.key,
+      artifact.providerAlias,
+    ])),
+    target: {
+      siteId: options.siteId.trim() || 'site-demo',
+      settingsAdminApi: '/api/admin/settings?certificationSiteId={siteId}',
+      siteScopedSettingsApi: '/api/admin/sites/{siteId}/settings',
+      settingsApi: '/api/admin/sites/{siteId}/settings',
+      settingsSiteSelectorEnv: 'BACKY_SETTINGS_CERTIFY_SITE_ID',
+      commerceSiteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      externalBaseUrl: options.externalBaseUrl.trim() || null,
+      publicApiOrigin: options.publicApiOrigin.trim() || null,
+    },
+    runtimeReadiness: {
+      localRuntimeInputsConfigured: runtimeEvidence.localRuntimeInputsConfigured,
+      missingInputAliases: runtimeEvidence.missingInputAliases,
+      missingSelectedFamilies,
+    },
+    operatorArtifacts: selectedArtifacts.map((artifact) => ({
+      key: artifact.key,
+      family: artifact.family,
+      providerAlias: artifact.providerAlias,
+      status: artifact.ready ? 'ready-to-run' as const : 'needs-runtime-inputs' as const,
+      requiredInputs: artifact.requiredInputs,
+      expectedArtifacts: artifact.expectedArtifacts,
+      captureSource: artifact.captureSource,
+      redaction: 'Attach ids, timestamps, provider-family names, status codes, counts, and command summaries only; remove database URLs, provider credentials, service-role keys, Vercel tokens, notification secrets, commerce secrets, and customer/order payloads.',
+    })),
+    scenarioAttachments: scenarioEvidence.scenarios.map((scenario) => ({
+      key: scenario.key,
+      label: scenario.label,
+      status: scenario.status,
+      evidenceCount: scenario.evidenceCount,
+      expectedEvidence: [...scenario.expectedEvidence],
+      nextAction: scenario.nextAction,
+    })),
+    commandPreview: {
+      command,
+      envTemplate,
+      requiredAliases,
+      targetInputs: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs,
+    },
+    redactionPolicy: {
+      includesProviderSecrets: false,
+      includesDatabaseUrls: false,
+      includesServiceRoleKeys: false,
+      includesVercelTokens: false,
+      includesNotificationSecrets: false,
+      includesCommerceSecrets: false,
+      includesCustomerOrOrderPayloads: false,
+      allowedEvidence: [
+        'provider-family names and selectors',
+        'timestamped preflight and doctor summaries',
+        'runtime readiness booleans and missing-alias names',
+        'storage, notification, Vercel, and commerce status codes',
+        'custom frontend origins and exposed Backy contract header names',
+        'scenario counts and coverage state',
+      ],
+    },
+    secretHandling: 'Redacted operator attachment manifest only; database URLs, provider credentials, service-role keys, Vercel tokens, notification secrets, commerce secrets, and customer/order payloads stay out of copied JSON.',
   };
 };
 
@@ -1033,7 +1379,8 @@ const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOpti
   options.certifyStorage ||
   options.certifyRotation ||
   options.certifyVercelSecrets ||
-  options.certifyNotification
+  options.certifyNotification ||
+  options.certifyPublicApiCors
 );
 
 const buildSettingsProviderCertificationEnvEntries = (
@@ -1041,16 +1388,23 @@ const buildSettingsProviderCertificationEnvEntries = (
 ): Array<[string, string]> => {
   const settingsSelected = hasSettingsCertificationGroup(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/$/, '');
+  const siteId = options.siteId.trim() || 'site-demo';
   const envEntries: Array<[string, string]> = [
     ['BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(settingsSelected)],
+    ['BACKY_SETTINGS_CERTIFY_SITE_ID', siteId],
     ['BACKY_SETTINGS_CERTIFY_STORAGE', boolEnv(options.certifyStorage)],
     ['BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER', options.storageProvider],
     ['BACKY_SETTINGS_CERTIFY_ROTATION', boolEnv(options.certifyRotation)],
     ['BACKY_SETTINGS_CERTIFY_VERCEL_SECRETS', boolEnv(options.certifyVercelSecrets)],
     ['BACKY_SETTINGS_CERTIFY_NOTIFICATION', boolEnv(options.certifyNotification)],
     ['BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER', options.notificationProvider],
+    ['BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS', boolEnv(options.certifyPublicApiCors)],
     ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(options.certifyCommerce)],
   ];
+
+  if (options.certifyCommerce) {
+    envEntries.push(['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId]);
+  }
 
   if (options.includeReleaseDoctor) {
     envEntries.unshift(['BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED', '1']);
@@ -1070,6 +1424,14 @@ const buildSettingsProviderCertificationEnvEntries = (
 
   if (options.certifyVercelSecrets && options.vercelTeamId.trim()) {
     envEntries.push(['BACKY_SETTINGS_CERTIFY_VERCEL_TEAM_ID', options.vercelTeamId.trim()]);
+  }
+
+  if (options.certifyPublicApiCors) {
+    const publicApiOrigin = options.publicApiOrigin.trim();
+    envEntries.push(
+      ['BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN', publicApiOrigin || '<https://custom-frontend.example.com>'],
+      ['BACKY_CORS_ALLOWED_ORIGINS', publicApiOrigin || '<https://custom-frontend.example.com>'],
+    );
   }
 
   return envEntries;
@@ -1105,7 +1467,9 @@ const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCert
   const aliases = [
     options.includeReleaseDoctor ? 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1' : '',
     hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+    hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_CERTIFY_SITE_ID or BACKY_SETTINGS_CERTIFICATION_SITE_ID' : '',
     options.certifyCommerce ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+    options.certifyCommerce ? 'BACKY_COMMERCE_CERTIFY_SITE_ID' : '',
   ];
   const externalBaseUrl = options.externalBaseUrl.trim();
 
@@ -1164,6 +1528,13 @@ const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCert
     }
   }
 
+  if (options.certifyPublicApiCors) {
+    aliases.push(
+      'BACKY_CORS_ALLOWED_ORIGINS',
+      'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
+    );
+  }
+
   if (options.certifyCommerce) {
     aliases.push(
       'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
@@ -1185,6 +1556,16 @@ const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   storageProviderChoices: SETTINGS_CERTIFICATION_STORAGE_PROVIDER_OPTIONS.map((option) => option.value),
   notificationProviderChoices: SETTINGS_CERTIFICATION_NOTIFICATION_PROVIDER_OPTIONS.map((option) => option.value),
   requiredInputAliases: buildSettingsProviderCertificationRequiredAliases(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
+  targetInputs: [
+    'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+    'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'BACKY_SETTINGS_CERTIFY_SITE_ID',
+    'BACKY_SETTINGS_CERTIFICATION_SITE_ID',
+    'BACKY_COMMERCE_CERTIFY_SITE_ID',
+    'BACKY_CORS_ALLOWED_ORIGINS',
+    'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
+    'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
+  ],
 };
 
 const SETTINGS_LAUNCH_STATUS_STYLES: Record<SettingsLaunchReadinessStatus, string> = {
@@ -1356,6 +1737,97 @@ function buildCopyText(base: string, path: string): string {
   return `${base}${path}`;
 }
 
+function buildSettingsMediaStorageHandoff({
+  integrations,
+  runtimeStorage,
+  runtimeSupabase,
+  publicApiBase,
+  adminApiBase,
+}: {
+  integrations: SiteSettingsInput['integrations'];
+  runtimeStorage?: SiteSettingsInput['runtimeStorage'];
+  runtimeSupabase?: SiteSettingsInput['runtimeSupabase'];
+  publicApiBase: string;
+  adminApiBase: string;
+}) {
+  const storageMetadata = integrations?.storage || {};
+  const provider = storageMetadata.provider || runtimeStorage?.provider || 'local';
+  const bucket = storageMetadata.bucket || runtimeStorage?.bucket || runtimeSupabase?.storageBucket || '';
+  const publicBaseUrl = storageMetadata.publicBaseUrl || runtimeStorage?.publicUrl || '';
+  const pathPrefix = storageMetadata.pathPrefix || runtimeStorage?.basePath || 'sites/{siteId}';
+  const configured = Boolean(runtimeStorage?.configured || storageMetadata.provider || storageMetadata.bucket || storageMetadata.publicBaseUrl);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 'backy.media-storage-handoff.v1',
+    status: configured ? 'ready' : 'needs-runtime-env',
+    provider: {
+      selected: provider,
+      bucket,
+      publicBaseUrl,
+      pathPrefix,
+      runtime: runtimeStorage || null,
+      supabase: runtimeSupabase || null,
+    },
+    policies: {
+      privateFilesEnabled: Boolean(storageMetadata.privateFilesEnabled),
+      imageTransformsEnabled: storageMetadata.imageTransformsEnabled !== false,
+      maxFileSizeMb: storageMetadata.maxFileSizeMb ?? null,
+      workspaceStorageLimitGb: storageMetadata.workspaceStorageLimitGb ?? null,
+      warningThresholdPercent: storageMetadata.warningThresholdPercent ?? null,
+      allowedFileTypes: storageMetadata.allowedFileTypes || 'image/*,font/*,document/*,file/*',
+    },
+    endpointTemplates: {
+      adminMediaList: `${adminApiBase}/sites/{siteId}/media`,
+      adminMediaUpload: `${adminApiBase}/sites/{siteId}/media`,
+      adminSignedUrl: `${adminApiBase}/sites/{siteId}/media/{mediaId}/signed-url`,
+      publicMediaList: `${publicApiBase}/sites/{siteId}/media`,
+      publicMediaFolders: `${publicApiBase}/sites/{siteId}/media/folders`,
+      publicFontManifest: `${publicApiBase}/sites/{siteId}/media/fonts`,
+      publicMediaDetail: `${publicApiBase}/sites/{siteId}/media/{mediaId}`,
+      publicMediaFile: `${publicApiBase}/sites/{siteId}/media/{mediaId}/file`,
+      publicMediaTransform: `${publicApiBase}/sites/{siteId}/media/{mediaId}/transform`,
+    },
+    contracts: {
+      organization: 'backy.media.organization.v1',
+      references: 'backy.media.references.v1',
+      editableMetadata: 'backy.media.editable-metadata.v1',
+      deliveryPolicy: 'MediaDeliveryPolicy',
+      fileCategories: 'backy.media-file-categories.v1',
+    },
+    designStateUsage: {
+      preservedFields: [
+        'frontendDesignAssets',
+        'frontendDesignContentDocument.assets',
+        'content.assets.media[]',
+        'content.assets.fonts[]',
+        'element.props.mediaId',
+        'element.props.imageMediaId',
+        'element.props.fileMediaId',
+        'element.props.fontMediaId',
+        'element.props.mediaOrganization',
+      ],
+      editableSurfaces: ['pages', 'blog', 'reusable sections', 'products', 'collections', 'editor media picker'],
+      customFrontendUses: ['image picker', 'font picker', 'file download picker', 'product media gallery', 'private signed delivery', 'responsive transforms'],
+    },
+    runtimeGate: {
+      certificationCommand: 'npm run ci:settings-provider-certification',
+      sourceOnlyGuard: 'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+      missingRuntimeAliases: runtimeStorage?.missing || [],
+    },
+    privacy: {
+      includesSecretValues: false,
+      exposesSecretReferencesOnly: true,
+      secretReferences: {
+        supabaseServiceRole: storageMetadata.supabaseKeySecretRef || 'env:BACKY_SUPABASE_SERVICE_ROLE_KEY',
+        s3AccessKeyId: storageMetadata.accessKeyIdSecretRef || 'env:BACKY_S3_ACCESS_KEY_ID',
+        s3SecretAccessKey: storageMetadata.secretAccessKeySecretRef || 'env:BACKY_S3_SECRET_ACCESS_KEY',
+      },
+      excludes: ['raw provider credentials', 'service-role key values', 'signed URL tokens', 'private file bytes'],
+    },
+  };
+}
+
 function cloneSettingsDraftSnapshot(snapshot: SettingsDraftSnapshot): SettingsDraftSnapshot {
   return JSON.parse(JSON.stringify(snapshot)) as SettingsDraftSnapshot;
 }
@@ -1378,21 +1850,29 @@ function normalizeNotificationSettings(
     return settings;
   }
 
+  const digestFrequency = settings.digestFrequency;
+
   return {
     ...settings,
     email: {
       ...(settings.email || {}),
-      newUser: false,
-      pagePublished: false,
+      newUser: settings.email?.newUser === true,
+      pagePublished: settings.email?.pagePublished === true,
+      formSubmission: settings.email?.formSubmission === true,
+      comments: settings.email?.comments === true,
       orderCreated: settings.email?.orderCreated === true,
       productLowStock: settings.email?.productLowStock === true,
-      systemUpdates: false,
+      systemUpdates: settings.email?.systemUpdates === true,
     },
     inApp: {
       ...(settings.inApp || {}),
-      mentions: false,
+      comments: settings.inApp?.comments === true,
+      activity: settings.inApp?.activity === true,
+      mentions: settings.inApp?.mentions === true,
     },
-    digestFrequency: settings.digestFrequency === 'off' ? 'off' : 'instant',
+    digestFrequency: ['instant', 'daily', 'weekly', 'off'].includes(String(digestFrequency))
+      ? digestFrequency
+      : 'instant',
   };
 }
 
@@ -1559,6 +2039,7 @@ function SettingsPage() {
   const [sessionRotationNotice, setSessionRotationNotice] = useState<string | null>(null);
   const [notificationWebhookDelivery, setNotificationWebhookDelivery] = useState<SettingsNotificationWebhookDeliveryResult | null>(null);
   const [isNotificationWebhookTesting, setIsNotificationWebhookTesting] = useState(false);
+  const [notificationWebhookSubmitted, setNotificationWebhookSubmitted] = useState(false);
   const [saved, setSaved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -1955,12 +2436,18 @@ function SettingsPage() {
       return;
     }
 
+    setNotificationWebhookSubmitted(true);
     const webhookUrl = notificationSettings.webhookUrl?.trim();
     if (!webhookUrl) {
       setNotice('Add a notification webhook URL before sending a test event.');
       return;
     }
+    if (!isValidHttpUrl(webhookUrl)) {
+      setNotice('Enter a valid http(s) notification webhook URL before sending a test event.');
+      return;
+    }
 
+    setNotificationWebhookSubmitted(false);
     setIsNotificationWebhookTesting(true);
 
     try {
@@ -2057,6 +2544,14 @@ function SettingsPage() {
       ...(integrations.notifications?.inApp || {}),
     },
   };
+  const notificationWebhookUrlValue = notificationSettings.webhookUrl?.trim() || '';
+  const notificationWebhookUrlInlineError = notificationWebhookSubmitted
+    ? notificationWebhookUrlValue.length === 0
+      ? 'Add a notification webhook URL before sending a test event.'
+      : isValidHttpUrl(notificationWebhookUrlValue)
+        ? null
+        : 'Enter a valid http(s) notification webhook URL before sending a test event.'
+    : null;
   const commerceSettings: CommerceSettingsConfig = {
     ...DEFAULT_COMMERCE_SETTINGS,
     ...(integrations.commerce || {}),
@@ -2372,6 +2867,38 @@ function SettingsPage() {
     runtimeSupabase?.configured,
     runtimeVercel?.configured,
   ]);
+  const providerCertificationArtifactReadiness = useMemo(() => buildSettingsProviderCertificationArtifactReadiness({
+    runtimeStorage,
+    runtimeVercel,
+    runtimeNotifications,
+    runtimePublicApi,
+    runtimeCommerce,
+    integrations,
+    runtimeEvidence: providerCertificationRuntimeEvidence,
+    scenarioEvidence: providerCertificationScenarioEvidence,
+  }), [
+    integrations,
+    providerCertificationRuntimeEvidence,
+    providerCertificationScenarioEvidence,
+    runtimeCommerce,
+    runtimeNotifications,
+    runtimePublicApi,
+    runtimeStorage,
+    runtimeVercel,
+  ]);
+  const providerCertificationEvidencePacket = useMemo(() => buildSettingsProviderCertificationEvidencePacket({
+    options: DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS,
+    command: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.command,
+    envTemplate: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.envTemplate,
+    requiredAliases: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.requiredInputAliases,
+    runtimeEvidence: providerCertificationRuntimeEvidence,
+    scenarioEvidence: providerCertificationScenarioEvidence,
+    artifactReadiness: providerCertificationArtifactReadiness,
+  }), [
+    providerCertificationArtifactReadiness,
+    providerCertificationRuntimeEvidence,
+    providerCertificationScenarioEvidence,
+  ]);
   const providerCertificationHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.settings-provider-certification-handoff.v1',
@@ -2383,6 +2910,7 @@ function SettingsPage() {
     secretHandling: 'Provider credentials stay in deployment or CI environment variables; Settings handoff manifests only expose non-secret provider families, gate names, and readiness evidence.',
     runtimeEvidence: providerCertificationRuntimeEvidence,
     scenarioEvidence: providerCertificationScenarioEvidence,
+    operatorEvidencePacket: providerCertificationEvidencePacket,
     metadataEvidence: {
       storage: integrations.storage || null,
       supabase: integrations.supabase || null,
@@ -2413,6 +2941,7 @@ function SettingsPage() {
     integrations.vercel,
     providerCertificationRuntimeEvidence,
     providerCertificationScenarioEvidence,
+    providerCertificationEvidencePacket,
   ]);
   const frontendDatabaseCertificationScenarioEvidence = useMemo(() => buildFrontendDatabaseCertificationScenarioEvidence({
     databaseReady: Boolean(runtimeDatabase?.mode === 'database' && runtimeDatabase.configured),
@@ -2627,7 +3156,6 @@ function SettingsPage() {
     runtimeVercel,
   ]);
   const settingsBackyCompletionStatus = useMemo(() => {
-    const databaseGateReady = frontendDatabaseCertificationScenarioEvidence.status === 'ready';
     const settingsGateReady = providerCertificationRuntimeEvidence.localRuntimeInputsConfigured;
     const commerceProviderScenario = providerCertificationScenarioEvidence.scenarios.find((scenario) => scenario.key === 'commerce-provider-bridge');
     const commerceGateReady = commerceProviderScenario?.status === 'covered';
@@ -2643,27 +3171,42 @@ function SettingsPage() {
       missingAliases: providerCertificationRuntimeEvidence.missingInputAliases,
       localRuntimeInputsConfigured: providerCertificationRuntimeEvidence.localRuntimeInputsConfigured,
     };
-    const gates: BackyCompletionGate[] = [
+    const settingsMissingAliases = providerCertificationRuntimeEvidence.missingInputAliases;
+    const commerceMissingScenarios = commerceProviderScenario?.status === 'covered'
+      ? []
+      : [commerceProviderScenario?.label || 'Commerce provider bridge'];
+    const commerceRuntime = {
+      settingsProviderEvidence: providerCertificationScenarioEvidence.schemaVersion,
+      commerceProviderScenario: commerceProviderScenario || null,
+      missingAliases: settingsMissingAliases,
+      missingScenarios: commerceMissingScenarios,
+      liveProviderGateRequired: true,
+    };
+    const certifiedGates: BackyCertifiedCompletionGate[] = [
       {
         key: 'forms-postgres',
         label: 'Forms Supabase/Postgres persistence',
-        status: databaseGateReady ? 'ready-to-run' : 'blocked-missing-inputs',
+        status: 'certified',
         command: 'npm run ci:forms-postgres',
         workflow: '.github/workflows/forms-postgres-contract.yml',
         affectedSurfaces: ['/forms'],
-        requiredEnvAliases: ['BACKY_DATABASE_URL', 'DATABASE_URL', 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'],
+        certifiedAt: '2026-05-21',
+        evidence: 'Passed against a migrated disposable local Postgres target with form definition, submission, contact, spam/consent, moderation, promotion, and cleanup coverage.',
         runtime: databaseRuntime,
       },
       {
         key: 'sdk-postgres',
         label: 'Frontend manifest/OpenAPI/SDK Supabase/Postgres smoke',
-        status: databaseGateReady ? 'ready-to-run' : 'blocked-missing-inputs',
+        status: 'certified',
         command: 'npm run ci:sdk-postgres-smoke',
         workflow: '.github/workflows/sdk-postgres-smoke.yml',
         affectedSurfaces: ['Frontend manifest/OpenAPI/SDK APIs'],
-        requiredEnvAliases: ['BACKY_DATABASE_URL', 'DATABASE_URL', 'BACKY_DATABASE_DISPOSABLE_CONFIRMED=true', 'BACKY_SDK_REQUIRE_DATABASE=1'],
+        certifiedAt: '2026-05-21',
+        evidence: 'Passed against a migrated disposable local Postgres target with database-mode discovery, manifest, OpenAPI, render, media, CMS, forms, comments, events, commerce, and SDK write-flow coverage.',
         runtime: databaseRuntime,
       },
+    ];
+    const gates: BackyCompletionGate[] = [
       {
         key: 'settings-provider-certification',
         label: 'Settings live provider certification',
@@ -2692,15 +3235,159 @@ function SettingsPage() {
         },
       },
     ];
+    const surfaceRunbooks: BackyCompletionSurfaceRunbook[] = [
+      {
+        key: 'settings',
+        label: '/settings',
+        gate: 'settings-provider-certification',
+        command: 'npm run ci:settings-provider-certification',
+        preflight: 'npm run test:settings-provider-certification-preflight-contract',
+        workflow: '.github/workflows/settings-provider-certification.yml',
+        targetInputs: [
+          'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+          'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+          'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
+        ],
+        evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
+        evidenceApi: '/api/admin/settings data.settings.providerCertification.operatorEvidencePacket',
+        evidenceUiPanel: 'settings-provider-certification-evidence-packet',
+        sourceOnlyGuard: 'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+        proofSources: [
+          'GET /api/admin/settings',
+          'apps/admin/src/routes/settings.tsx',
+          'scripts/settings-provider-certification-preflight-contract-smoke.mjs',
+        ],
+        expectedArtifacts: [
+          'provider runtime alias summary',
+          'operator evidence packet',
+          'Settings provider workflow summary',
+          'release doctor summary',
+        ],
+        runtime: providerRuntime,
+        secretBoundary: {
+          includesSecretValues: false,
+          excludes: ['database URLs', 'provider credentials', 'service-role keys', 'Vercel tokens', 'notification secrets', 'commerce secrets'],
+        },
+        nextAction: settingsMissingAliases.length > 0
+          ? `Configure ${settingsMissingAliases.slice(0, 4).join(', ')} and run npm run ci:settings-provider-certification.`
+          : 'Run npm run ci:settings-provider-certification and attach the redacted evidence packet.',
+      },
+      {
+        key: 'settings-admin-apis',
+        label: 'Settings admin APIs',
+        gate: 'settings-provider-certification',
+        command: 'npm run ci:settings-provider-certification',
+        preflight: 'npm run test:settings-provider-certification-preflight-contract',
+        workflow: '.github/workflows/settings-provider-certification.yml',
+        targetInputs: [
+          'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+          'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
+        ],
+        evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
+        evidenceApi: '/api/admin/settings providerCertification plus site OpenAPI AdminSettingsProviderCertification',
+        evidenceUiPanel: 'settings-provider-certification-evidence-packet',
+        sourceOnlyGuard: 'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+        proofSources: [
+          'GET /api/admin/settings',
+          '/api/sites/{siteId}/openapi AdminSettingsProviderCertification',
+          'packages/sdk-js/src/generated-contract-types.ts',
+        ],
+        expectedArtifacts: [
+          'typed AdminSettings providerCertification response',
+          'operator evidence packet',
+          'Settings API no-secret response headers',
+        ],
+        runtime: providerRuntime,
+        secretBoundary: {
+          includesSecretValues: false,
+          excludes: ['admin key values', 'database URLs', 'provider credentials', 'service-role keys'],
+        },
+        nextAction: settingsMissingAliases.length > 0
+          ? `Configure ${settingsMissingAliases.slice(0, 4).join(', ')} and re-run the Settings admin API provider gate.`
+          : 'Run the Settings provider gate and archive the typed admin API evidence packet.',
+      },
+      {
+        key: 'products',
+        label: '/products',
+        gate: 'commerce-provider-certification',
+        command: 'npm run ci:commerce-provider-certification',
+        preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+        workflow: '.github/workflows/commerce-provider-certification.yml',
+        targetInputs: [
+          'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+          'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
+        ],
+        evidencePacketSchema: 'backy.commerce-provider-certification-evidence-packet.v1',
+        evidenceApi: '/api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync data.providerCertification.operatorEvidencePacket',
+        evidenceUiPanel: 'products-provider-certification-evidence-packet',
+        sourceOnlyGuard: 'BACKY_COMMERCE_SOURCE_ONLY=1 npm run test:commerce --workspace @backy-cms/admin',
+        proofSources: [
+          'apps/admin/src/routes/products.tsx',
+          'GET/POST /api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync',
+          'scripts/commerce-provider-certification-preflight-contract-smoke.mjs',
+        ],
+        expectedArtifacts: [
+          'product provider-sync evidence',
+          'product storefront handoff',
+          'provider catalog sync proof',
+          'subscription lifecycle proof when selected',
+        ],
+        runtime: commerceRuntime,
+        secretBoundary: {
+          includesSecretValues: false,
+          excludes: ['provider secrets', 'raw provider responses', 'private orders', 'customer payloads', 'digital delivery URLs'],
+        },
+        nextAction: commerceMissingScenarios.length > 0
+          ? 'Cover the Commerce provider bridge scenario, then run npm run ci:commerce-provider-certification.'
+          : 'Run commerce provider certification and attach the products provider-sync evidence packet.',
+      },
+      {
+        key: 'orders',
+        label: '/orders',
+        gate: 'commerce-provider-certification',
+        command: 'npm run ci:commerce-provider-certification',
+        preflight: 'npm run test:commerce-provider-certification-preflight-contract',
+        workflow: '.github/workflows/commerce-provider-certification.yml',
+        targetInputs: [
+          'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+          'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
+        ],
+        evidencePacketSchema: 'backy.order-provider-certification-evidence-packet.v1',
+        evidenceApi: '/api/admin/sites/{siteId}/commerce/orders/analytics data.providerCertification.operatorEvidencePacket',
+        evidenceUiPanel: 'orders-provider-certification-evidence-packet',
+        sourceOnlyGuard: 'BACKY_ORDERS_SOURCE_ONLY=1 npm run test:orders --workspace @backy-cms/admin',
+        proofSources: [
+          'apps/admin/src/routes/orders.tsx',
+          'GET /api/admin/sites/{siteId}/commerce/orders/analytics',
+          'scripts/commerce-provider-certification-preflight-contract-smoke.mjs',
+        ],
+        expectedArtifacts: [
+          'order analytics provider evidence',
+          'status handoff evidence',
+          'quote/tracking/fulfillment/refund proof',
+          'webhook/reconciliation proof',
+        ],
+        runtime: commerceRuntime,
+        secretBoundary: {
+          includesSecretValues: false,
+          excludes: ['provider secrets', 'customer payloads', 'raw order payloads', 'payment references', 'addresses', 'webhook bodies'],
+        },
+        nextAction: commerceMissingScenarios.length > 0
+          ? 'Cover the Commerce provider bridge scenario, then run npm run ci:commerce-provider-certification.'
+          : 'Run commerce provider certification and attach the orders analytics evidence packet.',
+      },
+    ];
     const blockedGates = gates.filter((gate) => gate.status !== 'ready-to-run');
 
     return {
       generatedAt: new Date().toISOString(),
       schemaVersion: 'backy.completion-status.v1',
       status: blockedGates.length === 0 ? 'certification-ready' : 'external-gates-required',
-      summary: 'Backy has the core local backend/editor/API surface implemented for the current audit; the remaining Partial rows need external database or live provider certification evidence.',
+      summary: 'Backy has the core local backend/editor/API surface implemented for the current audit; Forms and SDK database gates are certified, and the remaining Partial rows need live provider certification evidence.',
       audit: BACKY_COMPLETION_AUDIT,
       surfaces: BACKY_COMPLETION_SURFACES,
+      surfaceRunbooks,
+      certifiedGates,
       gates,
       nextAction: blockedGates[0]
         ? `Run ${blockedGates[0].command} after configuring ${blockedGates[0].requiredEnvAliases.slice(0, 3).join(', ')}.`
@@ -2729,10 +3416,37 @@ function SettingsPage() {
     runtimePublicApi?.corsAllowedOriginsConfigured,
     runtimePublicApi?.exposedContractHeaders.length,
   ]);
+  const settingsMediaStorageHandoff = useMemo(() => buildSettingsMediaStorageHandoff({
+    integrations,
+    runtimeStorage,
+    runtimeSupabase,
+    publicApiBase,
+    adminApiBase,
+  }), [
+    adminApiBase,
+    integrations,
+    publicApiBase,
+    runtimeStorage,
+    runtimeSupabase,
+  ]);
+  const settingsThemeDesignImpact = useMemo(() => buildSettingsThemeDesignImpact({
+    appearanceSettings,
+    deliveryMode,
+    publicApiBase,
+    adminApiBase,
+    validationIssues,
+  }), [
+    adminApiBase,
+    appearanceSettings,
+    deliveryMode,
+    publicApiBase,
+    validationIssues,
+  ]);
   const settingsHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     completionStatus: settingsBackyCompletionStatus,
     launchReadiness: settingsLaunchReadiness,
+    themeDesignImpact: settingsThemeDesignImpact,
     delivery: {
       mode: deliveryMode,
       publicApiBase,
@@ -2753,6 +3467,7 @@ function SettingsPage() {
       storage: {
         runtime: runtimeStorage || null,
         metadata: integrations.storage || null,
+        frontendHandoff: settingsMediaStorageHandoff,
         note: 'Storage provider metadata lives in Backy; bucket credentials and service keys stay in deployment environment variables.',
       },
       database: runtimeDatabase || null,
@@ -2836,6 +3551,7 @@ function SettingsPage() {
       general: generalSettings,
       appearance: appearanceSettings,
       themeContract: buildAppearanceThemeContract(appearanceSettings),
+      themeDesignImpact: settingsThemeDesignImpact,
       seo: seoSettings,
       notifications: notificationSettings,
       commerce: commerceSettings,
@@ -2906,6 +3622,8 @@ function SettingsPage() {
     runtimeSupabase,
     runtimeVercel,
     seoSettings,
+    settingsMediaStorageHandoff,
+    settingsThemeDesignImpact,
     settingsBackyCompletionStatus,
     settingsLaunchReadiness,
     siteScopedSettingsDraft,
@@ -2913,6 +3631,7 @@ function SettingsPage() {
     siteSettingsScope,
   ]);
   const settingsHandoffText = useMemo(() => JSON.stringify(settingsHandoff, null, 2), [settingsHandoff]);
+  const settingsThemeDesignImpactText = useMemo(() => JSON.stringify(settingsThemeDesignImpact, null, 2), [settingsThemeDesignImpact]);
   const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationHandoff, null, 2), [providerCertificationHandoff]);
   const frontendDatabaseCertificationHandoffText = useMemo(() => JSON.stringify(frontendDatabaseCertificationHandoff, null, 2), [frontendDatabaseCertificationHandoff]);
   const settingsLaunchReadinessText = useMemo(() => JSON.stringify(settingsLaunchReadiness, null, 2), [settingsLaunchReadiness]);
@@ -3383,6 +4102,71 @@ function SettingsPage() {
                   </div>
                 ))}
               </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-backy-completion-status-runbooks">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">Partial surface runbooks</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Copyable per-page runbooks mirror completionStatus.surfaceRunbooks for operator handoff and custom admin frontends.
+                    </p>
+                  </div>
+                  <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    surfaceRunbooks
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                  {settingsBackyCompletionStatus.surfaceRunbooks.map((runbook) => (
+                    <div
+                      key={runbook.key}
+                      className="rounded-md border border-border bg-card px-3 py-2"
+                      data-testid={`settings-backy-completion-status-runbook-${runbook.key}`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-semibold text-foreground">{runbook.label}</div>
+                          <div className="mt-1 break-words font-mono text-[10px] leading-4 text-muted-foreground">{runbook.gate}</div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isSaving || !canConfigureSettings}
+                          title={configurePermissionTitle}
+                          onClick={() => void copySettingsHandoffText(JSON.stringify(runbook, null, 2), `${runbook.label} completion runbook`)}
+                          iconStart={<Copy className="size-4" />}
+                          data-testid={`settings-backy-completion-status-runbook-copy-${runbook.key}`}
+                        >
+                          Copy runbook
+                        </Button>
+                      </div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidence packet</div>
+                          <div className="mt-1 break-words font-mono text-[10px] leading-4 text-foreground">{runbook.evidencePacketSchema}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Source guard</div>
+                          <div className="mt-1 break-words font-mono text-[10px] leading-4 text-foreground">{runbook.sourceOnlyGuard}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[11px] leading-5 text-muted-foreground">
+                        Evidence API: <span className="break-words font-mono text-[10px] text-foreground">{runbook.evidenceApi}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                        Secret boundary: no secret values; excludes {runbook.secretBoundary.excludes.slice(0, 4).join(', ')}.
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {runbook.targetInputs.map((input) => (
+                          <span key={input} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                            {input}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground">{runbook.nextAction}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {settingsBackyCompletionStatus.surfaces.map((surface) => (
                   <span key={surface.key} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
@@ -3499,7 +4283,12 @@ function SettingsPage() {
           <GeneralSettings value={generalSettings} onChange={updateGeneralSettings} />
         )}
         {activeTab === 'appearance' && (
-          <AppearanceSettings value={appearanceSettings} onChange={updateAppearanceSettings} />
+          <AppearanceSettings
+            value={appearanceSettings}
+            themeDesignImpact={settingsThemeDesignImpact}
+            onCopyThemeDesignImpact={() => void copySettingsHandoffText(settingsThemeDesignImpactText, 'Theme design impact handoff')}
+            onChange={updateAppearanceSettings}
+          />
         )}
         {activeTab === 'seo' && (
           <SEOSettings value={seoSettings} onChange={updateSeoSettings} />
@@ -3554,6 +4343,7 @@ function SettingsPage() {
             onChange={updateNotificationSettings}
             delivery={notificationWebhookDelivery}
             deliveryLoading={isNotificationWebhookTesting}
+            webhookUrlError={notificationWebhookUrlInlineError}
             onTestWebhook={() => handleTestNotificationWebhook()}
             onRetryWebhook={() => handleTestNotificationWebhook(notificationWebhookDelivery?.requestId)}
             disabled={settingsFormDisabled}
@@ -4310,9 +5100,13 @@ function SiteScopedSettingsPanel({
 
 function AppearanceSettings({
   value,
+  themeDesignImpact,
+  onCopyThemeDesignImpact,
   onChange,
 }: {
   value: AppearanceSettingsConfig;
+  themeDesignImpact: ReturnType<typeof buildSettingsThemeDesignImpact>;
+  onCopyThemeDesignImpact: () => void;
   onChange: (next: Partial<AppearanceSettingsConfig>) => void;
 }) {
   const resolved = resolveAppearanceSettings(value);
@@ -4324,11 +5118,14 @@ function AppearanceSettings({
     { key: 'textColor', label: 'Text', variable: '--backy-color-text' },
     { key: 'mutedTextColor', label: 'Muted text', variable: '--backy-color-muted-text' },
   ] as const;
-  const themeContract = buildAppearanceThemeContract(value);
+	  const themeContract = buildAppearanceThemeContract(value);
+	  const baseFontSizeInvalid = !Number.isFinite(resolved.baseFontSize) || resolved.baseFontSize < 12 || resolved.baseFontSize > 24;
+	  const radiusInvalid = !Number.isFinite(resolved.radius) || resolved.radius < 0 || resolved.radius > 32;
+	  const spacingUnitInvalid = !Number.isFinite(resolved.spacingUnit) || resolved.spacingUnit < 2 || resolved.spacingUnit > 16;
 
-  const updateColor = (key: typeof colorControls[number]['key'], nextValue: string) => {
-    onChange({ [key]: nextValue });
-  };
+	  const updateColor = (key: typeof colorControls[number]['key'], nextValue: string) => {
+	    onChange({ [key]: nextValue });
+	  };
   const updateNumber = (key: 'baseFontSize' | 'radius' | 'spacingUnit', nextValue: number) => {
     onChange({ [key]: nextValue });
   };
@@ -4336,37 +5133,52 @@ function AppearanceSettings({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-4 text-lg font-semibold">Theme colors</h3>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {colorControls.map((control) => (
-            <div key={control.key} className="rounded-lg border border-border bg-background p-3">
-              <label htmlFor={`settings-${control.key}`} className="block text-sm font-medium">
-                {control.label}
-              </label>
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  id={`settings-${control.key}`}
-                  type="color"
-                  value={colorInputValue(resolved[control.key], DEFAULT_APPEARANCE_SETTINGS[control.key])}
-                  onChange={(event) => updateColor(control.key, event.target.value)}
-                  className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border"
-                />
-                <input
-                  type="text"
-                  aria-label={`${control.label} color hex`}
-                  value={resolved[control.key]}
-                  onChange={(event) => updateColor(control.key, event.target.value)}
-                  className={cn(
-                    'min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 font-mono text-sm',
-                    'focus:outline-none focus:ring-2 focus:ring-ring',
-                  )}
-                />
-              </div>
-              <div className="mt-2 font-mono text-[11px] text-muted-foreground">{control.variable}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+	        <h3 className="mb-4 text-lg font-semibold">Theme colors</h3>
+	        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+	          {colorControls.map((control) => {
+	            const colorInvalid = !HEX_COLOR_REGEX.test(resolved[control.key]);
+	            const errorId = `settings-${control.key}-error`;
+
+	            return (
+	              <div key={control.key} className="rounded-lg border border-border bg-background p-3">
+	                <label htmlFor={`settings-${control.key}`} className="block text-sm font-medium">
+	                  {control.label}
+	                </label>
+	                <div className="mt-2 flex items-center gap-2">
+	                  <input
+	                    id={`settings-${control.key}`}
+	                    type="color"
+	                    value={colorInputValue(resolved[control.key], DEFAULT_APPEARANCE_SETTINGS[control.key])}
+	                    onChange={(event) => updateColor(control.key, event.target.value)}
+	                    className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border"
+	                    data-testid={`settings-${control.key}-color-input`}
+	                  />
+	                  <input
+	                    type="text"
+	                    aria-label={`${control.label} color hex`}
+	                    aria-invalid={colorInvalid}
+	                    aria-describedby={colorInvalid ? errorId : undefined}
+	                    value={resolved[control.key]}
+	                    onChange={(event) => updateColor(control.key, event.target.value)}
+	                    className={cn(
+	                      'min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 font-mono text-sm',
+	                      'focus:outline-none focus:ring-2 focus:ring-ring',
+	                      colorInvalid && 'border-destructive text-destructive focus:ring-destructive/30',
+	                    )}
+	                    data-testid={`settings-${control.key}-hex-input`}
+	                  />
+	                </div>
+	                {colorInvalid ? (
+	                  <p id={errorId} role="alert" className="mt-2 text-xs font-medium text-destructive" data-testid={`settings-${control.key}-error`}>
+	                    {control.label} must use a six-character hex value like #0f172a.
+	                  </p>
+	                ) : null}
+	                <div className="mt-2 font-mono text-[11px] text-muted-foreground">{control.variable}</div>
+	              </div>
+	            );
+	          })}
+	        </div>
+	      </div>
 
       <div>
         <h3 className="mb-4 text-lg font-semibold">Typography and layout tokens</h3>
@@ -4395,68 +5207,151 @@ function AppearanceSettings({
 
           <label htmlFor="settings-base-font-size" className="space-y-2 text-sm">
             <span className="font-medium">Base font size</span>
-            <input
-              id="settings-base-font-size"
-              type="number"
-              value={resolved.baseFontSize}
-              onChange={(event) => updateNumber('baseFontSize', Number(event.target.value))}
-              min={12}
-              max={24}
-              className={cn(
-                'w-full rounded-lg border bg-background px-3 py-2',
-                'focus:outline-none focus:ring-2 focus:ring-ring',
-              )}
-            />
-          </label>
+	            <input
+	              id="settings-base-font-size"
+	              type="number"
+	              value={resolved.baseFontSize}
+	              onChange={(event) => updateNumber('baseFontSize', Number(event.target.value))}
+	              min={12}
+	              max={24}
+	              aria-invalid={baseFontSizeInvalid}
+	              aria-describedby={baseFontSizeInvalid ? 'settings-base-font-size-error' : undefined}
+	              className={cn(
+	                'w-full rounded-lg border bg-background px-3 py-2',
+	                'focus:outline-none focus:ring-2 focus:ring-ring',
+	                baseFontSizeInvalid && 'border-destructive text-destructive focus:ring-destructive/30',
+	              )}
+	              data-testid="settings-base-font-size-input"
+	            />
+	            {baseFontSizeInvalid ? (
+	              <p id="settings-base-font-size-error" role="alert" className="text-xs font-medium text-destructive" data-testid="settings-base-font-size-error">
+	                Use a base font size from 12 to 24 pixels.
+	              </p>
+	            ) : null}
+	          </label>
 
-          <label htmlFor="settings-radius" className="space-y-2 text-sm">
-            <span className="font-medium">Corner radius</span>
-            <input
+	          <label htmlFor="settings-radius" className="space-y-2 text-sm">
+	            <span className="font-medium">Corner radius</span>
+	            <input
               id="settings-radius"
               type="number"
               value={resolved.radius}
-              onChange={(event) => updateNumber('radius', Number(event.target.value))}
-              min={0}
-              max={32}
-              className={cn(
-                'w-full rounded-lg border bg-background px-3 py-2',
-                'focus:outline-none focus:ring-2 focus:ring-ring',
-              )}
-            />
-          </label>
+	              onChange={(event) => updateNumber('radius', Number(event.target.value))}
+	              min={0}
+	              max={32}
+	              aria-invalid={radiusInvalid}
+	              aria-describedby={radiusInvalid ? 'settings-radius-error' : undefined}
+	              className={cn(
+	                'w-full rounded-lg border bg-background px-3 py-2',
+	                'focus:outline-none focus:ring-2 focus:ring-ring',
+	                radiusInvalid && 'border-destructive text-destructive focus:ring-destructive/30',
+	              )}
+	              data-testid="settings-radius-input"
+	            />
+	            {radiusInvalid ? (
+	              <p id="settings-radius-error" role="alert" className="text-xs font-medium text-destructive" data-testid="settings-radius-error">
+	                Use a corner radius from 0 to 32 pixels.
+	              </p>
+	            ) : null}
+	          </label>
 
-          <label htmlFor="settings-spacing-unit" className="space-y-2 text-sm">
-            <span className="font-medium">Spacing unit</span>
-            <input
+	          <label htmlFor="settings-spacing-unit" className="space-y-2 text-sm">
+	            <span className="font-medium">Spacing unit</span>
+	            <input
               id="settings-spacing-unit"
               type="number"
               value={resolved.spacingUnit}
-              onChange={(event) => updateNumber('spacingUnit', Number(event.target.value))}
-              min={2}
-              max={16}
-              className={cn(
-                'w-full rounded-lg border bg-background px-3 py-2',
-                'focus:outline-none focus:ring-2 focus:ring-ring',
-              )}
-            />
-          </label>
+	              onChange={(event) => updateNumber('spacingUnit', Number(event.target.value))}
+	              min={2}
+	              max={16}
+	              aria-invalid={spacingUnitInvalid}
+	              aria-describedby={spacingUnitInvalid ? 'settings-spacing-unit-error' : undefined}
+	              className={cn(
+	                'w-full rounded-lg border bg-background px-3 py-2',
+	                'focus:outline-none focus:ring-2 focus:ring-ring',
+	                spacingUnitInvalid && 'border-destructive text-destructive focus:ring-destructive/30',
+	              )}
+	              data-testid="settings-spacing-unit-input"
+	            />
+	            {spacingUnitInvalid ? (
+	              <p id="settings-spacing-unit-error" role="alert" className="text-xs font-medium text-destructive" data-testid="settings-spacing-unit-error">
+	                Use a spacing unit from 2 to 16 pixels.
+	              </p>
+	            ) : null}
+	          </label>
 
-          <label htmlFor="settings-motion-preset" className="space-y-2 text-sm">
-            <span className="font-medium">Motion preset</span>
-            <select
+	          <label htmlFor="settings-motion-preset" className="space-y-2 text-sm">
+	            <span className="font-medium">Motion preset</span>
+	            <select
               id="settings-motion-preset"
               value={resolved.motionPreset}
               onChange={(event) => onChange({ motionPreset: event.target.value })}
               className={cn(
-                'w-full rounded-lg border bg-background px-3 py-2',
-                'focus:outline-none focus:ring-2 focus:ring-ring',
-              )}
-            >
+	                'w-full rounded-lg border bg-background px-3 py-2',
+	                'focus:outline-none focus:ring-2 focus:ring-ring',
+	              )}
+	              data-testid="settings-motion-preset-select"
+	            >
               {MOTION_PRESETS.map((preset) => (
                 <option key={preset.value} value={preset.value}>{preset.label}</option>
               ))}
             </select>
           </label>
+	        </div>
+	      </div>
+
+      <div
+        className="rounded-lg border border-border bg-background p-4"
+        data-testid="settings-theme-design-impact"
+        data-schema-version={themeDesignImpact.schemaVersion}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">Theme design impact</h3>
+              <span className={cn(
+                'rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize',
+                themeDesignImpact.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+              )}
+              >
+                {themeDesignImpact.status}
+              </span>
+              <span className="rounded-md border border-border bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+                {themeDesignImpact.schemaVersion}
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Copy the global token, motion, and editable design-state contract before wiring a custom frontend theme system.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onCopyThemeDesignImpact}
+            iconStart={<Copy className="size-4" />}
+            data-testid="settings-theme-design-impact-copy-button"
+          >
+            Copy design impact
+          </Button>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {[
+            { label: 'CSS variables', value: String(themeDesignImpact.impact.cssVariableCount) },
+            { label: 'Editable surfaces', value: String(themeDesignImpact.designStatePersistence.editableSurfaces.length) },
+            { label: 'Motion bindings', value: String(themeDesignImpact.motion.bindingPaths.length) },
+          ].map((item) => (
+            <div key={item.label} className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+              <div className="text-muted-foreground">{item.label}</div>
+              <div className="mt-1 font-semibold text-foreground">{item.value}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2" data-testid="settings-theme-design-impact-token-paths">
+          {themeDesignImpact.designStatePersistence.tokenRefPaths.map((path) => (
+            <span key={path} className="rounded-full border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+              {path}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -5420,6 +6315,120 @@ const buildAppearanceThemeContract = (value?: AppearanceSettingsConfig) => {
   };
 };
 
+const buildSettingsThemeDesignImpact = ({
+  appearanceSettings,
+  deliveryMode,
+  publicApiBase,
+  adminApiBase,
+  validationIssues,
+}: {
+  appearanceSettings: AppearanceSettingsConfig;
+  deliveryMode: DeliveryMode;
+  publicApiBase: string;
+  adminApiBase: string;
+  validationIssues: SettingsValidationIssue[];
+}) => {
+  const themeContract = buildAppearanceThemeContract(appearanceSettings);
+  const appearanceIssues = validationIssues.filter((issue) => issue.tab === 'appearance');
+  const colorKeys = Object.keys(themeContract.colors);
+  const typographyKeys = Object.keys(themeContract.typography);
+  const cssVariableKeys = Object.keys(themeContract.cssVariables);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: 'backy.settings-theme-design-impact.v1',
+    status: appearanceIssues.some((issue) => issue.severity === 'error') ? 'attention' : 'ready',
+    deliveryMode,
+    summary: 'Global Settings appearance tokens are the workspace-level source for custom frontend colors, typography, spacing, radius, and motion defaults.',
+    themeContract,
+    impact: {
+      colorTokenCount: colorKeys.length,
+      typographyTokenCount: typographyKeys.length,
+      cssVariableCount: cssVariableKeys.length,
+      invalidControlCount: appearanceIssues.length,
+      invalidControls: appearanceIssues.map((issue) => ({
+        label: issue.label,
+        detail: issue.detail,
+        severity: issue.severity,
+      })),
+    },
+    editableControls: {
+      colors: colorKeys.map((key) => ({
+        key,
+        cssVariable: `--backy-color-${key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)}`,
+      })),
+      typography: ['headingFontFamily', 'bodyFontFamily', 'monoFontFamily', 'baseFontSize'],
+      layout: ['radius', 'spacingUnit'],
+      motion: ['motionPreset'],
+    },
+    motion: {
+      preset: themeContract.motion.preset,
+      bindingPaths: [
+        'content.themeTokenRefs.motion',
+        'element.tokenRefs.animationDuration',
+        'element.tokenRefs.animationEasing',
+        'element.animation.tokenRefs.duration',
+        'element.animation.tokenRefs.easing',
+      ],
+      animationStateFields: [
+        'content.animations[]',
+        'content.contentDocument.animations[]',
+        'element.animation',
+        'element.animation.trigger',
+        'element.animation.from',
+        'element.animation.to',
+        'element.animation.scrollTrigger',
+      ],
+    },
+    designStatePersistence: {
+      tokenSchemaVersion: themeContract.schemaVersion,
+      tokenRefPaths: [
+        'content.themeTokenRefs',
+        'content.contentDocument.themeTokenRefs',
+        'element.tokenRefs',
+        'element.styles',
+        'element.props',
+        'document.themeTokenRefs',
+      ],
+      editableSurfaces: [
+        'pages',
+        'blog',
+        'reusable sections',
+        'products',
+        'collections',
+        'live management overlay',
+        'hosted public renderer',
+      ],
+      preservedDesignFields: [
+        'content.elements',
+        'content.contentDocument',
+        'content.customCSS',
+        'content.customJS',
+        'content.assets',
+        'content.animations',
+        'content.interactions',
+        'content.dataBindings',
+        'content.editableMap',
+        'content.themeTokenRefs',
+      ],
+    },
+    frontendBindings: {
+      publicManifestThemeModule: `${publicApiBase}/sites/{siteId}/manifest#data.modules.theme`,
+      publicOpenApiThemeSchema: `${publicApiBase}/sites/{siteId}/openapi#/components/schemas/BackyThemeTokens`,
+      adminSettingsApi: `${adminApiBase}/settings#data.settings.themeDesignImpact`,
+      settingsHandoffPath: 'settingsHandoff.themeDesignImpact',
+      cssVariableSelector: ':root, [data-backy-theme]',
+    },
+    privacy: {
+      includesSecretValues: false,
+      includesAdminApiKeys: false,
+      includesProviderCredentials: false,
+      includesPrivateContent: false,
+      note: 'Theme design impact only exports non-secret design tokens, token reference paths, and editable design-state field names.',
+    },
+  };
+};
+
 const DEFAULT_NOTIFICATION_SETTINGS: Required<Pick<NotificationSettingsConfig, 'email' | 'inApp' | 'digestFrequency'>> & {
   webhookUrl: string;
 } = {
@@ -6204,7 +7213,16 @@ const buildInfrastructureEnvContract = ({
     label: 'Notification email provider',
     description: 'Selects production email delivery for form, comment, invite, reset, and workflow notifications.',
     configured: Boolean(runtimeNotifications?.productionReady),
-    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.orderCreated || notifications?.email?.productLowStock || notifications?.email?.systemUpdates),
+    required: Boolean(
+      notifications?.email?.recipient ||
+        notifications?.email?.comments ||
+        notifications?.email?.newUser ||
+        notifications?.email?.pagePublished ||
+        notifications?.email?.formSubmission ||
+        notifications?.email?.orderCreated ||
+        notifications?.email?.productLowStock ||
+        notifications?.email?.systemUpdates
+    ),
     valueHint: runtimeNotifications?.emailProvider,
     example: 'resend',
   },
@@ -6215,7 +7233,16 @@ const buildInfrastructureEnvContract = ({
     label: 'Notification sender',
     description: 'Sender identity used by Backy notification emails.',
     configured: Boolean(runtimeNotifications?.from),
-    required: Boolean(notifications?.email?.recipient || notifications?.email?.formSubmission || notifications?.email?.comments || notifications?.email?.orderCreated || notifications?.email?.productLowStock || notifications?.email?.systemUpdates),
+    required: Boolean(
+      notifications?.email?.recipient ||
+        notifications?.email?.comments ||
+        notifications?.email?.newUser ||
+        notifications?.email?.pagePublished ||
+        notifications?.email?.formSubmission ||
+        notifications?.email?.orderCreated ||
+        notifications?.email?.productLowStock ||
+        notifications?.email?.systemUpdates
+    ),
     valueHint: runtimeNotifications?.from,
     example: 'Backy <notifications@example.com>',
   },
@@ -7113,25 +8140,7 @@ function InfrastructureSettings({
   mediaOnly?: boolean;
   providerCertificationControlsDisabled?: boolean;
   providerCertificationControlsTitle?: string;
-  providerCertificationScenarioEvidence: {
-    schemaVersion: string;
-    status: 'ready' | 'attention';
-    requiredGate: string;
-    coverage: {
-      covered: number;
-      total: number;
-      missing: string[];
-    };
-    scenarios: Array<{
-      key: string;
-      label: string;
-      expectedEvidence: readonly string[];
-      nextAction: string;
-      evidenceCount: number;
-      status: 'covered' | 'missing';
-    }>;
-    secretHandling: string;
-  };
+  providerCertificationScenarioEvidence: SettingsProviderCertificationScenarioEvidence;
   onCopyProviderCertificationHandoff: () => void;
   onDownloadProviderCertificationHandoff: () => void;
   onChange: Dispatch<SetStateAction<IntegrationSettings>>;
@@ -7143,7 +8152,24 @@ function InfrastructureSettings({
   const storageDisabled = disabled;
   const supabaseDisabled = disabled;
   const vercelDisabled = disabled || mediaOnly;
+  const publicApiBase = useMemo(() => getApiBase('public'), []);
+  const adminApiBase = useMemo(() => getApiBase('admin'), []);
+  const settingsMediaStorageHandoff = useMemo(() => buildSettingsMediaStorageHandoff({
+    integrations,
+    runtimeStorage,
+    runtimeSupabase,
+    publicApiBase,
+    adminApiBase,
+  }), [
+    adminApiBase,
+    integrations,
+    publicApiBase,
+    runtimeStorage,
+    runtimeSupabase,
+  ]);
+  const settingsMediaStorageHandoffText = useMemo(() => JSON.stringify(settingsMediaStorageHandoff, null, 2), [settingsMediaStorageHandoff]);
   const [copiedEnvProfile, setCopiedEnvProfile] = useState('');
+  const [mediaStorageHandoffNotice, setMediaStorageHandoffNotice] = useState('');
   const [isCheckingInfrastructure, setIsCheckingInfrastructure] = useState(false);
   const [infrastructureCheckError, setInfrastructureCheckError] = useState('');
   const [infrastructureDiagnostics, setInfrastructureDiagnostics] = useState<SettingsInfrastructureDiagnostic[] | null>(null);
@@ -7161,6 +8187,7 @@ function InfrastructureSettings({
   );
   const [copiedCertificationCommand, setCopiedCertificationCommand] = useState(false);
   const [copiedCertificationEnvTemplate, setCopiedCertificationEnvTemplate] = useState(false);
+  const [copiedCertificationEvidencePacket, setCopiedCertificationEvidencePacket] = useState(false);
   const settingsCertificationCommand = useMemo(
     () => buildSettingsProviderCertificationCommand(settingsCertificationCommandOptions),
     [settingsCertificationCommandOptions],
@@ -7172,6 +8199,67 @@ function InfrastructureSettings({
   const settingsCertificationRequiredAliases = useMemo(
     () => buildSettingsProviderCertificationRequiredAliases(settingsCertificationCommandOptions),
     [settingsCertificationCommandOptions],
+  );
+  const settingsCertificationRuntimeEvidence = useMemo(() => buildSettingsProviderRuntimeEvidence({
+    database: runtimeDatabase || null,
+    storage: runtimeStorage || null,
+    supabase: runtimeSupabase || null,
+    vercel: runtimeVercel || null,
+    mediaScanner: runtimeMediaScanner || null,
+    notifications: runtimeNotifications || null,
+    commerce: runtimeCommerce || null,
+    interactiveComponents: runtimeInteractiveComponents || null,
+    publicApi: runtimePublicApi || null,
+  }), [
+    runtimeCommerce,
+    runtimeDatabase,
+    runtimeInteractiveComponents,
+    runtimeMediaScanner,
+    runtimeNotifications,
+    runtimePublicApi,
+    runtimeStorage,
+    runtimeSupabase,
+    runtimeVercel,
+  ]);
+  const settingsCertificationArtifactReadiness = useMemo(() => buildSettingsProviderCertificationArtifactReadiness({
+    runtimeStorage,
+    runtimeVercel,
+    runtimeNotifications,
+    runtimePublicApi,
+    runtimeCommerce,
+    integrations,
+    runtimeEvidence: settingsCertificationRuntimeEvidence,
+    scenarioEvidence: providerCertificationScenarioEvidence,
+  }), [
+    integrations,
+    providerCertificationScenarioEvidence,
+    runtimeCommerce,
+    runtimeNotifications,
+    runtimePublicApi,
+    runtimeStorage,
+    runtimeVercel,
+    settingsCertificationRuntimeEvidence,
+  ]);
+  const settingsCertificationEvidencePacket = useMemo(() => buildSettingsProviderCertificationEvidencePacket({
+    options: settingsCertificationCommandOptions,
+    command: settingsCertificationCommand,
+    envTemplate: settingsCertificationEnvTemplate,
+    requiredAliases: settingsCertificationRequiredAliases,
+    runtimeEvidence: settingsCertificationRuntimeEvidence,
+    scenarioEvidence: providerCertificationScenarioEvidence,
+    artifactReadiness: settingsCertificationArtifactReadiness,
+  }), [
+    providerCertificationScenarioEvidence,
+    settingsCertificationArtifactReadiness,
+    settingsCertificationCommand,
+    settingsCertificationCommandOptions,
+    settingsCertificationEnvTemplate,
+    settingsCertificationRequiredAliases,
+    settingsCertificationRuntimeEvidence,
+  ]);
+  const settingsCertificationEvidencePacketText = useMemo(
+    () => JSON.stringify(settingsCertificationEvidencePacket, null, 2),
+    [settingsCertificationEvidencePacket],
   );
   const settingsCertificationHasSelectedFamily = hasSettingsCertificationGroup(settingsCertificationCommandOptions) ||
     settingsCertificationCommandOptions.certifyCommerce;
@@ -7193,6 +8281,17 @@ function InfrastructureSettings({
         ...next,
       },
     }));
+  };
+
+  const copyMediaStorageHandoff = async () => {
+    if (storageDisabled) return;
+
+    try {
+      await navigator.clipboard.writeText(settingsMediaStorageHandoffText);
+      setMediaStorageHandoffNotice('Media storage handoff copied.');
+    } catch {
+      setMediaStorageHandoffNotice(settingsMediaStorageHandoffText);
+    }
   };
 
   const updateSupabase = (next: Partial<SupabaseSettings>) => {
@@ -7309,6 +8408,20 @@ function InfrastructureSettings({
       }, 1400);
     } catch {
       setCopiedCertificationEnvTemplate(false);
+    }
+  };
+
+  const copySettingsProviderCertificationEvidencePacket = async () => {
+    if (providerCertificationControlsDisabled || settingsCertificationEvidencePacket.selectedFamilies.length === 0) return;
+
+    try {
+      await navigator.clipboard.writeText(settingsCertificationEvidencePacketText);
+      setCopiedCertificationEvidencePacket(true);
+      setTimeout(() => {
+        setCopiedCertificationEvidencePacket(false);
+      }, 1400);
+    } catch {
+      setCopiedCertificationEvidencePacket(false);
     }
   };
 
@@ -7878,6 +8991,121 @@ function InfrastructureSettings({
                 {providerCertificationScenarioEvidence.secretHandling}
               </div>
             </div>
+            <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="settings-provider-certification-evidence-packet">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium text-foreground">Certification evidence packet</div>
+                  <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                    Redacted operator attachment manifest for selected Settings provider families, required aliases, capture sources, scenario attachments, and live-run redaction rules.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                    {settingsCertificationEvidencePacket.schemaVersion}
+                  </span>
+                  <span className={cn(
+                    'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                    settingsCertificationEvidencePacket.status === 'evidence-complete'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : settingsCertificationEvidencePacket.status === 'needs-runtime-inputs'
+                        ? 'bg-red-50 text-red-700'
+                        : 'bg-amber-50 text-amber-700',
+                  )}>
+                    {settingsCertificationEvidencePacket.status}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={providerCertificationControlsDisabled || settingsCertificationEvidencePacket.selectedFamilies.length === 0}
+                    title={providerCertificationControlsTitle || (settingsCertificationEvidencePacket.selectedFamilies.length === 0 ? 'Select at least one provider family' : undefined)}
+                    onClick={() => void copySettingsProviderCertificationEvidencePacket()}
+                    iconStart={copiedCertificationEvidencePacket ? <Check className="size-4" /> : <Copy className="size-4" />}
+                    data-testid="settings-provider-certification-evidence-packet-copy-button"
+                  >
+                    {copiedCertificationEvidencePacket ? 'Copied evidence packet' : 'Copy evidence packet'}
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Selected families</div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">{settingsCertificationEvidencePacket.selectedFamilies.length}</div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {settingsCertificationEvidencePacket.selectedFamilies.length > 0 ? settingsCertificationEvidencePacket.selectedFamilies.map((family) => (
+                      <span key={family} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {family}
+                      </span>
+                    )) : (
+                      <span className="text-[11px] text-muted-foreground">No families selected</span>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Runtime gaps</div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">{settingsCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length}</div>
+                  <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                    {settingsCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length > 0
+                      ? settingsCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.join(', ')
+                      : 'Selected families have runtime readiness evidence.'}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Scenario attachments</div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {settingsCertificationEvidencePacket.scenarioAttachments.filter((scenario) => scenario.status === 'covered').length}/{settingsCertificationEvidencePacket.scenarioAttachments.length}
+                  </div>
+                  <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                    {settingsCertificationEvidencePacket.redactionPolicy.allowedEvidence.slice(0, 3).join(' | ')}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                {settingsCertificationEvidencePacket.operatorArtifacts.map((artifact) => (
+                  <div key={artifact.key} className="rounded-md border border-border bg-card px-3 py-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium text-foreground">{artifact.family}</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">{artifact.providerAlias} · {artifact.captureSource}</div>
+                      </div>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        artifact.status === 'ready-to-run' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
+                      )}>
+                        {artifact.status}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {artifact.expectedArtifacts.map((expectedArtifact) => (
+                        <span key={`${artifact.key}-${expectedArtifact}`} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          {expectedArtifact}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Scenario attachments</div>
+                <div className="mt-2 grid gap-1 md:grid-cols-2 xl:grid-cols-4">
+                  {settingsCertificationEvidencePacket.scenarioAttachments.map((scenario) => (
+                    <div key={scenario.key} className="rounded bg-background px-2 py-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-foreground">{scenario.label}</span>
+                        <span className={cn(
+                          'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
+                          scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                        )}>
+                          {scenario.evidenceCount}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                {settingsCertificationEvidencePacket.secretHandling}
+              </div>
+            </div>
             <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-provider-certification-command-builder">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -7944,13 +9172,19 @@ function InfrastructureSettings({
                     testId: 'settings-provider-certification-notification-toggle',
                   },
                   {
+                    key: 'certifyPublicApiCors',
+                    label: 'Custom frontend CORS',
+                    env: 'BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS',
+                    testId: 'settings-provider-certification-cors-toggle',
+                  },
+                  {
                     key: 'certifyCommerce',
                     label: 'Nested commerce',
                     env: 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED',
                     testId: 'settings-provider-certification-commerce-toggle',
                   },
                 ] satisfies Array<{
-                  key: 'includeReleaseDoctor' | 'certifyStorage' | 'certifyRotation' | 'certifyVercelSecrets' | 'certifyNotification' | 'certifyCommerce';
+                  key: 'includeReleaseDoctor' | 'certifyStorage' | 'certifyRotation' | 'certifyVercelSecrets' | 'certifyNotification' | 'certifyPublicApiCors' | 'certifyCommerce';
                   label: string;
                   env: string;
                   testId: string;
@@ -7973,7 +9207,7 @@ function InfrastructureSettings({
                   </label>
                 ))}
               </div>
-              <div className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-5">
                 <label className="text-xs">
                   <span className="font-semibold text-foreground">Storage provider</span>
                   <select
@@ -8013,6 +9247,19 @@ function InfrastructureSettings({
                   </span>
                 </label>
                 <label className="text-xs">
+                  <span className="font-semibold text-foreground">Certification site id</span>
+                  <input
+                    type="text"
+                    value={settingsCertificationCommandOptions.siteId}
+                    disabled={providerCertificationControlsDisabled}
+                    onChange={(event) => updateSettingsCertificationCommandOptions({ siteId: event.target.value })}
+                    placeholder="site-demo"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="settings-provider-certification-site-id-input"
+                  />
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">Sets BACKY_SETTINGS_CERTIFY_SITE_ID and nested BACKY_COMMERCE_CERTIFY_SITE_ID.</span>
+                </label>
+                <label className="text-xs">
                   <span className="font-semibold text-foreground">External target URL</span>
                   <input
                     type="url"
@@ -8024,6 +9271,19 @@ function InfrastructureSettings({
                     data-testid="settings-provider-certification-external-target-input"
                   />
                   <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">Blank starts a local disposable target.</span>
+                </label>
+                <label className="text-xs">
+                  <span className="font-semibold text-foreground">Expected frontend origin</span>
+                  <input
+                    type="url"
+                    value={settingsCertificationCommandOptions.publicApiOrigin}
+                    disabled={providerCertificationControlsDisabled || !settingsCertificationCommandOptions.certifyPublicApiCors}
+                    onChange={(event) => updateSettingsCertificationCommandOptions({ publicApiOrigin: event.target.value })}
+                    placeholder="https://app.example.com"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="settings-provider-certification-public-api-origin-input"
+                  />
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">Sets BACKY_CORS_ALLOWED_ORIGINS for exact custom frontend API certification.</span>
                 </label>
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                   <label className="text-xs">
@@ -8605,14 +9865,77 @@ function InfrastructureSettings({
                   value={storage.allowedFileTypes || ''}
                   disabled={storageDisabled}
                   onChange={(event) => updateStorage({ allowedFileTypes: event.target.value })}
-                  placeholder="image/*,font/*,application/pdf"
+                  placeholder="image/*,font/*,document/*,file/*"
                   className={inputClassName}
                 />
                 <span className="text-xs text-muted-foreground">
-                  Comma-separated MIME types or extensions for uploads, fonts, and downloadable files.
+                  Comma-separated MIME types, extensions, or Backy media categories like image/*, font/*, document/*, and file/*.
                 </span>
               </label>
             </div>
+          </div>
+          <div data-testid="settings-media-storage-handoff" className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground">Custom frontend media handoff</h4>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  backy.media-storage-handoff.v1 packages storage policy, public media APIs, signed private delivery, folder organization, usage references, editable metadata, and design asset persistence for external builders.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={storageDisabled}
+                title={storageDisabled ? providerCertificationControlsTitle : undefined}
+                onClick={() => void copyMediaStorageHandoff()}
+                data-testid="settings-media-storage-handoff-copy-button"
+              >
+                Copy media handoff
+              </Button>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <div className="text-[11px] font-medium text-muted-foreground">Provider</div>
+                <div className="mt-1 truncate font-mono text-sm text-foreground">{settingsMediaStorageHandoff.provider.selected}</div>
+              </div>
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <div className="text-[11px] font-medium text-muted-foreground">Bucket</div>
+                <div className="mt-1 truncate font-mono text-sm text-foreground">{settingsMediaStorageHandoff.provider.bucket || 'not set'}</div>
+              </div>
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <div className="text-[11px] font-medium text-muted-foreground">Private Files</div>
+                <div className="mt-1 text-sm font-semibold text-foreground">{settingsMediaStorageHandoff.policies.privateFilesEnabled ? 'enabled' : 'off'}</div>
+              </div>
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <div className="text-[11px] font-medium text-muted-foreground">Transforms</div>
+                <div className="mt-1 text-sm font-semibold text-foreground">{settingsMediaStorageHandoff.policies.imageTransformsEnabled ? 'enabled' : 'off'}</div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.55fr)]">
+              <div className="grid gap-2">
+                <SettingsApiSnippet label="Public media list" value={settingsMediaStorageHandoff.endpointTemplates.publicMediaList} />
+                <SettingsApiSnippet label="Admin upload" value={settingsMediaStorageHandoff.endpointTemplates.adminMediaUpload} />
+                <SettingsApiSnippet label="Signed private URL" value={settingsMediaStorageHandoff.endpointTemplates.adminSignedUrl} />
+              </div>
+              <div className="rounded-md border border-border bg-background p-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Contracts</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {Object.values(settingsMediaStorageHandoff.contracts).map((contract) => (
+                    <span key={contract} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {contract}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                  Design assets persist through {settingsMediaStorageHandoff.designStateUsage.preservedFields.length} media-aware fields without exposing provider credentials or signed URL tokens.
+                </p>
+              </div>
+            </div>
+            {mediaStorageHandoffNotice && (
+              <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs leading-5 text-muted-foreground">
+                {mediaStorageHandoffNotice}
+              </div>
+            )}
           </div>
           {runtimeStorage?.missing && runtimeStorage.missing.length > 0 && (
             <Notice tone="warning" className="mt-4">
@@ -9466,6 +10789,7 @@ function NotificationSettings({
   onChange,
   delivery,
   deliveryLoading,
+  webhookUrlError,
   onTestWebhook,
   onRetryWebhook,
   disabled,
@@ -9474,11 +10798,11 @@ function NotificationSettings({
   onChange: (next: Partial<NotificationSettingsConfig>) => void;
   delivery: SettingsNotificationWebhookDeliveryResult | null;
   deliveryLoading: boolean;
+  webhookUrlError: string | null;
   onTestWebhook: () => void;
   onRetryWebhook: () => void;
   disabled: boolean;
 }) {
-  const digestFrequency = value.digestFrequency === 'off' ? 'off' : 'instant';
   const updateEmail = (key: keyof NonNullable<NotificationSettingsConfig['email']>, checked: boolean) => {
     onChange({
       email: {
@@ -9512,28 +10836,20 @@ function NotificationSettings({
         <PanelContent>
           <div className="grid gap-3">
             {[
-              { key: 'comments' as const, label: 'Comment moderation events', live: true },
-              { key: 'newUser' as const, label: 'New user registration', live: false },
-              { key: 'pagePublished' as const, label: 'Page published', live: false },
-              { key: 'formSubmission' as const, label: 'New form submission', live: true },
-              { key: 'orderCreated' as const, label: 'New commerce order', live: true },
-              { key: 'productLowStock' as const, label: 'Product low stock', live: true },
-              { key: 'systemUpdates' as const, label: 'System updates', live: false },
+              { key: 'comments' as const, label: 'Comment moderation events' },
+              { key: 'newUser' as const, label: 'New user registration' },
+              { key: 'pagePublished' as const, label: 'Page published' },
+              { key: 'formSubmission' as const, label: 'New form submission' },
+              { key: 'orderCreated' as const, label: 'New commerce order' },
+              { key: 'productLowStock' as const, label: 'Product low stock' },
+              { key: 'systemUpdates' as const, label: 'System updates' },
             ].map((item) => (
               <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
-                <span className="flex flex-col gap-1">
-                  <span>{item.label}</span>
-                  {!item.live && (
-                    <span className="text-xs leading-4 text-muted-foreground">
-                      Planned channel. Backy does not send this email yet.
-                    </span>
-                  )}
-                </span>
+                <span>{item.label}</span>
                 <input
                   type="checkbox"
-                  checked={item.live ? Boolean(value.email?.[item.key]) : false}
-                  disabled={!item.live}
-                  title={item.live ? undefined : 'This email channel is planned and not enforced yet.'}
+                  checked={Boolean(value.email?.[item.key])}
+                  disabled={disabled}
                   onChange={(event) => updateEmail(item.key, event.target.checked)}
                   className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -9561,24 +10877,16 @@ function NotificationSettings({
         <PanelContent>
           <div className="grid gap-3">
             {[
-              { key: 'comments' as const, label: 'Pending comments', live: true },
-              { key: 'activity' as const, label: 'Team activity', live: true },
-              { key: 'mentions' as const, label: 'Team mentions', live: false },
+              { key: 'comments' as const, label: 'Pending comments' },
+              { key: 'activity' as const, label: 'Team activity' },
+              { key: 'mentions' as const, label: 'Team mentions' },
             ].map((item) => (
               <label key={item.key} className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border px-3 text-sm">
-                <span className="flex flex-col gap-1">
-                  <span>{item.label}</span>
-                  {!item.live && (
-                    <span className="text-xs leading-4 text-muted-foreground">
-                      Planned channel. Team mention notifications are not generated yet.
-                    </span>
-                  )}
-                </span>
+                <span>{item.label}</span>
                 <input
                   type="checkbox"
-                  checked={item.live ? Boolean(value.inApp?.[item.key]) : false}
-                  disabled={!item.live}
-                  title={item.live ? undefined : 'This in-app channel is planned and not enforced yet.'}
+                  checked={Boolean(value.inApp?.[item.key])}
+                  disabled={disabled}
                   onChange={(event) => updateInApp(item.key, event.target.checked)}
                   className="size-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -9598,13 +10906,14 @@ function NotificationSettings({
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">Digest frequency</span>
               <select
-                value={digestFrequency}
+                value={value.digestFrequency || 'instant'}
                 onChange={(event) => onChange({ digestFrequency: event.target.value as NotificationSettingsConfig['digestFrequency'] })}
                 className={inputClassName}
+                disabled={disabled}
               >
                 <option value="instant">Instant</option>
-                <option value="daily" disabled>Daily digest (planned)</option>
-                <option value="weekly" disabled>Weekly digest (planned)</option>
+                <option value="daily">Daily digest</option>
+                <option value="weekly">Weekly digest</option>
                 <option value="off">Off</option>
               </select>
             </label>
@@ -9615,7 +10924,15 @@ function NotificationSettings({
                 onChange={(event) => onChange({ webhookUrl: event.target.value })}
                 placeholder="https://example.com/backy-events"
                 className={inputClassName}
+                aria-invalid={Boolean(webhookUrlError)}
+                aria-describedby={webhookUrlError ? 'settings-notification-webhook-url-error' : undefined}
+                data-testid="settings-notification-webhook-url"
               />
+              {webhookUrlError && (
+                <span id="settings-notification-webhook-url-error" className="text-xs font-medium text-destructive" role="alert" data-testid="settings-notification-webhook-url-error">
+                  {webhookUrlError}
+                </span>
+              )}
             </label>
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -9623,7 +10940,7 @@ function NotificationSettings({
                 size="sm"
                 variant="secondary"
                 onClick={onTestWebhook}
-                disabled={disabled || deliveryLoading || !value.webhookUrl?.trim()}
+                disabled={disabled || deliveryLoading}
                 data-testid="settings-notification-webhook-test"
               >
                 {deliveryLoading && !delivery?.retry ? 'Sending...' : 'Send test webhook'}
@@ -9718,6 +11035,7 @@ function SecuritySettings({
 }) {
   const [copiedKey, setCopiedKey] = useState<'public' | 'admin' | null>(null);
   const [serviceKeyLabel, setServiceKeyLabel] = useState('');
+  const [serviceKeySubmitted, setServiceKeySubmitted] = useState(false);
   const [issuedServiceKey, setIssuedServiceKey] = useState<IssuedAdminApiKey | null>(null);
   const [copiedIssuedServiceKey, setCopiedIssuedServiceKey] = useState(false);
   const [issuingServiceKey, setIssuingServiceKey] = useState(false);
@@ -9782,10 +11100,14 @@ function SecuritySettings({
   const serviceKeys = authSettings?.apiKeyServiceKeys || [];
   const activeServiceKeys = serviceKeys.filter((entry) => !entry.revokedAt && entry.status !== 'revoked');
   const currentSessionId = currentSession?.token ? currentSession.token.slice(-12) : null;
+  const serviceKeyLabelInlineError = serviceKeySubmitted && serviceKeyLabel.trim().length === 0
+    ? 'Add a label before issuing a key.'
+    : null;
 
   const issueServiceKey = async () => {
     const label = serviceKeyLabel.trim();
     if (!canManageApiKeys || issuingServiceKey) return;
+    setServiceKeySubmitted(true);
     if (!label) {
       setServiceKeyNotice('Add a label before issuing a key.');
       return;
@@ -9798,6 +11120,7 @@ function SecuritySettings({
       if (issued) {
         setIssuedServiceKey(issued);
         setServiceKeyLabel('');
+        setServiceKeySubmitted(false);
         setServiceKeyNotice('Admin API key issued. Copy it now; Backy stores only a hash.');
       }
     } finally {
@@ -10081,14 +11404,21 @@ function SecuritySettings({
               onChange={(event) => setServiceKeyLabel(event.target.value)}
               placeholder="Production frontend server"
               className={inputClassName}
+              aria-invalid={Boolean(serviceKeyLabelInlineError)}
+              aria-describedby={serviceKeyLabelInlineError ? 'settings-admin-service-key-label-error' : undefined}
               data-testid="settings-admin-service-key-label"
             />
+            {serviceKeyLabelInlineError && (
+              <span id="settings-admin-service-key-label-error" className="text-xs font-medium text-destructive" role="alert" data-testid="settings-admin-service-key-label-error">
+                {serviceKeyLabelInlineError}
+              </span>
+            )}
           </label>
           <div className="flex items-end">
             <Button
               variant="outline"
               onClick={() => void issueServiceKey()}
-              disabled={!canManageApiKeys || issuingServiceKey || !serviceKeyLabel.trim()}
+              disabled={!canManageApiKeys || issuingServiceKey}
               title={manageKeysPermissionTitle}
               data-testid="settings-admin-service-key-issue"
             >
@@ -10632,6 +11962,17 @@ function AuditTrail({
           </pre>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function SettingsApiSnippet({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="mb-1 text-[11px] font-medium text-muted-foreground">{label}</div>
+      <code className="block min-w-0 overflow-x-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
+        {value}
+      </code>
     </div>
   );
 }

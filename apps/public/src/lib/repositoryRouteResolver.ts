@@ -7,6 +7,7 @@ import type {
   Site,
 } from '@backy-cms/core';
 import { matchCollectionItemRoute, matchCollectionListRoute } from './collectionRoutes';
+import { PRODUCT_COLLECTION_SLUG, productDesignReadinessFromValues } from './commerceCatalog';
 import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
 import { getRepositoryPageByPublicPath } from './repositoryPages';
 import { type ResolvedSiteRoute, withLocalizedResolvedRoute } from './routeResolver';
@@ -204,6 +205,9 @@ export async function resolveRepositorySiteRoute(
   ) {
     return null;
   }
+  const designReadiness = collection.slug === PRODUCT_COLLECTION_SLUG
+    ? productDesignReadinessFromValues(record.values)
+    : undefined;
 
   return withLocalizedResolvedRoute({
     type: 'dynamicItem',
@@ -227,6 +231,7 @@ export async function resolveRepositorySiteRoute(
       hostedPath: canonical,
       frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
       collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
+      ...(designReadiness ? { designReadiness } : {}),
     },
   }, localized);
 }

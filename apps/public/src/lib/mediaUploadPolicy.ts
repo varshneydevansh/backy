@@ -93,6 +93,17 @@ const EXTENSION_MIME_FAMILIES: Record<string, string> = {
   '.mp3': 'audio',
   '.ogg': 'audio',
   '.wav': 'audio',
+  '.csv': 'document',
+  '.doc': 'document',
+  '.docx': 'document',
+  '.md': 'document',
+  '.pdf': 'document',
+  '.ppt': 'document',
+  '.pptx': 'document',
+  '.rtf': 'document',
+  '.txt': 'document',
+  '.xls': 'document',
+  '.xlsx': 'document',
   '.eot': 'font',
   '.otf': 'font',
   '.ttf': 'font',
@@ -101,11 +112,37 @@ const EXTENSION_MIME_FAMILIES: Record<string, string> = {
 };
 
 const MIME_TYPE_FAMILIES: Record<string, string> = {
+  'application/csv': 'document',
   'application/font-woff': 'font',
   'application/font-woff2': 'font',
+  'application/msword': 'document',
+  'application/pdf': 'document',
+  'application/rtf': 'document',
   'application/vnd.ms-fontobject': 'font',
+  'application/vnd.ms-excel': 'document',
+  'application/vnd.ms-powerpoint': 'document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'document',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'document',
   'application/x-font-otf': 'font',
   'application/x-font-ttf': 'font',
+  'text/csv': 'document',
+  'text/markdown': 'document',
+  'text/plain': 'document',
+};
+
+const categoryForFile = (mimeType: string, extension: string) => {
+  const mapped = MIME_TYPE_FAMILIES[mimeType] || EXTENSION_MIME_FAMILIES[extension];
+  if (mapped) {
+    return mapped;
+  }
+
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  if (mimeType.startsWith('font/')) return 'font';
+
+  return 'other';
 };
 
 const fileMatchesMimeFamily = (family: string, mimeType: string, extension: string) => (
@@ -113,6 +150,20 @@ const fileMatchesMimeFamily = (family: string, mimeType: string, extension: stri
   MIME_TYPE_FAMILIES[mimeType] === family ||
   EXTENSION_MIME_FAMILIES[extension] === family
 );
+
+const fileMatchesMediaCategory = (category: string, mimeType: string, extension: string) => {
+  const fileCategory = categoryForFile(mimeType, extension);
+
+  if (category === 'all' || category === '*') {
+    return true;
+  }
+
+  if (category === 'file') {
+    return fileCategory === 'document' || fileCategory === 'other';
+  }
+
+  return fileCategory === category;
+};
 
 const toRecord = <TRecord extends Record<string, unknown>>(value: unknown): TRecord | undefined => (
   value && typeof value === 'object' && !Array.isArray(value)
@@ -177,12 +228,22 @@ export const isUploadAllowedByFileType = (
   const extension = extname(input.filename).toLowerCase();
 
   return policy.allowedFileTypes.some((rule) => {
+    if (rule === '*' || rule === '*/*' || rule === 'all') {
+      return true;
+    }
+
     if (rule.startsWith('.')) {
       return extension === rule;
     }
 
     if (rule.endsWith('/*')) {
-      return fileMatchesMimeFamily(rule.slice(0, -2), mimeType, extension);
+      const family = rule.slice(0, -2);
+      return fileMatchesMimeFamily(family, mimeType, extension) ||
+        fileMatchesMediaCategory(family, mimeType, extension);
+    }
+
+    if (['image', 'video', 'audio', 'document', 'file', 'font', 'other'].includes(rule)) {
+      return fileMatchesMediaCategory(rule, mimeType, extension);
     }
 
     return mimeType === rule;

@@ -149,9 +149,9 @@ const mergeSettingsPatch = (
   };
 };
 
-const normalizePatchInput = (body: Record<string, unknown>): Partial<FormDefinition> => {
+const normalizePatchInput = (body: Record<string, unknown>, actorId: string | null): Partial<FormDefinition> => {
   const input: Partial<FormDefinition> = {
-    updatedBy: 'admin',
+    updatedBy: actorId,
   };
   const settings = parseRecord<Record<string, unknown>>(body.settings) || {};
   const spamSettings = parseRecord<FormDefinition['spamSettings'] & Record<string, unknown>>(body.spamSettings);
@@ -240,7 +240,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (configurationError) {
       return configurationError;
     }
-    const input = normalizePatchInput(body);
+    const input = normalizePatchInput(body, access.session?.user.id || null);
 
     if ('name' in input && !input.name) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Form name is required', requestId);

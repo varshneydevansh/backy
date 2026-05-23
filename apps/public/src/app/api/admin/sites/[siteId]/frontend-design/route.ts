@@ -872,6 +872,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const frontendDesign = normalizeFrontendDesignContract(input, {
         fallback: site.settings.frontendDesign,
         updatedAt,
+        mergeFallback: true,
       });
       const updated = await persistRepositoryFrontendDesign(
         site,
@@ -927,6 +928,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const frontendDesign = normalizeFrontendDesignContract(input, {
       fallback: site.settings?.frontendDesign,
       updatedAt,
+      mergeFallback: true,
     });
     const updated = updateAdminSite(site.id, {
       settings: {

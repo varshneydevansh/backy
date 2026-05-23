@@ -204,19 +204,20 @@ const MEMBERSHIP_FLOW_SYSTEMS = [
     key: 'supabase-auth',
     title: 'Supabase Auth adapter',
     status: 'next',
-    detail: 'Credentials, sessions, password reset, and protected routes remain an integration pass.',
+    detail: 'Credentials, sessions, password reset, and protected-route enforcement are provider-gated through Settings.',
   },
   {
     key: 'member-portal',
-    title: 'Member portal APIs',
-    status: 'next',
-    detail: 'Self-service profile, order history, downloads, and account deletion are not complete yet.',
+    title: 'Member portal page shell',
+    status: 'available',
+    detail: 'Member login and account starter pages seed editable form blocks, profile/preferences capture, resources, and support links.',
   },
 ] as const;
 
 const MEMBERSHIP_HANDOFF_STEPS = [
   {
     step: '1',
+    template: 'registration',
     title: 'Create registration page',
     detail: 'Seed a public page with the registration template and Backy form block.',
     status: 'available',
@@ -241,19 +242,29 @@ const MEMBERSHIP_HANDOFF_STEPS = [
   },
   {
     step: '4',
-    title: 'Connect auth provider',
-    detail: 'Use Settings to track Supabase/Auth infrastructure before credentialed member sessions.',
-    status: 'next',
-    to: '/settings',
-    label: 'Open settings',
+    template: 'member-login',
+    title: 'Create member login page',
+    detail: 'Seed an email-based access page that can request secure links or route members into provider auth.',
+    status: 'available',
+    to: '/pages/new',
+    label: 'Start login',
   },
   {
     step: '5',
-    title: 'Expose member portal',
-    detail: 'Protected account pages, profile updates, downloads, order history, and account deletion remain future work.',
+    template: 'member-account',
+    title: 'Create member account page',
+    detail: 'Seed an editable account page for profile/preferences capture, resource links, support, and signed-download handoff copy.',
+    status: 'available',
+    to: '/pages/new',
+    label: 'Start account',
+  },
+  {
+    step: '6',
+    title: 'Connect auth provider',
+    detail: 'Use Settings to track Supabase/Auth infrastructure before enforcing credentialed public member sessions.',
     status: 'next',
     to: '/settings',
-    label: 'Track gap',
+    label: 'Open settings',
   },
 ] as const;
 
@@ -274,15 +285,60 @@ const MEMBERSHIP_AUTH_BOUNDARIES = [
     key: 'credentialed-login',
     title: 'Credentialed member login',
     status: 'next',
-    detail: 'Public member signup, login, password reset, email verification, and protected routes still need the Supabase/Auth provider pass.',
+    detail: 'Public member signup, login, password reset, email verification, and protected routes are gated on the Supabase/Auth provider pass.',
   },
   {
     key: 'member-portal',
-    title: 'Self-service member portal',
-    status: 'next',
-    detail: 'Profile editing, order history, downloads, subscriptions, and account deletion are not yet public member APIs.',
+    title: 'Self-service member portal shell',
+    status: 'available',
+    detail: 'Member-account pages can capture profile/preferences through Backy Forms and link signed downloads, order status handoffs, support, and collection-backed profile records.',
   },
 ] as const;
+
+const MEMBER_ACCESS_HANDOFF_SCHEMA_VERSION = 'backy.member-access-handoff.v1';
+
+const MEMBERSHIP_EDITABLE_REGIONS = [
+  {
+    key: 'registration-intake',
+    template: 'registration',
+    label: 'Registration intake',
+    editableFields: ['headline', 'introCopy', 'memberTypeOptions', 'consentCopy', 'submitLabel', 'successMessage'],
+  },
+  {
+    key: 'access-request',
+    template: 'member-login',
+    label: 'Access request',
+    editableFields: ['headline', 'registrationPrompt', 'emailField', 'reasonField', 'requestLabel', 'successMessage'],
+  },
+  {
+    key: 'member-profile',
+    template: 'member-account',
+    label: 'Member profile',
+    editableFields: ['profileSummary', 'displayNameField', 'emailField', 'preferenceFields', 'resourceCards', 'supportLinks'],
+  },
+] as const;
+
+const MEMBERSHIP_DATA_BINDINGS = [
+  { key: 'member.profile', target: 'member-account profile card', fields: ['name', 'email', 'status'] },
+  { key: 'member.preferences', target: 'member-account preferences form', fields: ['display_name', 'email', 'updates'] },
+  { key: 'registration.contact', target: 'registration form contact share', fields: ['name', 'email', 'phone', 'member_type', 'consent'] },
+  { key: 'registration.profileRecord', target: 'optional collection write', fields: ['name', 'email', 'member_type', 'source_form_id'] },
+] as const;
+
+const MEMBERSHIP_ACTION_BINDINGS = [
+  { key: 'create-registration-page', target: '/pages/new', template: 'registration' },
+  { key: 'create-member-login-page', target: '/pages/new', template: 'member-login' },
+  { key: 'create-member-account-page', target: '/pages/new', template: 'member-account' },
+  { key: 'review-registration-form', target: '/forms' },
+  { key: 'review-member-contacts', target: '/contacts' },
+  { key: 'configure-auth-provider', target: '/settings?tab=infrastructure' },
+] as const;
+
+const USER_IMPORT_REQUIRED_COLUMNS = ['full_name', 'email'] as const;
+const USER_IMPORT_NAME_HEADERS = ['full_name', 'fullname', 'name'] as const;
+const USER_IMPORT_EMAIL_HEADERS = ['email', 'email_address'] as const;
+const USER_IMPORT_ROLES = ['owner', 'admin', 'editor', 'viewer'] as const;
+const USER_IMPORT_STATUSES = ['active', 'inactive', 'invited', 'suspended'] as const;
 
 function UsersLayout() {
   const routerState = useRouterState();
@@ -318,6 +374,8 @@ function UsersListView() {
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
   const [isRollingBackImport, setIsRollingBackImport] = useState(false);
   const [importResult, setImportResult] = useState<UserImportResult | null>(null);
+  const [userImportInlineError, setUserImportInlineError] = useState<string | null>(null);
+  const [pendingImportRollback, setPendingImportRollback] = useState(false);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -522,7 +580,7 @@ function UsersListView() {
       },
       {
         label: 'Public registration',
-        detail: 'Registration can be captured through Backy Forms; credentialed member auth is not wired yet.',
+        detail: 'Registration and member pages are connected to Forms, Contacts, Collections, and a provider-gated member access handoff.',
         ready: true,
       },
       {
@@ -709,7 +767,7 @@ function UsersListView() {
   };
 
   useEffect(() => {
-    if (!pendingDelete && !pendingBulkDelete) return;
+    if (!pendingDelete && !pendingBulkDelete && !pendingImportRollback) return;
 
     const handleDeleteDialogKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || isUserMutationBusy) {
@@ -720,11 +778,12 @@ function UsersListView() {
       event.stopPropagation();
       setPendingDelete(null);
       setPendingBulkDelete(false);
+      setPendingImportRollback(false);
     };
 
     document.addEventListener('keydown', handleDeleteDialogKeyDown, true);
     return () => document.removeEventListener('keydown', handleDeleteDialogKeyDown, true);
-  }, [isUserMutationBusy, pendingBulkDelete, pendingDelete]);
+  }, [isUserMutationBusy, pendingBulkDelete, pendingDelete, pendingImportRollback]);
 
   const copyUserApiText = async (value: string, label: string) => {
     if (isUsersBusy) return;
@@ -781,6 +840,7 @@ function UsersListView() {
       return;
     }
 
+    setUserImportInlineError(null);
     const csv = [
       ['full_name', 'email', 'role', 'status'].join(','),
       ['Example Editor', 'editor@example.com', 'editor', 'invited'].join(','),
@@ -805,12 +865,17 @@ function UsersListView() {
       return;
     }
 
+    setUserImportInlineError(null);
     importInputRef.current.dataset.importDryRun = dryRun ? 'true' : 'false';
     importInputRef.current.click();
   };
 
   const handleImportUsers = async (file: File | null | undefined, dryRun: boolean) => {
-    if (!file || isUsersBusy) return;
+    if (isUsersBusy) return;
+    if (!file) {
+      setUserImportInlineError('Choose a users CSV before previewing or importing.');
+      return;
+    }
     if (!canCreateUsers || (importMode === 'upsert' && !canManageUsers)) {
       setNotice(importMode === 'upsert'
         ? managePermissionTitle || 'Updating existing users from CSV requires user management access.'
@@ -818,16 +883,24 @@ function UsersListView() {
       return;
     }
 
-    if (dryRun) {
-      setIsPreviewingImport(true);
-    } else {
-      setIsImportingUsers(true);
-    }
     setImportResult(null);
     setNotice(null);
 
     try {
-      const csv = await file.text();
+      const preflight = await validateUserImportCsvFile(file);
+      if (preflight.error) {
+        setUserImportInlineError(preflight.error);
+        return;
+      }
+
+      setUserImportInlineError(null);
+      if (dryRun) {
+        setIsPreviewingImport(true);
+      } else {
+        setIsImportingUsers(true);
+      }
+
+      const { csv } = preflight;
       const result = await importUsersCsv(csv, { mode: importMode, dryRun });
       if (!dryRun) {
         await loadUsers();
@@ -865,9 +938,6 @@ function UsersListView() {
         : deletePermissionTitle || 'Rolling back imports requires user delete access.');
       return;
     }
-    const confirmed = window.confirm('Roll back the last user import batch? Created users from that batch will be deleted and updated users will be restored.');
-    if (!confirmed) return;
-
     setIsRollingBackImport(true);
     setNotice(null);
     try {
@@ -876,6 +946,7 @@ function UsersListView() {
       await loadUserAuditLogs();
       setNotice(`Rolled back import: ${rollback.deleted} created user${rollback.deleted === 1 ? '' : 's'} deleted, ${rollback.restored} update${rollback.restored === 1 ? '' : 's'} restored, ${rollback.skipped.length} skipped.`);
       setImportResult(null);
+      setPendingImportRollback(false);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to roll back users import.');
     } finally {
@@ -1064,6 +1135,7 @@ function UsersListView() {
   const hiddenSelectedUserCount = Math.max(0, selectedActionableUsers.length - selectedVisibleActionableUsers.length);
   const allVisibleSelected = visibleSelectableUsers.length > 0
     && visibleSelectableUsers.every((user) => selectedUserIdSet.has(user.id));
+  const accessWorkflowUser = selectedActionableUsers[0] || data[0] || filteredUsers[0];
   const toggleVisibleSelection = (checked: boolean) => {
     if (isUsersBusy || (!canManageUsers && !canDeleteUsers)) return;
 
@@ -1085,11 +1157,15 @@ function UsersListView() {
 
     navigate({ to: '/users/new', search: { siteId: membershipSiteId } });
   };
+  const openAccessWorkflowUser = () => {
+    if (isUsersBusy || !accessWorkflowUser) return;
+    navigate({ to: '/users/$userId', params: { userId: accessWorkflowUser.id } });
+  };
   const openMembershipStep = (step: (typeof MEMBERSHIP_HANDOFF_STEPS)[number]) => {
     if (isUsersBusy) return;
 
     if (step.to === '/pages/new') {
-      navigate({ to: '/pages/new', search: { siteId: membershipSiteId, template: 'registration' } });
+      navigate({ to: '/pages/new', search: { siteId: membershipSiteId, template: 'template' in step ? step.template : 'registration' } });
       return;
     }
 
@@ -1105,6 +1181,63 @@ function UsersListView() {
 
     navigate({ to: '/settings', search: { tab: 'infrastructure' } });
   };
+  const memberAccessHandoff = useMemo(() => ({
+    schemaVersion: MEMBER_ACCESS_HANDOFF_SCHEMA_VERSION,
+    generatedAt: new Date().toISOString(),
+    site: {
+      id: membershipSiteId,
+      name: membershipSite?.name || membershipSiteId,
+      slug: membershipSite?.slug || null,
+    },
+    pageTemplates: {
+      registration: `/pages/new?siteId=${encodedMembershipSiteId}&template=registration`,
+      memberLogin: `/pages/new?siteId=${encodedMembershipSiteId}&template=member-login`,
+      memberAccount: `/pages/new?siteId=${encodedMembershipSiteId}&template=member-account`,
+    },
+    publicApis: {
+      formsCatalog: publicFormsUrl,
+      registrationDefinition: publicRegistrationDefinitionUrl,
+      registrationSubmit: publicRegistrationSubmitUrl,
+    },
+    privateAdminApis: {
+      registrationContacts: publicContactsUrl,
+      users: usersListUrl,
+      userDetail: userDetailUrl,
+    },
+    editableRegions: MEMBERSHIP_EDITABLE_REGIONS,
+    dataBindings: MEMBERSHIP_DATA_BINDINGS,
+    actionBindings: MEMBERSHIP_ACTION_BINDINGS,
+    authProviderGate: {
+      status: 'provider-gated',
+      settingsRoute: '/settings?tab=infrastructure',
+      providerFamily: 'supabase-auth-or-compatible',
+      requiredFor: ['credentialed-public-member-sessions', 'member-password-reset', 'member-email-verification', 'protected-member-routes'],
+      boundary: 'Public member sessions stay separate from private Backy admin users.',
+    },
+    privacy: {
+      includesIdentity: false,
+      excludes: ['private admin user records', 'raw contact payloads', 'session cookies', 'auth provider secrets', 'reset tokens', 'invite tokens'],
+      note: 'Use public form APIs for visitor registration, private admin APIs for review, and the configured auth provider for credentialed member sessions.',
+    },
+    launchPath: [
+      'Create the registration page template.',
+      'Review the generated registration form definition and submit URL.',
+      'Route approved registrations into Contacts or a member profile collection.',
+      'Create member login and member account pages.',
+      'Configure Supabase/Auth provider readiness in Settings before enforcing protected routes.',
+    ],
+  }), [
+    encodedMembershipSiteId,
+    membershipSite?.name,
+    membershipSite?.slug,
+    membershipSiteId,
+    publicContactsUrl,
+    publicFormsUrl,
+    publicRegistrationDefinitionUrl,
+    publicRegistrationSubmitUrl,
+    userDetailUrl,
+    usersListUrl,
+  ]);
   const userHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     endpoints: {
@@ -1131,8 +1264,9 @@ function UsersListView() {
       },
       systems: MEMBERSHIP_FLOW_SYSTEMS,
       handoffSteps: MEMBERSHIP_HANDOFF_STEPS,
+      frontendHandoff: memberAccessHandoff,
       authBoundary: {
-        model: 'Registration capture is available through Backy content systems; credentialed public member sessions are intentionally separated from private admin users until Supabase/Auth integration is complete.',
+        model: 'Registration capture and member page shells are available through Backy content systems; credentialed public member sessions stay separated from private admin users and are enforced through configured Supabase/Auth readiness.',
         boundaries: MEMBERSHIP_AUTH_BOUNDARIES,
         availableNow: MEMBERSHIP_AUTH_BOUNDARIES
           .filter((boundary) => boundary.status === 'available')
@@ -1146,7 +1280,7 @@ function UsersListView() {
         'Use Forms to review the registration definition, public submit URL, contacts, and submissions.',
         'Use Settings to connect Supabase metadata and auth/infrastructure readiness.',
         'Connect the form to Backy Forms contact sharing and optional collection writes.',
-        'Use Supabase Auth settings when credentialed sessions are implemented.',
+        'Use Supabase Auth settings to enforce credentialed sessions on the seeded member pages.',
         'Use private admin users only for Backy workspace access.',
       ],
     },
@@ -1212,6 +1346,7 @@ function UsersListView() {
     currentPage,
     data,
     encodedMembershipSiteId,
+    memberAccessHandoff,
     membershipSite?.name,
     membershipSite?.slug,
     membershipSiteId,
@@ -1230,6 +1365,7 @@ function UsersListView() {
     usersListUrl,
   ]);
   const userHandoffText = useMemo(() => JSON.stringify(userHandoff, null, 2), [userHandoff]);
+  const memberAccessHandoffText = useMemo(() => JSON.stringify(memberAccessHandoff, null, 2), [memberAccessHandoff]);
   const downloadUserHandoff = () => {
     if (isUsersBusy) return;
 
@@ -1256,6 +1392,8 @@ function UsersListView() {
   };
 
   const hasActiveFilters = Boolean(searchQuery || roleFilter !== 'all' || statusFilter !== 'all' || reviewFilter !== 'all');
+  const registrationMembershipStep = MEMBERSHIP_HANDOFF_STEPS.find((step) => 'template' in step && step.template === 'registration') || MEMBERSHIP_HANDOFF_STEPS[0];
+  const authMembershipStep = MEMBERSHIP_HANDOFF_STEPS.find((step) => step.to === '/settings') || MEMBERSHIP_HANDOFF_STEPS[MEMBERSHIP_HANDOFF_STEPS.length - 1];
 
   if (!isPermissionMatrixPending && !canViewUsers) {
     return (
@@ -1295,6 +1433,8 @@ function UsersListView() {
         accept=".csv,text/csv"
         className="hidden"
         aria-label="Import users CSV"
+        aria-invalid={Boolean(userImportInlineError)}
+        aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
         onChange={(event) => void handleImportUsers(
           event.currentTarget.files?.[0],
           event.currentTarget.dataset.importDryRun === 'true',
@@ -1360,9 +1500,13 @@ function UsersListView() {
               value={importMode}
               disabled={isUsersBusy || !canCreateUsers}
               title={!canCreateUsers ? createPermissionTitle : undefined}
-              onChange={(event) => setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create')}
+              onChange={(event) => {
+                setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create');
+                setUserImportInlineError(null);
+              }}
               className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               aria-label="User import duplicate handling"
+              aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
             >
               <option value="create">Skip duplicates</option>
               <option value="upsert">Update duplicates</option>
@@ -1374,6 +1518,8 @@ function UsersListView() {
               title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
               onClick={() => openImportFile(true)}
               iconStart={<ClipboardList className="size-4" />}
+              aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
+              data-testid="users-import-preview-button"
             >
               {isPreviewingImport ? 'Previewing...' : 'Preview CSV'}
             </Button>
@@ -1384,6 +1530,8 @@ function UsersListView() {
               title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
               onClick={() => openImportFile(false)}
               iconStart={<Upload className="size-4" />}
+              aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
+              data-testid="users-import-button"
             >
               {isImportingUsers ? 'Importing...' : 'Import CSV'}
             </Button>
@@ -1402,6 +1550,16 @@ function UsersListView() {
             </Button>
           </div>
         </div>
+        {userImportInlineError && (
+          <div
+            id="users-import-inline-error"
+            role="alert"
+            data-testid="users-import-inline-error"
+            className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {userImportInlineError}
+          </div>
+        )}
 
         <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
           <div className="rounded-lg border border-border bg-background p-4">
@@ -1496,6 +1654,8 @@ function UsersListView() {
                     title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
                     onClick={() => openImportFile(true)}
                     iconStart={<ClipboardList className="size-4" />}
+                    aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
+                    data-testid="users-api-import-preview-button"
                   >
                     Preview CSV
                   </Button>
@@ -1506,6 +1666,8 @@ function UsersListView() {
                     title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
                     onClick={() => openImportFile(false)}
                     iconStart={<Upload className="size-4" />}
+                    aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
+                    data-testid="users-api-import-button"
                   >
                     Import CSV
                   </Button>
@@ -1513,9 +1675,13 @@ function UsersListView() {
                     value={importMode}
                     disabled={isUsersBusy || !canCreateUsers}
                     title={!canCreateUsers ? createPermissionTitle : undefined}
-                    onChange={(event) => setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create')}
+                    onChange={(event) => {
+                      setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create');
+                      setUserImportInlineError(null);
+                    }}
                     className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="User API import duplicate handling"
+                    aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
                   >
                     <option value="create">Skip duplicates</option>
                     <option value="upsert">Update duplicates</option>
@@ -1749,7 +1915,7 @@ function UsersListView() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => void handleRollbackImport()}
+                      onClick={() => setPendingImportRollback(true)}
                       disabled={isUsersBusy || !canManageUsers || !canDeleteUsers}
                       title={!canManageUsers ? managePermissionTitle : !canDeleteUsers ? deletePermissionTitle : undefined}
                       data-testid="users-import-rollback-button"
@@ -1958,7 +2124,7 @@ function UsersListView() {
                   <Button
                     size="sm"
                     variant="primary"
-                    onClick={() => openMembershipStep(MEMBERSHIP_HANDOFF_STEPS[0])}
+                    onClick={() => openMembershipStep(registrationMembershipStep)}
                     disabled={isUsersBusy}
                     iconStart={<Plus className="size-4" />}
                   >
@@ -1976,7 +2142,7 @@ function UsersListView() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => openMembershipStep(MEMBERSHIP_HANDOFF_STEPS[3])}
+                    onClick={() => openMembershipStep(authMembershipStep)}
                     disabled={isUsersBusy}
                     iconStart={<Settings className="size-4" />}
                   >
@@ -1995,7 +2161,7 @@ function UsersListView() {
                   <div>
                     <h3 className="text-sm font-semibold">Registration handoff workflow</h3>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      What Backy can control today and which member-account pieces still need the auth/provider pass.
+                      Working Backy surfaces for registration, member pages, and the provider handoff that enforces credentialed sessions.
                     </p>
                   </div>
                   <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -2041,7 +2207,7 @@ function UsersListView() {
                   <div>
                     <h3 className="text-sm font-semibold">Member auth boundary</h3>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Public registration capture is available today. Credentialed public member sessions stay separate from private Backy admin users until the Supabase/Auth pass is complete.
+                      Public registration and member page shells are available today. Credentialed public member sessions stay separate from private Backy admin users and are enforced through the Supabase/Auth provider pass.
                     </p>
                   </div>
                   <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -2068,6 +2234,36 @@ function UsersListView() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div data-testid="users-member-access-handoff" className="mt-4 rounded-lg border border-border bg-background p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Custom frontend member handoff</h3>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {MEMBER_ACCESS_HANDOFF_SCHEMA_VERSION} packages the page templates, public form APIs, editable regions, member bindings, provider gate, and privacy boundary for external member-area frontends.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isUsersBusy}
+                    onClick={() => void copyUserApiText(memberAccessHandoffText, 'Member access handoff')}
+                    iconStart={<Copy className="size-3.5" />}
+                  >
+                    Copy member handoff
+                  </Button>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  <UserApiStat label="Editable regions" value={`${MEMBERSHIP_EDITABLE_REGIONS.length}`} />
+                  <UserApiStat label="Data bindings" value={`${MEMBERSHIP_DATA_BINDINGS.length}`} />
+                  <UserApiStat label="Action bindings" value={`${MEMBERSHIP_ACTION_BINDINGS.length}`} />
+                </div>
+                <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                  <UserApiSnippet label="Registration template" value={memberAccessHandoff.pageTemplates.registration} />
+                  <UserApiSnippet label="Member login template" value={memberAccessHandoff.pageTemplates.memberLogin} />
+                  <UserApiSnippet label="Member account template" value={memberAccessHandoff.pageTemplates.memberAccount} />
                 </div>
               </div>
 
@@ -2152,17 +2348,87 @@ function UsersListView() {
 
           <Panel>
             <PanelHeader
-              title="Next controls"
-              description="Backlog for parity with bigger site builders."
+              title="Access workflows"
+              description="Direct controls for common account and permission work."
               icon={<SlidersHorizontal className="size-4" />}
             />
             <PanelContent>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>Per-site role overrides</li>
-                <li>Permission groups for products, orders, and media folders</li>
-                <li>Real email invite delivery and password reset events</li>
-                <li>Activity log drill-down by user</li>
-              </ul>
+              <div className="grid gap-3 text-sm" data-testid="users-access-workflows-panel">
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <div className="font-semibold">User detail drill-down</div>
+                  <p className="mt-1 text-muted-foreground">
+                    Open a selected or visible account to review sessions, MFA, invite/reset links, ownership transfer, and user-scoped audit events.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="mt-3"
+                    onClick={openAccessWorkflowUser}
+                    disabled={isUsersBusy || !accessWorkflowUser}
+                    data-testid="users-access-open-detail"
+                  >
+                    {accessWorkflowUser ? `Open ${accessWorkflowUser.fullName}` : 'Open user detail'}
+                  </Button>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <div className="font-semibold">Invite and reset delivery</div>
+                  <p className="mt-1 text-muted-foreground">
+                    Create an invite through the backend delivery stack, then use user detail for resend, reset, recovery, and delivery audit evidence.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={openInviteUser}
+                      disabled={isUsersBusy || !canCreateUsers}
+                      title={!canCreateUsers ? createPermissionTitle : undefined}
+                      data-testid="users-access-invite"
+                    >
+                      Invite user
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate({ to: '/settings', search: { tab: 'infrastructure' } })}
+                      disabled={isUsersBusy}
+                      data-testid="users-access-delivery-settings"
+                    >
+                      Delivery settings
+                    </Button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3">
+                  <div className="font-semibold">Workspace and module permissions</div>
+                  <p className="mt-1 text-muted-foreground">
+                    Team ownership gates site access, while the user permission matrix controls Products, Orders, Media, Settings, and Activity capabilities.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate({ to: '/teams' })}
+                      disabled={isUsersBusy}
+                      data-testid="users-access-teams"
+                    >
+                      Manage teams
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={openAccessWorkflowUser}
+                      disabled={isUsersBusy || !accessWorkflowUser}
+                      data-testid="users-access-permissions"
+                    >
+                      Review permissions
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </PanelContent>
           </Panel>
         </aside>
@@ -2208,6 +2474,70 @@ function UsersListView() {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isUserMutationBusy ? 'Removing...' : 'Remove selected'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingImportRollback && importResult?.rollbackAvailable && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="users-import-rollback-confirm-title"
+          aria-describedby="users-import-rollback-confirm-description"
+          data-testid="users-import-rollback-confirm-dialog"
+        >
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
+                <History className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 id="users-import-rollback-confirm-title" className="text-lg font-semibold text-foreground">Roll back imported users?</h2>
+                <p id="users-import-rollback-confirm-description" className="mt-1 text-sm text-muted-foreground">
+                  Backy will delete users created by this import batch and restore user records that were updated during the import. Existing unrelated users stay unchanged.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 rounded-lg bg-muted px-3 py-2 text-center text-xs text-muted-foreground">
+              <div>
+                <div className="font-semibold text-foreground">{importResult.created}</div>
+                <div>created</div>
+              </div>
+              <div>
+                <div className="font-semibold text-foreground">{importResult.updated}</div>
+                <div>updated</div>
+              </div>
+              <div>
+                <div className="font-semibold text-foreground">{importResult.skipped}</div>
+                <div>skipped</div>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isRollingBackImport) {
+                    setPendingImportRollback(false);
+                  }
+                }}
+                disabled={isRollingBackImport}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Cancel user import rollback"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleRollbackImport()}
+                disabled={isRollingBackImport || !canManageUsers || !canDeleteUsers}
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label="Confirm user import rollback"
+                data-testid="users-import-rollback-confirm"
+              >
+                {isRollingBackImport ? 'Rolling back...' : 'Roll back import'}
               </button>
             </div>
           </div>
@@ -2493,4 +2823,137 @@ const getPublicBaseUrl = (): string => {
 const csvEscape = (value: unknown): string => {
   const raw = String(value ?? '').replace(/\r?\n/g, '\\n');
   return `"${raw.replace(/"/g, '""')}"`;
+};
+
+const normalizeUserImportHeader = (value: string) => value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+const parseUserImportCsvRows = (csv: string): string[][] => {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+
+  for (let index = 0; index < csv.length; index += 1) {
+    const char = csv[index];
+    const next = csv[index + 1];
+
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        cell += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      quoted = true;
+    } else if (char === ',') {
+      row.push(cell);
+      cell = '';
+    } else if (char === '\n') {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = '';
+    } else if (char !== '\r') {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim())) {
+    rows.push(row);
+  }
+
+  return rows.filter((cells) => cells.some((cellValue) => cellValue.trim()));
+};
+
+const findUserImportColumn = (headers: string[], aliases: readonly string[]) => (
+  aliases.map((alias) => headers.indexOf(alias)).find((index) => index !== -1) ?? -1
+);
+
+const validateUserImportCsvFile = async (file: File): Promise<{ csv: string; error: string | null }> => {
+  const lowerName = file.name.trim().toLowerCase();
+  const lowerType = file.type.trim().toLowerCase();
+  const hasCsvName = lowerName.endsWith('.csv');
+  const hasCsvType = lowerType.includes('csv');
+
+  if (lowerName && !hasCsvName && !hasCsvType) {
+    return { csv: '', error: 'Upload a .csv file exported from the Backy users template.' };
+  }
+
+  const csv = await file.text();
+  const table = parseUserImportCsvRows(csv);
+  if (table.length === 0) {
+    return { csv, error: 'Users import CSV is empty.' };
+  }
+
+  const headers = table[0].map(normalizeUserImportHeader);
+  const nameIndex = findUserImportColumn(headers, USER_IMPORT_NAME_HEADERS);
+  const emailIndex = findUserImportColumn(headers, USER_IMPORT_EMAIL_HEADERS);
+  const roleIndex = findUserImportColumn(headers, ['role']);
+  const statusIndex = findUserImportColumn(headers, ['status']);
+  const missingColumns = [
+    nameIndex === -1 ? USER_IMPORT_REQUIRED_COLUMNS[0] : null,
+    emailIndex === -1 ? USER_IMPORT_REQUIRED_COLUMNS[1] : null,
+  ].filter((value): value is (typeof USER_IMPORT_REQUIRED_COLUMNS)[number] => Boolean(value));
+
+  if (missingColumns.length > 0) {
+    return { csv, error: `Users import CSV is missing required columns: ${missingColumns.join(', ')}.` };
+  }
+
+  const dataRows = table.slice(1);
+  if (dataRows.length === 0) {
+    return { csv, error: 'Users import CSV needs at least one user row.' };
+  }
+
+  const seenEmails = new Set<string>();
+  const rowErrors: string[] = [];
+  dataRows.forEach((cells, index) => {
+    const rowNumber = index + 2;
+    const fullName = (cells[nameIndex] || '').trim();
+    const email = (cells[emailIndex] || '').trim().toLowerCase();
+    const role = roleIndex === -1 ? 'viewer' : (cells[roleIndex] || 'viewer').trim().toLowerCase();
+    const status = statusIndex === -1 ? 'invited' : (cells[statusIndex] || 'invited').trim().toLowerCase();
+
+    if (!fullName) {
+      rowErrors.push(`Row ${rowNumber}: full name is required.`);
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      rowErrors.push(`Row ${rowNumber}: enter a valid email address.`);
+      return;
+    }
+
+    if (!USER_IMPORT_ROLES.some((option) => option === role)) {
+      rowErrors.push(`Row ${rowNumber}: role must be owner, admin, editor, or viewer.`);
+      return;
+    }
+
+    if (!USER_IMPORT_STATUSES.some((option) => option === status)) {
+      rowErrors.push(`Row ${rowNumber}: status must be active, inactive, invited, or suspended.`);
+      return;
+    }
+
+    if (seenEmails.has(email)) {
+      rowErrors.push(`Row ${rowNumber}: duplicate email appears more than once in the CSV.`);
+      return;
+    }
+
+    seenEmails.add(email);
+  });
+
+  if (rowErrors.length > 0) {
+    const visibleErrors = rowErrors.slice(0, 3).join(' ');
+    const hiddenCount = rowErrors.length - 3;
+    const hiddenCopy = hiddenCount > 0 ? ` ${hiddenCount} more issue${hiddenCount === 1 ? '' : 's'} hidden.` : '';
+    return { csv, error: `Fix users import CSV before uploading: ${visibleErrors}${hiddenCopy}` };
+  }
+
+  return { csv, error: null };
 };

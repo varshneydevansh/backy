@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-  canvasElementsToBackyContentDocument,
+  canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
   type BackyJsonObject,
   type BackyContentDocument,
@@ -37,6 +37,7 @@ import {
 import { pageRevisionSnapshot } from "@/lib/repositoryContentWorkflow";
 import { findPageRouteConflict } from "@/lib/routeConflicts";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
+import { normalizeInputFromDirectFrontendDesignEnvelope } from "@/lib/frontendDesignContract";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import { getRepositoryPageByPublicPath } from "@/lib/repositoryPages";
 import {
@@ -172,39 +173,27 @@ const contentDocumentFromInput = (
   if (rawContent === undefined) {
     return undefined;
   }
-  if (isBackyContentDocument(rawContent)) {
-    return rawContent;
-  }
-  if (
-    isRecord(rawContent) &&
-    isBackyContentDocument(rawContent.contentDocument)
-  ) {
-    return rawContent.contentDocument;
-  }
-
-  return canvasElementsToBackyContentDocument({
+  return canvasContentPayloadToBackyContentDocument({
     id: fallback.id,
     kind: "page",
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements:
-      isRecord(rawContent) && Array.isArray(rawContent.elements)
-        ? rawContent.elements
-        : Array.isArray(rawContent)
-          ? rawContent
-          : [],
-    canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
-    customCSS:
-      isRecord(rawContent) && typeof rawContent.customCSS === "string"
-        ? rawContent.customCSS
-        : undefined,
+    version: fallback.content.version,
+    rawContent,
+    fallbackDocument: fallback.content,
   });
 };
 
 const storePageContentFromInput = (
   rawContent: unknown,
   fallback: StorePage["content"],
+  input: {
+    id: string;
+    title: string;
+    slug: string;
+    status: "draft" | "published" | "scheduled" | "archived";
+  },
 ): StorePage["content"] => {
   if (rawContent === undefined) {
     return fallback;
@@ -214,13 +203,38 @@ const storePageContentFromInput = (
   const canvasSizeInput = isRecord(contentInput.canvasSize)
     ? contentInput.canvasSize
     : {};
+  const contentDocument = canvasContentPayloadToBackyContentDocument({
+    id: input.id,
+    kind: "page",
+    title: input.title,
+    slug: input.slug,
+    status: input.status,
+    rawContent,
+    fallbackDocument: isBackyContentDocument(fallback.contentDocument)
+      ? fallback.contentDocument
+      : undefined,
+  });
+  const metadata = isRecord(contentDocument.metadata)
+    ? contentDocument.metadata
+    : {};
+  const designStateValue = <T = unknown>(key: keyof StorePage["content"]): T | undefined => {
+    const sourceValue =
+      contentInput[key] !== undefined
+        ? contentInput[key]
+        : (contentDocument as unknown as Record<string, unknown>)[key] ??
+          metadata[key as string] ??
+          fallback[key];
+    return Array.isArray(sourceValue) || isRecord(sourceValue)
+      ? (sourceValue as T)
+      : undefined;
+  };
 
   return {
     elements: (isRecord(rawContent) && Array.isArray(rawContent.elements)
       ? rawContent.elements
       : Array.isArray(rawContent)
         ? rawContent
-        : []) as StorePage["content"]["elements"],
+        : fallback.elements) as StorePage["content"]["elements"],
     canvasSize: {
       width:
         Number(canvasSizeInput.width) || fallback.canvasSize?.width || 1200,
@@ -230,16 +244,26 @@ const storePageContentFromInput = (
     customCSS:
       typeof contentInput.customCSS === "string"
         ? contentInput.customCSS
-        : fallback.customCSS,
+        : typeof metadata.customCSS === "string"
+          ? metadata.customCSS
+          : fallback.customCSS,
     customJS:
       typeof contentInput.customJS === "string"
         ? contentInput.customJS
-        : fallback.customJS,
-    contentDocument: isBackyContentDocument(rawContent)
-      ? rawContent
-      : isBackyContentDocument(contentInput.contentDocument)
-        ? contentInput.contentDocument
-        : fallback.contentDocument,
+        : typeof metadata.customJS === "string"
+          ? metadata.customJS
+          : fallback.customJS,
+    contentDocument,
+    themeTokenRefs: designStateValue<Record<string, string>>("themeTokenRefs"),
+    assets: designStateValue<unknown[] | Record<string, unknown>>("assets"),
+    animations: designStateValue<unknown[] | Record<string, unknown>>("animations"),
+    interactions: designStateValue<unknown[] | Record<string, unknown>>(
+      "interactions",
+    ),
+    dataBindings: designStateValue<Record<string, unknown>>("dataBindings"),
+    editableMap: designStateValue<Record<string, unknown>>("editableMap"),
+    seo: designStateValue<Record<string, unknown>>("seo"),
+    metadata: designStateValue<Record<string, unknown>>("metadata"),
   };
 };
 
@@ -332,7 +356,21 @@ const adminPageFromRepositoryPage = (page: BackyPage) => {
         typeof page.content.metadata?.customCSS === "string"
           ? page.content.metadata.customCSS
           : undefined,
+      customJS:
+        typeof page.content.metadata?.customJS === "string"
+          ? page.content.metadata.customJS
+          : undefined,
       contentDocument: page.content,
+      themeTokenRefs: page.content.themeTokenRefs,
+      assets: page.content.assets,
+      animations: Array.isArray(page.content.metadata?.animations) || isRecord(page.content.metadata?.animations)
+        ? page.content.metadata.animations
+        : undefined,
+      interactions: page.content.interactions,
+      dataBindings: page.content.dataBindings,
+      editableMap: page.content.editableMap,
+      seo: page.content.seo,
+      metadata: page.content.metadata,
     },
   };
 };
@@ -512,7 +550,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const body = await parseJsonBody(request);
+      const body = normalizeInputFromDirectFrontendDesignEnvelope(
+        await parseJsonBody(request),
+      );
       const statusValidationError = pageStatusValidationError(body, requestId);
       if (statusValidationError) {
         return statusValidationError;
@@ -671,6 +711,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           body.revisionNote.trim().length > 0
             ? body.revisionNote
             : "Before update",
+        operation: "update",
         createdBy: request.headers.get("x-backy-actor") || "admin",
       });
       const updated = await repositories.pages.update(site.id, page.id, {
@@ -750,7 +791,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "PAGE_NOT_FOUND", "Page not found", requestId);
     }
 
-    const body = await parseJsonBody(request);
+    const body = normalizeInputFromDirectFrontendDesignEnvelope(
+      await parseJsonBody(request),
+    );
     const statusValidationError = pageStatusValidationError(body, requestId);
     if (statusValidationError) {
       return statusValidationError;
@@ -875,7 +918,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       status,
       scheduledAt: nextScheduledAt,
       isHomepage: nextIsHomepage,
-      content: storePageContentFromInput(body.content, page.content),
+      content: storePageContentFromInput(body.content, page.content, {
+        id: page.id,
+        title: typeof body.title === "string" ? body.title : page.title,
+        slug: nextSlug,
+        status,
+      }),
       meta: isRecord(body.meta) ? body.meta : page.meta,
     } as StorePage;
     const readiness = buildPageReadiness(prospectivePage);

@@ -1,6 +1,7 @@
 import {
   BACKY_CONTENT_SCHEMA_VERSION,
   createBackyContentDocument,
+  isBackyContentDocument,
   validateBackyContentDocument,
   type BackyBreakpoint,
   type BackyComponentBindingSlot,
@@ -17,6 +18,7 @@ import {
   type BackyElementAccessibility,
   type BackyElementAction,
   type BackyElementActionType,
+  type BackyElementAnimation,
   type BackyInteractiveControl,
   type BackyInteractiveFallback,
   type BackyInteractiveRenderCapabilities,
@@ -71,6 +73,18 @@ const BINDING_SLOT_SOURCE_KINDS = new Set<string>([
   'commerce',
 ]);
 
+const ELEMENT_ANIMATION_TYPES = new Set([
+  'fadeIn',
+  'slideIn',
+  'scaleIn',
+  'bounce',
+  'rotate',
+  'custom',
+]);
+
+const ELEMENT_ANIMATION_TRIGGERS = new Set(['load', 'scroll', 'hover']);
+const ELEMENT_ANIMATION_DIRECTIONS = new Set(['left', 'right', 'up', 'down']);
+
 const RESERVED_ELEMENT_FIELDS = new Set([
   'id',
   'type',
@@ -106,14 +120,34 @@ const RESERVED_ELEMENT_FIELDS = new Set([
 
 const ASSET_ID_FIELDS = new Set([
   'assetId',
+  'mediaIds',
   'mediaId',
+  'fileIds',
   'fileId',
+  'fileMediaIds',
+  'fileMediaId',
+  'downloadMediaIds',
+  'downloadMediaId',
+  'imageIds',
   'imageId',
+  'videoIds',
   'videoId',
+  'audioIds',
   'audioId',
+  'fontIds',
   'fontId',
+  'documentIds',
   'documentId',
+  'iconIds',
   'iconId',
+  'fontMediaIds',
+  'fontMediaId',
+  'fallbackImageMediaIds',
+  'fallbackImageMediaId',
+  'backgroundMediaIds',
+  'backgroundMediaId',
+  'posterMediaIds',
+  'posterMediaId',
 ]);
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
@@ -135,9 +169,27 @@ const toNumber = (value: unknown): number | undefined => {
   return undefined;
 };
 
-const toBoolean = (value: unknown): boolean | undefined => (
-  typeof value === 'boolean' ? value : undefined
-);
+const toBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return undefined;
+};
 
 const toString = (value: unknown): string | undefined => (
   isNonEmptyString(value) ? value.trim() : undefined
@@ -239,6 +291,60 @@ const normalizeTokenRefs = (value: unknown): Record<string, string> | undefined 
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
+const normalizeBackyElementAnimation = (value: unknown): BackyElementAnimation | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const type = toString(value.type);
+  if (!type || !ELEMENT_ANIMATION_TYPES.has(type)) {
+    return undefined;
+  }
+
+  const duration = toNumber(value.duration);
+  if (duration === undefined || duration < 0) {
+    return undefined;
+  }
+
+  const delay = toNumber(value.delay);
+  const easing = toString(value.easing);
+  const direction = toString(value.direction);
+  const trigger = toString(value.trigger);
+  const from = normalizeBackyJsonObject(value.from);
+  const to = normalizeBackyJsonObject(value.to);
+  const tokenRefs = normalizeTokenRefs(value.tokenRefs);
+  const animation: BackyElementAnimation = {
+    type: type as BackyElementAnimation['type'],
+    duration,
+  };
+
+  if (delay !== undefined && delay >= 0) animation.delay = delay;
+  if (easing) animation.easing = easing;
+  if (direction && ELEMENT_ANIMATION_DIRECTIONS.has(direction)) {
+    animation.direction = direction as BackyElementAnimation['direction'];
+  }
+  if (trigger && ELEMENT_ANIMATION_TRIGGERS.has(trigger)) {
+    animation.trigger = trigger as BackyElementAnimation['trigger'];
+  }
+  if (isRecord(value.scrollTrigger)) {
+    const scrollStart = toString(value.scrollTrigger.start);
+    const scrollEnd = toString(value.scrollTrigger.end);
+    const scrub = toBoolean(value.scrollTrigger.scrub);
+    const scrollTrigger: NonNullable<BackyElementAnimation['scrollTrigger']> = {};
+    if (scrollStart) scrollTrigger.start = scrollStart;
+    if (scrollEnd) scrollTrigger.end = scrollEnd;
+    if (scrub !== undefined) scrollTrigger.scrub = scrub;
+    if (Object.keys(scrollTrigger).length > 0) {
+      animation.scrollTrigger = scrollTrigger;
+    }
+  }
+  if (Object.keys(from).length > 0) animation.from = from;
+  if (Object.keys(to).length > 0) animation.to = to;
+  if (tokenRefs) animation.tokenRefs = tokenRefs;
+
+  return animation;
+};
+
 const normalizePermissions = (value: unknown): Record<string, boolean> | undefined => {
   if (!isRecord(value)) {
     return undefined;
@@ -268,7 +374,7 @@ const normalizeResponsiveOverride = (value: unknown): BackyResponsiveElementOver
   const rotation = toNumber(value.rotation);
   const visible = toBoolean(value.visible);
   const locked = toBoolean(value.locked);
-  const tokenRefs = normalizeTokenRefs(value.tokenRefs);
+  const tokenRefs = normalizeTokenRefs(value.tokenRefs ?? value.themeTokenRefs);
 
   if (x !== undefined) override.x = x;
   if (y !== undefined) override.y = y;
@@ -618,8 +724,21 @@ const normalizeRenderCapabilities = (value: unknown): BackyInteractiveRenderCapa
 };
 
 const collectAssetIdsFromValue = (value: unknown, key: string | null, assetIds: Set<string>) => {
-  if (key && ASSET_ID_FIELDS.has(key) && isNonEmptyString(value)) {
-    assetIds.add(value.trim());
+  if (key && ASSET_ID_FIELDS.has(key)) {
+    if (isNonEmptyString(value)) {
+      assetIds.add(value.trim());
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (isNonEmptyString(item)) {
+          assetIds.add(item.trim());
+        }
+      });
+      return;
+    }
+
     return;
   }
 
@@ -654,14 +773,17 @@ const normalizeAssetIds = (rawElement: Record<string, unknown>, props: BackyJson
 
 const normalizeElementMetadata = (
   rawElement: Record<string, unknown>,
+  parentId?: string,
 ): BackyJsonObject | undefined => {
   const metadata = normalizeBackyJsonObject(rawElement.metadata);
 
-  if (rawElement.parentId !== undefined) {
-    const parentId = normalizeJsonValue(rawElement.parentId);
-    if (parentId !== undefined) {
-      metadata.parentId = parentId;
-    }
+  const parentIdValue = parentId
+    ? parentId
+    : rawElement.parentId !== undefined
+      ? normalizeJsonValue(rawElement.parentId)
+      : undefined;
+  if (parentIdValue !== undefined) {
+    metadata.parentId = parentIdValue;
   }
 
   if (rawElement.animation !== undefined) {
@@ -691,6 +813,7 @@ const normalizeElementMetadata = (
 interface NormalizeElementContext {
   path: string;
   usedIds: Set<string>;
+  parentId?: string;
 }
 
 export function normalizeBackyContentElement(
@@ -714,6 +837,8 @@ export function normalizeBackyContentElement(
   const props = normalizeBackyJsonObject(rawElement.props);
   const styles = normalizeBackyJsonObject(rawElement.styles);
   const rawChildren = Array.isArray(rawElement.children) ? rawElement.children : [];
+  const rawMetadata = isRecord(rawElement.metadata) ? rawElement.metadata : {};
+  const parentId = context.parentId || toString(rawElement.parentId) || toString(rawMetadata.parentId);
 
   const element: BackyContentElement = {
     id,
@@ -722,6 +847,7 @@ export function normalizeBackyContentElement(
       .map((child, index) => normalizeBackyContentElement(child, {
         path: `${path}_children_${index}`,
         usedIds,
+        parentId: id,
       }))
       .filter((child): child is BackyContentElement => child !== null),
     props,
@@ -742,16 +868,18 @@ export function normalizeBackyContentElement(
   const visible = toBoolean(rawElement.visible);
   const locked = toBoolean(rawElement.locked);
   const responsive = normalizeResponsive(rawElement.responsive);
-  const tokenRefs = normalizeTokenRefs(rawElement.tokenRefs);
+  const tokenRefs = normalizeTokenRefs(rawElement.tokenRefs ?? rawElement.themeTokenRefs);
+  const animation = normalizeBackyElementAnimation(rawElement.animation ?? rawMetadata.animation);
   const actions = normalizeActions(rawElement.actions, id);
   const dataBindings = normalizeDataBindings(rawElement.dataBindings, id);
   const bindingSlots = normalizeBindingSlots(rawElement.bindingSlots, id);
   const accessibility = normalizeAccessibility(rawElement.accessibility, props);
   const assetIds = normalizeAssetIds(rawElement, props);
   const permissions = normalizePermissions(rawElement.permissions);
-  const metadata = normalizeElementMetadata(rawElement);
+  const metadata = normalizeElementMetadata(rawElement, parentId);
 
   if (name) element.name = name;
+  if (parentId) element.parentId = parentId;
   if (componentKey) element.componentKey = componentKey;
   if (version) element.version = version;
   if (controls) element.controls = controls;
@@ -768,6 +896,7 @@ export function normalizeBackyContentElement(
   if (Object.keys(styles).length > 0) element.styles = styles;
   if (responsive) element.responsive = responsive;
   if (tokenRefs) element.tokenRefs = tokenRefs;
+  if (animation) element.animation = animation;
   if (actions) element.actions = actions;
   if (dataBindings) element.dataBindings = dataBindings;
   if (bindingSlots) element.bindingSlots = bindingSlots;
@@ -806,6 +935,7 @@ export interface BackyCanvasContentDocumentInput {
   version?: string | BackyContentVersion;
   canvasSize?: unknown;
   customCSS?: string;
+  customJS?: string;
   themeTokenRefs?: Record<string, string>;
   assets?: {
     media?: BackyContentAssetRef[];
@@ -817,6 +947,377 @@ export interface BackyCanvasContentDocumentInput {
   editableMap?: Record<string, BackyEditableMapEntry>;
   metadata?: Record<string, BackyJsonValue>;
   themeSchemaVersion?: BackyThemeSchemaVersion;
+}
+
+export interface BackyCanvasContentPayloadDocumentInput {
+  id: string;
+  kind: BackyContentKind;
+  rawContent: unknown;
+  fallbackDocument?: BackyContentDocument | null;
+  title?: string;
+  slug?: string;
+  locale?: string;
+  status?: BackyContentStatus;
+  version?: string | BackyContentVersion;
+}
+
+const documentFromCanvasPayload = (
+  rawContent: unknown,
+  fallbackDocument?: BackyContentDocument | null,
+): BackyContentDocument | null => {
+  if (isBackyContentDocument(rawContent)) {
+    return rawContent;
+  }
+
+  if (isRecord(rawContent) && isBackyContentDocument(rawContent.contentDocument)) {
+    return rawContent.contentDocument;
+  }
+
+  return fallbackDocument || null;
+};
+
+const payloadString = (
+  value: unknown,
+  fallback: string | undefined,
+): string | undefined => (
+  typeof value === 'string' ? value : fallback
+);
+
+const hasPayloadKey = (
+  value: Record<string, unknown>,
+  key: string,
+): boolean => Object.prototype.hasOwnProperty.call(value, key);
+
+const payloadJsonObject = <TValue>(
+  source: Record<string, unknown>,
+  key: string,
+  fallback: TValue | undefined,
+): TValue | undefined => {
+  if (!hasPayloadKey(source, key)) {
+    return fallback;
+  }
+
+  return normalizeBackyJsonObject(source[key]) as TValue;
+};
+
+const payloadStringRecord = (
+  source: Record<string, unknown>,
+  key: string,
+  fallback: Record<string, string> | undefined,
+): Record<string, string> | undefined => {
+  if (!hasPayloadKey(source, key)) {
+    return fallback;
+  }
+
+  return normalizeStringRecord(source[key]) || {};
+};
+
+const firstNonEmptyJsonObject = <TValue>(
+  ...candidates: Array<unknown>
+): TValue | undefined => {
+  for (const candidate of candidates) {
+    const normalized = normalizeBackyJsonObject(candidate);
+    if (Object.keys(normalized).length > 0) {
+      return normalized as TValue;
+    }
+  }
+
+  return undefined;
+};
+
+const mergeDocumentMetadata = (
+  primary?: BackyContentDocument | null,
+  fallback?: BackyContentDocument | null,
+): BackyContentDocument['metadata'] | undefined => {
+  const merged = {
+    ...normalizeBackyJsonObject(fallback?.metadata),
+    ...normalizeBackyJsonObject(primary?.metadata),
+  };
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
+};
+
+const isEditorGroupElement = (element: BackyContentElement): boolean => (
+  element.props?.editorGroup === true
+);
+
+const hasNonEmptyArray = (value: unknown): boolean => (
+  Array.isArray(value) && value.length > 0
+);
+
+const hasNonEmptyRecord = (value: unknown): boolean => (
+  isRecord(value) && Object.keys(value).length > 0
+);
+
+const isInteractiveBackyElement = (element: BackyContentElement): boolean => (
+  element.type === 'interactiveFigure' ||
+  element.type === 'codeComponent' ||
+  isNonEmptyString(element.componentKey) ||
+  hasNonEmptyArray(element.controls) ||
+  Boolean(element.renderCapabilities)
+);
+
+const ACTION_PROP_KEYS = [
+  'href',
+  'url',
+  'action',
+  'actionUrl',
+  'formId',
+  'successRedirectUrl',
+  'redirectUrl',
+] as const;
+
+const hasBackyElementActionWiring = (element: BackyContentElement): boolean => (
+  hasNonEmptyArray(element.actions) ||
+  ACTION_PROP_KEYS.some((key) => isNonEmptyString(element.props?.[key]))
+);
+
+export function buildBackyEditorCompositionSummary(
+  elements: BackyContentElement[],
+): BackyJsonObject {
+  const typeCounts: Record<string, number> = {};
+  const groupIds: string[] = [];
+  const nestedElementIds: string[] = [];
+  const containerIds: string[] = [];
+  const animatedElementIds: string[] = [];
+  const actionElementIds: string[] = [];
+  const dataBoundElementIds: string[] = [];
+  const tokenRefElementIds: string[] = [];
+  const assetBoundElementIds: string[] = [];
+  const interactiveElementIds: string[] = [];
+  const metrics = {
+    totalLayers: 0,
+    rootLayers: elements.length,
+    groupLayers: 0,
+    nestedLayers: 0,
+    childContainerLayers: 0,
+    responsiveOverrideLayers: 0,
+    animatedLayers: 0,
+    actionLayers: 0,
+    dataBoundLayers: 0,
+    tokenRefLayers: 0,
+    assetBoundLayers: 0,
+    interactiveLayers: 0,
+    hiddenLayers: 0,
+    lockedLayers: 0,
+    maxDepth: 0,
+  };
+
+  const walk = (items: BackyContentElement[], depth: number) => {
+    metrics.maxDepth = Math.max(metrics.maxDepth, depth);
+    items.forEach((item) => {
+      const type = item.type || 'unknown';
+      metrics.totalLayers += 1;
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+
+      if (depth > 0) {
+        metrics.nestedLayers += 1;
+        nestedElementIds.push(item.id);
+      }
+      if (isEditorGroupElement(item)) {
+        metrics.groupLayers += 1;
+        groupIds.push(item.id);
+      }
+      if (item.children.length > 0) {
+        metrics.childContainerLayers += 1;
+        containerIds.push(item.id);
+      }
+      if (item.responsive && Object.keys(item.responsive).length > 0) {
+        metrics.responsiveOverrideLayers += 1;
+      }
+      if (item.animation && Object.keys(item.animation).length > 0) {
+        metrics.animatedLayers += 1;
+        animatedElementIds.push(item.id);
+      }
+      if (hasBackyElementActionWiring(item)) {
+        metrics.actionLayers += 1;
+        actionElementIds.push(item.id);
+      }
+      if (hasNonEmptyArray(item.dataBindings) || hasNonEmptyArray(item.bindingSlots)) {
+        metrics.dataBoundLayers += 1;
+        dataBoundElementIds.push(item.id);
+      }
+      if (hasNonEmptyRecord(item.tokenRefs) || hasNonEmptyRecord(item.animation?.tokenRefs)) {
+        metrics.tokenRefLayers += 1;
+        tokenRefElementIds.push(item.id);
+      }
+      if (hasNonEmptyArray(item.assetIds)) {
+        metrics.assetBoundLayers += 1;
+        assetBoundElementIds.push(item.id);
+      }
+      if (isInteractiveBackyElement(item)) {
+        metrics.interactiveLayers += 1;
+        interactiveElementIds.push(item.id);
+      }
+      if (toBoolean(item.visible) === false) {
+        metrics.hiddenLayers += 1;
+      }
+      if (toBoolean(item.locked) === true) {
+        metrics.lockedLayers += 1;
+      }
+
+      if (item.children.length > 0) {
+        walk(item.children, depth + 1);
+      }
+    });
+  };
+
+  walk(elements, 0);
+
+  const topTypes = Object.entries(typeCounts)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 8)
+    .map(([type, count]) => ({ type, count }));
+
+  return {
+    schemaVersion: 'backy.editor-composition-summary.v1',
+    ready: metrics.totalLayers > 0,
+    hasGroups: metrics.groupLayers > 0,
+    hasNestedLayers: metrics.nestedLayers > 0,
+    hasAnimations: metrics.animatedLayers > 0,
+    hasActions: metrics.actionLayers > 0,
+    hasDataBindings: metrics.dataBoundLayers > 0,
+    hasTokenRefs: metrics.tokenRefLayers > 0,
+    hasAssetRefs: metrics.assetBoundLayers > 0,
+    hasInteractiveComponents: metrics.interactiveLayers > 0,
+    metrics: {
+      ...metrics,
+      topTypes,
+    },
+    groupIds,
+    nestedElementIds,
+    containerIds,
+    animatedElementIds,
+    actionElementIds,
+    dataBoundElementIds,
+    tokenRefElementIds,
+    assetBoundElementIds,
+    interactiveElementIds,
+    shortcuts: {
+      group: 'Cmd/Ctrl+G',
+      ungroup: 'Shift+Cmd/Ctrl+G',
+      selectSiblings: 'Cmd/Ctrl+A',
+      selectChildren: 'Shift+Cmd/Ctrl+A',
+      selectChild: 'Enter',
+      selectParent: 'Shift+Enter',
+    },
+    invariants: {
+      sameParentRequired: true,
+      lockedLayersBlocked: true,
+      editorGroupMarker: 'props.editorGroup',
+      childrenPersistedInline: true,
+      parentIdsStoredAsElementMetadata: true,
+      responsiveBreakpoints: ['tablet', 'mobile'],
+    },
+  };
+}
+
+export function canvasContentPayloadToBackyContentDocument(
+  input: BackyCanvasContentPayloadDocumentInput,
+): BackyContentDocument {
+  if (isBackyContentDocument(input.rawContent)) {
+    return input.rawContent;
+  }
+
+  const rawRecord = isRecord(input.rawContent) ? input.rawContent : {};
+  const payloadDocument = isRecord(input.rawContent) && isBackyContentDocument(input.rawContent.contentDocument)
+    ? input.rawContent.contentDocument
+    : null;
+  const fallbackDocument = input.fallbackDocument || null;
+  const existingDocument = documentFromCanvasPayload(input.rawContent, fallbackDocument);
+  const rawElements = Array.isArray(input.rawContent)
+    ? input.rawContent
+    : Array.isArray(rawRecord.elements)
+      ? rawRecord.elements
+      : existingDocument?.elements || [];
+  const metadata = payloadJsonObject<NonNullable<BackyContentDocument['metadata']>>(
+    rawRecord,
+    'metadata',
+    mergeDocumentMetadata(existingDocument, payloadDocument ? fallbackDocument : null),
+  ) || {};
+  if (hasPayloadKey(rawRecord, 'animations')) {
+    const animations = normalizeJsonValue(rawRecord.animations);
+    if (Array.isArray(animations)) {
+      metadata.animations = animations;
+    }
+  }
+  const themeSchemaVersion = typeof rawRecord.themeSchemaVersion === 'string'
+    ? rawRecord.themeSchemaVersion as BackyThemeSchemaVersion
+    : typeof existingDocument?.metadata?.themeSchemaVersion === 'string'
+      ? existingDocument.metadata.themeSchemaVersion as BackyThemeSchemaVersion
+      : typeof fallbackDocument?.metadata?.themeSchemaVersion === 'string'
+        ? fallbackDocument.metadata.themeSchemaVersion as BackyThemeSchemaVersion
+      : undefined;
+
+  return canvasElementsToBackyContentDocument({
+    id: input.id,
+    kind: input.kind,
+    title: input.title,
+    slug: input.slug,
+    locale: input.locale || existingDocument?.locale,
+    status: input.status,
+    version: input.version || existingDocument?.version,
+    elements: rawElements,
+    canvasSize: rawRecord.canvasSize ?? existingDocument?.metadata?.canvasSize,
+    customCSS: payloadString(
+      rawRecord.customCSS,
+      (existingDocument?.metadata?.customCSS as string | undefined)
+        || (fallbackDocument?.metadata?.customCSS as string | undefined),
+    ),
+    customJS: payloadString(
+      rawRecord.customJS,
+      (existingDocument?.metadata?.customJS as string | undefined)
+        || (fallbackDocument?.metadata?.customJS as string | undefined),
+    ),
+    themeTokenRefs: payloadStringRecord(
+      rawRecord,
+      'themeTokenRefs',
+      normalizeStringRecord(existingDocument?.themeTokenRefs)
+        || normalizeStringRecord(fallbackDocument?.themeTokenRefs),
+    ),
+    assets: payloadJsonObject<BackyContentDocument['assets']>(
+      rawRecord,
+      'assets',
+      firstNonEmptyJsonObject<BackyContentDocument['assets']>(
+        existingDocument?.assets,
+        fallbackDocument?.assets,
+      ),
+    ),
+    interactions: payloadJsonObject<BackyContentDocument['interactions']>(
+      rawRecord,
+      'interactions',
+      firstNonEmptyJsonObject<BackyContentDocument['interactions']>(
+        existingDocument?.interactions,
+        fallbackDocument?.interactions,
+      ),
+    ),
+    seo: payloadJsonObject<BackyContentDocument['seo']>(
+      rawRecord,
+      'seo',
+      firstNonEmptyJsonObject<BackyContentDocument['seo']>(
+        existingDocument?.seo,
+        fallbackDocument?.seo,
+      ),
+    ),
+    dataBindings: payloadJsonObject<BackyContentDocument['dataBindings']>(
+      rawRecord,
+      'dataBindings',
+      firstNonEmptyJsonObject<BackyContentDocument['dataBindings']>(
+        existingDocument?.dataBindings,
+        fallbackDocument?.dataBindings,
+      ),
+    ),
+    editableMap: payloadJsonObject<BackyContentDocument['editableMap']>(
+      rawRecord,
+      'editableMap',
+      firstNonEmptyJsonObject<BackyContentDocument['editableMap']>(
+        existingDocument?.editableMap,
+        fallbackDocument?.editableMap,
+      ),
+    ),
+    metadata,
+    themeSchemaVersion,
+  });
 }
 
 export function canvasElementsToBackyContentDocument(
@@ -831,12 +1332,17 @@ export function canvasElementsToBackyContentDocument(
   if (Object.keys(canvasSize).length > 0) {
     metadata.canvasSize = canvasSize;
   }
-  if (input.customCSS) {
+  if (input.customCSS !== undefined) {
     metadata.customCSS = input.customCSS;
+  }
+  if (input.customJS !== undefined) {
+    metadata.customJS = input.customJS;
   }
   if (input.themeSchemaVersion) {
     metadata.themeSchemaVersion = input.themeSchemaVersion;
   }
+  const normalizedElements = normalizeBackyContentElements(input.elements);
+  metadata.editorComposition = buildBackyEditorCompositionSummary(normalizedElements);
 
   const document = createBackyContentDocument({
     id: input.id,
@@ -848,7 +1354,7 @@ export function canvasElementsToBackyContentDocument(
     version: input.version || {
       source: 'migration',
     },
-    elements: normalizeBackyContentElements(input.elements),
+    elements: normalizedElements,
     themeTokenRefs: input.themeTokenRefs,
     assets: input.assets,
     interactions: input.interactions,

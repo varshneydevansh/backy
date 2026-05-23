@@ -13,6 +13,7 @@ import {
   type StoreSite,
 } from './backyStore';
 import { matchCollectionItemRoute, matchCollectionListRoute } from './collectionRoutes';
+import { PRODUCT_COLLECTION_SLUG, productDesignReadinessFromValues } from './commerceCatalog';
 import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
 import { resolveRedirectRoute, type ResolvedRedirectRoute } from './redirectRules';
 import {
@@ -86,6 +87,7 @@ type ResolvedDynamicItemRoute = {
     hostedPath: string;
     frontendDesign?: ReturnType<typeof frontendDesignProvenanceFromMetadata>;
     collectionFrontendDesign?: ReturnType<typeof frontendDesignProvenanceFromMetadata>;
+    designReadiness?: ReturnType<typeof productDesignReadinessFromValues>;
   };
 };
 
@@ -297,6 +299,10 @@ export function resolveSiteRoute(
       : typeof record.values.name === 'string' && record.values.name.length > 0
         ? record.values.name
         : record.slug;
+    const designReadiness = collection.slug === PRODUCT_COLLECTION_SLUG
+      ? productDesignReadinessFromValues(record.values)
+      : undefined;
+
     return withLocalizedResolvedRoute({
       type: 'dynamicItem',
       path,
@@ -319,6 +325,7 @@ export function resolveSiteRoute(
         hostedPath: canonical,
         frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
         collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
+        ...(designReadiness ? { designReadiness } : {}),
       },
     }, localized);
   }

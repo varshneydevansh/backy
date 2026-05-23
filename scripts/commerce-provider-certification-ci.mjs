@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,7 @@ const requestedDiscountProvider = (process.env.BACKY_COMMERCE_CERTIFY_DISCOUNT_P
 const requestedCatalogProvider = (process.env.BACKY_COMMERCE_CERTIFY_CATALOG_PROVIDER || 'auto').trim().toLowerCase();
 const requestedSubscriptionProvider = (process.env.BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER || 'auto').trim().toLowerCase();
 const requestedWebhookProvider = (process.env.BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER || 'auto').trim().toLowerCase();
+const certificationOutputPath = (process.env.BACKY_COMMERCE_CERTIFICATION_OUTPUT || '').trim();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -40,6 +42,39 @@ const assert = (condition, message) => {
 };
 
 const isHttpUrl = (url) => /^https?:\/\//i.test(url);
+const RAW_SECRET_VALUE_PATTERN = /(sk_live|sk_test|whsec_|AKIA|-----BEGIN|xox[baprs]-)/i;
+const URL_WITH_CREDENTIALS_PATTERN = /\b(?:https?|postgres(?:ql)?):\/\/[^/\s:@]+:[^@\s/]+@/i;
+const FORBIDDEN_CERTIFICATION_ARTIFACT_FIELD_NAMES = new Set([
+  'adminkey',
+  'adminapikey',
+  'authorization',
+  'cookie',
+  'setcookie',
+  'databaseurl',
+  'databaseuri',
+  'externalbaseurl',
+  'externalurl',
+  'targeturl',
+  'webhookbody',
+  'webhookpayload',
+  'rawwebhookbody',
+  'rawwebhookpayload',
+  'providercredential',
+  'providercredentials',
+  'credential',
+  'credentials',
+  'paymentreference',
+  'paymentreferences',
+  'providerpaymentreference',
+  'customerpayload',
+  'rawcustomerpayload',
+  'orderpayload',
+  'raworderpayload',
+  'raworder',
+  'raworders',
+  'privatekey',
+  'servicerolekey',
+]);
 
 if (requireCertification && externalBaseUrl && !isHttpUrl(externalBaseUrl)) {
   throw new Error('BACKY_COMMERCE_CERTIFICATION_BASE_URL must be an http:// or https:// URL when Commerce provider certification targets an external deployment.');
@@ -189,14 +224,63 @@ const requestJson = async (baseUrl, pathName, init = {}) => {
   return payload;
 };
 
+const optionalRequestJson = async (baseUrl, pathName, init = {}) => {
+  const response = await fetch(`${baseUrl}${pathName}`, {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      'x-backy-admin-key': adminKey,
+      ...(init.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+  return { response, payload };
+};
+
 const asRecord = (value) => (
   value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 );
 
 const stringValue = (value) => (typeof value === 'string' ? value.trim() : '');
+const previewJson = (value) => JSON.stringify(value ?? null).slice(0, 900);
 
 const hasHttpUrl = (value) => /^https?:\/\//i.test(stringValue(value));
 const envValue = (names) => names.map((name) => stringValue(process.env[name])).find(Boolean) || '';
+
+const normalizeArtifactFieldName = (name) => name.replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+const collectForbiddenArtifactFields = (input, pathSegments = []) => {
+  if (Array.isArray(input)) {
+    return input.flatMap((item, index) => collectForbiddenArtifactFields(item, [...pathSegments, String(index)]));
+  }
+
+  if (!input || typeof input !== 'object') {
+    if (typeof input === 'string' && URL_WITH_CREDENTIALS_PATTERN.test(input)) {
+      return [pathSegments.join('.') || '$'];
+    }
+    return [];
+  }
+
+  return Object.entries(input).flatMap(([key, nestedValue]) => {
+    const nextPath = [...pathSegments, key];
+    const normalizedKey = normalizeArtifactFieldName(key);
+    const fieldLeak = FORBIDDEN_CERTIFICATION_ARTIFACT_FIELD_NAMES.has(normalizedKey)
+      ? [nextPath.join('.')]
+      : [];
+    return [
+      ...fieldLeak,
+      ...collectForbiddenArtifactFields(nestedValue, nextPath),
+    ];
+  });
+};
+
+const assertNoForbiddenArtifactFields = (payload, label) => {
+  const forbiddenFields = collectForbiddenArtifactFields(payload);
+  assert(
+    forbiddenFields.length === 0,
+    `${label} contains forbidden sensitive artifact fields: ${forbiddenFields.join(', ')}`,
+  );
+};
 
 const commerceHttpCertificationUrls = {
   taxProviderUrl: envValue(['BACKY_COMMERCE_TAX_PROVIDER_URL', 'COMMERCE_TAX_PROVIDER_URL']),
@@ -570,7 +654,296 @@ const requestedWebhookReady = (runtime, settings) => {
 
 const assertNoRawSecrets = (runtime) => {
   const serialized = JSON.stringify(runtime);
-  assert(!/(sk_live|sk_test|whsec_|AKIA|-----BEGIN|xox[baprs]-)/i.test(serialized), 'Runtime commerce summary appears to expose a raw secret-like value.');
+  assert(!RAW_SECRET_VALUE_PATTERN.test(serialized), 'Runtime commerce summary appears to expose a raw secret-like value.');
+};
+
+const assertNoRawSecretsInPayload = (payload, label) => {
+  const serialized = JSON.stringify(payload);
+  assert(
+    !RAW_SECRET_VALUE_PATTERN.test(serialized),
+    `${label} appears to expose a raw secret-like value.`,
+  );
+};
+
+const assertCommerceProviderCertification = (commerce, label, expectedSiteId) => {
+  const providerCertification = asRecord(asRecord(commerce).providerCertification);
+  const runtime = asRecord(providerCertification.runtime);
+  const operatorCommandTemplate = asRecord(providerCertification.operatorCommandTemplate);
+  const operatorEnvTemplate = asRecord(providerCertification.operatorEnvTemplate);
+  const targetInputs = Array.isArray(operatorCommandTemplate.targetInputs)
+    ? operatorCommandTemplate.targetInputs
+    : [];
+
+  assert(
+    providerCertification.schemaVersion === 'backy.commerce-provider-certification-handoff.v1',
+    `${label} is missing commerce provider certification handoff: ${previewJson(commerce)}`,
+  );
+  assert(
+    providerCertification.status === 'external-live-provider-gate',
+    `${label} provider certification status drifted: ${previewJson(providerCertification)}`,
+  );
+  assert(
+    providerCertification.localMockGate === 'ci:commerce-provider-smoke' &&
+      providerCertification.liveCertificationGate === 'ci:commerce-provider-certification' &&
+      providerCertification.requiredFor === 'live-commerce-provider-launch',
+    `${label} provider certification gate metadata drifted: ${previewJson(providerCertification)}`,
+  );
+  assert(
+    stringValue(providerCertification.secretHandling).includes('Provider credentials stay in server environment/configuration'),
+    `${label} provider certification is missing the public no-secret boundary: ${previewJson(providerCertification)}`,
+  );
+  assert(
+    operatorCommandTemplate.envTemplateSchemaVersion === 'backy.commerce-provider-certification-env-template.v1' &&
+      Array.isArray(operatorCommandTemplate.requiredInputs) &&
+      targetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+      stringValue(operatorCommandTemplate.command).includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+      stringValue(operatorCommandTemplate.envTemplate).includes('BACKY_COMMERCE_CERTIFY_SITE_ID=') &&
+      (!expectedSiteId || stringValue(operatorCommandTemplate.envTemplate).includes(expectedSiteId)),
+    `${label} provider certification is missing operator command template inputs: ${previewJson(operatorCommandTemplate)}`,
+  );
+  assert(
+    operatorEnvTemplate.schemaVersion === 'backy.commerce-provider-certification-env-template.v1' &&
+      operatorEnvTemplate.fileName === '.env.backy-commerce-provider-certification' &&
+      stringValue(operatorEnvTemplate.body).includes('BACKY_COMMERCE_CERTIFY_SITE_ID=') &&
+      (!expectedSiteId || stringValue(operatorEnvTemplate.body).includes(expectedSiteId)),
+    `${label} provider certification is missing operator env template: ${previewJson(operatorEnvTemplate)}`,
+  );
+  assert(
+    typeof runtime.paymentConfigured === 'boolean' &&
+      typeof runtime.taxConfigured === 'boolean' &&
+      typeof runtime.shippingConfigured === 'boolean' &&
+      typeof runtime.catalogSyncConfigured === 'boolean' &&
+      Array.isArray(runtime.configuredFamilies) &&
+      Array.isArray(runtime.missingFamilies) &&
+      stringValue(runtime.secretHandling).includes('Provider secret values are never returned'),
+    `${label} provider certification is missing non-secret runtime readiness: ${previewJson(runtime)}`,
+  );
+  assertNoRawSecretsInPayload(providerCertification, `${label} provider certification handoff`);
+
+  return providerCertification;
+};
+
+const firstCatalogProduct = async (baseUrl, siteId) => {
+  const { response, payload } = await optionalRequestJson(baseUrl, `/api/sites/${encodeURIComponent(siteId)}/commerce/catalog?limit=1`);
+  if (!response.ok || payload.success === false) {
+    return { product: null, payload, status: response.status };
+  }
+  const products = Array.isArray(payload.data?.products)
+    ? payload.data.products
+    : Array.isArray(payload.products)
+      ? payload.products
+      : [];
+  return {
+    product: products[0] || null,
+    payload,
+    status: response.status,
+  };
+};
+
+const assertProductProviderApiHandoff = async (baseUrl, siteId, required) => {
+  const catalog = await firstCatalogProduct(baseUrl, siteId);
+  const productId = stringValue(catalog.product?.id || catalog.product?.slug);
+  if (!productId) {
+    assert(
+      !required,
+      `Commerce product provider API handoff requires at least one public catalog product: ${JSON.stringify(catalog.payload).slice(0, 800)}`,
+    );
+    return {
+      status: 'skipped',
+      reason: 'no public catalog product available',
+      catalogStatus: catalog.status,
+    };
+  }
+
+  const payload = await requestJson(
+    baseUrl,
+    `/api/admin/sites/${encodeURIComponent(siteId)}/commerce/products/${encodeURIComponent(productId)}/provider-sync`,
+  );
+  const data = payload.data || payload;
+  const providerCertification = data.providerCertification || payload.providerCertification;
+  const storefrontHandoff = data.storefrontHandoff || payload.storefrontHandoff;
+  const operatorEvidencePacket = asRecord(providerCertification?.operatorEvidencePacket);
+  const operatorEvidenceTarget = asRecord(operatorEvidencePacket.target);
+  const commandPreview = asRecord(operatorEvidencePacket.commandPreview);
+  const commandPreviewTargetInputs = Array.isArray(commandPreview.targetInputs)
+    ? commandPreview.targetInputs
+    : [];
+
+  assert(
+    providerCertification?.schemaVersion === 'backy.commerce-provider-certification-handoff.v1',
+    `Product provider-sync API is missing provider certification handoff: ${JSON.stringify(payload).slice(0, 900)}`,
+  );
+  assert(
+    providerCertification.source === 'admin-product-provider-sync-api',
+    `Product provider-sync API source drifted: ${JSON.stringify(providerCertification).slice(0, 900)}`,
+  );
+  assert(
+    operatorEvidencePacket.schemaVersion === 'backy.commerce-provider-certification-evidence-packet.v1',
+    `Product provider-sync API is missing operator evidence packet: ${JSON.stringify(providerCertification).slice(0, 900)}`,
+  );
+  assert(
+    operatorEvidenceTarget.siteId === siteId &&
+      operatorEvidenceTarget.siteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
+    `Product provider-sync API operator evidence packet is not tied to ${siteId}: ${JSON.stringify(operatorEvidencePacket).slice(0, 900)}`,
+  );
+  assert(
+    storefrontHandoff?.schemaVersion === 'backy.product-storefront-handoff.v1' &&
+      storefrontHandoff.source === 'admin-product-provider-sync-api',
+    `Product provider-sync API is missing storefront handoff: ${JSON.stringify(payload).slice(0, 900)}`,
+  );
+  assert(
+    storefrontHandoff.designReadiness?.schemaVersion === 'backy.product-design-readiness.v1',
+    `Product provider-sync API is missing custom frontend design readiness: ${JSON.stringify(storefrontHandoff).slice(0, 900)}`,
+  );
+  assertNoRawSecretsInPayload({ providerCertification, storefrontHandoff }, 'Product provider-sync API handoff');
+
+  return {
+    status: 'certified',
+    productId,
+    providerSchema: providerCertification.schemaVersion,
+    productEvidenceSchema: providerCertification.certificationEvidence?.schemaVersion || null,
+    packetSchema: operatorEvidencePacket.schemaVersion,
+    targetSiteId: stringValue(operatorEvidenceTarget.siteId),
+    siteSelectorEnv: stringValue(operatorEvidenceTarget.siteSelectorEnv),
+    commandPreviewTargetInputsIncludeSiteSelector: commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
+    storefrontSchema: storefrontHandoff.schemaVersion,
+    designReadinessStatus: storefrontHandoff.designReadiness.status,
+  };
+};
+
+const assertOrderProviderApiHandoff = async (baseUrl, siteId) => {
+  const payload = await requestJson(baseUrl, `/api/admin/sites/${encodeURIComponent(siteId)}/commerce/orders/analytics`);
+  const data = payload.data || payload;
+  const analytics = data.analytics;
+  const providerCertification = data.providerCertification;
+  const operatorEvidencePacket = asRecord(providerCertification?.operatorEvidencePacket);
+  const operatorEvidenceTarget = asRecord(operatorEvidencePacket.target);
+  const commandPreview = asRecord(operatorEvidencePacket.commandPreview);
+  const commandPreviewTargetInputs = Array.isArray(commandPreview.targetInputs)
+    ? commandPreview.targetInputs
+    : [];
+
+  assert(
+    analytics?.schemaVersion === 'backy.order-analytics.v1',
+    `Order analytics API is missing analytics schema: ${JSON.stringify(payload).slice(0, 900)}`,
+  );
+  assert(
+    providerCertification?.schemaVersion === 'backy.commerce-provider-certification-handoff.v1',
+    `Order analytics API is missing provider certification handoff: ${JSON.stringify(payload).slice(0, 900)}`,
+  );
+  assert(
+    providerCertification.source === 'admin-order-analytics-api',
+    `Order analytics API source drifted: ${JSON.stringify(providerCertification).slice(0, 900)}`,
+  );
+  assert(
+    providerCertification.certificationEvidence?.schemaVersion === 'backy.order-provider-certification-evidence.v1',
+    `Order analytics API is missing order provider scenario evidence: ${JSON.stringify(providerCertification).slice(0, 900)}`,
+  );
+  assert(
+    operatorEvidencePacket.schemaVersion === 'backy.order-provider-certification-evidence-packet.v1',
+    `Order analytics API is missing order operator evidence packet: ${JSON.stringify(providerCertification).slice(0, 900)}`,
+  );
+  assert(
+    operatorEvidenceTarget.siteId === siteId &&
+      operatorEvidenceTarget.siteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
+    `Order analytics API operator evidence packet is not tied to ${siteId}: ${JSON.stringify(operatorEvidencePacket).slice(0, 900)}`,
+  );
+  assertNoRawSecretsInPayload({ analytics, providerCertification }, 'Order analytics provider certification handoff');
+
+  return {
+    status: 'certified',
+    analyticsSchema: analytics.schemaVersion,
+    providerSchema: providerCertification.schemaVersion,
+    orderEvidenceSchema: providerCertification.certificationEvidence.schemaVersion,
+    packetSchema: operatorEvidencePacket.schemaVersion,
+    targetSiteId: stringValue(operatorEvidenceTarget.siteId),
+    siteSelectorEnv: stringValue(operatorEvidenceTarget.siteSelectorEnv),
+    commandPreviewTargetInputsIncludeSiteSelector: commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
+    orderCount: Number(analytics.orderCount || analytics.counts?.orders || analytics.orders?.count || 0),
+  };
+};
+
+const assertPublicCommerceApiHandoffs = async (baseUrl, siteId) => {
+  const encodedSiteId = encodeURIComponent(siteId);
+  const manifestPayload = await requestJson(baseUrl, `/api/sites/${encodedSiteId}/manifest`);
+  const manifestCommerce = manifestPayload.data?.modules?.commerce;
+  const manifestCommerceRuntime = asRecord(manifestPayload.data?.modules?.commerceRuntime);
+  const manifestCertification = assertCommerceProviderCertification(manifestCommerce, 'Public manifest commerce module', siteId);
+
+  assert(
+    asRecord(manifestCommerceRuntime.schemas).providerCertification === 'backy.commerce-provider-certification-handoff.v1',
+    `Public manifest commerce runtime is missing provider certification schema: ${previewJson(manifestCommerceRuntime)}`,
+  );
+  assert(
+    typeof asRecord(manifestCommerceRuntime.endpoints).catalog === 'string' &&
+      typeof asRecord(manifestCommerceRuntime.endpoints).orderContract === 'string',
+    `Public manifest commerce runtime is missing catalog/order contract endpoints: ${previewJson(manifestCommerceRuntime)}`,
+  );
+
+  const catalogPayload = await requestJson(baseUrl, `/api/sites/${encodedSiteId}/commerce/catalog?limit=1`);
+  const catalogData = catalogPayload.data || {};
+  assert(
+    catalogData.schemaVersion === 'backy.commerce-catalog.v1',
+    `Public commerce catalog API schema drifted: ${previewJson(catalogPayload)}`,
+  );
+  const catalogCertification = assertCommerceProviderCertification(catalogData.commerce, 'Public commerce catalog', siteId);
+
+  const ordersPayload = await requestJson(baseUrl, `/api/sites/${encodedSiteId}/commerce/orders`);
+  const ordersData = ordersPayload.data || {};
+  assert(
+    ordersData.schemaVersion === 'backy.commerce-orders.v1',
+    `Public commerce order contract API schema drifted: ${previewJson(ordersPayload)}`,
+  );
+  const orderCertification = assertCommerceProviderCertification(ordersData.commerce, 'Public commerce order contract', siteId);
+
+  assertNoRawSecretsInPayload({
+    manifestCommerce,
+    manifestCommerceRuntime,
+    catalogCommerce: catalogData.commerce,
+    ordersCommerce: ordersData.commerce,
+  }, 'Public commerce API handoffs');
+
+  return {
+    status: 'certified',
+    manifestProviderSchema: manifestCertification.schemaVersion,
+    runtimeProviderSchema: manifestCommerceRuntime.schemas.providerCertification,
+    catalogSchema: catalogData.schemaVersion,
+    catalogProviderSchema: catalogCertification.schemaVersion,
+    catalogProductCount: Array.isArray(catalogData.products) ? catalogData.products.length : 0,
+    orderContractSchema: ordersData.schemaVersion,
+    orderProviderSchema: orderCertification.schemaVersion,
+  };
+};
+
+const assertCommerceApiHandoffs = async (baseUrl) => {
+  const siteId = process.env.BACKY_COMMERCE_CERTIFY_SITE_ID || 'site-demo';
+  const productRequired = requireCertification && (certifyCatalog || certifyPayment || certifySubscriptions);
+  const orderRequired = requireCertification && (certifyPayment || certifyTax || certifyShipping || certifyDiscount || certifySubscriptions || certifyWebhooks);
+  const publicApis = await assertPublicCommerceApiHandoffs(baseUrl, siteId);
+  const product = (productRequired || !externalBaseUrl)
+    ? await assertProductProviderApiHandoff(baseUrl, siteId, productRequired)
+    : { status: 'skipped', reason: 'product API handoff not requested for this external provider family set' };
+  const orders = orderRequired || !externalBaseUrl
+    ? await assertOrderProviderApiHandoff(baseUrl, siteId)
+    : { status: 'skipped', reason: 'order API handoff not requested for this external provider family set' };
+
+  return {
+    siteId,
+    publicApis,
+    product,
+    orders,
+  };
+};
+
+const writeCertificationOutput = async (payload) => {
+  if (!certificationOutputPath) return;
+  const outputPath = path.isAbsolute(certificationOutputPath)
+    ? certificationOutputPath
+    : path.join(rootPath, certificationOutputPath);
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 };
 
 const buildReadiness = (runtime, settings) => ({
@@ -626,9 +999,17 @@ const main = async () => {
       assert(failures.length === 0, `Commerce provider certification failed readiness checks: ${failures.join(', ')}`);
     }
 
-    console.log(JSON.stringify({
+    const apiHandoffs = await assertCommerceApiHandoffs(server.baseUrl);
+
+    const certificationPayload = {
       ok: true,
       contract: 'backy.commerce-provider-certification.v1',
+      artifact: {
+        schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+        outputPathConfigured: Boolean(certificationOutputPath),
+        fileName: path.basename(certificationOutputPath || 'backy-commerce-provider-certification.json'),
+        secretHandling: 'Certification artifacts contain provider names, readiness booleans, target mode, non-secret runtime selections, and diagnostic counts only; admin keys, external target URLs, provider credentials, payment references, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
+      },
       required: requireCertification,
       target: {
         mode: externalBaseUrl ? 'external' : 'local',
@@ -658,7 +1039,12 @@ const main = async () => {
         groups: diagnostics.diagnostics.length,
         commerceGroup: commerceDiagnostics.checks.length,
       },
-    }));
+      apiHandoffs,
+    };
+    assertNoRawSecretsInPayload(certificationPayload, 'Commerce provider certification artifact');
+    assertNoForbiddenArtifactFields(certificationPayload, 'Commerce provider certification artifact');
+    await writeCertificationOutput(certificationPayload);
+    console.log(JSON.stringify(certificationPayload));
   } finally {
     await stopProcess(server.childProcess);
   }

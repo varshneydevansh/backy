@@ -460,7 +460,7 @@ const mergeFormSettings = (
     : {}),
 });
 
-const normalizeCreateInput = (siteId: string, body: Record<string, unknown>) => {
+const normalizeCreateInput = (siteId: string, body: Record<string, unknown>, actorId: string | null) => {
   const settings = parseRecord<Record<string, unknown>>(body.settings) || {};
   const spamSettings = parseRecord<FormDefinition['spamSettings'] & Record<string, unknown>>(body.spamSettings);
   const consentSettings = parseRecord<FormDefinition['consentSettings'] & Record<string, unknown>>(body.consentSettings);
@@ -487,8 +487,8 @@ const normalizeCreateInput = (siteId: string, body: Record<string, unknown>) => 
     contactShare: parseRecord<FormDefinition['contactShare'] & Record<string, unknown>>(body.contactShare),
     collectionTarget: parseRecord<FormDefinition['collectionTarget'] & Record<string, unknown>>(body.collectionTarget),
     settings: mergeFormSettings(settings, spamSettings, consentSettings),
-    createdBy: 'admin',
-    updatedBy: 'admin',
+    createdBy: actorId,
+    updatedBy: actorId,
   };
 };
 
@@ -592,7 +592,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, seeded.code, seeded.message, requestId);
       }
 
-      const input = normalizeCreateInput(site.id, seeded.body);
+      const input = normalizeCreateInput(site.id, seeded.body, access.session?.user.id || null);
       if (!input.name || !input.title) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Form name and title are required', requestId);
       }
@@ -665,7 +665,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
 
-    const input = normalizeCreateInput(site.id, seeded.body);
+    const input = normalizeCreateInput(site.id, seeded.body, access.session?.user.id || null);
     if (!input.name || !input.title) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Form name and title are required', requestId);
     }

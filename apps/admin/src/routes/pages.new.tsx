@@ -33,6 +33,7 @@ import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplate
 import {
     DEFAULT_CANVAS_SIZE,
     createCanvasElement,
+    extractFrontendTemplateDesignSerialization,
     serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 import type { CanvasElement } from '@/types/editor';
@@ -1243,6 +1244,7 @@ function NewPageRoute() {
     const [notice, setNotice] = useState<string | null>(null);
     const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
     const [routeCheckRetry, setRouteCheckRetry] = useState(0);
+    const [pageCreateFormSubmitted, setPageCreateFormSubmitted] = useState(false);
     const [hasHydratedAutosave, setHasHydratedAutosave] = useState(false);
     const [draftRecovery, setDraftRecovery] = useState<PageCreateAutosaveDraft | null>(null);
     const [autosavePausedForRecovery, setAutosavePausedForRecovery] = useState(false);
@@ -1879,6 +1881,30 @@ function NewPageRoute() {
     const hasNavigationLabel = formData.navigationPlacement === 'none' || Boolean((formData.navigationLabel || formData.title).trim());
     const hasValidParentPage = !formData.parentPageId || Boolean(selectedParentPage);
     const datasetImportReady = !formData.collectionId || Boolean(selectedDatasetCollection);
+    const pageTargetSiteInlineError = pageCreateFormSubmitted && !selectedSite
+        ? 'Select the website that should own this page before creating the editor document.'
+        : null;
+    const pageTitleInlineError = pageCreateFormSubmitted && !formData.title.trim()
+        ? 'Add a page title so Backy can create a named page, route, and editable canvas document.'
+        : null;
+    const pageNavigationInlineError = pageCreateFormSubmitted && !hasNavigationLabel
+        ? 'Add a menu label or choose not to add this page to navigation.'
+        : null;
+    const pageParentInlineError = pageCreateFormSubmitted && !hasValidParentPage
+        ? 'Choose an existing parent page or keep this page at the top level.'
+        : null;
+    const pageCanonicalInlineError = pageCreateFormSubmitted && !canonicalValid
+        ? 'Use a canonical path that starts with / or paste a valid site URL.'
+        : null;
+    const pageJsonLdInlineError = pageCreateFormSubmitted && !jsonLdValid
+        ? jsonLdResult.message
+        : null;
+    const pageDatasetInlineError = pageCreateFormSubmitted && Boolean(formData.collectionId) && !selectedDatasetCollection
+        ? collectionsError || 'Choose an existing collection before creating this dataset page.'
+        : null;
+    const pageScheduleInlineError = pageCreateFormSubmitted && scheduleValidationMessage
+        ? scheduleValidationMessage
+        : null;
     const adminPagesUrl = useMemo(
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(formData.siteId || requestedSiteId)}/pages`,
         [formData.siteId, requestedSiteId],
@@ -2774,6 +2800,9 @@ function NewPageRoute() {
     const buildPageCreateInput = (statusOverride: PageCreationStatus = formData.status): PageCreateInput & { siteId: string } => {
         const title = formData.title.trim();
         const slug = resolvedSlug;
+        const frontendTemplateDesignState = selectedFrontendTemplate
+            ? extractFrontendTemplateDesignSerialization(selectedFrontendTemplate.content, frontendDesign?.tokens?.customCss)
+            : null;
         const content = createInitialPageContent({
             template: formData.template,
             frontendTemplate: selectedFrontendTemplate,
@@ -2812,7 +2841,19 @@ function NewPageRoute() {
                 frontendDesignRoutePattern: selectedFrontendTemplate?.routePattern,
                 frontendDesignTokens: selectedFrontendTemplate ? frontendDesign?.tokens : undefined,
                 frontendDesignChrome: selectedFrontendTemplate ? frontendDesign?.chrome : undefined,
-                frontendDesignCustomCss: selectedFrontendTemplate ? frontendDesign?.tokens?.customCss : undefined,
+                frontendDesignCustomCss: selectedFrontendTemplate ? frontendTemplateDesignState?.customCSS : undefined,
+                frontendDesignCustomJs: frontendTemplateDesignState?.provenance.customJS,
+                frontendDesignContentDocument: frontendTemplateDesignState?.provenance.contentDocument,
+                frontendDesignElements: frontendTemplateDesignState?.provenance.elements,
+                frontendDesignCanvasSize: frontendTemplateDesignState?.provenance.canvasSize,
+                frontendDesignThemeTokenRefs: frontendTemplateDesignState?.provenance.themeTokenRefs,
+                frontendDesignAssets: frontendTemplateDesignState?.provenance.assets,
+                frontendDesignAnimations: frontendTemplateDesignState?.provenance.animations,
+                frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions,
+                frontendDesignDataBindings: frontendTemplateDesignState?.provenance.dataBindings,
+                frontendDesignEditableMap: frontendTemplateDesignState?.provenance.editableMap,
+                frontendDesignSeo: frontendTemplateDesignState?.provenance.seo,
+                frontendDesignMetadata: frontendTemplateDesignState?.provenance.metadata,
                 frontendDesignBindingHints: selectedFrontendTemplate?.bindingHints,
                 navigationPlacement: formData.navigationPlacement,
                 navigationLabel: formData.navigationLabel.trim() || title,
@@ -2918,6 +2959,7 @@ function NewPageRoute() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isPageCreateBusy) return;
+        setPageCreateFormSubmitted(true);
 
         if (!canEditPages) {
             setError(editPermissionTitle || 'Your account cannot create pages.');
@@ -3353,7 +3395,7 @@ function NewPageRoute() {
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="min-w-0 space-y-6">
+                <form onSubmit={handleSubmit} noValidate className="min-w-0 space-y-6">
                     <div id="page-basics" className="space-y-6 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
@@ -3376,6 +3418,9 @@ function NewPageRoute() {
                                     value={formData.siteId}
                                     onChange={(e) => selectPageSite(e.target.value)}
                                     disabled={isPageCreateBusy}
+                                    aria-invalid={Boolean(pageTargetSiteInlineError)}
+                                    aria-describedby={pageTargetSiteInlineError ? 'page-create-site-error' : undefined}
+                                    data-testid="page-create-site-input"
                                     className="w-full rounded-lg border bg-background py-2.5 pl-10 pr-4 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     required
                                 >
@@ -3385,6 +3430,11 @@ function NewPageRoute() {
                                     ))}
                                 </select>
                             </div>
+                            {pageTargetSiteInlineError && (
+                                <p id="page-create-site-error" className="mt-2 text-xs text-destructive" data-testid="page-create-site-error">
+                                    {pageTargetSiteInlineError}
+                                </p>
+                            )}
                             {sites.length === 0 && (
                                 <p className="text-sm text-yellow-600 mt-1">
                                     You need to create a site first!
@@ -3407,9 +3457,17 @@ function NewPageRoute() {
                                     })}
                                     placeholder="About us"
                                     disabled={isPageCreateBusy}
+                                    aria-invalid={Boolean(pageTitleInlineError)}
+                                    aria-describedby={pageTitleInlineError ? 'page-create-title-error' : undefined}
+                                    data-testid="page-create-title-input"
                                     className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     required
                                 />
+                                {pageTitleInlineError && (
+                                    <p id="page-create-title-error" className="mt-2 text-xs text-destructive" data-testid="page-create-title-error">
+                                        {pageTitleInlineError}
+                                    </p>
+                                )}
                             </div>
 
                             <div>
@@ -3556,10 +3614,18 @@ function NewPageRoute() {
                                         type="text"
                                         value={formData.navigationLabel}
                                         onChange={(event) => updatePageDraft({ navigationLabel: event.target.value })}
-	                                        placeholder={formData.title || 'Navigation label'}
-	                                        disabled={isPageCreateBusy || formData.navigationPlacement === 'none' || !canApplyNavigationPlacement}
+                                        placeholder={formData.title || 'Navigation label'}
+                                        disabled={isPageCreateBusy || formData.navigationPlacement === 'none' || !canApplyNavigationPlacement}
+                                        aria-invalid={Boolean(pageNavigationInlineError)}
+                                        aria-describedby={pageNavigationInlineError ? 'page-create-navigation-label-error' : undefined}
+                                        data-testid="page-create-navigation-label-input"
                                         className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     />
+                                    {pageNavigationInlineError && (
+                                        <p id="page-create-navigation-label-error" className="mt-2 text-xs text-destructive" data-testid="page-create-navigation-label-error">
+                                            {pageNavigationInlineError}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                             <div className="mt-4">
@@ -3569,6 +3635,9 @@ function NewPageRoute() {
                                     value={formData.parentPageId}
                                     onChange={(event) => updatePageDraft({ parentPageId: event.target.value })}
                                     disabled={isPageCreateBusy || formData.isHomepage || selectableParentPages.length === 0}
+                                    aria-invalid={Boolean(pageParentInlineError)}
+                                    aria-describedby={pageParentInlineError ? 'page-create-parent-error' : undefined}
+                                    data-testid="page-create-parent-input"
                                     className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     <option value="">Top-level page</option>
@@ -3578,6 +3647,11 @@ function NewPageRoute() {
                                         </option>
                                     ))}
                                 </select>
+                                {pageParentInlineError && (
+                                    <p id="page-create-parent-error" className="mt-2 text-xs text-destructive" data-testid="page-create-parent-error">
+                                        {pageParentInlineError}
+                                    </p>
+                                )}
                                 <p className="mt-2 text-xs leading-5 text-muted-foreground">
                                     {selectedParentPage
                                         ? `Backy will save ${selectedParentPage.title} as the parent and nest this page beneath it when menu placement is enabled.`
@@ -3647,8 +3721,16 @@ function NewPageRoute() {
                                     onChange={(event) => updatePageDraft({ canonicalPath: event.target.value })}
                                     placeholder={routePreview}
                                     disabled={isPageCreateBusy}
+                                    aria-invalid={Boolean(pageCanonicalInlineError)}
+                                    aria-describedby={pageCanonicalInlineError ? 'page-create-canonical-error' : undefined}
+                                    data-testid="page-create-canonical-input"
                                     className="w-full rounded-lg border bg-card px-4 py-2.5 font-mono text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                 />
+                                {pageCanonicalInlineError && (
+                                    <p id="page-create-canonical-error" className="mt-2 text-xs text-destructive" data-testid="page-create-canonical-error">
+                                        {pageCanonicalInlineError}
+                                    </p>
+                                )}
                                 <div className={cn('mt-1 text-xs', canonicalValid ? 'text-muted-foreground' : 'text-amber-700')}>
                                     {normalizedCanonicalPath}
                                 </div>
@@ -3680,11 +3762,19 @@ function NewPageRoute() {
                                 placeholder={JSON.stringify(defaultJsonLd, null, 2)}
                                 rows={7}
                                 disabled={isPageCreateBusy}
+                                aria-invalid={Boolean(pageJsonLdInlineError)}
+                                aria-describedby={pageJsonLdInlineError ? 'page-create-json-ld-error' : undefined}
+                                data-testid="page-create-json-ld-input"
                                 className={cn(
                                     'w-full resize-y rounded-lg border bg-card px-4 py-2.5 font-mono text-xs leading-5 outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60',
                                     !jsonLdValid && 'border-amber-300 focus:ring-amber-300',
                                 )}
                             />
+                            {pageJsonLdInlineError && (
+                                <p id="page-create-json-ld-error" className="mt-2 text-xs text-destructive" data-testid="page-create-json-ld-error">
+                                    {pageJsonLdInlineError}
+                                </p>
+                            )}
                             <div className={cn('mt-1 text-xs', jsonLdValid ? 'text-muted-foreground' : 'text-amber-700')}>
                                 {jsonLdValid
                                     ? `${effectiveJsonLd.length} JSON-LD object${effectiveJsonLd.length === 1 ? '' : 's'} will be saved. Leave empty to use the generated default.`
@@ -3782,6 +3872,8 @@ function NewPageRoute() {
                                         onChange={(event) => handleDatasetCollectionChange(event.target.value)}
                                         disabled={isPageCreateBusy || collectionsLoading || !canViewCollections}
                                         title={!canViewCollections ? collectionsViewPermissionTitle : undefined}
+                                        aria-invalid={Boolean(pageDatasetInlineError)}
+                                        aria-describedby={pageDatasetInlineError ? 'page-create-dataset-error' : undefined}
                                         data-testid="page-dataset-collection-select"
                                         className="w-full rounded-lg border border-cyan-200 bg-white px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
@@ -3792,6 +3884,11 @@ function NewPageRoute() {
                                             </option>
                                         ))}
                                     </select>
+                                    {pageDatasetInlineError && (
+                                        <p id="page-create-dataset-error" className="mt-2 text-xs text-destructive" data-testid="page-create-dataset-error">
+                                            {pageDatasetInlineError}
+                                        </p>
+                                    )}
                                     <div className="mt-2 text-xs leading-5 text-cyan-900/80">
                                         {!canViewCollections
                                             ? collectionsViewPermissionTitle || 'Your account cannot view collections.'
@@ -3994,12 +4091,16 @@ function NewPageRoute() {
                                             scheduledAt: fromDateTimeLocalValue(e.target.value),
                                         })}
                                         disabled={isPageCreateBusy}
-                                        aria-invalid={Boolean(scheduleValidationMessage)}
+                                        aria-invalid={Boolean(pageScheduleInlineError)}
+                                        aria-describedby={pageScheduleInlineError ? 'page-create-schedule-error' : undefined}
+                                        data-testid="page-create-schedule-input"
                                         className="w-full rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                         required
                                     />
-                                    {scheduleValidationMessage && (
-                                        <p className="mt-2 text-xs text-destructive">{scheduleValidationMessage}</p>
+                                    {pageScheduleInlineError && (
+                                        <p id="page-create-schedule-error" className="mt-2 text-xs text-destructive" data-testid="page-create-schedule-error">
+                                            {pageScheduleInlineError}
+                                        </p>
                                     )}
                                 </div>
                             )}
@@ -4053,9 +4154,9 @@ function NewPageRoute() {
                             <button
                                 type="submit"
                                 data-testid="page-create-submit-button"
-                                disabled={isPageCreateBusy || !canSubmit}
+                                disabled={isPageCreateBusy || !canEditPages}
                                 title={submitBlockerMessage || 'Create page and open the visual editor'}
-                                aria-disabled={isPageCreateBusy || !canSubmit}
+                                aria-disabled={isPageCreateBusy || !canEditPages}
                                 aria-describedby={submitBlockerMessage ? 'page-create-submit-blocker' : undefined}
                                 data-state={submitControlState}
                                 data-blocker={submitBlockerMessage || ''}
@@ -4447,9 +4548,10 @@ function createInitialPageContent(input: {
             ...DEFAULT_CANVAS_SIZE,
             height: getCanvasHeightForElements(elements),
         };
-    const customCSS = input.frontendTemplate
-        ? input.frontendDesign?.tokens?.customCss
-        : undefined;
+    const templateDesignState = input.frontendTemplate
+        ? extractFrontendTemplateDesignSerialization(input.frontendTemplate.content, input.frontendDesign?.tokens?.customCss)
+        : null;
+    const customCSS = templateDesignState?.customCSS;
 
     return JSON.parse(serializeCanvasContent(elements, {
         ...canvasSize,
@@ -4461,6 +4563,7 @@ function createInitialPageContent(input: {
         slug: input.slug,
         status: input.status,
         locale: 'en',
+        ...(templateDesignState?.options || {}),
     }));
 }
 

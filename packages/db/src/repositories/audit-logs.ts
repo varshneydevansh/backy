@@ -104,6 +104,11 @@ const toMetadata = (details: unknown): BackyJsonObject => (
     isRecord(details) ? details as BackyJsonObject : {}
 );
 
+const isUuid = (value: string | null | undefined): value is string => (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+);
+
 const toAuditLogEntry = (row: AuditLogRow): BackyAuditLogEntry => {
     const metadata = toMetadata(row.details);
 
@@ -128,6 +133,10 @@ export function createAuditLogRepository(db: DatabaseInstance): BackyAuditLogRep
 
     return {
         async list(input: BackyAuditLogListInput): Promise<BackyListResult<BackyAuditLogEntry>> {
+            if (input.actorId && !isUuid(input.actorId)) {
+                return paginate([], input.limit, input.offset);
+            }
+
             const conditions: SQLWrapper[] = [];
             if (input.siteId) conditions.push(eq(activityLogs.siteId, input.siteId));
             if (input.teamId) conditions.push(sql`${activityLogs.details}->>'teamId' = ${input.teamId}`);
@@ -153,7 +162,7 @@ export function createAuditLogRepository(db: DatabaseInstance): BackyAuditLogRep
             };
             const [row] = await database.insert(activityLogs).values({
                 siteId: input.siteId || null,
-                userId: input.actorId || null,
+                userId: isUuid(input.actorId) ? input.actorId : null,
                 action: input.action,
                 entityType: input.entity,
                 entityId: input.entityId,

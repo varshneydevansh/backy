@@ -122,6 +122,7 @@ type ProviderRefundStatus = 'none' | 'requested' | 'succeeded' | 'failed' | 'req
 type OrderOperationActionKey = 'refresh-quote' | 'prepare-label' | 'refresh-tracking' | 'dispatch-fulfillment' | 'provider-refund' | 'refresh-provider-refund';
 type OrderOperationExecutionMode = 'provider-ready' | 'manual-handoff' | 'blocked';
 type OrderStatusHandoffStatus = 'ready' | 'attention' | 'blocked';
+type OrderDigitalDeliveryStatus = 'not-applicable' | 'pending-payment' | 'ready' | 'fulfilled' | 'attention';
 type PaymentStatusFilter = PaymentStatus | 'all';
 type FulfillmentStatusFilter = FulfillmentStatus | 'all';
 type OrderSourceFilter = OrderSource | 'all';
@@ -150,15 +151,84 @@ interface OrderOperationActionPlan {
   executableNow: boolean;
   availableActions: OrderOperationAction[];
 }
+interface OrderOperationImpact {
+  schemaVersion: 'backy.order-operation-impact.v1';
+  generatedAt: string;
+  selectedSiteId: string;
+  order: {
+    id: string | null;
+    slug: string | null;
+    orderNumber: string;
+    recordStatus: ContentStatus | null;
+    orderStatus: OrderWorkflowStatus | null;
+    paymentStatus: PaymentStatus | null;
+    fulfillmentStatus: FulfillmentStatus | null;
+    total: number;
+    currency: string;
+  };
+  providerReadiness: {
+    readyCount: number;
+    total: number;
+    checks: Array<Pick<ProviderReadinessCheck, 'key' | 'title' | 'mode' | 'ready'>>;
+  };
+  operations: {
+    recommendedAction: OrderOperationActionKey | 'none';
+    recommendation: string;
+    executableNow: boolean;
+    handoffRequired: boolean;
+    attention: boolean;
+    actionCounts: Record<OrderOperationExecutionMode, number>;
+    availableActions: OrderOperationAction[];
+  };
+  customerSafeProjection: {
+    statusHandoffStatus: OrderStatusHandoffStatus;
+    statusHandoffReady: boolean;
+    maskedContactAvailable: boolean;
+    frontendBindingsReady: boolean;
+    publicCollectionReadBlocked: boolean;
+    safeBindingPaths: string[];
+    maskedBindingPaths: string[];
+  };
+  references: {
+    paymentReferencePresent: boolean;
+    trackingReferencePresent: boolean;
+    shippingLabelReferencePresent: boolean;
+    fulfillmentReferencePresent: boolean;
+    providerRefundReferencePresent: boolean;
+  };
+  privacy: {
+    adminOperatorOnly: true;
+    customerSafeFieldsOnly: true;
+    includesRawCustomerContact: false;
+    includesPaymentReferences: false;
+    includesProviderExecutionIds: false;
+    includesAddresses: false;
+    includesInternalNotes: false;
+    includesProviderPayloads: false;
+    note: string;
+  };
+}
 interface OrderStatusHandoffCheck {
   key: string;
   label: string;
   status: OrderStatusHandoffStatus;
   detail: string;
 }
+interface OrderDigitalDeliveryHandoff {
+  schemaVersion: 'backy.order-digital-delivery-handoff.v1';
+  itemCount: number;
+  configuredItemCount: number;
+  pendingItemCount: number;
+  status: OrderDigitalDeliveryStatus;
+  customerAction: string;
+  customerSafeFieldsOnly: true;
+  includesDownloadUrls: false;
+  includesDownloadMediaIds: false;
+}
 interface OrderStatusHandoff {
   schemaVersion: 'backy.order-status-handoff.v1';
   generatedAt: string;
+  source: 'admin-orders-ui' | 'admin-order-status-handoff-api' | string;
   status: OrderStatusHandoffStatus;
   score: number;
   selectedSiteId: string;
@@ -204,12 +274,23 @@ interface OrderStatusHandoff {
     providerRefundRequestedAt: string;
     providerRefundCompletedAt: string;
   } | null;
+  digitalDelivery: OrderDigitalDeliveryHandoff | null;
   endpoints: {
     checkoutIntake: string;
+    publicStatusHandoff: string;
     adminStatusHandoff: string;
     adminOrderDetail: string;
     adminTracking: string;
     adminProviderRefund: string;
+  };
+  frontendBindings: {
+    schemaVersion: 'backy.order-status-frontend-bindings.v1';
+    targetViews: string[];
+    dataset: Record<string, unknown>;
+    safeBindingPaths: string[];
+    maskedBindingPaths: string[];
+    editableRegions: Array<Record<string, unknown>>;
+    actionBindings: Array<Record<string, unknown>>;
   };
   privacy: {
     publicCollectionReadBlocked: boolean;
@@ -219,9 +300,12 @@ interface OrderStatusHandoff {
     includesPaymentReferences: boolean;
     includesAddresses: boolean;
     includesInternalNotes: boolean;
+    includesDigitalDeliveryUrls: boolean;
+    includesDownloadMediaIds: boolean;
     excludedFields: string[];
   };
   actionPlan: OrderOperationActionPlan | null;
+  operationImpact: OrderOperationImpact;
   checks: OrderStatusHandoffCheck[];
   nextSteps: string[];
 }
@@ -279,6 +363,10 @@ interface OrderLineItem {
   price: number;
   currency: string;
   lineTotal: number;
+  productType: string;
+  digitalDeliveryConfigured: boolean;
+  downloadMediaPresent: boolean;
+  downloadUrlPresent: boolean;
 }
 
 interface OrderFormState {
@@ -390,6 +478,8 @@ const normalizedSearchString = (value: unknown): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
+const isLikelyOrderEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
 const customerProfileToDraft = (record: CollectionRecord | null): CustomerProfileDraft => {
   const values = record?.values || {};
   const status = String(values.status || 'customer').trim().toLowerCase();
@@ -431,6 +521,9 @@ const ORDER_FIELDS: CollectionField[] = [
   { key: 'ordersource', label: 'Order Source', type: 'select', required: false, unique: false, sortOrder: 75, options: ['web', 'manual', 'api', 'import', 'pos'], defaultValue: 'web' },
   { key: 'checkoutsessionid', label: 'Checkout Session ID', type: 'text', required: false, unique: false, sortOrder: 76 },
   { key: 'customerid', label: 'Customer ID', type: 'text', required: false, unique: false, sortOrder: 77 },
+  { key: 'statusaccesstokenhash', label: 'Status Access Token Hash', type: 'text', required: false, unique: false, sortOrder: 78 },
+  { key: 'statusaccesstokenissuedat', label: 'Status Access Token Issued At', type: 'date', required: false, unique: false, sortOrder: 79 },
+  { key: 'statusaccesstokenexpiresat', label: 'Status Access Token Expires At', type: 'date', required: false, unique: false, sortOrder: 79.5 },
   { key: 'orderstatus', label: 'Order Status', type: 'select', required: true, unique: false, sortOrder: 80, options: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'], defaultValue: 'open' },
   { key: 'paymentstatus', label: 'Payment Status', type: 'select', required: true, unique: false, sortOrder: 90, options: ['pending', 'paid', 'failed', 'refunded'], defaultValue: 'pending' },
   { key: 'paymentprovider', label: 'Payment Provider', type: 'text', required: false, unique: false, sortOrder: 100 },
@@ -952,6 +1045,11 @@ type OrderProviderCertificationShippingProvider = (typeof ORDER_PROVIDER_CERTIFI
 type OrderProviderCertificationDiscountProvider = (typeof ORDER_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS)[number]['value'];
 type OrderProviderCertificationSubscriptionProvider = (typeof ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS)[number]['value'];
 type OrderProviderCertificationWebhookProvider = (typeof ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS)[number]['value'];
+type OrderProviderCertificationEvidencePacketStatus =
+  | 'no-family-selected'
+  | 'needs-credentials'
+  | 'needs-scenario-evidence'
+  | 'evidence-complete';
 
 type OrderProviderCertificationCommandOptions = {
   certifyPayment: boolean;
@@ -967,9 +1065,64 @@ type OrderProviderCertificationCommandOptions = {
   certifyWebhooks: boolean;
   webhookProvider: OrderProviderCertificationWebhookProvider;
   includeFulfillmentEvidence: boolean;
+  siteId: string;
   externalBaseUrl: string;
   includeReleaseDoctor: boolean;
 };
+
+interface OrderProviderCertificationEvidencePacket {
+  schemaVersion: 'backy.order-provider-certification-evidence-packet.v1';
+  generatedAt: string;
+  selectedSiteId: string;
+  status: OrderProviderCertificationEvidencePacketStatus;
+  selectedFamilies: string[];
+  selectedProviderAliases: Record<string, string>;
+  runtimeReadiness: {
+    loaded: boolean;
+    configuredFamilies: string[];
+    missingSelectedFamilies: string[];
+  };
+  operatorArtifacts: Array<{
+    key: string;
+    family: string;
+    providerAlias: string;
+    status: 'ready-to-run' | 'needs-credentials';
+    requiredInputs: string[];
+    expectedArtifacts: string[];
+    captureSource: string;
+    redaction: string;
+  }>;
+  scenarioAttachments: Array<{
+    key: string;
+    label: string;
+    status: 'covered' | 'missing';
+    evidenceCount: number;
+    expectedEvidence: string[];
+    nextAction: string;
+  }>;
+  commandPreview: {
+    command: string;
+    requiredInputs: string[];
+    targetInputs: string[];
+  };
+  target: {
+    siteId: string;
+    siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID';
+    orderAnalyticsApi: string;
+    publicOrderContractApi: string;
+    productProviderSyncApi: string;
+  };
+  redactionPolicy: {
+    includesProviderSecrets: false;
+    includesCustomerPayloads: false;
+    includesRawOrderPayloads: false;
+    includesPaymentReferences: false;
+    includesAddresses: false;
+    includesWebhookBodies: false;
+    allowedEvidence: string[];
+  };
+  secretHandling: string;
+}
 
 const DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS = {
   certifyPayment: true,
@@ -985,6 +1138,7 @@ const DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS = {
   certifyWebhooks: true,
   webhookProvider: 'auto',
   includeFulfillmentEvidence: true,
+  siteId: 'site-demo',
   externalBaseUrl: '',
   includeReleaseDoctor: true,
 } satisfies OrderProviderCertificationCommandOptions;
@@ -995,6 +1149,10 @@ const quoteOrderEnvTemplateValue = (value: string): string => (
 );
 const orderBoolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
 const uniqueOrderCertificationInputs = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
+const orderProviderCertificationOptionLabel = <Value extends string>(
+  options: ReadonlyArray<{ readonly value: Value; readonly label: string }>,
+  value: Value,
+): string => options.find((option) => option.value === value)?.label || value;
 const hasOrderProviderCertificationSelector = (options: OrderProviderCertificationCommandOptions): boolean => (
   options.certifyPayment ||
   options.certifyTax ||
@@ -1074,8 +1232,10 @@ const buildOrderProviderCertificationEnvEntries = (
 ): Array<[string, string]> => {
   const selectedSelector = hasOrderProviderCertificationSelector(options);
   const externalBaseUrl = options.externalBaseUrl.trim().replace(/\/+$/, '');
+  const siteId = options.siteId.trim() || 'site-demo';
   const envEntries: Array<[string, string]> = [
     ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', orderBoolEnv(selectedSelector)],
+    ['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId],
     ['BACKY_COMMERCE_CERTIFY_PAYMENT', orderBoolEnv(options.certifyPayment)],
     ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', options.paymentProvider],
     ['BACKY_COMMERCE_CERTIFY_TAX', orderBoolEnv(options.certifyTax)],
@@ -1146,6 +1306,7 @@ const buildOrderProviderCertificationRequiredInputs = (options: OrderProviderCer
   const externalBaseUrl = options.externalBaseUrl.trim();
   return uniqueOrderCertificationInputs([
     hasOrderProviderCertificationSelector(options) ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
+    hasOrderProviderCertificationSelector(options) ? 'BACKY_COMMERCE_CERTIFY_SITE_ID' : '',
     options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT=1' : '',
     options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER' : '',
     ...(options.certifyPayment ? ORDER_PROVIDER_CERTIFICATION_PAYMENT_INPUTS[options.paymentProvider] : []),
@@ -1186,6 +1347,7 @@ const ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   requiredInputs: buildOrderProviderCertificationRequiredInputs(DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
   targetInputs: [
     'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+    'BACKY_COMMERCE_CERTIFY_SITE_ID',
     'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
   ],
   secretHandling: 'Provider credential values stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
@@ -1275,6 +1437,7 @@ function OrdersRoute() {
     quantity: '1',
     price: '',
   });
+  const [lineItemSubmitted, setLineItemSubmitted] = useState(false);
   const [filter, setFilter] = useState<OrderFilter>(routeSearch.workflow || 'all');
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatusFilter>(routeSearch.payment || 'all');
   const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentStatusFilter>(routeSearch.fulfillment || 'all');
@@ -1304,6 +1467,7 @@ function OrdersRoute() {
   const orderImportInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [orderFormSubmitted, setOrderFormSubmitted] = useState(false);
   const [pendingDeleteOrder, setPendingDeleteOrder] = useState<CollectionRecord | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
@@ -1324,18 +1488,6 @@ function OrdersRoute() {
   const canExportOrders = canViewCommerce && canExportCollections;
   const canDeleteOrders = canDeleteCommerce && canDeleteCollections;
   const providerCertificationHasSelectedSelector = hasOrderProviderCertificationSelector(providerCertificationCommandOptions);
-  const providerCertificationCommand = useMemo(
-    () => buildOrderProviderCertificationCommand(providerCertificationCommandOptions),
-    [providerCertificationCommandOptions],
-  );
-  const providerCertificationEnvTemplate = useMemo(
-    () => buildOrderProviderCertificationEnvTemplate(providerCertificationCommandOptions),
-    [providerCertificationCommandOptions],
-  );
-  const providerCertificationRequiredInputs = useMemo(
-    () => buildOrderProviderCertificationRequiredInputs(providerCertificationCommandOptions),
-    [providerCertificationCommandOptions],
-  );
   const updateProviderCertificationCommandOptions = (next: Partial<OrderProviderCertificationCommandOptions>) => {
     setProviderCertificationCommandOptions((current) => ({
       ...current,
@@ -1359,17 +1511,68 @@ function OrdersRoute() {
     : adminPermissionReason(permissionMatrix, currentAdmin, !canDeleteCommerce ? 'commerce.delete' : 'collections.delete', ORDER_PERMISSION_ROLE_DEFAULTS);
   const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
   const isOrdersAccessBusy = isOrdersBusy || isPermissionMatrixPending;
+  const orderTotalValue = Number(formState.total || 0);
+  const orderNumberMissing = !formState.orderNumber.trim();
+  const orderCustomerMissing = !formState.customerName.trim();
+  const orderEmailMissing = !formState.email.trim();
+  const orderEmailFormatInvalid = Boolean(formState.email.trim()) && !isLikelyOrderEmail(formState.email);
+  const orderTotalInvalid = !Number.isFinite(orderTotalValue) || orderTotalValue <= 0;
+  const orderItemsMissing = !formState.items.trim();
+  const orderNumberInlineError = orderFormSubmitted && orderNumberMissing
+    ? 'Add an order number so admin APIs, customer status handoff, and provider references can address this order.'
+    : null;
+  const orderCustomerInlineError = orderFormSubmitted && orderCustomerMissing
+    ? 'Add a customer name so support, fulfillment, and private order views can identify the buyer.'
+    : null;
+  const orderEmailInlineError = orderFormSubmitted
+    ? orderEmailMissing
+      ? 'Add a customer email for receipts, status handoff, and support follow-up.'
+      : orderEmailFormatInvalid
+        ? 'Enter a valid customer email address.'
+        : null
+    : null;
+  const orderTotalInlineError = orderFormSubmitted && orderTotalInvalid
+    ? 'Add a positive order total before saving.'
+    : null;
+  const orderItemsInlineError = orderFormSubmitted && orderItemsMissing
+    ? 'Add at least one line item or a raw item payload before saving.'
+    : null;
+  const orderRequiredFieldsInvalid = Boolean(
+    orderNumberMissing ||
+    orderCustomerMissing ||
+    orderEmailMissing ||
+    orderEmailFormatInvalid ||
+    orderTotalInvalid ||
+    orderItemsMissing,
+  );
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const providerCertificationTargetOptions = useMemo<OrderProviderCertificationCommandOptions>(
+    () => ({ ...providerCertificationCommandOptions, siteId: activeSiteId }),
+    [activeSiteId, providerCertificationCommandOptions],
+  );
+  const providerCertificationCommand = useMemo(
+    () => buildOrderProviderCertificationCommand(providerCertificationTargetOptions),
+    [providerCertificationTargetOptions],
+  );
+  const providerCertificationEnvTemplate = useMemo(
+    () => buildOrderProviderCertificationEnvTemplate(providerCertificationTargetOptions),
+    [providerCertificationTargetOptions],
+  );
+  const providerCertificationRequiredInputs = useMemo(
+    () => buildOrderProviderCertificationRequiredInputs(providerCertificationTargetOptions),
+    [providerCertificationTargetOptions],
+  );
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminOrdersApiUrl = ordersCollection
     ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/collections/${encodeURIComponent(ordersCollection.id)}/records`
     : '';
+  const adminOrderOperationsApiUrl = `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/orders`;
   const adminOrderDetailApiUrl = ordersCollection
     ? `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/collections/${encodeURIComponent(ordersCollection.id)}/records/{orderId}`
     : '';
@@ -1426,6 +1629,21 @@ function OrdersRoute() {
     () => orderLineItems.reduce((sum, item) => sum + item.quantity, 0),
     [orderLineItems],
   );
+  const itemDraftTitleMissing = !itemDraft.title.trim();
+  const itemDraftQuantity = Number(itemDraft.quantity.trim() || 1);
+  const itemDraftPrice = Number(itemDraft.price.trim() || 0);
+  const itemDraftQuantityInvalid = !Number.isFinite(itemDraftQuantity) || itemDraftQuantity < 1 || !Number.isInteger(itemDraftQuantity);
+  const itemDraftPriceInvalid = !Number.isFinite(itemDraftPrice) || itemDraftPrice < 0;
+  const lineItemTitleInlineError = lineItemSubmitted && itemDraftTitleMissing
+    ? 'Add a line item title before adding it to the order.'
+    : null;
+  const lineItemQuantityInlineError = lineItemSubmitted && itemDraftQuantityInvalid
+    ? 'Use a whole-number quantity of at least 1.'
+    : null;
+  const lineItemPriceInlineError = lineItemSubmitted && itemDraftPriceInvalid
+    ? 'Use a line item price of 0 or more.'
+    : null;
+  const lineItemDraftInvalid = Boolean(itemDraftTitleMissing || itemDraftQuantityInvalid || itemDraftPriceInvalid);
   const hasActiveOrderFilters = Boolean(
     searchQuery.trim() ||
     filter !== 'all' ||
@@ -1851,6 +2069,234 @@ function OrdersRoute() {
       secretHandling: 'Order certification evidence reports scenario names, counts, gates, and non-secret provider families only; provider secrets, customer payloads, and raw order values stay private.',
     };
   }, [orderAnalytics, orders, reconciliationResult?.eventCount]);
+  const providerCertificationEvidencePacket = useMemo<OrderProviderCertificationEvidencePacket>(() => {
+    const selectedReadiness = (key: string) => providerReadinessByKey.get(key);
+    const familyArtifacts = [
+      {
+        key: 'payment-refunds',
+        family: 'Payment settlement and refunds',
+        selected: providerCertificationCommandOptions.certifyPayment,
+        readiness: selectedReadiness('payment-refund-providers') || selectedReadiness('stripe-checkout-refund'),
+        providerAlias: orderProviderCertificationOptionLabel(
+          ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.paymentProvider,
+        ),
+        requiredInputs: ORDER_PROVIDER_CERTIFICATION_PAYMENT_INPUTS[providerCertificationCommandOptions.paymentProvider],
+        expectedArtifacts: [
+          'paid checkout order id',
+          'payment provider alias',
+          'refund provider id or handoff id',
+          'provider refund refresh or webhook outcome',
+        ],
+        captureSource: 'public checkout intake, private order record, provider-refund endpoint, and signed refund webhook readback',
+      },
+      {
+        key: 'tax-quotes',
+        family: 'Tax quotes',
+        selected: providerCertificationCommandOptions.certifyTax,
+        readiness: selectedReadiness('tax-quote'),
+        providerAlias: orderProviderCertificationOptionLabel(
+          ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.taxProvider,
+        ),
+        requiredInputs: ORDER_PROVIDER_CERTIFICATION_TAX_INPUTS[providerCertificationCommandOptions.taxProvider],
+        expectedArtifacts: [
+          'tax provider alias',
+          'quote request target',
+          'returned tax amount',
+          'persisted order tax total',
+        ],
+        captureSource: 'order quote POST/GET response and private order totals',
+      },
+      {
+        key: 'shipping-labels',
+        family: 'Shipping quotes, labels, and tracking',
+        selected: providerCertificationCommandOptions.certifyShipping,
+        readiness: selectedReadiness('carrier-labels') || selectedReadiness('shipping-quote'),
+        providerAlias: orderProviderCertificationOptionLabel(
+          ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.shippingProvider,
+        ),
+        requiredInputs: ORDER_PROVIDER_CERTIFICATION_SHIPPING_INPUTS[providerCertificationCommandOptions.shippingProvider],
+        expectedArtifacts: [
+          'shipping provider alias',
+          'label id or handoff id',
+          'void/refund result',
+          'tracking status readback',
+        ],
+        captureSource: 'shipping-label endpoint, tracking endpoint, and order shipping-label fields',
+      },
+      {
+        key: 'discount-quotes',
+        family: 'Discount quotes',
+        selected: providerCertificationCommandOptions.certifyDiscount,
+        readiness: selectedReadiness('discount-quote'),
+        providerAlias: orderProviderCertificationOptionLabel(
+          ORDER_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.discountProvider,
+        ),
+        requiredInputs: ORDER_PROVIDER_CERTIFICATION_DISCOUNT_INPUTS[providerCertificationCommandOptions.discountProvider],
+        expectedArtifacts: [
+          'promotion or coupon code',
+          'discount provider alias',
+          'returned discount amount',
+          'persisted order discount total',
+        ],
+        captureSource: 'order quote response and private order discount fields',
+      },
+      {
+        key: 'fulfillment-dispatch',
+        family: 'Fulfillment dispatch',
+        selected: providerCertificationCommandOptions.includeFulfillmentEvidence,
+        readiness: selectedReadiness('fulfillment-dispatch'),
+        providerAlias: 'Settings fulfillment provider',
+        requiredInputs: ['Settings commerce fulfillmentProvider=http plus fulfillmentProviderUrl'],
+        expectedArtifacts: [
+          'warehouse or 3PL endpoint alias',
+          'dispatch request id',
+          'processing or fulfilled order state',
+          'fulfillment GET endpoint readback',
+        ],
+        captureSource: 'fulfillment endpoint response and private order fulfillment fields',
+      },
+      {
+        key: 'subscription-lifecycle',
+        family: 'Subscription lifecycle',
+        selected: providerCertificationCommandOptions.certifySubscriptions,
+        readiness: selectedReadiness('payment-refund-providers'),
+        providerAlias: orderProviderCertificationOptionLabel(
+          ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.subscriptionProvider,
+        ),
+        requiredInputs: ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_INPUTS[providerCertificationCommandOptions.subscriptionProvider],
+        expectedArtifacts: [
+          'subscription renewal event',
+          'dunning event',
+          'pause/resume/cancel action result',
+          'product lifecycle coverage summary',
+        ],
+        captureSource: 'product subscription lifecycle endpoint, order analytics, and signed subscription webhook readback',
+      },
+      {
+        key: 'webhook-reconciliation',
+        family: 'Webhooks and reconciliation',
+        selected: providerCertificationCommandOptions.certifyWebhooks,
+        readiness: selectedReadiness('webhook-settlement') || selectedReadiness('scheduled-reconciliation'),
+        providerAlias: orderProviderCertificationOptionLabel(
+          ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS,
+          providerCertificationCommandOptions.webhookProvider,
+        ),
+        requiredInputs: ORDER_PROVIDER_CERTIFICATION_WEBHOOK_INPUTS[providerCertificationCommandOptions.webhookProvider],
+        expectedArtifacts: [
+          'signed webhook event name',
+          'idempotent order update result',
+          'reconciliation run id or event count',
+          'platform reconciliation endpoint readback',
+        ],
+        captureSource: 'commerce webhook response, commerce-order events, and reconciliation endpoints',
+      },
+    ];
+    const selectedArtifacts = familyArtifacts.filter((artifact) => artifact.selected);
+    const missingSelectedFamilies = selectedArtifacts
+      .filter((artifact) => !artifact.readiness?.ready)
+      .map((artifact) => artifact.key);
+    const status: OrderProviderCertificationEvidencePacketStatus = selectedArtifacts.length === 0
+      ? 'no-family-selected'
+      : missingSelectedFamilies.length > 0
+        ? 'needs-credentials'
+        : orderProviderCertificationEvidence.status === 'ready'
+          ? 'evidence-complete'
+          : 'needs-scenario-evidence';
+
+    return {
+      schemaVersion: 'backy.order-provider-certification-evidence-packet.v1',
+      generatedAt: new Date().toISOString(),
+      selectedSiteId: activeSiteId,
+      status,
+      selectedFamilies: selectedArtifacts.map((artifact) => artifact.key),
+      selectedProviderAliases: Object.fromEntries(selectedArtifacts.map((artifact) => [
+        artifact.key,
+        artifact.providerAlias,
+      ])),
+      runtimeReadiness: {
+        loaded: Boolean(runtimeCommerce || commerceSettings || providerReadinessChecks.length > 0),
+        configuredFamilies: providerRuntimeEvidence.configuredFamilies,
+        missingSelectedFamilies,
+      },
+      operatorArtifacts: selectedArtifacts.map((artifact) => ({
+        key: artifact.key,
+        family: artifact.family,
+        providerAlias: artifact.providerAlias,
+        status: artifact.readiness?.ready ? 'ready-to-run' : 'needs-credentials',
+        requiredInputs: artifact.requiredInputs,
+        expectedArtifacts: artifact.expectedArtifacts,
+        captureSource: artifact.captureSource,
+        redaction: 'Attach ids, timestamps, event names, totals, and status codes only; remove provider secrets, customer payloads, raw order payloads, addresses, payment references, and webhook bodies.',
+      })),
+      scenarioAttachments: orderProviderCertificationEvidence.scenarios.map((scenario) => ({
+        key: scenario.key,
+        label: scenario.label,
+        status: scenario.status,
+        evidenceCount: scenario.evidenceCount,
+        expectedEvidence: [...scenario.expectedEvidence],
+        nextAction: scenario.nextAction,
+      })),
+      commandPreview: {
+        command: providerCertificationCommand,
+        requiredInputs: providerCertificationRequiredInputs,
+        targetInputs: ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs,
+      },
+      target: {
+        siteId: activeSiteId,
+        siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+        orderAnalyticsApi: `/api/admin/sites/${activeSiteId}/commerce/orders/analytics`,
+        publicOrderContractApi: `/api/sites/${activeSiteId}/commerce/orders`,
+        productProviderSyncApi: `/api/admin/sites/${activeSiteId}/commerce/products/{productId}/provider-sync`,
+      },
+      redactionPolicy: {
+        includesProviderSecrets: false,
+        includesCustomerPayloads: false,
+        includesRawOrderPayloads: false,
+        includesPaymentReferences: false,
+        includesAddresses: false,
+        includesWebhookBodies: false,
+        allowedEvidence: [
+          'provider ids and aliases',
+          'timestamped CI/preflight logs',
+          'quote totals and adjustment names',
+          'label, tracking, fulfillment, and refund statuses',
+          'webhook event names and accepted status codes',
+          'reconciliation event counts and run modes',
+          'scenario counts and coverage state',
+        ],
+      },
+      secretHandling: 'Redacted operator attachment manifest only; provider credentials, raw customer data, raw order payloads, payment references, addresses, and webhook bodies stay out of copied JSON.',
+    };
+  }, [
+    activeSiteId,
+    commerceSettings,
+    orderProviderCertificationEvidence.scenarios,
+    orderProviderCertificationEvidence.status,
+    providerCertificationCommand,
+    providerCertificationCommandOptions.certifyDiscount,
+    providerCertificationCommandOptions.certifyPayment,
+    providerCertificationCommandOptions.certifyShipping,
+    providerCertificationCommandOptions.certifySubscriptions,
+    providerCertificationCommandOptions.certifyTax,
+    providerCertificationCommandOptions.certifyWebhooks,
+    providerCertificationCommandOptions.discountProvider,
+    providerCertificationCommandOptions.includeFulfillmentEvidence,
+    providerCertificationCommandOptions.paymentProvider,
+    providerCertificationCommandOptions.shippingProvider,
+    providerCertificationCommandOptions.subscriptionProvider,
+    providerCertificationCommandOptions.taxProvider,
+    providerCertificationCommandOptions.webhookProvider,
+    providerCertificationRequiredInputs,
+    providerReadinessByKey,
+    providerReadinessChecks.length,
+    providerRuntimeEvidence.configuredFamilies,
+    runtimeCommerce,
+  ]);
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -1882,6 +2328,7 @@ function OrdersRoute() {
     preflightGates: [...ORDER_PROVIDER_CERTIFICATION_PREFLIGHT_GATES],
     providerSelectors: [...ORDER_PROVIDER_CERTIFICATION_SELECTORS],
     evidenceExpectations: [...ORDER_PROVIDER_CERTIFICATION_EVIDENCE_EXPECTATIONS],
+    operatorEvidencePacket: providerCertificationEvidencePacket,
     secretHandling: 'Provider credentials stay in server environment/configuration; order records and handoff manifests only expose non-secret readiness evidence.',
     orderEvidence: {
       apiReady: ordersApiReady,
@@ -1895,11 +2342,11 @@ function OrdersRoute() {
     endpointEvidence: {
       adminOrders: adminOrdersApiUrl,
       statusHandoff: adminOrderStatusHandoffApiUrl,
-      quote: `${adminOrdersApiUrl}/{orderId}/quote`,
-      shippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
-      fulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
-      tracking: `${adminOrdersApiUrl}/{orderId}/tracking`,
-      providerRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
+      quote: `${adminOrderOperationsApiUrl}/{orderId}/quote`,
+      shippingLabel: `${adminOrderOperationsApiUrl}/{orderId}/shipping-label`,
+      fulfillment: `${adminOrderOperationsApiUrl}/{orderId}/fulfillment`,
+      tracking: `${adminOrderOperationsApiUrl}/{orderId}/tracking`,
+      providerRefund: `${adminOrderOperationsApiUrl}/{orderId}/provider-refund`,
       commerceWebhook: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/webhook`,
       siteReconciliation: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/reconcile`,
       platformReconciliation: `${publicBaseUrl}/api/admin/commerce/reconcile`,
@@ -1928,6 +2375,7 @@ function OrdersRoute() {
     activeSite?.slug,
     activeSite?.status,
     activeSiteId,
+    adminOrderOperationsApiUrl,
     adminOrderStatusHandoffApiUrl,
     adminOrdersApiUrl,
     filteredOrders.length,
@@ -1936,6 +2384,7 @@ function OrdersRoute() {
     missingOrderFields,
     orderAnalytics?.providerOperations,
     orderReadiness.score,
+    providerCertificationEvidencePacket,
     orderProviderCertificationEvidence,
     orderOperationPlanSummary,
     ordersApiReady,
@@ -1953,19 +2402,23 @@ function OrdersRoute() {
   const selectedOrderStatusHandoff = useMemo<OrderStatusHandoff>(() => buildOrderStatusHandoff({
     activeSiteId,
     adminOrderDetailApiUrl,
+    adminOrderOperationsApiUrl,
     adminOrderStatusHandoffApiUrl,
     publicOrderIntakeUrl,
     order: selectedOrder,
     customerProfile: linkedCustomerProfile,
     orderOperationPlan: selectedOrder ? orderOperationPlans.get(selectedOrder.id) || null : null,
+    providerReadinessChecks,
     ordersApiReady,
   }), [
     activeSiteId,
     adminOrderDetailApiUrl,
+    adminOrderOperationsApiUrl,
     adminOrderStatusHandoffApiUrl,
     linkedCustomerProfile,
     orderOperationPlans,
     ordersApiReady,
+    providerReadinessChecks,
     publicOrderIntakeUrl,
     selectedOrder,
   ]);
@@ -2001,11 +2454,11 @@ function OrdersRoute() {
     endpoints: {
       adminListCreate: adminOrdersApiUrl,
       adminDetailUpdate: adminOrderDetailApiUrl,
-      adminQuote: `${adminOrdersApiUrl}/{orderId}/quote`,
-      adminShippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
-      adminFulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
-      adminTracking: `${adminOrdersApiUrl}/{orderId}/tracking`,
-      adminProviderRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
+      adminQuote: `${adminOrderOperationsApiUrl}/{orderId}/quote`,
+      adminShippingLabel: `${adminOrderOperationsApiUrl}/{orderId}/shipping-label`,
+      adminFulfillment: `${adminOrderOperationsApiUrl}/{orderId}/fulfillment`,
+      adminTracking: `${adminOrderOperationsApiUrl}/{orderId}/tracking`,
+      adminProviderRefund: `${adminOrderOperationsApiUrl}/{orderId}/provider-refund`,
       adminStatusHandoff: adminOrderStatusHandoffApiUrl,
       orderAnalytics: orderAnalyticsApiUrl,
       orderDeliveryEvents: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=commerce-order`,
@@ -2023,11 +2476,11 @@ function OrdersRoute() {
         url: {
           analytics: orderAnalyticsApiUrl,
           statusHandoff: adminOrderStatusHandoffApiUrl,
-          quote: `${adminOrdersApiUrl}/{orderId}/quote`,
-          shippingLabel: `${adminOrdersApiUrl}/{orderId}/shipping-label`,
-          fulfillment: `${adminOrdersApiUrl}/{orderId}/fulfillment`,
-          tracking: `${adminOrdersApiUrl}/{orderId}/tracking`,
-          providerRefund: `${adminOrdersApiUrl}/{orderId}/provider-refund`,
+          quote: `${adminOrderOperationsApiUrl}/{orderId}/quote`,
+          shippingLabel: `${adminOrderOperationsApiUrl}/{orderId}/shipping-label`,
+          fulfillment: `${adminOrderOperationsApiUrl}/{orderId}/fulfillment`,
+          tracking: `${adminOrderOperationsApiUrl}/{orderId}/tracking`,
+          providerRefund: `${adminOrderOperationsApiUrl}/{orderId}/provider-refund`,
           commerceWebhook: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/commerce/webhook`,
           siteReconciliation: `${publicBaseUrl}/api/admin/sites/${encodeURIComponent(activeSiteId)}/commerce/reconcile`,
           platformReconciliation: `${publicBaseUrl}/api/admin/commerce/reconcile`,
@@ -2195,6 +2648,7 @@ function OrdersRoute() {
     activeSite?.slug,
     activeSite?.status,
     activeSiteId,
+    adminOrderOperationsApiUrl,
     adminOrderDetailApiUrl,
     adminOrderStatusHandoffApiUrl,
     adminOrdersApiUrl,
@@ -2231,7 +2685,12 @@ function OrdersRoute() {
   ]);
   const orderHandoffText = useMemo(() => JSON.stringify(orderHandoff, null, 2), [orderHandoff]);
   const selectedOrderStatusHandoffText = useMemo(() => JSON.stringify(selectedOrderStatusHandoff, null, 2), [selectedOrderStatusHandoff]);
+  const selectedOrderOperationImpactText = useMemo(() => JSON.stringify(selectedOrderStatusHandoff.operationImpact, null, 2), [selectedOrderStatusHandoff]);
   const providerCertificationHandoffText = useMemo(() => JSON.stringify(providerCertificationSummary, null, 2), [providerCertificationSummary]);
+  const providerCertificationEvidencePacketText = useMemo(
+    () => JSON.stringify(providerCertificationEvidencePacket, null, 2),
+    [providerCertificationEvidencePacket],
+  );
   const ordersRouteSearch = useMemo<OrdersSearch>(() => ({
     siteId: activeSiteId,
     ...(filter !== 'all' ? { workflow: filter } : {}),
@@ -2565,6 +3024,7 @@ function OrdersRoute() {
   useEffect(() => {
     if (!selectedOrder) return;
     setFormState(orderToForm(selectedOrder));
+    setOrderFormSubmitted(false);
   }, [selectedOrder]);
 
   useEffect(() => {
@@ -2582,6 +3042,7 @@ function OrdersRoute() {
     setSelectedCustomerProfileId(null);
     setCustomerProfileDraft(customerProfileToDraft(null));
     setFormState(nextFormState);
+    setOrderFormSubmitted(false);
     setItemDraft({
       title: '',
       sku: '',
@@ -2621,14 +3082,23 @@ function OrdersRoute() {
   };
 
   const addLineItem = () => {
+    setLineItemSubmitted(true);
     if (isOrdersBusy) return;
     if (!canEditOrders) return;
 
     const title = itemDraft.title.trim();
-    if (!title || orderLineItems.length >= 100) return;
+    if (lineItemDraftInvalid) {
+      setError('Fix line item fields before adding.');
+      return;
+    }
 
-    const quantity = Math.max(1, Math.floor(Number(itemDraft.quantity || 1)));
-    const price = Math.max(0, Number(itemDraft.price || 0));
+    if (orderLineItems.length >= 100) {
+      setError('Orders can include up to 100 line items.');
+      return;
+    }
+
+    const quantity = itemDraftQuantity;
+    const price = itemDraftPrice;
     const lineItem: OrderLineItem = {
       id: `item-${Date.now()}`,
       productId: '',
@@ -2642,6 +3112,10 @@ function OrdersRoute() {
       price,
       currency: normalizeCurrency(formState.currency),
       lineTotal: moneyValue(quantity * price),
+      productType: '',
+      digitalDeliveryConfigured: false,
+      downloadMediaPresent: false,
+      downloadUrlPresent: false,
     };
 
     setLineItems([...orderLineItems, lineItem]);
@@ -2652,6 +3126,8 @@ function OrdersRoute() {
       quantity: '1',
       price: '',
     });
+    setLineItemSubmitted(false);
+    setError(null);
   };
 
   const removeLineItem = (itemId: string) => {
@@ -2771,20 +3247,10 @@ function OrdersRoute() {
       return;
     }
 
-    if (!formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()) {
-      setError('Add an order number, customer name, and email before saving.');
-      setNotice(null);
-      return;
-    }
+    setOrderFormSubmitted(true);
 
-    if (Number(formState.total || 0) <= 0) {
-      setError('Add a positive order total before saving.');
-      setNotice(null);
-      return;
-    }
-
-    if (!formState.items.trim()) {
-      setError('Add at least one line item or raw item payload before saving.');
+    if (orderRequiredFieldsInvalid) {
+      setError('Fix required order fields before saving.');
       setNotice(null);
       return;
     }
@@ -2873,6 +3339,7 @@ function OrdersRoute() {
       setSelectedOrderId(saved.id);
       updateOrdersRouteSearch({ orderId: saved.id });
       void loadOrderAnalytics();
+      setOrderFormSubmitted(false);
       setNotice(selectedOrder ? 'Order updated.' : 'Order recorded.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save order');
@@ -3459,6 +3926,21 @@ function OrdersRoute() {
     }
   };
 
+  const copySelectedOrderOperationImpact = async () => {
+    if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(selectedOrderOperationImpactText);
+      setNotice('Order operation impact copied.');
+    } catch {
+      setNotice(selectedOrderOperationImpactText);
+    }
+  };
+
   const copyProviderCertificationHandoff = async () => {
     if (isOrdersBusy) return;
     if (!canExportOrders) {
@@ -3501,6 +3983,25 @@ function OrdersRoute() {
       setNotice('Orders provider certification env template copied.');
     } catch {
       setNotice(providerCertificationEnvTemplate);
+    }
+  };
+
+  const copyProviderCertificationEvidencePacket = async () => {
+    if (isOrdersBusy) return;
+    if (!canExportOrders) {
+      setError(exportPermissionTitle || 'Your account cannot export order data.');
+      return;
+    }
+    if (providerCertificationEvidencePacket.selectedFamilies.length === 0) {
+      setError('Select at least one order provider family before copying the evidence packet.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(providerCertificationEvidencePacketText);
+      setNotice('Orders provider certification evidence packet copied.');
+    } catch {
+      setNotice(providerCertificationEvidencePacketText);
     }
   };
 
@@ -4414,7 +4915,12 @@ function OrdersRoute() {
 	                        </span>
 	                      </label>
 	                    </div>
-	                    <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_260px]">
+	                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-[220px_minmax(0,1fr)_260px]">
+	                      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-certification-site-target">
+	                        <span className="font-semibold text-foreground">Certification site id</span>
+	                        <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{activeSiteId}</div>
+	                        <div className="mt-1 text-[11px] leading-4 text-muted-foreground">Emits BACKY_COMMERCE_CERTIFY_SITE_ID.</div>
+	                      </div>
 	                      <label className="text-xs">
 	                        <span className="font-semibold text-foreground">External target URL</span>
 	                        <input
@@ -4581,6 +5087,121 @@ function OrdersRoute() {
                     </div>
                     <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
                       {orderProviderCertificationEvidence.secretHandling}
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-certification-evidence-packet">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-foreground">Certification evidence packet</div>
+                        <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                          Redacted operator attachment manifest for selected provider families, required inputs, capture sources, scenario attachments, and live-run redaction rules.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                          {providerCertificationEvidencePacket.schemaVersion}
+                        </span>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                          providerCertificationEvidencePacket.status === 'evidence-complete'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : providerCertificationEvidencePacket.status === 'needs-credentials'
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-amber-50 text-amber-700',
+                        )}>
+                          {providerCertificationEvidencePacket.status}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyProviderCertificationEvidencePacket()}
+                          disabled={isOrdersAccessBusy || !canExportOrders || providerCertificationEvidencePacket.selectedFamilies.length === 0}
+                          title={!canExportOrders ? exportPermissionTitle : providerCertificationEvidencePacket.selectedFamilies.length === 0 ? 'Select at least one order provider family' : undefined}
+                          iconStart={<Copy className="size-4" />}
+                          data-testid="orders-provider-certification-evidence-packet-copy-button"
+                        >
+                          Copy evidence packet
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Selected families</div>
+                        <div className="mt-1 text-sm font-semibold text-foreground">{providerCertificationEvidencePacket.selectedFamilies.length}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {providerCertificationEvidencePacket.selectedFamilies.length > 0 ? providerCertificationEvidencePacket.selectedFamilies.map((family) => (
+                            <span key={family} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                              {family}
+                            </span>
+                          )) : (
+                            <span className="text-[11px] text-muted-foreground">No families selected</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Credential gaps</div>
+                        <div className="mt-1 text-sm font-semibold text-foreground">{providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length}</div>
+                        <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                          {providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length > 0
+                            ? providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.join(', ')
+                            : 'Selected families have runtime readiness evidence.'}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Scenario attachments</div>
+                        <div className="mt-1 text-sm font-semibold text-foreground">
+                          {providerCertificationEvidencePacket.scenarioAttachments.filter((scenario) => scenario.status === 'covered').length}/{providerCertificationEvidencePacket.scenarioAttachments.length}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                          {providerCertificationEvidencePacket.redactionPolicy.allowedEvidence.slice(0, 3).join(' | ')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2 lg:grid-cols-2">
+                      {providerCertificationEvidencePacket.operatorArtifacts.map((artifact) => (
+                        <div key={artifact.key} className="rounded-md border border-border bg-card px-3 py-2">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <div className="font-medium text-foreground">{artifact.family}</div>
+                              <div className="mt-0.5 text-[11px] text-muted-foreground">{artifact.providerAlias} · {artifact.captureSource}</div>
+                            </div>
+                            <span className={cn(
+                              'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                              artifact.status === 'ready-to-run' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
+                            )}>
+                              {artifact.status}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {artifact.expectedArtifacts.map((expectedArtifact) => (
+                              <span key={`${artifact.key}-${expectedArtifact}`} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {expectedArtifact}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Scenario attachments</div>
+                      <div className="mt-2 grid gap-1 md:grid-cols-2 xl:grid-cols-4">
+                        {providerCertificationEvidencePacket.scenarioAttachments.map((scenario) => (
+                          <div key={scenario.key} className="rounded bg-background px-2 py-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-foreground">{scenario.label}</span>
+                              <span className={cn(
+                                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold',
+                                scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                              )}>
+                                {scenario.evidenceCount}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                      {providerCertificationEvidencePacket.secretHandling}
                     </div>
                   </div>
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -5328,7 +5949,7 @@ function OrdersRoute() {
               icon={<Receipt className="size-4" />}
             />
             <PanelContent>
-              <form onSubmit={saveOrder}>
+              <form onSubmit={saveOrder} noValidate>
                 <fieldset disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} className={cn('space-y-4', (isOrdersAccessBusy || !canEditOrders) && 'opacity-70')}>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Order number">
@@ -5336,9 +5957,17 @@ function OrdersRoute() {
                       value={formState.orderNumber}
                       onChange={(event) => setFormState((current) => ({ ...current, orderNumber: event.target.value }))}
                       required
+                      aria-invalid={Boolean(orderNumberInlineError)}
+                      aria-describedby={orderNumberInlineError ? 'orders-order-number-error' : undefined}
+                      data-testid="orders-order-number-input"
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                       placeholder="ORD-1001"
                     />
+                    {orderNumberInlineError ? (
+                      <span id="orders-order-number-error" className="block text-xs text-destructive" data-testid="orders-order-number-error">
+                        {orderNumberInlineError}
+                      </span>
+                    ) : null}
                   </Field>
                   <Field label="Record status">
                     <select
@@ -5358,9 +5987,17 @@ function OrdersRoute() {
                     value={formState.customerName}
                     onChange={(event) => setFormState((current) => ({ ...current, customerName: event.target.value }))}
                     required
+                    aria-invalid={Boolean(orderCustomerInlineError)}
+                    aria-describedby={orderCustomerInlineError ? 'orders-customer-error' : undefined}
+                    data-testid="orders-customer-input"
                     className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     placeholder="Jane Customer"
                   />
+                  {orderCustomerInlineError ? (
+                    <span id="orders-customer-error" className="block text-xs text-destructive" data-testid="orders-customer-error">
+                      {orderCustomerInlineError}
+                    </span>
+                  ) : null}
                 </Field>
                 <Field label="Email">
                   <input
@@ -5368,9 +6005,17 @@ function OrdersRoute() {
                     value={formState.email}
                     onChange={(event) => setFormState((current) => ({ ...current, email: event.target.value }))}
                     required
+                    aria-invalid={Boolean(orderEmailInlineError)}
+                    aria-describedby={orderEmailInlineError ? 'orders-email-error' : undefined}
+                    data-testid="orders-email-input"
                     className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     placeholder="jane@example.com"
                   />
+                  {orderEmailInlineError ? (
+                    <span id="orders-email-error" className="block text-xs text-destructive" data-testid="orders-email-error">
+                      {orderEmailInlineError}
+                    </span>
+                  ) : null}
                 </Field>
                 <Field label="Phone">
                   <input
@@ -5389,8 +6034,16 @@ function OrdersRoute() {
                       value={formState.total}
                       onChange={(event) => setFormState((current) => ({ ...current, total: event.target.value }))}
                       required
+                      aria-invalid={Boolean(orderTotalInlineError)}
+                      aria-describedby={orderTotalInlineError ? 'orders-total-error' : undefined}
+                      data-testid="orders-total-input"
                       className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
                     />
+                    {orderTotalInlineError ? (
+                      <span id="orders-total-error" className="block text-xs text-destructive" data-testid="orders-total-error">
+                        {orderTotalInlineError}
+                      </span>
+                    ) : null}
                   </Field>
                   <Field label="Currency">
                     <input
@@ -5687,6 +6340,92 @@ function OrdersRoute() {
                     </div>
                     <div className="mt-1 leading-5">
                       {selectedOrderStatusHandoff.actionPlan?.recommendation || 'Select an order before exporting customer status handoff data.'}
+                    </div>
+                  </div>
+
+                  <div
+                    className="space-y-3 rounded-lg border border-border bg-background px-3 py-2.5 text-xs"
+                    data-testid="orders-operation-impact"
+                    data-schema-version={selectedOrderStatusHandoff.operationImpact.schemaVersion}
+                    data-recommended-action={selectedOrderStatusHandoff.operationImpact.operations.recommendedAction}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-foreground">Operation impact</span>
+                          <span className="rounded-md border border-border bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+                            {selectedOrderStatusHandoff.operationImpact.schemaVersion}
+                          </span>
+                        </div>
+                        <div className="mt-1 leading-5 text-muted-foreground">
+                          {selectedOrderStatusHandoff.operationImpact.operations.recommendation}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void copySelectedOrderOperationImpact()}
+                        disabled={isOrdersAccessBusy || !canExportOrders}
+                        title={!canExportOrders ? exportPermissionTitle : undefined}
+                        iconStart={<Copy className="size-4" />}
+                        data-testid="orders-operation-impact-copy-button"
+                      >
+                        Copy impact JSON
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-muted-foreground">Recommended action</div>
+                        <div className="mt-1 truncate font-semibold text-foreground">
+                          {selectedOrderStatusHandoff.operationImpact.operations.recommendedAction === 'none'
+                            ? 'No operation'
+                            : selectedOrderStatusHandoff.operationImpact.operations.availableActions.find((action) => action.key === selectedOrderStatusHandoff.operationImpact.operations.recommendedAction)?.label || selectedOrderStatusHandoff.operationImpact.operations.recommendedAction}
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-muted-foreground">Executable now</div>
+                        <div className="mt-1 font-semibold text-foreground">
+                          {selectedOrderStatusHandoff.operationImpact.operations.actionCounts['provider-ready']} provider-ready
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-muted-foreground">Manual handoff</div>
+                        <div className="mt-1 font-semibold text-foreground">
+                          {selectedOrderStatusHandoff.operationImpact.operations.actionCounts['manual-handoff']} fallback
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                        <div className="text-muted-foreground">Frontend projection</div>
+                        <div className="mt-1 font-semibold text-foreground">
+                          {selectedOrderStatusHandoff.operationImpact.customerSafeProjection.statusHandoffReady ? 'Ready' : 'Blocked'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2" data-testid="orders-operation-impact-actions">
+                      {selectedOrderStatusHandoff.operationImpact.operations.availableActions.length ? (
+                        selectedOrderStatusHandoff.operationImpact.operations.availableActions.map((action) => (
+                          <span
+                            key={action.key}
+                            className={cn(
+                              'rounded-full border px-2 py-1 font-medium',
+                              action.executionMode === 'provider-ready'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : action.executionMode === 'manual-handoff'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                  : 'border-border bg-muted/30 text-muted-foreground',
+                            )}
+                            title={action.reason}
+                          >
+                            {action.label}: {action.executionMode}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="rounded-full border border-border bg-muted/30 px-2 py-1 font-medium text-muted-foreground">
+                          Select an order to inspect operation impact
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -6072,14 +6811,17 @@ function OrdersRoute() {
                     />
                   )}
 
-                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_80px_100px_auto]">
-                    <input
-                      aria-label="Line item title"
-                      value={itemDraft.title}
-                      onChange={(event) => setItemDraft((current) => ({ ...current, title: event.target.value }))}
-                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
-                      placeholder="Product title"
-                    />
+	                  <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_80px_100px_auto]">
+	                    <input
+	                      aria-label="Line item title"
+	                      value={itemDraft.title}
+	                      onChange={(event) => setItemDraft((current) => ({ ...current, title: event.target.value }))}
+	                      aria-invalid={Boolean(lineItemTitleInlineError)}
+	                      aria-describedby={lineItemTitleInlineError ? 'orders-line-item-title-error' : undefined}
+	                      data-testid="orders-line-item-title-input"
+	                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+	                      placeholder="Product title"
+	                    />
                     <input
                       aria-label="Line item variant"
                       value={itemDraft.variant}
@@ -6089,33 +6831,55 @@ function OrdersRoute() {
                     />
                     <input
                       aria-label="Line item quantity"
-                      type="number"
-                      min="1"
-                      value={itemDraft.quantity}
-                      onChange={(event) => setItemDraft((current) => ({ ...current, quantity: event.target.value }))}
-                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
-                      placeholder="Qty"
-                    />
+	                      type="number"
+	                      min="1"
+	                      value={itemDraft.quantity}
+	                      onChange={(event) => setItemDraft((current) => ({ ...current, quantity: event.target.value }))}
+	                      aria-invalid={Boolean(lineItemQuantityInlineError)}
+	                      aria-describedby={lineItemQuantityInlineError ? 'orders-line-item-quantity-error' : undefined}
+	                      data-testid="orders-line-item-quantity-input"
+	                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+	                      placeholder="Qty"
+	                    />
                     <input
                       aria-label="Line item price"
                       type="number"
                       min="0"
-                      step="0.01"
-                      value={itemDraft.price}
-                      onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))}
-                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
-                      placeholder="Price"
-                    />
+	                      step="0.01"
+	                      value={itemDraft.price}
+	                      onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))}
+	                      aria-invalid={Boolean(lineItemPriceInlineError)}
+	                      aria-describedby={lineItemPriceInlineError ? 'orders-line-item-price-error' : undefined}
+	                      data-testid="orders-line-item-price-input"
+	                      className="rounded-lg border bg-background px-3 py-2.5 text-sm"
+	                      placeholder="Price"
+	                    />
                     <Button
-                      variant="outline"
-                      onClick={addLineItem}
-                      disabled={isOrdersAccessBusy || !canEditOrders || !itemDraft.title.trim() || orderLineItems.length >= 100}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                  <input
-                    aria-label="Line item SKU"
+	                      variant="outline"
+	                      onClick={addLineItem}
+	                      disabled={isOrdersAccessBusy || !canEditOrders || orderLineItems.length >= 100}
+	                      data-testid="orders-line-item-add"
+	                    >
+	                      Add
+	                    </Button>
+	                  </div>
+	                  {(lineItemTitleInlineError || lineItemQuantityInlineError || lineItemPriceInlineError) ? (
+	                    <div className="grid gap-1 text-xs text-destructive md:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_80px_100px_auto]">
+	                      <span id="orders-line-item-title-error" data-testid="orders-line-item-title-error">
+	                        {lineItemTitleInlineError}
+	                      </span>
+	                      <span aria-hidden="true" />
+	                      <span id="orders-line-item-quantity-error" data-testid="orders-line-item-quantity-error">
+	                        {lineItemQuantityInlineError}
+	                      </span>
+	                      <span id="orders-line-item-price-error" data-testid="orders-line-item-price-error">
+	                        {lineItemPriceInlineError}
+	                      </span>
+	                      <span aria-hidden="true" />
+	                    </div>
+	                  ) : null}
+	                  <input
+	                    aria-label="Line item SKU"
                     value={itemDraft.sku}
                     onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))}
                     className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm"
@@ -6128,9 +6892,17 @@ function OrdersRoute() {
                       onChange={(event) => setFormState((current) => ({ ...current, items: event.target.value }))}
                       rows={4}
                       required
+                      aria-invalid={Boolean(orderItemsInlineError)}
+                      aria-describedby={orderItemsInlineError ? 'orders-items-error' : undefined}
+                      data-testid="orders-items-input"
                       className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 font-mono text-xs"
                       placeholder="Structured line items JSON or a legacy item summary"
                     />
+                    {orderItemsInlineError ? (
+                      <span id="orders-items-error" className="block text-xs text-destructive" data-testid="orders-items-error">
+                        {orderItemsInlineError}
+                      </span>
+                    ) : null}
                   </Field>
                 </div>
                 <Field label="Shipping address">
@@ -6274,7 +7046,7 @@ function OrdersRoute() {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={resetForm} disabled={isOrdersAccessBusy || !canEditOrders}>Clear</Button>
-                  <Button type="submit" variant="primary" disabled={isOrdersAccessBusy || !canEditOrders || !formState.orderNumber.trim() || !formState.customerName.trim() || !formState.email.trim()} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Receipt className="size-4" />}>
+                  <Button type="submit" variant="primary" disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Receipt className="size-4" />}>
                     {isSaving ? 'Saving...' : selectedOrder ? 'Save Order' : 'Create Order'}
                   </Button>
                 </div>
@@ -6941,35 +7713,247 @@ const summarizeOrderStatus = (checks: OrderStatusHandoffCheck[]): OrderStatusHan
   return 'ready';
 };
 
+const buildOrderStatusFrontendBindings = (
+  endpoints: OrderStatusHandoff['endpoints'],
+  order: CollectionRecord | null,
+): OrderStatusHandoff['frontendBindings'] => ({
+  schemaVersion: 'backy.order-status-frontend-bindings.v1',
+  targetViews: ['order-confirmation', 'order-tracking', 'refund-status', 'support-widget'],
+  dataset: {
+    key: 'orderStatusHandoff',
+    source: 'admin-order-status-handoff-api',
+    endpoint: endpoints.adminStatusHandoff,
+    selectedOrderId: order?.id || null,
+    selectedOrderSlug: order?.slug || null,
+    auth: 'admin-session-or-service-key',
+    refreshMethod: 'GET',
+  },
+  safeBindingPaths: [
+    'order.orderNumber',
+    'order.total',
+    'order.currency',
+    'order.itemCount',
+    'order.orderStatus',
+    'order.paymentStatus',
+    'order.fulfillmentStatus',
+    'customer.displayName',
+    'customer.maskedEmail',
+    'customer.maskedPhone',
+    'customer.customerProfileLinked',
+    'tracking.carrier',
+    'tracking.trackingNumber',
+    'tracking.trackingUrl',
+    'tracking.trackingStatus',
+    'tracking.fulfilledAt',
+    'refund.refundAmount',
+    'refund.providerRefundStatus',
+    'digitalDelivery.itemCount',
+    'digitalDelivery.configuredItemCount',
+    'digitalDelivery.pendingItemCount',
+    'digitalDelivery.status',
+    'digitalDelivery.customerAction',
+    'actionPlan.recommendation',
+    'checks[].status',
+    'nextSteps[]',
+  ],
+  maskedBindingPaths: ['customer.maskedEmail', 'customer.maskedPhone'],
+  editableRegions: [
+    {
+      key: 'confirmation-summary',
+      label: 'Confirmation summary',
+      targetViews: ['order-confirmation'],
+      recommendedBindings: ['order.orderNumber', 'order.total', 'order.currency', 'order.paymentStatus'],
+    },
+    {
+      key: 'tracking-timeline',
+      label: 'Tracking timeline',
+      targetViews: ['order-tracking'],
+      recommendedBindings: ['order.fulfillmentStatus', 'tracking.carrier', 'tracking.trackingNumber', 'tracking.trackingUrl', 'tracking.trackingStatus'],
+    },
+    {
+      key: 'refund-support',
+      label: 'Refund and support status',
+      targetViews: ['refund-status', 'support-widget'],
+      recommendedBindings: ['refund.refundAmount', 'refund.providerRefundStatus', 'actionPlan.recommendation', 'nextSteps[]'],
+    },
+    {
+      key: 'digital-delivery-status',
+      label: 'Digital delivery status',
+      targetViews: ['order-confirmation', 'order-tracking', 'support-widget'],
+      recommendedBindings: ['digitalDelivery.itemCount', 'digitalDelivery.configuredItemCount', 'digitalDelivery.status', 'digitalDelivery.customerAction'],
+    },
+  ],
+  actionBindings: [
+    {
+      key: 'refresh-status',
+      label: 'Refresh status',
+      method: 'GET',
+      endpoint: endpoints.adminStatusHandoff,
+      requiresPermission: 'commerce.view',
+    },
+    {
+      key: 'refresh-tracking',
+      label: 'Refresh tracking',
+      method: 'POST',
+      endpoint: endpoints.adminTracking,
+      requiresPermission: 'commerce.edit',
+    },
+    {
+      key: 'request-provider-refund',
+      label: 'Request provider refund',
+      method: 'POST',
+      endpoint: endpoints.adminProviderRefund,
+      requiresPermission: 'commerce.edit',
+    },
+    {
+      key: 'open-admin-order-detail',
+      label: 'Open private order detail',
+      method: 'GET',
+      endpoint: endpoints.adminOrderDetail,
+      requiresPermission: 'commerce.view',
+    },
+  ],
+});
+
+const buildOrderOperationImpact = ({
+  activeSiteId,
+  generatedAt,
+  order,
+  actionPlan,
+  providerReadinessChecks,
+  statusHandoffStatus,
+  frontendBindings,
+  ordersApiReady,
+}: {
+  activeSiteId: string;
+  generatedAt: string;
+  order: CollectionRecord | null;
+  actionPlan: OrderOperationActionPlan | null;
+  providerReadinessChecks: ProviderReadinessCheck[];
+  statusHandoffStatus: OrderStatusHandoffStatus;
+  frontendBindings: OrderStatusHandoff['frontendBindings'];
+  ordersApiReady: boolean;
+}): OrderOperationImpact => {
+  const values = order?.values || {};
+  const currency = order ? normalizeCurrency(String(values.currency || 'USD')) : 'USD';
+  const availableActions = actionPlan?.availableActions || [];
+  const actionCounts: Record<OrderOperationExecutionMode, number> = {
+    'provider-ready': 0,
+    'manual-handoff': 0,
+    blocked: 0,
+  };
+
+  availableActions.forEach((action) => {
+    actionCounts[action.executionMode] += 1;
+  });
+
+  return {
+    schemaVersion: 'backy.order-operation-impact.v1',
+    generatedAt,
+    selectedSiteId: activeSiteId,
+    order: {
+      id: order?.id || null,
+      slug: order?.slug || null,
+      orderNumber: order ? String(readOrderValue(values, 'ordernumber', order.slug)) : 'No order selected',
+      recordStatus: order?.status || null,
+      orderStatus: order ? asOrderStatus(readOrderValue(values, 'orderstatus', undefined)) : null,
+      paymentStatus: order ? asPaymentStatus(readOrderValue(values, 'paymentstatus', undefined)) : null,
+      fulfillmentStatus: order ? asFulfillmentStatus(readOrderValue(values, 'fulfillmentstatus', undefined)) : null,
+      total: order ? toNumber(values.total) : 0,
+      currency,
+    },
+    providerReadiness: {
+      readyCount: providerReadinessChecks.filter((check) => check.ready).length,
+      total: providerReadinessChecks.length,
+      checks: providerReadinessChecks.map((check) => ({
+        key: check.key,
+        title: check.title,
+        mode: check.mode,
+        ready: check.ready,
+      })),
+    },
+    operations: {
+      recommendedAction: actionPlan?.recommendedAction || 'none',
+      recommendation: actionPlan?.recommendation || 'Select or save an order before running provider operations.',
+      executableNow: Boolean(actionPlan?.executableNow),
+      handoffRequired: Boolean(actionPlan?.handoffRequired),
+      attention: Boolean(actionPlan?.attention),
+      actionCounts,
+      availableActions,
+    },
+    customerSafeProjection: {
+      statusHandoffStatus,
+      statusHandoffReady: statusHandoffStatus !== 'blocked',
+      maskedContactAvailable: Boolean(
+        String(values.email || '').trim() ||
+        String(readOrderValue(values, 'phone', '') || '').trim()
+      ),
+      frontendBindingsReady: frontendBindings.safeBindingPaths.length > 0 &&
+        frontendBindings.editableRegions.length > 0 &&
+        frontendBindings.actionBindings.length > 0,
+      publicCollectionReadBlocked: ordersApiReady,
+      safeBindingPaths: frontendBindings.safeBindingPaths,
+      maskedBindingPaths: frontendBindings.maskedBindingPaths,
+    },
+    references: {
+      paymentReferencePresent: Boolean(readOrderValue(values, 'paymentreference', '')),
+      trackingReferencePresent: Boolean(readOrderValue(values, 'trackingnumber', '') || readOrderValue(values, 'trackingurl', '')),
+      shippingLabelReferencePresent: Boolean(readOrderValue(values, 'shippinglabelid', '') || readOrderValue(values, 'shippinglabelurl', '')),
+      fulfillmentReferencePresent: Boolean(readOrderValue(values, 'fulfillmentid', '')),
+      providerRefundReferencePresent: Boolean(readOrderValue(values, 'providerrefundid', '') || readOrderValue(values, 'providerrefundreference', '')),
+    },
+    privacy: {
+      adminOperatorOnly: true,
+      customerSafeFieldsOnly: true,
+      includesRawCustomerContact: false,
+      includesPaymentReferences: false,
+      includesProviderExecutionIds: false,
+      includesAddresses: false,
+      includesInternalNotes: false,
+      includesProviderPayloads: false,
+      note: 'Operation impact exports action readiness, safe binding paths, and boolean reference presence only; raw contacts, payment references, provider ids, provider payloads, addresses, and private notes remain inside admin APIs.',
+    },
+  };
+};
+
 const buildOrderStatusHandoff = ({
   activeSiteId,
   adminOrderDetailApiUrl,
+  adminOrderOperationsApiUrl,
   adminOrderStatusHandoffApiUrl,
   publicOrderIntakeUrl,
   order,
   customerProfile,
   orderOperationPlan,
+  providerReadinessChecks,
   ordersApiReady,
 }: {
   activeSiteId: string;
   adminOrderDetailApiUrl: string;
+  adminOrderOperationsApiUrl: string;
   adminOrderStatusHandoffApiUrl: string;
   publicOrderIntakeUrl: string;
   order: CollectionRecord | null;
   customerProfile: CollectionRecord | null;
   orderOperationPlan: OrderOperationActionPlan | null;
+  providerReadinessChecks: ProviderReadinessCheck[];
   ordersApiReady: boolean;
 }): OrderStatusHandoff => {
   const generatedAt = new Date().toISOString();
   const adminDetailUrl = order ? orderStatusEndpoint(adminOrderDetailApiUrl, order.id) : adminOrderDetailApiUrl;
+  const adminOperationUrl = order ? `${adminOrderOperationsApiUrl}/${encodeURIComponent(order.id)}` : `${adminOrderOperationsApiUrl}/{orderId}`;
   const adminStatusHandoffUrl = order ? orderStatusEndpoint(adminOrderStatusHandoffApiUrl, order.id) : adminOrderStatusHandoffApiUrl;
   const endpoints = {
     checkoutIntake: publicOrderIntakeUrl,
+    publicStatusHandoff: order
+      ? `${publicOrderIntakeUrl}?orderId=${encodeURIComponent(order.id)}&statusToken={statusToken}`
+      : `${publicOrderIntakeUrl}?orderId={orderId}&statusToken={statusToken}`,
     adminStatusHandoff: adminStatusHandoffUrl,
     adminOrderDetail: adminDetailUrl,
-    adminTracking: `${adminDetailUrl}/tracking`,
-    adminProviderRefund: `${adminDetailUrl}/provider-refund`,
+    adminTracking: `${adminOperationUrl}/tracking`,
+    adminProviderRefund: `${adminOperationUrl}/provider-refund`,
   };
+  const frontendBindings = buildOrderStatusFrontendBindings(endpoints, order);
 
   if (!order) {
     const checks: OrderStatusHandoffCheck[] = [
@@ -6988,18 +7972,32 @@ const buildOrderStatusHandoff = ({
           : 'Sync the private orders collection before exposing customer order status.',
       },
     ];
+    const status = summarizeOrderStatus(checks);
+    const operationImpact = buildOrderOperationImpact({
+      activeSiteId,
+      generatedAt,
+      order: null,
+      actionPlan: null,
+      providerReadinessChecks,
+      statusHandoffStatus: status,
+      frontendBindings,
+      ordersApiReady,
+    });
 
     return {
       schemaVersion: 'backy.order-status-handoff.v1',
       generatedAt,
-      status: summarizeOrderStatus(checks),
+      source: 'admin-orders-ui',
+      status,
       score: 0,
       selectedSiteId: activeSiteId,
       order: null,
       customer: null,
       tracking: null,
       refund: null,
+      digitalDelivery: null,
       endpoints,
+      frontendBindings,
       privacy: {
         publicCollectionReadBlocked: ordersApiReady,
         customerSafeFieldsOnly: true,
@@ -7008,11 +8006,16 @@ const buildOrderStatusHandoff = ({
         includesPaymentReferences: false,
         includesAddresses: false,
         includesInternalNotes: false,
+        includesDigitalDeliveryUrls: false,
+        includesDownloadMediaIds: false,
         excludedFields: [
           'email',
           'phone',
           'customerid',
           'checkoutsessionid',
+          'statusaccesstokenhash',
+          'statusaccesstokenissuedat',
+          'statusaccesstokenexpiresat',
           'shippingaddress',
           'billingaddress',
           'notes',
@@ -7024,9 +8027,14 @@ const buildOrderStatusHandoff = ({
           'providerrefundid',
           'providerrefundreference',
           'providerrefundpayload',
+          'downloadurl',
+          'downloadmediaid',
+          'downloadmediaorganization',
+          'digitaldeliverypayload',
         ],
       },
       actionPlan: null,
+      operationImpact,
       checks,
       nextSteps: ['Select an order from the queue or save the current draft before copying customer status JSON.'],
     };
@@ -7056,6 +8064,7 @@ const buildOrderStatusHandoff = ({
   const hasTracking = Boolean(trackingNumber || trackingUrl);
   const isClosed = orderStatus === 'cancelled' || paymentStatus === 'refunded' || orderStatus === 'refunded';
   const lineItems = parseOrderLineItems(values.items, currency);
+  const digitalDelivery = buildOrderDigitalDeliveryHandoff(lineItems, paymentStatus, fulfillmentStatus);
 
   const checks: OrderStatusHandoffCheck[] = [
     {
@@ -7121,6 +8130,12 @@ const buildOrderStatusHandoff = ({
             : 'No refund or return is active for this order.',
     },
     {
+      key: 'digital-delivery',
+      label: 'Digital delivery',
+      status: digitalDelivery.status === 'attention' ? 'attention' : 'ready',
+      detail: digitalDelivery.customerAction,
+    },
+    {
       key: 'private-order-queue',
       label: 'Customer portal safety',
       status: ordersApiReady ? 'ready' : 'blocked',
@@ -7141,10 +8156,21 @@ const buildOrderStatusHandoff = ({
     .filter((check) => check.status !== 'ready')
     .map((check) => check.detail)
     .slice(0, 4);
+  const operationImpact = buildOrderOperationImpact({
+    activeSiteId,
+    generatedAt,
+    order,
+    actionPlan: orderOperationPlan,
+    providerReadinessChecks,
+    statusHandoffStatus: status,
+    frontendBindings,
+    ordersApiReady,
+  });
 
   return {
     schemaVersion: 'backy.order-status-handoff.v1',
     generatedAt,
+    source: 'admin-orders-ui',
     status,
     score: Math.round((readyCount / checks.length) * 100),
     selectedSiteId: activeSiteId,
@@ -7190,7 +8216,9 @@ const buildOrderStatusHandoff = ({
       providerRefundRequestedAt: String(readOrderValue(values, 'providerrefundrequestedat', '') || ''),
       providerRefundCompletedAt: String(readOrderValue(values, 'providerrefundcompletedat', '') || ''),
     },
+    digitalDelivery,
     endpoints,
+    frontendBindings,
     privacy: {
       publicCollectionReadBlocked: ordersApiReady,
       customerSafeFieldsOnly: true,
@@ -7199,11 +8227,16 @@ const buildOrderStatusHandoff = ({
       includesPaymentReferences: false,
       includesAddresses: false,
       includesInternalNotes: false,
+      includesDigitalDeliveryUrls: false,
+      includesDownloadMediaIds: false,
       excludedFields: [
         'email',
         'phone',
         'customerid',
         'checkoutsessionid',
+        'statusaccesstokenhash',
+        'statusaccesstokenissuedat',
+        'statusaccesstokenexpiresat',
         'shippingaddress',
         'billingaddress',
         'notes',
@@ -7215,9 +8248,14 @@ const buildOrderStatusHandoff = ({
         'providerrefundid',
         'providerrefundreference',
         'providerrefundpayload',
+        'downloadurl',
+        'downloadmediaid',
+        'downloadmediaorganization',
+        'digitaldeliverypayload',
       ],
     },
     actionPlan: orderOperationPlan,
+    operationImpact,
     checks,
     nextSteps: nextSteps.length
       ? nextSteps
@@ -7694,6 +8732,71 @@ const lineItemText = (value: unknown): string => (
   typeof value === 'string' ? value.trim() : ''
 );
 
+const lineItemBoolean = (value: unknown): boolean => (
+  value === true ||
+  value === 1 ||
+  (typeof value === 'string' && ['true', '1', 'yes', 'download', 'digital'].includes(value.trim().toLowerCase()))
+);
+
+const lineItemProductType = (record: Record<string, unknown>): string => (
+  lineItemText(record.productType || record.product_type || record.type || record.kind).toLowerCase()
+);
+
+const lineItemDeliveryMetadata = (record: Record<string, unknown>): Pick<OrderLineItem, 'productType' | 'digitalDeliveryConfigured' | 'downloadMediaPresent' | 'downloadUrlPresent'> => {
+  const productType = lineItemProductType(record);
+  const downloadMediaPresent = Boolean(lineItemText(record.downloadMediaId || record.download_media_id || record.mediaId || record.media_id));
+  const downloadUrlPresent = Boolean(lineItemText(record.downloadUrl || record.download_url || record.deliveryUrl || record.delivery_url));
+  const digitalFlag = lineItemBoolean(record.digitalDelivery) || lineItemBoolean(record.hasDigitalDelivery) || lineItemBoolean(record.downloadable);
+
+  return {
+    productType,
+    digitalDeliveryConfigured: digitalFlag || downloadMediaPresent || downloadUrlPresent,
+    downloadMediaPresent,
+    downloadUrlPresent,
+  };
+};
+
+const buildOrderDigitalDeliveryHandoff = (
+  items: OrderLineItem[],
+  paymentStatus: PaymentStatus,
+  fulfillmentStatus: FulfillmentStatus,
+): OrderDigitalDeliveryHandoff => {
+  const digitalItems = items.filter((item) => item.productType === 'digital' || item.productType === 'download' || item.digitalDeliveryConfigured);
+  const configuredItemCount = digitalItems.filter((item) => item.digitalDeliveryConfigured).length;
+  const pendingItemCount = Math.max(0, digitalItems.length - configuredItemCount);
+  const isPaid = paymentStatus === 'paid' || paymentStatus === 'refunded';
+  const status: OrderDigitalDeliveryStatus = digitalItems.length === 0
+    ? 'not-applicable'
+    : pendingItemCount > 0
+      ? 'attention'
+      : fulfillmentStatus === 'fulfilled'
+        ? 'fulfilled'
+        : isPaid
+          ? 'ready'
+          : 'pending-payment';
+  const customerAction = digitalItems.length === 0
+    ? 'No digital delivery items were detected for this order.'
+    : pendingItemCount > 0
+      ? `${pendingItemCount} digital item${pendingItemCount === 1 ? '' : 's'} still need delivery metadata before customer portal handoff.`
+      : status === 'pending-payment'
+        ? 'Digital delivery is configured and will become customer-visible after payment is confirmed.'
+        : status === 'fulfilled'
+          ? 'Digital delivery items are configured and fulfillment is complete.'
+          : 'Digital delivery items are configured for the customer-safe order status view.';
+
+  return {
+    schemaVersion: 'backy.order-digital-delivery-handoff.v1',
+    itemCount: digitalItems.length,
+    configuredItemCount,
+    pendingItemCount,
+    status,
+    customerAction,
+    customerSafeFieldsOnly: true,
+    includesDownloadUrls: false,
+    includesDownloadMediaIds: false,
+  };
+};
+
 const normalizeOrderLineItem = (value: unknown, index: number, fallbackCurrency: string): OrderLineItem | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 
@@ -7711,6 +8814,7 @@ const normalizeOrderLineItem = (value: unknown, index: number, fallbackCurrency:
   const variantTitle = lineItemText(variant.title || record.variantTitle || record.variantName);
   const variantOption = lineItemText(variant.option || record.variantOption || record.option);
   const variantSku = lineItemText(variant.sku || record.variantSku);
+  const deliveryMetadata = lineItemDeliveryMetadata(record);
 
   return {
     id: lineItemText(record.id) || lineItemText(record.lineItemId) || `${lineItemText(record.productId) || lineItemText(record.slug) || 'item'}-${index}`,
@@ -7725,6 +8829,7 @@ const normalizeOrderLineItem = (value: unknown, index: number, fallbackCurrency:
     price,
     currency,
     lineTotal,
+    ...deliveryMetadata,
   };
 };
 
@@ -7753,6 +8858,10 @@ const serializeOrderLineItems = (items: OrderLineItem[], fallbackCurrency: strin
       price: item.price,
       currency: normalizeCurrency(item.currency || fallbackCurrency),
       lineTotal: moneyValue(item.lineTotal || item.price * item.quantity),
+      productType: item.productType || undefined,
+      digitalDelivery: item.digitalDeliveryConfigured || undefined,
+      downloadMediaAttached: item.downloadMediaPresent || undefined,
+      downloadUrlAttached: item.downloadUrlPresent || undefined,
     })),
     null,
     2,

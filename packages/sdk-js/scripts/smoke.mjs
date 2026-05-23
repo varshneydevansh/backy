@@ -3,24 +3,47 @@
 import { createServer } from 'node:http';
 
 import {
+  addBackyContentElement,
+  buildBackyAdminBlogPostCreateInput,
+  buildBackyAdminBlogPostUpdateInput,
+  buildBackyAdminCollectionRecordCreateInput,
+  buildBackyAdminCollectionRecordUpdateInput,
+  buildBackyAdminCommerceProductCreateInput,
+  buildBackyAdminCommerceProductUpdateInput,
+  buildBackyAdminPageCreateInput,
+  buildBackyAdminPageUpdateInput,
+  buildBackyAdminReusableSectionCreateInput,
+  buildBackyAdminReusableSectionUpdateInput,
   buildBackyCommentInput,
   buildBackyCommentReportInput,
   buildBackyCollectionRecordWriteInput,
   buildBackyCommerceOrderInput,
+  buildBackyContentDesignPayload,
+  buildBackyContentDownloadFilePatch,
   buildBackyFormSubmissionInput,
   buildBackyInteractiveRuntimeEventInput,
   buildBackyLiveManagedBlogPostEditableMapUpdate,
   buildBackyMediaBindingInput,
+  buildBackyMediaDownloadLinkProps,
+  buildBackyMediaFilePath,
+  buildBackyMediaFileUrl,
   buildBackyMediaSignedUrlInput,
+  buildBackyMediaTransformPath,
+  buildBackyMediaTransformUrl,
   createBackyClient,
+  deleteBackyContentElements,
+  duplicateBackyContentElement,
+  evaluateBackyEditorCommandRegistry,
   findBackyContentElement,
   groupBackyContentElements,
   listBackyContentElements,
   patchBackyContentEditableFields,
   patchBackyContentEditableMapEntries,
   patchBackyContentEditableMapValues,
+  patchBackyContentElementDownloadFile,
   patchBackyContentElement,
   patchBackyContentElements,
+  transformBackyContentElements,
   ungroupBackyContentElements,
 } from '../dist/index.js';
 
@@ -36,6 +59,26 @@ const assert = (condition, message) => {
   if (!condition) {
     throw new Error(message);
   }
+};
+
+const assertRevisionBranchMetadata = (revision, expectedTargetType, expectedSource, label) => {
+  const branchMetadata = revision?.branchMetadata;
+  assert(branchMetadata?.schemaVersion === 'backy.content-revision-branch-metadata.v1', `${label} missing revision branch metadata schema`);
+  assert(branchMetadata.source === expectedSource, `${label} branch metadata source drifted: ${branchMetadata.source}`);
+  assert(branchMetadata.targetType === expectedTargetType, `${label} branch metadata target type drifted: ${branchMetadata.targetType}`);
+  assert(typeof branchMetadata.position === 'number' && branchMetadata.position >= 1, `${label} branch metadata missing position`);
+  assert(typeof branchMetadata.total === 'number' && branchMetadata.total >= branchMetadata.position, `${label} branch metadata total drifted`);
+  assert(typeof branchMetadata.branchId === 'string' && branchMetadata.branchId.length > 0, `${label} branch metadata missing branch id`);
+  assert(['trunk', 'restore-checkpoint', 'restore-branch'].includes(branchMetadata.branchRole), `${label} branch metadata branch role drifted: ${branchMetadata.branchRole}`);
+  assert(Object.prototype.hasOwnProperty.call(branchMetadata, 'chronologicalParentId'), `${label} branch metadata missing chronological parent`);
+  assert(Object.prototype.hasOwnProperty.call(branchMetadata, 'chronologicalChildId'), `${label} branch metadata missing chronological child`);
+  assert(Object.prototype.hasOwnProperty.call(branchMetadata, 'restoreTargetRevisionId'), `${label} branch metadata missing restore target id`);
+  assert(branchMetadata.inference?.confidence === 'explicit-api-metadata', `${label} branch metadata inference confidence drifted`);
+  assert(['persisted-revision-lineage', 'revision-note-and-order'].includes(branchMetadata.inference?.lineageSource), `${label} branch metadata lineage source drifted`);
+  assert(Object.prototype.hasOwnProperty.call(revision, 'parentRevisionId'), `${label} missing persisted parent revision id field`);
+  assert(typeof revision.operation === 'string' && revision.operation.length > 0, `${label} missing persisted revision operation`);
+  assert(Object.prototype.hasOwnProperty.call(revision, 'restoreTargetRevisionId'), `${label} missing persisted restore target revision id field`);
+  assert(revision.metadata?.schemaVersion === 'backy.content-revision-metadata.v1', `${label} missing revision metadata schema`);
 };
 
 const ONE_PIXEL_PNG = Buffer.from(
@@ -65,6 +108,321 @@ trailer << /Root 1 0 R >>
 %%EOF
 `, 'utf8');
 };
+
+const sdkCustomFrontendDesign = {
+  templateId: 'sdk-design-template',
+  templateName: 'SDK Design Template',
+  routePattern: '/sdk-design/:slug',
+  customCss: '.sdk-design-hero { color: var(--backy-color-primary); }',
+  customJs: 'window.__backySdkDesignTemplate = true;',
+  contentDocument: {
+    schemaVersion: 'backy.content.v1',
+    elements: [
+      {
+        id: 'sdk-design-hero',
+        type: 'heading',
+        x: 64,
+        y: 64,
+        width: 720,
+        height: 96,
+        props: { content: 'SDK design hero', mediaId: 'sdk-design-media' },
+        animation: {
+          type: 'custom',
+          from: { opacity: 0, y: 24 },
+          to: { opacity: 1, y: 0 },
+        },
+      },
+      {
+        id: 'sdk-design-cta',
+        type: 'button',
+        x: 64,
+        y: 184,
+        width: 180,
+        height: 48,
+        props: {
+          label: 'Start',
+          fileMediaIds: ['sdk-design-file'],
+          fileSignedUrlRequired: true,
+        },
+        styles: {
+          backgroundColor: '#16a34a',
+          boxShadow: '0 12px 28px rgba(22, 163, 74, 0.22)',
+        },
+        tokenRefs: {
+          'styles.backgroundColor': 'colors.accent',
+        },
+        responsive: {
+          mobile: {
+            props: {
+              label: 'Start mobile',
+              fileSignedUrlRequired: false,
+            },
+            styles: {
+              boxShadow: '0 8px 18px rgba(22, 163, 74, 0.18)',
+            },
+          },
+        },
+        dataBindings: [
+          {
+            source: { collectionId: 'pages', field: 'ctaLabel' },
+            targetPath: 'props.label',
+          },
+        ],
+        actions: [{ type: 'navigate', href: '/start' }],
+        bindingSlots: [{ name: 'primaryCta', collectionId: 'pages' }],
+      },
+    ],
+  },
+  canvasSize: { width: 1200, height: 820 },
+  themeTokenRefs: { 'styles.color': 'colors.primary' },
+  assets: [
+    { id: 'sdk-design-media', type: 'image' },
+    { id: 'sdk-design-file', type: 'document' },
+  ],
+  animations: [{ id: 'sdk-hero-intro', targetId: 'sdk-design-hero' }],
+  interactions: [{ id: 'sdk-hero-click', trigger: 'click' }],
+  dataBindings: { hero: { collectionId: 'pages', field: 'title' } },
+  editableMap: {
+    'hero.title': {
+      elementId: 'sdk-design-hero',
+      targetPath: 'props.content',
+    },
+  },
+  seo: { title: 'SDK design page' },
+  metadata: { importedFrom: 'sdk-smoke' },
+  bindingHints: [{ key: 'hero.title', targetPath: 'props.content' }],
+};
+
+const sdkDesignPayload = buildBackyContentDesignPayload(sdkCustomFrontendDesign);
+assert(sdkDesignPayload.customCSS === sdkCustomFrontendDesign.customCss, 'buildBackyContentDesignPayload() did not normalize customCss to customCSS');
+assert(sdkDesignPayload.customJS === sdkCustomFrontendDesign.customJs, 'buildBackyContentDesignPayload() did not normalize customJs to customJS');
+assert(sdkDesignPayload.elements?.[0]?.id === 'sdk-design-hero', 'buildBackyContentDesignPayload() did not hydrate elements from contentDocument');
+assert(sdkDesignPayload.animations?.[0]?.id === 'sdk-hero-intro', 'buildBackyContentDesignPayload() did not preserve animation timelines');
+assert(sdkDesignPayload.editableMap?.['hero.title']?.targetPath === 'props.content', 'buildBackyContentDesignPayload() did not preserve editable maps');
+assert(
+  sdkDesignPayload.editableMap?.['sdk-design-cta.props.fileMediaIds']?.valueType === 'file' &&
+    sdkDesignPayload.editableMap?.['sdk-design-cta.responsive.mobile.props.fileSignedUrlRequired']?.valueType === 'boolean' &&
+    sdkDesignPayload.editableMap?.['sdk-design-cta.styles.backgroundColor']?.valueType === 'color' &&
+    sdkDesignPayload.editableMap?.['sdk-design-cta.tokenRefs.styles.backgroundColor']?.valueType === 'string' &&
+    sdkDesignPayload.editableMap?.['sdk-design-cta.actions']?.valueType === 'json' &&
+    sdkDesignPayload.editableMap?.['sdk-design-cta.dataBindings']?.valueType === 'json' &&
+    sdkDesignPayload.editableMap?.['sdk-design-cta.ctaLabel']?.targetPath === 'props.label' &&
+    sdkDesignPayload.editableMap?.['sdk-design-hero.animation.type']?.targetPath === 'animation.type',
+  'buildBackyContentDesignPayload() did not infer editable controls from SDK design elements',
+);
+assert(sdkDesignPayload.metadata?.editorComposition?.animatedElementIds?.includes?.('sdk-design-hero'), 'buildBackyContentDesignPayload() did not refresh editor composition metadata');
+
+const sdkPageCreateInput = buildBackyAdminPageCreateInput({
+  title: 'SDK Design Page',
+  slug: 'sdk-design-page',
+  status: 'draft',
+  design: sdkCustomFrontendDesign,
+  meta: { title: 'SDK Design Page' },
+});
+assert(sdkPageCreateInput.frontendDesignTemplateId === 'sdk-design-template', 'buildBackyAdminPageCreateInput() did not infer frontendDesignTemplateId');
+assert(sdkPageCreateInput.content?.customCSS === sdkCustomFrontendDesign.customCss, 'buildBackyAdminPageCreateInput() did not preserve custom CSS');
+assert(sdkPageCreateInput.meta?.frontendDesignCustomJs === sdkCustomFrontendDesign.customJs, 'buildBackyAdminPageCreateInput() did not preserve custom JS provenance');
+assert(sdkPageCreateInput.meta?.frontendDesignAnimations?.[0]?.id === 'sdk-hero-intro', 'buildBackyAdminPageCreateInput() did not preserve animation provenance');
+assert(sdkPageCreateInput.meta?.frontendDesignEditableMap?.['hero.title']?.elementId === 'sdk-design-hero', 'buildBackyAdminPageCreateInput() did not preserve editable-map provenance');
+assert(sdkPageCreateInput.meta?.frontendDesignEditableMap?.['sdk-design-cta.props.fileMediaIds']?.valueType === 'file', 'buildBackyAdminPageCreateInput() did not preserve inferred editable-map provenance');
+
+const sdkNoTemplatePageCreateInput = buildBackyAdminPageCreateInput({
+  title: 'SDK Imported Direct Design',
+  slug: 'sdk-imported-direct-design',
+  design: {
+    contentDocument: {
+      id: 'sdk-imported-direct-document',
+      schemaVersion: 'backy.content.v1',
+      elements: [
+        {
+          id: 'sdk-imported-direct-heading',
+          type: 'heading',
+          props: { content: 'Imported SDK design without a template id' },
+        },
+      ],
+    },
+  },
+});
+assert(sdkNoTemplatePageCreateInput.frontendDesignTemplateId === 'content-sdk-imported-direct-document', 'buildBackyAdminPageCreateInput() did not synthesize a stable template id for imported designs');
+assert(sdkNoTemplatePageCreateInput.meta?.frontendDesignTemplateId === 'content-sdk-imported-direct-document', 'buildBackyAdminPageCreateInput() did not preserve synthesized template id in metadata');
+
+const sdkPageUpdateInput = buildBackyAdminPageUpdateInput({
+  title: 'SDK Design Page Updated',
+  expectedUpdatedAt: '2026-05-23T00:00:00.000Z',
+  revisionNote: 'SDK design refresh',
+  design: {
+    ...sdkCustomFrontendDesign,
+    templateId: 'sdk-design-update-template',
+  },
+  meta: { title: 'SDK Design Page Updated' },
+});
+assert(sdkPageUpdateInput.expectedUpdatedAt === '2026-05-23T00:00:00.000Z', 'buildBackyAdminPageUpdateInput() did not preserve expectedUpdatedAt');
+assert(sdkPageUpdateInput.frontendDesignTemplateId === 'sdk-design-update-template', 'buildBackyAdminPageUpdateInput() did not infer frontendDesignTemplateId');
+assert(sdkPageUpdateInput.content?.customJS === sdkCustomFrontendDesign.customJs, 'buildBackyAdminPageUpdateInput() did not preserve custom JS content');
+assert(sdkPageUpdateInput.meta?.frontendDesignAnimations?.[0]?.id === 'sdk-hero-intro', 'buildBackyAdminPageUpdateInput() did not preserve animation provenance');
+
+const sdkCollectionRecordCreateInput = buildBackyAdminCollectionRecordCreateInput({
+  slug: 'sdk-design-record',
+  status: 'draft',
+  values: {
+    title: 'SDK Design Record',
+  },
+  content: {
+    ...sdkCustomFrontendDesign,
+    templateId: 'sdk-collection-design-template',
+  },
+});
+assert(sdkCollectionRecordCreateInput.frontendDesignTemplateId === 'sdk-collection-design-template', 'buildBackyAdminCollectionRecordCreateInput() did not infer template id');
+assert(sdkCollectionRecordCreateInput.values.frontendDesignCustomCss === sdkCustomFrontendDesign.customCss, 'buildBackyAdminCollectionRecordCreateInput() did not preserve flat custom CSS');
+assert(sdkCollectionRecordCreateInput.values.design?.customJs === sdkCustomFrontendDesign.customJs, 'buildBackyAdminCollectionRecordCreateInput() did not preserve clean custom JS');
+assert(sdkCollectionRecordCreateInput.values.design?.frontendDesignAnimations?.[0]?.id === 'sdk-hero-intro', 'buildBackyAdminCollectionRecordCreateInput() did not preserve animation aliases');
+assert(sdkCollectionRecordCreateInput.values.design?.frontendDesignEditableMap?.['sdk-design-cta.ctaLabel']?.targetPath === 'props.label', 'buildBackyAdminCollectionRecordCreateInput() did not preserve inferred editable-map aliases');
+
+const sdkNoTemplateRecordCreateInput = buildBackyAdminCollectionRecordCreateInput({
+  values: {
+    title: 'SDK Untemplated Record',
+  },
+  design: {
+    elements: [
+      {
+        id: 'sdk-untemplated-record-title',
+        type: 'heading',
+        props: { content: 'Record imported without template id' },
+      },
+    ],
+  },
+});
+assert(sdkNoTemplateRecordCreateInput.frontendDesignTemplateId === 'record-sdk-untemplated-record', 'buildBackyAdminCollectionRecordCreateInput() did not synthesize record template id');
+assert(sdkNoTemplateRecordCreateInput.values.design?.frontendDesignTemplateId === 'record-sdk-untemplated-record', 'buildBackyAdminCollectionRecordCreateInput() did not preserve synthesized record template id');
+
+const sdkCollectionRecordUpdateInput = buildBackyAdminCollectionRecordUpdateInput({
+  status: 'published',
+  requestId: 'sdk-design-record-update',
+  values: {
+    title: 'SDK Design Record Updated',
+  },
+  design: {
+    customCss: '.sdk-design-record-updated { color: #111827; }',
+    animations: [{ id: 'sdk-record-update-intro', targetId: 'sdk-design-hero' }],
+    editableMap: {
+      'record.title': {
+        elementId: 'sdk-design-hero',
+        targetPath: 'props.content',
+      },
+    },
+  },
+});
+assert(sdkCollectionRecordUpdateInput.requestId === 'sdk-design-record-update', 'buildBackyAdminCollectionRecordUpdateInput() did not preserve requestId');
+assert(sdkCollectionRecordUpdateInput.values?.frontendDesignCustomCss?.includes?.('sdk-design-record-updated'), 'buildBackyAdminCollectionRecordUpdateInput() did not preserve flat custom CSS');
+assert(sdkCollectionRecordUpdateInput.values?.design?.animations?.[0]?.id === 'sdk-record-update-intro', 'buildBackyAdminCollectionRecordUpdateInput() did not preserve clean animation state');
+assert(sdkCollectionRecordUpdateInput.values?.design?.editableMap?.['record.title']?.targetPath === 'props.content', 'buildBackyAdminCollectionRecordUpdateInput() did not preserve editable map');
+
+const sdkCommerceProductCreateInput = buildBackyAdminCommerceProductCreateInput({
+  slug: 'sdk-design-product',
+  values: {
+    title: 'SDK Design Product',
+    sku: 'SDK-DESIGN-PRODUCT',
+    price: 19,
+  },
+  design: sdkCustomFrontendDesign,
+});
+assert(sdkCommerceProductCreateInput.frontendDesignTemplateId === 'sdk-design-template', 'buildBackyAdminCommerceProductCreateInput() did not infer product template id');
+assert(sdkCommerceProductCreateInput.values.frontendDesignCustomJs === sdkCustomFrontendDesign.customJs, 'buildBackyAdminCommerceProductCreateInput() did not preserve flat custom JS');
+assert(sdkCommerceProductCreateInput.values.design?.contentDocument?.elements?.[0]?.id === 'sdk-design-hero', 'buildBackyAdminCommerceProductCreateInput() did not preserve product content document');
+
+const sdkCommerceProductUpdateInput = buildBackyAdminCommerceProductUpdateInput({
+  requestId: 'sdk-design-product-update',
+  values: {
+    title: 'SDK Design Product Updated',
+  },
+  content: {
+    ...sdkCustomFrontendDesign,
+    templateId: 'sdk-product-update-template',
+    customJS: 'window.__backySdkProductUpdate = true;',
+  },
+});
+assert(sdkCommerceProductUpdateInput.frontendDesignTemplateId === 'sdk-product-update-template', 'buildBackyAdminCommerceProductUpdateInput() did not infer update template id');
+assert(sdkCommerceProductUpdateInput.values?.frontendDesignCustomJs === 'window.__backySdkProductUpdate = true;', 'buildBackyAdminCommerceProductUpdateInput() did not prefer update custom JS');
+assert(sdkCommerceProductUpdateInput.values?.design?.frontendDesignEditableMap?.['hero.title']?.elementId === 'sdk-design-hero', 'buildBackyAdminCommerceProductUpdateInput() did not preserve product editable-map alias');
+assert(sdkCommerceProductUpdateInput.values?.design?.frontendDesignEditableMap?.['sdk-design-cta.responsive.mobile.props.fileSignedUrlRequired']?.valueType === 'boolean', 'buildBackyAdminCommerceProductUpdateInput() did not preserve inferred product editable-map alias');
+
+const sdkMetadataOnlyDesignPayload = buildBackyContentDesignPayload({
+  templateId: 'sdk-metadata-only-template',
+  contentDocument: {
+    schemaVersion: 'backy.content.v1',
+    metadata: {
+      customCSS: '.sdk-metadata-only { color: #111827; }',
+      customJS: 'window.__backyMetadataOnly = true;',
+      animations: [{ id: 'sdk-metadata-intro', targetId: 'sdk-metadata-hero' }],
+    },
+    elements: [
+      {
+        id: 'sdk-metadata-hero',
+        type: 'heading',
+        props: { content: 'Metadata-only design' },
+        animation: { type: 'fadeIn' },
+      },
+    ],
+  },
+});
+assert(sdkMetadataOnlyDesignPayload.customCSS === '.sdk-metadata-only { color: #111827; }', 'buildBackyContentDesignPayload() did not preserve contentDocument metadata customCSS');
+assert(sdkMetadataOnlyDesignPayload.customJS === 'window.__backyMetadataOnly = true;', 'buildBackyContentDesignPayload() did not preserve contentDocument metadata customJS');
+assert(sdkMetadataOnlyDesignPayload.animations?.[0]?.id === 'sdk-metadata-intro', 'buildBackyContentDesignPayload() did not preserve contentDocument metadata animations');
+
+const sdkBlogCreateInput = buildBackyAdminBlogPostCreateInput({
+  title: 'SDK Design Post',
+  slug: 'sdk-design-post',
+  status: 'draft',
+  content: {
+    ...sdkCustomFrontendDesign,
+    templateId: 'sdk-blog-design-template',
+    customCSS: '.sdk-blog-design { color: #111827; }',
+  },
+});
+assert(sdkBlogCreateInput.frontendDesignTemplateId === 'sdk-blog-design-template', 'buildBackyAdminBlogPostCreateInput() did not infer template id from content');
+assert(sdkBlogCreateInput.content?.customCSS === '.sdk-blog-design { color: #111827; }', 'buildBackyAdminBlogPostCreateInput() did not prefer explicit content customCSS');
+assert(sdkBlogCreateInput.meta?.frontendDesignContentDocument?.elements?.[0]?.id === 'sdk-design-hero', 'buildBackyAdminBlogPostCreateInput() did not preserve content-document provenance');
+
+const sdkBlogUpdateInput = buildBackyAdminBlogPostUpdateInput({
+  excerpt: 'Updated from SDK design helper',
+  expectedUpdatedAt: '2026-05-23T00:00:00.000Z',
+  content: {
+    ...sdkCustomFrontendDesign,
+    templateId: 'sdk-blog-update-design-template',
+    customJS: 'window.__backySdkBlogUpdate = true;',
+  },
+});
+assert(sdkBlogUpdateInput.frontendDesignTemplateId === 'sdk-blog-update-design-template', 'buildBackyAdminBlogPostUpdateInput() did not infer template id from content');
+assert(sdkBlogUpdateInput.content?.customJS === 'window.__backySdkBlogUpdate = true;', 'buildBackyAdminBlogPostUpdateInput() did not prefer explicit content customJS');
+assert(sdkBlogUpdateInput.meta?.frontendDesignContentDocument?.elements?.[0]?.id === 'sdk-design-hero', 'buildBackyAdminBlogPostUpdateInput() did not preserve content-document provenance');
+
+const sdkReusableSectionCreateInput = buildBackyAdminReusableSectionCreateInput({
+  name: 'SDK Design Section',
+  slug: 'sdk-design-section',
+  design: {
+    ...sdkCustomFrontendDesign,
+    templateId: 'sdk-section-design-template',
+  },
+  metadata: { libraryGroup: 'sdk-smoke' },
+});
+assert(sdkReusableSectionCreateInput.frontendDesignTemplateId === 'sdk-section-design-template', 'buildBackyAdminReusableSectionCreateInput() did not infer template id');
+assert(sdkReusableSectionCreateInput.content?.customJS === sdkCustomFrontendDesign.customJs, 'buildBackyAdminReusableSectionCreateInput() did not preserve custom JS content');
+assert(sdkReusableSectionCreateInput.metadata?.frontendDesignAnimations?.[0]?.id === 'sdk-hero-intro', 'buildBackyAdminReusableSectionCreateInput() did not preserve animation metadata');
+assert(sdkReusableSectionCreateInput.metadata?.libraryGroup === 'sdk-smoke', 'buildBackyAdminReusableSectionCreateInput() did not preserve caller metadata');
+
+const sdkReusableSectionUpdateInput = buildBackyAdminReusableSectionUpdateInput({
+  expectedVersion: 2,
+  expectedUpdatedAt: '2026-05-23T00:00:00.000Z',
+  design: {
+    ...sdkCustomFrontendDesign,
+    templateId: 'sdk-section-update-design-template',
+  },
+  metadata: { libraryGroup: 'sdk-smoke-update' },
+});
+assert(sdkReusableSectionUpdateInput.expectedVersion === 2, 'buildBackyAdminReusableSectionUpdateInput() did not preserve expectedVersion');
+assert(sdkReusableSectionUpdateInput.frontendDesignTemplateId === 'sdk-section-update-design-template', 'buildBackyAdminReusableSectionUpdateInput() did not infer template id');
+assert(sdkReusableSectionUpdateInput.content?.elements?.[0]?.id === 'sdk-design-hero', 'buildBackyAdminReusableSectionUpdateInput() did not hydrate section elements');
+assert(sdkReusableSectionUpdateInput.metadata?.frontendDesignAnimations?.[0]?.id === 'sdk-hero-intro', 'buildBackyAdminReusableSectionUpdateInput() did not preserve animation metadata');
 
 async function startSmokeWebhookReceiver(pathname) {
   const requests = [];
@@ -153,6 +511,7 @@ function assertCommerceProviderCertification(commerce, label) {
   );
   assert(
     operatorTemplate.command.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') &&
+      operatorTemplate.command.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
       operatorTemplate.command.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED'),
     `${label} missing guarded commerce certification command env`,
   );
@@ -164,6 +523,7 @@ function assertCommerceProviderCertification(commerce, label) {
     typeof operatorTemplate.envTemplate === 'string' &&
       operatorTemplate.envTemplate.includes('# Backy commerce provider certification environment') &&
       operatorTemplate.envTemplate.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+      operatorTemplate.envTemplate.includes('BACKY_COMMERCE_CERTIFY_SITE_ID=site-demo') &&
       operatorTemplate.envTemplate.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER=auto') &&
       operatorTemplate.envTemplate.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1'),
     `${label} missing commerce operator env-template body`,
@@ -177,6 +537,7 @@ function assertCommerceProviderCertification(commerce, label) {
   assert(
     typeof operatorEnvTemplate.body === 'string' &&
       operatorEnvTemplate.body === operatorTemplate.envTemplate &&
+      operatorEnvTemplate.body.includes('BACKY_COMMERCE_CERTIFY_SITE_ID=site-demo') &&
       operatorEnvTemplate.body.includes('BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER=auto'),
     `${label} commerce operator env-template body drifted`,
   );
@@ -206,12 +567,14 @@ function assertCommerceProviderCertification(commerce, label) {
   assert(
     Array.isArray(operatorTemplate.requiredInputs) &&
       operatorTemplate.requiredInputs.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+      operatorTemplate.requiredInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
       operatorTemplate.requiredInputs.includes('BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'),
     `${label} missing commerce operator required-input aliases`,
   );
   assert(
     Array.isArray(operatorTemplate.targetInputs) &&
-      operatorTemplate.targetInputs.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL'),
+      operatorTemplate.targetInputs.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
+      operatorTemplate.targetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
     `${label} missing commerce external target guard inputs`,
   );
   assert(typeof certification.runtime?.paymentConfigured === 'boolean', `${label} missing payment provider runtime readiness`);
@@ -270,6 +633,23 @@ function assertCommerceProviderCertification(commerce, label) {
   ]) {
     assert(requiredInputs.includes(requiredInput), `${label} missing certification required input ${requiredInput}`);
   }
+}
+
+function assertProviderEvidencePacket(packet, label, expectedSchemaVersion) {
+  assert(packet?.schemaVersion === expectedSchemaVersion, `${label} missing provider evidence-packet schema`);
+  assert(Array.isArray(packet.selectedFamilies) && packet.selectedFamilies.length > 0, `${label} missing selected provider families`);
+  assert(Array.isArray(packet.operatorArtifacts) && packet.operatorArtifacts.length > 0, `${label} missing operator artifacts`);
+  assert(Array.isArray(packet.scenarioAttachments) && packet.scenarioAttachments.length > 0, `${label} missing scenario attachments`);
+  assert(
+    packet.operatorArtifacts.some((artifact) => artifact.captureSource && Array.isArray(artifact.expectedArtifacts)),
+    `${label} missing capture source or expected artifacts`,
+  );
+  assert(
+    packet.redactionPolicy?.includesProviderSecrets === false &&
+      typeof packet.secretHandling === 'string' &&
+      packet.secretHandling.includes('Redacted operator attachment manifest only'),
+    `${label} missing redacted evidence-packet boundary`,
+  );
 }
 
 async function request(path, init) {
@@ -427,6 +807,97 @@ async function createSdkSmokeFixture() {
   const collectionId = collection.json?.data?.collection?.id;
   assert(collectionId, 'temporary SDK smoke collection missing id');
 
+  const productsCollection = await request(`/api/admin/sites/${siteId}/collections`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Products',
+      slug: 'products',
+      description: 'Temporary product catalog for SDK commerce design-state smoke.',
+      status: 'published',
+      listRoutePattern: '/products',
+      routePattern: '/products/:recordSlug',
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'sku', label: 'SKU', type: 'text', required: true, unique: true },
+        { key: 'price', label: 'Price', type: 'number', required: true },
+        { key: 'currency', label: 'Currency', type: 'text', required: true, defaultValue: 'USD' },
+        { key: 'inventory', label: 'Inventory', type: 'number', defaultValue: 0 },
+        { key: 'productType', label: 'Product Type', type: 'select', options: ['physical', 'digital', 'service'], defaultValue: 'physical' },
+        { key: 'subscriptionEnabled', label: 'Subscription Enabled', type: 'boolean', defaultValue: false },
+        { key: 'subscriptionInterval', label: 'Subscription Interval', type: 'select', options: ['weekly', 'monthly', 'quarterly', 'yearly'], defaultValue: 'monthly' },
+        { key: 'subscriptionTrialDays', label: 'Subscription Trial Days', type: 'number', defaultValue: 0 },
+        { key: 'imageUrl', label: 'Image URL', type: 'url' },
+        { key: 'description', label: 'Description', type: 'richText' },
+        { key: 'category', label: 'Category', type: 'text' },
+        { key: 'featured', label: 'Featured', type: 'boolean', defaultValue: false },
+      ],
+      permissions: {
+        publicRead: true,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+      },
+    }),
+  });
+  assert(productsCollection.response.status === 201, `${productsCollection.url} expected products collection create 201, got ${productsCollection.response.status}`);
+  const productsCollectionId = productsCollection.json?.data?.collection?.id;
+  assert(productsCollectionId, 'temporary SDK smoke products collection missing id');
+
+  const ordersCollection = await request(`/api/admin/sites/${siteId}/collections`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Orders',
+      slug: 'orders',
+      description: 'Temporary private order queue for SDK commerce status-handoff smoke.',
+      status: 'published',
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'ordernumber', label: 'Order Number', type: 'text', required: true, unique: true },
+        { key: 'customername', label: 'Customer Name', type: 'text', required: true },
+        { key: 'email', label: 'Email', type: 'email', required: true },
+        { key: 'phone', label: 'Phone', type: 'text' },
+        { key: 'orderstatus', label: 'Order Status', type: 'select', options: ['open', 'paid', 'fulfilled', 'cancelled', 'refunded'], defaultValue: 'open' },
+        { key: 'paymentstatus', label: 'Payment Status', type: 'select', options: ['pending', 'paid', 'failed', 'refunded'], defaultValue: 'pending' },
+        { key: 'fulfillmentstatus', label: 'Fulfillment Status', type: 'select', options: ['unfulfilled', 'processing', 'fulfilled', 'cancelled'], defaultValue: 'unfulfilled' },
+        { key: 'items', label: 'Line Items', type: 'json' },
+        { key: 'total', label: 'Total', type: 'number', defaultValue: 0 },
+        { key: 'currency', label: 'Currency', type: 'text', defaultValue: 'USD' },
+        { key: 'trackingnumber', label: 'Tracking Number', type: 'text' },
+        { key: 'trackingurl', label: 'Tracking URL', type: 'url' },
+        { key: 'trackingstatus', label: 'Tracking Status', type: 'text' },
+        { key: 'fulfillmentcarrier', label: 'Fulfillment Carrier', type: 'text' },
+        { key: 'shippinglabelstatus', label: 'Shipping Label Status', type: 'select', options: ['none', 'draft', 'purchased', 'voided'], defaultValue: 'none' },
+        { key: 'shippinglabelprovider', label: 'Shipping Label Provider', type: 'text' },
+        { key: 'shippinglabelid', label: 'Shipping Label ID', type: 'text' },
+        { key: 'shippinglabelurl', label: 'Shipping Label URL', type: 'url' },
+        { key: 'refundamount', label: 'Refund Amount', type: 'number', defaultValue: 0 },
+        { key: 'providerrefundstatus', label: 'Provider Refund Status', type: 'select', options: ['none', 'requested', 'succeeded', 'failed', 'requires_action'], defaultValue: 'none' },
+        { key: 'providerrefundprovider', label: 'Provider Refund Provider', type: 'text' },
+        { key: 'providerrefundid', label: 'Provider Refund ID', type: 'text' },
+        { key: 'providerrefundreference', label: 'Provider Refund Reference', type: 'text' },
+        { key: 'paymentprovider', label: 'Payment Provider', type: 'text' },
+        { key: 'paymentreference', label: 'Payment Reference', type: 'text' },
+        { key: 'checkoutsessionid', label: 'Checkout Session ID', type: 'text' },
+        { key: 'paidat', label: 'Paid At', type: 'datetime' },
+        { key: 'fulfilledat', label: 'Fulfilled At', type: 'datetime' },
+        { key: 'subscriptionactionhistory', label: 'Subscription Action History', type: 'json' },
+        { key: 'notes', label: 'Internal Notes', type: 'richText' },
+        { key: 'shippingaddress', label: 'Shipping Address', type: 'json' },
+      ],
+      permissions: {
+        publicRead: false,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+      },
+    }),
+  });
+  assert(ordersCollection.response.status === 201, `${ordersCollection.url} expected orders collection create 201, got ${ordersCollection.response.status}`);
+  const ordersCollectionId = ordersCollection.json?.data?.collection?.id;
+  assert(ordersCollectionId, 'temporary SDK smoke orders collection missing id');
+
   const publishedRecordSlug = `sdk-published-record-${unique}`;
   const publishedRecord = await request(`/api/admin/sites/${siteId}/collections/${collectionId}/records`, {
     method: 'POST',
@@ -518,6 +989,44 @@ async function createSdkSmokeFixture() {
   assert(page.response.status === 201, `${page.url} expected page create 201, got ${page.response.status}`);
   const pageId = page.json?.data?.page?.id;
   assert(pageId, 'temporary SDK smoke page missing id');
+
+  const form = await request(`/api/admin/sites/${siteId}/forms`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      pageId,
+      name: 'SDK Smoke Form',
+      title: 'SDK Smoke Form',
+      audience: 'public',
+      isActive: true,
+      enableHoneypot: false,
+      moderationMode: 'auto-approve',
+      contactShare: {
+        enabled: true,
+        nameField: 'title',
+        notesField: 'message',
+        dedupeByEmail: true,
+      },
+      collectionTarget: {
+        enabled: true,
+        collectionId,
+        slugField: 'title',
+        fieldMap: {
+          title: 'title',
+          message: 'summary',
+          category: 'category',
+        },
+      },
+      fields: [
+        { key: 'title', label: 'Title', type: 'text', required: true },
+        { key: 'message', label: 'Message', type: 'textarea' },
+        { key: 'category', label: 'Category', type: 'select', options: ['Featured', 'Standard'] },
+      ],
+    }),
+  });
+  assert(form.response.status === 201, `${form.url} expected form create 201, got ${form.response.status}: ${JSON.stringify(form.json || form.text).slice(0, 500)}`);
+  const formId = form.json?.data?.form?.id;
+  assert(formId, 'temporary SDK smoke form missing id');
   const postSlug = `sdk-smoke-post-${unique}`;
 
   const post = await request(`/api/admin/sites/${siteId}/blog`, {
@@ -656,6 +1165,9 @@ async function createSdkSmokeFixture() {
     redirectPath,
     gonePath,
     collectionId,
+    productsCollectionId,
+    ordersCollectionId,
+    formId,
     publishedRecordId,
     publishedRecordSlug,
     publicWriteToken,
@@ -757,6 +1269,10 @@ assert(interactiveComponents.data.contract?.schemaVersion === 'backy.interactive
 assert(interactiveComponents.data.contract?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("object-src 'none'"), 'interactiveComponents() missing sandbox CSP response-header contract');
 assert(interactiveComponents.data.contract?.sandbox?.responseHeaders?.permissionsPolicy?.includes('microphone=()'), 'interactiveComponents() missing sandbox permissions response-header contract');
 assert(interactiveComponents.data.components?.some?.((component) => component.componentKey === 'backy.figure.rounds'), 'interactiveComponents() missing communication rounds figure');
+const canvasInteractiveComponent = interactiveComponents.data.components?.find?.((component) => component.componentKey === 'backy.canvas.sandboxed');
+assert(canvasInteractiveComponent?.controls?.some?.((control) => control.key === 'accentColor' && control.type === 'color'), 'interactiveComponents() missing sandbox color control');
+assert(canvasInteractiveComponent?.controls?.some?.((control) => control.key === 'caption' && control.type === 'textarea'), 'interactiveComponents() missing sandbox textarea control');
+assert(canvasInteractiveComponent?.controls?.some?.((control) => control.key === 'runtimeConfig' && control.type === 'json'), 'interactiveComponents() missing sandbox JSON control');
 const sandboxedComponent = interactiveComponents.data.components?.find?.((component) => component.componentKey === 'backy.custom.sandboxed');
 assert(sandboxedComponent?.renderMode === 'sandbox-iframe', 'interactiveComponents() missing sandboxed custom component render mode');
 assert(sandboxedComponent?.runtime?.sandboxUrl?.includes('/interactive-components/backy.custom.sandboxed/1.0.0/sandbox'), 'interactiveComponents() missing sandbox runtime URL');
@@ -840,7 +1356,13 @@ assert(manifestMedia.filters?.queryParams?.includes?.('search'), 'manifest() med
 assert(manifestMedia.filters?.queryParams?.includes?.('tag'), 'manifest() media discovery missing tag filter');
 assert(manifestMedia.filters?.queryParams?.includes?.('scope'), 'manifest() media discovery missing scope filter');
 assert(manifestMedia.filters?.queryParams?.includes?.('blogId'), 'manifest() media discovery missing blogId filter alias');
-assert(manifestMedia.filters?.typeAliases?.file === 'document', 'manifest() media discovery missing file type alias');
+assert(
+  Array.isArray(manifestMedia.filters?.typeAliases?.file) &&
+    manifestMedia.filters.typeAliases.file.includes('document') &&
+    manifestMedia.filters.typeAliases.file.includes('other'),
+  'manifest() media discovery missing broad file type alias',
+);
+assert(manifestMedia.filters?.aliases?.fileType === 'file', 'manifest() media discovery missing fileType query alias');
 assert(manifestMedia.filters?.aliases?.folder === 'folderId', 'manifest() media discovery missing folder alias');
 assert(manifestMedia.filters?.maxLimit === 100, 'manifest() media discovery missing max limit');
 assert(manifestMedia.filters?.scopes?.includes?.('page') && manifestMedia.filters?.scopes?.includes?.('post'), 'manifest() media discovery missing page/post scope filters');
@@ -863,6 +1385,15 @@ assert(manifestMedia.managementPolicy?.auth?.requiredPermissions?.privateDeliver
 assert(manifestMedia.managementPolicy?.uploadFields?.includes?.('file'), 'manifest() media management missing file upload field');
 assert(manifestMedia.managementPolicy?.uploadFields?.includes?.('folderId'), 'manifest() media management missing folderId upload field');
 assert(manifestMedia.managementPolicy?.uploadFields?.includes?.('fontFamily'), 'manifest() media management missing fontFamily upload field');
+assert(manifestMedia.managementPolicy?.filters?.queryParams?.includes?.('folderId'), 'manifest() media management missing folderId list filter');
+assert(manifestMedia.managementPolicy?.filters?.queryParams?.includes?.('blogId'), 'manifest() media management missing blogId list filter alias');
+assert(
+  Array.isArray(manifestMedia.managementPolicy?.filters?.typeAliases?.file) &&
+    manifestMedia.managementPolicy.filters.typeAliases.file.includes('document') &&
+    manifestMedia.managementPolicy.filters.typeAliases.file.includes('other'),
+  'manifest() media management missing broad file type alias',
+);
+assert(manifestMedia.managementPolicy?.filters?.aliases?.fileType === 'file', 'manifest() media management missing fileType helper alias');
 assert(manifestMedia.managementPolicy?.sdkHelpers?.upload === 'uploadMedia', 'manifest() media management missing upload helper');
 assert(manifestMedia.managementPolicy?.sdkHelpers?.signedUrl === 'createMediaSignedUrl', 'manifest() media management missing signed URL helper');
 assert(manifestMedia.managementPolicy?.sdkHelpers?.bind === 'bindMedia', 'manifest() media management missing bind helper');
@@ -893,15 +1424,180 @@ const mediaSignedUrlInput = buildBackyMediaSignedUrlInput({
 assert(mediaSignedUrlInput.disposition === 'attachment', 'buildBackyMediaSignedUrlInput() did not normalize download disposition');
 assert(mediaSignedUrlInput.expiresInSeconds === 900, 'buildBackyMediaSignedUrlInput() did not normalize ttl seconds');
 assert(mediaSignedUrlInput.requestId === 'sdk-media-signed-url', 'buildBackyMediaSignedUrlInput() did not preserve request id');
+const mediaFilePath = buildBackyMediaFilePath(client.getSiteId(), 'sdk-media-file', {
+  disposition: 'download',
+  token: 'sdk-token',
+  expiresAt: '1893456000',
+});
+assert(
+  mediaFilePath === `/api/sites/${client.getSiteId()}/media/sdk-media-file/file?token=sdk-token&expiresAt=1893456000&disposition=attachment`,
+  'buildBackyMediaFilePath() did not normalize signed download file paths',
+);
+assert(
+  buildBackyMediaFileUrl(baseUrl, client.getSiteId(), 'sdk-media-file', { disposition: 'inline' }) ===
+    `${baseUrl}/api/sites/${client.getSiteId()}/media/sdk-media-file/file?disposition=inline`,
+  'buildBackyMediaFileUrl() did not build public media file URLs',
+);
+assert(
+  buildBackyMediaTransformPath(client.getSiteId(), 'sdk-media-image', { width: 960, quality: 72 }) ===
+    `/api/sites/${client.getSiteId()}/media/sdk-media-image/transform?width=960&quality=72`,
+  'buildBackyMediaTransformPath() did not build public media transform paths',
+);
+assert(
+  buildBackyMediaTransformUrl(baseUrl, client.getSiteId(), 'sdk-media-image', { width: 960 }) ===
+    `${baseUrl}/api/sites/${client.getSiteId()}/media/sdk-media-image/transform?width=960`,
+  'buildBackyMediaTransformUrl() did not build public media transform URLs',
+);
+const mediaDownloadLinkProps = buildBackyMediaDownloadLinkProps(client.getSiteId(), 'sdk-media-file', {
+  baseUrl,
+  targetBlank: true,
+  fileName: 'SDK file.pdf',
+  mediaType: 'document',
+  visibility: 'private',
+});
+assert(
+  mediaDownloadLinkProps.href === `${baseUrl}/api/sites/${client.getSiteId()}/media/sdk-media-file/file?disposition=attachment` &&
+    mediaDownloadLinkProps.download === true &&
+    mediaDownloadLinkProps.target === '_blank' &&
+    mediaDownloadLinkProps.rel === 'noopener noreferrer' &&
+    mediaDownloadLinkProps.fileIds?.[0] === 'sdk-media-file' &&
+    mediaDownloadLinkProps.fileMediaId === 'sdk-media-file' &&
+    mediaDownloadLinkProps.fileMediaIds?.[0] === 'sdk-media-file' &&
+    mediaDownloadLinkProps.downloadMediaIds?.[0] === 'sdk-media-file' &&
+    mediaDownloadLinkProps.fileDownloadDisposition === 'attachment' &&
+    mediaDownloadLinkProps.fileMediaName === 'SDK file.pdf' &&
+    mediaDownloadLinkProps.fileMediaType === 'document' &&
+    mediaDownloadLinkProps.fileMediaVisibility === 'private' &&
+    mediaDownloadLinkProps.fileSignedUrlRequired === true &&
+    mediaDownloadLinkProps.fileSignedUrlEndpoint === `/api/admin/sites/${client.getSiteId()}/media/sdk-media-file/signed-url` &&
+    mediaDownloadLinkProps.fileName === 'SDK file.pdf',
+  'buildBackyMediaDownloadLinkProps() did not emit editor-compatible downloadable file props',
+);
+const mediaDeliveryFetches = [];
+const mediaDeliveryClient = createBackyClient({
+  baseUrl,
+  siteId: client.getSiteId(),
+  fetch: async (url, init = {}) => {
+    const headers = new Headers(init.headers);
+    mediaDeliveryFetches.push({
+      url: String(url),
+      ifNoneMatch: headers.get('if-none-match'),
+      requestId: headers.get('x-request-id'),
+      redirect: init.redirect,
+    });
+    if (String(url).includes('/transform')) {
+      if (headers.get('if-none-match') === '"sdk-transform-etag"') {
+        return new Response(null, {
+          status: 304,
+          headers: {
+            etag: '"sdk-transform-etag"',
+            'x-backy-cache-revision': 'sdk-transform-revision',
+            'x-backy-cache-scope': 'discovery',
+            'x-backy-schema-version': 'backy.media-transform.v1',
+            'x-backy-site-id': client.getSiteId(),
+            'x-backy-media-id': 'sdk-media-image',
+            'x-backy-transform-width': '960',
+            'x-backy-transform-quality': '72',
+          },
+        });
+      }
+      return new Response(null, {
+        status: 307,
+        headers: {
+          location: '/_next/image?url=%2Fapi%2Fsites%2Fsite-demo%2Fmedia%2Fsdk-media-image%2Ffile&w=960&q=72',
+          etag: '"sdk-transform-etag"',
+          'x-backy-cache-revision': 'sdk-transform-revision',
+          'x-backy-cache-scope': 'discovery',
+          'x-backy-schema-version': 'backy.media-transform.v1',
+          'x-backy-site-id': client.getSiteId(),
+          'x-backy-media-id': 'sdk-media-image',
+          'x-backy-transform-width': '960',
+          'x-backy-transform-quality': '72',
+        },
+      });
+    }
+
+    if (headers.get('if-none-match') === '"sdk-file-etag"') {
+      return new Response(null, {
+        status: 304,
+        headers: {
+          etag: '"sdk-file-etag"',
+          'x-backy-cache-revision': 'sdk-file-revision',
+          'x-backy-cache-scope': 'discovery',
+          'x-backy-schema-version': 'backy.media-file.v1',
+          'x-backy-site-id': client.getSiteId(),
+          'x-backy-media-id': 'sdk-media-file',
+        },
+      });
+    }
+
+    return new Response(new Uint8Array([1, 2, 3]), {
+      status: 200,
+      headers: {
+        'content-type': 'application/pdf',
+        'content-length': '3',
+        'content-disposition': 'attachment; filename="sdk.pdf"',
+        etag: '"sdk-file-etag"',
+        'x-backy-cache-revision': 'sdk-file-revision',
+        'x-backy-cache-scope': 'discovery',
+        'x-backy-schema-version': 'backy.media-file.v1',
+        'x-backy-site-id': client.getSiteId(),
+        'x-backy-media-id': 'sdk-media-file',
+      },
+    });
+  },
+});
+const cachedMediaFile = await mediaDeliveryClient.mediaFileCached('sdk-media-file', {
+  disposition: 'attachment',
+  requestId: 'sdk-media-file-cache',
+});
+assert(cachedMediaFile.notModified === false, 'mediaFileCached() first request should return bytes');
+assert(cachedMediaFile.body.byteLength === 3, 'mediaFileCached() did not return media bytes');
+assert(cachedMediaFile.meta.etag === '"sdk-file-etag"', 'mediaFileCached() missing ETag metadata');
+assert(cachedMediaFile.meta.cacheRevision === 'sdk-file-revision', 'mediaFileCached() missing cache revision metadata');
+assert(cachedMediaFile.meta.contentDisposition?.includes('sdk.pdf'), 'mediaFileCached() missing content disposition metadata');
+const revalidatedMediaFile = await mediaDeliveryClient.mediaFileCached('sdk-media-file', {
+  disposition: 'attachment',
+  etag: cachedMediaFile.meta.etag,
+});
+assert(revalidatedMediaFile.notModified === true, 'mediaFileCached() did not return notModified for matching ETag');
+assert(mediaDeliveryFetches.some((entry) => entry.ifNoneMatch === '"sdk-file-etag"'), 'mediaFileCached() did not send If-None-Match');
+const cachedMediaTransform = await mediaDeliveryClient.mediaTransformCached('sdk-media-image', {
+  width: 960,
+  quality: 72,
+});
+assert(cachedMediaTransform.notModified === false, 'mediaTransformCached() first request should return redirect metadata');
+assert(cachedMediaTransform.status === 307, 'mediaTransformCached() did not preserve redirect status');
+assert(cachedMediaTransform.meta.location?.includes('/_next/image'), 'mediaTransformCached() missing redirect location metadata');
+assert(cachedMediaTransform.meta.etag === '"sdk-transform-etag"', 'mediaTransformCached() missing ETag metadata');
+const revalidatedMediaTransform = await mediaDeliveryClient.mediaTransformCached('sdk-media-image', {
+  width: 960,
+  quality: 72,
+  etag: cachedMediaTransform.meta.etag,
+});
+assert(revalidatedMediaTransform.notModified === true, 'mediaTransformCached() did not return notModified for matching ETag');
+assert(
+  mediaDeliveryFetches.some((entry) => entry.redirect === 'manual' && entry.ifNoneMatch === '"sdk-transform-etag"'),
+  'mediaTransformCached() did not use manual redirects with If-None-Match',
+);
 const manifestTheme = manifest.data.modules?.theme;
 assert(manifestTheme?.schemaVersion === 'backy.theme-discovery.v1', 'manifest() missing theme discovery module');
 assert(manifestTheme.tokenSchemaVersion === 'backy.theme.v1', 'manifest() theme discovery missing token schema marker');
 assert(manifestTheme.tokens?.schemaVersion === 'backy.theme.v1', 'manifest() theme discovery missing compiled token contract');
 assert(manifestTheme.cssVariables?.['--backy-color-primary'], 'manifest() theme discovery missing primary color CSS variable');
 assert(manifestTheme.cssVariables?.['--backy-font-heading'], 'manifest() theme discovery missing heading font CSS variable');
+assert(manifestTheme.tokenReferences?.['colors.primary'] === 'var(--backy-color-primary)', 'manifest() theme discovery missing token reference map');
+assert(manifestTheme.styleSheet?.includes?.('--backy-color-primary'), 'manifest() theme discovery missing compiled stylesheet');
 assert(manifestTheme.selectors?.root === ':root', 'manifest() theme discovery missing root selector');
+assert(manifestTheme.inheritance?.elementTokenRefPath === 'tokenRefs', 'manifest() theme discovery missing per-block token inheritance metadata');
+assert(manifestTheme.inheritance?.documentTokenRefPath === 'themeTokenRefs', 'manifest() theme discovery missing document-level token inheritance metadata');
+assert(manifestTheme.inheritance?.supportedElementPaths?.includes?.('styles.backgroundColor'), 'manifest() theme discovery missing style token target paths');
 assert(manifestTheme.editableFields?.includes?.('colors.primary'), 'manifest() theme discovery missing editable color field');
 assert(manifestTheme.capabilities?.cssVariables === true, 'manifest() theme discovery missing CSS variable capability');
+assert(manifestTheme.capabilities?.styleSheet === true, 'manifest() theme discovery missing stylesheet capability');
+assert(manifestTheme.capabilities?.tokenReferences === true, 'manifest() theme discovery missing token-reference capability');
+assert(manifestTheme.capabilities?.perBlockTokenRefs === true, 'manifest() theme discovery missing per-block token-ref capability');
+assert(manifestTheme.capabilities?.animationTokenRefs === true, 'manifest() theme discovery missing animation token-ref capability');
 assert(manifestTheme.capabilities?.liveEditable === true, 'manifest() theme discovery missing live editable capability');
 const manifestLiveManagement = manifest.data.modules?.liveManagement;
 assert(manifestLiveManagement?.schemaVersion === 'backy.live-management.v1', 'manifest() missing live-management discovery module');
@@ -915,19 +1611,87 @@ assert(manifestLiveManagement.capabilities?.editableMap === true, 'manifest() li
 assert(manifestLiveManagement.capabilities?.postMetadata === true, 'manifest() live-management missing blog post metadata capability');
 assert(manifestLiveManagement.capabilities?.optimisticConcurrency === true, 'manifest() live-management missing optimistic concurrency capability');
 assert(manifestLiveManagement.capabilities?.editorComposition === true, 'manifest() live-management missing editor composition capability');
+assert(manifestLiveManagement.capabilities?.mediaAssetRefs === true, 'manifest() live-management missing media asset refs capability');
+assert(manifestLiveManagement.capabilities?.fontAssetRefs === true, 'manifest() live-management missing font asset refs capability');
+assert(manifestLiveManagement.capabilities?.elementAssetIds === true, 'manifest() live-management missing element assetIds capability');
+assert(manifestLiveManagement.capabilities?.animationTokenRefs === true, 'manifest() live-management missing animation token-ref capability');
 assert(manifestLiveManagement.editableTargets?.includes?.('props.content'), 'manifest() live-management missing content editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.href'), 'manifest() live-management missing link href editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.target'), 'manifest() live-management missing link target editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.download'), 'manifest() live-management missing download flag editable target');
 assert(manifestLiveManagement.editableTargets?.includes?.('props.formId'), 'manifest() live-management missing form id editable target');
 assert(manifestLiveManagement.editableTargets?.includes?.('props.options'), 'manifest() live-management missing form options editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.backgroundColor'), 'manifest() live-management missing prop background color editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.borderWidth'), 'manifest() live-management missing prop border width editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.textAlign'), 'manifest() live-management missing prop text align editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.actionPreset'), 'manifest() live-management missing button action preset editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.underline'), 'manifest() live-management missing link underline editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('styles.boxShadow'), 'manifest() live-management missing style box shadow editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('tokenRefs.styles.boxShadow'), 'manifest() live-management missing style token box shadow editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.fileMediaId'), 'manifest() live-management missing file media id editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.fileMediaIds'), 'manifest() live-management missing plural file media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.downloadMediaId'), 'manifest() live-management missing download media id editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.downloadMediaIds'), 'manifest() live-management missing plural download media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.fileDownloadDisposition'), 'manifest() live-management missing file download disposition editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.mediaId'), 'manifest() live-management missing media id editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.mediaIds'), 'manifest() live-management missing plural media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.backgroundMediaIds'), 'manifest() live-management missing background media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.posterMediaIds'), 'manifest() live-management missing poster media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.fontMediaId'), 'manifest() live-management missing font media id editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('props.fontMediaIds'), 'manifest() live-management missing plural font media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('assetIds'), 'manifest() live-management missing element assetIds editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('animation.type'), 'manifest() live-management missing animation type editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('animation.from'), 'manifest() live-management missing animation from editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('animation.to'), 'manifest() live-management missing animation to editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('animation.tokenRefs.duration'), 'manifest() live-management missing animation duration token editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('animation.scrollTrigger.start'), 'manifest() live-management missing animation scroll-trigger start editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('animation.scrollTrigger.scrub'), 'manifest() live-management missing animation scroll-trigger scrub editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('actions'), 'manifest() live-management missing element actions editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('dataBindings'), 'manifest() live-management missing element data bindings editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('bindingSlots'), 'manifest() live-management missing element binding slots editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.mobile.x'), 'manifest() live-management missing mobile responsive editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.mobile.props.backgroundColor'), 'manifest() live-management missing mobile prop background color editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.mobile.styles.boxShadow'), 'manifest() live-management missing mobile style box shadow editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.tablet.tokenRefs.styles.boxShadow'), 'manifest() live-management missing tablet style token box shadow editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.tablet.props.borderWidth'), 'manifest() live-management missing tablet prop border width editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.mobile.props.downloadMediaIds'), 'manifest() live-management missing mobile download media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.tablet.props.fileMediaIds'), 'manifest() live-management missing tablet file media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.mobile.props.posterMediaIds'), 'manifest() live-management missing mobile poster media ids editable target');
+assert(manifestLiveManagement.editableTargets?.includes?.('responsive.tablet.width'), 'manifest() live-management missing tablet responsive editable target');
 assert(manifestLiveManagement.editorComposition?.schemaVersion === 'backy.editor-composition-commands.v1', 'manifest() live-management missing editor composition command contract');
+assert(manifestLiveManagement.editorComposition?.sdkHelpers?.addElement === 'addBackyContentElement', 'manifest() live-management missing SDK add helper');
+assert(manifestLiveManagement.editorComposition?.sdkHelpers?.duplicateElement === 'duplicateBackyContentElement', 'manifest() live-management missing SDK duplicate helper');
+assert(manifestLiveManagement.editorComposition?.sdkHelpers?.deleteElements === 'deleteBackyContentElements', 'manifest() live-management missing SDK delete helper');
+assert(manifestLiveManagement.editorComposition?.sdkHelpers?.transformElements === 'transformBackyContentElements', 'manifest() live-management missing SDK transform helper');
 assert(manifestLiveManagement.editorComposition?.sdkHelpers?.group === 'groupBackyContentElements', 'manifest() live-management missing SDK group helper');
 assert(manifestLiveManagement.editorComposition?.sdkHelpers?.ungroup === 'ungroupBackyContentElements', 'manifest() live-management missing SDK ungroup helper');
+assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'add' && command.sdkHelper === 'addBackyContentElement' && command.minSelected === 0), 'manifest() live-management missing add command metadata');
+assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'duplicate' && command.sdkHelper === 'duplicateBackyContentElement' && command.shortcut === 'Cmd/Ctrl+D'), 'manifest() live-management missing duplicate command metadata');
+assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'delete' && command.sdkHelper === 'deleteBackyContentElements'), 'manifest() live-management missing delete command metadata');
+assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'move' && command.sdkHelper === 'transformBackyContentElements'), 'manifest() live-management missing move command metadata');
+assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'resize' && command.sdkHelper === 'transformBackyContentElements'), 'manifest() live-management missing resize command metadata');
 assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'group' && command.shortcut === 'Cmd/Ctrl+G' && command.minSelected === 2), 'manifest() live-management missing group command metadata');
 assert(manifestLiveManagement.editorComposition?.commands?.some?.((command) => command.id === 'ungroup' && command.shortcut === 'Shift+Cmd/Ctrl+G' && command.editorGroupRequired === true), 'manifest() live-management missing ungroup command metadata');
+assert(manifestLiveManagement.editorComposition?.commandRegistry?.schemaVersion === 'backy.editor-command-registry.v1', 'manifest() live-management missing editor command registry contract');
+assert(manifestLiveManagement.editorComposition?.commandRegistry?.commands?.some?.((command) => command.id === 'group-selection' && command.testId === 'editor-group-selection' && command.sdkHelper === 'groupBackyContentElements'), 'manifest() live-management command registry missing group-selection command');
+assert(manifestLiveManagement.editorComposition?.commandRegistry?.commands?.some?.((command) => command.id === 'toggle-selection-visibility' && command.targetPaths?.includes?.('visible')), 'manifest() live-management command registry missing visibility target paths');
+assert(manifestLiveManagement.editorComposition?.commandRegistry?.commands?.some?.((command) => command.id === 'save-page' && command.testId === 'editor-save-page'), 'manifest() live-management command registry missing save-page workflow command');
+assert(manifestLiveManagement.editorComposition?.commandRegistry?.privacy?.includesSecretValues === false, 'manifest() live-management command registry must not expose secrets');
 assert(manifestLiveManagement.editorComposition?.constraints?.editorGroupMarker === 'props.editorGroup', 'manifest() live-management missing editor group marker constraint');
 assert(manifestLiveManagement.editorComposition?.constraints?.responsiveBreakpoints?.includes?.('mobile'), 'manifest() live-management missing responsive grouping breakpoint metadata');
 assert(manifestLiveManagement.updateBody?.expectedUpdatedAt, 'manifest() live-management missing expectedUpdatedAt update guidance');
 assert(manifestLiveManagement.errors?.conflict === 'PAGE_VERSION_CONFLICT', 'manifest() live-management conflict code drifted');
 assert(manifestLiveManagement.errors?.postConflict === 'BLOG_VERSION_CONFLICT', 'manifest() live-management blog conflict code drifted');
+assert(manifestLiveManagement.endpoints?.pageCreate === `/api/admin/sites/${client.getSiteId()}/pages`, 'manifest() live-management missing page create lifecycle endpoint');
+assert(manifestLiveManagement.endpoints?.postCreate === `/api/admin/sites/${client.getSiteId()}/blog`, 'manifest() live-management missing blog create lifecycle endpoint');
+assert(manifestLiveManagement.methods?.create === 'POST', 'manifest() live-management missing content create method');
+assert(manifestLiveManagement.capabilities?.authenticatedContentLifecycle === true, 'manifest() live-management missing authenticated lifecycle capability');
+assert(manifestLiveManagement.capabilities?.templateCloning === true, 'manifest() live-management missing template cloning lifecycle capability');
+assert(manifestLiveManagement.lifecycle?.schemaVersion === 'backy.content-lifecycle-commands.v1', 'manifest() live-management missing content lifecycle command contract');
+assert(manifestLiveManagement.lifecycle?.cloneField === 'frontendDesignTemplateId', 'manifest() live-management lifecycle clone field drifted');
+assert(manifestLiveManagement.lifecycle?.permissions?.create === 'pages.edit', 'manifest() live-management lifecycle create permission drifted');
+assert(manifestLiveManagement.lifecycle?.sdkHelpers?.createPage === 'createAdminPage', 'manifest() live-management lifecycle missing page create helper');
+assert(manifestLiveManagement.lifecycle?.sdkHelpers?.createPost === 'createAdminBlogPost', 'manifest() live-management lifecycle missing blog create helper');
 const manifestPagesRuntime = manifest.data.modules?.pagesRuntime;
 assert(manifestPagesRuntime?.schemaVersion === 'backy.pages-discovery.v1', 'manifest() missing pages runtime discovery module');
 assert(manifestPagesRuntime.endpoints?.list === manifest.data.endpoints.pages, 'manifest() pages runtime list endpoint drifted');
@@ -935,8 +1699,18 @@ assert(manifestPagesRuntime.endpoints?.resolve === '/api/sites/' + client.getSit
 assert(manifestPagesRuntime.endpoints?.render === '/api/sites/' + client.getSiteId() + '/render?path={path}', 'manifest() pages runtime render endpoint drifted');
 assert(manifestPagesRuntime.endpoints?.liveManage === manifest.data.endpoints.liveManagePage, 'manifest() pages runtime live manage endpoint drifted');
 assert(manifestPagesRuntime.methods?.liveManageUpdate === 'PATCH', 'manifest() pages runtime live update method drifted');
+assert(manifestPagesRuntime.methods?.adminCreate === 'POST', 'manifest() pages runtime admin create method drifted');
 assert(manifestPagesRuntime.capabilities?.previewTokens === true, 'manifest() pages runtime missing preview token capability');
 assert(manifestPagesRuntime.capabilities?.seoMetadata === true, 'manifest() pages runtime missing SEO metadata capability');
+assert(manifestPagesRuntime.capabilities?.authenticatedManagement === true, 'manifest() pages runtime missing authenticated management capability');
+assert(manifestPagesRuntime.capabilities?.pageCreation === true, 'manifest() pages runtime missing page creation capability');
+assert(manifestPagesRuntime.managementPolicy?.schemaVersion === 'backy.pages-management.v1', 'manifest() pages runtime missing pages management policy');
+assert(manifestPagesRuntime.managementPolicy?.endpoints?.create === `/api/admin/sites/${client.getSiteId()}/pages`, 'manifest() pages runtime management create endpoint drifted');
+assert(manifestPagesRuntime.managementPolicy?.endpoints?.templateRegistry === `/api/admin/sites/${client.getSiteId()}/templates?type=page`, 'manifest() pages runtime template registry endpoint drifted');
+assert(manifestPagesRuntime.managementPolicy?.sdkHelpers?.create === 'createAdminPage', 'manifest() pages runtime missing management create helper');
+assert(manifestPagesRuntime.managementPolicy?.sdkHelpers?.preview === 'createAdminPagePreviewToken', 'manifest() pages runtime missing preview helper');
+assert(manifestPagesRuntime.managementPolicy?.designState?.acceptsFrontendDesignTemplateId === true, 'manifest() pages runtime missing frontend template clone design-state flag');
+assert(manifestPagesRuntime.managementPolicy?.designState?.preservesAssetsAnimationsInteractions === true, 'manifest() pages runtime missing design-state preservation flag');
 assert(manifestPagesRuntime.cache?.previewDetail === 'private-no-store', 'manifest() pages runtime preview cache policy drifted');
 assert(manifestPagesRuntime.privacy?.draftPreviewRequiresToken === true, 'manifest() pages runtime missing draft preview privacy boundary');
 assert(manifestPagesRuntime.filters?.maxLimit === 100, 'manifest() pages runtime max limit drifted');
@@ -1050,20 +1824,75 @@ assert(manifest.data.contract?.frontendLaunchReadiness?.schemaVersion === 'backy
 assert(['ready', 'attention', 'blocked'].includes(manifest.data.contract.frontendLaunchReadiness.status), 'manifest() frontend launch readiness status drifted');
 assert(typeof manifest.data.contract.frontendLaunchReadiness.score === 'number', 'manifest() missing frontend launch readiness score');
 assert(manifest.data.contract.frontendLaunchReadiness.actionPlan?.schemaVersion === 'backy.frontend-launch-action-plan.v1', 'manifest() missing frontend launch action plan schema');
-assert(manifest.data.contract.frontendLaunchReadiness.checks?.some((check) => check.key === 'routing-render-contracts'), 'manifest() missing routing/render launch readiness check');
-assert(manifest.data.contract.frontendLaunchReadiness.checks?.some((check) => check.key === 'database-certification'), 'manifest() missing database launch readiness check');
+const launchCheckKeys = new Set((manifest.data.contract.frontendLaunchReadiness.checks || []).map((check) => check.key));
+assert(launchCheckKeys.has('routing-render-contracts'), 'manifest() missing routing/render launch readiness check');
+assert(launchCheckKeys.has('content-design-modules'), 'manifest() missing content/design launch readiness check');
+assert(launchCheckKeys.has('media-font-delivery'), 'manifest() missing media/font launch readiness check');
+assert(launchCheckKeys.has('visitor-interactions'), 'manifest() missing visitor interaction launch readiness check');
+assert(launchCheckKeys.has('commerce-handoff'), 'manifest() missing commerce launch readiness check');
+assert(launchCheckKeys.has('live-management'), 'manifest() missing live-management launch readiness check');
+assert(launchCheckKeys.has('database-certification'), 'manifest() missing database launch readiness check');
+assert(typeof manifest.data.contract.frontendLaunchReadiness.moduleCounts?.pages === 'number', 'manifest() launch readiness missing page count');
+assert(typeof manifest.data.contract.frontendLaunchReadiness.moduleCounts?.blogPosts === 'number', 'manifest() launch readiness missing blog post count');
+assert(typeof manifest.data.contract.frontendLaunchReadiness.moduleCounts?.fonts === 'number', 'manifest() launch readiness missing font count');
 assert(manifest.data.contract.frontendLaunchReadiness.privacy?.includesSecretValues === false, 'manifest() launch readiness must not include secret values');
 assert(manifest.data.contract.frontendLaunchReadiness.privacy?.adminEndpointsRequireAuth === true, 'manifest() launch readiness missing admin auth boundary');
 assert(manifest.data.contract.frontendLaunchReadiness.actionPlan?.recommendedCommands?.includes('npm run ci:sdk-postgres-smoke'), 'manifest() launch readiness missing SDK Postgres recommended command');
+	const hasCompletionEvidenceArtifact = (runbook, expected) => runbook?.evidenceArtifacts?.some?.((artifact) => (
+	  artifact.key === expected.key &&
+  artifact.artifactName === expected.artifactName &&
+  artifact.path === expected.path &&
+  artifact.schemaVersion === expected.schemaVersion &&
+  artifact.producerEnv === expected.producerEnv &&
+  artifact.workflow === expected.workflow &&
+  artifact.requiredForReady === true &&
+	  artifact.includesSecretValues === false
+	)) === true;
+	const hasCompletionArtifactVerifier = (runbook, expectedSchemaVersion, expectedPathEnv, expectedValidates = []) => (
+	  runbook?.artifactVerifier?.command === 'npm run doctor:release-certification' &&
+	  runbook.artifactVerifier.schemaVersion === expectedSchemaVersion &&
+	  runbook.artifactVerifier.pathEnv === expectedPathEnv &&
+	  runbook.artifactVerifier.requiredEnv?.includes?.('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+	  runbook.artifactVerifier.validates?.includes?.('no-secret boundary') &&
+	  expectedValidates.every((field) => runbook.artifactVerifier.validates?.includes?.(field)) &&
+	  runbook.artifactVerifier.includesSecretValues === false
+	);
+const settingsCompletionArtifact = {
+  key: 'settings-provider-certification-json',
+  artifactName: 'backy-settings-provider-certification-evidence',
+  path: 'artifacts/backy-settings-provider-certification.json',
+  schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+  producerEnv: 'BACKY_SETTINGS_CERTIFICATION_OUTPUT',
+  workflow: '.github/workflows/settings-provider-certification.yml',
+};
+const commerceCompletionArtifact = {
+  key: 'commerce-provider-certification-json',
+  artifactName: 'backy-commerce-provider-certification-evidence',
+  path: 'artifacts/backy-commerce-provider-certification.json',
+  schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+  producerEnv: 'BACKY_COMMERCE_CERTIFICATION_OUTPUT',
+  workflow: '.github/workflows/commerce-provider-certification.yml',
+};
 assert(manifest.data.contract?.completionStatus?.schemaVersion === 'backy.completion-status.v1', 'manifest() missing Backy completion status schema');
-assert(manifest.data.contract.completionStatus.audit?.ready === 39 && manifest.data.contract.completionStatus.audit?.partial === 6, 'manifest() completion status audit counts drifted');
-assert(manifest.data.contract.completionStatus.audit?.total === 45 && manifest.data.contract.completionStatus.audit?.readyPercent === 87, 'manifest() completion status percentage drifted');
+assert(manifest.data.contract.completionStatus.audit?.ready === 41 && manifest.data.contract.completionStatus.audit?.partial === 4, 'manifest() completion status audit counts drifted');
+assert(manifest.data.contract.completionStatus.audit?.total === 45 && manifest.data.contract.completionStatus.audit?.readyPercent === 91, 'manifest() completion status percentage drifted');
 assert(manifest.data.contract.completionStatus.surfaces?.some((surface) => surface.key === 'products' && surface.gate === 'npm run ci:commerce-provider-certification'), 'manifest() completion status missing products provider gate');
-assert(manifest.data.contract.completionStatus.surfaces?.some((surface) => surface.key === 'frontend-contracts' && surface.gate === 'npm run ci:sdk-postgres-smoke'), 'manifest() completion status missing frontend SDK database gate');
-assert(manifest.data.contract.completionStatus.gates?.some((gate) => gate.key === 'forms-postgres' && gate.command === 'npm run ci:forms-postgres'), 'manifest() completion status missing forms Postgres gate');
+assert(manifest.data.contract.completionStatus.surfaces?.some((surface) => surface.key === 'orders' && surface.gate === 'npm run ci:commerce-provider-certification'), 'manifest() completion status missing orders provider gate');
+assert(manifest.data.contract.completionStatus.surfaces?.some((surface) => surface.key === 'settings' && surface.gate === 'npm run ci:settings-provider-certification'), 'manifest() completion status missing Settings provider gate');
+assert(manifest.data.contract.completionStatus.surfaces?.some((surface) => surface.key === 'settings-admin-apis' && surface.gate === 'npm run ci:settings-provider-certification'), 'manifest() completion status missing Settings admin API provider gate');
+	assert(manifest.data.contract.completionStatus.surfaceRunbooks?.some((runbook) => runbook.key === 'settings' && runbook.evidencePacketSchema === 'backy.settings-provider-certification-evidence-packet.v1' && runbook.targetInputs?.includes?.('BACKY_SETTINGS_CERTIFICATION_BASE_URL') && runbook.targetInputs?.includes?.('BACKY_SETTINGS_CERTIFY_SITE_ID') && runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') && hasCompletionEvidenceArtifact(runbook, settingsCompletionArtifact) && hasCompletionArtifactVerifier(runbook, 'backy.settings-provider-certification-artifact.v1', 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT', ['apiHandoffs.siteScopedSettingsApi present', 'settingsApiHandoffSchemaReady', 'settingsApiHandoffSiteTargetReady', 'settingsApiHandoffTargetSiteId', 'settingsApiHandoffSettingsSiteSelectorEnv', 'settingsApiHandoffCommerceSiteSelectorEnv', 'siteSettingsApiHandoffReady'])), 'manifest() completion status missing Settings runbook');
+	assert(manifest.data.contract.completionStatus.surfaceRunbooks?.some((runbook) => runbook.key === 'products' && runbook.evidenceUiPanel === 'products-provider-certification-evidence-packet' && runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFICATION_BASE_URL') && runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') && hasCompletionEvidenceArtifact(runbook, commerceCompletionArtifact) && hasCompletionArtifactVerifier(runbook, 'backy.commerce-provider-certification-artifact.v1', 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT', ['productApiHandoffSchemaReady', 'productApiHandoffSiteTargetReady', 'productApiHandoffTargetSiteId', 'commerceApiHandoffSiteSelectorEnv'])), 'manifest() completion status missing products runbook');
+	assert(manifest.data.contract.completionStatus.surfaceRunbooks?.some((runbook) => runbook.key === 'orders' && runbook.evidencePacketSchema === 'backy.order-provider-certification-evidence-packet.v1' && runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') && hasCompletionEvidenceArtifact(runbook, commerceCompletionArtifact) && hasCompletionArtifactVerifier(runbook, 'backy.commerce-provider-certification-artifact.v1', 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT', ['orderApiHandoffSchemaReady', 'orderApiHandoffSiteTargetReady', 'orderApiHandoffTargetSiteId', 'commerceApiHandoffSiteSelectorEnv']) && runbook.secretBoundary?.includesSecretValues === false), 'manifest() completion status missing orders runbook');
+assert(manifest.data.contract.completionStatus.surfaceRunbooks?.every?.((runbook) => runbook.secretBoundary?.includesSecretValues === false), 'manifest() completion status runbooks must not expose secret values');
+assert(!manifest.data.contract.completionStatus.surfaces?.some((surface) => surface.key === 'frontend-contracts' || surface.key === 'forms'), 'manifest() completion status should not list certified database gates as current Partial surfaces');
+assert(!manifest.data.contract.completionStatus.gates?.some((gate) => gate.key === 'forms-postgres' || gate.key === 'sdk-postgres'), 'manifest() completion status remaining gates should not include certified database gates');
+assert(manifest.data.contract.completionStatus.certifiedGates?.some((gate) => gate.key === 'forms-postgres' && gate.command === 'npm run ci:forms-postgres'), 'manifest() completion status missing certified forms Postgres gate');
+assert(manifest.data.contract.completionStatus.certifiedGates?.some((gate) => gate.key === 'sdk-postgres' && gate.command === 'npm run ci:sdk-postgres-smoke'), 'manifest() completion status missing certified SDK Postgres gate');
 assert(manifest.data.contract.completionStatus.gates?.some((gate) => gate.key === 'settings-provider-certification' && gate.workflow === '.github/workflows/settings-provider-certification.yml'), 'manifest() completion status missing Settings provider workflow');
 assert(manifest.data.contract.completionStatus.gates?.some((gate) => gate.key === 'commerce-provider-certification' && gate.workflow === '.github/workflows/commerce-provider-certification.yml'), 'manifest() completion status missing commerce provider workflow');
-assert(manifest.data.contract.completionStatus.recommendedCommands?.includes('npm run ci:sdk-postgres-smoke'), 'manifest() completion status missing SDK Postgres recommended command');
+assert(manifest.data.contract.completionStatus.recommendedCommands?.includes('npm run ci:settings-provider-certification'), 'manifest() completion status missing Settings provider recommended command');
+assert(manifest.data.contract.completionStatus.recommendedCommands?.includes('npm run ci:commerce-provider-certification'), 'manifest() completion status missing Commerce provider recommended command');
+assert(!manifest.data.contract.completionStatus.recommendedCommands?.includes('npm run ci:sdk-postgres-smoke'), 'manifest() completion status should not recommend certified SDK Postgres as remaining work');
 assert(manifest.data.contract.completionStatus.localPreflight === 'npm run test:partial-gate-preflights', 'manifest() completion status missing partial-gate preflight');
 assert(manifest.data.contract.completionStatus.privacy?.includesSecretValues === false, 'manifest() completion status must not include secret values');
 assert(manifest.data.contract.completionStatus.privacy?.exposesOnlyAliasPresence === true, 'manifest() completion status must expose only alias presence');
@@ -1098,6 +1927,11 @@ assert(openapi.openapi === '3.1.0', 'openapi() did not return an OpenAPI 3.1 doc
 assert(openapi.paths?.['/api/sites']?.get?.operationId === 'discoverBackySite', 'openapi() missing global site discovery path');
 assertManifestEndpointsDocumented(manifest.data, openapi);
 assert(openapi.paths?.[manifest.data.endpoints.openapi]?.get, 'openapi() missing manifest-advertised OpenAPI path');
+assert(openapi.paths?.['/api/admin/settings']?.get?.operationId === 'getBackyAdminSettings', 'openapi() missing global admin settings read path');
+assert(openapi.paths?.['/api/admin/settings']?.patch?.operationId === 'updateBackyAdminSettings', 'openapi() missing global admin settings update path');
+assert(openapi.paths?.['/api/admin/settings']?.post?.operationId === 'runBackyAdminSettingsAction', 'openapi() missing global admin settings action path');
+assert(openapi.paths?.[`/api/admin/sites/${client.getSiteId()}/settings`]?.get?.operationId === 'getBackyAdminSiteSettings', 'openapi() missing admin site settings read path');
+assert(openapi.paths?.[`/api/admin/sites/${client.getSiteId()}/settings`]?.patch?.operationId === 'updateBackyAdminSiteSettings', 'openapi() missing admin site settings update path');
 assert(openapi.paths?.[manifest.data.endpoints.blogCategories]?.get, 'openapi() missing manifest-advertised blog categories path');
 assert(openapi.paths?.[manifest.data.endpoints.blogTags]?.get, 'openapi() missing manifest-advertised blog tags path');
 assert(openapi.paths?.[manifest.data.endpoints.blogAuthors]?.get, 'openapi() missing manifest-advertised blog authors path');
@@ -1105,21 +1939,116 @@ assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get, 'openapi() missing
 assert(openapi.paths?.[manifest.data.endpoints.blogRss]?.get?.['x-backy-feed']?.endpoint === manifest.data.endpoints.blogRss, 'openapi() missing blog RSS feed discovery extension');
 assert(openapi.components?.schemas?.BlogFeedDiscovery?.properties?.limits, 'openapi() missing blog feed discovery schema');
 assert(openapi.components?.schemas?.LiveManagementDiscovery?.properties?.editorComposition, 'openapi() missing editor composition discovery schema');
+assert(openapi.components?.schemas?.AdminSettingsEnvelope?.properties?.data?.properties?.settings?.$ref === '#/components/schemas/AdminSettings', 'openapi() missing global admin settings envelope schema');
+assert(openapi.components?.schemas?.AdminSettings?.properties?.schemaVersion?.const === 'backy.admin-settings.v1', 'openapi() missing global admin settings schema');
+assert(openapi.components?.schemas?.AdminSettings?.properties?.completionStatus?.$ref === '#/components/schemas/BackyCompletionStatus', 'openapi() missing global admin settings completion status handoff');
+assert(openapi.components?.schemas?.AdminSettings?.properties?.providerCertification?.$ref === '#/components/schemas/AdminSettingsProviderCertification', 'openapi() missing global admin settings provider certification handoff');
+assert(openapi.components?.schemas?.AdminSettings?.properties?.frontendDatabaseCertification?.$ref === '#/components/schemas/FrontendDatabaseCertificationHandoff', 'openapi() missing global admin settings database certification handoff');
+assert(openapi.components?.schemas?.AdminSettingsProviderCertification?.properties?.operatorEvidencePacket?.$ref === '#/components/schemas/AdminSettingsProviderCertificationEvidencePacket', 'openapi() missing settings provider evidence packet handoff');
+assert(openapi.components?.schemas?.AdminSettingsProviderCertificationEvidencePacket?.properties?.target?.properties?.settingsAdminApi?.const === '/api/admin/settings?certificationSiteId={siteId}', 'openapi() missing settings provider evidence packet admin API target');
+assert(openapi.components?.schemas?.AdminSettingsProviderCertificationEvidencePacket?.properties?.target?.properties?.siteScopedSettingsApi?.const === '/api/admin/sites/{siteId}/settings', 'openapi() missing settings provider evidence packet site-scoped API target');
+assert(openapi.components?.schemas?.AdminSettingsActionRequest?.properties?.action?.enum?.includes('media-storage-secret-manager'), 'openapi() missing settings secret-manager action schema');
+assert(openapi.components?.schemas?.AdminSettingsActionRequest?.properties?.action?.enum?.includes('test-notification-webhook'), 'openapi() missing settings notification action schema');
+assert(openapi.components?.schemas?.AdminSiteSettingsEnvelope?.properties?.data?.properties?.settings?.$ref === '#/components/schemas/AdminSiteSettingsScope', 'openapi() missing admin site settings envelope schema');
+assert(openapi.components?.schemas?.AdminSiteSettingsScope?.properties?.schemaVersion?.const === 'backy.site-settings-scope.v1', 'openapi() missing admin site settings scope schema');
+assert(openapi.components?.schemas?.AdminSiteSettingsScope?.properties?.frontendDatabaseCertification?.$ref === '#/components/schemas/FrontendDatabaseCertificationHandoff', 'openapi() missing site settings database certification handoff');
+assert(openapi.components?.schemas?.AdminSiteSettingsScope?.properties?.mediaStorageHandoff?.$ref === '#/components/schemas/AdminSettingsMediaStorageHandoff', 'openapi() missing site settings media storage handoff');
+assert(openapi.components?.schemas?.AdminSiteSettingsPatchRequest?.properties?.settings?.properties?.localization, 'openapi() missing site settings patch request schema');
+const pageCanvasContentSchema = openapi.components?.schemas?.PageUpdateRequest?.properties?.content?.oneOf?.[1];
+const blogCanvasContentSchema = openapi.components?.schemas?.BlogPostUpdateRequest?.properties?.content?.oneOf?.[1];
+assert(pageCanvasContentSchema?.properties?.customJS?.type === 'string', 'openapi() page update canvas payload missing customJS design state');
+assert(pageCanvasContentSchema?.properties?.themeTokenRefs?.additionalProperties?.type === 'string', 'openapi() page update canvas payload missing theme token refs');
+assert(pageCanvasContentSchema?.properties?.editableMap?.additionalProperties?.$ref === '#/components/schemas/BackyEditableMapEntry', 'openapi() page update canvas payload missing editable map design state');
+assert(pageCanvasContentSchema?.properties?.contentDocument?.$ref === '#/components/schemas/BackyContentDocument', 'openapi() page update canvas payload missing canonical content document link');
+assert(blogCanvasContentSchema?.properties?.customJS?.type === 'string', 'openapi() blog update canvas payload missing customJS design state');
+assert(blogCanvasContentSchema?.properties?.dataBindings?.additionalProperties === true, 'openapi() blog update canvas payload missing data binding design state');
 assert(openapi['x-backy-live-management']?.editorComposition?.sdkHelpers?.group === 'groupBackyContentElements', 'openapi() missing live-management group helper metadata');
+assert(openapi['x-backy-live-management']?.editorComposition?.sdkHelpers?.addElement === 'addBackyContentElement', 'openapi() missing live-management add helper metadata');
+assert(openapi['x-backy-live-management']?.editorComposition?.sdkHelpers?.transformElements === 'transformBackyContentElements', 'openapi() missing live-management transform helper metadata');
+assert(openapi['x-backy-live-management']?.editorComposition?.commands?.some?.((command) => command.id === 'duplicate' && command.sdkHelper === 'duplicateBackyContentElement'), 'openapi() missing live-management duplicate command metadata');
 assert(openapi['x-backy-live-management']?.editorComposition?.commands?.some?.((command) => command.id === 'ungroup' && command.shortcut === 'Shift+Cmd/Ctrl+G'), 'openapi() missing live-management ungroup command metadata');
+assert(openapi['x-backy-live-management']?.editorComposition?.commandRegistry?.schemaVersion === 'backy.editor-command-registry.v1', 'openapi() missing live-management editor command registry');
+assert(openapi['x-backy-live-management']?.editorComposition?.commandRegistry?.commands?.some?.((command) => command.id === 'toggle-grid' && command.testId === 'editor-grid-visibility-toggle'), 'openapi() command registry missing grid toggle metadata');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('props.downloadMediaIds'), 'openapi() live-management missing download media ids editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('props.backgroundColor'), 'openapi() live-management missing prop background color editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('styles.boxShadow'), 'openapi() live-management missing style box shadow editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('tokenRefs.styles.boxShadow'), 'openapi() live-management missing style token box shadow editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('animation.scrollTrigger.start'), 'openapi() live-management missing animation scroll-trigger start editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('animation.scrollTrigger.scrub'), 'openapi() live-management missing animation scroll-trigger scrub editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('actions'), 'openapi() live-management missing element actions editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('dataBindings'), 'openapi() live-management missing element data bindings editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('bindingSlots'), 'openapi() live-management missing element binding slots editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('responsive.mobile.props.backgroundColor'), 'openapi() live-management missing mobile prop background color editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('responsive.mobile.styles.boxShadow'), 'openapi() live-management missing mobile style box shadow editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('responsive.tablet.tokenRefs.styles.boxShadow'), 'openapi() live-management missing tablet style token box shadow editable target');
+assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('responsive.tablet.props.fileMediaIds'), 'openapi() live-management missing tablet file media ids editable target');
+assert(openapi.components?.schemas?.LiveManagementDiscovery?.properties?.editorComposition?.properties?.commandRegistry, 'openapi() LiveManagementDiscovery schema missing command registry');
 assert(openapi['x-backy-media-file-categories']?.managementPolicy?.schemaVersion === 'backy.media-management.v1', 'openapi() missing media management policy');
 assert(openapi['x-backy-media-file-categories']?.managementPolicy?.sdkHelpers?.upload === 'uploadMedia', 'openapi() media management missing upload helper metadata');
+assert(openapi['x-backy-media-file-categories']?.managementPolicy?.filters?.typeAliases?.file?.includes?.('other'), 'openapi() media management missing broad file type alias');
+assert(openapi['x-backy-media-file-categories']?.managementPolicy?.filters?.aliases?.fileType === 'file', 'openapi() media management missing fileType helper alias');
 assert(openapi.components?.schemas?.MediaManagementPolicy, 'openapi() missing media management policy schema');
 assert(openapi['x-backy-forms-management']?.schemaVersion === 'backy.forms-management.v1', 'openapi() missing forms management policy');
 assert(openapi['x-backy-forms-management']?.sdkHelpers?.clone === 'cloneAdminForm', 'openapi() forms management missing clone helper metadata');
 assert(openapi.components?.schemas?.FormsManagementPolicy, 'openapi() missing forms management policy schema');
 assert(openapi['x-backy-commerce-management']?.schemaVersion === 'backy.commerce-management.v1', 'openapi() missing commerce management policy');
 assert(openapi['x-backy-commerce-management']?.sdkHelpers?.orderStatusHandoff === 'commerceOrderStatusHandoff', 'openapi() commerce management missing order status handoff helper metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.orderAnalytics === 'backy.order-analytics.v1', 'openapi() commerce management missing order analytics contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.orderStatusHandoff === 'backy.order-status-handoff.v1', 'openapi() commerce management missing order status handoff contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.orderQuote === 'backy.order-quote.v1', 'openapi() commerce management missing order quote contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.orderTracking === 'backy.tracking.v1', 'openapi() commerce management missing order tracking contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.orderFulfillment === 'backy.fulfillment-dispatch.v1', 'openapi() commerce management missing order fulfillment contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.orderShippingLabel === 'backy.shipping-label.v1', 'openapi() commerce management missing order shipping label contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.orderProviderRefund === 'backy.provider-refund.v1', 'openapi() commerce management missing order provider refund contract metadata');
 assert(openapi['x-backy-commerce-management']?.responseContracts?.providerCertification === 'backy.commerce-provider-certification-handoff.v1', 'openapi() commerce management missing provider certification contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.productStorefrontHandoff === 'backy.product-storefront-handoff.v1', 'openapi() commerce management missing product storefront handoff contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.productSubscriptions === 'backy.product-subscription-lifecycle.v1', 'openapi() commerce management missing product subscription lifecycle contract metadata');
+assert(openapi['x-backy-commerce-management']?.responseContracts?.productSubscriptionAction === 'backy.product-subscription-action.v1', 'openapi() commerce management missing product subscription action contract metadata');
+assert(openapi['x-backy-commerce-management']?.privacy?.productStorefrontHandoffExcludesPrivateData === true, 'openapi() commerce management missing product storefront handoff privacy boundary');
+assert(openapi.components?.schemas?.CommerceOrderAnalytics?.properties?.schemaVersion?.const === 'backy.order-analytics.v1', 'openapi() missing order analytics schema contract');
+assert(openapi.components?.schemas?.CommerceOrderAnalyticsEnvelope?.properties?.data?.properties?.providerCertification?.$ref === '#/components/schemas/CommerceOrderAnalyticsProviderCertification', 'openapi() missing order analytics provider certification envelope');
+assert(openapi.components?.schemas?.CommerceOrderProviderCertificationEvidencePacket?.properties?.redactionPolicy?.properties?.includesProviderSecrets?.const === false, 'openapi() missing order analytics evidence redaction boundary');
+assert(openapi.components?.schemas?.CommerceOrderQuoteEnvelope?.properties?.data?.properties?.quote?.$ref === '#/components/schemas/CommerceOrderQuote', 'openapi() missing order quote envelope schema');
+assert(openapi.components?.schemas?.CommerceOrderTrackingEnvelope?.properties?.data?.properties?.tracking?.oneOf?.some?.((item) => item?.$ref === '#/components/schemas/CommerceOrderTracking'), 'openapi() missing order tracking envelope schema');
+assert(openapi.components?.schemas?.CommerceOrderFulfillmentEnvelope?.properties?.data?.properties?.fulfillment?.oneOf?.some?.((item) => item?.$ref === '#/components/schemas/CommerceOrderFulfillment'), 'openapi() missing order fulfillment envelope schema');
+assert(openapi.components?.schemas?.CommerceOrderShippingLabelEnvelope?.properties?.data?.properties?.label?.oneOf?.some?.((item) => item?.$ref === '#/components/schemas/CommerceOrderShippingLabel'), 'openapi() missing order shipping label envelope schema');
+assert(openapi.components?.schemas?.CommerceOrderProviderRefundEnvelope?.properties?.data?.properties?.refund?.oneOf?.some?.((item) => item?.$ref === '#/components/schemas/CommerceOrderProviderRefund'), 'openapi() missing order provider refund envelope schema');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoff?.properties?.privacy?.properties?.includesRawCustomerContact?.const === false, 'openapi() missing order status handoff schema privacy boundary');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoff?.properties?.privacy?.properties?.includesDigitalDeliveryUrls?.const === false, 'openapi() missing order status handoff digital delivery URL privacy boundary');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoff?.properties?.digitalDelivery?.properties?.schemaVersion?.const === 'backy.order-digital-delivery-handoff.v1', 'openapi() missing order status digital delivery handoff schema');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoff?.properties?.endpoints?.properties?.adminOrderDetail?.type === 'string', 'openapi() missing order status handoff admin order detail endpoint');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoff?.properties?.endpoints?.properties?.publicStatusHandoff?.type === 'string', 'openapi() missing order status handoff public refresh endpoint');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoff?.properties?.source?.enum?.includes?.('public-commerce-order-intake-api'), 'openapi() missing public checkout order status handoff source');
+assert(openapi.components?.schemas?.CommerceOrderEnvelope?.properties?.data?.properties?.statusHandoff?.$ref === '#/components/schemas/CommerceOrderStatusHandoff', 'openapi() checkout order response missing customer-safe status handoff schema');
+assert(openapi.components?.schemas?.CommerceOrderEnvelope?.properties?.data?.properties?.statusAccess?.$ref === '#/components/schemas/CommerceOrderStatusAccess', 'openapi() checkout order response missing public order status access schema');
+assert(openapi.components?.schemas?.CommerceOrderStatusAccess?.properties?.schemaVersion?.const === 'backy.order-status-access.v1', 'openapi() missing public order status access token schema');
+assert(openapi.components?.schemas?.CommerceOrderStatusAccess?.properties?.privacy?.properties?.rawTokenStoredByBacky?.const === false, 'openapi() public order status access must never store raw tokens');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoffEnvelope?.properties?.data?.properties?.statusAccess?.$ref === '#/components/schemas/CommerceOrderStatusAccess', 'openapi() missing public order status handoff envelope schema');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoff?.properties?.frontendBindings?.properties?.dataset?.properties?.auth?.enum?.includes?.('post-checkout-response'), 'openapi() checkout order status handoff bindings missing post-checkout auth mode');
+assert(openapi.components?.schemas?.CommerceOrderStatusHandoff?.properties?.frontendBindings?.properties?.dataset?.properties?.auth?.enum?.includes?.('post-checkout-status-token'), 'openapi() missing tokenized public order status auth mode');
+assert(openapi.components?.schemas?.CommerceProductProviderSync?.properties?.status?.enum?.includes?.('synced'), 'openapi() missing product provider sync schema');
+assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignContentDocument?.type === 'object', 'openapi() missing product frontend design content document schema');
+assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignCustomJs?.type === 'string', 'openapi() missing product frontend design custom JS schema');
+assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignThemeTokenRefs?.additionalProperties?.type === 'string', 'openapi() missing product frontend design token refs schema');
+assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignElements?.type === 'array', 'openapi() missing product frontend design elements schema');
+assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignAnimations?.type === 'array', 'openapi() missing product frontend design animations schema');
+assert(openapi.components?.schemas?.CommerceProductDesignReadiness?.properties?.schemaVersion?.const === 'backy.product-design-readiness.v1', 'openapi() missing product frontend design readiness schema');
+assert(openapi.components?.schemas?.CommerceProduct?.properties?.designReadiness?.$ref === '#/components/schemas/CommerceProductDesignReadiness', 'openapi() missing public product design readiness schema');
+assert(openapi.components?.schemas?.DynamicItemRouteResource?.properties?.designReadiness?.$ref === '#/components/schemas/CommerceProductDesignReadiness', 'openapi() missing dynamic product route design readiness schema');
+assert(openapi.components?.schemas?.CommerceProductStorefrontHandoff?.properties?.designReadiness?.$ref === '#/components/schemas/CommerceProductDesignReadiness', 'openapi() missing product storefront design readiness handoff');
+assert(openapi.components?.schemas?.CommerceProductProviderSyncEnvelope?.properties?.data?.properties?.sync?.oneOf?.some?.((item) => item?.$ref === '#/components/schemas/CommerceProductProviderSync'), 'openapi() missing product provider sync envelope schema');
+assert(openapi.components?.schemas?.CommerceProductProviderSyncEnvelope?.properties?.data?.properties?.storefrontHandoff?.$ref === '#/components/schemas/CommerceProductStorefrontHandoff', 'openapi() missing product provider sync storefront handoff envelope link');
+assert(openapi.components?.schemas?.CommerceProductSubscriptionLifecycle?.properties?.schemaVersion?.const === 'backy.product-subscription-lifecycle.v1', 'openapi() missing product subscription lifecycle schema contract');
+assert(openapi.components?.schemas?.CommerceProductSubscriptionsEnvelope?.properties?.data?.properties?.lifecycle?.$ref === '#/components/schemas/CommerceProductSubscriptionLifecycle', 'openapi() missing product subscription lifecycle envelope schema');
+assert(openapi.components?.schemas?.CommerceProductSubscriptionAction?.properties?.executionMode?.enum?.includes?.('http-api'), 'openapi() missing product subscription action execution modes');
+assert(openapi.components?.schemas?.CommerceProductSubscriptionActionEnvelope?.properties?.data?.properties?.action?.$ref === '#/components/schemas/CommerceProductSubscriptionAction', 'openapi() missing product subscription action envelope schema');
+assert(openapi.components?.schemas?.CommerceProductStorefrontHandoff?.properties?.privacy?.properties?.includesProviderSecrets?.const === false, 'openapi() missing product storefront handoff schema privacy boundary');
 assert(openapi.components?.schemas?.CommerceManagementPolicy, 'openapi() missing commerce management policy schema');
 assert(openapi['x-backy-completion-status']?.schemaVersion === manifest.data.contract.completionStatus.schemaVersion, 'openapi() missing completion status extension');
 assert(openapi['x-backy-completion-status']?.audit?.partial === manifest.data.contract.completionStatus.audit.partial, 'openapi() completion status audit drifted from manifest');
 assert(openapi['x-backy-completion-status']?.gates?.some((gate) => gate.key === 'commerce-provider-certification'), 'openapi() completion status missing commerce provider gate');
+	assert(openapi['x-backy-completion-status']?.surfaceRunbooks?.some((runbook) => runbook.key === 'products' && runbook.evidenceApi?.includes?.('/provider-sync') && runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') && hasCompletionEvidenceArtifact(runbook, commerceCompletionArtifact) && hasCompletionArtifactVerifier(runbook, 'backy.commerce-provider-certification-artifact.v1', 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT', ['productApiHandoffSchemaReady', 'productApiHandoffSiteTargetReady', 'productApiHandoffTargetSiteId', 'commerceApiHandoffSiteSelectorEnv'])), 'openapi() completion status missing products provider runbook');
+	assert(openapi['x-backy-completion-status']?.surfaceRunbooks?.some((runbook) => runbook.key === 'orders' && runbook.evidenceApi?.includes?.('/commerce/orders/analytics') && runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') && hasCompletionEvidenceArtifact(runbook, commerceCompletionArtifact) && hasCompletionArtifactVerifier(runbook, 'backy.commerce-provider-certification-artifact.v1', 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT', ['orderApiHandoffSchemaReady', 'orderApiHandoffSiteTargetReady', 'orderApiHandoffTargetSiteId', 'commerceApiHandoffSiteSelectorEnv'])), 'openapi() completion status missing orders provider runbook');
 assert(openapi.components?.schemas?.BackyCompletionStatus, 'openapi() missing completion status schema');
 assert(openapi['x-backy-database-certification']?.schemaVersion === manifest.data.contract.databaseCertification.schemaVersion, 'openapi() missing database certification schema extension');
 assert(openapi['x-backy-database-certification']?.gate?.command === manifest.data.contract.databaseCertification.gate.command, 'openapi() database certification command drifted from manifest');
@@ -1147,7 +2076,17 @@ assert(
 );
 assert(openapi['x-backy-frontend-launch-readiness']?.schemaVersion === manifest.data.contract.frontendLaunchReadiness.schemaVersion, 'openapi() missing frontend launch readiness extension');
 assert(openapi['x-backy-frontend-launch-readiness']?.actionPlan?.schemaVersion === 'backy.frontend-launch-action-plan.v1', 'openapi() missing frontend launch action plan extension');
-assert(openapi['x-backy-frontend-launch-readiness']?.checks?.some((check) => check.key === 'database-certification'), 'openapi() missing database frontend launch check');
+const openApiLaunchCheckKeys = new Set((openapi['x-backy-frontend-launch-readiness']?.checks || []).map((check) => check.key));
+assert(openApiLaunchCheckKeys.has('routing-render-contracts'), 'openapi() missing routing/render frontend launch check');
+assert(openApiLaunchCheckKeys.has('content-design-modules'), 'openapi() missing content/design frontend launch check');
+assert(openApiLaunchCheckKeys.has('media-font-delivery'), 'openapi() missing media/font frontend launch check');
+assert(openApiLaunchCheckKeys.has('visitor-interactions'), 'openapi() missing visitor interaction frontend launch check');
+assert(openApiLaunchCheckKeys.has('commerce-handoff'), 'openapi() missing commerce frontend launch check');
+assert(openApiLaunchCheckKeys.has('live-management'), 'openapi() missing live-management frontend launch check');
+assert(openApiLaunchCheckKeys.has('database-certification'), 'openapi() missing database frontend launch check');
+assert(typeof openapi['x-backy-frontend-launch-readiness']?.moduleCounts?.pages === 'number', 'openapi() launch readiness missing page count');
+assert(typeof openapi['x-backy-frontend-launch-readiness']?.moduleCounts?.blogPosts === 'number', 'openapi() launch readiness missing blog post count');
+assert(typeof openapi['x-backy-frontend-launch-readiness']?.moduleCounts?.fonts === 'number', 'openapi() launch readiness missing font count');
 assert(openapi['x-backy-frontend-launch-readiness']?.privacy?.includesSecretValues === false, 'openapi() launch readiness must not include secret values');
 assert(openapi['x-backy-frontend-launch-readiness']?.actionPlan?.recommendedCommands?.includes('npm run ci:sdk-postgres-smoke'), 'openapi() launch readiness missing SDK Postgres recommended command');
 assert(openapi['x-backy']?.delivery?.defaultLocale === manifest.data.delivery.defaultLocale, 'openapi() missing delivery locale discovery extension');
@@ -1196,13 +2135,24 @@ const manifestBlogRuntime = manifest.data.modules?.blogRuntime;
 assert(manifestBlogRuntime?.schemaVersion === 'backy.blog-discovery.v1', 'manifest() missing blog runtime discovery module');
 assert(manifestBlogRuntime.endpoints?.list === manifest.data.endpoints.blog, 'manifest() blog runtime list endpoint drifted');
 assert(manifestBlogRuntime.endpoints?.liveManage === manifest.data.endpoints.liveManagePost, 'manifest() blog runtime live manage endpoint drifted');
+assert(manifestBlogRuntime.endpoints?.adminCreate === `/api/admin/sites/${client.getSiteId()}/blog`, 'manifest() blog runtime admin create endpoint drifted');
 assert(manifestBlogRuntime.endpoints?.rss === manifest.data.endpoints.blogRss, 'manifest() blog runtime RSS endpoint drifted');
 assert(manifestBlogRuntime.endpoints?.categories === manifest.data.endpoints.blogCategories, 'manifest() blog runtime categories endpoint drifted');
 assert(manifestBlogRuntime.methods?.detail === 'GET', 'manifest() blog runtime detail method drifted');
 assert(manifestBlogRuntime.methods?.liveManageUpdate === 'PATCH', 'manifest() blog runtime live update method drifted');
+assert(manifestBlogRuntime.methods?.adminCreate === 'POST', 'manifest() blog runtime admin create method drifted');
 assert(manifestBlogRuntime.capabilities?.taxonomyFilters === true, 'manifest() blog runtime missing taxonomy filters capability');
 assert(manifestBlogRuntime.capabilities?.rssFeed === true, 'manifest() blog runtime missing RSS feed capability');
 assert(manifestBlogRuntime.capabilities?.liveManagement === true, 'manifest() blog runtime missing live management capability');
+assert(manifestBlogRuntime.capabilities?.authenticatedManagement === true, 'manifest() blog runtime missing authenticated management capability');
+assert(manifestBlogRuntime.capabilities?.postCreation === true, 'manifest() blog runtime missing post creation capability');
+assert(manifestBlogRuntime.managementPolicy?.schemaVersion === 'backy.blog-management.v1', 'manifest() blog runtime missing blog management policy');
+assert(manifestBlogRuntime.managementPolicy?.endpoints?.create === `/api/admin/sites/${client.getSiteId()}/blog`, 'manifest() blog runtime management create endpoint drifted');
+assert(manifestBlogRuntime.managementPolicy?.endpoints?.templateRegistry === `/api/admin/sites/${client.getSiteId()}/templates?type=blogPost`, 'manifest() blog runtime template registry endpoint drifted');
+assert(manifestBlogRuntime.managementPolicy?.sdkHelpers?.create === 'createAdminBlogPost', 'manifest() blog runtime missing management create helper');
+assert(manifestBlogRuntime.managementPolicy?.sdkHelpers?.preview === 'createAdminBlogPostPreviewToken', 'manifest() blog runtime missing preview helper');
+assert(manifestBlogRuntime.managementPolicy?.designState?.acceptsFrontendDesignTemplateId === true, 'manifest() blog runtime missing frontend template clone design-state flag');
+assert(manifestBlogRuntime.managementPolicy?.designState?.preservesAssetsAnimationsInteractions === true, 'manifest() blog runtime missing design-state preservation flag');
 assert(manifestBlogRuntime.cache?.previewDetail === 'private-no-store', 'manifest() blog runtime preview cache policy drifted');
 assert(manifestBlogRuntime.privacy?.draftPreviewRequiresToken === true, 'manifest() blog runtime missing draft preview privacy boundary');
 assert(manifestBlogRuntime.filters?.queryParams?.includes?.('categorySlug'), 'manifest() blog runtime missing categorySlug filter metadata');
@@ -1314,6 +2264,15 @@ if (media.data.media?.length > 0) {
   assert(
     client.mediaFileUrl(media.data.media[0].id).includes(`/api/sites/${client.getSiteId()}/media/${media.data.media[0].id}/file`),
     'mediaFileUrl() returned wrong media file URL',
+  );
+  const mediaDownloadProps = client.mediaDownloadLinkProps(media.data.media[0].id, { targetBlank: true });
+  assert(
+      mediaDownloadProps.href.includes(`/api/sites/${client.getSiteId()}/media/${media.data.media[0].id}/file?disposition=attachment`) &&
+      mediaDownloadProps.download === true &&
+      mediaDownloadProps.fileIds?.includes?.(media.data.media[0].id) &&
+      mediaDownloadProps.fileMediaIds?.includes?.(media.data.media[0].id) &&
+      mediaDownloadProps.fileSignedUrlEndpoint === `/api/admin/sites/${client.getSiteId()}/media/${media.data.media[0].id}/signed-url`,
+    'mediaDownloadLinkProps() did not build editor-compatible media download props',
   );
   assert(
     client.mediaTransformUrl(media.data.media[0].id, { width: 640, quality: 80 }).includes(`/api/sites/${client.getSiteId()}/media/${media.data.media[0].id}/transform?width=640&quality=80`),
@@ -1430,6 +2389,15 @@ const privateClient = createBackyClient({
   requestIdFactory: () => 'sdk-private-smoke-request',
   defaultHeaders: adminClientHeaders(),
 });
+const ownerSettingsSession = await getCleanupOwnerSession();
+const ownerSettingsClient = createBackyClient({
+  baseUrl,
+  siteId: client.getSiteId(),
+  requestIdFactory: () => 'sdk-owner-settings-request',
+  defaultHeaders: {
+    authorization: `Bearer ${ownerSettingsSession.token}`,
+  },
+});
 
 const comments = await privateClient.siteComments({ limit: 5 });
 assert(Array.isArray(comments.data.comments), 'siteComments() missing comments array');
@@ -1442,8 +2410,20 @@ assert(Array.isArray(events.data.events), 'events() missing events array');
 
 const adminSettings = await privateClient.adminSettings();
 assert(adminSettings.data.settings?.schemaVersion === 'backy.admin-settings.v1', 'adminSettings() missing settings schema version');
+assert(adminSettings.data.settings?.completionStatus?.schemaVersion === 'backy.completion-status.v1', 'adminSettings() missing completion status handoff');
+	assert(adminSettings.data.settings.completionStatus?.surfaceRunbooks?.some?.((runbook) => runbook.key === 'settings-admin-apis' && runbook.evidenceApi?.includes?.('data.settings.completionStatus') && runbook.targetInputs?.includes?.('BACKY_SETTINGS_CERTIFY_SITE_ID') && runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') && hasCompletionEvidenceArtifact(runbook, settingsCompletionArtifact) && hasCompletionArtifactVerifier(runbook, 'backy.settings-provider-certification-artifact.v1', 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT', ['apiHandoffs.siteScopedSettingsApi present', 'settingsApiHandoffSiteTargetReady', 'siteSettingsApiHandoffReady'])), 'adminSettings() missing Settings admin API completion runbook');
+assert(adminSettings.data.settings.completionStatus?.privacy?.includesSecretValues === false, 'adminSettings() completion status leaked secret-value policy');
 assert(adminSettings.data.settings?.providerCertification?.schemaVersion === 'backy.settings-provider-certification-handoff.v1', 'adminSettings() missing provider certification handoff');
+assert(adminSettings.data.settings?.providerCertification?.operatorEvidencePacket?.schemaVersion === 'backy.settings-provider-certification-evidence-packet.v1', 'adminSettings() missing provider certification evidence packet');
+assert(adminSettings.data.settings.providerCertification.operatorEvidencePacket?.target?.settingsAdminApi === '/api/admin/settings?certificationSiteId={siteId}', 'adminSettings() provider certification evidence packet missing admin settings API target');
+assert(adminSettings.data.settings.providerCertification.operatorEvidencePacket?.target?.siteScopedSettingsApi === '/api/admin/sites/{siteId}/settings', 'adminSettings() provider certification evidence packet missing site-scoped settings API target');
+assert(adminSettings.data.settings.providerCertification.operatorEvidencePacket?.redactionPolicy?.includesProviderSecrets === false, 'adminSettings() provider certification evidence packet leaked provider-secret policy');
 assert(adminSettings.data.settings?.frontendDatabaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', 'adminSettings() missing frontend database certification handoff');
+assert(adminSettings.data.settings?.mediaStorageHandoff?.schemaVersion === 'backy.media-storage-handoff.v1', 'adminSettings() missing media storage handoff');
+assert(adminSettings.data.settings.mediaStorageHandoff?.endpointTemplates?.adminSignedUrl?.includes?.('/api/admin/sites/{siteId}/media/{mediaId}/signed-url'), 'adminSettings() media storage handoff missing admin signed-url endpoint template');
+assert(adminSettings.data.settings.mediaStorageHandoff?.contracts?.organization === 'backy.media.organization.v1', 'adminSettings() media storage handoff missing media organization contract');
+assert(adminSettings.data.settings.mediaStorageHandoff?.designStateUsage?.preservedFields?.includes?.('element.props.mediaOrganization'), 'adminSettings() media storage handoff missing design-state media organization field');
+assert(adminSettings.data.settings.mediaStorageHandoff?.privacy?.includesSecretValues === false, 'adminSettings() media storage handoff leaked secret-value policy');
 assert(typeof privateClient.regenerateAdminSettingsApiKeys === 'function', 'regenerateAdminSettingsApiKeys() missing SDK method');
 assert(typeof privateClient.issueAdminSettingsApiKey === 'function', 'issueAdminSettingsApiKey() missing SDK method');
 assert(typeof privateClient.revokeAdminSettingsApiKey === 'function', 'revokeAdminSettingsApiKey() missing SDK method');
@@ -1453,7 +2433,7 @@ assert(typeof privateClient.runAdminSettingsStorageCredentialRotationProbe === '
 assert(typeof privateClient.runAdminSettingsStorageSecretManager === 'function', 'runAdminSettingsStorageSecretManager() missing SDK method');
 assert(typeof privateClient.testAdminSettingsNotificationWebhook === 'function', 'testAdminSettingsNotificationWebhook() missing SDK method');
 
-const issuedSettingsApiKey = await privateClient.issueAdminSettingsApiKey({
+const issuedSettingsApiKey = await ownerSettingsClient.issueAdminSettingsApiKey({
   label: `SDK Smoke Service Key ${Date.now()}`,
   requestId: 'sdk-settings-service-key-issue',
 });
@@ -1478,7 +2458,7 @@ assert(serviceKeySettings.data.settings?.schemaVersion === 'backy.admin-settings
 assert(serviceKeySettings.data.settings?.apiKeys?.adminApiKey === '', 'issued service key should not expose owner admin key');
 assert(!JSON.stringify(serviceKeySettings.data.settings || {}).includes(issuedServiceKey.adminApiKey), 'issued service key leaked raw key on authenticated read');
 
-const revokedSettingsApiKey = await privateClient.revokeAdminSettingsApiKey({
+const revokedSettingsApiKey = await ownerSettingsClient.revokeAdminSettingsApiKey({
   keyId: issuedServiceKey.id,
   requestId: 'sdk-settings-service-key-revoke',
 });
@@ -1561,6 +2541,11 @@ const adminSiteSettings = await privateClient.adminSiteSettings();
 assert(adminSiteSettings.data.settings?.schemaVersion === 'backy.site-settings-scope.v1', 'adminSiteSettings() missing site settings schema version');
 assert(adminSiteSettings.data.settings?.scope?.siteId === privateClient.getSiteId(), 'adminSiteSettings() returned wrong site settings scope');
 assert(adminSiteSettings.data.settings?.frontendDatabaseCertification?.source === 'admin-site-settings-api', 'adminSiteSettings() missing site-scoped database certification handoff');
+assert(adminSiteSettings.data.settings?.mediaStorageHandoff?.schemaVersion === 'backy.media-storage-handoff.v1', 'adminSiteSettings() missing site-scoped media storage handoff');
+assert(adminSiteSettings.data.settings.mediaStorageHandoff?.source === 'admin-site-settings-api', 'adminSiteSettings() media storage handoff source drifted');
+assert(adminSiteSettings.data.settings.mediaStorageHandoff?.selectedSiteId === privateClient.getSiteId(), 'adminSiteSettings() media storage handoff returned wrong site id');
+assert(adminSiteSettings.data.settings.mediaStorageHandoff?.siteEndpoints?.adminMediaList?.includes?.(`/api/admin/sites/${privateClient.getSiteId()}/media`), 'adminSiteSettings() media storage handoff missing resolved site media endpoint');
+assert(adminSiteSettings.data.settings.mediaStorageHandoff?.privacy?.includesSecretValues === false, 'adminSiteSettings() media storage handoff leaked secret-value policy');
 
 const adminFrontendDesign = await privateClient.adminFrontendDesign();
 assert(adminFrontendDesign.data.frontendDesign?.schemaVersion === 'backy.frontend-design.v1', 'adminFrontendDesign() missing design contract');
@@ -1660,6 +2645,9 @@ if (firstAdminPageId) {
   assert(pageReadiness.data.readiness, 'adminPageReadiness() missing readiness payload');
   const pageRevisions = await privateClient.adminPageRevisions(firstAdminPageId, { limit: 5 });
   assert(Array.isArray(pageRevisions.data.revisions), 'adminPageRevisions() missing revisions array');
+  if (pageRevisions.data.revisions[0]) {
+    assertRevisionBranchMetadata(pageRevisions.data.revisions[0], 'page', 'admin-page-revisions-api', 'adminPageRevisions()');
+  }
 }
 
 assert(typeof privateClient.createAdminBlogCategory === 'function', 'createAdminBlogCategory() missing SDK method');
@@ -1695,6 +2683,9 @@ if (firstAdminBlogPostId) {
   assert(postReadiness.data.readiness, 'adminBlogPostReadiness() missing readiness payload');
   const postRevisions = await privateClient.adminBlogPostRevisions(firstAdminBlogPostId, { limit: 5 });
   assert(Array.isArray(postRevisions.data.revisions), 'adminBlogPostRevisions() missing revisions array');
+  if (postRevisions.data.revisions[0]) {
+    assertRevisionBranchMetadata(postRevisions.data.revisions[0], 'post', 'admin-blog-revisions-api', 'adminBlogPostRevisions()');
+  }
 }
 
 const adminCollections = await privateClient.adminCollections({ limit: 50 });
@@ -1856,15 +2847,21 @@ try {
   assert(manifestCommerceRuntime?.schemaVersion === 'backy.commerce-discovery.v1', 'manifest() missing commerce runtime discovery module');
   assert(manifestCommerceRuntime.endpoints?.catalog === manifest.data.endpoints.commerceCatalog, 'manifest() commerce runtime catalog endpoint drifted');
   assert(manifestCommerceRuntime.endpoints?.orderContract === manifest.data.endpoints.commerceOrders, 'manifest() commerce runtime order contract endpoint drifted');
+  assert(manifestCommerceRuntime.endpoints?.publicOrderStatus?.includes?.('statusToken={statusToken}'), 'manifest() commerce runtime missing public order status endpoint template');
   assert(manifestCommerceRuntime.methods?.createOrder === 'POST', 'manifest() commerce runtime create order method drifted');
+  assert(manifestCommerceRuntime.methods?.publicOrderStatus === 'GET', 'manifest() commerce runtime public order status method drifted');
   assert(manifestCommerceRuntime.capabilities?.productFilters === true, 'manifest() commerce runtime missing product filters capability');
+  assert(manifestCommerceRuntime.capabilities?.publicOrderStatusRefresh === true, 'manifest() commerce runtime missing public order status refresh capability');
   assert(manifestCommerceRuntime.orderRequest?.schemaVersion === 'backy.commerce-order-request.v1', 'manifest() commerce runtime missing order request contract');
   assert(manifestCommerceRuntime.orderRequest?.itemArrays?.includes?.('lineItems'), 'manifest() commerce runtime missing lineItems order alias');
   assert(manifestCommerceRuntime.orderRequest?.itemFields?.quantity?.includes?.('qty'), 'manifest() commerce runtime missing quantity alias');
   assert(manifestCommerceRuntime.orderRequest?.customer?.includes?.('customerName/customerEmail/customerPhone'), 'manifest() commerce runtime missing top-level customer aliases');
   assert(manifestCommerceRuntime.orderRequest?.checkoutSessionStatuses?.includes?.('provider_created'), 'manifest() commerce runtime missing provider-created checkout status');
   assert(manifestCommerceRuntime.cache?.createOrder === 'private-no-store', 'manifest() commerce runtime create order cache policy drifted');
+  assert(manifestCommerceRuntime.cache?.publicOrderStatus === 'private-no-store', 'manifest() commerce runtime public order status cache policy drifted');
   assert(manifestCommerceRuntime.privacy?.ordersCollectionMustRemainPrivate === true, 'manifest() commerce runtime missing private order queue boundary');
+  assert(manifestCommerceRuntime.privacy?.publicOrderStatusUsesOneTimeReturnedToken === true, 'manifest() commerce runtime missing public order status token boundary');
+  assert(manifestCommerceRuntime.privacy?.publicOrderStatusTokenStoredAsHashOnly === true, 'manifest() commerce runtime missing public order status token-hash boundary');
   assert(manifestCommerceRuntime.capabilities?.authenticatedManagement === true, 'manifest() commerce runtime missing authenticated management capability');
   assert(manifestCommerceRuntime.capabilities?.providerOperations === true, 'manifest() commerce runtime missing provider operations capability');
   assert(manifestCommerceRuntime.managementPolicy?.schemaVersion === 'backy.commerce-management.v1', 'manifest() commerce management missing schema version');
@@ -1875,8 +2872,18 @@ try {
   assert(manifestCommerceRuntime.managementPolicy?.auth?.requiredPermissions?.collectionExport === 'collections.export', 'manifest() commerce management collection export permission drifted');
   assert(manifestCommerceRuntime.managementPolicy?.sdkHelpers?.syncProductProvider === 'syncCommerceProductProvider', 'manifest() commerce management missing product provider sync helper');
   assert(manifestCommerceRuntime.managementPolicy?.sdkHelpers?.orderStatusHandoff === 'commerceOrderStatusHandoff', 'manifest() commerce management missing order status handoff helper');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.orderAnalytics === 'backy.order-analytics.v1', 'manifest() commerce management missing order analytics contract');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.orderQuote === 'backy.order-quote.v1', 'manifest() commerce management missing order quote contract');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.orderTracking === 'backy.tracking.v1', 'manifest() commerce management missing order tracking contract');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.orderFulfillment === 'backy.fulfillment-dispatch.v1', 'manifest() commerce management missing order fulfillment contract');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.orderShippingLabel === 'backy.shipping-label.v1', 'manifest() commerce management missing order shipping label contract');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.orderProviderRefund === 'backy.provider-refund.v1', 'manifest() commerce management missing order provider refund contract');
   assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.providerCertification === 'backy.commerce-provider-certification-handoff.v1', 'manifest() commerce management missing provider certification contract');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.productStorefrontHandoff === 'backy.product-storefront-handoff.v1', 'manifest() commerce management missing product storefront handoff contract');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.productSubscriptions === 'backy.product-subscription-lifecycle.v1', 'manifest() commerce management missing product subscription lifecycle contract');
+  assert(manifestCommerceRuntime.managementPolicy?.responseContracts?.productSubscriptionAction === 'backy.product-subscription-action.v1', 'manifest() commerce management missing product subscription action contract');
   assert(manifestCommerceRuntime.managementPolicy?.privacy?.providerSecretsNeverReturned === true, 'manifest() commerce management must not expose provider secrets');
+  assert(manifestCommerceRuntime.managementPolicy?.privacy?.productStorefrontHandoffExcludesPrivateData === true, 'manifest() commerce management missing product storefront handoff privacy boundary');
   assert(manifestCommerceRuntime.filters?.queryParams?.includes?.('productType'), 'manifest() commerce runtime missing productType filter metadata');
   assert(manifestCommerceRuntime.schemas?.orderQueueNotPrivate === 'ORDER_QUEUE_NOT_PRIVATE', 'manifest() commerce runtime order queue privacy schema drifted');
 
@@ -1910,6 +2917,11 @@ try {
     assertCommerceProviderCertification(
       { providerCertification: orderAnalytics.data.providerCertification },
       'commerceOrderAnalytics()',
+    );
+    assertProviderEvidencePacket(
+      orderAnalytics.data.providerCertification?.operatorEvidencePacket,
+      'commerceOrderAnalytics()',
+      'backy.order-provider-certification-evidence-packet.v1',
     );
     const orderOperationId = orderAnalytics.data.analytics.recentOrders?.[0]?.id
       || orderAnalytics.data.analytics.recentOrders?.[0]?.slug;
@@ -1969,9 +2981,19 @@ try {
       const providerSync = await privateClient.commerceProductProviderSync(String(syncProductId));
       assert(Object.prototype.hasOwnProperty.call(providerSync.data, 'sync'), 'commerceProductProviderSync() missing sync key');
       assert(providerSync.data.product?.id || providerSync.data.product?.slug, 'commerceProductProviderSync() missing product payload');
+      assert(providerSync.data.storefrontHandoff?.schemaVersion === 'backy.product-storefront-handoff.v1', 'commerceProductProviderSync() missing product storefront handoff');
+      assert(providerSync.data.storefrontHandoff?.source === 'admin-product-provider-sync-api', 'commerceProductProviderSync() storefront handoff source drifted');
+      assert(providerSync.data.storefrontHandoff?.privacy?.includesProviderSecrets === false, 'commerceProductProviderSync() storefront handoff must not expose provider secrets');
+      assert(providerSync.data.storefrontHandoff?.privacy?.includesPrivateOrders === false, 'commerceProductProviderSync() storefront handoff must not expose private orders');
+      assert(providerSync.data.storefrontHandoff?.privacy?.includesDigitalDeliveryUrl === false, 'commerceProductProviderSync() storefront handoff must not expose digital delivery URLs');
       assertCommerceProviderCertification(
         { providerCertification: providerSync.data.providerCertification },
         'commerceProductProviderSync()',
+      );
+      assertProviderEvidencePacket(
+        providerSync.data.providerCertification?.operatorEvidencePacket,
+        'commerceProductProviderSync()',
+        'backy.commerce-provider-certification-evidence-packet.v1',
       );
     } catch (syncError) {
       if (
@@ -2007,6 +3029,7 @@ let fixture = null;
 if (runWriteSmoke) {
   fixture = await createSdkSmokeFixture();
   try {
+    const fixtureFormId = fixture.formId;
     const writeClient = createBackyClient({
       baseUrl,
       requestIdFactory: () => 'sdk-write-smoke-request',
@@ -2034,8 +3057,8 @@ if (runWriteSmoke) {
     );
     assert(
       fixtureManifest.data.modules?.forms?.some?.((form) => (
-        form.id === 'sdk-smoke-form'
-        && form.definitionUrl === `/api/sites/${fixture.siteId}/forms/sdk-smoke-form/definition`
+        form.id === fixtureFormId
+        && form.definitionUrl === `/api/sites/${fixture.siteId}/forms/${fixtureFormId}/definition`
       )),
       'fixture manifest missing SDK smoke form definition URL',
     );
@@ -2067,7 +3090,451 @@ if (runWriteSmoke) {
       )),
       'listBackyContentElements() missing editable nested page element metadata',
     );
+    const defaultControlDescriptors = listBackyContentElements({
+      elements: [
+        {
+          id: 'sdk-default-button-controls',
+          type: 'button',
+          name: 'Button',
+          x: 0,
+          y: 0,
+          width: 160,
+          height: 44,
+          props: { label: 'Start' },
+        },
+        {
+          id: 'sdk-default-link-controls',
+          type: 'link',
+          name: 'Link',
+          x: 0,
+          y: 60,
+          width: 160,
+          height: 28,
+          props: { content: 'Docs' },
+        },
+        {
+          id: 'sdk-default-input-controls',
+          type: 'input',
+          name: 'Email',
+          x: 0,
+          y: 100,
+          width: 240,
+          height: 42,
+          props: { name: 'email' },
+        },
+        {
+          id: 'sdk-default-form-controls',
+          type: 'form',
+          name: 'Lead form',
+          x: 0,
+          y: 150,
+          width: 320,
+          height: 280,
+          props: { formId: 'lead_form' },
+        },
+          {
+            id: 'sdk-default-layout-controls',
+            type: 'box',
+            name: 'Imported box',
+            visible: 'false',
+            locked: 'yes',
+            props: {},
+          },
+      ],
+    });
+    const defaultButtonTargets = new Map(
+      defaultControlDescriptors
+        .find((element) => element.id === 'sdk-default-button-controls')
+        ?.editableTargets.map((target) => [target.path, target]) || [],
+    );
+    const defaultLinkTargets = new Map(
+      defaultControlDescriptors
+        .find((element) => element.id === 'sdk-default-link-controls')
+        ?.editableTargets.map((target) => [target.path, target]) || [],
+    );
+    const defaultInputTargets = new Map(
+      defaultControlDescriptors
+        .find((element) => element.id === 'sdk-default-input-controls')
+        ?.editableTargets.map((target) => [target.path, target]) || [],
+    );
+    const defaultFormTargets = new Map(
+      defaultControlDescriptors
+        .find((element) => element.id === 'sdk-default-form-controls')
+        ?.editableTargets.map((target) => [target.path, target]) || [],
+    );
+    const defaultLayoutTargets = new Map(
+      defaultControlDescriptors
+        .find((element) => element.id === 'sdk-default-layout-controls')
+        ?.editableTargets.map((target) => [target.path, target]) || [],
+    );
+    assert(
+      defaultLayoutTargets.get('visibility.hidden')?.value === true &&
+        defaultLayoutTargets.get('visibility.locked')?.value === true,
+      'listBackyContentElements() did not normalize boolean-like layer visibility/locking values',
+    );
+    assert(
+        defaultButtonTargets.get('props.actionPreset')?.valueType === 'string' &&
+        defaultButtonTargets.get('props.backgroundColor')?.valueType === 'color' &&
+        defaultButtonTargets.get('props.borderWidth')?.valueType === 'number' &&
+        defaultButtonTargets.get('props.fontFamily')?.valueType === 'font' &&
+        defaultButtonTargets.get('props.fontWeight')?.valueType === 'string' &&
+        defaultButtonTargets.get('props.fontStyle')?.valueType === 'string' &&
+        defaultButtonTargets.get('props.fileIds')?.valueType === 'assetList' &&
+        defaultButtonTargets.get('props.fileMediaId')?.valueType === 'asset' &&
+        defaultButtonTargets.get('props.fileMediaIds')?.valueType === 'assetList' &&
+        defaultButtonTargets.get('props.downloadMediaId')?.valueType === 'asset' &&
+        defaultButtonTargets.get('props.downloadMediaIds')?.valueType === 'assetList' &&
+        defaultButtonTargets.get('props.fileMediaUrl')?.valueType === 'url' &&
+        defaultButtonTargets.get('props.fileUrl')?.valueType === 'url' &&
+        defaultButtonTargets.get('props.fileMediaName')?.valueType === 'string' &&
+        defaultButtonTargets.get('props.fileMediaType')?.valueType === 'string' &&
+        defaultButtonTargets.get('props.fileMediaVisibility')?.valueType === 'string' &&
+        defaultButtonTargets.get('props.fileDownloadDisposition')?.valueType === 'string' &&
+        defaultButtonTargets.get('props.fileSignedUrlRequired')?.valueType === 'boolean' &&
+        defaultButtonTargets.get('props.fileSignedUrlEndpoint')?.valueType === 'url' &&
+        defaultButtonTargets.get('props.fileName')?.valueType === 'string' &&
+        defaultButtonTargets.get('styles.color')?.valueType === 'color' &&
+        defaultButtonTargets.get('styles.fontFamily')?.valueType === 'font' &&
+        defaultButtonTargets.get('styles.fontSize')?.valueType === 'number' &&
+        defaultButtonTargets.get('styles.boxShadow')?.valueType === 'string' &&
+        defaultButtonTargets.get('tokenRefs.styles.color')?.valueType === 'string' &&
+        defaultButtonTargets.get('tokenRefs.styles.fontSize')?.valueType === 'string' &&
+        defaultButtonTargets.get('tokenRefs.styles.boxShadow')?.valueType === 'string' &&
+        defaultButtonTargets.get('responsive.mobile.props.backgroundColor')?.valueType === 'color' &&
+        defaultButtonTargets.get('responsive.mobile.props.downloadMediaIds')?.valueType === 'assetList' &&
+        defaultButtonTargets.get('responsive.tablet.props.fileMediaIds')?.valueType === 'assetList' &&
+        defaultButtonTargets.get('responsive.mobile.props.fileSignedUrlRequired')?.valueType === 'boolean' &&
+        defaultButtonTargets.get('responsive.tablet.props.borderWidth')?.valueType === 'number' &&
+        defaultButtonTargets.get('responsive.mobile.styles.boxShadow')?.valueType === 'string' &&
+        defaultButtonTargets.get('responsive.tablet.tokenRefs.styles.boxShadow')?.valueType === 'string' &&
+        defaultButtonTargets.get('animation.type')?.valueType === 'string' &&
+        defaultButtonTargets.get('animation.duration')?.valueType === 'number' &&
+        defaultButtonTargets.get('animation.easing')?.valueType === 'string' &&
+        defaultButtonTargets.get('animation.direction')?.valueType === 'string' &&
+        defaultButtonTargets.get('animation.scrollTrigger')?.valueType === 'json' &&
+        defaultButtonTargets.get('animation.scrollTrigger.start')?.valueType === 'string' &&
+        defaultButtonTargets.get('animation.scrollTrigger.scrub')?.valueType === 'boolean' &&
+        defaultButtonTargets.get('animation.from')?.valueType === 'json' &&
+        defaultButtonTargets.get('animation.to')?.valueType === 'json' &&
+        defaultButtonTargets.get('animation.tokenRefs.duration')?.valueType === 'string' &&
+        defaultButtonTargets.get('animation.tokenRefs.easing')?.valueType === 'string' &&
+        defaultButtonTargets.get('actions')?.valueType === 'json' &&
+        defaultButtonTargets.get('dataBindings')?.valueType === 'json' &&
+        defaultButtonTargets.get('bindingSlots')?.valueType === 'json' &&
+        defaultLinkTargets.get('props.underline')?.valueType === 'boolean' &&
+        defaultLinkTargets.get('props.fileIds')?.valueType === 'assetList' &&
+        defaultLinkTargets.get('props.fileMediaId')?.valueType === 'asset' &&
+        defaultLinkTargets.get('props.downloadMediaIds')?.valueType === 'assetList' &&
+        defaultLinkTargets.get('props.fileSignedUrlRequired')?.valueType === 'boolean' &&
+	        defaultInputTargets.get('props.required')?.valueType === 'boolean' &&
+	        defaultInputTargets.get('responsive.mobile.props.required')?.valueType === 'boolean' &&
+	        defaultFormTargets.get('props.labelColor')?.valueType === 'color' &&
+	        defaultFormTargets.get('props.helpTextColor')?.valueType === 'color' &&
+	        defaultFormTargets.get('props.fieldBackgroundColor')?.valueType === 'color' &&
+	        defaultFormTargets.get('props.fieldBorderColor')?.valueType === 'color' &&
+	        defaultFormTargets.get('props.fieldBorderRadius')?.valueType === 'number' &&
+	        defaultFormTargets.get('props.submitBackgroundColor')?.valueType === 'color' &&
+	        defaultFormTargets.get('props.submitColor')?.valueType === 'color' &&
+	        defaultFormTargets.get('props.submitBorderRadius')?.valueType === 'number' &&
+	        defaultFormTargets.get('responsive.mobile.props.submitBackgroundColor')?.valueType === 'color' &&
+	        defaultFormTargets.get('responsive.tablet.props.fieldBorderRadius')?.valueType === 'number' &&
+	        defaultLayoutTargets.get('layout.x')?.valueType === 'number' &&
+        defaultLayoutTargets.get('layout.y')?.valueType === 'number' &&
+        defaultLayoutTargets.get('layout.width')?.valueType === 'number' &&
+        defaultLayoutTargets.get('layout.height')?.valueType === 'number' &&
+        defaultLayoutTargets.get('layout.zIndex')?.valueType === 'number' &&
+        defaultLayoutTargets.get('layout.rotation')?.valueType === 'number' &&
+        defaultLayoutTargets.get('responsive.mobile.x')?.valueType === 'number' &&
+        defaultLayoutTargets.get('responsive.tablet.width')?.valueType === 'number' &&
+        defaultLayoutTargets.get('responsive.mobile.visible')?.valueType === 'boolean' &&
+        defaultLayoutTargets.get('responsive.tablet.locked')?.valueType === 'boolean',
+      'listBackyContentElements() did not expose unset default button/link/form control targets',
+    );
+    assert(
+      defaultLayoutTargets.get('layout.x')?.source === 'layout' &&
+        defaultLayoutTargets.get('responsive.mobile.x')?.source === 'responsive' &&
+        defaultLayoutTargets.get('responsive.tablet.locked')?.source === 'responsive',
+      'listBackyContentElements() did not expose unset layout/responsive geometry targets',
+    );
+    assert(
+      defaultButtonTargets.get('animation.type')?.source === 'animation' &&
+        defaultButtonTargets.get('styles.boxShadow')?.source === 'styles' &&
+        defaultButtonTargets.get('tokenRefs.styles.boxShadow')?.source === 'tokenRefs' &&
+        defaultButtonTargets.get('actions')?.source === 'interactions' &&
+        defaultButtonTargets.get('dataBindings')?.source === 'interactions' &&
+        defaultButtonTargets.get('bindingSlots')?.source === 'interactions',
+      'listBackyContentElements() did not expose unset animation/actions/bindings targets',
+    );
+    const defaultControlPatchedContent = patchBackyContentEditableFields(
+      {
+        elements: [
+          {
+            id: 'sdk-default-button-controls',
+            type: 'button',
+            props: { label: 'Start' },
+          },
+          {
+            id: 'sdk-default-link-controls',
+            type: 'link',
+            props: { content: 'Docs' },
+          },
+          {
+            id: 'sdk-default-input-controls',
+            type: 'input',
+            props: { name: 'email' },
+          },
+          {
+            id: 'sdk-default-layout-controls',
+            type: 'box',
+            props: {},
+          },
+        ],
+      },
+      [
+        { elementId: 'sdk-default-button-controls', field: 'props.actionPreset', value: 'download' },
+        { elementId: 'sdk-default-button-controls', field: 'props.backgroundColor', value: '#111827' },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileIds', value: ['sdk-default-file'] },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileMediaId', value: 'sdk-default-file' },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileMediaIds', value: ['sdk-default-file'] },
+        { elementId: 'sdk-default-button-controls', field: 'props.downloadMediaId', value: 'sdk-default-file' },
+        { elementId: 'sdk-default-button-controls', field: 'props.downloadMediaIds', value: ['sdk-default-file'] },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileMediaUrl', value: '/api/sites/site-demo/media/sdk-default-file/file?disposition=attachment' },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileDownloadDisposition', value: 'attachment' },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileSignedUrlRequired', value: true },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileSignedUrlEndpoint', value: '/api/admin/sites/site-demo/media/sdk-default-file/signed-url' },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileMediaName', value: 'SDK default file.pdf' },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileMediaType', value: 'document' },
+        { elementId: 'sdk-default-button-controls', field: 'props.fileMediaVisibility', value: 'private' },
+        { elementId: 'sdk-default-button-controls', field: 'styles.boxShadow', value: '0 12px 30px rgba(15, 23, 42, 0.22)' },
+        { elementId: 'sdk-default-button-controls', field: 'tokenRefs.styles.boxShadow', value: 'shadows.page' },
+        { elementId: 'sdk-default-button-controls', field: 'responsive.tablet.styles.fontSize', value: 18 },
+        { elementId: 'sdk-default-button-controls', field: 'responsive.tablet.tokenRefs.styles.fontSize', value: 'typography.scale.body' },
+        { elementId: 'sdk-default-button-controls', field: 'responsive.mobile.props.borderWidth', value: 2 },
+        { elementId: 'sdk-default-button-controls', field: 'responsive.mobile.props.downloadMediaIds', value: ['sdk-mobile-default-file'] },
+        { elementId: 'sdk-default-button-controls', field: 'responsive.tablet.props.fileMediaIds', value: ['sdk-tablet-default-file'] },
+        { elementId: 'sdk-default-button-controls', field: 'responsive.mobile.props.fileSignedUrlRequired', value: true },
+        { elementId: 'sdk-default-button-controls', field: 'responsive.mobile.styles.boxShadow', value: 'none' },
+        { elementId: 'sdk-default-button-controls', field: 'animation.type', value: 'custom' },
+        { elementId: 'sdk-default-button-controls', field: 'animation.duration', value: 0.35 },
+        { elementId: 'sdk-default-button-controls', field: 'animation.easing', value: 'power2.out' },
+        { elementId: 'sdk-default-button-controls', field: 'animation.scrollTrigger.start', value: 'top 80%' },
+        { elementId: 'sdk-default-button-controls', field: 'animation.scrollTrigger.scrub', value: true },
+        { elementId: 'sdk-default-button-controls', field: 'animation.from', value: { opacity: 0, y: 12 } },
+        { elementId: 'sdk-default-button-controls', field: 'animation.to', value: { opacity: 1, y: 0 } },
+        { elementId: 'sdk-default-button-controls', field: 'animation.tokenRefs.duration', value: 'motion.duration.fast' },
+        {
+          elementId: 'sdk-default-button-controls',
+          field: 'actions',
+          value: [{ id: 'sdk-default-button-action', type: 'customEvent', label: 'Track button' }],
+        },
+        {
+          elementId: 'sdk-default-button-controls',
+          field: 'dataBindings',
+          value: [{ id: 'sdk-default-button-binding', targetPath: 'props.label', source: { kind: 'collection', field: 'title' } }],
+        },
+        {
+          elementId: 'sdk-default-button-controls',
+          field: 'bindingSlots',
+          value: [{ id: 'sdk-default-button-slot', path: 'props.label', kind: 'text' }],
+        },
+        { elementId: 'sdk-default-link-controls', field: 'props.underline', value: true },
+        { elementId: 'sdk-default-link-controls', field: 'props.fileIds', value: ['sdk-default-link-file'] },
+        { elementId: 'sdk-default-link-controls', field: 'props.downloadMediaIds', value: ['sdk-default-link-file'] },
+        { elementId: 'sdk-default-link-controls', field: 'props.fileSignedUrlRequired', value: true },
+        { elementId: 'sdk-default-input-controls', field: 'props.required', value: true },
+        { elementId: 'sdk-default-layout-controls', field: 'layout.x', value: 24 },
+        { elementId: 'sdk-default-layout-controls', field: 'layout.width', value: 360 },
+        { elementId: 'sdk-default-layout-controls', field: 'layout.rotation', value: 4 },
+        { elementId: 'sdk-default-layout-controls', field: 'responsive.mobile.x', value: 12 },
+        { elementId: 'sdk-default-layout-controls', field: 'responsive.tablet.width', value: 320 },
+        { elementId: 'sdk-default-layout-controls', field: 'responsive.mobile.visible', value: false },
+        { elementId: 'sdk-default-layout-controls', field: 'responsive.tablet.locked', value: true },
+        { elementId: 'sdk-default-layout-controls', field: 'visibility.hidden', value: 'false' },
+        { elementId: 'sdk-default-layout-controls', field: 'visibility.locked', value: '0' },
+      ],
+    );
+    const defaultPatchedButton = findBackyContentElement(defaultControlPatchedContent, 'sdk-default-button-controls');
+    const defaultPatchedLayout = findBackyContentElement(defaultControlPatchedContent, 'sdk-default-layout-controls');
+    assert(
+        defaultPatchedButton?.props?.actionPreset === 'download' &&
+        defaultPatchedButton?.props?.backgroundColor === '#111827' &&
+        defaultPatchedButton?.props?.fileIds?.includes?.('sdk-default-file') &&
+        defaultPatchedButton?.props?.fileMediaId === 'sdk-default-file' &&
+        defaultPatchedButton?.props?.fileMediaIds?.includes?.('sdk-default-file') &&
+        defaultPatchedButton?.props?.downloadMediaId === 'sdk-default-file' &&
+        defaultPatchedButton?.props?.downloadMediaIds?.includes?.('sdk-default-file') &&
+        defaultPatchedButton?.props?.fileMediaUrl === '/api/sites/site-demo/media/sdk-default-file/file?disposition=attachment' &&
+        defaultPatchedButton?.props?.fileDownloadDisposition === 'attachment' &&
+        defaultPatchedButton?.props?.fileSignedUrlRequired === true &&
+        defaultPatchedButton?.props?.fileSignedUrlEndpoint === '/api/admin/sites/site-demo/media/sdk-default-file/signed-url' &&
+        defaultPatchedButton?.props?.fileMediaName === 'SDK default file.pdf' &&
+        defaultPatchedButton?.props?.fileMediaType === 'document' &&
+        defaultPatchedButton?.props?.fileMediaVisibility === 'private' &&
+        defaultPatchedButton?.styles?.boxShadow === '0 12px 30px rgba(15, 23, 42, 0.22)' &&
+        defaultPatchedButton?.tokenRefs?.['styles.boxShadow'] === 'shadows.page' &&
+        defaultPatchedButton?.responsive?.tablet?.styles?.fontSize === 18 &&
+        defaultPatchedButton?.responsive?.tablet?.tokenRefs?.['styles.fontSize'] === 'typography.scale.body' &&
+        defaultPatchedButton?.responsive?.mobile?.props?.borderWidth === 2 &&
+        defaultPatchedButton?.responsive?.mobile?.props?.downloadMediaIds?.includes?.('sdk-mobile-default-file') &&
+        defaultPatchedButton?.responsive?.tablet?.props?.fileMediaIds?.includes?.('sdk-tablet-default-file') &&
+        defaultPatchedButton?.responsive?.mobile?.props?.fileSignedUrlRequired === true &&
+        defaultPatchedButton?.responsive?.mobile?.styles?.boxShadow === 'none' &&
+        findBackyContentElement(defaultControlPatchedContent, 'sdk-default-link-controls')?.props?.underline === true &&
+        findBackyContentElement(defaultControlPatchedContent, 'sdk-default-link-controls')?.props?.fileIds?.includes?.('sdk-default-link-file') &&
+        findBackyContentElement(defaultControlPatchedContent, 'sdk-default-link-controls')?.props?.downloadMediaIds?.includes?.('sdk-default-link-file') &&
+        findBackyContentElement(defaultControlPatchedContent, 'sdk-default-link-controls')?.props?.fileSignedUrlRequired === true &&
+        findBackyContentElement(defaultControlPatchedContent, 'sdk-default-input-controls')?.props?.required === true,
+      'patchBackyContentEditableFields() did not patch unset default button/link/form control targets',
+    );
+    assert(
+      defaultPatchedLayout?.x === 24 &&
+        defaultPatchedLayout?.width === 360 &&
+        defaultPatchedLayout?.rotation === 4 &&
+        defaultPatchedLayout?.responsive?.mobile?.x === 12 &&
+        defaultPatchedLayout?.responsive?.tablet?.width === 320 &&
+        defaultPatchedLayout?.responsive?.mobile?.visible === false &&
+        defaultPatchedLayout?.responsive?.tablet?.locked === true &&
+        defaultPatchedLayout?.visible === true &&
+        defaultPatchedLayout?.locked === false,
+      'patchBackyContentEditableFields() did not patch unset layout/responsive geometry targets',
+    );
+    assert(
+      defaultPatchedButton?.animation?.type === 'custom' &&
+        defaultPatchedButton?.animation?.duration === 0.35 &&
+        defaultPatchedButton?.animation?.easing === 'power2.out' &&
+        defaultPatchedButton?.animation?.scrollTrigger?.start === 'top 80%' &&
+        defaultPatchedButton?.animation?.scrollTrigger?.scrub === true &&
+        defaultPatchedButton?.animation?.from?.y === 12 &&
+        defaultPatchedButton?.animation?.to?.opacity === 1 &&
+        defaultPatchedButton?.animation?.tokenRefs?.duration === 'motion.duration.fast' &&
+        defaultPatchedButton?.actions?.[0]?.type === 'customEvent' &&
+        defaultPatchedButton?.dataBindings?.[0]?.targetPath === 'props.label' &&
+        defaultPatchedButton?.bindingSlots?.[0]?.path === 'props.label',
+      'patchBackyContentEditableFields() did not patch unset animation/actions/bindings targets',
+    );
+    const editorCommandEvaluation = evaluateBackyEditorCommandRegistry(
+      fixtureManifest.data.modules.liveManagement.editorComposition.commandRegistry,
+      {
+        content: liveManagedPage.data.page.content,
+        selectedIds: ['sdk-smoke-form-title', 'sdk-smoke-form-message'],
+        clipboardCount: 1,
+        canEdit: true,
+        canPublish: true,
+        historyIndex: 1,
+        historyLength: 2,
+      },
+    );
+    assert(editorCommandEvaluation.schemaVersion === 'backy.editor-command-registry-evaluation.v1', 'evaluateBackyEditorCommandRegistry() returned the wrong schema');
+    assert(editorCommandEvaluation.commands.some((command) => command.id === 'group-selection' && command.state === 'ready'), 'evaluateBackyEditorCommandRegistry() did not mark sibling grouping ready');
+    assert(editorCommandEvaluation.commands.some((command) => command.id === 'paste-selection' && command.state === 'ready'), 'evaluateBackyEditorCommandRegistry() did not mark paste ready with clipboard content');
+    assert(editorCommandEvaluation.commands.some((command) => command.id === 'ungroup-selection' && command.state === 'disabled'), 'evaluateBackyEditorCommandRegistry() should keep ungroup disabled for non-group siblings');
+    assert(editorCommandEvaluation.commands.some((command) => command.id === 'toggle-grid' && command.state === 'ready'), 'evaluateBackyEditorCommandRegistry() did not expose ready viewport commands');
+    assert(editorCommandEvaluation.commands.some((command) => command.id === 'save-page' && command.state === 'ready'), 'evaluateBackyEditorCommandRegistry() did not expose ready save command');
+    const booleanLikeLayerEvaluation = evaluateBackyEditorCommandRegistry(
+      fixtureManifest.data.modules.liveManagement.editorComposition.commandRegistry,
+      {
+        content: {
+          elements: [
+            { id: 'sdk-string-locked-a', type: 'text', locked: 'true', props: { content: 'Locked' } },
+            { id: 'sdk-string-hidden-b', type: 'text', visible: 'false', props: { content: 'Hidden' } },
+          ],
+        },
+        selectedIds: ['sdk-string-locked-a', 'sdk-string-hidden-b'],
+        canEdit: true,
+      },
+    );
+    assert(
+      booleanLikeLayerEvaluation.commands.some((command) => command.id === 'group-selection' && command.state === 'disabled') &&
+        booleanLikeLayerEvaluation.commands.some((command) => command.id === 'toggle-selection-visibility' && command.state === 'disabled'),
+      'evaluateBackyEditorCommandRegistry() did not normalize boolean-like layer visibility/locking state',
+    );
+    writeChecks.push('evaluateBackyEditorCommandRegistry');
     writeChecks.push('liveManagedPage');
+
+    const addedLivePageElement = addBackyContentElement(
+      liveManagedPage.data.page.content,
+      {
+        id: 'sdk-smoke-added-field',
+        type: 'input',
+        name: 'SDK added field',
+        x: 16,
+        y: 132,
+        width: 220,
+        height: 36,
+        props: { label: 'Added from SDK', placeholder: 'Programmatic element' },
+      },
+      {
+        parentId: 'sdk-smoke-form',
+        index: 2,
+      },
+    );
+    assert(addedLivePageElement?.elementId === 'sdk-smoke-added-field', 'addBackyContentElement() did not return the added element id');
+    assert(
+      findBackyContentElement(addedLivePageElement.content, 'sdk-smoke-added-field')?.parentId === 'sdk-smoke-form',
+      'addBackyContentElement() did not insert the element under the requested parent',
+    );
+    writeChecks.push('addBackyContentElement');
+
+    const duplicatedLivePageElement = duplicateBackyContentElement(
+      addedLivePageElement.content,
+      'sdk-smoke-added-field',
+      {
+        duplicateId: 'sdk-smoke-added-field-copy',
+        idSuffix: 'sdk-copy',
+        offsetX: 12,
+        offsetY: 18,
+      },
+    );
+    assert(
+      duplicatedLivePageElement?.duplicateId === 'sdk-smoke-added-field-copy' &&
+        findBackyContentElement(duplicatedLivePageElement.content, 'sdk-smoke-added-field-copy')?.parentId === 'sdk-smoke-form',
+      'duplicateBackyContentElement() did not duplicate the selected element tree',
+    );
+    writeChecks.push('duplicateBackyContentElement');
+
+    const transformedLivePageElement = transformBackyContentElements(
+      duplicatedLivePageElement.content,
+      [
+        {
+          elementId: 'sdk-smoke-added-field-copy',
+          deltaX: 24,
+          width: 260,
+        },
+        {
+          elementId: 'sdk-smoke-form-message',
+          y: 96,
+          breakpoint: 'mobile',
+        },
+      ],
+    );
+    const transformedAddedField = findBackyContentElement(transformedLivePageElement?.content, 'sdk-smoke-added-field-copy');
+    const transformedMessageField = findBackyContentElement(transformedLivePageElement?.content, 'sdk-smoke-form-message');
+    assert(
+      transformedAddedField?.x === 52 &&
+        transformedAddedField.width === 260 &&
+        transformedMessageField?.responsive?.mobile?.y === 96,
+      'transformBackyContentElements() did not apply desktop and responsive transform commands',
+    );
+    const transformedDescriptors = listBackyContentElements(transformedLivePageElement.content);
+    assert(
+      transformedDescriptors.some((element) => (
+        element.id === 'sdk-smoke-form-message' &&
+        element.editableTargetPaths.includes('responsive.mobile.y')
+      )),
+      'listBackyContentElements() did not expose responsive override editable target paths',
+    );
+    writeChecks.push('transformBackyContentElements');
+
+    const deletedLivePageElement = deleteBackyContentElements(
+      transformedLivePageElement.content,
+      ['sdk-smoke-added-field-copy'],
+    );
+    assert(
+      deletedLivePageElement?.deletedIds.includes('sdk-smoke-added-field-copy') &&
+        findBackyContentElement(deletedLivePageElement.content, 'sdk-smoke-added-field-copy') === null,
+      'deleteBackyContentElements() did not remove the selected element tree',
+    );
+    writeChecks.push('deleteBackyContentElements');
 
     const groupedLivePageContent = groupBackyContentElements(
       liveManagedPage.data.page.content,
@@ -2086,6 +3553,20 @@ if (runWriteSmoke) {
       groupedFormField.children.every((child) => child.parentId === 'sdk-smoke-form-field-group'),
       'groupBackyContentElements() did not rewrite child parent ids',
     );
+    const groupedCommandEvaluation = evaluateBackyEditorCommandRegistry(
+      fixtureManifest.data.modules.liveManagement.editorComposition.commandRegistry,
+      {
+        content: groupedLivePageContent.content,
+        selectedIds: ['sdk-smoke-form-field-group'],
+        canEdit: true,
+      },
+    );
+    assert(groupedCommandEvaluation.commands.some((command) => command.id === 'ungroup-selection' && command.state === 'ready'), 'evaluateBackyEditorCommandRegistry() did not mark selected editor group ungroup ready');
+    const contentComposition = (content) => content?.metadata?.editorComposition || content?.contentDocument?.metadata?.editorComposition;
+    const groupedComposition = contentComposition(groupedLivePageContent.content);
+    assert(groupedComposition?.schemaVersion === 'backy.editor-composition-summary.v1', 'groupBackyContentElements() did not refresh editor composition metadata');
+    assert(groupedComposition?.metrics?.groupLayers >= 1, `groupBackyContentElements() did not report grouped layer metadata: ${JSON.stringify(groupedComposition)}`);
+    assert(groupedComposition?.groupIds?.includes?.('sdk-smoke-form-field-group'), 'groupBackyContentElements() composition metadata missing group id');
     writeChecks.push('groupBackyContentElements');
 
     const groupedLiveManagedPageUpdate = await writeClient.updateLiveManagedPage(fixture.pageId, {
@@ -2115,7 +3596,322 @@ if (runWriteSmoke) {
       findBackyContentElement(ungroupedLivePageContent.content, 'sdk-smoke-form-field-group') === null,
       'ungroupBackyContentElements() left the editor group in the content tree',
     );
+    const ungroupedComposition = contentComposition(ungroupedLivePageContent.content);
+    assert(ungroupedComposition?.schemaVersion === 'backy.editor-composition-summary.v1', 'ungroupBackyContentElements() did not refresh editor composition metadata');
+    assert(!ungroupedComposition?.groupIds?.includes?.('sdk-smoke-form-field-group'), 'ungroupBackyContentElements() composition metadata retained stale group id');
     writeChecks.push('ungroupBackyContentElements');
+
+    const downloadFilePatch = buildBackyContentDownloadFilePatch(
+      'sdk-smoke-form-title',
+      client.getSiteId(),
+      'sdk-smoke-download-file-ref',
+      {
+        baseUrl,
+        fileName: 'SDK download.pdf',
+        mediaType: 'document',
+        visibility: 'private',
+        targetBlank: true,
+      },
+    );
+    assert(
+      downloadFilePatch.changes?.['props.fileMediaId'] === 'sdk-smoke-download-file-ref' &&
+        downloadFilePatch.changes?.['props.fileIds']?.[0] === 'sdk-smoke-download-file-ref' &&
+        downloadFilePatch.changes?.['props.downloadMediaIds']?.[0] === 'sdk-smoke-download-file-ref' &&
+        downloadFilePatch.changes?.['props.fileDownloadDisposition'] === 'attachment' &&
+        downloadFilePatch.changes?.['props.fileSignedUrlRequired'] === true,
+      'buildBackyContentDownloadFilePatch() did not create editor-compatible props patch',
+    );
+    const downloadFilePatchedLivePageContent = patchBackyContentElementDownloadFile(
+      ungroupedLivePageContent.content,
+      'sdk-smoke-form-title',
+      client.getSiteId(),
+      'sdk-smoke-download-file-ref',
+      {
+        baseUrl,
+        fileName: 'SDK download.pdf',
+        mediaType: 'document',
+        visibility: 'private',
+        targetBlank: true,
+      },
+    );
+    const downloadFilePatchedTitleElement = downloadFilePatchedLivePageContent
+      ? findBackyContentElement(downloadFilePatchedLivePageContent, 'sdk-smoke-form-title')
+      : null;
+    assert(
+      downloadFilePatchedTitleElement?.props?.href === `${baseUrl}/api/sites/${client.getSiteId()}/media/sdk-smoke-download-file-ref/file?disposition=attachment` &&
+        downloadFilePatchedTitleElement?.props?.download === true &&
+        downloadFilePatchedTitleElement?.props?.fileIds?.[0] === 'sdk-smoke-download-file-ref' &&
+        downloadFilePatchedTitleElement?.props?.fileMediaId === 'sdk-smoke-download-file-ref' &&
+        downloadFilePatchedTitleElement?.props?.downloadMediaIds?.[0] === 'sdk-smoke-download-file-ref' &&
+        downloadFilePatchedTitleElement?.props?.fileSignedUrlEndpoint === `/api/admin/sites/${client.getSiteId()}/media/sdk-smoke-download-file-ref/signed-url` &&
+        Array.isArray(downloadFilePatchedTitleElement.assetIds) &&
+        downloadFilePatchedTitleElement.assetIds.includes('sdk-smoke-download-file-ref'),
+      'patchBackyContentElementDownloadFile() did not attach central uploaded file design state',
+    );
+    writeChecks.push('patchBackyContentElementDownloadFile');
+
+    const mediaSyncedLivePageContent = patchBackyContentElement(downloadFilePatchedLivePageContent, {
+      elementId: 'sdk-smoke-form-title',
+      changes: {
+        'props.mediaId': 'sdk-smoke-media-ref',
+        'props.fontMediaId': 'sdk-smoke-font-ref',
+        'props.fileMediaId': 'sdk-smoke-file-ref',
+        'props.downloadMediaIds': ['sdk-smoke-download-ref', 'sdk-smoke-download-alt'],
+      },
+    });
+    const mediaSyncedLivePageElement = mediaSyncedLivePageContent
+      ? findBackyContentElement(mediaSyncedLivePageContent, 'sdk-smoke-form-title')
+      : null;
+    assert(
+      mediaSyncedLivePageElement?.props?.mediaId === 'sdk-smoke-media-ref' &&
+        mediaSyncedLivePageElement?.props?.fontMediaId === 'sdk-smoke-font-ref' &&
+        mediaSyncedLivePageElement?.props?.fileMediaId === 'sdk-smoke-file-ref' &&
+        mediaSyncedLivePageElement?.props?.downloadMediaIds?.includes?.('sdk-smoke-download-ref') &&
+        Array.isArray(mediaSyncedLivePageElement.assetIds) &&
+        mediaSyncedLivePageElement.assetIds.includes('sdk-smoke-media-ref') &&
+        mediaSyncedLivePageElement.assetIds.includes('sdk-smoke-font-ref') &&
+        mediaSyncedLivePageElement.assetIds.includes('sdk-smoke-file-ref') &&
+        mediaSyncedLivePageElement.assetIds.includes('sdk-smoke-download-ref') &&
+        mediaSyncedLivePageElement.assetIds.includes('sdk-smoke-download-file-ref'),
+      'patchBackyContentElement() did not sync media/font/file/download editable target refs into assetIds',
+    );
+    const mediaSyncedEditableTitle = listBackyContentElements(mediaSyncedLivePageContent).find((element) => element.id === 'sdk-smoke-form-title');
+    const mediaSyncedTargetByPath = new Map((mediaSyncedEditableTitle?.editableTargets || []).map((target) => [target.path, target]));
+    assert(
+      mediaSyncedTargetByPath.get('props.fileMediaId')?.valueType === 'asset' &&
+        mediaSyncedTargetByPath.get('props.downloadMediaIds')?.valueType === 'assetList',
+      'listBackyContentElements() did not classify file/download media editable targets for asset pickers',
+    );
+    writeChecks.push('patchBackyContentElement:assetIds');
+
+    const responsivePatchedLivePageContent = patchBackyContentEditableFields(ungroupedLivePageContent.content, [
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.mobile.styles.color',
+        value: '#0f172a',
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'tokenRefs.styles.color',
+        value: 'colors.text',
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.mobile.props.placeholder',
+        value: 'Mobile message edited through SDK',
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.mobile.props.mediaId',
+        value: 'sdk-smoke-mobile-media-ref',
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.mobile.props.mediaIds',
+        value: ['sdk-smoke-mobile-gallery-ref', 'sdk-smoke-mobile-gallery-alt'],
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.mobile.props.fontMediaIds',
+        value: ['sdk-smoke-mobile-font-ref'],
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.mobile.props.posterMediaIds',
+        value: ['sdk-smoke-mobile-poster-ref'],
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.mobile.props.downloadMediaIds',
+        value: ['sdk-smoke-mobile-download-ref'],
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.tablet.props.fileMediaIds',
+        value: ['sdk-smoke-tablet-file-ref'],
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.tablet.styles.backgroundMediaIds',
+        value: ['sdk-smoke-tablet-background-ref'],
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'responsive.tablet.width',
+        value: 320,
+      },
+      {
+        elementId: 'sdk-smoke-form-title',
+        field: 'props.href',
+        value: '/sdk-smoke-title-action',
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'animation.type',
+        value: 'custom',
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'animation.duration',
+        value: 0.45,
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'animation.from',
+        value: { opacity: 0, y: 18, scale: 0.98 },
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'animation.to',
+        value: { opacity: 1, y: 0, scale: 1 },
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'animation.tokenRefs.duration',
+        value: 'motion.duration.fast',
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'animation.tokenRefs.easing',
+        value: 'motion.easing.standard',
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'actions',
+        value: [
+          {
+            id: 'sdk-message-track',
+            type: 'customEvent',
+            label: 'Track message edit',
+          },
+        ],
+      },
+      {
+        elementId: 'sdk-smoke-form-message',
+        field: 'dataBindings',
+        value: [
+          {
+            id: 'sdk-message-binding',
+            targetPath: 'props.value',
+            source: {
+              kind: 'collection',
+              collectionId: 'sdk_messages',
+              field: 'body',
+            },
+            mode: 'text',
+          },
+        ],
+      },
+    ]);
+    const responsivePatchedLivePageElement = responsivePatchedLivePageContent
+      ? findBackyContentElement(responsivePatchedLivePageContent, 'sdk-smoke-form-message')
+      : null;
+    const responsivePatchedTitleElement = responsivePatchedLivePageContent
+      ? findBackyContentElement(responsivePatchedLivePageContent, 'sdk-smoke-form-title')
+      : null;
+    assert(
+      responsivePatchedLivePageElement?.responsive?.mobile?.styles?.color === '#0f172a' &&
+        responsivePatchedTitleElement?.props?.href === '/sdk-smoke-title-action' &&
+        responsivePatchedLivePageElement?.tokenRefs?.['styles.color'] === 'colors.text' &&
+        responsivePatchedLivePageElement?.responsive?.mobile?.props?.placeholder === 'Mobile message edited through SDK' &&
+        responsivePatchedLivePageElement?.responsive?.mobile?.props?.mediaId === 'sdk-smoke-mobile-media-ref' &&
+        responsivePatchedLivePageElement?.responsive?.mobile?.props?.mediaIds?.includes?.('sdk-smoke-mobile-gallery-ref') &&
+        responsivePatchedLivePageElement?.responsive?.mobile?.props?.fontMediaIds?.includes?.('sdk-smoke-mobile-font-ref') &&
+        responsivePatchedLivePageElement?.responsive?.mobile?.props?.posterMediaIds?.includes?.('sdk-smoke-mobile-poster-ref') &&
+        responsivePatchedLivePageElement?.responsive?.mobile?.props?.downloadMediaIds?.includes?.('sdk-smoke-mobile-download-ref') &&
+        responsivePatchedLivePageElement?.responsive?.tablet?.props?.fileMediaIds?.includes?.('sdk-smoke-tablet-file-ref') &&
+        responsivePatchedLivePageElement?.responsive?.tablet?.styles?.backgroundMediaIds?.includes?.('sdk-smoke-tablet-background-ref') &&
+        responsivePatchedLivePageElement?.responsive?.tablet?.width === 320 &&
+        Array.isArray(responsivePatchedLivePageElement.assetIds) &&
+        responsivePatchedLivePageElement.assetIds.includes('sdk-smoke-mobile-media-ref') &&
+        responsivePatchedLivePageElement.assetIds.includes('sdk-smoke-mobile-gallery-ref') &&
+        responsivePatchedLivePageElement.assetIds.includes('sdk-smoke-mobile-gallery-alt') &&
+        responsivePatchedLivePageElement.assetIds.includes('sdk-smoke-mobile-font-ref') &&
+        responsivePatchedLivePageElement.assetIds.includes('sdk-smoke-mobile-poster-ref') &&
+        responsivePatchedLivePageElement.assetIds.includes('sdk-smoke-mobile-download-ref') &&
+        responsivePatchedLivePageElement.assetIds.includes('sdk-smoke-tablet-file-ref') &&
+        responsivePatchedLivePageElement.assetIds.includes('sdk-smoke-tablet-background-ref') &&
+        responsivePatchedLivePageElement?.animation?.type === 'custom' &&
+        responsivePatchedLivePageElement?.animation?.duration === 0.45 &&
+        responsivePatchedLivePageElement?.animation?.from?.y === 18 &&
+        responsivePatchedLivePageElement?.animation?.to?.opacity === 1 &&
+        responsivePatchedLivePageElement?.animation?.tokenRefs?.duration === 'motion.duration.fast' &&
+        responsivePatchedLivePageElement?.animation?.tokenRefs?.easing === 'motion.easing.standard' &&
+        responsivePatchedLivePageElement?.actions?.[0]?.type === 'customEvent' &&
+        responsivePatchedLivePageElement?.dataBindings?.[0]?.source?.collectionId === 'sdk_messages',
+      'patchBackyContentEditableFields() did not patch responsive custom frontend design state',
+    );
+    assert(
+      responsivePatchedLivePageElement?.animation?.type === 'custom' &&
+        responsivePatchedLivePageElement?.animation?.from?.scale === 0.98 &&
+        responsivePatchedLivePageElement?.animation?.to?.scale === 1,
+      'patchBackyContentEditableFields() did not patch custom animation JSON state',
+    );
+    assert(
+      (() => {
+        const editableElement = listBackyContentElements(responsivePatchedLivePageContent).find((element) => element.id === 'sdk-smoke-form-message');
+        const targetByPath = new Map((editableElement?.editableTargets || []).map((target) => [target.path, target]));
+        return Boolean(
+          editableElement?.editableTargetPaths.includes('tokenRefs.styles.color') &&
+          editableElement.editableTargetPaths.includes('responsive.mobile.styles.color') &&
+          editableElement.editableTargetPaths.includes('responsive.mobile.props.mediaId') &&
+          editableElement.editableTargetPaths.includes('responsive.mobile.props.mediaIds') &&
+          editableElement.editableTargetPaths.includes('responsive.mobile.props.fontMediaIds') &&
+          editableElement.editableTargetPaths.includes('responsive.mobile.props.posterMediaIds') &&
+          editableElement.editableTargetPaths.includes('responsive.mobile.props.downloadMediaIds') &&
+          editableElement.editableTargetPaths.includes('responsive.tablet.props.fileMediaIds') &&
+          editableElement.editableTargetPaths.includes('responsive.tablet.styles.backgroundMediaIds') &&
+          editableElement.editableTargetPaths.includes('responsive.tablet.width') &&
+          editableElement.editableTargetPaths.includes('animation.type') &&
+          editableElement.editableTargetPaths.includes('animation.from') &&
+          editableElement.editableTargetPaths.includes('animation.to') &&
+          editableElement.editableTargetPaths.includes('animation.tokenRefs.duration') &&
+          targetByPath.get('responsive.mobile.props.downloadMediaIds')?.valueType === 'assetList' &&
+          targetByPath.get('responsive.tablet.props.fileMediaIds')?.valueType === 'assetList'
+        );
+      })(),
+      'listBackyContentElements() did not expose patched custom animation targets',
+    );
+    const responsiveEditableMapPatchedContent = patchBackyContentEditableMapValues(
+      responsivePatchedLivePageContent,
+      {
+        'form.message.mobile.placeholder': {
+          elementId: 'sdk-smoke-form-message',
+          targetPath: 'responsive.mobile.props.placeholder',
+          editable: true,
+        },
+        'form.message.mobile.token-color': {
+          elementId: 'sdk-smoke-form-message',
+          targetPath: 'responsive.mobile.tokenRefs.styles.color',
+          editable: true,
+        },
+      },
+      {
+        'form.message.mobile.placeholder': 'Mobile message edited from editable map',
+        'form.message.mobile.token-color': 'colors.primary',
+      },
+    );
+    const responsiveEditableMapElement = responsiveEditableMapPatchedContent
+      ? findBackyContentElement(responsiveEditableMapPatchedContent, 'sdk-smoke-form-message')
+      : null;
+    assert(
+      responsiveEditableMapElement?.responsive?.mobile?.props?.placeholder === 'Mobile message edited from editable map' &&
+        responsiveEditableMapElement?.responsive?.mobile?.tokenRefs?.['styles.color'] === 'colors.primary',
+      'patchBackyContentEditableMapValues() did not patch responsive targetPath aliases',
+    );
+    const responsiveComposition = contentComposition(responsiveEditableMapPatchedContent);
+    assert(responsiveComposition?.metrics?.responsiveOverrideLayers >= 1, 'patchBackyContentEditableMapValues() did not refresh responsive override composition metadata');
+    assert(responsiveComposition?.metrics?.animatedLayers >= 1, 'patchBackyContentEditableFields() did not refresh animated composition metadata');
+    assert(responsiveComposition?.metrics?.actionLayers >= 2, 'patchBackyContentEditableFields() did not refresh action composition metadata');
+    assert(responsiveComposition?.metrics?.dataBoundLayers >= 1, 'patchBackyContentEditableFields() did not refresh data-bound composition metadata');
+    assert(responsiveComposition?.metrics?.tokenRefLayers >= 1, 'patchBackyContentEditableFields() did not refresh token-ref composition metadata');
+    assert(responsiveComposition?.metrics?.assetBoundLayers >= 1, 'patchBackyContentEditableFields() did not refresh asset-bound composition metadata');
+    assert(responsiveComposition?.animatedElementIds?.includes?.('sdk-smoke-form-message'), 'patchBackyContentEditableFields() composition metadata missing animated element id');
+    assert(responsiveComposition?.actionElementIds?.includes?.('sdk-smoke-form-title'), 'patchBackyContentEditableFields() composition metadata missing prop-action element id');
+    assert(responsiveComposition?.dataBoundElementIds?.includes?.('sdk-smoke-form-message'), 'patchBackyContentEditableFields() composition metadata missing data-bound element id');
+    assert(responsiveComposition?.assetBoundElementIds?.includes?.('sdk-smoke-form-message'), 'patchBackyContentEditableFields() composition metadata missing asset-bound element id');
+    writeChecks.push('patchBackyContentEditableFields:responsive');
+    writeChecks.push('patchBackyContentEditableMapValues:responsive');
 
     const patchedLivePageContent = patchBackyContentElements(ungroupedLivePageContent.content, [
       {
@@ -2244,6 +4040,8 @@ if (runWriteSmoke) {
       requestId: 'sdk-admin-page-lifecycle-revisions',
     });
     assert(Array.isArray(lifecyclePageRevisions.data.revisions), 'adminPageRevisions() missing lifecycle page revisions array');
+    assert(lifecyclePageRevisions.data.revisions.length >= 1, 'adminPageRevisions() lifecycle page revisions did not include publish/archive snapshots');
+    assertRevisionBranchMetadata(lifecyclePageRevisions.data.revisions[0], 'page', 'admin-page-revisions-api', 'adminPageRevisions():lifecycle');
     writeChecks.push('adminPageRevisions:lifecycle');
 
     const deletedLifecyclePage = await writeClient.deleteAdminPage(lifecyclePageId, {
@@ -2252,6 +4050,161 @@ if (runWriteSmoke) {
     assert(deletedLifecyclePage.data.deleted === true, 'deleteAdminPage() did not delete lifecycle page');
     assert(deletedLifecyclePage.data.pageId === lifecyclePageId, 'deleteAdminPage() returned wrong page id');
     writeChecks.push('deleteAdminPage');
+
+    const lifecyclePostSlug = `sdk-lifecycle-post-${Date.now()}`;
+    const lifecyclePost = await writeClient.createAdminBlogPost({
+      title: 'SDK Lifecycle Post',
+      slug: lifecyclePostSlug,
+      excerpt: 'Temporary post for SDK lifecycle coverage.',
+      status: 'draft',
+      meta: {
+        title: 'SDK Lifecycle Post',
+        description: 'Temporary post for SDK lifecycle coverage.',
+        canonical: `/blog/${lifecyclePostSlug}`,
+      },
+      categoryIds: firstAdminBlogCategoryId ? [firstAdminBlogCategoryId] : [],
+      tagIds: firstAdminBlogTagId ? [firstAdminBlogTagId] : [],
+      content: {
+        canvasSize: { width: 960, height: 720 },
+        customCSS: '.sdk-lifecycle-post { color: var(--backy-color-primary); }',
+        customJS: 'window.__backySdkLifecyclePost = true;',
+        elements: [
+          {
+            id: 'sdk-lifecycle-post-hero',
+            type: 'heading',
+            x: 72,
+            y: 72,
+            width: 680,
+            height: 84,
+            props: {
+              content: 'SDK lifecycle post',
+              level: 'h1',
+              mediaId: 'sdk-lifecycle-post-media',
+            },
+            styles: {
+              color: '#111827',
+            },
+            tokenRefs: {
+              'styles.color': 'colors.primary',
+            },
+            animation: {
+              type: 'custom',
+              duration: 0.35,
+              from: { opacity: 0, y: 16 },
+              to: { opacity: 1, y: 0 },
+              tokenRefs: {
+                duration: 'motion.duration.fast',
+                easing: 'motion.easing.standard',
+              },
+            },
+            responsive: {
+              mobile: {
+                x: 24,
+                y: 48,
+                width: 320,
+                props: {
+                  content: 'SDK lifecycle post mobile',
+                  mediaId: 'sdk-lifecycle-post-mobile-media',
+                },
+              },
+            },
+          },
+        ],
+      },
+      requestId: 'sdk-admin-blog-post-create',
+    });
+    const lifecyclePostId = lifecyclePost.data.post?.id;
+    const lifecyclePostHero = findBackyContentElement(lifecyclePost.data.post?.content, 'sdk-lifecycle-post-hero');
+    assert(lifecyclePostId, 'createAdminBlogPost() missing created post id');
+    assert(lifecyclePost.data.post.slug === lifecyclePostSlug, 'createAdminBlogPost() returned wrong post slug');
+    assert(lifecyclePost.data.post.updatedAt, 'createAdminBlogPost() missing updatedAt for conflict-safe writes');
+    assert(lifecyclePostHero?.animation?.from?.y === 16, 'createAdminBlogPost() did not preserve custom animation design state');
+    assert(lifecyclePostHero?.responsive?.mobile?.props?.mediaId === 'sdk-lifecycle-post-mobile-media', 'createAdminBlogPost() did not preserve responsive media design state');
+    writeChecks.push('createAdminBlogPost');
+
+    const updatedLifecyclePost = await writeClient.updateAdminBlogPost(lifecyclePostId, {
+      title: 'SDK Lifecycle Post Updated',
+      excerpt: 'Updated temporary post for SDK lifecycle coverage.',
+      expectedUpdatedAt: lifecyclePost.data.post.updatedAt,
+      revisionNote: 'SDK lifecycle blog post update',
+      content: {
+        canvasSize: { width: 960, height: 720 },
+        customCSS: '.sdk-lifecycle-post-updated { color: var(--backy-color-primary); }',
+        elements: [
+          {
+            id: 'sdk-lifecycle-post-hero',
+            type: 'heading',
+            x: 88,
+            y: 88,
+            width: 700,
+            height: 84,
+            props: {
+              content: 'SDK lifecycle post updated',
+              level: 'h1',
+            },
+            animation: {
+              type: 'custom',
+              duration: 0.25,
+              from: { opacity: 0, y: 8 },
+              to: { opacity: 1, y: 0 },
+            },
+          },
+        ],
+      },
+      requestId: 'sdk-admin-blog-post-update',
+    });
+    assert(updatedLifecyclePost.data.post?.title === 'SDK Lifecycle Post Updated', 'updateAdminBlogPost() did not update the post title');
+    assert(updatedLifecyclePost.data.post?.updatedAt, 'updateAdminBlogPost() missing updatedAt');
+    writeChecks.push('updateAdminBlogPost');
+
+    const lifecyclePostReadiness = await writeClient.adminBlogPostReadiness(lifecyclePostId, {
+      requestId: 'sdk-admin-blog-post-lifecycle-readiness',
+    });
+    const lifecyclePostReadinessErrors = lifecyclePostReadiness.data.readiness?.checks?.filter?.((check) => (
+      check?.severity === 'error' && check?.status !== 'pass'
+    )) || [];
+    assert(lifecyclePostReadiness.data.readiness?.id === lifecyclePostId, 'adminBlogPostReadiness() returned wrong lifecycle post');
+    assert(lifecyclePostReadinessErrors.length === 0, 'adminBlogPostReadiness() found lifecycle post readiness errors');
+    writeChecks.push('adminBlogPostReadiness:lifecycle');
+
+    const lifecyclePostPreview = await writeClient.createAdminBlogPostPreviewToken(lifecyclePostId, {
+      ttlSeconds: 300,
+      requestId: 'sdk-admin-blog-post-preview-token',
+    });
+    assert(lifecyclePostPreview.data.targetId === lifecyclePostId, 'createAdminBlogPostPreviewToken() returned wrong target');
+    assert(lifecyclePostPreview.data.previewToken, 'createAdminBlogPostPreviewToken() missing preview token');
+    assert(lifecyclePostPreview.data.postApiUrl?.includes('previewToken='), 'createAdminBlogPostPreviewToken() missing post preview API URL');
+    writeChecks.push('createAdminBlogPostPreviewToken');
+
+    const publishedLifecyclePost = await writeClient.publishAdminBlogPost(lifecyclePostId, {
+      expectedUpdatedAt: updatedLifecyclePost.data.post.updatedAt,
+      requestId: 'sdk-admin-blog-post-publish',
+    });
+    assert(publishedLifecyclePost.data.post?.status === 'published', 'publishAdminBlogPost() did not publish lifecycle post');
+    writeChecks.push('publishAdminBlogPost');
+
+    const archivedLifecyclePost = await writeClient.archiveAdminBlogPost(lifecyclePostId, {
+      expectedUpdatedAt: publishedLifecyclePost.data.post.updatedAt,
+      requestId: 'sdk-admin-blog-post-archive',
+    });
+    assert(archivedLifecyclePost.data.post?.status === 'archived', 'archiveAdminBlogPost() did not archive lifecycle post');
+    writeChecks.push('archiveAdminBlogPost');
+
+    const lifecyclePostRevisions = await writeClient.adminBlogPostRevisions(lifecyclePostId, {
+      limit: 5,
+      requestId: 'sdk-admin-blog-post-lifecycle-revisions',
+    });
+    assert(Array.isArray(lifecyclePostRevisions.data.revisions), 'adminBlogPostRevisions() missing lifecycle post revisions array');
+    assert(lifecyclePostRevisions.data.revisions.length >= 1, 'adminBlogPostRevisions() lifecycle post revisions did not include publish/archive snapshots');
+    assertRevisionBranchMetadata(lifecyclePostRevisions.data.revisions[0], 'post', 'admin-blog-revisions-api', 'adminBlogPostRevisions():lifecycle');
+    writeChecks.push('adminBlogPostRevisions:lifecycle');
+
+    const deletedLifecyclePost = await writeClient.deleteAdminBlogPost(lifecyclePostId, {
+      requestId: 'sdk-admin-blog-post-delete',
+    });
+    assert(deletedLifecyclePost.data.deleted === true, 'deleteAdminBlogPost() did not delete lifecycle post');
+    assert(deletedLifecyclePost.data.postId === lifecyclePostId, 'deleteAdminBlogPost() returned wrong post id');
+    writeChecks.push('deleteAdminBlogPost');
 
     const mediaLifecycleSlug = `sdk-media-${Date.now()}`;
     const mediaFolder = await writeClient.createMediaFolder({
@@ -2314,6 +4267,399 @@ if (runWriteSmoke) {
     assert(updatedMedia.data.media?.altText === 'SDK media lifecycle image updated', 'updateAdminMedia() did not update alt text');
     assert(updatedMedia.data.media?.metadata?.lifecycleStage === 'metadata-updated', 'updateAdminMedia() did not merge metadata');
     writeChecks.push('updateAdminMedia');
+
+    const productDesignSlug = `sdk-product-design-${Date.now()}`;
+    const createdCommerceProduct = await writeClient.createAdminCommerceProduct({
+      slug: productDesignSlug,
+      status: 'published',
+      values: {
+        title: 'SDK Product Design Record',
+        sku: `SKU-${productDesignSlug}`,
+        price: 49,
+        currency: 'USD',
+        inventory: 12,
+        productType: 'physical',
+        subscriptionenabled: true,
+        subscriptioninterval: 'monthly',
+        subscriptiontrialdays: 14,
+        imageUrl: updatedMedia.data.media?.url || uploadedImage.data.media?.url || '',
+        description: 'Product created through SDK smoke to verify custom storefront design-state durability.',
+        category: 'Featured',
+        featured: true,
+        frontendDesignTemplateId: 'sdk-product-template',
+        frontendDesignTemplateName: 'SDK Product Template',
+        frontendDesignRoutePattern: '/products/:recordSlug',
+        frontendDesignCustomCss: '.sdk-product-card { color: var(--backy-color-primary); }',
+        frontendDesignCustomJs: 'window.__backySdkProductDesign = true;',
+        frontendDesignContentDocument: {
+          schemaVersion: 'backy.content.v1',
+          kind: 'product',
+          title: 'SDK Product Design Record',
+          metadata: {
+            source: 'sdk-smoke',
+            mediaIds: [uploadedImageId],
+          },
+        },
+        frontendDesignElements: [
+          {
+            id: 'sdk-product-card',
+            type: 'productCard',
+            props: {
+              productSlug: productDesignSlug,
+              mediaId: uploadedImageId,
+            },
+            animation: {
+              type: 'custom',
+              duration: 0.3,
+              from: { opacity: 0, y: 12 },
+              to: { opacity: 1, y: 0 },
+            },
+            responsive: {
+              mobile: {
+                props: {
+                  mediaId: uploadedImageId,
+                },
+              },
+            },
+          },
+        ],
+        frontendDesignCanvasSize: { width: 1024, height: 720 },
+        frontendDesignThemeTokenRefs: {
+          'styles.color': 'colors.primary',
+        },
+        frontendDesignAssets: [
+          {
+            id: uploadedImageId,
+            type: 'image',
+            role: 'product-card',
+          },
+        ],
+        frontendDesignAnimations: [
+          {
+            id: 'sdk-product-card-enter',
+            targetId: 'sdk-product-card',
+            type: 'custom',
+            from: { opacity: 0 },
+            to: { opacity: 1 },
+          },
+        ],
+        frontendDesignInteractions: [
+          {
+            id: 'sdk-product-open',
+            type: 'navigate',
+            href: `/products/${productDesignSlug}`,
+          },
+        ],
+        frontendDesignDataBindings: {
+          product: {
+            collection: 'products',
+            slug: productDesignSlug,
+          },
+        },
+        frontendDesignEditableMap: {
+          'product.title': {
+            elementId: 'sdk-product-card',
+            targetPath: 'props.title',
+            editable: true,
+          },
+        },
+        frontendDesignSeo: {
+          title: 'SDK Product Design Record',
+          description: 'SDK smoke product design state.',
+        },
+        frontendDesignMetadata: {
+          source: 'sdk-smoke',
+          preservesCustomStorefrontState: true,
+        },
+        design: {
+          bindingHints: [
+            {
+              binding: 'product.aliasDesign',
+              targetPath: 'values.title',
+            },
+          ],
+          customAliasFlag: true,
+        },
+      },
+      requestId: 'sdk-commerce-product-design-create',
+    });
+    const createdCommerceProductId = createdCommerceProduct.data.record?.id;
+    assert(createdCommerceProductId, 'createAdminCommerceProduct() missing product record id');
+    assert(createdCommerceProduct.data.record?.slug === productDesignSlug, 'createAdminCommerceProduct() returned wrong product slug');
+    assert(createdCommerceProduct.data.record?.values?.frontendDesignCustomJs?.includes?.('__backySdkProductDesign'), 'createAdminCommerceProduct() did not preserve custom JS design state');
+    writeChecks.push('createAdminCommerceProduct:design');
+
+    const productCatalogDetail = await writeClient.commerceCatalog({
+      slug: productDesignSlug,
+      requestId: 'sdk-commerce-product-design-catalog',
+    });
+    const catalogProduct = productCatalogDetail.data.products?.[0];
+    assert(catalogProduct?.slug === productDesignSlug, 'commerceCatalog() did not return created product by slug');
+    assert(catalogProduct.design?.templateId === 'sdk-product-template', 'commerceCatalog() product design missing template id');
+    assert(catalogProduct.design?.customCss?.includes?.('sdk-product-card'), 'commerceCatalog() product design missing custom CSS');
+    assert(catalogProduct.design?.customJs?.includes?.('__backySdkProductDesign'), 'commerceCatalog() product design missing custom JS');
+    assert(catalogProduct.design?.contentDocument?.metadata?.mediaIds?.includes?.(uploadedImageId), 'commerceCatalog() product design missing content-document media refs');
+    assert(catalogProduct.design?.elements?.[0]?.props?.mediaId === uploadedImageId, 'commerceCatalog() product design missing element media refs');
+    assert(catalogProduct.design?.animations?.[0]?.targetId === 'sdk-product-card', 'commerceCatalog() product design missing animation timeline');
+    assert(catalogProduct.design?.assets?.[0]?.id === uploadedImageId, 'commerceCatalog() product design missing asset manifest');
+    assert(catalogProduct.design?.editableMap?.['product.title']?.targetPath === 'props.title', 'commerceCatalog() product design missing editable map');
+    assert(catalogProduct.design?.bindingHints?.[0]?.binding === 'product.aliasDesign', 'commerceCatalog() product design missing clean design-envelope binding hint');
+    assert(catalogProduct.design?.customAliasFlag === true, 'commerceCatalog() product design did not preserve additional clean design-envelope metadata');
+    assert(catalogProduct.designReadiness?.schemaVersion === 'backy.product-design-readiness.v1', 'commerceCatalog() product design missing readiness schema');
+    assert(catalogProduct.designReadiness?.status === 'ready', 'commerceCatalog() product design readiness did not mark editable design ready');
+    assert(catalogProduct.designReadiness?.counts?.animations === 1, 'commerceCatalog() product design readiness missing animation count');
+    assert(catalogProduct.subscription?.enabled === true, 'commerceCatalog() product subscription metadata missing enabled flag');
+    assert(catalogProduct.subscription?.interval === 'monthly', 'commerceCatalog() product subscription interval drifted');
+    assert(catalogProduct.subscription?.trialDays === 14, 'commerceCatalog() product subscription trial metadata drifted');
+    writeChecks.push('commerceCatalog:productDesign');
+
+    const productDesignRoutePath = `/products/${productDesignSlug}`;
+    const productDesignResolved = await writeClient.resolve(productDesignRoutePath);
+    assert(productDesignResolved.data.route?.resource?.designReadiness?.schemaVersion === 'backy.product-design-readiness.v1', 'resolve() product dynamic route missing design readiness schema');
+    assert(productDesignResolved.data.route?.resource?.designReadiness?.status === 'ready', 'resolve() product dynamic route did not mark editable design ready');
+    assert(productDesignResolved.data.route?.resource?.designReadiness?.counts?.animations === 1, 'resolve() product dynamic route design readiness missing animation count');
+    const productDesignRendered = await writeClient.render(productDesignRoutePath, {
+      schemaVersion: 'backy.content-payload.v1',
+    });
+    assert(productDesignRendered.data.route?.resource?.designReadiness?.schemaVersion === 'backy.product-design-readiness.v1', 'render() product dynamic route missing design readiness schema');
+    assert(productDesignRendered.data.route?.resource?.designReadiness?.status === 'ready', 'render() product dynamic route did not mark editable design ready');
+    assert(productDesignRendered.data.route?.resource?.designReadiness?.counts?.animations === 1, 'render() product dynamic route design readiness missing animation count');
+    writeChecks.push('productDynamicRoute:designReadiness');
+
+    const productDesignProviderSync = await writeClient.commerceProductProviderSync(createdCommerceProductId, {
+      requestId: 'sdk-commerce-product-design-provider-sync-handoff',
+    });
+    assert(productDesignProviderSync.data.storefrontHandoff?.schemaVersion === 'backy.product-storefront-handoff.v1', 'commerceProductProviderSync() design product missing storefront handoff');
+    assert(productDesignProviderSync.data.storefrontHandoff?.design?.customJs?.includes?.('__backySdkProductDesign'), 'commerceProductProviderSync() storefront handoff missing custom JS design state');
+    assert(productDesignProviderSync.data.storefrontHandoff?.design?.contentDocument?.metadata?.mediaIds?.includes?.(uploadedImageId), 'commerceProductProviderSync() storefront handoff missing content-document media refs');
+    assert(productDesignProviderSync.data.storefrontHandoff?.design?.animations?.[0]?.targetId === 'sdk-product-card', 'commerceProductProviderSync() storefront handoff missing animation timeline');
+    assert(productDesignProviderSync.data.storefrontHandoff?.design?.editableMap?.['product.title']?.targetPath === 'props.title', 'commerceProductProviderSync() storefront handoff missing editable map');
+    assert(productDesignProviderSync.data.storefrontHandoff?.designReadiness?.schemaVersion === 'backy.product-design-readiness.v1', 'commerceProductProviderSync() storefront handoff missing design readiness schema');
+    assert(productDesignProviderSync.data.storefrontHandoff?.designReadiness?.status === 'ready', 'commerceProductProviderSync() storefront handoff did not mark editable design ready');
+    assert(productDesignProviderSync.data.storefrontHandoff?.designReadiness?.counts?.animations === 1, 'commerceProductProviderSync() storefront design readiness missing animation count');
+    assert(productDesignProviderSync.data.storefrontHandoff?.launchReadiness?.checks?.some?.((check) => check.key === 'frontend-design' && check.status === 'ready'), 'commerceProductProviderSync() storefront launch readiness missing frontend-design check');
+    writeChecks.push('commerceProductProviderSync:productDesignHandoff');
+
+    const updatedCommerceProduct = await writeClient.updateAdminCommerceProduct(createdCommerceProductId, {
+      values: {
+        title: 'SDK Product Design Record Updated',
+        design: {
+          customCss: '.sdk-product-card-updated { color: var(--backy-color-primary); }',
+          customJs: 'window.__backySdkProductDesignUpdated = true;',
+          animations: [
+            {
+              id: 'sdk-product-card-enter-updated',
+              targetId: 'sdk-product-card',
+              type: 'custom',
+              from: { opacity: 0, scale: 0.98 },
+              to: { opacity: 1, scale: 1 },
+            },
+          ],
+        },
+      },
+      requestId: 'sdk-commerce-product-design-update',
+    });
+    assert(updatedCommerceProduct.data.record?.values?.title === 'SDK Product Design Record Updated', 'updateAdminCommerceProduct() did not update product title');
+    assert(updatedCommerceProduct.data.record?.values?.design?.animations?.[0]?.id === 'sdk-product-card-enter-updated', 'updateAdminCommerceProduct() did not preserve updated clean design-envelope animation state');
+    assert(updatedCommerceProduct.data.record?.values?.frontendDesignContentDocument?.metadata?.mediaIds?.includes?.(uploadedImageId), 'updateAdminCommerceProduct() partial design update wiped existing product design content document');
+    writeChecks.push('updateAdminCommerceProduct:design');
+
+    const updatedProductCatalogDetail = await writeClient.commerceCatalog({
+      slug: productDesignSlug,
+      requestId: 'sdk-commerce-product-design-catalog-updated',
+    });
+    const updatedCatalogProduct = updatedProductCatalogDetail.data.products?.[0];
+    assert(updatedCatalogProduct?.title === 'SDK Product Design Record Updated', 'commerceCatalog() did not expose updated product title');
+    assert(updatedCatalogProduct.design?.customJs?.includes?.('__backySdkProductDesignUpdated'), 'commerceCatalog() product design did not expose updated custom JS');
+    assert(updatedCatalogProduct.design?.animations?.[0]?.id === 'sdk-product-card-enter-updated', 'commerceCatalog() product design did not expose updated animation state');
+
+    const orderStatusSlug = `sdk-order-status-${Date.now()}`;
+    const createdCommerceOrder = await writeClient.createAdminCommerceOrder({
+      slug: orderStatusSlug,
+      status: 'published',
+      values: {
+        title: 'SDK Order Status Record',
+        ordernumber: `SDK-${orderStatusSlug}`,
+        customername: 'SDK Status Customer',
+        email: 'sdk-status-customer@example.com',
+        phone: '+1 555 0100',
+        orderstatus: 'paid',
+        paymentstatus: 'paid',
+        fulfillmentstatus: 'processing',
+        items: [
+          {
+            productId: createdCommerceProductId,
+            productSlug: productDesignSlug,
+            slug: productDesignSlug,
+            sku: `SKU-${productDesignSlug}`,
+            title: 'SDK Product Design Record Updated',
+            quantity: 1,
+            total: 49,
+            lineTotal: 49,
+            productType: 'digital',
+            digitalDelivery: true,
+            downloadMediaId: 'sdk_download_media_internal_should_not_leak',
+            downloadUrl: 'https://downloads.example.com/internal/sdk-product.zip',
+            subscription: {
+              enabled: true,
+              interval: 'monthly',
+              trialDays: 14,
+            },
+          },
+        ],
+        total: 49,
+        currency: 'USD',
+        trackingnumber: '1ZSDKSTATUS',
+        trackingurl: 'https://tracking.example.com/sdk-order-status',
+        trackingstatus: 'in_transit',
+        fulfillmentcarrier: 'UPS',
+        shippinglabelstatus: 'purchased',
+        shippinglabelprovider: 'manual',
+        shippinglabelid: 'label_internal_should_not_leak',
+        shippinglabelurl: 'https://labels.example.com/internal/sdk-order-status.pdf',
+        refundamount: 0,
+        providerrefundstatus: 'none',
+        paymentprovider: 'manual',
+        paymentreference: 'manual_sub_internal_should_not_leak',
+        checkoutsessionid: 'cs_internal_should_not_leak',
+        paidat: new Date().toISOString(),
+        notes: 'Internal support note should not appear in the customer-safe handoff.',
+        shippingaddress: {
+          street1: '100 Internal Way',
+          city: 'Austin',
+          region: 'TX',
+          postalCode: '78701',
+          country: 'US',
+        },
+      },
+      requestId: 'sdk-commerce-order-status-create',
+    });
+    const createdCommerceOrderId = createdCommerceOrder.data.record?.id;
+    assert(createdCommerceOrderId, 'createAdminCommerceOrder() missing order record id');
+    assert(createdCommerceOrder.data.record?.slug === orderStatusSlug, 'createAdminCommerceOrder() returned wrong order slug');
+    writeChecks.push('createAdminCommerceOrder:statusHandoff');
+
+    const subscriptionLifecycle = await writeClient.commerceProductSubscriptions(createdCommerceProductId, {
+      requestId: 'sdk-commerce-product-subscriptions',
+    });
+    const lifecycle = subscriptionLifecycle.data.lifecycle;
+    assert(lifecycle?.schemaVersion === 'backy.product-subscription-lifecycle.v1', 'commerceProductSubscriptions() missing schema version');
+    assert(lifecycle.product?.id === createdCommerceProductId, 'commerceProductSubscriptions() returned wrong product id');
+    assert(lifecycle.product?.subscription?.enabled === true, 'commerceProductSubscriptions() missing product subscription metadata');
+    const subscriptionOrder = lifecycle.subscriptions?.find?.((subscription) => subscription.id === createdCommerceOrderId);
+    assert(subscriptionOrder, 'commerceProductSubscriptions() did not include the SDK subscription order');
+    assert(subscriptionOrder.lifecycleStatus === 'active', 'commerceProductSubscriptions() did not classify paid subscription as active');
+    assert(subscriptionOrder.subscriptionReference === 'manual_sub_internal_should_not_leak', 'commerceProductSubscriptions() did not expose the subscription reference');
+    assert(subscriptionOrder.actionExecutionMode === 'handoff', 'commerceProductSubscriptions() manual subscription should use handoff mode');
+    assert(subscriptionOrder.actionPlan?.availableActions?.some?.((action) => action.action === 'pause' && action.requiresHandoff === true), 'commerceProductSubscriptions() missing pause handoff action plan');
+    assert(lifecycle.execution?.actionEndpoint?.includes?.('/subscriptions/:orderId/action'), 'commerceProductSubscriptions() missing action endpoint contract');
+    assert(lifecycle.certification?.secretHandling?.includes?.('provider secrets'), 'commerceProductSubscriptions() missing secret-handling boundary');
+    writeChecks.push('commerceProductSubscriptions:subscriptionOrder');
+
+    const subscriptionAction = await writeClient.runCommerceProductSubscriptionAction(createdCommerceProductId, createdCommerceOrderId, {
+      action: 'pause',
+      provider: 'manual',
+      reason: 'SDK smoke verifies manual subscription handoff persistence.',
+      requestId: 'sdk-commerce-product-subscription-action',
+    });
+    const action = subscriptionAction.data.action;
+    assert(action?.schemaVersion === 'backy.product-subscription-action.v1', 'runCommerceProductSubscriptionAction() missing schema version');
+    assert(action.action === 'pause', 'runCommerceProductSubscriptionAction() returned wrong action');
+    assert(action.status === 'requires_action', 'runCommerceProductSubscriptionAction() manual handoff should require action');
+    assert(action.executionMode === 'handoff', 'runCommerceProductSubscriptionAction() manual action should use handoff execution');
+    assert(action.provider === 'manual', 'runCommerceProductSubscriptionAction() provider drifted');
+    assert(action.productId === createdCommerceProductId, 'runCommerceProductSubscriptionAction() returned wrong product id');
+    assert(action.orderId === createdCommerceOrderId, 'runCommerceProductSubscriptionAction() returned wrong order id');
+    assert(action.subscriptionReference === 'manual_sub_internal_should_not_leak', 'runCommerceProductSubscriptionAction() returned wrong subscription reference');
+    assert(subscriptionAction.data.record?.values?.subscriptionactionhistory?.[0]?.id === action.id, 'runCommerceProductSubscriptionAction() did not persist action history');
+    assert(subscriptionAction.data.record?.values?.subscriptionactionhistory?.[0]?.status === 'requires_action', 'runCommerceProductSubscriptionAction() persisted wrong action status');
+    const serializedSubscriptionAction = JSON.stringify(subscriptionAction.data);
+    assert(!serializedSubscriptionAction.includes('BACKY_STRIPE_SECRET_KEY'), 'runCommerceProductSubscriptionAction() leaked provider secret env names');
+    assert(!serializedSubscriptionAction.includes('stripe_secret'), 'runCommerceProductSubscriptionAction() leaked provider secret-like values');
+    writeChecks.push('runCommerceProductSubscriptionAction:handoff');
+
+    const subscriptionLifecycleAfterAction = await writeClient.commerceProductSubscriptions(createdCommerceProductId, {
+      requestId: 'sdk-commerce-product-subscriptions-after-action',
+    });
+    const lifecycleAfterAction = subscriptionLifecycleAfterAction.data.lifecycle;
+    const subscriptionOrderAfterAction = lifecycleAfterAction.subscriptions?.find?.((subscription) => subscription.id === createdCommerceOrderId);
+    assert(subscriptionOrderAfterAction?.lifecycleStatus === 'paused', 'commerceProductSubscriptions() did not reflect the persisted pause handoff state');
+    assert(subscriptionOrderAfterAction.lastAction?.id === action.id, 'commerceProductSubscriptions() did not expose the latest action history');
+    assert(subscriptionOrderAfterAction.lastAction?.executionMode === 'handoff', 'commerceProductSubscriptions() action history execution mode drifted');
+    assert(subscriptionOrderAfterAction.actionPlan?.retryRecommended === true, 'commerceProductSubscriptions() did not recommend retry/follow-up for manual handoff');
+    assert(lifecycleAfterAction.summary?.paused >= 1, 'commerceProductSubscriptions() did not count paused subscription state');
+    writeChecks.push('commerceProductSubscriptions:actionHistory');
+
+    const orderStatusHandoff = await writeClient.commerceOrderStatusHandoff(createdCommerceOrderId, {
+      requestId: 'sdk-commerce-order-status-handoff',
+    });
+    const handoff = orderStatusHandoff.data.statusHandoff;
+    assert(handoff?.schemaVersion === 'backy.order-status-handoff.v1', 'commerceOrderStatusHandoff() missing schema version');
+    assert(handoff.order?.id === createdCommerceOrderId, 'commerceOrderStatusHandoff() returned wrong order id');
+    assert(handoff.order?.orderNumber === `SDK-${orderStatusSlug}`, 'commerceOrderStatusHandoff() returned wrong order number');
+    assert(handoff.order?.paymentStatus === 'paid', 'commerceOrderStatusHandoff() returned wrong payment status');
+    assert(handoff.customer?.displayName === 'SDK Status Customer', 'commerceOrderStatusHandoff() missing display customer name');
+    assert(handoff.customer?.maskedEmail && handoff.customer.maskedEmail !== 'sdk-status-customer@example.com', 'commerceOrderStatusHandoff() leaked raw customer email');
+    assert(handoff.customer?.maskedPhone === '***-0100', 'commerceOrderStatusHandoff() did not mask customer phone');
+    assert(handoff.tracking?.trackingNumber === '1ZSDKSTATUS', 'commerceOrderStatusHandoff() missing safe tracking number');
+    assert(handoff.tracking?.shippingLabelReferencePresent === true, 'commerceOrderStatusHandoff() missing shipping-label reference boolean');
+    assert(handoff.privacy?.customerSafeFieldsOnly === true, 'commerceOrderStatusHandoff() missing customer-safe privacy flag');
+    assert(handoff.privacy?.includesRawCustomerContact === false, 'commerceOrderStatusHandoff() raw-contact privacy flag drifted');
+    assert(handoff.privacy?.includesPaymentReferences === false, 'commerceOrderStatusHandoff() payment-reference privacy flag drifted');
+    assert(handoff.privacy?.includesAddresses === false, 'commerceOrderStatusHandoff() address privacy flag drifted');
+    assert(handoff.privacy?.includesDigitalDeliveryUrls === false, 'commerceOrderStatusHandoff() digital delivery URL privacy flag drifted');
+    assert(handoff.privacy?.excludedFields?.includes?.('paymentreference'), 'commerceOrderStatusHandoff() missing payment reference exclusion');
+    assert(handoff.privacy?.excludedFields?.includes?.('shippingaddress'), 'commerceOrderStatusHandoff() missing address exclusion');
+    assert(handoff.privacy?.excludedFields?.includes?.('downloadurl'), 'commerceOrderStatusHandoff() missing digital download URL exclusion');
+    assert(handoff.digitalDelivery?.schemaVersion === 'backy.order-digital-delivery-handoff.v1', 'commerceOrderStatusHandoff() missing digital delivery schema');
+    assert(handoff.digitalDelivery?.itemCount === 1 && handoff.digitalDelivery?.configuredItemCount === 1, 'commerceOrderStatusHandoff() missing digital delivery counts');
+    assert(handoff.digitalDelivery?.includesDownloadUrls === false && handoff.digitalDelivery?.includesDownloadMediaIds === false, 'commerceOrderStatusHandoff() leaked digital delivery privacy flags');
+    assert(handoff.frontendBindings?.schemaVersion === 'backy.order-status-frontend-bindings.v1', 'commerceOrderStatusHandoff() missing frontend bindings schema');
+    assert(handoff.frontendBindings?.targetViews?.includes?.('order-confirmation'), 'commerceOrderStatusHandoff() missing order-confirmation target view');
+    assert(handoff.frontendBindings?.safeBindingPaths?.includes?.('tracking.trackingUrl'), 'commerceOrderStatusHandoff() missing tracking binding path');
+    assert(handoff.frontendBindings?.safeBindingPaths?.includes?.('digitalDelivery.status'), 'commerceOrderStatusHandoff() missing digital delivery binding path');
+    assert(handoff.frontendBindings?.actionBindings?.some?.((binding) => binding.key === 'refresh-status' && binding.method === 'GET'), 'commerceOrderStatusHandoff() missing refresh-status action binding');
+    const serializedHandoff = JSON.stringify(handoff);
+    assert(!serializedHandoff.includes('manual_sub_internal_should_not_leak'), 'commerceOrderStatusHandoff() leaked payment reference');
+    assert(!serializedHandoff.includes('cs_internal_should_not_leak'), 'commerceOrderStatusHandoff() leaked checkout session id');
+    assert(!serializedHandoff.includes('label_internal_should_not_leak'), 'commerceOrderStatusHandoff() leaked shipping label id');
+    assert(!serializedHandoff.includes('sdk_download_media_internal_should_not_leak'), 'commerceOrderStatusHandoff() leaked digital download media id');
+    assert(!serializedHandoff.includes('https://downloads.example.com/internal/sdk-product.zip'), 'commerceOrderStatusHandoff() leaked digital download URL');
+    assert(!serializedHandoff.includes('100 Internal Way'), 'commerceOrderStatusHandoff() leaked shipping address');
+    assert(!serializedHandoff.includes('Internal support note'), 'commerceOrderStatusHandoff() leaked internal notes');
+    writeChecks.push('commerceOrderStatusHandoff:privacyBindings');
+
+    const updatedCommerceOrder = await writeClient.updateAdminCommerceOrder(createdCommerceOrderId, {
+      values: {
+        orderstatus: 'fulfilled',
+        fulfillmentstatus: 'fulfilled',
+        trackingstatus: 'delivered',
+        fulfilledat: new Date().toISOString(),
+      },
+      requestId: 'sdk-commerce-order-status-update',
+    });
+    assert(updatedCommerceOrder.data.record?.values?.orderstatus === 'fulfilled', 'updateAdminCommerceOrder() did not update order status');
+    writeChecks.push('updateAdminCommerceOrder:statusHandoff');
+
+    const updatedOrderStatusHandoff = await writeClient.commerceOrderStatusHandoff(createdCommerceOrderId, {
+      requestId: 'sdk-commerce-order-status-handoff-updated',
+    });
+    assert(updatedOrderStatusHandoff.data.statusHandoff?.order?.orderStatus === 'fulfilled', 'commerceOrderStatusHandoff() did not expose updated order status');
+    assert(updatedOrderStatusHandoff.data.statusHandoff?.tracking?.trackingStatus === 'delivered', 'commerceOrderStatusHandoff() did not expose updated tracking status');
+
+    const deletedCommerceOrder = await writeClient.deleteAdminCommerceOrder(createdCommerceOrderId, {
+      requestId: 'sdk-commerce-order-status-delete',
+    });
+    assert(deletedCommerceOrder.data.deleted === true, 'deleteAdminCommerceOrder() did not delete order record');
+    assert(deletedCommerceOrder.data.recordId === createdCommerceOrderId, 'deleteAdminCommerceOrder() returned wrong order record id');
+    writeChecks.push('deleteAdminCommerceOrder:statusHandoff');
+
+    const deletedCommerceProduct = await writeClient.deleteAdminCommerceProduct(createdCommerceProductId, {
+      requestId: 'sdk-commerce-product-design-delete',
+    });
+    assert(deletedCommerceProduct.data.deleted === true, 'deleteAdminCommerceProduct() did not delete product record');
+    assert(deletedCommerceProduct.data.recordId === createdCommerceProductId, 'deleteAdminCommerceProduct() returned wrong product record id');
+    writeChecks.push('deleteAdminCommerceProduct:design');
 
     const mediaBindInput = buildBackyMediaBindingInput({
       pageId: fixture.pageId,
@@ -2723,38 +5069,38 @@ if (runWriteSmoke) {
     assert(deletedBackupCollection.data.deleted === true, 'deleteAdminCollection() did not delete imported backup collection');
     writeChecks.push('deleteAdminCollection');
 
-    const form = await writeClient.form('sdk-smoke-form');
-    assert(form.data.form?.id === 'sdk-smoke-form', 'form() missing SDK smoke form');
+    const form = await writeClient.form(fixtureFormId);
+    assert(form.data.form?.id === fixtureFormId, 'form() missing SDK smoke form');
     writeChecks.push('form');
 
-    const formDefinition = await writeClient.formDefinitionCached('sdk-smoke-form');
+    const formDefinition = await writeClient.formDefinitionCached(fixtureFormId);
     assert(formDefinition.notModified === false, 'formDefinitionCached() should return SDK smoke form body');
-    assert(formDefinition.body?.data?.form?.id === 'sdk-smoke-form', 'formDefinitionCached() missing SDK smoke form');
+    assert(formDefinition.body?.data?.form?.id === fixtureFormId, 'formDefinitionCached() missing SDK smoke form');
     assert(formDefinition.meta.cacheScope === 'discovery', 'formDefinitionCached() expected discovery cache scope');
     assert(formDefinition.meta.etag, 'formDefinitionCached() SDK smoke missing response ETag');
-    const revalidatedFormDefinition = await writeClient.formDefinitionCached('sdk-smoke-form', { etag: formDefinition.meta.etag });
+    const revalidatedFormDefinition = await writeClient.formDefinitionCached(fixtureFormId, { etag: formDefinition.meta.etag });
     assert(revalidatedFormDefinition.notModified === true, 'formDefinitionCached() SDK smoke revalidation failed');
     writeChecks.push('formDefinitionCached');
 
-    const embeddedFormBlock = await writeClient.createAdminFormEmbedBlock('sdk-smoke-form', {
+    const embeddedFormBlock = await writeClient.createAdminFormEmbedBlock(fixtureFormId, {
       name: 'SDK Smoke Form Embed',
       slug: `sdk-smoke-form-embed-${Date.now()}`,
       actor: 'sdk-smoke',
       publicBaseUrl: baseUrl,
       requestId: 'sdk-form-embed-block',
     });
-    assert(embeddedFormBlock.data.section?.sourceElementId === 'sdk-smoke-form', 'createAdminFormEmbedBlock() did not bind the source form');
-    assert(embeddedFormBlock.data.embed?.definitionUrl?.includes('/forms/sdk-smoke-form/definition'), 'createAdminFormEmbedBlock() missing form definition URL');
+    assert(embeddedFormBlock.data.section?.sourceElementId === fixtureFormId, 'createAdminFormEmbedBlock() did not bind the source form');
+    assert(embeddedFormBlock.data.embed?.definitionUrl?.includes(`/forms/${fixtureFormId}/definition`), 'createAdminFormEmbedBlock() missing form definition URL');
     writeChecks.push('createAdminFormEmbedBlock');
 
-    const clonedAdminForm = await writeClient.cloneAdminForm('sdk-smoke-form', {
+    const clonedAdminForm = await writeClient.cloneAdminForm(fixtureFormId, {
       name: 'SDK Smoke Form Clone',
       title: 'SDK Smoke Form Clone',
       isActive: false,
       requestId: 'sdk-form-clone',
     });
-    assert(clonedAdminForm.data.form?.id && clonedAdminForm.data.form.id !== 'sdk-smoke-form', 'cloneAdminForm() did not create a distinct form');
-    assert(clonedAdminForm.data.sourceFormId === 'sdk-smoke-form', 'cloneAdminForm() returned the wrong source form id');
+    assert(clonedAdminForm.data.form?.id && clonedAdminForm.data.form.id !== fixtureFormId, 'cloneAdminForm() did not create a distinct form');
+    assert(clonedAdminForm.data.sourceFormId === fixtureFormId, 'cloneAdminForm() returned the wrong source form id');
     writeChecks.push('cloneAdminForm');
 
     const formSubmissionInput = buildBackyFormSubmissionInput(formDefinition.body.data.form, {
@@ -2766,19 +5112,12 @@ if (runWriteSmoke) {
       },
       pageId: fixture.pageId,
       requestId: 'sdk-form-submit',
-      rateLimitBypass: true,
-      contactShareOverride: {
-        enabled: true,
-        nameField: 'title',
-        notesField: 'message',
-      },
     });
     assert(formSubmissionInput.values?.title === 'SDK Form Record', 'buildBackyFormSubmissionInput() did not preserve title value');
     assert(formSubmissionInput.values?.message === 'Submitted through the SDK.', 'buildBackyFormSubmissionInput() did not preserve message value');
     assert(formSubmissionInput.values?.requestId === undefined, 'buildBackyFormSubmissionInput() leaked reserved metadata into values');
     assert(formSubmissionInput.pageId === fixture.pageId, 'buildBackyFormSubmissionInput() did not preserve page id metadata');
-    assert(formSubmissionInput.contactShareOverride?.nameField === 'title', 'buildBackyFormSubmissionInput() did not normalize contact share fields');
-    const submittedForm = await writeClient.submitForm('sdk-smoke-form', formSubmissionInput);
+    const submittedForm = await writeClient.submitForm(fixtureFormId, formSubmissionInput);
     const submissionId = submittedForm.data.submission?.id;
     const contactId = submittedForm.data.contact?.id;
     assert(submissionId, 'submitForm() missing submission id');
@@ -2786,7 +5125,7 @@ if (runWriteSmoke) {
     assert(contactId, 'submitForm() missing generated contact id');
     writeChecks.push('submitForm');
 
-    const submissions = await writeClient.formSubmissions('sdk-smoke-form', {
+    const submissions = await writeClient.formSubmissions(fixtureFormId, {
       status: 'approved',
       requestId: 'sdk-form-submit',
     });
@@ -2796,18 +5135,18 @@ if (runWriteSmoke) {
     );
     writeChecks.push('formSubmissions');
 
-    const submissionDetail = await writeClient.formSubmission('sdk-smoke-form', submissionId);
+    const submissionDetail = await writeClient.formSubmission(fixtureFormId, submissionId);
     assert(submissionDetail.data.submission?.id === submissionId, 'formSubmission() returned wrong submission');
     writeChecks.push('formSubmission');
 
-    const updatedSubmission = await writeClient.updateFormSubmission('sdk-smoke-form', submissionId, {
+    const updatedSubmission = await writeClient.updateFormSubmission(fixtureFormId, submissionId, {
       status: 'approved',
       reviewedBy: 'sdk-smoke',
     });
     assert(updatedSubmission.data.submission?.status === 'approved', 'updateFormSubmission() did not keep approved status');
     writeChecks.push('updateFormSubmission');
 
-    const reviewedSubmission = await writeClient.reviewFormSubmission('sdk-smoke-form', submissionId, {
+    const reviewedSubmission = await writeClient.reviewFormSubmission(fixtureFormId, submissionId, {
       status: 'approved',
       reviewedBy: 'sdk-reviewer',
       adminNotes: 'Reviewed through the SDK smoke.',
@@ -2856,7 +5195,6 @@ if (runWriteSmoke) {
           message: 'Delivery retry smoke submission.',
         },
         requestId: 'sdk-form-delivery-submit',
-        rateLimitBypass: true,
       });
       const deliverySubmittedForm = await writeClient.submitForm(deliveryRetryFormId, deliverySubmissionInput);
       const deliverySubmissionId = deliverySubmittedForm.data.submission?.id;
@@ -2917,15 +5255,15 @@ if (runWriteSmoke) {
       await deliveryRetryReceiver.close();
     }
 
-    const contacts = await writeClient.formContacts('sdk-smoke-form', { requestId: 'sdk-form-submit' });
+    const contacts = await writeClient.formContacts(fixtureFormId, { requestId: 'sdk-form-submit' });
     assert(contacts.data.contacts?.some?.((contact) => contact.id === contactId), 'formContacts() missing generated contact');
     writeChecks.push('formContacts');
 
-    const updatedContact = await writeClient.updateFormContact('sdk-smoke-form', contactId, { status: 'qualified' });
+    const updatedContact = await writeClient.updateFormContact(fixtureFormId, contactId, { status: 'qualified' });
     assert(updatedContact.data.contact?.status === 'qualified', 'updateFormContact() did not update contact status');
     writeChecks.push('updateFormContact');
 
-    const createdContact = await writeClient.createFormContact('sdk-smoke-form', {
+    const createdContact = await writeClient.createFormContact(fixtureFormId, {
       name: 'SDK Manual Contact',
       email: 'sdk-manual-contact@example.com',
       status: 'qualified',
@@ -2943,7 +5281,7 @@ if (runWriteSmoke) {
     writeChecks.push('createFormContact');
 
     const importedContacts = await writeClient.importFormContactsCsv(
-      'sdk-smoke-form',
+      fixtureFormId,
       [
         'name,email,status,notes,requestId,sourceCompany',
         'SDK Imported Contact,sdk-imported-contact@example.com,qualified,Imported through SDK smoke,sdk-contact-import-row,Backy SDK',
@@ -2962,7 +5300,7 @@ if (runWriteSmoke) {
       name: 'SDK Qualified Contacts',
       description: 'Temporary saved list created by the SDK smoke.',
       filters: {
-        formId: 'sdk-smoke-form',
+        formId: fixtureFormId,
         status: 'qualified',
         quality: 'all',
       },
@@ -2982,7 +5320,7 @@ if (runWriteSmoke) {
     assert(deletedContactList.data.listId === savedContactListId, 'deleteFormContactList() returned wrong list id');
     writeChecks.push('deleteFormContactList');
 
-    const promotedCustomer = await writeClient.promoteFormContactToCustomer('sdk-smoke-form', manualContactId, {
+    const promotedCustomer = await writeClient.promoteFormContactToCustomer(fixtureFormId, manualContactId, {
       customerStatus: 'lead',
       notes: 'SDK smoke customer promotion.',
       requestId: 'sdk-contact-promote-customer',
@@ -2994,7 +5332,7 @@ if (runWriteSmoke) {
 
     const promotionEmailDomain = await getCleanupOwnerEmailDomain();
     const promotionEmail = `sdk-promoted-contact-${Date.now()}@${promotionEmailDomain}`;
-    const userPromotionContact = await writeClient.createFormContact('sdk-smoke-form', {
+    const userPromotionContact = await writeClient.createFormContact(fixtureFormId, {
       name: 'SDK User Promotion Contact',
       email: promotionEmail,
       status: 'qualified',
@@ -3008,7 +5346,7 @@ if (runWriteSmoke) {
     assert(userPromotionContactId, 'createFormContact() missing user-promotion contact id');
     let promotedUserId = null;
     try {
-      const promotedUser = await writeClient.promoteFormContactToUser('sdk-smoke-form', userPromotionContactId, {
+      const promotedUser = await writeClient.promoteFormContactToUser(fixtureFormId, userPromotionContactId, {
         role: 'viewer',
         status: 'invited',
         createInvite: false,
@@ -3035,7 +5373,7 @@ if (runWriteSmoke) {
 
     const contactSyncReceiver = await startSmokeWebhookReceiver('/sdk-contact-sync');
     try {
-      const syncedContacts = await writeClient.syncFormContacts('sdk-smoke-form', {
+      const syncedContacts = await writeClient.syncFormContacts(fixtureFormId, {
         contactIds: [manualContactId],
         targetUrl: contactSyncReceiver.url,
         includeSourceValues: false,
@@ -3059,7 +5397,7 @@ if (runWriteSmoke) {
       await contactSyncReceiver.close();
     }
 
-    const contactRetention = await writeClient.applyFormContactConsentRetention('sdk-smoke-form', {
+    const contactRetention = await writeClient.applyFormContactConsentRetention(fixtureFormId, {
       contactIds: [manualContactId],
       dryRun: true,
       retentionDays: 0,
@@ -3072,14 +5410,14 @@ if (runWriteSmoke) {
     assert(contactRetention.data.contacts?.[0]?.id === manualContactId, 'applyFormContactConsentRetention() returned wrong contact evidence');
     writeChecks.push('applyFormContactConsentRetention');
 
-    const formRetention = await writeClient.applyAdminFormConsentRetention('sdk-smoke-form', {
+    const formRetention = await writeClient.applyAdminFormConsentRetention(fixtureFormId, {
       dryRun: true,
       now: '2035-01-01T00:00:00.000Z',
       actor: 'sdk-smoke',
       requestId: 'sdk-form-retention',
     });
     assert(formRetention.data.dryRun === true, 'applyAdminFormConsentRetention() did not preserve dryRun');
-    assert(formRetention.data.formId === 'sdk-smoke-form', 'applyAdminFormConsentRetention() returned wrong form id');
+    assert(formRetention.data.formId === fixtureFormId, 'applyAdminFormConsentRetention() returned wrong form id');
     writeChecks.push('applyAdminFormConsentRetention');
 
     const formsRetention = await writeClient.applyAdminFormsConsentRetention({
@@ -3090,7 +5428,7 @@ if (runWriteSmoke) {
     });
     assert(formsRetention.data.dryRun === true, 'applyAdminFormsConsentRetention() did not preserve dryRun');
     assert(formsRetention.data.scannedForms >= 1, 'applyAdminFormsConsentRetention() did not scan fixture forms');
-    assert(formsRetention.data.results?.some?.((result) => result.formId === 'sdk-smoke-form'), 'applyAdminFormsConsentRetention() missing fixture form result');
+    assert(formsRetention.data.results?.some?.((result) => result.formId === fixtureFormId), 'applyAdminFormsConsentRetention() missing fixture form result');
     writeChecks.push('applyAdminFormsConsentRetention');
 
     const commentInput = buildBackyCommentInput({
@@ -3103,7 +5441,6 @@ if (runWriteSmoke) {
       captcha: {
         token: 'sdk-comment-captcha',
       },
-      rateLimitBypass: true,
     }, {
       moderationMode: 'auto-approve',
     });
@@ -3111,7 +5448,6 @@ if (runWriteSmoke) {
     assert(commentInput.authorEmail === 'sdk-commenter@example.com', 'buildBackyCommentInput() did not normalize email');
     assert(commentInput.commentThreadId === 'sdk-smoke-thread', 'buildBackyCommentInput() did not normalize thread id');
     assert(commentInput.captchaToken === 'sdk-comment-captcha', 'buildBackyCommentInput() did not normalize captcha token');
-    assert(commentInput.rateLimitBypass === true, 'buildBackyCommentInput() dropped rate-limit bypass metadata');
     const comment = await writeClient.submitPageComment(fixture.pageId, commentInput);
     const commentId = comment.data.comment?.id;
     assert(commentId, 'submitPageComment() missing comment id');
@@ -3242,9 +5578,14 @@ console.log(JSON.stringify({
     'updateLiveManagedBlogPost',
     'buildBackyCommerceOrderInput',
     'buildBackyLiveManagedBlogPostEditableMapUpdate',
+    'addBackyContentElement',
+    'duplicateBackyContentElement',
+    'deleteBackyContentElements',
+    'transformBackyContentElements',
     'groupBackyContentElements',
     'ungroupBackyContentElements',
     'patchBackyContentElement',
+    'patchBackyContentElementDownloadFile',
     'patchBackyContentElements',
     'patchBackyContentEditableFields',
     'patchBackyContentEditableMapEntries',
@@ -3274,8 +5615,17 @@ console.log(JSON.stringify({
     'mediaAssetCached',
     'mediaFonts',
     'mediaFontsCached',
+    'buildBackyMediaFilePath',
+    'buildBackyMediaFileUrl',
+    'buildBackyMediaTransformPath',
+    'buildBackyMediaTransformUrl',
+    'buildBackyMediaDownloadLinkProps',
+    'buildBackyContentDownloadFilePatch',
     'mediaFileUrl',
+    'mediaFileCached',
+    'mediaDownloadLinkProps',
     'mediaTransformUrl',
+    'mediaTransformCached',
     'collections',
     'collectionsCached',
     'collectionCached',

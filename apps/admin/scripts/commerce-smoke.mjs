@@ -25,6 +25,9 @@ const COMMERCE_PROVIDER_MOCK_PORT = Number(
   process.env.BACKY_COMMERCE_PROVIDER_MOCK_PORT || 45679,
 );
 const COMMERCE_PROVIDER_MOCK_BASE_URL = `http://127.0.0.1:${COMMERCE_PROVIDER_MOCK_PORT}`;
+const SOURCE_ONLY_MODE = process.env.BACKY_COMMERCE_SOURCE_ONLY === "1"
+  || process.env.BACKY_PRODUCTS_SOURCE_ONLY === "1"
+  || process.env.BACKY_COMMERCE_SMOKE_SOURCE_ONLY === "1";
 
 const PRODUCT_COLLECTION_SLUG = "products";
 const ORDERS_COLLECTION_SLUG = "orders";
@@ -51,6 +54,15 @@ const PRODUCT_VALUE_KEYS = {
   inventoryPolicy: "inventorypolicy",
   productType: "producttype",
   downloadUrl: "downloadurl",
+  downloadMediaId: "downloadmediaid",
+  downloadMediaName: "downloadmedianame",
+  downloadMediaType: "downloadmediatype",
+  downloadMediaFolderId: "downloadmediafolderid",
+  downloadMediaFolderPath: "downloadmediafolderpath",
+  downloadMediaVisibility: "downloadmediavisibility",
+  downloadMediaScope: "downloadmediascope",
+  downloadMediaScopeTargetId: "downloadmediascopetargetid",
+  downloadMediaOrganization: "downloadmediaorganization",
   checkoutUrl: "checkouturl",
   subscriptionEnabled: "subscriptionenabled",
   subscriptionInterval: "subscriptioninterval",
@@ -175,6 +187,78 @@ const PRODUCT_SCHEMA_FIELDS = [
     required: false,
     unique: false,
     sortOrder: 110,
+  },
+  {
+    key: productFieldKey("downloadMediaId"),
+    label: "Digital Delivery Media ID",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 111,
+  },
+  {
+    key: productFieldKey("downloadMediaName"),
+    label: "Digital Delivery Media Name",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 112,
+  },
+  {
+    key: productFieldKey("downloadMediaType"),
+    label: "Digital Delivery Media Type",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 113,
+  },
+  {
+    key: productFieldKey("downloadMediaFolderId"),
+    label: "Digital Delivery Folder ID",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 114,
+  },
+  {
+    key: productFieldKey("downloadMediaFolderPath"),
+    label: "Digital Delivery Folder Path",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 115,
+  },
+  {
+    key: productFieldKey("downloadMediaVisibility"),
+    label: "Digital Delivery Visibility",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 116,
+  },
+  {
+    key: productFieldKey("downloadMediaScope"),
+    label: "Digital Delivery Scope",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 117,
+  },
+  {
+    key: productFieldKey("downloadMediaScopeTargetId"),
+    label: "Digital Delivery Scope Target",
+    type: "text",
+    required: false,
+    unique: false,
+    sortOrder: 118,
+  },
+  {
+    key: productFieldKey("downloadMediaOrganization"),
+    label: "Digital Delivery Organization",
+    type: "json",
+    required: false,
+    unique: false,
+    sortOrder: 119,
   },
   {
     key: productFieldKey("checkoutUrl"),
@@ -870,6 +954,38 @@ const assertProductsApiContractsSource = () => {
     new URL("../src/lib/adminContentApi.ts", import.meta.url),
     "utf8",
   );
+  const commerceCatalogSource = fs.readFileSync(
+    new URL("../../public/src/lib/commerceCatalog.ts", import.meta.url),
+    "utf8",
+  );
+  const routeResolverSource = fs.readFileSync(
+    new URL("../../public/src/lib/routeResolver.ts", import.meta.url),
+    "utf8",
+  );
+  const repositoryRouteResolverSource = fs.readFileSync(
+    new URL("../../public/src/lib/repositoryRouteResolver.ts", import.meta.url),
+    "utf8",
+  );
+  const renderPayloadSource = fs.readFileSync(
+    new URL("../../public/src/lib/renderPayload.ts", import.meta.url),
+    "utf8",
+  );
+  const openapiSource = fs.readFileSync(
+    new URL("../../public/src/app/api/sites/[siteId]/openapi/route.ts", import.meta.url),
+    "utf8",
+  );
+  const frontendDesignContractSource = fs.readFileSync(
+    new URL("../../public/src/lib/frontendDesignContract.ts", import.meta.url),
+    "utf8",
+  );
+  const sdkSource = fs.readFileSync(
+    new URL("../../../packages/sdk-js/src/index.ts", import.meta.url),
+    "utf8",
+  );
+  const sdkSmokeSource = fs.readFileSync(
+    new URL("../../../packages/sdk-js/scripts/smoke.mjs", import.meta.url),
+    "utf8",
+  );
   assert(
     source.includes("import { EmptyState } from '@/components/ui/EmptyState';"),
     "Products route must use the shared EmptyState component",
@@ -921,25 +1037,118 @@ const assertProductsApiContractsSource = () => {
     source.includes("const PRODUCT_GALLERY_IMAGE_LIMIT = 12;") &&
       source.includes("galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT") &&
       source.includes("Product galleries support up to ${PRODUCT_GALLERY_IMAGE_LIMIT} images. Remove an image before adding another.") &&
-      source.includes("That image is already in this product gallery."),
-    "Products gallery controls must enforce image caps and duplicate prevention in the shared add handler",
+      source.includes("That image is already in this product gallery.") &&
+      source.includes("const [galleryImageSubmitted, setGalleryImageSubmitted] = useState(false);") &&
+      source.includes("const galleryImageInlineError = galleryImageSubmitted") &&
+      source.includes("setError('Fix gallery image URL before adding.')") &&
+      source.includes('data-testid="products-gallery-image-url-input"') &&
+      source.includes('data-testid="products-gallery-image-url-error"') &&
+      source.includes('data-testid="products-gallery-image-url-add"') &&
+      source.includes("disabled={galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT || isProductsAccessBusy || !canEditProducts}") &&
+      !source.includes("disabled={!galleryImageDraft.trim() || galleryImageUrls.length >= PRODUCT_GALLERY_IMAGE_LIMIT}"),
+    "Products gallery controls must enforce image caps, duplicate prevention, and reachable inline URL validation",
   );
   assert(
     source.includes("const PRODUCT_VARIANT_LIMIT = 50;") &&
       source.includes("productVariants.length >= PRODUCT_VARIANT_LIMIT") &&
-      source.includes(".slice(0, PRODUCT_VARIANT_LIMIT)"),
-    "Products variant controls must enforce variant caps through a shared source limit",
+      source.includes(".slice(0, PRODUCT_VARIANT_LIMIT)") &&
+      source.includes("const [variantDraftSubmitted, setVariantDraftSubmitted] = useState(false);") &&
+      source.includes("const [variantMatrixSubmitted, setVariantMatrixSubmitted] = useState(false);") &&
+      source.includes("const variantDraftIdentityInlineError = variantDraftSubmitted && variantDraftIdentityMissing") &&
+      source.includes("const optionMatrixInlineError = variantMatrixSubmitted && optionMatrixOptionsMissing") &&
+      source.includes("setError('Fix product variant fields before adding.')") &&
+      source.includes("setError('Fix option matrix fields before generating variants.')") &&
+      source.includes('data-testid="products-variant-identity-error"') &&
+      source.includes('data-testid="products-variant-add"') &&
+      source.includes('data-testid="products-variant-matrix-options-error"') &&
+      source.includes('data-testid="products-variant-matrix-price-error"') &&
+      source.includes('data-testid="products-variant-matrix-inventory-error"') &&
+      source.includes("disabled={productVariants.length >= PRODUCT_VARIANT_LIMIT || isProductsAccessBusy || !canEditProducts}") &&
+      !source.includes("disabled={(!variantDraft.title.trim() && !variantDraft.option.trim()) || productVariants.length >= PRODUCT_VARIANT_LIMIT}") &&
+      !source.includes("disabled={!optionMatrixDraft.options.trim() || productVariants.length >= PRODUCT_VARIANT_LIMIT || isProductsAccessBusy || !canEditProducts}"),
+    "Products variant controls must enforce variant caps through a shared source limit with reachable inline validation",
   );
   assert(
     source.includes("getScheduledProductDateError") &&
       source.includes("scheduledAtMs <= Date.now()") &&
       source.includes("Choose a future publish date before scheduling this product.") &&
-      source.includes("aria-invalid={Boolean(scheduledProductDateError)}"),
-    "Products scheduled status must block non-future publish dates before save",
+      source.includes("const scheduledProductInlineError = productFormSubmitted && scheduledProductDateError") &&
+      source.includes("aria-invalid={Boolean(scheduledProductInlineError)}") &&
+      source.includes("aria-describedby={scheduledProductInlineError ? 'products-scheduled-at-error' : undefined}") &&
+      source.includes('data-testid="products-scheduled-at-input"') &&
+      source.includes('data-testid="products-scheduled-at-error"'),
+    "Products scheduled status must show reachable inline validation for non-future publish dates before save",
+  );
+  assert(
+    source.includes("const [productFormSubmitted, setProductFormSubmitted] = useState(false);") &&
+      source.includes("const productTitleInlineError = productFormSubmitted && !formState.title.trim()") &&
+      source.includes("const productSkuInlineError = productFormSubmitted && !formState.sku.trim()") &&
+      source.includes("setError('Fix product identity fields before saving.')") &&
+      source.includes("<form onSubmit={saveProduct} noValidate>") &&
+      source.includes('data-testid="products-title-input"') &&
+      source.includes('aria-describedby={productTitleInlineError ?') &&
+      source.includes('data-testid="products-title-error"') &&
+      source.includes('data-testid="products-sku-input"') &&
+      source.includes('aria-describedby={productSkuInlineError ?') &&
+      source.includes('data-testid="products-sku-error"') &&
+      source.includes("disabled={isProductsAccessBusy || !canEditProducts}") &&
+      !source.includes("disabled={isProductsAccessBusy || !canEditProducts || Boolean(scheduledProductDateError)}"),
+    "Products editor must expose inline title/SKU/schedule validation instead of silently disabling the save action",
   );
   assert(
     source.includes("apiContracts: PRODUCT_API_CONTRACTS.map"),
     "Products handoff manifest must expose API response contracts for custom frontends",
+  );
+  assert(
+    source.includes("frontendDesignCustomJs") &&
+      source.includes("frontendDesignContentDocument") &&
+      source.includes("frontendDesignThemeTokenRefs") &&
+      source.includes("frontendDesignAnimations") &&
+      source.includes("frontendDesignInteractions") &&
+      source.includes("frontendDesignEditableMap") &&
+      source.includes("const designEnvelope = optionalRecordFromRecord(values, 'design');") &&
+      source.includes("designValue('customJs', 'frontendDesignCustomJs')") &&
+      commerceCatalogSource.includes("frontendDesignContentDocument") &&
+      commerceCatalogSource.includes("frontendDesignCustomJs") &&
+      commerceCatalogSource.includes("frontendDesignElements") &&
+      commerceCatalogSource.includes("frontendDesignAssets") &&
+      commerceCatalogSource.includes("frontendDesignAnimations") &&
+      commerceCatalogSource.includes("frontendDesignEditableMap") &&
+      commerceCatalogSource.includes("const designEnvelope = normalizeDesignRecord(values.design);") &&
+      commerceCatalogSource.includes("designValue('customJs', 'frontendDesignCustomJs')") &&
+      commerceCatalogSource.includes("const buildProductDesignReadiness = (") &&
+      commerceCatalogSource.includes("export const productDesignReadinessFromValues = (") &&
+      commerceCatalogSource.includes("designReadiness: buildProductDesignReadiness(design)") &&
+      routeResolverSource.includes("productDesignReadinessFromValues(record.values)") &&
+      repositoryRouteResolverSource.includes("productDesignReadinessFromValues(record.values)") &&
+      renderPayloadSource.includes("const designReadiness = collection.slug === PRODUCT_COLLECTION_SLUG") &&
+      renderPayloadSource.includes("...(designReadiness ? { designReadiness } : {})") &&
+      sdkSmokeSource.includes("product design missing clean design-envelope binding hint") &&
+      sdkSmokeSource.includes("partial design update wiped existing product design content document") &&
+      frontendDesignContractSource.includes("frontendDesignContentDocument") &&
+      frontendDesignContractSource.includes("frontendDesignThemeTokenRefs") &&
+      frontendDesignContractSource.includes("frontendDesignAnimations") &&
+      frontendDesignContractSource.includes("frontendDesignMetadata") &&
+      source.includes('data-testid="products-frontend-template-design-readiness"') &&
+      source.includes("const designValues = buildFrontendProductTemplateValues(template, frontendDesign);") &&
+      source.includes("const designReadiness = buildProductDesignReadiness(designValues);") &&
+      source.includes("designReadiness,") &&
+      source.includes("Template carries content, animation, and editable binding state into the created product record."),
+    "Products must durably store and expose custom frontend product design state for external storefront editors",
+  );
+  assert(
+    source.includes("productMediaAttachmentUrl") &&
+      source.includes("productDownloadMediaState") &&
+      source.includes("clearProductDownloadMediaState") &&
+      source.includes("[productFieldKey('downloadMediaId')]: formState.downloadMediaId.trim()") &&
+      source.includes("[productFieldKey('downloadMediaOrganization')]: formState.downloadMediaOrganization") &&
+      source.includes('data-testid="products-download-media-binding"') &&
+      source.includes('data-testid="products-download-media-clear"') &&
+      source.includes("download_media_id") &&
+      source.includes("downloadMediaId=${downloadMediaId ? 'present' : 'missing'}") &&
+      commerceCatalogSource.includes("downloadMediaId: 'downloadmediaid'") &&
+      commerceCatalogSource.includes("readProductValue(values, 'downloadMediaId')"),
+    "Products digital delivery must persist stable media bindings for downloadable files and catalog readiness",
   );
   assert(
     source.includes('data-testid="products-api-contracts"'),
@@ -953,20 +1162,80 @@ const assertProductsApiContractsSource = () => {
     source.includes('data-testid="products-launch-readiness"') &&
       source.includes('data-testid="products-launch-readiness-copy-button"') &&
       source.includes('data-testid="products-storefront-handoff-copy-button"') &&
+      source.includes('data-testid="products-sellability-impact"') &&
+      source.includes('data-testid="products-sellability-impact-copy-button"') &&
+      source.includes('data-testid="products-sellability-impact-blockers"') &&
       source.includes('data-testid="products-launch-readiness-action-plan"') &&
       source.includes("schemaVersion: 'backy.product-launch-readiness.v1'") &&
       source.includes("schemaVersion: 'backy.product-storefront-handoff.v1'") &&
+      source.includes("schemaVersion: 'backy.product-sellability-impact.v1'") &&
       source.includes("selectedProductLaunchReadinessText") &&
       source.includes("selectedProductStorefrontHandoffText") &&
+      source.includes("selectedProductSellabilityImpactText") &&
+      source.includes("sellabilityImpact: buildProductSellabilityImpact") &&
       source.includes("buildProductStorefrontHandoff") &&
+      source.includes("schemaVersion: 'backy.product-design-readiness.v1'") &&
+      source.includes("designReadiness: buildProductDesignReadiness(design)") &&
+      source.includes("designReadiness: buildProductDesignReadiness(null)") &&
+      source.includes("key: 'frontend-design'") &&
+      source.includes("label: 'Custom frontend design'") &&
+      source.includes("contentDocument=${hasContentDocument ? 'present' : 'missing'}") &&
+      source.includes("editableMap=${hasEditableMap ? 'present' : 'missing'}") &&
+      source.includes("dataBindings=${hasDataBindings ? 'present' : 'missing'}") &&
       source.includes("productHandoff.providerExecution.selectedProductLaunchReadiness") &&
       source.includes("selectedProductStorefrontHandoff") &&
       source.includes("Product storefront handoff") &&
+      source.includes("const design = buildProductStorefrontDesign(values)") &&
+      source.includes("design,") &&
+      source.includes("frontendDesignEditableMap: editableMap") &&
+      source.includes("providerSync: providerSyncApi") &&
       source.includes("includesProviderSecrets: false") &&
+      source.includes("includesProviderResponses: false") &&
       source.includes("includesPrivateOrders: false") &&
       source.includes("includesDigitalDeliveryUrl: false") &&
+      source.includes("includesCustomerPayloads: false") &&
+      source.includes("includesRawCheckoutSessions: false") &&
       source.includes("Selected-product sellability checklist for custom storefront, hosted page, and provider handoff."),
     "Products page must render copyable selected-product launch readiness and storefront handoff manifests",
+  );
+  assert(
+    providerSyncSource.includes("buildProductStorefrontHandoff") &&
+      providerSyncSource.includes('schemaVersion: "backy.product-storefront-handoff.v1"') &&
+      providerSyncSource.includes('schemaVersion: "backy.product-design-readiness.v1"') &&
+      providerSyncSource.includes('source: "admin-product-provider-sync-api"') &&
+      providerSyncSource.includes("design: product.design || null") &&
+      providerSyncSource.includes("designReadiness,") &&
+      providerSyncSource.includes('key: "frontend-design"') &&
+      providerSyncSource.includes("storefrontHandoff,") &&
+      providerSyncSource.includes("includesProviderSecrets: false") &&
+      providerSyncSource.includes("includesProviderResponses: false") &&
+      providerSyncSource.includes("includesPrivateOrders: false") &&
+      providerSyncSource.includes("includesCustomerPayloads: false") &&
+      providerSyncSource.includes("includesDigitalDeliveryUrl: false") &&
+      providerSyncSource.includes("includesRawCheckoutSessions: false"),
+    "Product provider-sync API must return a bounded storefront handoff for custom admin clients",
+  );
+  assert(
+    openapiSource.includes('CommerceProductStorefrontHandoff') &&
+      openapiSource.includes('CommerceProductDesignReadiness') &&
+      openapiSource.includes('"design"') &&
+      openapiSource.includes('"designReadiness"') &&
+      openapiSource.includes('$ref: "#/components/schemas/CommerceProductDesign"'),
+    "Product storefront handoff OpenAPI schema must expose the editable frontend design envelope",
+  );
+  assert(
+    sdkSource.includes("design?: BackyCommerceProductDesign | null") &&
+      sdkSource.includes("BackyCommerceProductDesignReadiness") &&
+      sdkSmokeSource.includes("commerceProductProviderSync:productDesignHandoff") &&
+      sdkSmokeSource.includes("productDynamicRoute:designReadiness") &&
+      sdkSmokeSource.includes("storefrontHandoff?.design?.customJs") &&
+      sdkSmokeSource.includes("resolve() product dynamic route missing design readiness schema") &&
+      sdkSmokeSource.includes("render() product dynamic route missing design readiness schema") &&
+      sdkSmokeSource.includes("storefrontHandoff?.design?.animations") &&
+      sdkSmokeSource.includes("storefrontHandoff?.design?.editableMap") &&
+      sdkSmokeSource.includes("storefrontHandoff?.designReadiness?.schemaVersion") &&
+      sdkSmokeSource.includes("launchReadiness?.checks?.some"),
+    "SDK product provider-sync storefront handoff must type and smoke-test the editable frontend design envelope",
   );
   assert(
     source.includes('data-testid="products-subscription-action-plan"') &&
@@ -996,6 +1265,23 @@ const assertProductsApiContractsSource = () => {
       source.includes("Customer and performance signal") &&
       source.includes("Product provider certification evidence reports scenario names, counts, gates, and non-secret provider families only"),
     "Products page must render non-secret provider certification scenario evidence",
+  );
+  assert(
+    source.includes('data-testid="products-provider-certification-evidence-packet"') &&
+      source.includes('data-testid="products-provider-certification-evidence-packet-copy-button"') &&
+      source.includes("providerCertificationEvidencePacket") &&
+      source.includes("providerCertificationEvidencePacketText") &&
+      source.includes("operatorEvidencePacket: providerCertificationEvidencePacket") &&
+      source.includes("backy.commerce-provider-certification-evidence-packet.v1") &&
+      source.includes("Copy evidence packet") &&
+      source.includes("Redacted operator attachment manifest") &&
+      source.includes("targetInputs: PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs") &&
+      source.includes("redactionPolicy") &&
+      source.includes("includesWebhookBodies: false") &&
+      source.includes("Scenario attachments") &&
+      source.includes("expectedArtifacts") &&
+      source.includes("captureSource"),
+    "Products page must render a copyable live-provider evidence packet for selected certification families",
   );
   assert(
     source.includes("bulkUpdateCollectionRecords") &&
@@ -1035,6 +1321,7 @@ const assertProductsApiContractsSource = () => {
       source.includes('data-testid="products-provider-certification-env-template"') &&
       source.includes('data-testid="products-provider-certification-env-template-body"') &&
       source.includes('data-testid="products-provider-certification-command-builder-copy-button"') &&
+      source.includes('data-testid="products-provider-certification-site-target"') &&
       source.includes("providerCertificationHandoffText") &&
       source.includes("providerCertificationEnvTemplate") &&
       source.includes("catalogEvidence") &&
@@ -1063,6 +1350,7 @@ const assertProductsApiContractsSource = () => {
       source.includes('data-testid="products-provider-certification-external-target-input"') &&
       source.includes('data-testid="products-provider-certification-doctor-toggle"') &&
       source.includes("BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER") &&
+      source.includes("BACKY_COMMERCE_CERTIFY_SITE_ID") &&
       source.includes("BACKY_COMMERCE_CERTIFICATION_BASE_URL") &&
       source.includes("npm run test:commerce-provider-certification-preflight-contract") &&
       source.includes("BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification") &&
@@ -1122,8 +1410,15 @@ const assertProductsApiContractsSource = () => {
       providerSyncSource.includes("PROVIDER_SYNC_SCHEMA_VERSION") &&
       providerSyncSource.includes("export async function GET") &&
       providerSyncSource.includes("buildProductProviderCertification") &&
+      providerSyncSource.includes("buildProductProviderCertificationEvidencePacket") &&
       providerSyncSource.includes("source: \"admin-product-provider-sync-api\"") &&
       providerSyncSource.includes("schemaVersion: \"backy.product-provider-certification-evidence.v1\"") &&
+      providerSyncSource.includes("operatorEvidencePacket") &&
+      providerSyncSource.includes("backy.commerce-provider-certification-evidence-packet.v1") &&
+      providerSyncSource.includes("redactionPolicy") &&
+      providerSyncSource.includes("captureSource") &&
+      providerSyncSource.includes("expectedArtifacts") &&
+      providerSyncSource.includes("Redacted operator attachment manifest only") &&
       providerSyncSource.includes("PRODUCT_PROVIDER_CERTIFICATION_SCENARIOS") &&
       providerSyncSource.includes("providerCertification,") &&
       providerSyncSource.includes("Product provider certification evidence reports scenario names, counts, gates, and non-secret provider families only"),
@@ -1224,8 +1519,19 @@ const assertCommerceProviderCertificationResponse = (commerce, label) => {
   assert(
     typeof operatorTemplate?.command === "string" &&
       operatorTemplate.command.includes("npm run ci:commerce-provider-certification") &&
-      operatorTemplate.command.includes("BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED"),
+      operatorTemplate.command.includes("BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED") &&
+      operatorTemplate.command.includes("BACKY_COMMERCE_CERTIFY_SITE_ID"),
     `${label} provider certification must expose the guarded operator command template: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    typeof operatorTemplate.envTemplate === "string" &&
+      operatorTemplate.envTemplate.includes("BACKY_COMMERCE_CERTIFY_SITE_ID=site-demo"),
+    `${label} provider certification must expose a site-targeted env template: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    typeof certification.operatorEnvTemplate?.body === "string" &&
+      certification.operatorEnvTemplate.body.includes("BACKY_COMMERCE_CERTIFY_SITE_ID=site-demo"),
+    `${label} provider certification must expose a site-targeted operator env template: ${JSON.stringify(certification)}`,
   );
   assert(
     Array.isArray(operatorTemplate.providerChoices?.payment) &&
@@ -1248,8 +1554,15 @@ const assertCommerceProviderCertificationResponse = (commerce, label) => {
   assert(
     Array.isArray(operatorTemplate.requiredInputs) &&
       operatorTemplate.requiredInputs.includes("BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1") &&
+      operatorTemplate.requiredInputs.includes("BACKY_COMMERCE_CERTIFY_SITE_ID") &&
       operatorTemplate.requiredInputs.includes("BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET"),
     `${label} provider certification must expose operator required input aliases: ${JSON.stringify(certification)}`,
+  );
+  assert(
+    Array.isArray(operatorTemplate.targetInputs) &&
+      operatorTemplate.targetInputs.includes("BACKY_COMMERCE_CERTIFICATION_BASE_URL") &&
+      operatorTemplate.targetInputs.includes("BACKY_COMMERCE_CERTIFY_SITE_ID"),
+    `${label} provider certification must expose site and external target guard inputs: ${JSON.stringify(certification)}`,
   );
   const groups = Array.isArray(certification.groups) ? certification.groups : [];
   const families = groups.map((group) => group.family);
@@ -2692,6 +3005,100 @@ const smokeFrontendDesignContract = () => ({
         seoTitle: "Smoke frontend product | Backy",
         featured: true,
         taxable: true,
+        customCSS: ".smoke-product-hero { color: var(--backy-smoke-commerce-primary); }",
+        customJS: "window.__backySmokeProduct = true;",
+        canvasSize: {
+          width: 1440,
+          height: 960,
+        },
+        themeTokenRefs: {
+          ctaColor: "colors.primary",
+        },
+        assets: [
+          {
+            id: "smoke-product-hero-asset",
+            kind: "image",
+            role: "hero",
+          },
+        ],
+        animations: [
+          {
+            id: "smoke-product-intro",
+            trigger: "load",
+            target: "smoke-product-hero",
+            timeline: ["fade-up", "cta-pop"],
+          },
+        ],
+        interactions: [
+          {
+            trigger: "hover",
+            target: "smoke-product-card",
+            action: "preview",
+          },
+        ],
+        dataBindings: {
+          title: {
+            source: "product.title",
+          },
+        },
+        editableMap: {
+          "product.title": {
+            elementId: "smoke-product-title",
+            targetPath: "props.content",
+          },
+        },
+        seo: {
+          title: "Smoke frontend product | Backy",
+        },
+        metadata: {
+          templateKind: "product-detail",
+          animationTimeline: "smoke-product-intro",
+        },
+        elements: [
+          {
+            id: "smoke-product-hero",
+            type: "section",
+            animation: {
+              preset: "fade-up",
+              durationMs: 420,
+            },
+            children: [
+              {
+                id: "smoke-product-title",
+                type: "heading",
+                props: {
+                  binding: "product.title",
+                },
+              },
+            ],
+          },
+        ],
+        contentDocument: {
+          schemaVersion: "backy.content.v1",
+          canvasSize: {
+            width: 1440,
+            height: 960,
+          },
+          elements: [
+            {
+              id: "smoke-product-hero",
+              type: "section",
+              animation: {
+                preset: "fade-up",
+                durationMs: 420,
+              },
+            },
+          ],
+          editableMap: {
+            "product.title": {
+              elementId: "smoke-product-title",
+              targetPath: "props.content",
+            },
+          },
+          metadata: {
+            templateKind: "product-detail",
+          },
+        },
       },
       bindingHints: [
         { role: "product.title", binding: "product.title" },
@@ -3938,6 +4345,20 @@ const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
     `Frontend binding hints missing: ${JSON.stringify(record.values)}`,
   );
   assert(
+    record.values.frontendDesignCustomCss?.includes("smoke-product-hero") &&
+      record.values.frontendDesignCustomJs?.includes("__backySmokeProduct") &&
+      record.values.frontendDesignContentDocument?.schemaVersion === "backy.content.v1" &&
+      record.values.frontendDesignElements?.[0]?.animation?.preset === "fade-up" &&
+      record.values.frontendDesignThemeTokenRefs?.ctaColor === "colors.primary" &&
+      record.values.frontendDesignAssets?.[0]?.id === "smoke-product-hero-asset" &&
+      record.values.frontendDesignAnimations?.[0]?.timeline?.includes("cta-pop") &&
+      record.values.frontendDesignInteractions?.[0]?.trigger === "hover" &&
+      record.values.frontendDesignDataBindings?.title?.source === "product.title" &&
+      record.values.frontendDesignEditableMap?.["product.title"]?.elementId === "smoke-product-title" &&
+      record.values.frontendDesignMetadata?.animationTimeline === "smoke-product-intro",
+    `Frontend product design state was not stored durably: ${JSON.stringify(record.values).slice(0, 1200)}`,
+  );
+  assert(
     readProductValue(record.values, "price") === 39,
     `Frontend product price mismatch: ${readProductValue(record.values, "price")}`,
   );
@@ -3999,6 +4420,18 @@ const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
   assert(
     product.design.frontendDesignBindingHints?.length === 3,
     `Public catalog did not expose binding hints: ${JSON.stringify(product.design)}`,
+  );
+  assert(
+    product.design.frontendDesignCustomJs?.includes("__backySmokeProduct") &&
+      product.design.frontendDesignContentDocument?.schemaVersion === "backy.content.v1" &&
+      product.design.frontendDesignElements?.[0]?.animation?.preset === "fade-up" &&
+      product.design.frontendDesignThemeTokenRefs?.ctaColor === "colors.primary" &&
+      product.design.frontendDesignAssets?.[0]?.id === "smoke-product-hero-asset" &&
+      product.design.frontendDesignAnimations?.[0]?.target === "smoke-product-hero" &&
+      product.design.frontendDesignInteractions?.[0]?.target === "smoke-product-card" &&
+      product.design.frontendDesignEditableMap?.["product.title"]?.targetPath === "props.content" &&
+      product.design.frontendDesignMetadata?.animationTimeline === "smoke-product-intro",
+    `Public catalog did not expose product design state: ${JSON.stringify(product.design).slice(0, 1200)}`,
   );
 
   return product;
@@ -4865,9 +5298,24 @@ const assertProductProviderSync = async ({
   const sync = payload.data?.sync || payload.sync;
   const updated = payload.data?.product || payload.product;
   const providerCertification = payload.data?.providerCertification || payload.providerCertification;
+  const storefrontHandoff = payload.data?.storefrontHandoff || payload.storefrontHandoff;
   assert(
     sync?.provider === "stripe",
     `Product provider sync did not return Stripe metadata: ${JSON.stringify(payload).slice(0, 500)}`,
+  );
+  assert(
+    storefrontHandoff?.schemaVersion === "backy.product-storefront-handoff.v1" &&
+      storefrontHandoff.source === "admin-product-provider-sync-api" &&
+      storefrontHandoff.product?.id === productRecord.id &&
+      Object.prototype.hasOwnProperty.call(storefrontHandoff, "design") &&
+      storefrontHandoff.designReadiness?.schemaVersion === "backy.product-design-readiness.v1" &&
+      storefrontHandoff.launchReadiness?.checks?.some?.((check) => check.key === "frontend-design") &&
+      storefrontHandoff.launchReadiness?.schemaVersion === "backy.product-launch-readiness.v1" &&
+      storefrontHandoff.privacy?.includesProviderSecrets === false &&
+      storefrontHandoff.privacy?.includesPrivateOrders === false &&
+      storefrontHandoff.privacy?.includesCustomerPayloads === false &&
+      storefrontHandoff.privacy?.includesDigitalDeliveryUrl === false,
+    `Product provider sync did not return the bounded storefront handoff: ${JSON.stringify(storefrontHandoff).slice(0, 900)}`,
   );
   assert(
     providerCertification?.schemaVersion === "backy.commerce-provider-certification-handoff.v1",
@@ -4888,6 +5336,20 @@ const assertProductProviderSync = async ({
       providerCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === "provider-catalog-sync") &&
       providerCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === "customer-signal"),
     `Product provider certification handoff missing scenario evidence: ${JSON.stringify(providerCertification).slice(0, 700)}`,
+  );
+  assert(
+    providerCertification.operatorEvidencePacket?.schemaVersion === "backy.commerce-provider-certification-evidence-packet.v1" &&
+      providerCertification.operatorEvidencePacket.operatorArtifacts?.some((artifact) => artifact.key === "payment-checkout") &&
+      providerCertification.operatorEvidencePacket.operatorArtifacts?.some((artifact) => artifact.key === "catalog-sync") &&
+      providerCertification.operatorEvidencePacket.scenarioAttachments?.some((scenario) => scenario.key === "provider-catalog-sync") &&
+      providerCertification.operatorEvidencePacket.commandPreview?.targetInputs?.includes("BACKY_COMMERCE_CERTIFICATION_BASE_URL") &&
+      providerCertification.operatorEvidencePacket.commandPreview?.targetInputs?.includes("BACKY_COMMERCE_CERTIFY_SITE_ID") &&
+      providerCertification.operatorEvidencePacket.target?.siteSelectorEnv === "BACKY_COMMERCE_CERTIFY_SITE_ID" &&
+      providerCertification.operatorEvidencePacket.target?.siteId === SITE_ID &&
+      providerCertification.operatorEvidencePacket.redactionPolicy?.includesProviderSecrets === false &&
+      providerCertification.operatorEvidencePacket.redactionPolicy?.includesWebhookBodies === false &&
+      providerCertification.operatorEvidencePacket.secretHandling?.includes("Redacted operator attachment manifest only"),
+    `Product provider certification handoff missing operator evidence packet: ${JSON.stringify(providerCertification).slice(0, 900)}`,
   );
   assert(
     typeof providerCertification.secretHandling === "string" &&
@@ -6244,15 +6706,21 @@ const assertStripeCheckoutExecution = async ({
         stripeLifecycleEntry?.actionExecutionModes?.cancel === "stripe-api",
       `Product subscription lifecycle did not expose per-action execution readiness: ${JSON.stringify(stripeLifecycleEntry)}`,
     );
+    const stripeCancelAction = stripeLifecycleEntry?.actionPlan?.availableActions?.find(
+      (action) => action.action === "cancel",
+    );
     assert(
       stripeLifecycleEntry?.actionPlan?.schemaVersion ===
         "backy.product-subscription-action-plan.v1" &&
         Array.isArray(stripeLifecycleEntry?.actionPlan?.availableActions) &&
-        stripeLifecycleEntry.actionPlan.availableActions.some(
-          (action) =>
-            action.action === "cancel" &&
-            action.enabled === true &&
-            action.executionMode === "stripe-api",
+        stripeCancelAction?.executionMode === "stripe-api" &&
+        typeof stripeCancelAction.enabled === "boolean" &&
+        (
+          stripeCancelAction.enabled === true ||
+          (
+            stripeLifecycleEntry.actionPlan.status === "cancelled" &&
+            String(stripeCancelAction.reason || "").includes("already cancelled")
+          )
         ),
       `Product subscription lifecycle did not expose per-order action plan: ${JSON.stringify(stripeLifecycleEntry)}`,
     );
@@ -6974,6 +7442,15 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
     productFieldKey("inventoryPolicy"),
     productFieldKey("productType"),
     productFieldKey("downloadUrl"),
+    productFieldKey("downloadMediaId"),
+    productFieldKey("downloadMediaName"),
+    productFieldKey("downloadMediaType"),
+    productFieldKey("downloadMediaFolderId"),
+    productFieldKey("downloadMediaFolderPath"),
+    productFieldKey("downloadMediaVisibility"),
+    productFieldKey("downloadMediaScope"),
+    productFieldKey("downloadMediaScopeTargetId"),
+    productFieldKey("downloadMediaOrganization"),
     productFieldKey("checkoutUrl"),
     productFieldKey("subscriptionEnabled"),
     productFieldKey("subscriptionInterval"),
@@ -7018,6 +7495,18 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
     "continue",
     "digital",
     `https://downloads.example.com/${slug}.zip`,
+    `media-download-${suffix}`,
+    `Imported download ${suffix}.zip`,
+    "file",
+    "folder-digital-delivery",
+    "/Digital delivery",
+    "private",
+    "site",
+    SITE_ID,
+    JSON.stringify({
+      folderPath: "/Digital delivery",
+      root: false,
+    }),
     "",
     "true",
     "yearly",
@@ -7104,6 +7593,16 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
     `Imported return policy did not persist: ${JSON.stringify(readProductValue(record.values, "returnPolicy"))}`,
   );
   assert(
+    readProductValue(record.values, "downloadMediaId") ===
+      `media-download-${suffix}` &&
+      readProductValue(record.values, "downloadMediaName") ===
+        `Imported download ${suffix}.zip` &&
+      readProductValue(record.values, "downloadMediaType") === "file" &&
+      readProductValue(record.values, "downloadMediaFolderPath") ===
+        "/Digital delivery",
+    `Imported digital delivery media binding did not persist: ${JSON.stringify(record.values)}`,
+  );
+  assert(
     record.values?.taxable === false,
     `Imported taxable flag did not stay boolean false: ${JSON.stringify(record.values?.taxable)}`,
   );
@@ -7147,6 +7646,10 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
       product.subscription?.interval === "yearly" &&
       product.subscription?.trialDays === 30,
     `Imported public subscription metadata was unexpected: ${JSON.stringify(product?.subscription)}`,
+  );
+  assert(
+    product.delivery?.hasDigitalDelivery === true,
+    `Imported digital product should report digital delivery configured: ${JSON.stringify(product?.delivery)}`,
   );
 
   return record;
@@ -7256,6 +7759,7 @@ const assertProductsLayout = async (client) => {
           productLaunchReadinessText.includes('Launch action plan') &&
           productLaunchReadinessText.includes('backy.product-launch-readiness.v1') &&
           productLaunchReadinessText.includes('backy.product-storefront-handoff.v1') &&
+          productLaunchReadinessText.includes('Custom frontend design') &&
           productLaunchReadinessText.includes('Copy storefront JSON') &&
           productLaunchReadinessText.includes('Copy launch JSON') &&
           Boolean(document.querySelector('[data-testid="products-storefront-handoff-copy-button"]')) &&
@@ -7289,6 +7793,7 @@ const assertProductsLayout = async (client) => {
           Boolean(document.querySelector('[data-testid="products-provider-certification-copy-button"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder-copy-button"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-site-target"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-payment-toggle"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-tax-provider-select"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-command"]')) &&
@@ -7302,6 +7807,7 @@ const assertProductsLayout = async (client) => {
           providerCertificationText.includes('Provider catalog sync') &&
           providerCertificationText.includes('Webhook settlement') &&
           providerCertificationText.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
+          providerCertificationText.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
           providerCertificationText.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED') &&
           providerCertificationText.includes('Download provider JSON'),
         providerCertificationText,
@@ -7689,7 +8195,18 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
 
 const main = async () => {
   assertProductsApiContractsSource();
-  if (process.env.BACKY_COMMERCE_SOURCE_ONLY === "1") {
+  if (SOURCE_ONLY_MODE) {
+    console.log(JSON.stringify({
+      ok: true,
+      mode: "commerce-source-only",
+      guard: "products-commerce-provider-certification",
+      contracts: [
+        "products-provider-certification-ui",
+        "product-provider-sync-api",
+        "commerce-management-sdk",
+        "public-commerce-contracts",
+      ],
+    }));
     return;
   }
 

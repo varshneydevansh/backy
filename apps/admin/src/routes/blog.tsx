@@ -242,6 +242,8 @@ function BlogListView() {
   const [isRevisionSummaryLoading, setIsRevisionSummaryLoading] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState<TaxonomyDraft>(() => emptyTaxonomyDraft('#2563eb'));
   const [tagDraft, setTagDraft] = useState<TaxonomyDraft>(() => emptyTaxonomyDraft());
+  const [categoryDraftSubmitted, setCategoryDraftSubmitted] = useState(false);
+  const [tagDraftSubmitted, setTagDraftSubmitted] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState('');
   const [editingTagId, setEditingTagId] = useState('');
   const [selectedSiteId, setSelectedSiteId] = useState(() => getSiteSelectionFromSearch(sites));
@@ -538,6 +540,7 @@ function BlogListView() {
     }
 
     setEditingCategoryId(category.id);
+    setCategoryDraftSubmitted(false);
     setCategoryDraft({
       name: category.name,
       slug: category.slug,
@@ -554,6 +557,7 @@ function BlogListView() {
     }
 
     setEditingTagId(tag.id);
+    setTagDraftSubmitted(false);
     setTagDraft({
       name: tag.name,
       slug: tag.slug,
@@ -564,18 +568,26 @@ function BlogListView() {
 
   const resetCategoryDraft = () => {
     setEditingCategoryId('');
+    setCategoryDraftSubmitted(false);
     setCategoryDraft(emptyTaxonomyDraft('#2563eb'));
   };
 
   const resetTagDraft = () => {
     setEditingTagId('');
+    setTagDraftSubmitted(false);
     setTagDraft(emptyTaxonomyDraft());
   };
 
   const saveCategoryDraft = async () => {
-    if (isBlogWorkflowBusy || !categoryDraft.name.trim()) return;
+    if (isBlogWorkflowBusy) return;
     if (!canEditBlog) {
       setError(editBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
+    setCategoryDraftSubmitted(true);
+    if (!categoryDraft.name.trim()) {
+      setError('Enter a category name before saving.');
       setNotice(null);
       return;
     }
@@ -610,9 +622,15 @@ function BlogListView() {
   };
 
   const saveTagDraft = async () => {
-    if (isBlogWorkflowBusy || !tagDraft.name.trim()) return;
+    if (isBlogWorkflowBusy) return;
     if (!canEditBlog) {
       setError(editBlogDeniedMessage);
+      setNotice(null);
+      return;
+    }
+    setTagDraftSubmitted(true);
+    if (!tagDraft.name.trim()) {
+      setError('Enter a tag name before saving.');
       setNotice(null);
       return;
     }
@@ -1970,6 +1988,7 @@ function BlogListView() {
             <TaxonomyDraftForm
               kind="category"
               draft={categoryDraft}
+              submitted={categoryDraftSubmitted}
               editingName={selectedCategory?.name || ''}
               busy={isBlogWorkflowBusy || !canEditBlog}
               colorEnabled
@@ -2034,6 +2053,7 @@ function BlogListView() {
             <TaxonomyDraftForm
               kind="tag"
               draft={tagDraft}
+              submitted={tagDraftSubmitted}
               editingName={selectedTag?.name || ''}
               busy={isBlogWorkflowBusy || !canEditBlog}
               onDraftChange={patchTagDraft}
@@ -2771,6 +2791,7 @@ function BlogApiSnippet({ label, value }: { label: string; value: string }) {
 function TaxonomyDraftForm({
   kind,
   draft,
+  submitted,
   editingName,
   busy,
   colorEnabled = false,
@@ -2780,6 +2801,7 @@ function TaxonomyDraftForm({
 }: {
   kind: 'category' | 'tag';
   draft: TaxonomyDraft;
+  submitted: boolean;
   editingName: string;
   busy: boolean;
   colorEnabled?: boolean;
@@ -2792,6 +2814,10 @@ function TaxonomyDraftForm({
   const nameId = `blog-${kind}-name`;
   const slugId = `blog-${kind}-slug`;
   const descriptionId = `blog-${kind}-description`;
+  const nameErrorId = `blog-${kind}-name-error`;
+  const nameInlineError = submitted && draft.name.trim().length === 0
+    ? `Enter a ${kind} name before saving.`
+    : null;
 
   return (
     <div>
@@ -2827,8 +2853,15 @@ function TaxonomyDraftForm({
             disabled={busy}
             onChange={(event) => onDraftChange({ name: event.target.value })}
             placeholder={kind === 'category' ? 'Engineering' : 'Launch notes'}
+            aria-invalid={Boolean(nameInlineError)}
+            aria-describedby={nameInlineError ? nameErrorId : undefined}
             className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
           />
+          {nameInlineError && (
+            <span id={nameErrorId} className="mt-1 block text-xs font-medium text-destructive" role="alert" data-testid={`blog-${kind}-name-error`}>
+              {nameInlineError}
+            </span>
+          )}
         </label>
         <label className="text-xs font-medium text-muted-foreground" htmlFor={slugId}>
           Slug
@@ -2875,7 +2908,7 @@ function TaxonomyDraftForm({
       <button
         type="button"
         onClick={onSave}
-        disabled={busy || !draft.name.trim()}
+        disabled={busy}
         data-testid={`blog-${kind}-save`}
         className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
       >

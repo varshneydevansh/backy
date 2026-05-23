@@ -44,6 +44,7 @@ import type { SiteSettings } from '@backy-cms/core';
 import {
   DEFAULT_CANVAS_SIZE,
   createCanvasElement,
+  extractFrontendTemplateDesignSerialization,
   serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 
@@ -122,6 +123,7 @@ type BlogCreatePermissionKey =
   | 'media.view'
   | 'media.create'
   | 'collections.view'
+  | 'sites.view'
   | 'sites.configure';
 
 const BLOG_CREATE_PERMISSION_ROLE_DEFAULTS: Record<BlogCreatePermissionKey, Array<User['role']>> = {
@@ -131,6 +133,7 @@ const BLOG_CREATE_PERMISSION_ROLE_DEFAULTS: Record<BlogCreatePermissionKey, Arra
   'media.view': ['owner', 'admin', 'editor', 'viewer'],
   'media.create': ['owner', 'admin', 'editor'],
   'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+  'sites.view': ['owner', 'admin', 'editor', 'viewer'],
   'sites.configure': ['owner', 'admin'],
 };
 
@@ -677,6 +680,7 @@ function NewBlogPostPage() {
     const [isPreviewAfterCreateBusy, setIsPreviewAfterCreateBusy] = useState(false);
     const [routeCheckError, setRouteCheckError] = useState<string | null>(null);
     const [routeCheckRetry, setRouteCheckRetry] = useState(0);
+    const [blogCreateFormSubmitted, setBlogCreateFormSubmitted] = useState(false);
     const [existingBlogPosts, setExistingBlogPosts] = useState<BlogPost[]>([]);
     const [isFeaturedMediaOpen, setIsFeaturedMediaOpen] = useState(false);
     const [hasHydratedAutosave, setHasHydratedAutosave] = useState(false);
@@ -719,28 +723,33 @@ function NewBlogPostPage() {
     const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
     const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(user?.id));
     const [permissionError, setPermissionError] = useState<string | null>(null);
-    const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-    const canViewBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'pages.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canEditBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'pages.edit', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canPublishBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'pages.publish', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'media.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canCreateMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'media.create', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'collections.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canConfigureSite = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, user, 'sites.configure', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canUseLoadingRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(user);
+    const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseLoadingRoleDefaults;
+    const isBlogCreatePermissionAllowed = (key: BlogCreatePermissionKey) => (
+        isAdminPermissionAllowed(permissionMatrix, user, key, BLOG_CREATE_PERMISSION_ROLE_DEFAULTS)
+        || (canUseLoadingRoleDefaults && Boolean(user && BLOG_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(user.role)))
+    );
+    const canViewBlog = isBlogCreatePermissionAllowed('pages.view');
+    const canEditBlog = isBlogCreatePermissionAllowed('pages.edit');
+    const canPublishBlog = isBlogCreatePermissionAllowed('pages.publish');
+    const canViewMedia = isBlogCreatePermissionAllowed('media.view');
+    const canCreateMedia = isBlogCreatePermissionAllowed('media.create');
+    const canViewCollections = isBlogCreatePermissionAllowed('collections.view');
+    const canViewSites = isBlogCreatePermissionAllowed('sites.view');
     const viewBlogPermissionTitle = canViewBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const editBlogPermissionTitle = canEditBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.edit', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const publishBlogPermissionTitle = canPublishBlog ? undefined : adminPermissionReason(permissionMatrix, user, 'pages.publish', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const viewMediaPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, user, 'media.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const createMediaPermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, user, 'media.create', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const viewCollectionsPermissionTitle = canViewCollections ? undefined : adminPermissionReason(permissionMatrix, user, 'collections.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const configureSitePermissionTitle = canConfigureSite ? undefined : adminPermissionReason(permissionMatrix, user, 'sites.configure', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const viewSitePermissionTitle = canViewSites ? undefined : adminPermissionReason(permissionMatrix, user, 'sites.view', BLOG_CREATE_PERMISSION_ROLE_DEFAULTS);
     const viewBlogDeniedMessage = `Your account needs pages.view to load blog creation data. ${viewBlogPermissionTitle}`;
     const editBlogDeniedMessage = `Your account needs pages.edit to create or change blog drafts. ${editBlogPermissionTitle}`;
     const publishBlogDeniedMessage = `Your account needs pages.publish to create previews, publish posts, or schedule posts. ${publishBlogPermissionTitle}`;
     const viewMediaDeniedMessage = `Your account needs media.view to select featured media. ${viewMediaPermissionTitle}`;
     const createMediaDeniedMessage = `Your account needs media.create to upload featured media. ${createMediaPermissionTitle}`;
     const viewCollectionsDeniedMessage = `Your account needs collections.view to bind blog canvas elements to collection data. ${viewCollectionsPermissionTitle}`;
-    const isCreateBusy = isLoading || isPreviewAfterCreateBusy || isCheckingPosts || isPermissionMatrixPending;
+    const isCreateBusy = isLoading || isPreviewAfterCreateBusy || isPermissionMatrixPending;
     const createFormDisabled = isCreateBusy || !canEditBlog;
 
     const clearCreationFeedback = () => {
@@ -884,9 +893,9 @@ function NewBlogPostPage() {
             if (!activeSiteId) return;
             if (isPermissionMatrixPending) return;
 
-            if (!canConfigureSite) {
+            if (!canViewSites) {
                 setFrontendDesign(null);
-                setFrontendDesignError(`Your account needs sites.configure to load frontend design templates. ${configureSitePermissionTitle}`);
+                setFrontendDesignError(`Your account needs sites.view to load frontend design templates. ${viewSitePermissionTitle}`);
                 return;
             }
 
@@ -923,7 +932,7 @@ function NewBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId, canConfigureSite, configureSitePermissionTitle, isPermissionMatrixPending, search.designTemplate, search.siteId]);
+    }, [activeSiteId, canViewSites, isPermissionMatrixPending, search.designTemplate, search.siteId, viewSitePermissionTitle]);
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, activeSiteId))) {
@@ -1230,6 +1239,24 @@ function NewBlogPostPage() {
     const scheduleValidationMessage = getScheduledBlogPostDateError(status, scheduledAt);
     const hasFutureSchedule = scheduleValidationMessage === null;
     const minimumScheduledAt = toDateTimeLocalValue(new Date(Date.now() + 60_000).toISOString());
+    const blogTitleInlineError = blogCreateFormSubmitted && !title.trim()
+        ? 'Add a post title so Backy can create a named article, route, and editable canvas document.'
+        : null;
+    const blogSlugInlineError = blogCreateFormSubmitted
+        ? !slugValue.trim()
+            ? 'Add a URL slug so this blog post has a stable public route.'
+            : routeCheckError
+                ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
+                : routeConflict
+                    ? `${routePath} is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
+                    : null
+        : null;
+    const blogCanonicalInlineError = blogCreateFormSubmitted && !canonicalValid
+        ? 'Canonical path must start with / before saving.'
+        : null;
+    const blogScheduleInlineError = blogCreateFormSubmitted && scheduleValidationMessage
+        ? scheduleValidationMessage
+        : null;
     const readinessChecks = [
         { label: 'Title', complete: title.trim().length > 0 },
         { label: 'Slug', complete: slugValue.trim().length > 0 },
@@ -1245,7 +1272,6 @@ function NewBlogPostPage() {
     const canCreateDraft = title.trim().length > 0
         && canEditBlog
         && slugValue.trim().length > 0
-        && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
         && canonicalValid;
@@ -1253,7 +1279,6 @@ function NewBlogPostPage() {
         && canEditBlog
         && canPublishBlog
         && slugValue.trim().length > 0
-        && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
         && canonicalValid
@@ -1752,13 +1777,17 @@ function NewBlogPostPage() {
         const contentCanvasSize = effectiveFrontendTemplate
             ? getFrontendBlogTemplateCanvasSize(effectiveFrontendTemplate, contentElements)
             : canvasSize;
-        const content = serializeCanvasContent(contentElements, contentCanvasSize, effectiveFrontendTemplate ? effectiveFrontendDesignTokens?.customCss : undefined, {
+        const frontendTemplateDesignState = effectiveFrontendTemplate
+            ? extractFrontendTemplateDesignSerialization(effectiveFrontendTemplate.content, effectiveFrontendDesignTokens?.customCss)
+            : null;
+        const content = serializeCanvasContent(contentElements, contentCanvasSize, frontendTemplateDesignState?.customCSS, {
             documentId: `new-post-${slugValue || title || 'draft'}`,
             kind: 'post',
             title,
             slug: slugValue,
             status: resolvedStatus,
             locale: 'en',
+            ...(frontendTemplateDesignState?.options || {}),
         });
 
         return {
@@ -1785,7 +1814,19 @@ function NewBlogPostPage() {
                 frontendDesignRoutePattern: effectiveFrontendTemplate?.routePattern,
                 frontendDesignTokens: effectiveFrontendDesignTokens,
                 frontendDesignChrome: effectiveFrontendDesignChrome,
-                frontendDesignCustomCss: effectiveFrontendDesignTokens?.customCss,
+                frontendDesignCustomCss: frontendTemplateDesignState?.customCSS,
+                frontendDesignCustomJs: frontendTemplateDesignState?.provenance.customJS,
+                frontendDesignContentDocument: frontendTemplateDesignState?.provenance.contentDocument,
+                frontendDesignElements: frontendTemplateDesignState?.provenance.elements,
+                frontendDesignCanvasSize: frontendTemplateDesignState?.provenance.canvasSize,
+                frontendDesignThemeTokenRefs: frontendTemplateDesignState?.provenance.themeTokenRefs,
+                frontendDesignAssets: frontendTemplateDesignState?.provenance.assets,
+                frontendDesignAnimations: frontendTemplateDesignState?.provenance.animations,
+                frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions,
+                frontendDesignDataBindings: frontendTemplateDesignState?.provenance.dataBindings,
+                frontendDesignEditableMap: frontendTemplateDesignState?.provenance.editableMap,
+                frontendDesignSeo: frontendTemplateDesignState?.provenance.seo,
+                frontendDesignMetadata: frontendTemplateDesignState?.provenance.metadata,
                 frontendDesignBindingHints: effectiveFrontendTemplate?.bindingHints,
             },
         };
@@ -1851,6 +1892,8 @@ function NewBlogPostPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isCreateBusy) return;
+        setBlogCreateFormSubmitted(true);
+
         if (!canEditBlog || (status !== 'draft' && !canPublishBlog)) {
             setError(!canEditBlog ? editBlogDeniedMessage : publishBlogDeniedMessage);
             setNotice(null);
@@ -2017,7 +2060,7 @@ function NewBlogPostPage() {
                     </Notice>
                 )}
 
-                <form id="blog-create-form" onSubmit={handleSubmit} className={cn('grid gap-5', isWorkspaceFocus && 'h-full min-h-0')}>
+                <form id="blog-create-form" onSubmit={handleSubmit} noValidate className={cn('grid gap-5', isWorkspaceFocus && 'h-full min-h-0')}>
                     {!isWorkspaceFocus && (
                     <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-create-command-center">
                         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -2077,8 +2120,8 @@ function NewBlogPostPage() {
                                 >
                                     {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                                 </Button>
-                                <Button type="submit" disabled={isCreateBusy || !canSubmit} variant="primary" iconStart={<Save className="size-4" />}>
-                                    {isLoading ? 'Saving...' : isCheckingPosts ? 'Checking routes...' : submitLabel}
+                                <Button type="submit" disabled={createFormDisabled} variant="primary" iconStart={<Save className="size-4" />}>
+                                    {isLoading ? 'Saving...' : submitLabel}
                                 </Button>
                             </div>
                         </div>
@@ -2164,26 +2207,44 @@ function NewBlogPostPage() {
                                 placeholder="Untitled post"
                                 disabled={createFormDisabled}
                                 title={editBlogPermissionTitle}
+                                aria-invalid={Boolean(blogTitleInlineError)}
+                                aria-describedby={blogTitleInlineError ? 'blog-create-title-error' : undefined}
+                                data-testid="blog-create-title-input"
                                 className="w-full rounded-lg border-0 bg-transparent px-0 text-4xl font-semibold tracking-normal placeholder:text-muted-foreground/45 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
                                 autoFocus
                             />
+                            {blogTitleInlineError && (
+                                <p id="blog-create-title-error" className="text-xs text-destructive" data-testid="blog-create-title-error">
+                                    {blogTitleInlineError}
+                                </p>
+                            )}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                            <label htmlFor="blog-create-slug" className="font-mono text-muted-foreground">/blog/</label>
-                            <input
-                                id="blog-create-slug"
-                                type="text"
-                                value={slug}
-                                onChange={(e) => {
-                                    clearCreationFeedback();
-                                    setSlug(e.target.value);
-                                }}
-                                disabled={createFormDisabled}
-                                title={editBlogPermissionTitle}
-                                className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
-                                placeholder="post-slug"
-                            />
+                        <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                                <label htmlFor="blog-create-slug" className="font-mono text-muted-foreground">/blog/</label>
+                                <input
+                                    id="blog-create-slug"
+                                    type="text"
+                                    value={slug}
+                                    onChange={(e) => {
+                                        clearCreationFeedback();
+                                        setSlug(e.target.value);
+                                    }}
+                                    disabled={createFormDisabled}
+                                    title={editBlogPermissionTitle}
+                                    aria-invalid={Boolean(blogSlugInlineError)}
+                                    aria-describedby={blogSlugInlineError ? 'blog-create-slug-error' : undefined}
+                                    data-testid="blog-create-slug-input"
+                                    className="min-w-48 flex-1 border-0 bg-transparent p-0 font-mono text-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60"
+                                    placeholder="post-slug"
+                                />
+                            </div>
+                            {blogSlugInlineError && (
+                                <p id="blog-create-slug-error" className="text-xs text-destructive" data-testid="blog-create-slug-error">
+                                    {blogSlugInlineError}
+                                </p>
+                            )}
                         </div>
                         {(routeConflict || routeCheckError) && (
                             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
@@ -2299,9 +2360,17 @@ function NewBlogPostPage() {
                                             }}
                                             disabled={createFormDisabled}
                                             title={editBlogPermissionTitle}
+                                            aria-invalid={Boolean(blogCanonicalInlineError)}
+                                            aria-describedby={blogCanonicalInlineError ? 'blog-create-canonical-error' : undefined}
+                                            data-testid="blog-create-canonical-input"
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             placeholder={routePath}
                                         />
+                                        {blogCanonicalInlineError && (
+                                            <p id="blog-create-canonical-error" className="text-xs text-destructive" data-testid="blog-create-canonical-error">
+                                                {blogCanonicalInlineError}
+                                            </p>
+                                        )}
                                         <div className={cn('text-xs', canonicalValid ? 'text-muted-foreground' : 'text-amber-700')}>
                                             {normalizedCanonicalPath}
                                         </div>
@@ -2411,8 +2480,8 @@ function NewBlogPostPage() {
                                                     key={template.id}
                                                     type="button"
                                                     onClick={() => applyFrontendTemplate(template, { syncRoute: true })}
-                                                    disabled={createFormDisabled || !canConfigureSite}
-                                                    title={editBlogPermissionTitle || configureSitePermissionTitle}
+                                                    disabled={createFormDisabled}
+                                                    title={editBlogPermissionTitle || viewSitePermissionTitle}
                                                     data-testid={`blog-frontend-template-${template.id}`}
                                                     data-active={designTemplateId === template.id}
                                                     className={cn(
@@ -2498,7 +2567,7 @@ function NewBlogPostPage() {
                                             type="submit"
                                             form="blog-create-form"
                                             size="sm"
-                                            disabled={isCreateBusy || !canSubmit}
+                                            disabled={createFormDisabled}
                                             iconStart={<Save className="size-4" />}
                                         >
                                             {isLoading ? 'Saving...' : submitLabel}
@@ -2529,6 +2598,7 @@ function NewBlogPostPage() {
                                     initialElements={canvasElements}
                                     initialSettings={dummySettings}
                                     initialSize={canvasSize}
+                                    theme={selectedSite?.theme}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
                                         if (isCreateBusy || !canEditBlog) return;
@@ -2623,12 +2693,16 @@ function NewBlogPostPage() {
                                             }}
                                             disabled={createFormDisabled || !canPublishBlog}
                                             title={publishBlogPermissionTitle}
-                                            aria-invalid={Boolean(scheduleValidationMessage)}
+                                            aria-invalid={Boolean(blogScheduleInlineError)}
+                                            aria-describedby={blogScheduleInlineError ? 'blog-create-schedule-error' : undefined}
+                                            data-testid="blog-create-schedule-input"
                                             className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                                             required
                                         />
-                                        {scheduleValidationMessage && (
-                                            <p className="text-xs text-destructive">{scheduleValidationMessage}</p>
+                                        {blogScheduleInlineError && (
+                                            <p id="blog-create-schedule-error" className="text-xs text-destructive" data-testid="blog-create-schedule-error">
+                                                {blogScheduleInlineError}
+                                            </p>
                                         )}
                                     </div>
                                 )}
@@ -2651,8 +2725,8 @@ function NewBlogPostPage() {
                                 </div>
 
                                 <div className="grid gap-2">
-                                    <Button type="submit" disabled={isCreateBusy || !canSubmit} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
-                                        {isLoading ? 'Saving...' : isCheckingPosts ? 'Checking routes...' : submitLabel}
+                                    <Button type="submit" disabled={createFormDisabled} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
+                                        {isLoading ? 'Saving...' : submitLabel}
                                     </Button>
                                     <Button
                                         type="button"

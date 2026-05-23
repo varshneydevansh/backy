@@ -609,6 +609,27 @@ export const buildPublicInteractiveComponentRegistry = (
           step: 5,
           defaultValue: 50,
         },
+        {
+          key: 'accentColor',
+          label: 'Accent color',
+          type: 'color',
+          defaultValue: '#38bdf8',
+        },
+        {
+          key: 'caption',
+          label: 'Fallback caption',
+          type: 'textarea',
+          defaultValue: 'Animated canvas module with a static accessible fallback.',
+        },
+        {
+          key: 'runtimeConfig',
+          label: 'Runtime config',
+          type: 'json',
+          defaultValue: {
+            reducedMotionFallback: true,
+            frameBudget: 60,
+          },
+        },
       ],
       fallback: {
         required: true,

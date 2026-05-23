@@ -57,7 +57,7 @@ jobs:
           {
             echo "## Backy SDK Postgres Certification"
             echo ""
-            echo "| Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |"
+            echo "| Certified regression gate | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |"
             echo "| --- | --- | --- | --- | --- | --- |"
             echo "| Frontend manifest/OpenAPI/SDK APIs | npm run ci:sdk-postgres-smoke | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source | disposable confirmed: ${{ inputs.disposable_database_confirmed }}; expected host configured: ${{ inputs.database_expected_host != '' }}; expected database configured: ${{ inputs.database_expected_name != '' }} |"
           } >> "$GITHUB_STEP_SUMMARY"

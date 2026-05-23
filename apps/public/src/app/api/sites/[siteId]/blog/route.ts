@@ -10,6 +10,7 @@
 import { NextRequest } from 'next/server';
 import type { BackyPost } from '@backy-cms/core';
 import { getBlogPosts, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
+import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
@@ -107,42 +108,40 @@ const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null 
     )
 );
 
-const frontendDesignFromMeta = (value: unknown) => {
-    const meta = isRecord(value) ? value : {};
-    if (typeof meta.frontendDesignTemplateId !== 'string') {
-        return undefined;
-    }
+const publicPost = <TPost extends { meta?: unknown }>(post: TPost) => ({
+    ...post,
+    frontendDesign: frontendDesignProvenanceFromMetadata(post.meta),
+});
+
+const publicPostContentFromRepositoryDocument = (content: BackyPost['content']) => {
+    const metadata = isRecord(content.metadata) ? content.metadata : {};
+    const canvasSize = isRecord(metadata.canvasSize)
+        ? metadata.canvasSize
+        : { width: 1200, height: 900 };
 
     return {
-        templateId: meta.frontendDesignTemplateId,
-        templateName: typeof meta.frontendDesignTemplateName === 'string' ? meta.frontendDesignTemplateName : undefined,
-        routePattern: typeof meta.frontendDesignRoutePattern === 'string' ? meta.frontendDesignRoutePattern : undefined,
-        source: meta.frontendDesignSource,
-        chrome: meta.frontendDesignChrome,
-        tokens: meta.frontendDesignTokens,
-        customCss: typeof meta.frontendDesignCustomCss === 'string' ? meta.frontendDesignCustomCss : undefined,
-        bindingHints: Array.isArray(meta.frontendDesignBindingHints) ? meta.frontendDesignBindingHints : [],
+        elements: content.elements,
+        canvasSize,
+        customCSS: typeof metadata.customCSS === 'string' ? metadata.customCSS : undefined,
+        customJS: typeof metadata.customJS === 'string' ? metadata.customJS : undefined,
+        themeTokenRefs: content.themeTokenRefs,
+        assets: content.assets,
+        animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)
+            ? metadata.animations
+            : undefined,
+        interactions: content.interactions,
+        seo: content.seo,
+        dataBindings: content.dataBindings,
+        editableMap: content.editableMap,
+        metadata,
+        contentDocument: content,
     };
 };
 
-const publicPost = <TPost extends { meta?: unknown }>(post: TPost) => ({
-    ...post,
-    frontendDesign: frontendDesignFromMeta(post.meta),
-});
-
 const publicPostFromRepositoryPost = (post: BackyPost) => {
-    const canvasSize = isRecord(post.content.metadata?.canvasSize)
-        ? post.content.metadata.canvasSize
-        : { width: 1200, height: 900 };
-
     return publicPost({
         ...post,
-        content: {
-            elements: post.content.elements,
-            canvasSize,
-            customCSS: typeof post.content.metadata?.customCSS === 'string' ? post.content.metadata.customCSS : undefined,
-            contentDocument: post.content,
-        },
+        content: publicPostContentFromRepositoryDocument(post.content),
     });
 };
 

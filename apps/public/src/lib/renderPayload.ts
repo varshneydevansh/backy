@@ -1,4 +1,6 @@
 import {
+  buildBackyThemeTokens,
+  canvasContentPayloadToBackyContentDocument,
   canvasElementsToBackyContentDocument,
   type BackyContentKind,
   type BackyContentStatus,
@@ -20,11 +22,13 @@ import {
   type StoreSite,
 } from './backyStore';
 import { buildCollectionItemPath, buildCollectionListPath } from './collectionRoutes';
+import { PRODUCT_COLLECTION_SLUG, productDesignReadinessFromValues } from './commerceCatalog';
 import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
+import { buildPublicFontManifest } from './fontManifest';
 import { publicMediaFilePath } from './mediaResponsive';
-import { buildBackyThemeTokens } from './themeTokens';
 
 type JsonObject = Record<string, unknown>;
+type JsonArrayOrObject = unknown[] | JsonObject;
 const CURRENT_RECORD_ID_QUERY_VALUE = '$currentRecord.id';
 const LEGACY_CURRENT_RECORD_ID_QUERY_VALUE = '$record.id';
 
@@ -47,6 +51,8 @@ interface RenderElement extends JsonObject {
   fallback?: JsonObject | string;
   renderCapabilities?: JsonObject;
   styles?: JsonObject;
+  animation?: JsonObject;
+  assetIds?: string[];
   actions?: JsonObject[];
   dataBindings?: JsonObject[];
   bindingSlots?: JsonObject[];
@@ -109,6 +115,19 @@ interface CanonicalContentPayloadInput {
   locale: string;
   version: string;
   elements: RenderElement[];
+  includeContentDocument?: boolean;
+  canvasSize?: unknown;
+  customCSS?: string;
+  customJS?: string;
+  themeTokenRefs?: Record<string, string>;
+  assets?: JsonArrayOrObject;
+  animations?: JsonArrayOrObject;
+  interactions?: JsonArrayOrObject;
+  seo?: JsonObject;
+  dataBindings?: JsonObject;
+  editableMap?: JsonObject;
+  metadata?: JsonObject;
+  contentDocument?: JsonObject;
 }
 
 const buildRenderFrontendDesign = (site: StoreSite, contentMetadata?: unknown) => ({
@@ -214,18 +233,89 @@ const collectionFrontendDesignTemplate = (site: StoreSite, collection: StoreColl
 type CollectionTemplateCanvas = {
   canvasSize?: { width: number; height: number };
   customCSS?: string;
+  customJS?: string;
+  themeTokenRefs?: Record<string, string>;
+  assets?: JsonArrayOrObject;
+  animations?: JsonArrayOrObject;
+  interactions?: JsonArrayOrObject;
+  seo?: JsonObject;
+  dataBindings?: JsonObject;
+  editableMap?: JsonObject;
+  metadata?: JsonObject;
+  contentDocument?: JsonObject;
   elements: unknown[];
+};
+
+type CollectionRenderableContent = Omit<CollectionTemplateCanvas, 'canvasSize' | 'elements'> & {
+  canvasSize: { width: number; height: number };
+  elements: RenderElement[];
+};
+
+const cloneJsonArray = <T = unknown>(value: unknown): T[] | undefined => (
+  Array.isArray(value) ? JSON.parse(JSON.stringify(value)) as T[] : undefined
+);
+
+const stringRecordValue = (...values: unknown[]): Record<string, string> | undefined => {
+  for (const value of values) {
+    if (!isRecord(value)) continue;
+    const entries = Object.entries(value).filter((entry): entry is [string, string] => (
+      typeof entry[1] === 'string' && entry[1].trim().length > 0
+    ));
+    if (entries.length > 0) return Object.fromEntries(entries);
+  }
+  return undefined;
+};
+
+const jsonRecordValue = (...values: unknown[]): JsonObject | undefined => {
+  for (const value of values) {
+    const record = cloneJsonObject(value);
+    if (record && Object.keys(record).length > 0) return record;
+  }
+  return undefined;
+};
+
+const jsonArrayValue = (...values: unknown[]): unknown[] | undefined => {
+  for (const value of values) {
+    const array = cloneJsonArray(value);
+    if (array && array.length > 0) return array;
+  }
+  return undefined;
+};
+
+const jsonArrayOrRecordValue = (...values: unknown[]): JsonArrayOrObject | undefined => {
+  for (const value of values) {
+    const array = cloneJsonArray(value);
+    if (array && array.length > 0) return array;
+    const record = cloneJsonObject(value);
+    if (record && Object.keys(record).length > 0) return record;
+  }
+  return undefined;
 };
 
 const templateContentCanvas = (
   value: unknown,
 ): CollectionTemplateCanvas | null => {
   const content = isRecord(value) ? value : null;
-  if (!content || !Array.isArray(content.elements)) {
+  const contentDocument = isRecord(content?.contentDocument)
+    ? content.contentDocument
+    : isRecord(content) && Array.isArray(content.elements) && isRecord(content.metadata)
+      ? content
+      : null;
+  const elements = Array.isArray(content?.elements)
+    ? content.elements
+    : Array.isArray(contentDocument?.elements)
+      ? contentDocument.elements
+      : null;
+
+  if (!content || !elements) {
     return null;
   }
 
-  const metadata = isRecord(content.metadata) ? content.metadata : null;
+  const metadata = isRecord(content.metadata)
+    ? content.metadata
+    : isRecord(contentDocument?.metadata)
+      ? contentDocument.metadata
+      : null;
   const rawCanvasSize = isRecord(content.canvasSize)
     ? content.canvasSize
     : isRecord(metadata?.canvasSize)
@@ -238,11 +328,40 @@ const templateContentCanvas = (
     : typeof metadata?.customCSS === 'string' && metadata.customCSS.trim().length > 0
       ? metadata.customCSS
       : '';
+  const customJS = typeof content.customJS === 'string' && content.customJS.trim().length > 0
+    ? content.customJS
+    : typeof metadata?.customJS === 'string' && metadata.customJS.trim().length > 0
+      ? metadata.customJS
+      : '';
 
   return {
     ...(width && height ? { canvasSize: { width, height } } : {}),
     ...(customCSS ? { customCSS } : {}),
-    elements: content.elements,
+    ...(customJS ? { customJS } : {}),
+    ...(stringRecordValue(content.themeTokenRefs, contentDocument?.themeTokenRefs, metadata?.themeTokenRefs)
+      ? { themeTokenRefs: stringRecordValue(content.themeTokenRefs, contentDocument?.themeTokenRefs, metadata?.themeTokenRefs) }
+      : {}),
+    ...(jsonArrayOrRecordValue(content.assets, contentDocument?.assets, metadata?.assets)
+      ? { assets: jsonArrayOrRecordValue(content.assets, contentDocument?.assets, metadata?.assets) }
+      : {}),
+    ...(jsonArrayOrRecordValue(content.animations, contentDocument?.animations, metadata?.animations)
+      ? { animations: jsonArrayOrRecordValue(content.animations, contentDocument?.animations, metadata?.animations) }
+      : {}),
+    ...(jsonArrayOrRecordValue(content.interactions, contentDocument?.interactions, metadata?.interactions)
+      ? { interactions: jsonArrayOrRecordValue(content.interactions, contentDocument?.interactions, metadata?.interactions) }
+      : {}),
+    ...(jsonRecordValue(content.seo, contentDocument?.seo, metadata?.seo)
+      ? { seo: jsonRecordValue(content.seo, contentDocument?.seo, metadata?.seo) }
+      : {}),
+    ...(jsonRecordValue(content.dataBindings, contentDocument?.dataBindings, metadata?.dataBindings)
+      ? { dataBindings: jsonRecordValue(content.dataBindings, contentDocument?.dataBindings, metadata?.dataBindings) }
+      : {}),
+    ...(jsonRecordValue(content.editableMap, contentDocument?.editableMap, metadata?.editableMap)
+      ? { editableMap: jsonRecordValue(content.editableMap, contentDocument?.editableMap, metadata?.editableMap) }
+      : {}),
+    ...(jsonRecordValue(metadata) ? { metadata: jsonRecordValue(metadata) } : {}),
+    ...(cloneJsonObject(contentDocument) ? { contentDocument: cloneJsonObject(contentDocument) as JsonObject } : {}),
+    elements,
   };
 };
 
@@ -292,15 +411,49 @@ const collectionTemplateCanvas = (
 };
 
 const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
-  const document = canvasElementsToBackyContentDocument({
-    id: input.id,
-    kind: input.kind,
-    title: input.title,
-    status: input.status,
-    locale: input.locale,
-    version: input.version,
+  const rawContent = {
     elements: input.elements,
-  });
+    ...(input.canvasSize ? { canvasSize: input.canvasSize } : {}),
+    ...(input.customCSS !== undefined ? { customCSS: input.customCSS } : {}),
+    ...(input.customJS !== undefined ? { customJS: input.customJS } : {}),
+    ...(input.themeTokenRefs ? { themeTokenRefs: input.themeTokenRefs } : {}),
+    ...(input.assets ? { assets: input.assets } : {}),
+    ...(input.animations ? { animations: input.animations } : {}),
+    ...(input.interactions ? { interactions: input.interactions } : {}),
+    ...(input.seo ? { seo: input.seo } : {}),
+    ...(input.dataBindings ? { dataBindings: input.dataBindings } : {}),
+    ...(input.editableMap ? { editableMap: input.editableMap } : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+    ...(input.contentDocument ? { contentDocument: input.contentDocument } : {}),
+  };
+  const document = (
+    input.includeContentDocument
+      ? canvasContentPayloadToBackyContentDocument({
+          id: input.id,
+          kind: input.kind,
+          title: input.title,
+          status: input.status,
+          locale: input.locale,
+          version: input.version,
+          rawContent,
+        })
+      : canvasElementsToBackyContentDocument({
+          id: input.id,
+          kind: input.kind,
+          title: input.title,
+          status: input.status,
+          locale: input.locale,
+          version: input.version,
+          elements: input.elements,
+        })
+  );
+  const metadata = isRecord(document.metadata) ? document.metadata : {};
+  const customCSS = typeof metadata.customCSS === 'string' && metadata.customCSS.trim().length > 0
+    ? metadata.customCSS
+    : undefined;
+  const customJS = typeof metadata.customJS === 'string' && metadata.customJS.trim().length > 0
+    ? metadata.customJS
+    : undefined;
 
   return {
     schemaVersion: document.schemaVersion,
@@ -310,6 +463,17 @@ const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
     locale: document.locale,
     version: typeof document.version === 'string' ? document.version : input.version,
     elements: document.elements,
+    ...(input.includeContentDocument && customCSS ? { customCSS } : {}),
+    ...(input.includeContentDocument && customJS ? { customJS } : {}),
+    ...(input.includeContentDocument && document.themeTokenRefs ? { themeTokenRefs: document.themeTokenRefs } : {}),
+    ...(input.includeContentDocument && document.assets ? { assets: document.assets } : {}),
+    ...(input.includeContentDocument && input.animations ? { animations: input.animations } : {}),
+    ...(input.includeContentDocument && document.interactions ? { interactions: document.interactions } : {}),
+    ...(input.includeContentDocument && document.seo ? { seo: document.seo } : {}),
+    ...(input.includeContentDocument && document.dataBindings ? { dataBindings: document.dataBindings } : {}),
+    ...(input.includeContentDocument ? { editableMap: document.editableMap } : {}),
+    ...(input.includeContentDocument && document.metadata ? { metadata: document.metadata } : {}),
+    ...(input.includeContentDocument ? { contentDocument: document } : {}),
   };
 };
 
@@ -1366,11 +1530,6 @@ const buildEditableMap = (elements: RenderElement[]): Record<string, JsonObject>
   return editableMap;
 };
 
-const getStringMetadata = (metadata: Record<string, unknown>, key: string) => {
-  const value = metadata[key];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
-};
-
 const buildFontAssets = (site: StoreSite, context?: RenderPayloadContext) => {
   const themeFonts = (site.theme.fonts.custom || []).map((font) => ({
     id: `font_${font.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
@@ -1382,23 +1541,33 @@ const buildFontAssets = (site: StoreSite, context?: RenderPayloadContext) => {
     type: 'font',
     visibility: 'public',
     limit: 100,
-  }).media.map((font) => ({
-    id: font.id,
-    family: getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, ''),
-    source: 'uploaded',
-    url: publicMediaFilePath(site.id, font.id),
-    weights: [getStringMetadata(font.metadata, 'fontWeight') || '400'],
-    styles: [getStringMetadata(font.metadata, 'fontStyle') === 'italic' || getStringMetadata(font.metadata, 'fontStyle') === 'oblique'
-      ? getStringMetadata(font.metadata, 'fontStyle')
-      : 'normal'],
-    fallbackStack: getStringMetadata(font.metadata, 'fontFallback') || 'system-ui, sans-serif',
-    display: getStringMetadata(font.metadata, 'fontDisplay') || 'swap',
-    cssFamily: `"${(getStringMetadata(font.metadata, 'fontFamily') || font.originalName.replace(/\.[a-z0-9]+$/i, '')).replace(/["\\]/g, '')}", ${getStringMetadata(font.metadata, 'fontFallback') || 'system-ui, sans-serif'}`,
-  }));
+  }).media;
+  const publicFontManifest = buildPublicFontManifest(site.id, mediaFonts);
+  const mediaFontAssets = publicFontManifest.families.map((family) => {
+    const firstVariant = family.variants[0];
+    const uniqueWeights = Array.from(new Set(family.variants.map((variant) => variant.weight).filter(Boolean)));
+    const uniqueStyles = Array.from(new Set(family.variants.map((variant) => variant.style).filter(Boolean)));
+
+    return {
+      id: firstVariant?.mediaId || `font_${family.family.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+      mediaId: firstVariant?.mediaId,
+      family: family.family,
+      source: 'uploaded',
+      url: firstVariant?.url,
+      weights: uniqueWeights.length ? uniqueWeights : ['400'],
+      styles: uniqueStyles.length ? uniqueStyles : ['normal'],
+      fallbackStack: family.fallbackStack,
+      display: family.display,
+      cssFamily: family.cssFamily,
+      assetIds: family.assetIds,
+      variants: family.variants,
+    };
+  });
   const seen = new Set<string>();
 
-  return [...themeFonts, ...mediaFonts].filter((font) => {
-    const key = `${font.family}:${font.url || ''}`.toLowerCase();
+  return [...themeFonts, ...mediaFontAssets].filter((font) => {
+    const assetIds = 'assetIds' in font && Array.isArray(font.assetIds) ? font.assetIds : [];
+    const key = `${font.family}:${font.url || ''}:${assetIds.join(',')}`.toLowerCase();
     if (seen.has(key)) {
       return false;
     }
@@ -1731,7 +1900,7 @@ export const buildCollectionTemplateContent = (
   kind: CollectionTemplateRenderKind,
   record?: StoreCollectionRecord,
   context?: RenderPayloadContext,
-): { canvasSize: { width: number; height: number }; customCSS?: string; elements: RenderElement[] } | null => {
+): CollectionRenderableContent | null => {
   const canvas = collectionTemplateCanvas(site, collection, kind);
   if (!canvas) {
     return null;
@@ -1760,6 +1929,16 @@ export const buildCollectionTemplateContent = (
       })),
     },
     ...(canvas.customCSS ? { customCSS: canvas.customCSS } : {}),
+    ...(canvas.customJS ? { customJS: canvas.customJS } : {}),
+    ...(canvas.themeTokenRefs ? { themeTokenRefs: canvas.themeTokenRefs } : {}),
+    ...(canvas.assets ? { assets: canvas.assets } : {}),
+    ...(canvas.animations ? { animations: canvas.animations } : {}),
+    ...(canvas.interactions ? { interactions: canvas.interactions } : {}),
+    ...(canvas.seo ? { seo: canvas.seo } : {}),
+    ...(canvas.dataBindings ? { dataBindings: canvas.dataBindings } : {}),
+    ...(canvas.editableMap ? { editableMap: canvas.editableMap } : {}),
+    ...(canvas.metadata ? { metadata: canvas.metadata } : {}),
+    ...(canvas.contentDocument ? { contentDocument: canvas.contentDocument } : {}),
     elements,
   };
 };
@@ -1896,7 +2075,7 @@ export const buildCollectionListContent = (
   collection: StoreCollection,
   records: StoreCollectionRecord[],
   context?: RenderPayloadContext,
-): { canvasSize: { width: number; height: number }; elements: RenderElement[] } => {
+): CollectionRenderableContent => {
   const safeCollectionId = safeIdPart(collection.id);
   const variant = collectionListVariant(collection);
   const visibleRecords = records.slice(0, collectionListLimit(collection));
@@ -2126,7 +2305,7 @@ export const buildCollectionItemContent = (
   collection: StoreCollection,
   record: StoreCollectionRecord,
   context?: RenderPayloadContext,
-): { canvasSize: { width: number; height: number }; elements: RenderElement[] } => {
+): CollectionRenderableContent => {
   const variant = collectionItemVariant(collection);
   const titleField = selectedTitleField(collection, record);
   const descriptionField = selectedDescriptionField(collection, record);
@@ -2428,6 +2607,20 @@ export function buildPublicCollectionListRenderPayload(
           collectionSlug: collection.slug,
           locale,
         },
+        resource: {
+          id: collection.id,
+          kind: 'dynamicList',
+          title: collection.name,
+          slug: collection.slug,
+          collectionId: collection.id,
+          collectionSlug: collection.slug,
+          collectionName: collection.name,
+          recordsUrl: `/api/sites/${site.id}/collections/${collection.id}/records`,
+          renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
+          hostedPath: canonical,
+          recordCount: records.length,
+          frontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
+        },
       },
       content: buildCanonicalContentPayload({
         id: collection.id,
@@ -2437,6 +2630,19 @@ export function buildPublicCollectionListRenderPayload(
         locale,
         version: collection.updatedAt,
         elements: payloadElements,
+        includeContentDocument: true,
+        canvasSize: content.canvasSize,
+        customCSS: content.customCSS,
+        customJS: content.customJS,
+        themeTokenRefs: content.themeTokenRefs,
+        assets: content.assets,
+        animations: content.animations,
+        interactions: content.interactions,
+        seo: content.seo,
+        dataBindings: content.dataBindings,
+        editableMap: content.editableMap,
+        metadata: content.metadata,
+        contentDocument: content.contentDocument,
       }),
       assets: {
         media: mediaPayload.media,
@@ -2514,6 +2720,9 @@ export function buildPublicCollectionItemRenderPayload(
     ...collection.metadata,
     ...record.values,
   };
+  const designReadiness = collection.slug === PRODUCT_COLLECTION_SLUG
+    ? productDesignReadinessFromValues(record.values)
+    : undefined;
 
   return {
     success: true,
@@ -2540,6 +2749,21 @@ export function buildPublicCollectionItemRenderPayload(
           recordSlug: record.slug,
           locale,
         },
+        resource: {
+          id: record.id,
+          kind: 'dynamicItem',
+          title,
+          slug: record.slug,
+          collectionId: collection.id,
+          collectionSlug: collection.slug,
+          collectionName: collection.name,
+          apiUrl: `/api/sites/${site.id}/collections/${collection.id}/records?slug=${encodeURIComponent(record.slug)}`,
+          renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
+          hostedPath: canonical,
+          frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
+          collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
+          ...(designReadiness ? { designReadiness } : {}),
+        },
       },
       content: buildCanonicalContentPayload({
         id: record.id,
@@ -2549,6 +2773,19 @@ export function buildPublicCollectionItemRenderPayload(
         locale,
         version: record.updatedAt,
         elements: payloadElements,
+        includeContentDocument: true,
+        canvasSize: content.canvasSize,
+        customCSS: content.customCSS,
+        customJS: content.customJS,
+        themeTokenRefs: content.themeTokenRefs,
+        assets: content.assets,
+        animations: content.animations,
+        interactions: content.interactions,
+        seo: content.seo,
+        dataBindings: content.dataBindings,
+        editableMap: content.editableMap,
+        metadata: content.metadata,
+        contentDocument: content.contentDocument,
       }),
       assets: {
         media: mediaPayload.media,

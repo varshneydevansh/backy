@@ -14,6 +14,8 @@ import {
   getSiteByIdOrSlug,
   updateAdminSite,
 } from "@/lib/backyStore";
+import { getMediaStorageConfigSummary } from "@/lib/mediaStorage";
+import { normalizeFrontendDesignContract } from "@/lib/frontendDesignContract";
 import { normalizeNavigationConfig } from "@/lib/navigation";
 import { publicContractJson } from "@/lib/publicContractResponse";
 import { normalizeRedirectRules } from "@/lib/redirectRules";
@@ -348,6 +350,39 @@ const getDatabaseRuntimeSummary = () => {
   }
 };
 
+const getSupabaseRuntimeSummary = () => {
+  const url = envValue([
+    "BACKY_SUPABASE_URL",
+    "SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+  ]);
+  const anonKey = envValue([
+    "BACKY_SUPABASE_ANON_KEY",
+    "SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  ]);
+  const serviceKey = envValue([
+    "BACKY_SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ]);
+  const bucket = envValue(["BACKY_SUPABASE_STORAGE_BUCKET", "BACKY_STORAGE_BUCKET"]);
+  const databaseUrl = envValue(["BACKY_DATABASE_URL", "DATABASE_URL"]);
+  const missing = [
+    !url ? "BACKY_SUPABASE_URL or SUPABASE_URL" : "",
+    !anonKey && !serviceKey ? "Supabase API key" : "",
+  ].filter(Boolean);
+
+  return {
+    configured: missing.length === 0,
+    projectUrl: url,
+    anonKeyConfigured: Boolean(anonKey),
+    serviceRoleConfigured: Boolean(serviceKey),
+    databaseUrlConfigured: Boolean(databaseUrl),
+    storageBucket: bucket,
+    missing,
+  };
+};
+
 const getFrontendDatabaseCertificationRuntime = (
   database: ReturnType<typeof getDatabaseRuntimeSummary>,
   publicApi: ReturnType<typeof getPublicApiRuntimeSummary>,
@@ -622,6 +657,7 @@ const mergeSiteSettings = (
   const commentPolicyInput = isRecord(patch.commentPolicy)
     ? patch.commentPolicy
     : null;
+  const updatedAt = new Date().toISOString();
 
   return {
     ...base,
@@ -723,6 +759,14 @@ const mergeSiteSettings = (
             ...(base.webhooks || {}),
             ...(isRecord(patch.webhooks) ? patch.webhooks : {}),
           } as SiteSettings["webhooks"]),
+    frontendDesign:
+      patch.frontendDesign === undefined
+        ? base.frontendDesign
+        : normalizeFrontendDesignContract(patch.frontendDesign, {
+            fallback: base.frontendDesign,
+            updatedAt,
+            mergeFallback: true,
+          }),
   };
 };
 
@@ -773,12 +817,146 @@ const workspaceSettingsSummary = (settings: {
   };
 };
 
+const missingInputsFromRuntime = (summary: unknown): string[] => {
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) {
+    return [];
+  }
+
+  const missing = (summary as { missing?: unknown }).missing;
+  return Array.isArray(missing)
+    ? missing.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+};
+
+const booleanFlag = (source: unknown, key: string): boolean =>
+  isRecord(source) && source[key] === true;
+
+const siteMediaStorageHandoffContract = ({
+  site,
+  workspaceSettings,
+  runtimeStorage,
+  runtimeSupabase,
+}: {
+  site: SiteSettingsScopedSite;
+  workspaceSettings: Parameters<typeof workspaceSettingsSummary>[0];
+  runtimeStorage: ReturnType<typeof getMediaStorageConfigSummary>;
+  runtimeSupabase: ReturnType<typeof getSupabaseRuntimeSummary>;
+}) => {
+  const integrations = isRecord(workspaceSettings.integrations)
+    ? workspaceSettings.integrations
+    : {};
+  const storage = isRecord(integrations.storage) ? integrations.storage : {};
+  const provider =
+    stringField(storage, "provider") || stringField(runtimeStorage, "provider") || "local";
+  const bucket =
+    stringField(storage, "bucket") ||
+    stringField(runtimeStorage, "bucket") ||
+    stringField(runtimeSupabase, "storageBucket");
+  const publicBaseUrl =
+    stringField(storage, "publicBaseUrl") || stringField(runtimeStorage, "publicUrl");
+  const pathPrefix =
+    stringField(storage, "pathPrefix") || stringField(runtimeStorage, "basePath") || "sites/{siteId}";
+  const configured = Boolean(
+    booleanFlag(runtimeStorage, "configured") ||
+      stringField(storage, "provider") ||
+      stringField(storage, "bucket") ||
+      stringField(storage, "publicBaseUrl"),
+  );
+  const siteId = encodeURIComponent(site.id);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    schemaVersion: "backy.media-storage-handoff.v1",
+    status: configured ? "ready" : "needs-runtime-env",
+    source: "admin-site-settings-api",
+    selectedSiteId: site.id,
+    provider: {
+      selected: provider,
+      bucket,
+      publicBaseUrl,
+      pathPrefix,
+      resolvedPathPrefix: pathPrefix.replace(/\{siteId\}/g, site.id),
+      runtime: runtimeStorage,
+      supabase: runtimeSupabase,
+    },
+    policies: {
+      privateFilesEnabled: booleanFlag(storage, "privateFilesEnabled"),
+      imageTransformsEnabled: storage.imageTransformsEnabled !== false,
+      maxFileSizeMb: storage.maxFileSizeMb ?? null,
+      workspaceStorageLimitGb: storage.workspaceStorageLimitGb ?? null,
+      warningThresholdPercent: storage.warningThresholdPercent ?? null,
+      allowedFileTypes: stringField(storage, "allowedFileTypes") || "image/*,font/*,document/*,file/*",
+    },
+    endpointTemplates: {
+      adminMediaList: "/api/admin/sites/{siteId}/media",
+      adminMediaUpload: "/api/admin/sites/{siteId}/media",
+      adminSignedUrl: "/api/admin/sites/{siteId}/media/{mediaId}/signed-url",
+      publicMediaList: "/api/sites/{siteId}/media",
+      publicMediaFolders: "/api/sites/{siteId}/media/folders",
+      publicFontManifest: "/api/sites/{siteId}/media/fonts",
+      publicMediaDetail: "/api/sites/{siteId}/media/{mediaId}",
+      publicMediaFile: "/api/sites/{siteId}/media/{mediaId}/file",
+      publicMediaTransform: "/api/sites/{siteId}/media/{mediaId}/transform",
+    },
+    siteEndpoints: {
+      adminMediaList: `/api/admin/sites/${siteId}/media`,
+      adminMediaUpload: `/api/admin/sites/${siteId}/media`,
+      adminSignedUrl: `/api/admin/sites/${siteId}/media/{mediaId}/signed-url`,
+      publicMediaList: `/api/sites/${siteId}/media`,
+      publicMediaFolders: `/api/sites/${siteId}/media/folders`,
+      publicFontManifest: `/api/sites/${siteId}/media/fonts`,
+      publicMediaDetail: `/api/sites/${siteId}/media/{mediaId}`,
+      publicMediaFile: `/api/sites/${siteId}/media/{mediaId}/file`,
+      publicMediaTransform: `/api/sites/${siteId}/media/{mediaId}/transform`,
+    },
+    contracts: {
+      organization: "backy.media.organization.v1",
+      references: "backy.media.references.v1",
+      editableMetadata: "backy.media.editable-metadata.v1",
+      deliveryPolicy: "MediaDeliveryPolicy",
+      fileCategories: "backy.media-file-categories.v1",
+    },
+    designStateUsage: {
+      preservedFields: [
+        "frontendDesignAssets",
+        "frontendDesignContentDocument.assets",
+        "content.assets.media[]",
+        "content.assets.fonts[]",
+        "element.props.mediaId",
+        "element.props.imageMediaId",
+        "element.props.fileMediaId",
+        "element.props.fontMediaId",
+        "element.props.mediaOrganization",
+      ],
+      editableSurfaces: ["pages", "blog", "reusable sections", "products", "collections", "editor media picker"],
+      customFrontendUses: ["image picker", "font picker", "file download picker", "product media gallery", "private signed delivery", "responsive transforms"],
+    },
+    runtimeGate: {
+      certificationCommand: "npm run ci:settings-provider-certification",
+      sourceOnlyGuard: "BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin",
+      missingRuntimeAliases: missingInputsFromRuntime(runtimeStorage),
+    },
+    privacy: {
+      includesSecretValues: false,
+      exposesSecretReferencesOnly: true,
+      secretReferences: {
+        supabaseServiceRole: stringField(storage, "supabaseKeySecretRef") || "env:BACKY_SUPABASE_SERVICE_ROLE_KEY",
+        s3AccessKeyId: stringField(storage, "accessKeyIdSecretRef") || "env:BACKY_S3_ACCESS_KEY_ID",
+        s3SecretAccessKey: stringField(storage, "secretAccessKeySecretRef") || "env:BACKY_S3_SECRET_ACCESS_KEY",
+      },
+      excludes: ["raw provider credentials", "service-role key values", "signed URL tokens", "private file bytes"],
+    },
+  };
+};
+
 const siteSettingsEnvelope = (
   site: SiteSettingsScopedSite,
   workspaceSettings: Parameters<typeof workspaceSettingsSummary>[0],
 ) => {
   const runtimeDatabase = getDatabaseRuntimeSummary();
   const runtimePublicApi = getPublicApiRuntimeSummary();
+  const runtimeStorage = getMediaStorageConfigSummary();
+  const runtimeSupabase = getSupabaseRuntimeSummary();
   const frontendDatabaseCertificationRuntime =
     getFrontendDatabaseCertificationRuntime(runtimeDatabase, runtimePublicApi);
   const frontendDatabaseCertificationScenarioEvidence =
@@ -814,6 +992,12 @@ const siteSettingsEnvelope = (
       frontendDatabaseCertificationRuntime,
       frontendDatabaseCertificationScenarioEvidence,
     ),
+    mediaStorageHandoff: siteMediaStorageHandoffContract({
+      site,
+      workspaceSettings,
+      runtimeStorage,
+      runtimeSupabase,
+    }),
     endpoints: {
       workspaceSettings: "/api/admin/settings",
       siteSettings: `/api/admin/sites/${encodeURIComponent(site.id)}/settings`,

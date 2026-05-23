@@ -45,8 +45,9 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import { buildPublicMediaOrganization } from "@/lib/publicMediaResource";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
-import type { BackyJsonObject, MediaItem, Site } from "@backy-cms/core";
+import type { BackyJsonObject, MediaFolder, MediaItem, Site } from "@backy-cms/core";
 
 export const runtime = "nodejs";
 
@@ -251,7 +252,7 @@ const MAX_MEDIA_LIMIT = 100;
 
 const mediaTypeFromInput = (
   value: string | null,
-): { type?: MediaItem["type"] | "all"; invalid?: string } => {
+): { type?: MediaItem["type"] | "all"; types?: MediaItem["type"][]; invalid?: string } => {
   if (!value) {
     return {};
   }
@@ -266,7 +267,7 @@ const mediaTypeFromInput = (
   }
 
   if (normalized === "file") {
-    return { type: "document" };
+    return { types: ["document", "other"] };
   }
 
   if (mediaTypeValues.includes(normalized as MediaItem["type"])) {
@@ -274,6 +275,17 @@ const mediaTypeFromInput = (
   }
 
   return { invalid: value };
+};
+
+const mediaMatchesRequestedType = (
+  item: MediaItem,
+  filter: ReturnType<typeof mediaTypeFromInput>,
+) => {
+  if (filter.types) {
+    return filter.types.includes(item.type);
+  }
+
+  return true;
 };
 
 const visibilityFromInput = (
@@ -359,8 +371,23 @@ const integerQueryFromInput = (
   return { value: parsed };
 };
 
-const paginateMedia = (items: MediaItem[], limit: number, offset: number) => ({
-  media: items.slice(offset, offset + limit),
+const withAdminMediaOrganization = (
+  media: MediaItem,
+  folders: MediaFolder[] = [],
+) => ({
+  ...media,
+  organization: buildPublicMediaOrganization(media, folders),
+});
+
+const paginateMedia = (
+  items: MediaItem[],
+  limit: number,
+  offset: number,
+  folders: MediaFolder[] = [],
+) => ({
+  media: items
+    .slice(offset, offset + limit)
+    .map((item) => withAdminMediaOrganization(item, folders)),
   pagination: {
     total: items.length,
     limit,
@@ -553,7 +580,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         requestId,
       );
     }
-    const type = mediaType.type === "all" ? undefined : mediaType.type;
+    const type = mediaType.type === "all" || mediaType.types ? undefined : mediaType.type;
     const mediaVisibility = visibilityFromInput(searchParams.get("visibility"));
     if (mediaVisibility.invalid) {
       return errorResponse(
@@ -631,23 +658,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const pageId = searchParams.get("pageId");
       const postId = searchParams.get("postId") || searchParams.get("blogId");
       const tag = searchParams.get("tag");
-      const result = await repositories.media.list({
-        siteId: site.id,
-        type: type || "all",
-        visibility: visibility || "all",
-        search: searchParams.get("search") || undefined,
-        folderId: searchParams.has("folderId")
-          ? searchParams.get("folderId")
-          : undefined,
-        limit: 10000,
-        offset: 0,
-      });
+      const [result, folders] = await Promise.all([
+        repositories.media.list({
+          siteId: site.id,
+          type: type || "all",
+          visibility: visibility || "all",
+          search: searchParams.get("search") || undefined,
+          folderId: searchParams.has("folderId")
+            ? searchParams.get("folderId")
+            : undefined,
+          limit: 10000,
+          offset: 0,
+        }),
+        repositories.media.listFolders(site.id),
+      ]);
       const filtered = result.items
+        .filter((item) => mediaMatchesRequestedType(item, mediaType))
         .filter((item) =>
           mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }),
         )
         .filter((item) => mediaTagMatches(item.tags, tag));
-      const payload = paginateMedia(filtered, limit, offset);
+      const payload = paginateMedia(filtered, limit, offset, folders);
       const allMedia = (
         await repositories.media.list({
           siteId: site.id,
@@ -680,7 +711,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const payload = getMediaList(site.id, {
+    const demoMedia = getMediaList(site.id, {
       type: type || undefined,
       scope: scope || undefined,
       visibility: visibility || undefined,
@@ -693,9 +724,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       postId:
         searchParams.get("postId") || searchParams.get("blogId") || undefined,
       global: globalOnly,
-      limit,
-      offset,
+      limit: mediaType.types ? 10000 : limit,
+      offset: mediaType.types ? 0 : offset,
     });
+    const folders = listMediaFolders(site.id);
+    const payload = mediaType.types
+      ? paginateMedia(demoMedia.media.filter((item) => mediaMatchesRequestedType(item, mediaType)), limit, offset, folders)
+      : {
+          ...demoMedia,
+          media: demoMedia.media.map((item) => withAdminMediaOrganization(item, folders)),
+        };
 
     const uploadPolicy = resolveMediaUploadPolicy(getAdminSettings());
 
@@ -1066,7 +1104,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          media,
+          media: withAdminMediaOrganization(
+            media,
+            repositories
+              ? await repositories.media.listFolders(site.id)
+              : listMediaFolders(site.id),
+          ),
           cacheInvalidation,
           quota: mediaQuotaPayload(siteMediaQuotaBytes, nextUsageBytes),
         },

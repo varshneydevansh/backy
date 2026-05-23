@@ -32,6 +32,7 @@ interface AnimationConfig {
         end?: string;
         scrub?: boolean;
     };
+    tokenRefs?: Record<string, string>;
 }
 
 /**
@@ -116,6 +117,7 @@ export function AnimationHydrator() {
     useEffect(() => {
         // Find all elements with animation data
         const animatedElements = document.querySelectorAll('[data-animation]');
+        const cleanupListeners: Array<() => void> = [];
 
         animatedElements.forEach((element) => {
             try {
@@ -148,20 +150,27 @@ export function AnimationHydrator() {
                     });
                 } else if (config.trigger === 'hover') {
                     // Hover animation
-                    element.addEventListener('mouseenter', () => {
+                    const handleMouseEnter = () => {
                         gsap.to(element, {
                             ...config.to,
                             duration: config.duration,
                             ease: config.easing || 'power2.out',
                         });
-                    });
+                    };
 
-                    element.addEventListener('mouseleave', () => {
+                    const handleMouseLeave = () => {
                         gsap.to(element, {
                             ...fromProps,
                             duration: config.duration,
                             ease: config.easing || 'power2.out',
                         });
+                    };
+
+                    element.addEventListener('mouseenter', handleMouseEnter);
+                    element.addEventListener('mouseleave', handleMouseLeave);
+                    cleanupListeners.push(() => {
+                        element.removeEventListener('mouseenter', handleMouseEnter);
+                        element.removeEventListener('mouseleave', handleMouseLeave);
                     });
                 } else {
                     // Load animation (default)
@@ -184,6 +193,7 @@ export function AnimationHydrator() {
 
         // Cleanup
         return () => {
+            cleanupListeners.forEach((cleanup) => cleanup());
             ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
         };
     }, []);

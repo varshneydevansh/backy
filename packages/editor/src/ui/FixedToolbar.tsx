@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { useEditorRef } from '@udecode/plate/react';
 import {
     Bold, Italic, Underline, Strikethrough, Code,
     Quote, Link, List, ListOrdered, Image,
-    Undo, Redo, Type, AlignLeft, AlignCenter, AlignRight
+    Undo, Redo, Type, AlignLeft, AlignCenter, AlignRight,
+    Palette, Highlighter
 } from 'lucide-react';
 import { cn } from '../utils';
 import { Editor, Transforms, Element as SlateElement } from 'slate';
+import { ColorPicker } from './ColorPicker';
+
+type InsertMode = 'link' | 'image';
 
 const ToolbarButton = ({
     onClick,
@@ -31,13 +35,14 @@ const ToolbarButton = ({
             "text-muted-foreground"
         )}
         title={tooltip}
+        aria-label={tooltip}
     >
         {children}
     </button>
 );
 
 const isMarkActive = (editor: any, format: string) => {
-    const marks = Editor.marks(editor) as Record<string, boolean> | null;
+    const marks = Editor.marks(editor) as Record<string, unknown> | null;
     return marks ? marks[format] === true : false;
 };
 
@@ -48,6 +53,22 @@ const toggleMark = (editor: any, format: string) => {
     } else {
         Editor.addMark(editor, format, true);
     }
+};
+
+const markValue = (editor: any, format: string): string | undefined => {
+    const marks = Editor.marks(editor) as Record<string, unknown> | null;
+    const value = marks?.[format];
+    return typeof value === 'string' ? value : undefined;
+};
+
+const setMarkValue = (editor: any, format: string, value: string) => {
+    const nextValue = value.trim();
+    if (!nextValue) {
+        Editor.removeMark(editor, format);
+        return;
+    }
+
+    Editor.addMark(editor, format, nextValue);
 };
 
 const isBlockActive = (editor: any, format: string) => {
@@ -88,10 +109,73 @@ const toggleBlock = (editor: any, format: string) => {
     }
 };
 
+const normalizeUrl = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (/^(#|\/|mailto:|tel:)/i.test(trimmed) || /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+        return trimmed;
+    }
+    return `https://${trimmed}`;
+};
+
+const insertToolbarLink = (editor: any, url: string) => {
+    const normalizedUrl = normalizeUrl(url);
+    if (!normalizedUrl) return false;
+    if (isBlockActive(editor, 'link')) {
+        Transforms.unwrapNodes(editor, { match: n => !Editor.isEditor(n) && SlateElement.isElement(n) && (n as any).type === 'link' });
+    }
+    const link = { type: 'link', url: normalizedUrl, children: [] };
+    Transforms.wrapNodes(editor, link as any, { split: true });
+    Transforms.collapse(editor, { edge: 'end' });
+    return true;
+};
+
+const insertToolbarImage = (editor: any, url: string) => {
+    const normalizedUrl = normalizeUrl(url);
+    if (!normalizedUrl) return false;
+    const image = { type: 'img', url: normalizedUrl, children: [{ text: '' }] };
+    Transforms.insertNodes(editor, image as any);
+    return true;
+};
+
 export const FixedToolbar = ({ className }: { className?: string }) => {
     const editor = useEditorRef() as any;
+    const [insertMode, setInsertMode] = useState<InsertMode | null>(null);
+    const [insertUrl, setInsertUrl] = useState('');
+    const savedSelectionRef = useRef<any>(null);
 
     if (!editor) return null;
+
+    const openInsertForm = (mode: InsertMode) => {
+        savedSelectionRef.current = editor.selection ? { ...editor.selection } : null;
+        setInsertMode(mode);
+        setInsertUrl(mode === 'link' ? 'https://' : '');
+    };
+
+    const closeInsertForm = () => {
+        setInsertMode(null);
+        setInsertUrl('');
+        savedSelectionRef.current = null;
+    };
+
+    const submitInsertForm = () => {
+        if (savedSelectionRef.current) {
+            try {
+                Transforms.select(editor, savedSelectionRef.current);
+            } catch {
+                // Best effort when the document changed while the URL field was focused.
+            }
+        }
+
+        const inserted = insertMode === 'link'
+            ? insertToolbarLink(editor, insertUrl)
+            : insertMode === 'image'
+                ? insertToolbarImage(editor, insertUrl)
+                : false;
+        if (inserted) {
+            closeInsertForm();
+        }
+    };
 
     return (
         <div className={cn(
@@ -147,6 +231,24 @@ export const FixedToolbar = ({ className }: { className?: string }) => {
                 </ToolbarButton>
             </div>
 
+            {/* Colors */}
+            <div className="flex items-center gap-0.5 px-1 border-r">
+                <ColorPicker
+                    value={markValue(editor, 'color')}
+                    onChange={(color) => setMarkValue(editor, 'color', color)}
+                    icon={<Palette className="w-3 h-3" />}
+                    tooltip="Text Color"
+                    testId="backy-editor-fixed-text-color"
+                />
+                <ColorPicker
+                    value={markValue(editor, 'backgroundColor')}
+                    onChange={(color) => setMarkValue(editor, 'backgroundColor', color)}
+                    icon={<Highlighter className="w-3 h-3" />}
+                    tooltip="Highlight"
+                    testId="backy-editor-fixed-highlight-color"
+                />
+            </div>
+
             {/* Headings / Blocks */}
             <div className="flex items-center gap-0.5 px-1 border-r">
                 <ToolbarButton
@@ -193,33 +295,52 @@ export const FixedToolbar = ({ className }: { className?: string }) => {
             {/* Insert */}
             <div className="flex items-center gap-0.5 px-1">
                 <ToolbarButton
-                    onClick={() => {
-                        const url = window.prompt('Enter link URL:');
-                        if (url) {
-                            if (isBlockActive(editor, 'link')) {
-                                Transforms.unwrapNodes(editor, { match: n => !Editor.isEditor(n) && SlateElement.isElement(n) && (n as any).type === 'link' });
-                            }
-                            const link = { type: 'link', url, children: [] };
-                            Transforms.wrapNodes(editor, link as any, { split: true });
-                            Transforms.collapse(editor, { edge: 'end' });
-                        }
-                    }}
+                    onClick={() => openInsertForm('link')}
                     tooltip="Link"
                 >
                     <Link className="w-3 h-3" />
                 </ToolbarButton>
                 <ToolbarButton
-                    onClick={() => {
-                        const url = window.prompt('Enter image URL:');
-                        if (url) {
-                            const image = { type: 'img', url, children: [{ text: '' }] };
-                            Transforms.insertNodes(editor, image as any);
-                        }
-                    }}
+                    onClick={() => openInsertForm('image')}
                     tooltip="Image"
                 >
                     <Image className="w-3 h-3" />
                 </ToolbarButton>
+                {insertMode ? (
+                    <form
+                        className="ml-1 flex min-w-[220px] items-center gap-1 rounded-md border border-border bg-background px-1 py-0.5"
+                        data-testid={`backy-editor-fixed-${insertMode}-form`}
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            submitInsertForm();
+                        }}
+                    >
+                        <input
+                            type="url"
+                            value={insertUrl}
+                            onChange={(event) => setInsertUrl(event.target.value)}
+                            placeholder={insertMode === 'link' ? 'https://example.com' : 'Image URL'}
+                            className="h-6 min-w-0 flex-1 rounded border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                            data-testid={`backy-editor-fixed-${insertMode}-input`}
+                        />
+                        <button
+                            type="submit"
+                            className="h-6 rounded bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                            data-testid={`backy-editor-fixed-${insertMode}-insert`}
+                        >
+                            Insert
+                        </button>
+                        <button
+                            type="button"
+                            className="h-6 rounded px-1.5 text-xs text-muted-foreground hover:bg-muted"
+                            data-testid={`backy-editor-fixed-${insertMode}-cancel`}
+                            onClick={closeInsertForm}
+                        >
+                            ×
+                        </button>
+                    </form>
+                ) : null}
             </div>
         </div>
     );

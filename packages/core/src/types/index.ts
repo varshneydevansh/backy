@@ -233,6 +233,16 @@ export interface ThemeConfig {
     scale?: number;
   };
 
+  /** Motion tokens for editor-authored animations */
+  motion?: {
+    /** Named animation durations such as fast/normal/slow */
+    duration?: Record<string, string>;
+    /** Named easing curves such as standard/emphasized */
+    easing?: Record<string, string>;
+    /** Optional high-level preset label for admin settings */
+    preset?: string;
+  };
+
   /** Custom CSS that applies to entire site */
   customCSS: string;
 }
@@ -559,6 +569,102 @@ export interface SiteContactPipelineSettings {
   savedLists?: SiteContactSavedList[];
 }
 
+export type SiteFrontendDesignArrayOrRecord = Array<Record<string, unknown>> | Record<string, unknown>;
+
+export interface SiteFrontendDesignTemplateContent {
+  /** Canonical or legacy canvas element tree used when cloning the template */
+  elements?: unknown[];
+
+  /** Canvas dimensions for reopening the template in page/blog editors */
+  canvasSize?: {
+    width?: number;
+    height?: number;
+    [key: string]: unknown;
+  };
+
+  /** Template-level custom CSS preserved for generated content */
+  customCSS?: string;
+  customCss?: string;
+
+  /** Template-level custom JavaScript preserved for generated content */
+  customJS?: string;
+  customJs?: string;
+
+  /** Canonical backy.content.v1 document snapshot */
+  contentDocument?: Record<string, unknown>;
+
+  /** Theme token references used by elements and document metadata */
+  themeTokenRefs?: Record<string, unknown>;
+
+  /** Media/font/file asset manifests used by the template */
+  assets?: SiteFrontendDesignArrayOrRecord;
+
+  /** Animation timelines or reusable motion descriptors used by the template */
+  animations?: SiteFrontendDesignArrayOrRecord;
+
+  /** Interaction/action manifests used by the template */
+  interactions?: SiteFrontendDesignArrayOrRecord;
+
+  /** Dataset and field binding metadata used by custom frontends */
+  dataBindings?: Record<string, unknown>;
+
+  /** Editable field aliases for external page/blog builders */
+  editableMap?: Record<string, unknown>;
+
+  /** SEO defaults captured with the template */
+  seo?: Record<string, unknown>;
+
+  /** Editor, provenance, and migration metadata */
+  metadata?: Record<string, unknown>;
+
+  [key: string]: unknown;
+}
+
+export interface SiteFrontendDesignMotionTokens {
+  /** Named animation durations such as fast/normal/slow */
+  duration?: Record<string, string>;
+  /** Named easing curves such as standard/emphasized */
+  easing?: Record<string, string>;
+  /** Optional high-level motion preset label from a custom frontend design system */
+  preset?: string;
+  /** Additional custom motion token groups such as keyframes or scroll presets */
+  [key: string]: unknown;
+}
+
+export type SiteFrontendDesignEditableValueType =
+  | "string"
+  | "richText"
+  | "number"
+  | "boolean"
+  | "color"
+  | "image"
+  | "video"
+  | "audio"
+  | "file"
+  | "url"
+  | "json"
+  | string;
+
+export interface SiteFrontendDesignEditableMapEntry {
+  selector?: string;
+  elementId?: string;
+  role?: string;
+  binding?: string;
+  fields?: string[];
+  field?: string;
+  targetPath?: string;
+  token?: string;
+  editable?: boolean;
+  permission?: string;
+  label?: string;
+  valueType?: SiteFrontendDesignEditableValueType;
+  scope?: "site" | "page" | "post" | "template" | "element" | "collectionRecord" | string;
+  collectionId?: string;
+  recordId?: string;
+  sourceField?: string;
+  [key: string]: unknown;
+}
+
 export interface SiteFrontendDesignContract {
   /** Contract schema identifier for frontend design ingestion */
   schemaVersion: "backy.frontend-design.v1" | string;
@@ -580,10 +686,15 @@ export interface SiteFrontendDesignContract {
   tokens: {
     colors?: Record<string, string>;
     fonts?: Record<string, string>;
+    typography?: Record<string, unknown>;
     spacing?: Record<string, unknown>;
     radii?: Record<string, unknown>;
     shadows?: Record<string, unknown>;
+    motion?: SiteFrontendDesignMotionTokens;
+    breakpoints?: Record<string, unknown>;
+    layout?: Record<string, unknown>;
     customCss?: string;
+    customCSS?: string;
   };
 
   /** Site chrome slots Backy should preserve for generated content */
@@ -605,18 +716,12 @@ export interface SiteFrontendDesignContract {
     routePattern?: string;
     description?: string;
     canvasSize?: { width: number; height: number };
-    content?: Record<string, unknown>;
+    content?: SiteFrontendDesignTemplateContent;
     bindingHints?: Array<Record<string, unknown>>;
   }>;
 
   /** Optional mapping from frontend selectors/components to Backy editable fields */
-  editableMap: Array<{
-    selector?: string;
-    elementId?: string;
-    role?: string;
-    binding?: string;
-    fields?: string[];
-  }>;
+  editableMap: SiteFrontendDesignEditableMapEntry[];
 
   /** Human notes for setup state, extraction limitations, or manual decisions */
   notes?: string;
@@ -992,6 +1097,42 @@ export interface PageMeta {
 
   /** Frontend design custom CSS snapshot used when the content was seeded */
   frontendDesignCustomCss?: string;
+
+  /** Frontend design custom JavaScript snapshot used when the content was seeded */
+  frontendDesignCustomJs?: string;
+
+  /** Canonical content document captured from the frontend design template */
+  frontendDesignContentDocument?: Record<string, unknown>;
+
+  /** Element tree captured from the frontend design template */
+  frontendDesignElements?: unknown[];
+
+  /** Canvas dimensions captured from the frontend design template */
+  frontendDesignCanvasSize?: Record<string, unknown>;
+
+  /** Theme token references captured from the frontend design template */
+  frontendDesignThemeTokenRefs?: Record<string, unknown>;
+
+  /** Media/font/file asset manifests captured from the frontend design template */
+  frontendDesignAssets?: unknown[] | Record<string, unknown>;
+
+  /** Frontend design animation timeline/state captured from the frontend template */
+  frontendDesignAnimations?: Array<Record<string, unknown>> | Record<string, unknown>;
+
+  /** Frontend design interaction/action state captured from the frontend template */
+  frontendDesignInteractions?: unknown[] | Record<string, unknown>;
+
+  /** Dataset and field binding metadata captured from the frontend design template */
+  frontendDesignDataBindings?: Record<string, unknown>;
+
+  /** Editable field aliases captured from the frontend design template */
+  frontendDesignEditableMap?: Record<string, unknown>;
+
+  /** SEO defaults captured from the frontend design template */
+  frontendDesignSeo?: Record<string, unknown>;
+
+  /** Editor, provenance, and migration metadata captured from the frontend design template */
+  frontendDesignMetadata?: Record<string, unknown>;
 
   /** Editable binding hints captured from the frontend design template */
   frontendDesignBindingHints?: Array<Record<string, unknown>>;

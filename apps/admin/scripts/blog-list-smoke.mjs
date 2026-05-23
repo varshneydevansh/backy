@@ -56,6 +56,17 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
       source.includes('setPostSelection(filteredPosts, !allFilteredPostsSelected)'),
     'Blog bulk toolbar must select or clear every post matching the current search/status/taxonomy/author filters, not only the visible page',
   );
+  assert(
+    source.includes('const [categoryDraftSubmitted, setCategoryDraftSubmitted] = useState(false);') &&
+      source.includes('const [tagDraftSubmitted, setTagDraftSubmitted] = useState(false);') &&
+      source.includes('const nameInlineError = submitted && draft.name.trim().length === 0') &&
+      source.includes('data-testid={`blog-${kind}-name-error`}') &&
+      source.includes('aria-invalid={Boolean(nameInlineError)}') &&
+      source.includes('aria-describedby={nameInlineError ? nameErrorId : undefined}') &&
+      source.includes('disabled={busy}'),
+    'Blog taxonomy manager must keep category/tag Save reachable and expose inline name validation',
+  );
+  assert(!source.includes('disabled={busy || !draft.name.trim()}'), 'Blog taxonomy Save must not hide blank-name validation behind a disabled state');
   assert(!completionSpec.includes('Missing dedicated blog content model'), 'Completion spec must not regress to stale blog-missing language');
   assert(completionSpec.includes('Blog authoring is implemented through the dedicated admin blog surfaces'), 'Completion spec must document current blog authoring implementation');
   assert(completionSpec.includes('templateType: "blogPost"'), 'Completion spec must document frontend-design blog template provenance');

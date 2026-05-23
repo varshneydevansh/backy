@@ -113,7 +113,7 @@ const parseCloneOverrides = (body: Record<string, unknown>, requestId: string) =
 const cloneFormInput = (
   source: FormDefinition,
   overrides: { name: string; title: string; isActive?: boolean },
-  actor: string,
+  actor: string | null,
 ): Omit<FormDefinition, 'id' | 'createdAt' | 'updatedAt'> => {
   const nextName = overrides.name || `${source.name} copy`;
   const nextTitle = overrides.title || `${source.title || source.name} copy`;
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (parsed.error) {
       return parsed.error;
     }
-    const actor = access.session?.user.id || access.session?.user.email || 'admin';
+    const actor = access.session?.user.id || null;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();

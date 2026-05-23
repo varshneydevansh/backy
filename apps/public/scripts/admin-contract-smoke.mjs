@@ -109,7 +109,13 @@ function assertInteractiveContractSource() {
   assert(registrySource.includes('responseHeaders'), 'Interactive manifest contract must expose sandbox response headers');
   assert(registrySource.includes("default-src 'none'"), 'Interactive manifest contract must expose sandbox CSP directives');
   assert(registrySource.includes('camera=()') && registrySource.includes('microphone=()'), 'Interactive manifest contract must expose denied browser permissions');
+  assert(registrySource.includes("key: 'accentColor'") && registrySource.includes("type: 'color'"), 'Interactive registry must expose sandbox color controls');
+  assert(registrySource.includes("key: 'caption'") && registrySource.includes("type: 'textarea'"), 'Interactive registry must expose sandbox textarea controls');
+  assert(registrySource.includes("key: 'runtimeConfig'") && registrySource.includes("type: 'json'"), 'Interactive registry must expose sandbox JSON controls');
   assert(openApiSource.includes('sandboxResponseHeaders'), 'OpenAPI must declare sandbox response headers');
+  assert(openApiSource.includes('InteractiveComponentControlOption'), 'OpenAPI must declare typed interactive control options');
+  assert(openApiSource.includes('"radio"') && openApiSource.includes('"textarea"') && openApiSource.includes('"code"'), 'OpenAPI must declare rich interactive control types');
+  assert(openApiSource.includes('"checkbox"') && openApiSource.includes('"toggle"'), 'OpenAPI must declare boolean interactive control aliases');
   assert(openApiSource.includes('"Content-Security-Policy"') || openApiSource.includes("'Content-Security-Policy'"), 'OpenAPI must declare sandbox CSP response header');
   assert(openApiSource.includes('"Permissions-Policy"') || openApiSource.includes("'Permissions-Policy'"), 'OpenAPI must declare sandbox permissions response header');
   assert(openApiSource.includes('"403":') && openApiSource.includes('description: "Component disabled"') && openApiSource.includes('headers: sandboxResponseHeaders'), 'OpenAPI disabled sandbox response must carry header contract');
@@ -117,6 +123,7 @@ function assertInteractiveContractSource() {
   assert(sdkSource.includes('responseHeaders: {'), 'SDK manifest type must require sandbox response headers');
   assert(sdkSource.includes('contentSecurityPolicy: string[]'), 'SDK manifest type must expose sandbox CSP directives');
   assert(sdkSource.includes('permissionsPolicy: string[]'), 'SDK manifest type must expose sandbox permissions policy directives');
+  assert(sdkSource.includes('export type BackyInteractiveControlType') && sdkSource.includes('export type BackyInteractiveControlOption'), 'SDK must expose typed interactive control helper shapes');
 }
 
 function assertHostedFeedErrorContractSource() {
@@ -247,7 +254,18 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('runtimeVercel: getVercelRuntimeSummary()'), 'Admin settings response must include Vercel runtime diagnostics');
   assert(source.includes('const runtimeCommerce = getCommerceRuntimeSummary(settings)') && source.includes('runtimeCommerce,'), 'Admin settings response must include commerce runtime diagnostics');
   assert(source.includes('const runtimeInteractiveComponents = getInteractiveComponentRuntimeSummary()') && source.includes('runtimeInteractiveComponents,'), 'Admin settings response must include interactive runtime diagnostics');
-  assert(source.includes('providerCertification: providerCertificationContract(providerCertificationRuntimeEvidence, providerCertificationScenarioEvidence)'), 'Admin settings response must include provider certification metadata');
+  assert(
+    source.includes('providerCertification: providerCertificationContract(') &&
+      source.includes('providerCertificationSiteId') &&
+      source.includes("request.nextUrl.searchParams.get('certificationSiteId')"),
+    'Admin settings response must include site-targeted provider certification metadata',
+  );
+  assert(source.includes('completionStatus: buildSettingsCompletionStatus()'), 'Admin settings response must include Backy completion status metadata');
+  assert(source.includes('backy.completion-status.v1'), 'Admin settings completion status must expose a stable handoff schema');
+  assert(source.includes('settings-admin-apis'), 'Admin settings completion status must list Settings admin APIs as a tracked Partial surface');
+  assert(source.includes('themeDesignImpact: themeDesignImpactContract(settings)'), 'Admin settings response must include theme design impact metadata');
+  assert(source.includes('backy.settings-theme-design-impact.v1'), 'Admin settings theme design impact must expose a stable handoff schema');
+  assert(source.includes('content.themeTokenRefs') && source.includes('element.animation.tokenRefs.duration'), 'Admin settings theme design impact must expose token and animation binding paths');
   assert(source.includes('frontendDatabaseCertification: frontendDatabaseCertificationContract('), 'Admin settings response must include frontend database certification metadata');
   assert(source.includes("source: 'admin-settings-api'"), 'Admin settings frontend database certification must identify the API source');
   assert(source.includes('backy.frontend-database-certification.v1'), 'Admin settings frontend database certification must expose a stable handoff schema');
@@ -262,6 +280,18 @@ function assertAdminSettingsContractSource() {
   assert(source.includes('buildProviderCertificationScenarioEvidence'), 'Admin settings provider certification must build scenario evidence for custom admin clients');
   assert(source.includes('backy.settings-provider-certification-evidence.v1'), 'Admin settings provider certification must expose a stable scenario-evidence schema');
   assert(source.includes('scenarioEvidence'), 'Admin settings provider certification must return scenario evidence');
+  assert(source.includes('buildProviderCertificationEvidencePacket'), 'Admin settings provider certification must build an operator evidence packet for custom admin clients');
+  assert(source.includes('operatorEvidencePacket'), 'Admin settings provider certification must return an operator evidence packet');
+  assert(source.includes('settingsAdminApi'), 'Admin settings provider certification packet must expose the global admin Settings API target');
+  assert(source.includes('siteScopedSettingsApi'), 'Admin settings provider certification packet must expose the site-scoped Settings API target');
+  assert(source.includes('backy.settings-provider-certification-evidence-packet.v1'), 'Admin settings provider certification must expose a stable operator evidence-packet schema');
+  assert(source.includes('targetInputs: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs'), 'Admin settings provider certification evidence packet must expose external target inputs');
+  assert(source.includes('redactionPolicy'), 'Admin settings provider certification evidence packet must expose redaction policy');
+  assert(source.includes('captureSource'), 'Admin settings provider certification evidence packet must expose capture sources');
+  assert(source.includes('expectedArtifacts'), 'Admin settings provider certification evidence packet must expose expected artifacts');
+  assert(source.includes('evidenceArtifacts'), 'Admin settings completion runbooks must expose structured evidence artifacts');
+  assert(source.includes('BACKY_SETTINGS_CERTIFICATION_OUTPUT'), 'Admin settings completion runbooks must expose Settings artifact producer env');
+  assert(source.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT'), 'Admin settings completion runbooks must expose Commerce artifact producer env');
   assert(source.includes('external-live-provider-gate'), 'Admin settings provider certification must expose external live-provider status');
   assert(source.includes('npm run ci:settings-provider-certification'), 'Admin settings provider certification must expose the Settings provider gate');
   assert(source.includes('npm run ci:commerce-provider-certification'), 'Admin settings provider certification must expose the Commerce provider gate');
@@ -331,10 +361,14 @@ function assertAdminSettingsContractSource() {
   assert(apiContracts.includes('settings.api_keys.issue'), 'API contracts must document service key issue audit events');
   assert(apiContracts.includes('settings.api_keys.revoke'), 'API contracts must document service key revoke audit events');
   assert(apiContracts.includes('data.settings.providerCertification'), 'API contracts must document admin Settings provider certification handoff');
+  assert(apiContracts.includes('data.settings.completionStatus'), 'API contracts must document admin Settings completion status handoff');
+  assert(apiContracts.includes('data.settings.themeDesignImpact'), 'API contracts must document admin Settings theme design impact handoff');
   assert(apiContracts.includes('data.settings.frontendDatabaseCertification'), 'API contracts must document admin Settings frontend database certification handoff');
+  assert(apiContracts.includes('backy.settings-theme-design-impact.v1'), 'API contracts must document Settings theme design impact schema');
   assert(apiContracts.includes('backy.settings-provider-certification-handoff.v1'), 'API contracts must document Settings provider certification schema');
   assert(apiContracts.includes('backy.frontend-database-certification.v1'), 'API contracts must document Settings frontend database certification schema');
   assert(apiContracts.includes('operatorEnvTemplate` for `.env.backy-settings-provider-certification`'), 'API contracts must document Settings provider env-template handoff');
+  assert(apiContracts.includes('operatorEvidencePacket` using `backy.settings-provider-certification-evidence-packet.v1`'), 'API contracts must document Settings provider evidence-packet handoff');
   assert(apiContracts.includes('BACKY_COMMERCE_WEBHOOK_SECRET`/`COMMERCE_WEBHOOK_SECRET'), 'API contracts must document provider certification alias families');
 }
 
@@ -503,6 +537,14 @@ function assertAdminPageContentValidationSource() {
     new URL('../src/app/api/admin/sites/[siteId]/blog/[postId]/route.ts', import.meta.url),
     'utf8',
   );
+  const reusableSectionsRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/reusable-sections/route.ts', import.meta.url),
+    'utf8',
+  );
+  const reusableSectionDetailRoute = fs.readFileSync(
+    new URL('../src/app/api/admin/sites/[siteId]/reusable-sections/[sectionId]/route.ts', import.meta.url),
+    'utf8',
+  );
   const publicBlogRoute = fs.readFileSync(
     new URL('../src/app/api/sites/[siteId]/blog/route.ts', import.meta.url),
     'utf8',
@@ -532,6 +574,7 @@ function assertAdminPageContentValidationSource() {
   );
 
   for (const [label, source] of [['page create', pageListRoute], ['page update', pageDetailRoute]]) {
+    assert(source.includes('normalizeInputFromDirectFrontendDesignEnvelope'), `${label} route must normalize direct custom-frontend design envelopes`);
     assert(source.includes('pageContentValidationError'), `${label} route must validate explicit editor content payloads`);
     assert(source.includes('"INVALID_PAGE_CONTENT"'), `${label} route must reject non-object/non-array content payloads`);
     assert(source.includes('"INVALID_PAGE_CONTENT_ELEMENTS"'), `${label} route must reject non-array content.elements payloads`);
@@ -543,6 +586,7 @@ function assertAdminPageContentValidationSource() {
   }
 
   for (const [label, source] of [['blog create', blogListRoute], ['blog update', blogDetailRoute]]) {
+    assert(source.includes('normalizeInputFromDirectFrontendDesignEnvelope'), `${label} route must normalize direct custom-frontend design envelopes`);
     assert(source.includes('postContentValidationError'), `${label} route must validate explicit editor content payloads`);
     assert(source.includes('"INVALID_BLOG_CONTENT"'), `${label} route must reject non-object/non-array/non-string content payloads`);
     assert(source.includes('"INVALID_BLOG_CONTENT_ELEMENTS"'), `${label} route must reject non-array content.elements payloads`);
@@ -551,6 +595,11 @@ function assertAdminPageContentValidationSource() {
     assert(source.includes('"SCHEDULED_AT_INVALID"'), `${label} route must reject malformed explicit scheduledAt payloads`);
     assert(source.includes('postStatusValidationError'), `${label} route must validate status and schedule payloads before mutation`);
     assert(source.includes('Number.isFinite(width)') && source.includes('Number.isFinite(height)'), `${label} route must require finite canvas dimensions`);
+  }
+  for (const [label, source] of [['reusable section create', reusableSectionsRoute], ['reusable section update', reusableSectionDetailRoute]]) {
+    assert(source.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope'), `${label} route must normalize direct custom-frontend design envelopes`);
+    assert(source.includes('hasElements(body.content)'), `${label} route must reject empty direct design content`);
+    assert(source.includes('buildReusableSectionUpdateMetadata') || source.includes('buildInitialReusableSectionMetadata'), `${label} route must preserve reusable-section version metadata`);
   }
   assert(blogListRoute.includes('"INVALID_BLOG_LIMIT"'), 'admin blog list route must reject invalid limit filters');
   assert(blogListRoute.includes('"INVALID_BLOG_OFFSET"'), 'admin blog list route must reject invalid offset filters');
@@ -3412,15 +3461,26 @@ try {
       renderPayload.json?.data?.navigation?.primary?.some((item) => item.id === 'contract-nav-page' && item.pageId === createdPageId),
       `${renderPayload.url} missing configured render navigation manifest`,
     );
+    const renderFontAsset = renderPayload.json?.data?.assets?.fonts?.find((font) => (
+      font.id === createdMediaId &&
+      font.family === 'Contract Sans Display'
+    ));
     assert(
-      renderPayload.json?.data?.assets?.fonts?.some((font) => (
-        font.id === createdMediaId &&
-        font.family === 'Contract Sans Display' &&
-        font.fallbackStack === 'Georgia, serif' &&
-        font.display === 'optional' &&
-        font.cssFamily === '"Contract Sans Display", Georgia, serif'
-      )),
+      renderFontAsset &&
+        renderFontAsset.fallbackStack === 'Georgia, serif' &&
+        renderFontAsset.display === 'optional' &&
+        renderFontAsset.cssFamily === '"Contract Sans Display", Georgia, serif',
       `${renderPayload.url} missing uploaded font asset manifest with fallback metadata`,
+    );
+    assert(
+      renderFontAsset.assetIds?.includes?.(createdMediaId) &&
+        renderFontAsset.variants?.some((variant) => (
+          variant.mediaId === createdMediaId &&
+          variant.weight === '600' &&
+          variant.style === 'normal' &&
+          variant.display === 'optional'
+        )),
+      `${renderPayload.url} missing uploaded font variant/asset-id manifest`,
     );
     assert(
       renderPayload.json?.data?.seo?.jsonLd?.some((entry) => entry?.['@type'] === 'WebPage' && entry?.name === 'Admin Contract Page'),
@@ -7854,6 +7914,55 @@ try {
     assert(response.status === 200, `${url} expected 200, got ${response.status}`);
     assert(json?.success === true, `${url} expected success envelope`);
     assert(json?.data?.settings?.schemaVersion === 'backy.admin-settings.v1', `${url} missing workspace settings payload schema version`);
+    const completionStatus = json?.data?.settings?.completionStatus;
+    assert(completionStatus?.schemaVersion === 'backy.completion-status.v1', `${url} missing completion status schema version`);
+    assert(completionStatus?.audit?.ready === 41 && completionStatus?.audit?.partial === 4, `${url} completion status audit counts drifted`);
+    assert(
+      completionStatus?.surfaceRunbooks?.some?.(
+        (runbook) =>
+          runbook.key === 'settings-admin-apis' &&
+          typeof runbook.evidenceApi === 'string' &&
+          runbook.evidenceApi.includes('data.settings.completionStatus') &&
+          runbook.targetInputs?.includes?.('BACKY_SETTINGS_CERTIFY_SITE_ID') &&
+          runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+          runbook.artifactVerifier?.validates?.includes?.('settingsApiHandoffSiteTargetReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('settingsApiHandoffTargetSiteId') &&
+          runbook.artifactVerifier?.validates?.includes?.('siteSettingsApiHandoffReady') &&
+          runbook.evidenceArtifacts?.some?.(
+            (artifact) =>
+              artifact.artifactName === 'backy-settings-provider-certification-evidence' &&
+              artifact.path === 'artifacts/backy-settings-provider-certification.json' &&
+              artifact.producerEnv === 'BACKY_SETTINGS_CERTIFICATION_OUTPUT' &&
+              artifact.includesSecretValues === false,
+          ),
+      ),
+      `${url} missing Settings admin API completion runbook evidence source`,
+    );
+    assert(
+      completionStatus?.surfaceRunbooks?.some?.(
+        (runbook) =>
+          runbook.key === 'products' &&
+          runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
+          runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+          runbook.artifactVerifier?.validates?.includes?.('productApiHandoffSiteTargetReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('productApiHandoffTargetSiteId') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceApiHandoffSiteSelectorEnv'),
+      ),
+      `${url} missing Products completion runbook commerce site target`,
+    );
+    assert(
+      completionStatus?.surfaceRunbooks?.some?.(
+        (runbook) =>
+          runbook.key === 'orders' &&
+          runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
+          runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+          runbook.artifactVerifier?.validates?.includes?.('orderApiHandoffSiteTargetReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('orderApiHandoffTargetSiteId') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceApiHandoffSiteSelectorEnv'),
+      ),
+      `${url} missing Orders completion runbook commerce site target`,
+    );
+    assert(completionStatus?.privacy?.includesSecretValues === false, `${url} completion status leaked secret-value policy`);
     assert(json?.data?.settings?.scope?.workspaceSettingsScope === 'global', `${url} missing global workspace settings scope`);
     assert(json?.data?.settings?.scope?.siteSettingsScope === 'site', `${url} missing site settings scope pointer`);
     assert(json?.data?.settings?.scope?.siteSettingsEndpointTemplate === '/api/admin/sites/:siteId/settings', `${url} missing site settings endpoint template`);
@@ -7873,6 +7982,13 @@ try {
     assert(Array.isArray(json?.data?.settings?.runtimeVercel?.missing), `${url} missing runtime Vercel missing list`);
     assert(!JSON.stringify(json.data.settings.runtimeStorage).includes('SECRET'), `${url} exposed storage secret names or values`);
     assert(!JSON.stringify(json.data.settings.runtimeSupabase).includes('SERVICE_ROLE'), `${url} exposed Supabase secret env names or values`);
+    const themeDesignImpact = json?.data?.settings?.themeDesignImpact;
+    assert(themeDesignImpact?.schemaVersion === 'backy.settings-theme-design-impact.v1', `${url} missing theme design impact schema version`);
+    assert(themeDesignImpact?.themeContract?.schemaVersion === 'backy.theme.v1', `${url} missing theme token contract`);
+    assert(themeDesignImpact?.frontendBindings?.adminSettingsApi === '/api/admin/settings#data.settings.themeDesignImpact', `${url} missing admin settings theme-design binding`);
+    assert(themeDesignImpact?.designStatePersistence?.tokenRefPaths?.includes('content.themeTokenRefs'), `${url} missing theme token ref path`);
+    assert(themeDesignImpact?.motion?.bindingPaths?.includes('element.animation.tokenRefs.duration'), `${url} missing animation token-ref binding`);
+    assert(themeDesignImpact?.privacy?.includesSecretValues === false, `${url} theme design impact leaked secret boundary`);
     const frontendDatabaseCertification = json?.data?.settings?.frontendDatabaseCertification;
     assert(frontendDatabaseCertification?.schemaVersion === 'backy.frontend-database-certification.v1', `${url} missing frontend database certification schema version`);
     assert(frontendDatabaseCertification?.status === 'external-database-gate', `${url} missing frontend database certification status`);
@@ -7945,11 +8061,60 @@ try {
         providerCertification.scenarioEvidence.secretHandling.includes('database URLs, provider credentials'),
       `${url} missing provider certification scenario secret-handling guidance`,
     );
+    assert(
+      providerCertification?.operatorEvidencePacket?.schemaVersion === 'backy.settings-provider-certification-evidence-packet.v1',
+      `${url} missing provider certification operator evidence packet schema`,
+    );
+    assert(
+      Array.isArray(providerCertification.operatorEvidencePacket.operatorArtifacts) &&
+        providerCertification.operatorEvidencePacket.operatorArtifacts.some((artifact) => artifact.key === 'storage-media') &&
+        providerCertification.operatorEvidencePacket.operatorArtifacts.some((artifact) => artifact.key === 'notification-delivery') &&
+        providerCertification.operatorEvidencePacket.operatorArtifacts.some((artifact) => artifact.key === 'commerce-provider-bridge'),
+      `${url} missing provider certification operator artifacts`,
+    );
+    assert(
+      providerCertification.operatorEvidencePacket.redactionPolicy?.includesProviderSecrets === false &&
+        providerCertification.operatorEvidencePacket.redactionPolicy?.includesDatabaseUrls === false &&
+        providerCertification.operatorEvidencePacket.redactionPolicy?.includesServiceRoleKeys === false &&
+        providerCertification.operatorEvidencePacket.redactionPolicy?.includesCustomerOrOrderPayloads === false,
+      `${url} missing provider certification evidence-packet redaction policy`,
+    );
+    assert(
+      providerCertification.operatorEvidencePacket.scenarioAttachments?.some((scenario) => scenario.key === 'storage-media') &&
+        providerCertification.operatorEvidencePacket.scenarioAttachments?.some((scenario) => scenario.key === 'release-certification-readiness'),
+      `${url} missing provider certification evidence-packet scenario attachments`,
+    );
+    assert(
+      providerCertification.operatorEvidencePacket.commandPreview?.command?.includes('npm run ci:settings-provider-certification') &&
+        providerCertification.operatorEvidencePacket.commandPreview?.command?.includes('npm run ci:commerce-provider-certification') &&
+        providerCertification.operatorEvidencePacket.commandPreview?.targetInputs?.includes('BACKY_SETTINGS_CERTIFICATION_BASE_URL') &&
+        providerCertification.operatorEvidencePacket.commandPreview?.targetInputs?.includes('BACKY_SETTINGS_CERTIFY_SITE_ID') &&
+        providerCertification.operatorEvidencePacket.commandPreview?.targetInputs?.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
+      `${url} missing provider certification evidence-packet command preview`,
+    );
+    assert(
+      providerCertification.operatorEvidencePacket.target?.siteId === 'site-demo' &&
+        providerCertification.operatorEvidencePacket.target?.settingsAdminApi === '/api/admin/settings?certificationSiteId={siteId}' &&
+        providerCertification.operatorEvidencePacket.target?.siteScopedSettingsApi === '/api/admin/sites/{siteId}/settings' &&
+        providerCertification.operatorEvidencePacket.target?.settingsApi === '/api/admin/sites/{siteId}/settings' &&
+        providerCertification.operatorEvidencePacket.target?.settingsSiteSelectorEnv === 'BACKY_SETTINGS_CERTIFY_SITE_ID' &&
+        providerCertification.operatorEvidencePacket.target?.commerceSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      `${url} missing provider certification evidence-packet site target`,
+    );
+    assert(
+      typeof providerCertification.operatorEvidencePacket.secretHandling === 'string' &&
+        providerCertification.operatorEvidencePacket.secretHandling.includes('Redacted operator attachment manifest only'),
+      `${url} missing provider certification evidence-packet secret handling`,
+    );
     assert(providerCertification.operatorCommandTemplate.envTemplateSchemaVersion === 'backy.settings-provider-certification-env-template.v1', `${url} missing provider certification command-template env schema`);
     assert(
       typeof providerCertification.operatorCommandTemplate.envTemplate === 'string' &&
         providerCertification.operatorCommandTemplate.envTemplate.includes('# Backy settings provider certification environment') &&
         providerCertification.operatorCommandTemplate.envTemplate.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+        providerCertification.operatorCommandTemplate.envTemplate.includes('BACKY_SETTINGS_CERTIFY_SITE_ID=site-demo') &&
+        providerCertification.operatorCommandTemplate.envTemplate.includes('BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS=1') &&
+        providerCertification.operatorCommandTemplate.envTemplate.includes('BACKY_CORS_ALLOWED_ORIGINS=') &&
+        providerCertification.operatorCommandTemplate.envTemplate.includes('BACKY_COMMERCE_CERTIFY_SITE_ID=site-demo') &&
         providerCertification.operatorCommandTemplate.envTemplate.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1'),
       `${url} missing provider certification command-template env body`,
     );
@@ -7961,12 +8126,20 @@ try {
       typeof providerCertification.operatorEnvTemplate.body === 'string' &&
         providerCertification.operatorEnvTemplate.body.includes('# Backy settings provider certification environment') &&
         providerCertification.operatorEnvTemplate.body.includes('BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1') &&
+        providerCertification.operatorEnvTemplate.body.includes('BACKY_SETTINGS_CERTIFY_SITE_ID=site-demo') &&
+        providerCertification.operatorEnvTemplate.body.includes('BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS=1') &&
+        providerCertification.operatorEnvTemplate.body.includes('BACKY_CORS_ALLOWED_ORIGINS=') &&
+        providerCertification.operatorEnvTemplate.body.includes('BACKY_COMMERCE_CERTIFY_SITE_ID=site-demo') &&
         providerCertification.operatorEnvTemplate.body.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1'),
       `${url} missing provider certification env-template body`,
     );
     assert(
-      providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') &&
+        providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') &&
+        providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_SITE_ID') &&
         providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_NOTIFICATION_PROVIDER') &&
+        providerCertification.operatorCommandTemplate.command.includes('BACKY_SETTINGS_CERTIFY_PUBLIC_API_CORS') &&
+        providerCertification.operatorCommandTemplate.command.includes('BACKY_CORS_ALLOWED_ORIGINS') &&
+        providerCertification.operatorCommandTemplate.command.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
         providerCertification.operatorCommandTemplate.command.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED') &&
         providerCertification.operatorCommandTemplate.command.includes('npm run ci:settings-provider-certification') &&
         providerCertification.operatorCommandTemplate.command.includes('npm run ci:commerce-provider-certification'),
@@ -7986,8 +8159,21 @@ try {
     );
     assert(
       Array.isArray(providerCertification.operatorCommandTemplate.requiredInputAliases) &&
+        providerCertification.operatorCommandTemplate.requiredInputAliases.includes('BACKY_SETTINGS_CERTIFY_SITE_ID or BACKY_SETTINGS_CERTIFICATION_SITE_ID') &&
+        providerCertification.operatorCommandTemplate.requiredInputAliases.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+        providerCertification.operatorCommandTemplate.requiredInputAliases.includes('BACKY_CORS_ALLOWED_ORIGINS') &&
         providerCertification.operatorCommandTemplate.requiredInputAliases.includes('BACKY_COMMERCE_WEBHOOK_SECRET or COMMERCE_WEBHOOK_SECRET'),
       `${url} missing provider certification operator required aliases`,
+    );
+    assert(
+      Array.isArray(providerCertification.operatorCommandTemplate.targetInputs) &&
+        providerCertification.operatorCommandTemplate.targetInputs.includes('BACKY_SETTINGS_CERTIFICATION_BASE_URL') &&
+        providerCertification.operatorCommandTemplate.targetInputs.includes('BACKY_SETTINGS_CERTIFY_SITE_ID') &&
+        providerCertification.operatorCommandTemplate.targetInputs.includes('BACKY_SETTINGS_CERTIFICATION_SITE_ID') &&
+        providerCertification.operatorCommandTemplate.targetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+        providerCertification.operatorCommandTemplate.targetInputs.includes('BACKY_CORS_ALLOWED_ORIGINS') &&
+        providerCertification.operatorCommandTemplate.targetInputs.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL'),
+      `${url} missing provider certification operator target inputs`,
     );
     assert(
       typeof providerCertification?.secretHandling === 'string' &&
@@ -8018,6 +8204,7 @@ try {
         providerCertification.groups.some((group) => group.family === 'Storage and media delivery') &&
         providerCertification.groups.some((group) => group.family === 'Vercel deployment and secrets') &&
         providerCertification.groups.some((group) => group.family === 'Notifications') &&
+        providerCertification.groups.some((group) => group.family === 'Public API and custom frontend CORS') &&
         providerCertification.groups.some((group) => group.family === 'Commerce providers'),
       `${url} missing provider certification family coverage`,
     );
@@ -8043,6 +8230,8 @@ try {
       'BACKY_SMTP_HOST or SMTP_HOST',
       'BACKY_SMTP_USER or SMTP_USER',
       'BACKY_SMTP_PASSWORD or SMTP_PASSWORD',
+      'BACKY_CORS_ALLOWED_ORIGINS',
+      'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
       'BACKY_STRIPE_SECRET_KEY or STRIPE_SECRET_KEY',
       'BACKY_TAXJAR_API_KEY or TAXJAR_API_KEY',
       'BACKY_AVALARA_ACCOUNT_ID/AVALARA_ACCOUNT_ID plus license and company code',

@@ -20,11 +20,48 @@ const assert = (condition, message) => {
 
 const assertTeamsRouteSourceContract = () => {
   const source = fs.readFileSync(new URL('../src/routes/teams.tsx', import.meta.url), 'utf8');
+  const componentSource = fs.readFileSync(new URL('../src/components/teams/TeamManagement.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Teams route must use the shared EmptyState component for the primary no-teams state');
   assert(source.includes('title="No teams yet"'), 'Teams empty state must keep the no-teams title visible');
   assert(source.includes('assigning members, roles, sites, and workspace ownership'), 'Teams empty state must explain what the first team unlocks');
   assert(source.includes('title="No team activity yet"'), 'Teams audit panel must keep the empty activity title visible');
   assert(source.includes('Team creation, member invites, role changes, and workspace ownership updates will appear here.'), 'Teams audit empty state must explain which actions populate activity');
+  assert(!source.includes('window.confirm') && !componentSource.includes('window.confirm'), 'Teams surfaces must not use browser confirm dialogs for account/workspace mutations');
+  assert(
+    componentSource.includes('aria-labelledby="teams-delete-team-title"') &&
+      componentSource.includes('aria-describedby="teams-delete-team-description"') &&
+      componentSource.includes('data-testid="teams-delete-team-confirmation"') &&
+      componentSource.includes('data-testid="teams-delete-team-confirm"') &&
+      componentSource.includes('aria-label={`Confirm deleting team ${pendingDeleteTeam.name}`}'),
+    'Teams delete flow must expose an accessible in-app confirmation dialog with testable actions.',
+  );
+  assert(
+    componentSource.includes('aria-labelledby="teams-remove-member-title"') &&
+      componentSource.includes('aria-describedby="teams-remove-member-description"') &&
+      componentSource.includes('data-testid="teams-remove-member-confirmation"') &&
+      componentSource.includes('data-testid="teams-remove-member-confirm"') &&
+      componentSource.includes('aria-label={`Confirm removing ${pendingRemoveMember.member.name}`}'),
+    'Teams member removal must expose an accessible in-app confirmation dialog with testable actions.',
+  );
+  const noValidateCount = (componentSource.match(/noValidate/g) || []).length;
+  assert(
+    noValidateCount >= 3 &&
+      componentSource.includes('validateTeamName') &&
+      componentSource.includes('validateTeamSlug') &&
+      componentSource.includes('validateTeamInviteEmail') &&
+      componentSource.includes('validateTeamInviteRole') &&
+      componentSource.includes('id="teams-create-name-error"') &&
+      componentSource.includes('id="teams-edit-slug-error"') &&
+      componentSource.includes('id="teams-invite-email-error"') &&
+      componentSource.includes('data-testid="teams-create-inline-error"') &&
+      componentSource.includes('data-testid="teams-edit-inline-error"') &&
+      componentSource.includes('data-testid="teams-invite-inline-error"') &&
+      componentSource.includes('aria-invalid={Boolean') &&
+      componentSource.includes('Fix team fields before creating.') &&
+      componentSource.includes('Fix team fields before saving.') &&
+      componentSource.includes('Fix invitation fields before sending.'),
+    'Teams create/edit/invite forms must use source-guarded inline validation instead of browser-only required fields.',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -643,6 +680,11 @@ const main = async () => {
 
   try {
     assertTeamsRouteSourceContract();
+    if (process.env.BACKY_TEAMS_SOURCE_ONLY === '1') {
+      console.log(JSON.stringify({ ok: true, guard: 'teams-source' }));
+      return;
+    }
+
     const adminSession = await loginAdminApi();
     adminUserId = adminSession.user?.id || '';
     if (adminUserId) {
@@ -925,9 +967,21 @@ const main = async () => {
     );
     await waitForTeamAuditPanel(client, ['Team member role updated', 'editor'], 'Team role update audit panel');
 
-    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.confirm = () => true;' });
-    await evaluate(client, 'window.confirm = () => true; true');
     await clickSelector(client, `[data-testid="teams-member-remove-${invitedMember.id}"]`);
+    await waitForState(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="teams-remove-member-confirmation"]');
+        const confirm = document.querySelector('[data-testid="teams-remove-member-confirm"]');
+        const text = dialog?.textContent || '';
+        return {
+          ready: Boolean(dialog) && confirm instanceof HTMLButtonElement && text.includes(${JSON.stringify(inviteEmail)}),
+          text: text.slice(0, 900),
+        };
+      })()`,
+      'Member removal confirmation',
+    );
+    await clickSelector(client, '[data-testid="teams-remove-member-confirm"]');
     await waitForTeam(editedSlug, (team) => !team.members.some((member) => member.email === inviteEmail));
     await waitForState(
       client,
@@ -944,6 +998,20 @@ const main = async () => {
     await waitForTeamAuditPanel(client, ['Team member removed'], 'Team member removal audit panel');
 
     await clickSelector(client, '[data-testid="teams-delete-button"]');
+    await waitForState(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="teams-delete-team-confirmation"]');
+        const confirm = document.querySelector('[data-testid="teams-delete-team-confirm"]');
+        const text = dialog?.textContent || '';
+        return {
+          ready: Boolean(dialog) && confirm instanceof HTMLButtonElement && text.includes(${JSON.stringify(editedName)}),
+          text: text.slice(0, 900),
+        };
+      })()`,
+      'Team delete confirmation',
+    );
+    await clickSelector(client, '[data-testid="teams-delete-team-confirm"]');
     await waitForTeamMissing(editedSlug);
     temporaryTeamIds.pop();
     await waitForState(

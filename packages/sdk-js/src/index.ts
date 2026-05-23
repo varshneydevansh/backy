@@ -3,7 +3,35 @@ import type {
   BackyContentElement,
 } from "@backy-cms/core/content-contract";
 import type {
+  GeneratedBackyOpenApiAdminSettings,
+  GeneratedBackyOpenApiAdminSettingsActionEnvelope,
+  GeneratedBackyOpenApiAdminSettingsActionRequest,
+  GeneratedBackyOpenApiAdminSettingsEnvelope,
+  GeneratedBackyOpenApiAdminSettingsMediaStorageHandoff,
+  GeneratedBackyOpenApiAdminSettingsThemeDesignImpact,
+  GeneratedBackyOpenApiAdminSettingsProviderCertification,
+  GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidence,
+  GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidencePacket,
+  GeneratedBackyOpenApiAdminSettingsUpdateRequest,
+  GeneratedBackyOpenApiAdminSiteSettingsPatchRequest,
+  GeneratedBackyOpenApiAdminSiteSettingsScope,
+  GeneratedBackyOpenApiAdminBlogPostRollbackRequest,
+  GeneratedBackyOpenApiAdminPageRollbackRequest,
   GeneratedBackyOpenApiBlogPostUpdateRequest,
+  GeneratedBackyOpenApiCommerceOrderAnalytics,
+  GeneratedBackyOpenApiCommerceOrderAnalyticsProviderCertification,
+  GeneratedBackyOpenApiCommerceOrderFulfillment,
+  GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidence,
+  GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidencePacket,
+  GeneratedBackyOpenApiCommerceOrderProviderRefund,
+  GeneratedBackyOpenApiCommerceOrderQuote,
+  GeneratedBackyOpenApiCommerceOrderShippingLabel,
+  GeneratedBackyOpenApiCommerceOrderStatusAccess,
+  GeneratedBackyOpenApiCommerceOrderStatusHandoff,
+  GeneratedBackyOpenApiCommerceOrderTracking,
+  GeneratedBackyOpenApiCommerceProductProviderSync,
+  GeneratedBackyOpenApiCommerceProductSubscriptionAction,
+  GeneratedBackyOpenApiCommerceProductSubscriptionLifecycle,
   GeneratedBackyOpenApiPageUpdateRequest,
 } from "./generated-contract-types";
 
@@ -39,6 +67,25 @@ export type {
   GeneratedBackyOpenApiBackyEditableMapEntry,
   GeneratedBackyOpenApiBackyElementAction,
   GeneratedBackyOpenApiBackyReusableSectionContent,
+  GeneratedBackyOpenApiAdminSettings,
+  GeneratedBackyOpenApiAdminSettingsActionEnvelope,
+  GeneratedBackyOpenApiAdminSettingsActionRequest,
+  GeneratedBackyOpenApiAdminSettingsEnvelope,
+  GeneratedBackyOpenApiAdminSettingsMediaStorageHandoff,
+  GeneratedBackyOpenApiAdminSettingsThemeDesignImpact,
+  GeneratedBackyOpenApiAdminSettingsProviderCertification,
+  GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidence,
+  GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidencePacket,
+  GeneratedBackyOpenApiAdminSettingsUpdateRequest,
+  GeneratedBackyOpenApiAdminBlogPostRollbackRequest,
+  GeneratedBackyOpenApiAdminBlogPostRevision,
+  GeneratedBackyOpenApiAdminBlogPostRevisionsEnvelope,
+  GeneratedBackyOpenApiAdminPageRollbackRequest,
+  GeneratedBackyOpenApiAdminPageRevision,
+  GeneratedBackyOpenApiAdminPageRevisionsEnvelope,
+  GeneratedBackyOpenApiAdminSiteSettingsEnvelope,
+  GeneratedBackyOpenApiAdminSiteSettingsPatchRequest,
+  GeneratedBackyOpenApiAdminSiteSettingsScope,
   GeneratedBackyOpenApiBlogAuthorListEnvelope,
   GeneratedBackyOpenApiBlogAuthorResource,
   GeneratedBackyOpenApiBlogCategoryListEnvelope,
@@ -72,16 +119,41 @@ export type {
   GeneratedBackyOpenApiCommentUpdateRequest,
   GeneratedBackyOpenApiCommentsEnvelope,
   GeneratedBackyOpenApiCommerceCatalogEnvelope,
+  GeneratedBackyOpenApiCommerceOrderAnalytics,
+  GeneratedBackyOpenApiCommerceOrderAnalyticsEnvelope,
+  GeneratedBackyOpenApiCommerceOrderAnalyticsProviderCertification,
   GeneratedBackyOpenApiCommerceOrderContractEnvelope,
   GeneratedBackyOpenApiCommerceOrderCreateRequest,
   GeneratedBackyOpenApiCommerceOrderEnvelope,
+  GeneratedBackyOpenApiCommerceOrderFulfillment,
+  GeneratedBackyOpenApiCommerceOrderFulfillmentEnvelope,
+  GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidence,
+  GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidencePacket,
+  GeneratedBackyOpenApiCommerceOrderProviderRefund,
+  GeneratedBackyOpenApiCommerceOrderProviderRefundEnvelope,
+  GeneratedBackyOpenApiCommerceOrderQuote,
+  GeneratedBackyOpenApiCommerceOrderQuoteEnvelope,
+  GeneratedBackyOpenApiCommerceOrderShippingLabel,
+  GeneratedBackyOpenApiCommerceOrderShippingLabelEnvelope,
+  GeneratedBackyOpenApiCommerceOrderStatusAccess,
+  GeneratedBackyOpenApiCommerceOrderStatusHandoffEnvelope,
+  GeneratedBackyOpenApiCommerceOrderStatusHandoff,
   GeneratedBackyOpenApiCommerceProduct,
   GeneratedBackyOpenApiCommerceProductDesign,
+  GeneratedBackyOpenApiCommerceProductDesignReadiness,
   GeneratedBackyOpenApiCommerceManagementPolicy,
   GeneratedBackyOpenApiCommerceProviderCertification,
+  GeneratedBackyOpenApiCommerceOrderTracking,
+  GeneratedBackyOpenApiCommerceOrderTrackingEnvelope,
   GeneratedBackyOpenApiCommerceStorefrontContract,
   GeneratedBackyOpenApiCommerceWebhookEnvelope,
   GeneratedBackyOpenApiCommerceWebhookRequest,
+  GeneratedBackyOpenApiCommerceProductProviderSync,
+  GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope,
+  GeneratedBackyOpenApiCommerceProductSubscriptionAction,
+  GeneratedBackyOpenApiCommerceProductSubscriptionActionEnvelope,
+  GeneratedBackyOpenApiCommerceProductSubscriptionLifecycle,
+  GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope,
   GeneratedBackyOpenApiCollectionFieldOption,
   GeneratedBackyOpenApiCollectionFieldSchema,
   GeneratedBackyOpenApiCollectionFieldValidation,
@@ -94,6 +166,7 @@ export type {
   GeneratedBackyOpenApiCollectionSchema,
   GeneratedBackyOpenApiComponentName,
   GeneratedBackyOpenApiComponents,
+  GeneratedBackyOpenApiContentRevisionBranchMetadata,
   GeneratedBackyOpenApiDynamicItemRoute,
   GeneratedBackyOpenApiDynamicItemRouteResource,
   GeneratedBackyOpenApiDynamicListRoute,
@@ -102,6 +175,7 @@ export type {
   GeneratedBackyOpenApiEventsEnvelope,
   GeneratedBackyOpenApiFontManifestEnvelope,
   GeneratedBackyOpenApiFontVariant,
+  GeneratedBackyOpenApiFrontendDatabaseCertificationHandoff,
   GeneratedBackyOpenApiFormCollectionRecordError,
   GeneratedBackyOpenApiFormCollectionRecordLink,
   GeneratedBackyOpenApiFormContact,
@@ -127,6 +201,7 @@ export type {
   GeneratedBackyOpenApiGoneRoute,
   GeneratedBackyOpenApiGoneRouteResolveEnvelope,
   GeneratedBackyOpenApiInteractiveComponentControl,
+  GeneratedBackyOpenApiInteractiveComponentControlOption,
   GeneratedBackyOpenApiInteractiveComponentFallback,
   GeneratedBackyOpenApiInteractiveComponentIntegrity,
   GeneratedBackyOpenApiInteractiveComponentManifestContract,
@@ -187,6 +262,8 @@ export type {
   GeneratedBackyRenderNavigationLayout,
   GeneratedBackyPublicRenderPayload,
   GeneratedBackyPublicRenderPayloadBindingSlot,
+  GeneratedBackyPublicRenderPayloadFontVariant,
+  GeneratedBackyPublicRenderPayloadProductDesignReadiness,
   GeneratedBackyPublicRenderPayloadEnvelope,
   GeneratedBackyThemeTokenContract,
   GeneratedBackyThemeTokens,
@@ -234,6 +311,14 @@ export interface BackyResponseMeta {
   schemaVersion?: string;
   requestId?: string;
   siteId?: string;
+  location?: string;
+  contentType?: string;
+  contentLength?: string;
+  contentDisposition?: string;
+  mediaId?: string;
+  mediaDeliveryPolicy?: string;
+  transformWidth?: string;
+  transformQuality?: string;
 }
 
 export type BackyConditionalResult<TBody> =
@@ -370,6 +455,31 @@ export interface BackyFrontendDesignSource {
   [key: string]: unknown;
 }
 
+export type BackyDesignArrayOrRecord = unknown[] | Record<string, unknown>;
+
+export interface BackyFrontendDesignTemplateContent {
+  elements?: unknown[];
+  canvasSize?: {
+    width?: number;
+    height?: number;
+    [key: string]: unknown;
+  };
+  customCSS?: string;
+  customCss?: string;
+  customJS?: string;
+  customJs?: string;
+  contentDocument?: Record<string, unknown>;
+  themeTokenRefs?: Record<string, unknown>;
+  assets?: BackyDesignArrayOrRecord;
+  animations?: BackyDesignArrayOrRecord;
+  interactions?: BackyDesignArrayOrRecord;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendDesignTemplate {
   id: string;
   type:
@@ -388,7 +498,7 @@ export interface BackyFrontendDesignTemplate {
     height?: number;
     [key: string]: unknown;
   };
-  content?: Record<string, unknown>;
+  content?: BackyFrontendDesignTemplateContent;
   bindingHints?: Array<Record<string, unknown>>;
   [key: string]: unknown;
 }
@@ -399,6 +509,36 @@ export interface BackyFrontendEditableMapEntry {
   role?: string;
   binding?: string;
   fields?: string[];
+  field?: string;
+  targetPath?: string;
+  token?: string;
+  editable?: boolean;
+  permission?: string;
+  label?: string;
+  valueType?:
+    | "string"
+    | "richText"
+    | "number"
+    | "boolean"
+    | "color"
+    | "image"
+    | "video"
+    | "audio"
+    | "file"
+    | "url"
+    | "json"
+    | string;
+  scope?:
+    | "site"
+    | "page"
+    | "post"
+    | "template"
+    | "element"
+    | "collectionRecord"
+    | string;
+  collectionId?: string;
+  recordId?: string;
+  sourceField?: string;
   [key: string]: unknown;
 }
 
@@ -408,6 +548,7 @@ export interface BackyFrontendDesignContract {
   source: BackyFrontendDesignSource;
   tokens?: BackyThemeTokens & {
     customCss?: string;
+    customCSS?: string;
     radii?: Record<string, unknown>;
     shadows?: Record<string, unknown>;
   };
@@ -775,13 +916,41 @@ export interface BackyNavigationItem {
   [key: string]: unknown;
 }
 
+export type BackyInteractiveControlType =
+  | "range"
+  | "select"
+  | "radio"
+  | "text"
+  | "textarea"
+  | "code"
+  | "number"
+  | "boolean"
+  | "checkbox"
+  | "toggle"
+  | "color"
+  | "json"
+  | string;
+
+export type BackyInteractiveControlOption =
+  | string
+  | number
+  | boolean
+  | {
+      label?: string;
+      name?: string;
+      value?: string | number | boolean;
+      id?: string | number | boolean;
+      key?: string | number | boolean;
+      [key: string]: unknown;
+    };
+
 export interface BackyInteractiveControl {
   key: string;
   label?: string;
-  type: string;
+  type: BackyInteractiveControlType;
   value?: unknown;
   defaultValue?: unknown;
-  options?: unknown[];
+  options?: BackyInteractiveControlOption[];
   min?: number;
   max?: number;
   step?: number;
@@ -824,6 +993,20 @@ export type BackyElement = BackyContentElement & {
 export type BackyContentDocument = CoreBackyContentDocument &
   Record<string, unknown>;
 
+export type BackyRenderContent = BackyContentDocument & {
+  customCSS?: string;
+  customJS?: string;
+  contentDocument?: BackyContentDocument | Record<string, unknown>;
+  themeTokenRefs?: Record<string, string>;
+  assets?: BackyDesignArrayOrRecord;
+  animations?: BackyDesignArrayOrRecord;
+  interactions?: BackyDesignArrayOrRecord;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+};
+
 export interface BackyMediaAsset {
   id: string;
   type: "image" | "video" | "audio" | "document" | "font" | "other" | string;
@@ -834,6 +1017,23 @@ export interface BackyMediaAsset {
   alt?: string;
   title?: string;
   visibility?: string;
+  organization?: {
+    schemaVersion: "backy.media.organization.v1" | string;
+    folderId: string | null;
+    folderName: string;
+    folderPath: string;
+    folderSegments: string[];
+    folderAncestors?: Array<{
+      id: string;
+      name: string;
+      parentId: string | null;
+      sortOrder: number;
+    }>;
+    folderDepth: number;
+    folderSortOrder: number | null;
+    root: boolean;
+    missingFolder: boolean;
+  };
   responsive?: {
     src: string;
     srcSet: string;
@@ -860,6 +1060,7 @@ export interface BackyMediaAsset {
     scopes: string[];
     pageIds: string[];
     postIds: string[];
+    collectionRecordIds?: string[];
     pages: Array<{
       id: string;
       usageTypes: string[];
@@ -870,12 +1071,18 @@ export interface BackyMediaAsset {
       usageTypes: string[];
       bindings: Array<Record<string, unknown>>;
     }>;
+    collectionRecords?: Array<{
+      id: string;
+      usageTypes: string[];
+      bindings: Array<Record<string, unknown>>;
+    }>;
     usageTypes: string[];
     totalBindings: number;
   };
   referenceSummary?: {
     pageCount: number;
     postCount: number;
+    collectionRecordCount?: number;
     usageTypes: string[];
     global: boolean;
     scoped: boolean;
@@ -1417,6 +1624,18 @@ export interface BackyCommerceProductDesign {
   chrome?: Record<string, unknown>;
   tokens?: Record<string, unknown>;
   customCss?: string;
+  customJs?: string;
+  contentDocument?: Record<string, unknown>;
+  elements?: unknown[];
+  canvasSize?: Record<string, unknown>;
+  themeTokenRefs?: Record<string, unknown>;
+  assets?: BackyDesignArrayOrRecord;
+  animations?: BackyDesignArrayOrRecord;
+  interactions?: BackyDesignArrayOrRecord;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   bindingHints?: Array<Record<string, unknown>>;
   frontendDesignTemplateId?: string;
   frontendDesignTemplateName?: string;
@@ -1425,7 +1644,42 @@ export interface BackyCommerceProductDesign {
   frontendDesignChrome?: Record<string, unknown>;
   frontendDesignTokens?: Record<string, unknown>;
   frontendDesignCustomCss?: string;
+  frontendDesignCustomJs?: string;
+  frontendDesignContentDocument?: Record<string, unknown>;
+  frontendDesignElements?: unknown[];
+  frontendDesignCanvasSize?: Record<string, unknown>;
+  frontendDesignThemeTokenRefs?: Record<string, unknown>;
+  frontendDesignAssets?: BackyDesignArrayOrRecord;
+  frontendDesignAnimations?: BackyDesignArrayOrRecord;
+  frontendDesignInteractions?: BackyDesignArrayOrRecord;
+  frontendDesignDataBindings?: Record<string, unknown>;
+  frontendDesignEditableMap?: Record<string, unknown>;
+  frontendDesignSeo?: Record<string, unknown>;
+  frontendDesignMetadata?: Record<string, unknown>;
   frontendDesignBindingHints?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface BackyCommerceProductDesignReadiness {
+  schemaVersion: "backy.product-design-readiness.v1" | string;
+  status: "ready" | "attention" | "blocked" | string;
+  templateId: string | null;
+  hasDesign: boolean;
+  hasContentDocument: boolean;
+  hasEditableMap: boolean;
+  hasDataBindings: boolean;
+  counts: {
+    elements: number;
+    animations: number;
+    assets: number;
+    bindingHints: number;
+    [key: string]: unknown;
+  };
+  missing: string[];
+  detail: string;
+  nextAction: string;
+  evidence: string[];
+  secretHandling: string;
   [key: string]: unknown;
 }
 
@@ -1753,6 +2007,7 @@ export interface BackyCommerceProduct {
   };
   links?: Record<string, unknown>;
   design?: BackyCommerceProductDesign;
+  designReadiness?: BackyCommerceProductDesignReadiness;
   [key: string]: unknown;
 }
 
@@ -1906,7 +2161,7 @@ export interface BackyCommerceCheckoutSession {
   provider: "manual" | "stripe";
   providerMode: "test" | "live";
   accountId?: string | null;
-  status: "requires_action" | "provider_ready";
+  status: "requires_action" | "provider_ready" | "provider_created";
   handoffMode: "manual" | "provider";
   url?: string | null;
   successUrl: string;
@@ -1917,6 +2172,73 @@ export interface BackyCommerceCheckoutSession {
   currency: string;
   metadata?: Record<string, string>;
   providerPayload?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface BackyProviderCertificationEvidencePacket {
+  schemaVersion:
+    | "backy.commerce-provider-certification-evidence-packet.v1"
+    | "backy.order-provider-certification-evidence-packet.v1"
+    | "backy.settings-provider-certification-evidence-packet.v1"
+    | string;
+  generatedAt: string;
+  selectedSiteId?: string;
+  selectedProductId?: string;
+  status:
+    | "no-family-selected"
+    | "needs-credentials"
+    | "needs-runtime-inputs"
+    | "needs-scenario-evidence"
+    | "evidence-complete"
+    | string;
+  selectedFamilies: string[];
+  selectedProviderAliases?: Record<string, string>;
+  runtimeReadiness?: {
+    loaded?: boolean;
+    configuredFamilies?: string[];
+    missingSelectedFamilies?: string[];
+    missingInputAliases?: string[];
+    localRuntimeInputsConfigured?: boolean;
+    [key: string]: unknown;
+  };
+  operatorArtifacts: Array<{
+    key: string;
+    family: string;
+    providerAlias: string;
+    status: "ready-to-run" | "needs-credentials" | "needs-runtime-inputs" | string;
+    requiredInputs: string[];
+    expectedArtifacts: string[];
+    captureSource: string;
+    redaction: string;
+    [key: string]: unknown;
+  }>;
+  scenarioAttachments: Array<{
+    key: string;
+    label: string;
+    status: "covered" | "missing" | string;
+    evidenceCount: number;
+    expectedEvidence: string[];
+    nextAction?: string;
+    [key: string]: unknown;
+  }>;
+  commandPreview?: {
+    command?: string;
+    envTemplate?: string;
+    requiredInputs?: string[];
+    requiredAliases?: string[];
+    targetInputs?: string[];
+    [key: string]: unknown;
+  };
+  target?: {
+    siteId?: string;
+    productId?: string;
+    siteSelectorEnv?: string;
+    settingsSiteSelectorEnv?: string;
+    commerceSiteSelectorEnv?: string;
+    [key: string]: unknown;
+  };
+  redactionPolicy?: Record<string, unknown>;
+  secretHandling: string;
   [key: string]: unknown;
 }
 
@@ -2025,6 +2347,7 @@ export interface BackyCommerceStorefrontContract {
       secretHandling: string;
       [key: string]: unknown;
     };
+    operatorEvidencePacket?: BackyProviderCertificationEvidencePacket;
     groups: Array<{
       family: string;
       providers: string[];
@@ -2043,18 +2366,21 @@ export type BackyCommerceProviderCertification = NonNullable<
 > &
   Record<string, unknown>;
 
-export interface BackyCommerceOrderAnalytics {
-  schemaVersion?: "backy.order-analytics.v1" | string;
-  totals?: Record<string, unknown>;
-  revenue?: Record<string, unknown>;
-  payment?: Record<string, unknown>;
-  fulfillment?: Record<string, unknown>;
-  operations?: Record<string, unknown>;
-  trends?: Array<Record<string, unknown>>;
-  recentOrders?: Array<Record<string, unknown>>;
-  providerExecution?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type BackyCommerceOrderProviderCertificationEvidence =
+  GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidence &
+    Record<string, unknown>;
+
+export type BackyCommerceOrderProviderCertificationEvidencePacket =
+  GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidencePacket &
+    Record<string, unknown>;
+
+export type BackyCommerceOrderAnalyticsProviderCertification =
+  GeneratedBackyOpenApiCommerceOrderAnalyticsProviderCertification &
+    BackyCommerceProviderCertification &
+    Record<string, unknown>;
+
+export type BackyCommerceOrderAnalytics =
+  GeneratedBackyOpenApiCommerceOrderAnalytics & Record<string, unknown>;
 
 export type BackyCommerceOrderAnalyticsResponse = BackyEnvelope<
   {
@@ -2066,37 +2392,15 @@ export type BackyCommerceOrderAnalyticsResponse = BackyEnvelope<
       [key: string]: unknown;
     };
     analytics: BackyCommerceOrderAnalytics;
-    providerCertification?: BackyCommerceProviderCertification;
+    providerCertification?: BackyCommerceOrderAnalyticsProviderCertification;
   } & Record<string, unknown>
 >;
 
-export interface BackyCommerceOrderStatusHandoff {
-  schemaVersion: "backy.order-status-handoff.v1" | string;
-  generatedAt: string;
-  source?: "admin-order-status-handoff-api" | string;
-  status?: "ready" | "attention" | "blocked" | string;
-  score?: number;
-  selectedSiteId?: string;
-  order?: Record<string, unknown> | null;
-  customer?: Record<string, unknown> | null;
-  tracking?: Record<string, unknown> | null;
-  refund?: Record<string, unknown> | null;
-  endpoints?: Record<string, unknown>;
-  privacy?: {
-    customerSafeFieldsOnly?: boolean;
-    includesRawCustomerContact?: boolean;
-    includesProviderExecutionIds?: boolean;
-    includesPaymentReferences?: boolean;
-    includesAddresses?: boolean;
-    includesInternalNotes?: boolean;
-    excludedFields?: string[];
-    [key: string]: unknown;
-  };
-  actionPlan?: Record<string, unknown> | null;
-  checks?: Array<Record<string, unknown>>;
-  nextSteps?: string[];
-  [key: string]: unknown;
-}
+export type BackyCommerceOrderStatusHandoff =
+  GeneratedBackyOpenApiCommerceOrderStatusHandoff & Record<string, unknown>;
+
+export type BackyCommerceOrderStatusAccess =
+  GeneratedBackyOpenApiCommerceOrderStatusAccess & Record<string, unknown>;
 
 export type BackyCommerceOrderStatusHandoffResponse = BackyEnvelope<
   {
@@ -2108,8 +2412,74 @@ export type BackyCommerceOrderStatusHandoffResponse = BackyEnvelope<
       [key: string]: unknown;
     };
     statusHandoff: BackyCommerceOrderStatusHandoff;
+    statusAccess?: BackyCommerceOrderStatusAccess;
   } & Record<string, unknown>
 >;
+
+export interface BackyCommerceOrderPublicStatusOptions {
+  siteId?: string;
+  requestId?: string;
+  lookupBy?: "orderId" | "orderSlug" | "orderNumber";
+}
+
+export interface BackyCommerceProductStorefrontHandoff {
+  schemaVersion: "backy.product-storefront-handoff.v1" | string;
+  generatedAt: string;
+  source?: "admin-product-provider-sync-api" | string;
+  selectedSiteId?: string;
+  selectedProductId?: string;
+  product?: Record<string, unknown> | null;
+  endpoints?: Record<string, unknown>;
+  pricing?: Record<string, unknown> | null;
+  inventory?: Record<string, unknown> | null;
+  media?: Record<string, unknown> | null;
+  merchandising?: Record<string, unknown> | null;
+  design?: BackyCommerceProductDesign | null;
+  designReadiness?: BackyCommerceProductDesignReadiness;
+  delivery?: Record<string, unknown> | null;
+  subscription?: Record<string, unknown> | null;
+  checkout?: {
+    orderIntakeReady?: boolean;
+    directCheckoutUrlConfigured?: boolean;
+    mode?: "backy-order-intake" | "direct-checkout-url" | "missing" | string;
+    [key: string]: unknown;
+  };
+  providerSync?: {
+    provider?: string;
+    status?: string;
+    executionMode?: string;
+    syncedAt?: string | null;
+    hasProviderProductReference?: boolean;
+    hasProviderPriceReference?: boolean;
+    hasError?: boolean;
+    [key: string]: unknown;
+  };
+  launchReadiness?: {
+    schemaVersion?: "backy.product-launch-readiness.v1" | string;
+    status?: "ready" | "attention" | "blocked" | string;
+    score?: number;
+    readyCount?: number;
+    totalChecks?: number;
+    blockerCount?: number;
+    attentionCount?: number;
+    checks?: Array<Record<string, unknown>>;
+    nextSteps?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  privacy?: {
+    customerSafeFieldsOnly?: boolean;
+    includesProviderSecrets?: boolean;
+    includesProviderResponses?: boolean;
+    includesPrivateOrders?: boolean;
+    includesCustomerPayloads?: boolean;
+    includesDigitalDeliveryUrl?: boolean;
+    includesRawCheckoutSessions?: boolean;
+    excludedFields?: string[];
+    [key: string]: unknown;
+  };
+  secretHandling?: string;
+  [key: string]: unknown;
+}
 
 export interface BackyCommerceProductProviderSyncInput {
   provider?:
@@ -2133,10 +2503,11 @@ export interface BackyCommerceProductProviderSyncInput {
 
 export type BackyCommerceProductProviderSyncResponse = BackyEnvelope<
   {
-    sync: Record<string, unknown> | null;
+    sync: GeneratedBackyOpenApiCommerceProductProviderSync | null;
     product: BackyCollectionRecord;
     cacheInvalidation?: Record<string, unknown>;
     providerCertification?: BackyCommerceProviderCertification;
+    storefrontHandoff?: BackyCommerceProductStorefrontHandoff;
   } & Record<string, unknown>
 >;
 
@@ -2154,65 +2525,20 @@ export type BackyCommerceOrderFulfillmentInput =
 export type BackyCommerceOrderShippingLabelInput =
   BackyCommerceOrderOperationInput;
 
-export interface BackyCommerceOrderQuote {
-  schemaVersion: "backy.order-quote.v1";
-  subtotal: number;
-  discountAmount: number;
-  taxAmount: number;
-  shippingAmount: number;
-  total: number;
-  currency: string;
-  providerAdjustments?: Array<Record<string, unknown>>;
-  calculatedAt?: string;
-  [key: string]: unknown;
-}
+export type BackyCommerceOrderQuote =
+  GeneratedBackyOpenApiCommerceOrderQuote & Record<string, unknown>;
 
-export interface BackyCommerceOrderTracking {
-  status: string;
-  provider: string;
-  trackingNumber: string;
-  trackingUrl: string;
-  checkedAt: string;
-  providerPayload?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type BackyCommerceOrderTracking =
+  GeneratedBackyOpenApiCommerceOrderTracking & Record<string, unknown>;
 
-export interface BackyCommerceOrderProviderRefund {
-  id: string;
-  status: "requested" | "succeeded" | "failed" | "requires_action" | string;
-  provider: string;
-  reference: string;
-  amount: number;
-  currency: string;
-  reason: string;
-  requestedAt: string;
-  completedAt: string | null;
-  providerPayload?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type BackyCommerceOrderProviderRefund =
+  GeneratedBackyOpenApiCommerceOrderProviderRefund & Record<string, unknown>;
 
-export interface BackyCommerceOrderFulfillment {
-  id: string;
-  status: "requested" | "succeeded" | "failed" | "requires_action" | string;
-  provider: string;
-  orderNumber: string;
-  requestedAt: string;
-  completedAt: string | null;
-  providerPayload?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type BackyCommerceOrderFulfillment =
+  GeneratedBackyOpenApiCommerceOrderFulfillment & Record<string, unknown>;
 
-export interface BackyCommerceOrderShippingLabel {
-  id: string;
-  status: "draft" | "purchased" | "voided" | string;
-  provider: string;
-  serviceLevel: string;
-  url: string;
-  cost: number;
-  createdAt: string;
-  providerPayload?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type BackyCommerceOrderShippingLabel =
+  GeneratedBackyOpenApiCommerceOrderShippingLabel & Record<string, unknown>;
 
 export type BackyCommerceOrderQuoteResponse = BackyEnvelope<
   {
@@ -2259,17 +2585,9 @@ export type BackyCommerceOrderShippingLabelResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
-export interface BackyCommerceProductSubscriptionsLifecycle {
-  schemaVersion: "backy.product-subscription-lifecycle.v1";
-  product: Record<string, unknown>;
-  summary: Record<string, unknown>;
-  actionPlan?: Record<string, unknown>;
-  subscriptions: Array<Record<string, unknown>>;
-  execution?: Record<string, unknown>;
-  certification?: Record<string, unknown>;
-  contract?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type BackyCommerceProductSubscriptionsLifecycle =
+  GeneratedBackyOpenApiCommerceProductSubscriptionLifecycle &
+    Record<string, unknown>;
 
 export type BackyCommerceProductSubscriptionsResponse = BackyEnvelope<
   {
@@ -2291,30 +2609,15 @@ export interface BackyCommerceProductSubscriptionActionInput {
   [key: string]: unknown;
 }
 
-export interface BackyCommerceProductSubscriptionAction {
-  id: string;
-  schemaVersion: "backy.product-subscription-action.v1";
-  action: "pause" | "resume" | "cancel";
-  status: "requested" | "succeeded" | "failed" | "requires_action" | string;
-  provider: string;
-  executionMode: string;
-  productId: string;
-  productSlug: string;
-  orderId: string;
-  orderSlug: string;
-  subscriptionReference: string;
-  reason: string;
-  requestedAt: string;
-  completedAt: string | null;
-  providerPayload?: Record<string, unknown>;
-  [key: string]: unknown;
-}
+export type BackyCommerceProductSubscriptionAction =
+  GeneratedBackyOpenApiCommerceProductSubscriptionAction &
+    Record<string, unknown>;
 
 export type BackyCommerceProductSubscriptionActionResponse = BackyEnvelope<
   {
     action: BackyCommerceProductSubscriptionAction;
     record: BackyCollectionRecord;
-    order?: BackyCollectionRecord;
+    order: BackyCollectionRecord;
     cacheInvalidation?: Record<string, unknown>;
   } & Record<string, unknown>
 >;
@@ -2499,11 +2802,24 @@ export interface BackyManifestCommerceManagementPolicy {
     [key: string]: unknown;
   };
   sdkHelpers: Record<string, string>;
-  responseContracts: Record<string, string>;
+  responseContracts: {
+    orderAnalytics: "backy.order-analytics.v1";
+    orderStatusHandoff: "backy.order-status-handoff.v1";
+    orderQuote: "backy.order-quote.v1";
+    orderTracking: "backy.tracking.v1";
+    orderFulfillment: "backy.fulfillment-dispatch.v1";
+    orderShippingLabel: "backy.shipping-label.v1";
+    orderProviderRefund: "backy.provider-refund.v1";
+    productProviderSync: "backy.commerce-product-sync.v1";
+    productStorefrontHandoff: "backy.product-storefront-handoff.v1";
+    providerCertification: "backy.commerce-provider-certification-handoff.v1";
+    [key: string]: string;
+  };
   privacy: {
     productCatalogCanBePublic: true;
     ordersRemainPrivate: true;
     orderStatusHandoffMasksCustomerContact: true;
+    productStorefrontHandoffExcludesPrivateData: true;
     providerOperationPayloadsMayContainCustomerData: true;
     providerSecretsNeverReturned: true;
     rawProviderResponsesStayPrivate: true;
@@ -3278,6 +3594,19 @@ export interface BackyFrontendDesignProvenance {
   chrome?: Record<string, unknown>;
   tokens?: Record<string, unknown>;
   customCss?: string;
+  customJs?: string;
+  contentDocument?: Record<string, unknown>;
+  elements?: unknown[];
+  canvasSize?: Record<string, unknown>;
+  themeTokenRefs?: Record<string, unknown>;
+  assets?: BackyDesignArrayOrRecord;
+  animations?: BackyDesignArrayOrRecord;
+  frontendDesignAnimations?: BackyDesignArrayOrRecord;
+  interactions?: BackyDesignArrayOrRecord;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   bindingHints?: Array<Record<string, unknown>>;
   [key: string]: unknown;
 }
@@ -3495,8 +3824,8 @@ export interface BackyAdminPagePreviewInput {
   [key: string]: unknown;
 }
 
-export interface BackyAdminPageRollbackInput {
-  revisionId: string;
+export interface BackyAdminPageRollbackInput
+  extends GeneratedBackyOpenApiAdminPageRollbackRequest {
   requestId?: string;
   [key: string]: unknown;
 }
@@ -3506,6 +3835,61 @@ export interface BackyAdminPageRevisionListOptions
   limit?: number;
   offset?: number;
 }
+
+export interface BackyContentRevisionBranchMetadata {
+  schemaVersion: "backy.content-revision-branch-metadata.v1";
+  source: "admin-page-revisions-api" | "admin-blog-revisions-api" | string;
+  targetType: "page" | "post";
+  position: number;
+  total: number;
+  order: "newest-first" | string;
+  branchId: string;
+  branchLabel: string;
+  branchLane: number;
+  branchRole: "trunk" | "restore-checkpoint" | "restore-branch" | string;
+  chronologicalParentId: string | null;
+  chronologicalChildId: string | null;
+  restoreTargetRevisionId: string | null;
+  restoreTargetPosition: number | null;
+  restoreTargetInWindow: boolean;
+  restoreEdgeId: string | null;
+  branchPointRevisionId?: string | null;
+  inference: {
+    source: "revision-note-and-order" | string;
+    lineageSource?: "persisted-revision-lineage" | "revision-note-and-order" | string;
+    rollbackNotePattern: string;
+    confidence: "explicit-api-metadata" | string;
+    persistedFields: string[];
+    limitation: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface BackyAdminContentRevision<
+  TTargetType extends "page" | "post",
+  TSnapshot extends Record<string, unknown>,
+> {
+  id: string;
+  siteId: string;
+  targetType: TTargetType;
+  targetId: string;
+  snapshot: TSnapshot;
+  note: string | null;
+  parentRevisionId: string | null;
+  operation: string | null;
+  restoreTargetRevisionId: string | null;
+  metadata: Record<string, unknown>;
+  createdBy: string | null;
+  createdAt: string;
+  branchMetadata: BackyContentRevisionBranchMetadata;
+  [key: string]: unknown;
+}
+
+export type BackyAdminPageRevision = BackyAdminContentRevision<
+  "page",
+  BackyAdminPageResource
+>;
 
 export type BackyAdminPagesResponse = BackyEnvelope<
   {
@@ -3550,7 +3934,7 @@ export type BackyAdminPagePreviewResponse = BackyEnvelope<
 
 export type BackyAdminPageRevisionsResponse = BackyEnvelope<
   {
-    revisions: Array<Record<string, unknown>>;
+    revisions: BackyAdminPageRevision[];
     pagination?: BackyPagination;
   } & Record<string, unknown>
 >;
@@ -3713,8 +4097,8 @@ export interface BackyAdminBlogPostPreviewInput {
   [key: string]: unknown;
 }
 
-export interface BackyAdminBlogPostRollbackInput {
-  revisionId: string;
+export interface BackyAdminBlogPostRollbackInput
+  extends GeneratedBackyOpenApiAdminBlogPostRollbackRequest {
   requestId?: string;
   [key: string]: unknown;
 }
@@ -3724,6 +4108,11 @@ export interface BackyAdminBlogPostRevisionListOptions
   limit?: number;
   offset?: number;
 }
+
+export type BackyAdminBlogPostRevision = BackyAdminContentRevision<
+  "post",
+  BackyAdminBlogPostResource
+>;
 
 export type BackyAdminBlogPostsResponse = BackyEnvelope<
   {
@@ -3767,7 +4156,7 @@ export type BackyAdminBlogPostPreviewResponse = BackyEnvelope<
 
 export type BackyAdminBlogPostRevisionsResponse = BackyEnvelope<
   {
-    revisions: Array<Record<string, unknown>>;
+    revisions: BackyAdminBlogPostRevision[];
     pagination?: BackyPagination;
   } & Record<string, unknown>
 >;
@@ -3778,6 +4167,114 @@ export type BackyEditableContent =
       elements?: BackyElement[];
       contentDocument?: BackyContentDocument | Record<string, unknown>;
     });
+
+export interface BackyContentDesignStateInput extends Record<string, unknown> {
+  content?: BackyEditableContent | Record<string, unknown> | unknown[];
+  templateId?: string | null;
+  templateName?: string | null;
+  frontendDesignTemplateId?: string | null;
+  frontendDesignTemplateName?: string | null;
+  routePattern?: string | null;
+  customCSS?: string | null;
+  customCss?: string | null;
+  customJS?: string | null;
+  customJs?: string | null;
+  contentDocument?: BackyContentDocument | Record<string, unknown>;
+  elements?: unknown[];
+  canvasSize?: Record<string, unknown>;
+  themeTokenRefs?: Record<string, unknown>;
+  assets?: unknown[] | Record<string, unknown>;
+  animations?: unknown[] | Record<string, unknown>;
+  interactions?: unknown[] | Record<string, unknown>;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  bindingHints?: unknown[];
+}
+
+export interface BackyContentDesignPayload extends Record<string, unknown> {
+  elements?: unknown[];
+  canvasSize?: Record<string, unknown>;
+  customCSS?: string;
+  customJS?: string;
+  contentDocument?: BackyContentDocument | Record<string, unknown>;
+  themeTokenRefs?: Record<string, unknown>;
+  assets?: unknown[] | Record<string, unknown>;
+  animations?: unknown[] | Record<string, unknown>;
+  interactions?: unknown[] | Record<string, unknown>;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BackyAdminPageCreateFromDesignInput
+  extends Omit<BackyAdminPageCreateInput, "content"> {
+  design?: BackyContentDesignStateInput | null;
+  content?: BackyContentDesignStateInput | BackyEditableContent | Record<string, unknown> | unknown[];
+}
+
+export interface BackyAdminPageUpdateFromDesignInput
+  extends Omit<BackyAdminPageUpdateInput, "content"> {
+  design?: BackyContentDesignStateInput | null;
+  content?: BackyContentDesignStateInput | BackyEditableContent | Record<string, unknown> | unknown[];
+}
+
+export interface BackyAdminBlogPostCreateFromDesignInput
+  extends Omit<BackyAdminBlogPostCreateInput, "content"> {
+  design?: BackyContentDesignStateInput | null;
+  content?: BackyContentDesignStateInput | BackyEditableContent | Record<string, unknown> | unknown[];
+}
+
+export interface BackyAdminBlogPostUpdateFromDesignInput
+  extends Omit<BackyAdminBlogPostUpdateInput, "content"> {
+  design?: BackyContentDesignStateInput | null;
+  content?: BackyContentDesignStateInput | BackyEditableContent | Record<string, unknown> | unknown[];
+}
+
+export interface BackyAdminReusableSectionCreateFromDesignInput
+  extends Omit<BackyAdminReusableSectionCreateInput, "content"> {
+  design?: BackyContentDesignStateInput | null;
+  content?: BackyContentDesignStateInput | BackyEditableContent | Record<string, unknown> | unknown[];
+}
+
+export interface BackyAdminReusableSectionUpdateFromDesignInput
+  extends Omit<BackyAdminReusableSectionUpdateInput, "content"> {
+  design?: BackyContentDesignStateInput | null;
+  content?: BackyContentDesignStateInput | BackyEditableContent | Record<string, unknown> | unknown[];
+}
+
+export type BackyCollectionRecordDesignInput =
+  | BackyContentDesignStateInput
+  | BackyCommerceProductDesign
+  | BackyEditableContent
+  | Record<string, unknown>
+  | unknown[];
+
+export interface BackyAdminCollectionRecordCreateFromDesignInput<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> extends Omit<BackyAdminCollectionRecordCreateInput<TValues>, "values"> {
+  values?: TValues;
+  design?: BackyCollectionRecordDesignInput | null;
+  content?: BackyCollectionRecordDesignInput | null;
+}
+
+export interface BackyAdminCollectionRecordUpdateFromDesignInput<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+> extends Omit<BackyAdminCollectionRecordUpdateInput<TValues>, "values"> {
+  values?: Partial<TValues>;
+  design?: BackyCollectionRecordDesignInput | null;
+  content?: BackyCollectionRecordDesignInput | null;
+}
+
+export type BackyAdminCommerceProductCreateFromDesignInput<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+> = BackyAdminCollectionRecordCreateFromDesignInput<TValues>;
+
+export type BackyAdminCommerceProductUpdateFromDesignInput<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+> = BackyAdminCollectionRecordUpdateFromDesignInput<TValues>;
 
 export interface BackyContentElementPatch {
   elementId: string;
@@ -3793,6 +4290,11 @@ export type BackyContentEditableTargetSource =
   | "layout"
   | "props"
   | "styles"
+  | "tokenRefs"
+  | "animation"
+  | "interactions"
+  | "assets"
+  | "responsive"
   | "visibility";
 
 export interface BackyContentEditableTarget {
@@ -3807,6 +4309,9 @@ export interface BackyContentEditableTarget {
     | "color"
     | "image"
     | "video"
+    | "asset"
+    | "assetList"
+    | "font"
     | "url"
     | "json"
     | string;
@@ -3824,6 +4329,58 @@ export interface BackyContentElementDescriptor {
   editableTargetPaths: string[];
   editableTargets: BackyContentEditableTarget[];
   element: BackyElement;
+}
+
+export type BackyEditorCommandEvaluationStateValue =
+  | "ready"
+  | "disabled"
+  | "hidden";
+
+export interface BackyEditorCommandEvaluationInput {
+  content?: BackyEditableContent | null;
+  descriptors?: BackyContentElementDescriptor[];
+  selectedIds?: string[];
+  clipboardCount?: number;
+  canEdit?: boolean;
+  canPublish?: boolean;
+  publishBlocked?: boolean;
+  isSaving?: boolean;
+  isPreview?: boolean;
+  hideSave?: boolean;
+  hideSettings?: boolean;
+  editorMode?: "page" | "blog" | "section" | string;
+  historyIndex?: number;
+  historyLength?: number;
+}
+
+export interface BackyEditorCommandEvaluation {
+  id: string;
+  label: string;
+  category: BackyManifestEditorCommandRegistryCommand["category"];
+  targetScope: BackyManifestEditorCommandRegistryCommand["targetScope"];
+  testId: string;
+  shortcut?: string;
+  ariaKeyshortcuts?: string;
+  sdkHelper?: string;
+  apiHelper?: string;
+  enabled: boolean;
+  state: BackyEditorCommandEvaluationStateValue;
+  reason: string;
+  command: BackyManifestEditorCommandRegistryCommand;
+}
+
+export interface BackyEditorCommandRegistryEvaluation {
+  schemaVersion: "backy.editor-command-registry-evaluation.v1";
+  registrySchemaVersion: BackyManifestEditorCommandRegistry["schemaVersion"];
+  selectedIds: string[];
+  summary: {
+    totalCommandCount: number;
+    readyCommandCount: number;
+    disabledCommandCount: number;
+    hiddenCommandCount: number;
+    selectedLayerCount: number;
+  };
+  commands: BackyEditorCommandEvaluation[];
 }
 
 export interface BackyContentGroupOptions {
@@ -3859,6 +4416,83 @@ export interface BackyContentUngroupResult<
   expandedIds: string[];
   parentId?: string;
   childCount: number;
+}
+
+export interface BackyContentAddElementOptions {
+  parentId?: string;
+  index?: number;
+  allowLockedParent?: boolean;
+}
+
+export interface BackyContentAddElementResult<
+  TContent extends BackyEditableContent = BackyEditableContent,
+> {
+  content: TContent;
+  elementId: string;
+  parentId?: string;
+  index: number;
+}
+
+export interface BackyContentDuplicateElementOptions {
+  duplicateId?: string;
+  idSuffix?: string;
+  index?: number;
+  offsetX?: number;
+  offsetY?: number;
+  allowLocked?: boolean;
+}
+
+export interface BackyContentDuplicateElementResult<
+  TContent extends BackyEditableContent = BackyEditableContent,
+> {
+  content: TContent;
+  sourceId: string;
+  duplicateId: string;
+  duplicatedIds: string[];
+  parentId?: string;
+  index: number;
+}
+
+export interface BackyContentDeleteElementsOptions {
+  allowLocked?: boolean;
+}
+
+export interface BackyContentDeleteElementsResult<
+  TContent extends BackyEditableContent = BackyEditableContent,
+> {
+  content: TContent;
+  deletedIds: string[];
+}
+
+export type BackyContentTransformBreakpoint = "desktop" | "tablet" | "mobile" | string;
+
+export interface BackyContentElementTransform {
+  elementId: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  zIndex?: number;
+  rotation?: number;
+  deltaX?: number;
+  deltaY?: number;
+  deltaWidth?: number;
+  deltaHeight?: number;
+  breakpoint?: BackyContentTransformBreakpoint;
+}
+
+export interface BackyContentTransformElementsOptions {
+  allowLocked?: boolean;
+  minWidth?: number;
+  minHeight?: number;
+}
+
+export interface BackyContentTransformElementsResult<
+  TContent extends BackyEditableContent = BackyEditableContent,
+> {
+  content: TContent;
+  transformedIds: string[];
+  breakpoints: BackyContentTransformBreakpoint[];
 }
 
 export interface BackyContentEditableFieldPatch {
@@ -3929,9 +4563,295 @@ const BACKY_RESPONSIVE_GEOMETRY_FIELDS = [
   "rotation",
 ] as const;
 const BACKY_RESPONSIVE_LAYER_FIELDS = ["visible", "locked"] as const;
+const BACKY_COMMON_PROP_EDITABLE_TARGETS = [
+  "backgroundColor",
+  "borderColor",
+  "borderRadius",
+  "borderWidth",
+  "borderStyle",
+  "padding",
+  "margin",
+  "opacity",
+  "boxShadow",
+] as const;
+const BACKY_TEXT_PROP_EDITABLE_TARGETS = [
+  "content",
+  "color",
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "lineHeight",
+  "textAlign",
+  "textTransform",
+  "letterSpacing",
+  "wordSpacing",
+  "textIndent",
+  "textShadow",
+  "textDecoration",
+  "fontStyle",
+] as const;
+const BACKY_LINK_PROP_EDITABLE_TARGETS = [
+  "href",
+  "target",
+  "rel",
+  "ariaLabel",
+  "title",
+  "download",
+  "underline",
+] as const;
+const BACKY_BUTTON_PROP_EDITABLE_TARGETS = [
+  "label",
+  "href",
+  "target",
+  "rel",
+  "ariaLabel",
+  "title",
+  "type",
+  "actionPreset",
+  "actionValue",
+  "download",
+] as const;
+const BACKY_FORM_PROP_EDITABLE_TARGETS = [
+  "formId",
+  "formTitle",
+  "submitLabel",
+  "action",
+  "actionUrl",
+  "method",
+  "successMessage",
+  "successRedirectUrl",
+  "formActive",
+  "labelColor",
+  "helpTextColor",
+  "fieldBackgroundColor",
+  "fieldBorderColor",
+  "fieldBorderRadius",
+  "submitBackgroundColor",
+  "submitColor",
+  "submitBorderRadius",
+] as const;
+const BACKY_FIELD_PROP_EDITABLE_TARGETS = [
+  "label",
+  "name",
+  "placeholder",
+  "helpText",
+  "defaultValue",
+  "value",
+  "required",
+  "disabled",
+] as const;
+const BACKY_MEDIA_PROP_EDITABLE_TARGETS = [
+  "src",
+  "alt",
+  "title",
+  "mediaId",
+  "mediaIds",
+  "objectFit",
+  "objectPosition",
+  "imageFocalPoint",
+] as const;
+const BACKY_DOWNLOAD_FILE_PROP_EDITABLE_TARGETS = [
+  "fileId",
+  "fileIds",
+  "fileMediaId",
+  "fileMediaIds",
+  "downloadMediaId",
+  "downloadMediaIds",
+  "fileMediaUrl",
+  "fileUrl",
+  "fileMediaName",
+  "fileMediaType",
+  "fileMediaVisibility",
+  "fileDownloadDisposition",
+  "fileSignedUrlRequired",
+  "fileSignedUrlEndpoint",
+  "fileName",
+] as const;
+const BACKY_STYLE_EDITABLE_TARGETS = [
+  "color",
+  "backgroundColor",
+  "borderColor",
+  "fontFamily",
+  "fontSize",
+  "lineHeight",
+  "fontWeight",
+  "padding",
+  "margin",
+  "borderRadius",
+  "boxShadow",
+] as const;
+const BACKY_TOKEN_REF_EDITABLE_TARGETS = [
+  "styles.color",
+  "styles.backgroundColor",
+  "styles.borderColor",
+  "styles.fontFamily",
+  "styles.fontSize",
+  "styles.lineHeight",
+  "styles.fontWeight",
+  "styles.padding",
+  "styles.margin",
+  "styles.borderRadius",
+  "styles.boxShadow",
+] as const;
+const BACKY_ANIMATION_EDITABLE_TARGETS = [
+  "animation.type",
+  "animation.duration",
+  "animation.delay",
+  "animation.easing",
+  "animation.direction",
+  "animation.trigger",
+  "animation.scrollTrigger",
+  "animation.scrollTrigger.start",
+  "animation.scrollTrigger.end",
+  "animation.scrollTrigger.scrub",
+  "animation.from",
+  "animation.to",
+  "animation.tokenRefs.duration",
+  "animation.tokenRefs.easing",
+] as const;
+const BACKY_INTERACTION_EDITABLE_TARGETS = [
+  "actions",
+  "dataBindings",
+  "bindingSlots",
+] as const;
+const BACKY_NUMERIC_EDITABLE_LEAVES = new Set([
+  "x",
+  "y",
+  "width",
+  "height",
+  "zindex",
+  "rotation",
+  "borderradius",
+  "fieldborderradius",
+  "submitborderradius",
+  "borderwidth",
+  "padding",
+  "margin",
+  "opacity",
+  "fontsize",
+  "lineheight",
+  "letterspacing",
+  "wordspacing",
+  "textindent",
+  "rows",
+  "duration",
+  "delay",
+]);
+const BACKY_BOOLEAN_EDITABLE_LEAVES = new Set([
+  "download",
+  "required",
+  "disabled",
+  "underline",
+  "formactive",
+  "visible",
+  "locked",
+  "controls",
+  "autoplay",
+  "muted",
+  "loop",
+  "filesignedurlrequired",
+  "scrub",
+]);
+const BACKY_STRING_EDITABLE_LEAVES = new Set([
+  "fontweight",
+  "fontstyle",
+  "fontdisplay",
+  "fontfallback",
+  "method",
+  "textalign",
+  "texttransform",
+  "textdecoration",
+  "borderstyle",
+  "actionpreset",
+  "actionvalue",
+  "target",
+  "rel",
+  "type",
+  "inputtype",
+  "objectfit",
+  "objectposition",
+  "boxshadow",
+  "filedownloaddisposition",
+  "filemedianame",
+  "filemediatype",
+  "filemediavisibility",
+  "filename",
+  "easing",
+  "direction",
+  "trigger",
+  "start",
+  "end",
+]);
+const BACKY_ASSET_REFERENCE_KEYS = new Set([
+  "assetId",
+  "mediaIds",
+  "mediaId",
+  "fileIds",
+  "fileId",
+  "fileMediaIds",
+  "fileMediaId",
+  "downloadMediaIds",
+  "downloadMediaId",
+  "imageIds",
+  "imageId",
+  "videoIds",
+  "videoId",
+  "audioIds",
+  "audioId",
+  "fontIds",
+  "fontId",
+  "documentIds",
+  "documentId",
+  "iconIds",
+  "iconId",
+  "fontMediaIds",
+  "fontMediaId",
+  "fallbackImageMediaIds",
+  "fallbackImageMediaId",
+  "backgroundMediaIds",
+  "backgroundMediaId",
+  "posterMediaIds",
+  "posterMediaId",
+]);
 
 function isBackyRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasNonEmptyBackyArray(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function hasNonEmptyBackyRecord(value: unknown): value is Record<string, unknown> {
+  return isBackyRecord(value) && Object.keys(value).length > 0;
+}
+
+function isInteractiveBackyElementRecord(element: Record<string, unknown>): boolean {
+  return element.type === "interactiveFigure" ||
+    element.type === "codeComponent" ||
+    (typeof element.componentKey === "string" && element.componentKey.trim().length > 0) ||
+    hasNonEmptyBackyArray(element.controls) ||
+    isBackyRecord(element.renderCapabilities);
+}
+
+const BACKY_ACTION_PROP_KEYS = [
+  "href",
+  "url",
+  "action",
+  "actionUrl",
+  "formId",
+  "successRedirectUrl",
+  "redirectUrl",
+] as const;
+
+function hasBackyElementActionWiring(
+  element: Record<string, unknown>,
+  props: Record<string, unknown>,
+): boolean {
+  return hasNonEmptyBackyArray(element.actions) ||
+    BACKY_ACTION_PROP_KEYS.some((key) => (
+      typeof props[key] === "string" && props[key].trim().length > 0
+    ));
 }
 
 function cloneBackyContent<TContent extends BackyEditableContent>(
@@ -3942,6 +4862,1195 @@ function cloneBackyContent<TContent extends BackyEditableContent>(
   }
 
   return JSON.parse(JSON.stringify(content)) as TContent;
+}
+
+function cloneBackyRecord<TRecord extends Record<string, unknown>>(
+  record: TRecord,
+): TRecord {
+  if (typeof structuredClone === "function") {
+    return structuredClone(record);
+  }
+
+  return JSON.parse(JSON.stringify(record)) as TRecord;
+}
+
+function cloneBackyValue<TValue>(value: TValue): TValue {
+  if (value === undefined || value === null || typeof value !== "object") {
+    return value;
+  }
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+
+  return JSON.parse(JSON.stringify(value)) as TValue;
+}
+
+function backyDesignSource(value: unknown): Record<string, unknown> {
+  if (Array.isArray(value)) {
+    return { elements: value };
+  }
+  return isBackyRecord(value) ? value : {};
+}
+
+function backyDesignContentSource(value: unknown): Record<string, unknown> {
+  const source = backyDesignSource(value);
+  return backyDesignSource(source.content);
+}
+
+function backyDesignValue(
+  source: Record<string, unknown>,
+  contentSource: Record<string, unknown>,
+  keys: readonly string[],
+): unknown {
+  for (const key of keys) {
+    if (source[key] !== undefined) return source[key];
+  }
+  for (const key of keys) {
+    if (contentSource[key] !== undefined) return contentSource[key];
+  }
+  const metadataSources = [
+    isBackyRecord(source.metadata) ? source.metadata : undefined,
+    isBackyRecord(contentSource.metadata) ? contentSource.metadata : undefined,
+    isBackyRecord(source.contentDocument) && isBackyRecord(source.contentDocument.metadata)
+      ? source.contentDocument.metadata
+      : undefined,
+    isBackyRecord(contentSource.contentDocument) && isBackyRecord(contentSource.contentDocument.metadata)
+      ? contentSource.contentDocument.metadata
+      : undefined,
+  ];
+  for (const metadata of metadataSources) {
+    if (!metadata) continue;
+    for (const key of keys) {
+      if (metadata[key] !== undefined) return metadata[key];
+    }
+  }
+  return undefined;
+}
+
+function backyDesignString(
+  source: Record<string, unknown>,
+  contentSource: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  const value = backyDesignValue(source, contentSource, keys);
+  return typeof value === "string" ? value : undefined;
+}
+
+function backyTemplateIdSegment(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return undefined;
+
+  const segment = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+
+  return segment || undefined;
+}
+
+function fallbackBackyTemplateId(prefix: string, values: unknown[]): string {
+  const segment = values.map(backyTemplateIdSegment).find(Boolean);
+  return segment ? `${prefix}-${segment}` : `${prefix}-direct-design`;
+}
+
+function backyDesignTemplateId(
+  design: unknown,
+  prefix: string,
+  fallbackCandidates: unknown[] = [],
+): string | undefined {
+  if (design === undefined || design === null) return undefined;
+
+  const source = backyDesignSource(design);
+  const contentSource = backyDesignContentSource(design);
+  const contentDocument = backyDesignRecord(source, contentSource, ["contentDocument"]) || {};
+  const metadata =
+    backyDesignRecord(source, contentSource, ["metadata"]) ||
+    backyDesignRecord(contentDocument, {}, ["metadata"]) ||
+    {};
+  return backyDesignString(source, contentSource, [
+    "frontendDesignTemplateId",
+    "templateId",
+    "designTemplateId",
+  ]) || fallbackBackyTemplateId(prefix, [
+    source.id,
+    source.name,
+    source.label,
+    contentSource.id,
+    contentSource.name,
+    contentSource.label,
+    contentDocument.id,
+    contentDocument.title,
+    metadata.frontendDesignTemplateId,
+    metadata.templateId,
+    metadata.title,
+    ...fallbackCandidates,
+  ]);
+}
+
+function backyDesignRecord(
+  source: Record<string, unknown>,
+  contentSource: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> | undefined {
+  const value = backyDesignValue(source, contentSource, keys);
+  return isBackyRecord(value) ? cloneBackyRecord(value) : undefined;
+}
+
+function backyDesignArray(
+  source: Record<string, unknown>,
+  contentSource: Record<string, unknown>,
+  keys: readonly string[],
+): unknown[] | undefined {
+  const value = backyDesignValue(source, contentSource, keys);
+  return Array.isArray(value) ? cloneBackyValue(value) : undefined;
+}
+
+function backyEditableString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function backyEditableStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings = value
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  return strings.length > 0 ? strings : undefined;
+}
+
+function backyEditableBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) return true;
+    if (["false", "0", "no", "off"].includes(normalized)) return false;
+  }
+  return undefined;
+}
+
+function inferBackyFrontendEditableValueType(
+  path: string,
+  value: unknown,
+): NonNullable<BackyFrontendEditableMapEntry["valueType"]> {
+  const normalizedPath = path.toLowerCase();
+  const leaf = normalizedPath.split(".").pop() || normalizedPath;
+
+  if (normalizedPath.startsWith("tokenrefs.") || normalizedPath.includes(".tokenrefs.")) return "string";
+  if (typeof value === "boolean" || BACKY_BOOLEAN_EDITABLE_LEAVES.has(leaf)) return "boolean";
+  if (typeof value === "number" || BACKY_NUMERIC_EDITABLE_LEAVES.has(leaf)) return "number";
+  if (normalizedPath.includes("color") || (typeof value === "string" && /^#(?:[0-9a-f]{3}){1,2}$/i.test(value))) return "color";
+  if (normalizedPath.includes("href") || normalizedPath.includes("url") || normalizedPath.includes("src")) return "url";
+  if (normalizedPath.includes("video")) return "video";
+  if (normalizedPath.includes("audio")) return "audio";
+  if (
+    normalizedPath.includes("file") ||
+    normalizedPath.includes("download") ||
+    normalizedPath.includes("document") ||
+    normalizedPath.includes("fontmedia")
+  ) {
+    return "file";
+  }
+  if (
+    normalizedPath.includes("image") ||
+    normalizedPath.includes("poster") ||
+    normalizedPath.includes("backgroundmedia") ||
+    normalizedPath.includes("mediaid")
+  ) {
+    return "image";
+  }
+  if (
+    normalizedPath === "actions" ||
+    normalizedPath === "databindings" ||
+    normalizedPath === "bindingslots" ||
+    normalizedPath === "animation.from" ||
+    normalizedPath === "animation.to" ||
+    normalizedPath === "animation.scrolltrigger" ||
+    Array.isArray(value) ||
+    hasNonEmptyBackyRecord(value)
+  ) {
+    return "json";
+  }
+  if (normalizedPath.includes("content") && Array.isArray(value)) return "richText";
+  if (BACKY_STRING_EDITABLE_LEAVES.has(leaf)) return "string";
+  if (typeof value === "string") return "string";
+  return "json";
+}
+
+function backyFrontendEditableTargetValue(
+  element: Record<string, unknown>,
+  path: string,
+): unknown {
+  if (path.startsWith("layout.")) {
+    return element[path.replace(/^layout\./, "")];
+  }
+
+  if (path === "visibility.hidden") {
+    return isBackyElementHidden(element);
+  }
+
+  if (path === "visibility.locked") {
+    return isBackyElementLocked(element);
+  }
+
+  const segments = path.split(".").filter(Boolean);
+  let current: unknown = element;
+  for (const segment of segments) {
+    if (!isBackyRecord(current)) return undefined;
+    current = current[segment];
+  }
+  return current;
+}
+
+function backyFrontendEditableLabel(
+  elementType: string | undefined,
+  path: string,
+): string {
+  const readablePath = path
+    .replace(/^layout\./, "")
+    .replace(/^props\./, "")
+    .replace(/^styles\./, "style ")
+    .replace(/^tokenRefs\./, "token ")
+    .replace(/^responsive\./, "responsive ")
+    .replace(/^animation\./, "animation ")
+    .replace(/\./g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim();
+  const label = readablePath.charAt(0).toUpperCase() + readablePath.slice(1);
+  return elementType ? `${elementType} ${label}` : label;
+}
+
+function normalizeBackyFrontendEditableMapEntry(
+  entry: Record<string, unknown>,
+): BackyFrontendEditableMapEntry {
+  const normalized = cloneBackyRecord(entry);
+
+  const applyString = (key: string) => {
+    const value = backyEditableString(entry[key]);
+    if (value) {
+      normalized[key] = value;
+    } else {
+      delete normalized[key];
+    }
+  };
+
+  [
+    "selector",
+    "elementId",
+    "role",
+    "binding",
+    "field",
+    "targetPath",
+    "token",
+    "permission",
+    "label",
+    "valueType",
+    "scope",
+    "collectionId",
+    "recordId",
+    "sourceField",
+  ].forEach(applyString);
+
+  const fields = backyEditableStringArray(entry.fields);
+  if (fields) {
+    normalized.fields = fields;
+  } else {
+    delete normalized.fields;
+  }
+
+  const editable = backyEditableBoolean(entry.editable);
+  if (editable !== undefined) {
+    normalized.editable = editable;
+  } else {
+    delete normalized.editable;
+  }
+
+  return normalized as BackyFrontendEditableMapEntry;
+}
+
+function pushBackyFrontendEditableMapEntry(
+  entries: BackyFrontendEditableMapEntry[],
+  input: {
+    elementId?: string;
+    elementType?: string;
+    targetPath: string;
+    value?: unknown;
+    binding?: string;
+    fields?: string[];
+    sourceField?: string;
+  },
+): void {
+  if (!input.elementId || !input.targetPath) return;
+
+  entries.push(normalizeBackyFrontendEditableMapEntry({
+    elementId: input.elementId,
+    role: input.elementType || "element",
+    binding: input.binding,
+    fields: input.fields,
+    field: input.targetPath,
+    targetPath: input.targetPath,
+    sourceField: input.sourceField,
+    editable: true,
+    valueType: inferBackyFrontendEditableValueType(input.targetPath, input.value),
+    scope: "element",
+    label: backyFrontendEditableLabel(input.elementType, input.targetPath),
+  }));
+}
+
+function backyFrontendEditableMapEntriesFromRecord(
+  editableMap: unknown,
+): BackyFrontendEditableMapEntry[] {
+  if (!isBackyRecord(editableMap)) return [];
+
+  return Object.entries(editableMap)
+    .filter((entry): entry is [string, Record<string, unknown>] => isBackyRecord(entry[1]))
+    .map(([key, entry]) => {
+      const targetPath =
+        backyEditableString(entry.targetPath) ||
+        backyEditableString(entry.path) ||
+        backyEditableString(entry.field) ||
+        key;
+      return normalizeBackyFrontendEditableMapEntry({
+        ...entry,
+        field: backyEditableString(entry.field) || key,
+        targetPath,
+        editable: backyEditableBoolean(entry.editable) ?? true,
+        valueType:
+          backyEditableString(entry.valueType) ||
+          inferBackyFrontendEditableValueType(targetPath, entry.value),
+      });
+    });
+}
+
+function backyFrontendEditableMapRecordKey(
+  entry: BackyFrontendEditableMapEntry,
+): string | undefined {
+  const elementId = backyEditableString(entry.elementId);
+  const field = backyEditableString(entry.field);
+  const targetPath = backyEditableString(entry.targetPath);
+  const binding = backyEditableString(entry.binding);
+  const sourceField = backyEditableString(entry.sourceField);
+  const explicitFieldAlias = field && field !== targetPath && !field.includes(".");
+
+  if (explicitFieldAlias) return field;
+  if (sourceField && elementId) return `${elementId}.${sourceField}`;
+  if (binding && elementId && binding !== "element.animation") return `${elementId}.${binding}`;
+  if (field && field !== targetPath && !field.startsWith("props.") && !field.startsWith("styles.")) return field;
+  if (elementId && targetPath) return `${elementId}.${targetPath}`;
+  if (elementId && field) return `${elementId}.${field}`;
+  return targetPath || field || binding || backyEditableString(entry.role);
+}
+
+function backyFrontendEditableMapRecordFromEntries(
+  entries: BackyFrontendEditableMapEntry[],
+): Record<string, unknown> | undefined {
+  const record: Record<string, unknown> = {};
+
+  for (const entry of entries) {
+    const baseKey = backyFrontendEditableMapRecordKey(entry);
+    if (!baseKey) continue;
+
+    let key = baseKey;
+    let suffix = 2;
+    while (Object.prototype.hasOwnProperty.call(record, key)) {
+      key = `${baseKey}.${suffix}`;
+      suffix += 1;
+    }
+    record[key] = entry;
+  }
+
+  return Object.keys(record).length > 0 ? record : undefined;
+}
+
+function dedupeBackyFrontendEditableMap(
+  entries: BackyFrontendEditableMapEntry[],
+): BackyFrontendEditableMapEntry[] {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const key = [
+      entry.selector || "",
+      entry.elementId || "",
+      entry.role || "",
+      entry.binding || "",
+      entry.field || "",
+      entry.targetPath || "",
+      entry.sourceField || "",
+    ].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return Boolean(entry.selector || entry.elementId || entry.binding || entry.role || entry.field || entry.targetPath);
+  });
+}
+
+function inferBackyFrontendEditableMapFromElements(
+  elements: unknown[],
+  entries: BackyFrontendEditableMapEntry[] = [],
+): BackyFrontendEditableMapEntry[] {
+  for (const element of elements) {
+    if (!isBackyRecord(element)) continue;
+
+    const elementId = backyEditableString(element.id);
+    const elementType = backyEditableString(element.type);
+    const props = isBackyRecord(element.props) ? element.props : {};
+    const binding = backyEditableString(props.binding);
+    if (binding) {
+      const bindingParts = binding.split(".").filter(Boolean);
+      entries.push(normalizeBackyFrontendEditableMapEntry({
+        elementId,
+        role: elementType,
+        binding,
+        fields: bindingParts.length > 0 ? [bindingParts[bindingParts.length - 1]] : undefined,
+        field: binding,
+        targetPath: "props.content",
+        editable: true,
+        valueType: "string",
+        scope: "element",
+        label: backyFrontendEditableLabel(elementType, "props.content"),
+      }));
+    }
+
+    [
+      { path: "name", source: "field" as const },
+      { path: "visibility.hidden", source: "visibility" as const },
+      { path: "visibility.locked", source: "visibility" as const },
+      ...defaultBackyEditableTargetPathsForElement(element),
+    ].forEach((target) => {
+      pushBackyFrontendEditableMapEntry(entries, {
+        elementId,
+        elementType,
+        targetPath: target.path,
+        value: backyFrontendEditableTargetValue(element, target.path),
+      });
+    });
+
+    if (Array.isArray(element.dataBindings)) {
+      for (const bindingEntry of element.dataBindings) {
+        if (!isBackyRecord(bindingEntry)) continue;
+        const sourceRecord = isBackyRecord(bindingEntry.source) ? bindingEntry.source : {};
+        const source =
+          backyEditableString(bindingEntry.source) ||
+          backyEditableString(sourceRecord.field) ||
+          backyEditableString(sourceRecord.kind);
+        const targetPath = backyEditableString(bindingEntry.targetPath) || "props.content";
+        const fields =
+          backyEditableStringArray(bindingEntry.fields) ||
+          [backyEditableString(sourceRecord.field), backyEditableString(bindingEntry.field)]
+            .filter((field): field is string => Boolean(field));
+        pushBackyFrontendEditableMapEntry(entries, {
+          elementId,
+          elementType,
+          targetPath,
+          value: backyFrontendEditableTargetValue(element, targetPath),
+          binding: source,
+          fields,
+          sourceField: backyEditableString(sourceRecord.field) || backyEditableString(bindingEntry.field),
+        });
+      }
+    }
+
+    const metadata = isBackyRecord(element.metadata) ? element.metadata : {};
+    const animation = isBackyRecord(element.animation)
+      ? element.animation
+      : isBackyRecord(metadata.animation)
+        ? metadata.animation
+        : undefined;
+    if (animation && Object.keys(animation).length > 0) {
+      Object.keys(animation).forEach((field) => {
+        const targetPath = `animation.${field}`;
+        pushBackyFrontendEditableMapEntry(entries, {
+          elementId,
+          elementType: `${elementType || "element"}.animation`,
+          targetPath,
+          value: backyFrontendEditableTargetValue(element, targetPath),
+          binding: "element.animation",
+          fields: [field],
+          sourceField: field,
+        });
+      });
+    }
+
+    if (Array.isArray(element.children)) {
+      inferBackyFrontendEditableMapFromElements(element.children, entries);
+    }
+  }
+
+  return entries;
+}
+
+function buildBackyFrontendEditableMapRecord(
+  elements: unknown[] | undefined,
+  editableMap: unknown,
+): Record<string, unknown> | undefined {
+  const explicitEditableMap = backyFrontendEditableMapEntriesFromRecord(editableMap);
+  const inferredEditableMap = Array.isArray(elements)
+    ? inferBackyFrontendEditableMapFromElements(elements)
+    : [];
+  return backyFrontendEditableMapRecordFromEntries(
+    dedupeBackyFrontendEditableMap([
+      ...explicitEditableMap,
+      ...inferredEditableMap,
+    ]),
+  );
+}
+
+function buildBackyFrontendDesignMeta(
+  design: unknown,
+  existingMeta: unknown,
+  fallbackTemplateIdValue?: string,
+): Record<string, unknown> | undefined {
+  const source = backyDesignSource(design);
+  const contentSource = backyDesignContentSource(design);
+  const meta = isBackyRecord(existingMeta) ? cloneBackyRecord(existingMeta) : {};
+  const templateId =
+    backyDesignString(source, contentSource, [
+      "frontendDesignTemplateId",
+      "templateId",
+      "designTemplateId",
+    ]) || fallbackTemplateIdValue;
+  const templateName = backyDesignString(source, contentSource, [
+    "frontendDesignTemplateName",
+    "templateName",
+  ]);
+  const routePattern = backyDesignString(source, contentSource, ["routePattern"]);
+  const customCss = backyDesignString(source, contentSource, ["customCSS", "customCss"]);
+  const customJs = backyDesignString(source, contentSource, ["customJS", "customJs"]);
+  const contentDocument = backyDesignRecord(source, contentSource, ["contentDocument"]);
+  const elements =
+    backyDesignArray(source, contentSource, ["elements"]) ||
+    (Array.isArray(contentDocument?.elements)
+      ? cloneBackyValue(contentDocument.elements)
+      : undefined);
+  const canvasSize = backyDesignRecord(source, contentSource, ["canvasSize"]);
+  const themeTokenRefs = backyDesignRecord(source, contentSource, ["themeTokenRefs"]);
+  const assets =
+    backyDesignArray(source, contentSource, ["assets"]) ||
+    backyDesignRecord(source, contentSource, ["assets"]);
+  const animations =
+    backyDesignArray(source, contentSource, ["animations", "frontendDesignAnimations"]) ||
+    backyDesignRecord(source, contentSource, ["animations", "frontendDesignAnimations"]);
+  const interactions =
+    backyDesignArray(source, contentSource, ["interactions"]) ||
+    backyDesignRecord(source, contentSource, ["interactions"]);
+  const dataBindings = backyDesignRecord(source, contentSource, ["dataBindings"]);
+  const editableMap = buildBackyFrontendEditableMapRecord(
+    elements,
+    backyDesignRecord(source, contentSource, ["frontendDesignEditableMap", "editableMap"]),
+  );
+  const seo = backyDesignRecord(source, contentSource, ["seo"]);
+  const metadata = backyDesignRecord(source, contentSource, ["metadata"]);
+  const bindingHints = backyDesignArray(source, contentSource, ["bindingHints"]);
+
+  if (templateId && meta.frontendDesignTemplateId === undefined) {
+    meta.frontendDesignTemplateId = templateId;
+  }
+  if (templateName && meta.frontendDesignTemplateName === undefined) {
+    meta.frontendDesignTemplateName = templateName;
+  }
+  if (routePattern && meta.frontendDesignRoutePattern === undefined) {
+    meta.frontendDesignRoutePattern = routePattern;
+  }
+  if (customCss !== undefined && meta.frontendDesignCustomCss === undefined) {
+    meta.frontendDesignCustomCss = customCss;
+  }
+  if (customJs !== undefined && meta.frontendDesignCustomJs === undefined) {
+    meta.frontendDesignCustomJs = customJs;
+  }
+  if (contentDocument && meta.frontendDesignContentDocument === undefined) {
+    meta.frontendDesignContentDocument = contentDocument;
+  }
+  if (elements && meta.frontendDesignElements === undefined) {
+    meta.frontendDesignElements = elements;
+  }
+  if (canvasSize && meta.frontendDesignCanvasSize === undefined) {
+    meta.frontendDesignCanvasSize = canvasSize;
+  }
+  if (themeTokenRefs && meta.frontendDesignThemeTokenRefs === undefined) {
+    meta.frontendDesignThemeTokenRefs = themeTokenRefs;
+  }
+  if (assets && meta.frontendDesignAssets === undefined) {
+    meta.frontendDesignAssets = assets;
+  }
+  if (animations && meta.frontendDesignAnimations === undefined) {
+    meta.frontendDesignAnimations = animations;
+  }
+  if (interactions && meta.frontendDesignInteractions === undefined) {
+    meta.frontendDesignInteractions = interactions;
+  }
+  if (dataBindings && meta.frontendDesignDataBindings === undefined) {
+    meta.frontendDesignDataBindings = dataBindings;
+  }
+  if (editableMap && meta.frontendDesignEditableMap === undefined) {
+    meta.frontendDesignEditableMap = editableMap;
+  }
+  if (seo && meta.frontendDesignSeo === undefined) {
+    meta.frontendDesignSeo = seo;
+  }
+  if (metadata && meta.frontendDesignMetadata === undefined) {
+    meta.frontendDesignMetadata = metadata;
+  }
+  if (bindingHints && meta.frontendDesignBindingHints === undefined) {
+    meta.frontendDesignBindingHints = bindingHints;
+  }
+
+  return Object.keys(meta).length > 0 ? meta : undefined;
+}
+
+export function buildBackyContentDesignPayload(
+  design: BackyContentDesignStateInput | BackyEditableContent | Record<string, unknown> | unknown[] | null | undefined,
+): BackyContentDesignPayload {
+  const source = backyDesignSource(design);
+  const contentSource = backyDesignContentSource(design);
+  const payload: BackyContentDesignPayload = {};
+  const contentDocument = backyDesignRecord(source, contentSource, ["contentDocument"]);
+  const elements =
+    backyDesignArray(source, contentSource, ["elements"]) ||
+    (Array.isArray(contentDocument?.elements)
+      ? cloneBackyValue(contentDocument.elements)
+      : undefined);
+  const canvasSize =
+    backyDesignRecord(source, contentSource, ["canvasSize"]) ||
+    backyDesignRecord(contentDocument || {}, {}, ["canvasSize"]);
+  const customCss = backyDesignString(source, contentSource, ["customCSS", "customCss"]);
+  const customJs = backyDesignString(source, contentSource, ["customJS", "customJs"]);
+  const metadata =
+    backyDesignRecord(source, contentSource, ["metadata"]) ||
+    backyDesignRecord(contentDocument || {}, {}, ["metadata"]);
+
+  if (elements) payload.elements = elements;
+  if (canvasSize) payload.canvasSize = canvasSize;
+  if (customCss !== undefined) payload.customCSS = customCss;
+  if (customJs !== undefined) payload.customJS = customJs;
+  if (contentDocument) payload.contentDocument = contentDocument;
+
+  const themeTokenRefs = backyDesignRecord(source, contentSource, ["themeTokenRefs"]);
+  const assets =
+    backyDesignArray(source, contentSource, ["assets"]) ||
+    backyDesignRecord(source, contentSource, ["assets"]);
+  const animations =
+    backyDesignArray(source, contentSource, ["animations", "frontendDesignAnimations"]) ||
+    backyDesignRecord(source, contentSource, ["animations", "frontendDesignAnimations"]);
+  const interactions =
+    backyDesignArray(source, contentSource, ["interactions"]) ||
+    backyDesignRecord(source, contentSource, ["interactions"]);
+  const dataBindings = backyDesignRecord(source, contentSource, ["dataBindings"]);
+  const editableMap = buildBackyFrontendEditableMapRecord(
+    elements,
+    backyDesignRecord(source, contentSource, ["frontendDesignEditableMap", "editableMap"]),
+  );
+  const seo = backyDesignRecord(source, contentSource, ["seo"]);
+
+  if (themeTokenRefs) payload.themeTokenRefs = themeTokenRefs;
+  if (assets) payload.assets = assets;
+  if (animations) payload.animations = animations;
+  if (interactions) payload.interactions = interactions;
+  if (dataBindings) payload.dataBindings = dataBindings;
+  if (editableMap) payload.editableMap = editableMap;
+  if (seo) payload.seo = seo;
+  if (metadata) payload.metadata = metadata;
+
+  return refreshBackyEditorCompositionMetadata(
+    payload as BackyEditableContent,
+  ) as BackyContentDesignPayload;
+}
+
+export function buildBackyAdminPageCreateInput(
+  input: BackyAdminPageCreateFromDesignInput,
+): BackyAdminPageCreateInput {
+  const { title, design, content, meta, frontendDesignTemplateId, ...rest } = input;
+  const contentSource = content ?? design;
+  const templateSource = contentSource ?? design;
+  const body: BackyAdminPageCreateInput = {
+    ...rest,
+    title: typeof title === "string" ? title : String(title ?? ""),
+  };
+  const templateId =
+    (typeof frontendDesignTemplateId === "string" ? frontendDesignTemplateId : undefined) ||
+    backyDesignTemplateId(templateSource, "content", [title, rest.slug, rest.path]);
+  const nextMeta = buildBackyFrontendDesignMeta(contentSource ?? design, meta, templateId);
+
+  if (contentSource !== undefined && contentSource !== null) {
+    body.content = buildBackyContentDesignPayload(contentSource);
+  }
+  if (meta !== undefined || nextMeta) {
+    body.meta = nextMeta || (isBackyRecord(meta) ? cloneBackyRecord(meta) : {});
+  }
+  if (templateId) {
+    body.frontendDesignTemplateId = templateId;
+    body.meta = {
+      ...(isBackyRecord(body.meta) ? body.meta : {}),
+      frontendDesignTemplateId:
+        isBackyRecord(body.meta) && typeof body.meta.frontendDesignTemplateId === "string"
+          ? body.meta.frontendDesignTemplateId
+          : templateId,
+    };
+  }
+
+  return body;
+}
+
+export function buildBackyAdminPageUpdateInput(
+  input: BackyAdminPageUpdateFromDesignInput,
+): BackyAdminPageUpdateInput {
+  const { design, content, meta, frontendDesignTemplateId, ...rest } = input;
+  const contentSource = content ?? design;
+  const templateSource = contentSource ?? design;
+  const body: BackyAdminPageUpdateInput = {
+    ...rest,
+  };
+  const templateId =
+    (typeof frontendDesignTemplateId === "string" ? frontendDesignTemplateId : undefined) ||
+    backyDesignTemplateId(templateSource, "content", [rest.slug, rest.path, rest.title]);
+  const nextMeta = buildBackyFrontendDesignMeta(contentSource ?? design, meta, templateId);
+
+  if (contentSource !== undefined && contentSource !== null) {
+    body.content = buildBackyContentDesignPayload(contentSource);
+  }
+  if (meta !== undefined || nextMeta) {
+    body.meta = nextMeta || (isBackyRecord(meta) ? cloneBackyRecord(meta) : {});
+  }
+  if (templateId) {
+    body.frontendDesignTemplateId = templateId;
+    body.meta = {
+      ...(isBackyRecord(body.meta) ? body.meta : {}),
+      frontendDesignTemplateId:
+        isBackyRecord(body.meta) && typeof body.meta.frontendDesignTemplateId === "string"
+          ? body.meta.frontendDesignTemplateId
+          : templateId,
+    };
+  }
+
+  return body;
+}
+
+export function buildBackyAdminBlogPostCreateInput(
+  input: BackyAdminBlogPostCreateFromDesignInput,
+): BackyAdminBlogPostCreateInput {
+  const { title, design, content, meta, frontendDesignTemplateId, ...rest } = input;
+  const contentSource = content ?? design;
+  const templateSource = contentSource ?? design;
+  const body: BackyAdminBlogPostCreateInput = {
+    ...rest,
+    title: typeof title === "string" ? title : String(title ?? ""),
+  };
+  const templateId =
+    (typeof frontendDesignTemplateId === "string" ? frontendDesignTemplateId : undefined) ||
+    backyDesignTemplateId(templateSource, "content", [title, rest.slug, rest.path]);
+  const nextMeta = buildBackyFrontendDesignMeta(contentSource ?? design, meta, templateId);
+
+  if (contentSource !== undefined && contentSource !== null) {
+    body.content = buildBackyContentDesignPayload(contentSource);
+  }
+  if (meta !== undefined || nextMeta) {
+    body.meta = nextMeta || (isBackyRecord(meta) ? cloneBackyRecord(meta) : {});
+  }
+  if (templateId) {
+    body.frontendDesignTemplateId = templateId;
+    body.meta = {
+      ...(isBackyRecord(body.meta) ? body.meta : {}),
+      frontendDesignTemplateId:
+        isBackyRecord(body.meta) && typeof body.meta.frontendDesignTemplateId === "string"
+          ? body.meta.frontendDesignTemplateId
+          : templateId,
+    };
+  }
+
+  return body;
+}
+
+export function buildBackyAdminBlogPostUpdateInput(
+  input: BackyAdminBlogPostUpdateFromDesignInput,
+): BackyAdminBlogPostUpdateInput {
+  const { design, content, meta, frontendDesignTemplateId, ...rest } = input;
+  const contentSource = content ?? design;
+  const templateSource = contentSource ?? design;
+  const body: BackyAdminBlogPostUpdateInput = {
+    ...rest,
+  };
+  const templateId =
+    (typeof frontendDesignTemplateId === "string" ? frontendDesignTemplateId : undefined) ||
+    backyDesignTemplateId(templateSource, "content", [rest.slug, rest.path, rest.title]);
+  const nextMeta = buildBackyFrontendDesignMeta(contentSource ?? design, meta, templateId);
+
+  if (contentSource !== undefined && contentSource !== null) {
+    body.content = buildBackyContentDesignPayload(contentSource);
+  }
+  if (meta !== undefined || nextMeta) {
+    body.meta = nextMeta || (isBackyRecord(meta) ? cloneBackyRecord(meta) : {});
+  }
+  if (templateId) {
+    body.frontendDesignTemplateId = templateId;
+    body.meta = {
+      ...(isBackyRecord(body.meta) ? body.meta : {}),
+      frontendDesignTemplateId:
+        isBackyRecord(body.meta) && typeof body.meta.frontendDesignTemplateId === "string"
+          ? body.meta.frontendDesignTemplateId
+          : templateId,
+    };
+  }
+
+  return body;
+}
+
+function buildBackyReusableSectionDesignContent(
+  design: BackyContentDesignStateInput | BackyEditableContent | Record<string, unknown> | unknown[] | null | undefined,
+): BackyReusableSection["content"] {
+  const designContent = buildBackyContentDesignPayload(design);
+  return {
+    ...designContent,
+    elements: Array.isArray(designContent.elements)
+      ? (designContent.elements as BackyElement[])
+      : [],
+  } as BackyReusableSection["content"];
+}
+
+export function buildBackyAdminReusableSectionCreateInput(
+  input: BackyAdminReusableSectionCreateFromDesignInput,
+): BackyAdminReusableSectionCreateInput {
+  const { name, design, content, metadata, frontendDesignTemplateId, ...rest } = input;
+  const contentSource = content ?? design;
+  const templateSource = contentSource ?? design;
+  const body: BackyAdminReusableSectionCreateInput = {
+    ...rest,
+    name: typeof name === "string" ? name : String(name ?? ""),
+    content: buildBackyReusableSectionDesignContent(contentSource),
+  };
+  const templateId =
+    (typeof frontendDesignTemplateId === "string" ? frontendDesignTemplateId : undefined) ||
+    backyDesignTemplateId(templateSource, "section", [name, rest.slug]);
+  const nextMetadata = buildBackyFrontendDesignMeta(contentSource ?? design, metadata, templateId);
+
+  if (metadata !== undefined || nextMetadata) {
+    body.metadata = nextMetadata || (isBackyRecord(metadata) ? cloneBackyRecord(metadata) : {});
+  }
+  if (templateId) {
+    body.frontendDesignTemplateId = templateId;
+    body.metadata = {
+      ...(isBackyRecord(body.metadata) ? body.metadata : {}),
+      frontendDesignTemplateId:
+        isBackyRecord(body.metadata) && typeof body.metadata.frontendDesignTemplateId === "string"
+          ? body.metadata.frontendDesignTemplateId
+          : templateId,
+    };
+  }
+
+  return body;
+}
+
+export function buildBackyAdminReusableSectionUpdateInput(
+  input: BackyAdminReusableSectionUpdateFromDesignInput,
+): BackyAdminReusableSectionUpdateInput {
+  const { design, content, metadata, frontendDesignTemplateId, ...rest } = input;
+  const contentSource = content ?? design;
+  const templateSource = contentSource ?? design;
+  const body: BackyAdminReusableSectionUpdateInput = {
+    ...rest,
+  };
+  const templateId =
+    (typeof frontendDesignTemplateId === "string" ? frontendDesignTemplateId : undefined) ||
+    backyDesignTemplateId(templateSource, "section", [rest.slug, rest.name]);
+  const nextMetadata = buildBackyFrontendDesignMeta(contentSource ?? design, metadata, templateId);
+
+  if (contentSource !== undefined && contentSource !== null) {
+    body.content = buildBackyReusableSectionDesignContent(contentSource);
+  }
+  if (metadata !== undefined || nextMetadata) {
+    body.metadata = nextMetadata || (isBackyRecord(metadata) ? cloneBackyRecord(metadata) : {});
+  }
+  if (templateId) {
+    body.frontendDesignTemplateId = templateId;
+    body.metadata = {
+      ...(isBackyRecord(body.metadata) ? body.metadata : {}),
+      frontendDesignTemplateId:
+        isBackyRecord(body.metadata) && typeof body.metadata.frontendDesignTemplateId === "string"
+          ? body.metadata.frontendDesignTemplateId
+          : templateId,
+    };
+  }
+
+  return body;
+}
+
+function applyBackyCollectionRecordDesignField(
+  values: Record<string, unknown>,
+  design: Record<string, unknown>,
+  key: string,
+  frontendKey: string,
+  value: unknown,
+) {
+  if (value === undefined) return;
+  design[key] = cloneBackyValue(value);
+  design[frontendKey] = cloneBackyValue(value);
+  values[frontendKey] = cloneBackyValue(value);
+}
+
+function backyDesignArrayOrRecord(
+  source: Record<string, unknown>,
+  contentSource: Record<string, unknown>,
+  keys: readonly string[],
+): unknown[] | Record<string, unknown> | undefined {
+  return backyDesignArray(source, contentSource, keys) ||
+    backyDesignRecord(source, contentSource, keys);
+}
+
+function buildBackyCollectionRecordDesignValues(
+  values: unknown,
+  designInput: BackyCollectionRecordDesignInput | null | undefined,
+): Record<string, unknown> {
+  const nextValues = isBackyRecord(values) ? cloneBackyRecord(values) : {};
+  if (designInput === undefined || designInput === null) {
+    return nextValues;
+  }
+
+  const source = backyDesignSource(designInput);
+  const content = buildBackyContentDesignPayload(designInput);
+  const design: Record<string, unknown> = {
+    ...(isBackyRecord(nextValues.design) ? cloneBackyRecord(nextValues.design) : {}),
+    ...cloneBackyRecord(source),
+  };
+
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "templateId",
+    "frontendDesignTemplateId",
+    backyDesignString(source, content, ["frontendDesignTemplateId", "templateId"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "templateName",
+    "frontendDesignTemplateName",
+    backyDesignString(source, content, ["frontendDesignTemplateName", "templateName"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "routePattern",
+    "frontendDesignRoutePattern",
+    backyDesignString(source, content, ["frontendDesignRoutePattern", "routePattern"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "source",
+    "frontendDesignSource",
+    backyDesignRecord(source, content, ["frontendDesignSource", "source"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "tokens",
+    "frontendDesignTokens",
+    backyDesignRecord(source, content, ["frontendDesignTokens", "tokens"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "chrome",
+    "frontendDesignChrome",
+    backyDesignRecord(source, content, ["frontendDesignChrome", "chrome"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "customCss",
+    "frontendDesignCustomCss",
+    backyDesignString(source, content, ["frontendDesignCustomCss", "customCSS", "customCss"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "customJs",
+    "frontendDesignCustomJs",
+    backyDesignString(source, content, ["frontendDesignCustomJs", "customJS", "customJs"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "contentDocument",
+    "frontendDesignContentDocument",
+    backyDesignRecord(source, content, ["frontendDesignContentDocument", "contentDocument"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "elements",
+    "frontendDesignElements",
+    backyDesignArray(source, content, ["frontendDesignElements", "elements"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "canvasSize",
+    "frontendDesignCanvasSize",
+    backyDesignRecord(source, content, ["frontendDesignCanvasSize", "canvasSize"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "themeTokenRefs",
+    "frontendDesignThemeTokenRefs",
+    backyDesignRecord(source, content, ["frontendDesignThemeTokenRefs", "themeTokenRefs"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "assets",
+    "frontendDesignAssets",
+    backyDesignArrayOrRecord(source, content, ["frontendDesignAssets", "assets"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "animations",
+    "frontendDesignAnimations",
+    backyDesignArrayOrRecord(source, content, ["frontendDesignAnimations", "animations"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "interactions",
+    "frontendDesignInteractions",
+    backyDesignArrayOrRecord(source, content, ["frontendDesignInteractions", "interactions"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "dataBindings",
+    "frontendDesignDataBindings",
+    backyDesignRecord(source, content, ["frontendDesignDataBindings", "dataBindings"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "editableMap",
+    "frontendDesignEditableMap",
+    backyDesignRecord(content, source, ["frontendDesignEditableMap", "editableMap"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "seo",
+    "frontendDesignSeo",
+    backyDesignRecord(source, content, ["frontendDesignSeo", "seo"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "metadata",
+    "frontendDesignMetadata",
+    backyDesignRecord(source, content, ["frontendDesignMetadata", "metadata"]),
+  );
+  applyBackyCollectionRecordDesignField(
+    nextValues,
+    design,
+    "bindingHints",
+    "frontendDesignBindingHints",
+    backyDesignArray(source, content, ["frontendDesignBindingHints", "bindingHints"]),
+  );
+
+  if (Object.keys(design).length > 0) {
+    nextValues.design = design;
+  }
+
+  return nextValues;
+}
+
+function backyCollectionRecordDesignTemplateId(
+  designInput: BackyCollectionRecordDesignInput | null | undefined,
+  values?: unknown,
+): string | undefined {
+  if (designInput === undefined || designInput === null) return undefined;
+  const valueRecord = isBackyRecord(values) ? values : {};
+  return backyDesignTemplateId(designInput, "record", [
+    valueRecord.slug,
+    valueRecord.title,
+    valueRecord.name,
+    valueRecord.sku,
+    valueRecord.id,
+  ]);
+}
+
+function applyBackyCollectionRecordTemplateId(
+  values: Record<string, unknown>,
+  templateId: string | undefined,
+) {
+  if (!templateId || !isBackyRecord(values.design)) return;
+  if (values.frontendDesignTemplateId === undefined) {
+    values.frontendDesignTemplateId = templateId;
+  }
+  values.design = {
+    ...values.design,
+    templateId:
+      typeof values.design.templateId === "string"
+        ? values.design.templateId
+        : templateId,
+    frontendDesignTemplateId:
+      typeof values.design.frontendDesignTemplateId === "string"
+        ? values.design.frontendDesignTemplateId
+        : templateId,
+  };
+}
+
+export function buildBackyAdminCollectionRecordCreateInput<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+>(
+  input: BackyAdminCollectionRecordCreateFromDesignInput<TValues>,
+): BackyAdminCollectionRecordCreateInput<TValues> {
+  const { values, design, content, frontendDesignTemplateId, ...rest } = input;
+  const designSource = content ?? design;
+  const bodyValues = buildBackyCollectionRecordDesignValues(values, designSource);
+  const templateId =
+    (typeof frontendDesignTemplateId === "string" ? frontendDesignTemplateId : undefined) ||
+    backyCollectionRecordDesignTemplateId(designSource, values);
+  applyBackyCollectionRecordTemplateId(bodyValues, templateId);
+
+  return {
+    ...rest,
+    values: bodyValues as TValues,
+    ...(templateId ? { frontendDesignTemplateId: templateId } : {}),
+  };
+}
+
+export function buildBackyAdminCollectionRecordUpdateInput<
+  TValues extends Record<string, unknown> = Record<string, unknown>,
+>(
+  input: BackyAdminCollectionRecordUpdateFromDesignInput<TValues>,
+): BackyAdminCollectionRecordUpdateInput<TValues> {
+  const { values, design, content, frontendDesignTemplateId, ...rest } = input;
+  const designSource = content ?? design;
+  const body: BackyAdminCollectionRecordUpdateInput<TValues> = {
+    ...rest,
+  };
+  const templateId =
+    (typeof frontendDesignTemplateId === "string" ? frontendDesignTemplateId : undefined) ||
+    backyCollectionRecordDesignTemplateId(designSource, values);
+
+  if (values !== undefined || (designSource !== undefined && designSource !== null)) {
+    const bodyValues = buildBackyCollectionRecordDesignValues(values, designSource);
+    applyBackyCollectionRecordTemplateId(bodyValues, templateId);
+    body.values = bodyValues as Partial<TValues>;
+  }
+  if (templateId) {
+    body.frontendDesignTemplateId = templateId;
+  }
+
+  return body;
+}
+
+export function buildBackyAdminCommerceProductCreateInput<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+>(
+  input: BackyAdminCommerceProductCreateFromDesignInput<TValues>,
+): BackyAdminCommerceProductCreateInput<TValues> {
+  return buildBackyAdminCollectionRecordCreateInput<TValues>(input);
+}
+
+export function buildBackyAdminCommerceProductUpdateInput<
+  TValues extends Record<string, unknown> = BackyAdminCommerceProductValues,
+>(
+  input: BackyAdminCommerceProductUpdateFromDesignInput<TValues>,
+): BackyAdminCommerceProductUpdateInput<TValues> {
+  return buildBackyAdminCollectionRecordUpdateInput<TValues>(input);
 }
 
 function contentElementRoots(content: unknown): unknown[][] {
@@ -3962,6 +6071,176 @@ function contentElementRoots(content: unknown): unknown[][] {
   return roots;
 }
 
+function buildBackyEditorCompositionSummaryFromElements(
+  elements: unknown[],
+): Record<string, unknown> {
+  const typeCounts: Record<string, number> = {};
+  const groupIds: string[] = [];
+  const nestedElementIds: string[] = [];
+  const containerIds: string[] = [];
+  const animatedElementIds: string[] = [];
+  const actionElementIds: string[] = [];
+  const dataBoundElementIds: string[] = [];
+  const tokenRefElementIds: string[] = [];
+  const assetBoundElementIds: string[] = [];
+  const interactiveElementIds: string[] = [];
+  const metrics = {
+    totalLayers: 0,
+    rootLayers: elements.length,
+    groupLayers: 0,
+    nestedLayers: 0,
+    childContainerLayers: 0,
+    responsiveOverrideLayers: 0,
+    animatedLayers: 0,
+    actionLayers: 0,
+    dataBoundLayers: 0,
+    tokenRefLayers: 0,
+    assetBoundLayers: 0,
+    interactiveLayers: 0,
+    hiddenLayers: 0,
+    lockedLayers: 0,
+    maxDepth: 0,
+  };
+
+  const walk = (items: unknown[], depth: number) => {
+    metrics.maxDepth = Math.max(metrics.maxDepth, depth);
+    items.filter(isBackyRecord).forEach((item) => {
+      const id = backyElementId(item);
+      const type = typeof item.type === "string" && item.type ? item.type : "unknown";
+      const props = isBackyRecord(item.props) ? item.props : {};
+      const children = Array.isArray(item.children) ? item.children : [];
+
+      metrics.totalLayers += 1;
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+
+      if (depth > 0 && id) {
+        metrics.nestedLayers += 1;
+        nestedElementIds.push(id);
+      } else if (depth > 0) {
+        metrics.nestedLayers += 1;
+      }
+      if (props.editorGroup === true) {
+        metrics.groupLayers += 1;
+        if (id) groupIds.push(id);
+      }
+      if (children.length > 0) {
+        metrics.childContainerLayers += 1;
+        if (id) containerIds.push(id);
+      }
+      if (isBackyRecord(item.responsive) && Object.keys(item.responsive).length > 0) {
+        metrics.responsiveOverrideLayers += 1;
+      }
+      if (hasNonEmptyBackyRecord(item.animation)) {
+        metrics.animatedLayers += 1;
+        if (id) animatedElementIds.push(id);
+      }
+      if (hasBackyElementActionWiring(item, props)) {
+        metrics.actionLayers += 1;
+        if (id) actionElementIds.push(id);
+      }
+      if (hasNonEmptyBackyArray(item.dataBindings) || hasNonEmptyBackyArray(item.bindingSlots)) {
+        metrics.dataBoundLayers += 1;
+        if (id) dataBoundElementIds.push(id);
+      }
+      const animation = isBackyRecord(item.animation) ? item.animation : {};
+      if (hasNonEmptyBackyRecord(item.tokenRefs) || hasNonEmptyBackyRecord(animation.tokenRefs)) {
+        metrics.tokenRefLayers += 1;
+        if (id) tokenRefElementIds.push(id);
+      }
+      if (hasNonEmptyBackyArray(item.assetIds)) {
+        metrics.assetBoundLayers += 1;
+        if (id) assetBoundElementIds.push(id);
+      }
+      if (isInteractiveBackyElementRecord(item)) {
+        metrics.interactiveLayers += 1;
+        if (id) interactiveElementIds.push(id);
+      }
+      if (isBackyElementHidden(item)) {
+        metrics.hiddenLayers += 1;
+      }
+      if (isBackyElementLocked(item)) {
+        metrics.lockedLayers += 1;
+      }
+
+      if (children.length > 0) {
+        walk(children, depth + 1);
+      }
+    });
+  };
+
+  walk(elements, 0);
+  const topTypes = Object.entries(typeCounts)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 8)
+    .map(([type, count]) => ({ type, count }));
+
+  return {
+    schemaVersion: "backy.editor-composition-summary.v1",
+    ready: metrics.totalLayers > 0,
+    hasGroups: metrics.groupLayers > 0,
+    hasNestedLayers: metrics.nestedLayers > 0,
+    hasAnimations: metrics.animatedLayers > 0,
+    hasActions: metrics.actionLayers > 0,
+    hasDataBindings: metrics.dataBoundLayers > 0,
+    hasTokenRefs: metrics.tokenRefLayers > 0,
+    hasAssetRefs: metrics.assetBoundLayers > 0,
+    hasInteractiveComponents: metrics.interactiveLayers > 0,
+    metrics: {
+      ...metrics,
+      topTypes,
+    },
+    groupIds,
+    nestedElementIds,
+    containerIds,
+    animatedElementIds,
+    actionElementIds,
+    dataBoundElementIds,
+    tokenRefElementIds,
+    assetBoundElementIds,
+    interactiveElementIds,
+    shortcuts: {
+      group: "Cmd/Ctrl+G",
+      ungroup: "Shift+Cmd/Ctrl+G",
+      selectSiblings: "Cmd/Ctrl+A",
+      selectChildren: "Shift+Cmd/Ctrl+A",
+      selectChild: "Enter",
+      selectParent: "Shift+Enter",
+    },
+    invariants: {
+      sameParentRequired: true,
+      lockedLayersBlocked: true,
+      editorGroupMarker: "props.editorGroup",
+      childrenPersistedInline: true,
+      parentIdsStoredAsElementMetadata: true,
+      responsiveBreakpoints: ["tablet", "mobile"],
+    },
+  };
+}
+
+function refreshBackyEditorCompositionMetadata<TContent extends BackyEditableContent>(
+  content: TContent,
+): TContent {
+  const refreshTarget = (target: Record<string, unknown>) => {
+    if (!Array.isArray(target.elements)) {
+      return;
+    }
+
+    target.metadata = {
+      ...(isBackyRecord(target.metadata) ? target.metadata : {}),
+      editorComposition: buildBackyEditorCompositionSummaryFromElements(target.elements),
+    };
+  };
+
+  if (isBackyRecord(content)) {
+    refreshTarget(content);
+    if (isBackyRecord(content.contentDocument)) {
+      refreshTarget(content.contentDocument);
+    }
+  }
+
+  return content;
+}
+
 function backyElementId(element: unknown): string | null {
   return isBackyRecord(element) && typeof element.id === "string"
     ? element.id
@@ -3977,13 +6256,67 @@ function backyNumberField(
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function normalizeBackyInsertIndex(index: number | undefined, length: number): number {
+  if (typeof index !== "number" || !Number.isFinite(index)) {
+    return length;
+  }
+
+  return Math.max(0, Math.min(Math.trunc(index), length));
+}
+
+function collectBackyElementIds(element: Record<string, unknown>): string[] {
+  const ids: string[] = [];
+  const visit = (item: Record<string, unknown>) => {
+    const id = backyElementId(item);
+    if (id) ids.push(id);
+    if (Array.isArray(item.children)) {
+      item.children.filter(isBackyRecord).forEach(visit);
+    }
+  };
+  visit(element);
+  return ids;
+}
+
+function nextBackyContentElementId(baseId: string, suffix: string): string {
+  return `${baseId || "backy-element"}-${suffix}`;
+}
+
 function backyBooleanField(
   element: Record<string, unknown>,
   field: string,
   fallback: boolean,
 ): boolean {
-  const value = element[field];
-  return typeof value === "boolean" ? value : fallback;
+  return parseBackyBoolean(element[field], fallback);
+}
+
+function parseBackyBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "on" || normalized === "yes") {
+      return true;
+    }
+    if (normalized === "false" || normalized === "0" || normalized === "off" || normalized === "no") {
+      return false;
+    }
+  }
+
+  return fallback;
+}
+
+function isBackyElementHidden(element: Record<string, unknown>): boolean {
+  return backyBooleanField(element, "visible", true) === false;
+}
+
+function isBackyElementLocked(element: Record<string, unknown>): boolean {
+  return backyBooleanField(element, "locked", false);
 }
 
 function backyResponsiveOverride(
@@ -4218,14 +6551,129 @@ function visitBackyContentElements(
   roots.forEach(visit);
 }
 
+function backyAssetId(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function collectBackyAssetReferences(
+  value: unknown,
+  ids: Set<string>,
+  options: { key?: string; includeExplicitAssetIds?: boolean } = {},
+): void {
+  const { key, includeExplicitAssetIds = false } = options;
+
+  if (key === "assetIds") {
+    if (includeExplicitAssetIds && Array.isArray(value)) {
+      value.map(backyAssetId).filter(Boolean).forEach((id) => ids.add(id as string));
+    }
+    return;
+  }
+
+  if (key && BACKY_ASSET_REFERENCE_KEYS.has(key)) {
+    if (Array.isArray(value)) {
+      value.map(backyAssetId).filter(Boolean).forEach((id) => ids.add(id as string));
+    } else {
+      const id = backyAssetId(value);
+      if (id) ids.add(id);
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectBackyAssetReferences(item, ids, { includeExplicitAssetIds }));
+    return;
+  }
+
+  if (!isBackyRecord(value)) {
+    return;
+  }
+
+  Object.entries(value).forEach(([entryKey, entryValue]) => {
+    collectBackyAssetReferences(entryValue, ids, {
+      key: entryKey,
+      includeExplicitAssetIds,
+    });
+  });
+}
+
+function collectBackyElementAssetReferences(
+  element: Record<string, unknown>,
+  includeExplicitAssetIds = false,
+): Set<string> {
+  const ids = new Set<string>();
+  collectBackyAssetReferences(element, ids, { includeExplicitAssetIds });
+  return ids;
+}
+
+function normalizeBackyElementAssetIds(element: Record<string, unknown>): void {
+  const ids = collectBackyElementAssetReferences(element, true);
+  if (ids.size > 0) {
+    element.assetIds = Array.from(ids);
+  } else {
+    delete element.assetIds;
+  }
+}
+
+function syncBackyElementAssetIdsAfterPatch(
+  element: Record<string, unknown>,
+  previousReferenceIds: Set<string>,
+): void {
+  const explicitAssetIds = Array.isArray(element.assetIds)
+    ? element.assetIds.map(backyAssetId).filter(Boolean) as string[]
+    : [];
+  const nextReferenceIds = collectBackyElementAssetReferences(element, false);
+  const nextAssetIds = [
+    ...explicitAssetIds.filter((id) => !previousReferenceIds.has(id)),
+    ...nextReferenceIds,
+  ];
+  const unique = Array.from(new Set(nextAssetIds));
+
+  if (unique.length > 0) {
+    element.assetIds = unique;
+  } else {
+    delete element.assetIds;
+  }
+}
+
+function patchTouchesAssetIds(patch: BackyContentElementPatch): boolean {
+  return Object.prototype.hasOwnProperty.call(patch.fields || {}, "assetIds") ||
+    Object.keys(patch.changes || {}).some((path) => path === "assetIds" || path.startsWith("assetIds.")) ||
+    (patch.remove || []).some((path) => path === "assetIds" || path.startsWith("assetIds."));
+}
+
 function inferBackyEditableValueType(
   path: string,
   value: unknown,
 ): BackyContentEditableTarget["valueType"] {
   const normalizedPath = path.toLowerCase();
+  const leaf = normalizedPath.split(".").pop() || normalizedPath;
+  const assetTargetPath = normalizedPath === "assetids" ||
+    normalizedPath.includes("assetid") ||
+    normalizedPath.includes("mediaid") ||
+    normalizedPath.includes("fileid") ||
+    normalizedPath.includes("fontmediaid");
+  const assetListTargetPath = assetTargetPath && leaf.endsWith("ids");
+  const jsonTargetPath = normalizedPath === "actions" ||
+    normalizedPath === "databindings" ||
+    normalizedPath === "bindingslots" ||
+    normalizedPath === "animation.from" ||
+    normalizedPath === "animation.to" ||
+    normalizedPath === "animation.scrolltrigger";
+  const tokenRefTargetPath = normalizedPath.startsWith("tokenrefs.") ||
+    normalizedPath.includes(".tokenrefs.");
+  if (tokenRefTargetPath) return "string";
   if (typeof value === "boolean") return "boolean";
   if (typeof value === "number") return "number";
+  if (BACKY_BOOLEAN_EDITABLE_LEAVES.has(leaf)) return "boolean";
+  if (BACKY_NUMERIC_EDITABLE_LEAVES.has(leaf)) return "number";
+  if (BACKY_STRING_EDITABLE_LEAVES.has(leaf)) return "string";
+  if (jsonTargetPath) return "json";
+  if (assetTargetPath && (Array.isArray(value) || assetListTargetPath)) return "assetList";
+  if (assetTargetPath) return "asset";
   if (Array.isArray(value)) return "richText";
+  if (normalizedPath.includes("font")) {
+    return "font";
+  }
   if (
     normalizedPath.includes("color") ||
     (typeof value === "string" && /^#(?:[0-9a-f]{3}){1,2}$/i.test(value))
@@ -4245,6 +6693,23 @@ function inferBackyEditableValueType(
   ) {
     return "url";
   }
+  if (
+    normalizedPath.includes("content") ||
+    normalizedPath.includes("label") ||
+    normalizedPath.includes("placeholder") ||
+    normalizedPath.includes("name") ||
+    normalizedPath.includes("title") ||
+    normalizedPath.includes("align") ||
+    normalizedPath.includes("transform") ||
+    normalizedPath.includes("decoration") ||
+    normalizedPath.includes("style") ||
+    normalizedPath.includes("preset") ||
+    normalizedPath.includes("target") ||
+    normalizedPath.includes("rel") ||
+    normalizedPath.includes("type")
+  ) {
+    return "string";
+  }
   if (typeof value === "string") return "string";
   return "json";
 }
@@ -4261,6 +6726,139 @@ function pushBackyEditableTarget(
     value,
     valueType: inferBackyEditableValueType(path, value),
   });
+}
+
+function backyEditableTargetValue(
+  element: Record<string, unknown>,
+  path: string,
+): unknown {
+  const segments = path.split(".").filter(Boolean);
+  let current: unknown = element;
+  for (const segment of segments) {
+    if (!isBackyRecord(current)) {
+      return undefined;
+    }
+    current = current[segment];
+  }
+  return current;
+}
+
+function pushBackyEditableTargetIfMissing(
+  targets: BackyContentEditableTarget[],
+  element: Record<string, unknown>,
+  path: string,
+  source: BackyContentEditableTargetSource,
+): void {
+  if (targets.some((target) => target.path === path)) {
+    return;
+  }
+  pushBackyEditableTarget(targets, path, source, backyEditableTargetValue(element, path));
+}
+
+function elementTypeMatchesBackyType(
+  elementType: string,
+  types: readonly string[],
+): boolean {
+  return types.includes(elementType);
+}
+
+function defaultBackyPropTargetPathsForElement(
+  element: Record<string, unknown>,
+): string[] {
+  const elementType = typeof element.type === "string" ? element.type : "";
+  const targets = new Set<string>(BACKY_COMMON_PROP_EDITABLE_TARGETS.map((target) => `props.${target}`));
+
+  if (elementTypeMatchesBackyType(elementType, ["text", "heading", "paragraph", "quote", "button", "link"])) {
+    BACKY_TEXT_PROP_EDITABLE_TARGETS.forEach((target) => targets.add(`props.${target}`));
+  }
+
+  if (elementType === "button") {
+    BACKY_BUTTON_PROP_EDITABLE_TARGETS.forEach((target) => targets.add(`props.${target}`));
+    BACKY_DOWNLOAD_FILE_PROP_EDITABLE_TARGETS.forEach((target) => targets.add(`props.${target}`));
+  }
+
+  if (elementType === "link") {
+    BACKY_LINK_PROP_EDITABLE_TARGETS.forEach((target) => targets.add(`props.${target}`));
+    BACKY_DOWNLOAD_FILE_PROP_EDITABLE_TARGETS.forEach((target) => targets.add(`props.${target}`));
+  }
+
+  if (elementType === "form") {
+    BACKY_FORM_PROP_EDITABLE_TARGETS.forEach((target) => targets.add(`props.${target}`));
+  }
+
+  if (elementTypeMatchesBackyType(elementType, ["input", "textarea", "select", "checkbox", "radio"])) {
+    BACKY_FIELD_PROP_EDITABLE_TARGETS.forEach((target) => targets.add(`props.${target}`));
+    targets.add("props.formId");
+    if (elementType === "input") {
+      targets.add("props.inputType");
+    }
+    if (elementType === "textarea") {
+      targets.add("props.rows");
+    }
+    if (elementTypeMatchesBackyType(elementType, ["select", "checkbox", "radio"])) {
+      targets.add("props.options");
+    }
+  }
+
+  if (elementTypeMatchesBackyType(elementType, ["image", "video"])) {
+    BACKY_MEDIA_PROP_EDITABLE_TARGETS.forEach((target) => targets.add(`props.${target}`));
+    if (elementType === "video") {
+      targets.add("props.posterMediaId");
+      targets.add("props.posterMediaIds");
+      targets.add("props.controls");
+      targets.add("props.autoplay");
+      targets.add("props.muted");
+      targets.add("props.loop");
+    }
+  }
+
+  return [...targets];
+}
+
+function defaultBackyEditableTargetPathsForElement(
+  element: Record<string, unknown>,
+): Array<{ path: string; source: BackyContentEditableTargetSource }> {
+  const layoutPaths = BACKY_LAYER_LAYOUT_TARGETS.map((field) => `layout.${field}`);
+  const responsiveLayoutPaths = BACKY_RESPONSIVE_BREAKPOINTS.flatMap((breakpoint) => (
+    [...BACKY_RESPONSIVE_GEOMETRY_FIELDS, ...BACKY_RESPONSIVE_LAYER_FIELDS].map((field) => ({
+      path: `responsive.${breakpoint}.${field}`,
+      source: "responsive" as const,
+    }))
+  ));
+  const propPaths = defaultBackyPropTargetPathsForElement(element);
+  const stylePaths = BACKY_STYLE_EDITABLE_TARGETS.map((target) => `styles.${target}`);
+  const tokenRefPaths = BACKY_TOKEN_REF_EDITABLE_TARGETS.map((target) => `tokenRefs.${target}`);
+  const responsivePropPaths = BACKY_RESPONSIVE_BREAKPOINTS.flatMap((breakpoint) => (
+    propPaths.map((path) => ({
+      path: `responsive.${breakpoint}.${path}`,
+      source: "responsive" as const,
+    }))
+  ));
+  const responsiveStylePaths = BACKY_RESPONSIVE_BREAKPOINTS.flatMap((breakpoint) => (
+    stylePaths.map((path) => ({
+      path: `responsive.${breakpoint}.${path}`,
+      source: "responsive" as const,
+    }))
+  ));
+  const responsiveTokenRefPaths = BACKY_RESPONSIVE_BREAKPOINTS.flatMap((breakpoint) => (
+    tokenRefPaths.map((path) => ({
+      path: `responsive.${breakpoint}.${path}`,
+      source: "responsive" as const,
+    }))
+  ));
+
+  return [
+    ...layoutPaths.map((path) => ({ path, source: "layout" as const })),
+    ...responsiveLayoutPaths,
+    ...propPaths.map((path) => ({ path, source: "props" as const })),
+    ...stylePaths.map((path) => ({ path, source: "styles" as const })),
+    ...tokenRefPaths.map((path) => ({ path, source: "tokenRefs" as const })),
+    ...responsivePropPaths,
+    ...responsiveStylePaths,
+    ...responsiveTokenRefPaths,
+    ...BACKY_ANIMATION_EDITABLE_TARGETS.map((path) => ({ path, source: "animation" as const })),
+    ...BACKY_INTERACTION_EDITABLE_TARGETS.map((path) => ({ path, source: "interactions" as const })),
+  ];
 }
 
 function editableTargetsForBackyElement(
@@ -4284,13 +6882,13 @@ function editableTargetsForBackyElement(
     targets,
     "visibility.hidden",
     "visibility",
-    element.visible === false,
+    isBackyElementHidden(element),
   );
   pushBackyEditableTarget(
     targets,
     "visibility.locked",
     "visibility",
-    Boolean(element.locked),
+    isBackyElementLocked(element),
   );
   if (isBackyRecord(element.props)) {
     Object.entries(element.props).forEach(([key, value]) => {
@@ -4302,6 +6900,57 @@ function editableTargetsForBackyElement(
       pushBackyEditableTarget(targets, `styles.${key}`, "styles", value);
     });
   }
+  if (isBackyRecord(element.tokenRefs)) {
+    Object.entries(element.tokenRefs).forEach(([key, value]) => {
+      pushBackyEditableTarget(targets, `tokenRefs.${key}`, "tokenRefs", value);
+    });
+  }
+  if (Array.isArray(element.assetIds)) {
+    pushBackyEditableTarget(targets, "assetIds", "assets", element.assetIds);
+  }
+  BACKY_INTERACTION_EDITABLE_TARGETS.forEach((path) => {
+    if (Array.isArray(element[path])) {
+      pushBackyEditableTarget(targets, path, "interactions", element[path]);
+    }
+  });
+  if (isBackyRecord(element.responsive)) {
+    Object.entries(element.responsive).forEach(([breakpoint, override]) => {
+      if (!isBackyRecord(override)) return;
+      [...BACKY_RESPONSIVE_GEOMETRY_FIELDS, ...BACKY_RESPONSIVE_LAYER_FIELDS].forEach((field) => {
+        if (override[field] !== undefined) {
+          pushBackyEditableTarget(targets, `responsive.${breakpoint}.${field}`, "responsive", override[field]);
+        }
+      });
+      if (isBackyRecord(override.props)) {
+        Object.entries(override.props).forEach(([key, value]) => {
+          pushBackyEditableTarget(targets, `responsive.${breakpoint}.props.${key}`, "responsive", value);
+        });
+      }
+      if (isBackyRecord(override.styles)) {
+        Object.entries(override.styles).forEach(([key, value]) => {
+          pushBackyEditableTarget(targets, `responsive.${breakpoint}.styles.${key}`, "responsive", value);
+        });
+      }
+      if (isBackyRecord(override.tokenRefs)) {
+        Object.entries(override.tokenRefs).forEach(([key, value]) => {
+          pushBackyEditableTarget(targets, `responsive.${breakpoint}.tokenRefs.${key}`, "responsive", value);
+        });
+      }
+    });
+  }
+  if (isBackyRecord(element.animation)) {
+    Object.entries(element.animation).forEach(([key, value]) => {
+      pushBackyEditableTarget(targets, `animation.${key}`, "animation", value);
+    });
+    if (isBackyRecord(element.animation.tokenRefs)) {
+      Object.entries(element.animation.tokenRefs).forEach(([key, value]) => {
+        pushBackyEditableTarget(targets, `animation.tokenRefs.${key}`, "animation", value);
+      });
+    }
+  }
+  defaultBackyEditableTargetPathsForElement(element).forEach((target) => {
+    pushBackyEditableTargetIfMissing(targets, element, target.path, target.source);
+  });
   return targets;
 }
 
@@ -4340,6 +6989,31 @@ function setNestedEditableValue(
   }
 }
 
+function setBackyTokenRefValue(
+  root: Record<string, unknown>,
+  tokenKey: string,
+  value: unknown,
+): void {
+  const normalizedTokenKey = tokenKey.trim();
+  if (!normalizedTokenKey) return;
+
+  if (!isBackyRecord(root.tokenRefs)) {
+    if (value === undefined) return;
+    root.tokenRefs = {};
+  }
+
+  const tokenRefs = root.tokenRefs as Record<string, unknown>;
+  if (value === undefined) {
+    delete tokenRefs[normalizedTokenKey];
+    if (Object.keys(tokenRefs).length === 0) {
+      delete root.tokenRefs;
+    }
+    return;
+  }
+
+  tokenRefs[normalizedTokenKey] = value;
+}
+
 function applyEditablePath(
   element: Record<string, unknown>,
   path: string,
@@ -4369,6 +7043,39 @@ function applyEditablePath(
     return;
   }
 
+  if (path.startsWith("tokenRefs.")) {
+    setBackyTokenRefValue(element, path.slice("tokenRefs.".length), value);
+    return;
+  }
+
+  const responsiveTokenRefMatch = path.match(/^responsive\.([^.]+)\.tokenRefs\.(.+)$/);
+  if (responsiveTokenRefMatch) {
+    const [, breakpoint, tokenKey] = responsiveTokenRefMatch;
+    if (!isBackyRecord(element.responsive)) {
+      if (value === undefined) return;
+      element.responsive = {};
+    }
+    const responsive = element.responsive as Record<string, unknown>;
+    if (!isBackyRecord(responsive[breakpoint])) {
+      if (value === undefined) return;
+      responsive[breakpoint] = {};
+    }
+    setBackyTokenRefValue(
+      responsive[breakpoint] as Record<string, unknown>,
+      tokenKey,
+      value,
+    );
+    if (value === undefined) {
+      const prunedResponsive = pruneBackyResponsive(responsive);
+      if (prunedResponsive) {
+        element.responsive = prunedResponsive;
+      } else {
+        delete element.responsive;
+      }
+    }
+    return;
+  }
+
   if (path.startsWith("layout.")) {
     const field = BACKY_LAYOUT_TARGET_ALIASES[path.slice("layout.".length)];
     if (field) {
@@ -4385,7 +7092,7 @@ function applyEditablePath(
     if (value === undefined) {
       delete element.visible;
     } else {
-      element.visible = !Boolean(value);
+      element.visible = !parseBackyBoolean(value, false);
     }
     return;
   }
@@ -4394,7 +7101,7 @@ function applyEditablePath(
     if (value === undefined) {
       delete element.locked;
     } else {
-      element.locked = Boolean(value);
+      element.locked = parseBackyBoolean(value, false);
     }
     return;
   }
@@ -4406,6 +7113,9 @@ function applyBackyContentElementPatch(
   element: Record<string, unknown>,
   patch: BackyContentElementPatch,
 ): void {
+  const previousReferenceIds = collectBackyElementAssetReferences(element, false);
+  const touchedAssetIds = patchTouchesAssetIds(patch);
+
   if (patch.props) {
     mergeElementRecord(element, "props", patch.props);
   }
@@ -4427,6 +7137,12 @@ function applyBackyContentElementPatch(
   (patch.remove || []).forEach((path) => {
     applyEditablePath(element, path, undefined);
   });
+
+  if (touchedAssetIds) {
+    normalizeBackyElementAssetIds(element);
+  } else {
+    syncBackyElementAssetIdsAfterPatch(element, previousReferenceIds);
+  }
 }
 
 function editableFieldPatchToElementPatch(
@@ -4563,6 +7279,612 @@ export function listBackyContentElements(
   return descriptors;
 }
 
+function isBackyDescriptorUnlocked(descriptor: BackyContentElementDescriptor): boolean {
+  return !isBackyElementLocked(descriptor.element);
+}
+
+function isBackyDescriptorVisible(descriptor: BackyContentElementDescriptor): boolean {
+  return !isBackyElementHidden(descriptor.element);
+}
+
+function isBackyDescriptorEditorGroup(descriptor: BackyContentElementDescriptor): boolean {
+  return isBackyRecord(descriptor.element.props) &&
+    descriptor.element.props.editorGroup === true &&
+    descriptor.childCount > 0;
+}
+
+function backyCommandEvaluation(
+  command: BackyManifestEditorCommandRegistryCommand,
+  enabled: boolean,
+  visible: boolean,
+  readyReason: string,
+  disabledReason: string,
+  hiddenReason = "Command is hidden in the current editor state.",
+): BackyEditorCommandEvaluation {
+  const state: BackyEditorCommandEvaluationStateValue = visible
+    ? enabled ? "ready" : "disabled"
+    : "hidden";
+
+  return {
+    id: command.id,
+    label: command.label,
+    category: command.category,
+    targetScope: command.targetScope,
+    testId: command.testId,
+    ...(command.shortcut ? { shortcut: command.shortcut } : {}),
+    ...(command.ariaKeyshortcuts ? { ariaKeyshortcuts: command.ariaKeyshortcuts } : {}),
+    ...(command.sdkHelper ? { sdkHelper: command.sdkHelper } : {}),
+    ...(command.apiHelper ? { apiHelper: command.apiHelper } : {}),
+    enabled: visible && enabled,
+    state,
+    reason: state === "ready"
+      ? readyReason
+      : state === "hidden"
+        ? hiddenReason
+        : disabledReason,
+    command,
+  };
+}
+
+export function evaluateBackyEditorCommandRegistry(
+  registry: BackyManifestEditorCommandRegistry,
+  state: BackyEditorCommandEvaluationInput = {},
+): BackyEditorCommandRegistryEvaluation {
+  const selectedIds = [...new Set(state.selectedIds || [])];
+  const descriptors = state.descriptors || listBackyContentElements(state.content);
+  const descriptorById = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
+  const selectedDescriptors = selectedIds
+    .map((id) => descriptorById.get(id))
+    .filter((descriptor): descriptor is BackyContentElementDescriptor => Boolean(descriptor));
+  const selectedLayerCount = selectedDescriptors.length || selectedIds.length;
+  const selectedParentId = selectedDescriptors[0]?.parentId;
+  const selectedEntriesShareParent = selectedDescriptors.length > 0 &&
+    selectedDescriptors.every((descriptor) => descriptor.parentId === selectedParentId);
+  const selectedUnlocked = selectedDescriptors.length > 0 &&
+    selectedDescriptors.every(isBackyDescriptorUnlocked);
+  const selectedVisible = selectedDescriptors.length > 0 &&
+    selectedDescriptors.every(isBackyDescriptorVisible);
+  const selectedEditorGroups = selectedDescriptors.length > 0 &&
+    selectedDescriptors.every(isBackyDescriptorEditorGroup);
+  const siblingLayerCount = selectedDescriptors.length > 0
+    ? descriptors.filter((descriptor) => descriptor.parentId === selectedParentId).length
+    : 0;
+  const firstSelectedDescriptor = selectedDescriptors[0];
+  const selectedChildDescriptors = firstSelectedDescriptor
+    ? descriptors.filter((descriptor) => descriptor.parentId === firstSelectedDescriptor.id)
+    : [];
+  const selectableChildLayerCount = selectedChildDescriptors
+    .filter((descriptor) => isBackyDescriptorUnlocked(descriptor) && isBackyDescriptorVisible(descriptor))
+    .length;
+  const canMutateCanvas = state.canEdit !== false && state.isSaving !== true && state.isPreview !== true;
+  const clipboardCount = Math.max(0, Math.trunc(state.clipboardCount || 0));
+  const historyIndex = Math.max(0, Math.trunc(state.historyIndex || 0));
+  const historyLength = Math.max(0, Math.trunc(state.historyLength || 0));
+  const editorMode = state.editorMode || "page";
+
+  const selectionReason = selectedLayerCount === 1
+    ? "1 selected layer."
+    : `${selectedLayerCount} selected layers.`;
+  const mutationDisabledReason = state.canEdit === false
+    ? "Editing is disabled."
+    : state.isSaving
+      ? "The editor is saving."
+      : state.isPreview
+        ? "Preview mode is active."
+        : "Command requirements are not met.";
+
+  const evaluations = registry.commands.map((command) => {
+    switch (command.id) {
+      case "undo":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && historyIndex > 0,
+          true,
+          "An earlier history state is available.",
+          canMutateCanvas ? "No earlier history state is available." : mutationDisabledReason,
+        );
+      case "redo":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && historyLength > 0 && historyIndex < historyLength - 1,
+          true,
+          "A later history state is available.",
+          canMutateCanvas ? "No later history state is available." : mutationDisabledReason,
+        );
+      case "copy-selection":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0 && selectedEntriesShareParent,
+          true,
+          `Copy can target the active sibling scope. ${selectionReason}`,
+          canMutateCanvas ? "Select one or more layers in the same parent scope." : mutationDisabledReason,
+        );
+      case "cut-selection":
+      case "duplicate-selection":
+      case "delete-selection":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0 && selectedEntriesShareParent && selectedUnlocked,
+          true,
+          `${command.label} is ready for unlocked sibling layers. ${selectionReason}`,
+          canMutateCanvas ? "Select unlocked layers in the same parent scope." : mutationDisabledReason,
+        );
+      case "paste-selection":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && clipboardCount > 0,
+          true,
+          `Paste is ready with ${clipboardCount} clipboard layer${clipboardCount === 1 ? "" : "s"}.`,
+          canMutateCanvas ? "Copy or cut at least one layer before pasting." : mutationDisabledReason,
+        );
+      case "select-sibling-layers":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0 && siblingLayerCount >= 2,
+          true,
+          `${siblingLayerCount} sibling layers are available in the active scope.`,
+          canMutateCanvas ? "Select a layer with at least one sibling." : mutationDisabledReason,
+        );
+      case "select-child-layers":
+      case "select-child-layer":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectableChildLayerCount > 0,
+          true,
+          `${selectableChildLayerCount} visible unlocked child layer${selectableChildLayerCount === 1 ? "" : "s"} are available.`,
+          canMutateCanvas ? "Select a container or group with visible unlocked children." : mutationDisabledReason,
+        );
+      case "select-parent-layer":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0 && typeof selectedParentId === "string",
+          true,
+          `Parent layer ${selectedParentId} is available.`,
+          canMutateCanvas ? "The current selection has no parent layer." : mutationDisabledReason,
+        );
+      case "group-selection":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount >= 2 && selectedEntriesShareParent && selectedUnlocked,
+          true,
+          `${selectedLayerCount} unlocked sibling layers can be grouped.`,
+          canMutateCanvas ? "Select at least two unlocked layers in the same parent scope." : mutationDisabledReason,
+        );
+      case "ungroup-selection":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0 && selectedEntriesShareParent && selectedUnlocked && selectedEditorGroups,
+          true,
+          `${selectedLayerCount} selected editor group${selectedLayerCount === 1 ? "" : "s"} can be ungrouped.`,
+          canMutateCanvas ? "Select unlocked editor groups in the same parent scope." : mutationDisabledReason,
+        );
+      case "toggle-selection-visibility":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0 && selectedUnlocked,
+          true,
+          "Selected unlocked layers can toggle visibility.",
+          canMutateCanvas ? "Select unlocked layers before toggling visibility." : mutationDisabledReason,
+        );
+      case "toggle-selection-lock":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0,
+          true,
+          "Selected layers can toggle lock state.",
+          canMutateCanvas ? "Select at least one layer before toggling lock state." : mutationDisabledReason,
+        );
+      case "send-to-back":
+      case "send-backward":
+      case "bring-forward":
+      case "bring-to-front":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0 && selectedEntriesShareParent && selectedUnlocked && siblingLayerCount > selectedLayerCount,
+          true,
+          "Selected sibling layers can change layer order.",
+          canMutateCanvas ? "Select unlocked layers with neighboring siblings before changing order." : mutationDisabledReason,
+        );
+      case "align-left":
+      case "align-center":
+      case "align-right":
+      case "align-top":
+      case "align-middle":
+      case "align-bottom":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount > 0 && selectedEntriesShareParent && selectedUnlocked && selectedVisible,
+          true,
+          "Selected visible unlocked sibling layers can be aligned.",
+          canMutateCanvas ? "Select visible unlocked layers in the same parent scope before aligning." : mutationDisabledReason,
+        );
+      case "distribute-horizontal":
+      case "distribute-vertical":
+        return backyCommandEvaluation(
+          command,
+          canMutateCanvas && selectedLayerCount >= 3 && selectedEntriesShareParent && selectedUnlocked && selectedVisible,
+          true,
+          `${selectedLayerCount} visible unlocked sibling layers can be distributed.`,
+          canMutateCanvas ? "Select at least three visible unlocked sibling layers before distributing." : mutationDisabledReason,
+        );
+      case "toggle-grid":
+      case "toggle-snap":
+      case "toggle-pan":
+      case "zoom-out":
+      case "zoom-in":
+      case "zoom-fit":
+        return backyCommandEvaluation(
+          command,
+          state.isPreview !== true,
+          state.isPreview !== true,
+          `${command.label} is ready outside preview mode.`,
+          "Viewport controls are disabled in preview mode.",
+          "Viewport controls are hidden in preview mode.",
+        );
+      case "toggle-preview":
+        return backyCommandEvaluation(
+          command,
+          state.isSaving !== true,
+          true,
+          "Preview can be toggled.",
+          "Wait for the current save before toggling preview.",
+        );
+      case "open-page-settings":
+        return backyCommandEvaluation(
+          command,
+          state.isSaving !== true,
+          state.hideSettings !== true,
+          "Settings can be opened.",
+          "Wait for the current save before opening settings.",
+          "Settings controls are hidden for this editor.",
+        );
+      case "reload-page":
+        return backyCommandEvaluation(
+          command,
+          state.isSaving !== true,
+          true,
+          "Content can be reloaded from the last saved state.",
+          "Wait for the current save before reloading.",
+        );
+      case "publish-page":
+        return backyCommandEvaluation(
+          command,
+          state.isSaving !== true &&
+            state.canEdit !== false &&
+            state.canPublish !== false &&
+            state.publishBlocked !== true,
+          state.hideSave !== true && editorMode === "page",
+          "Page publication command is ready.",
+          state.canPublish === false
+            ? "Publishing is disabled for this user."
+            : state.publishBlocked
+              ? "Resolve page readiness issues before publishing."
+              : mutationDisabledReason,
+          "Publish is only visible in page editor mode with save controls.",
+        );
+      case "save-page":
+        return backyCommandEvaluation(
+          command,
+          state.isSaving !== true && state.canEdit !== false,
+          state.hideSave !== true,
+          "Content can be saved.",
+          state.canEdit === false ? "Editing is disabled." : "Wait for the current save before saving.",
+          "Save controls are hidden for this editor.",
+        );
+      default:
+        if (command.category === "shell") {
+          return backyCommandEvaluation(
+            command,
+            true,
+            true,
+            `${command.label} shell command is available.`,
+            "Shell command is unavailable.",
+          );
+        }
+
+        return backyCommandEvaluation(
+          command,
+          true,
+          true,
+          command.stateRule,
+          command.stateRule,
+        );
+    }
+  });
+
+  return {
+    schemaVersion: "backy.editor-command-registry-evaluation.v1",
+    registrySchemaVersion: registry.schemaVersion,
+    selectedIds,
+    summary: {
+      totalCommandCount: evaluations.length,
+      readyCommandCount: evaluations.filter((command) => command.state === "ready").length,
+      disabledCommandCount: evaluations.filter((command) => command.state === "disabled").length,
+      hiddenCommandCount: evaluations.filter((command) => command.state === "hidden").length,
+      selectedLayerCount,
+    },
+    commands: evaluations,
+  };
+}
+
+export function addBackyContentElement<TContent extends BackyEditableContent>(
+  content: TContent | undefined | null,
+  element: BackyElement | Record<string, unknown>,
+  options: BackyContentAddElementOptions = {},
+): BackyContentAddElementResult<TContent> | null {
+  if (!content || !isBackyRecord(element) || typeof element.id !== "string") {
+    return null;
+  }
+
+  const elementId = element.id;
+  const nextContent = cloneBackyContent(content);
+  const nextElement = cloneBackyRecord(element);
+  const parentId = options.parentId;
+  let insertedIndex = -1;
+  let inserted = false;
+
+  if (parentId) {
+    visitBackyContentElements(contentElementRoots(nextContent), (candidate) => {
+      if (inserted || candidate.id !== parentId) return;
+      if (!options.allowLockedParent && isBackyElementLocked(candidate)) return;
+      if (!Array.isArray(candidate.children)) {
+        candidate.children = [];
+      }
+      const children = candidate.children as unknown[];
+      nextElement.parentId = parentId;
+      insertedIndex = normalizeBackyInsertIndex(options.index, children.length);
+      children.splice(insertedIndex, 0, nextElement);
+      inserted = true;
+    });
+  } else {
+    const root = contentElementRoots(nextContent)[0];
+    if (root) {
+      delete nextElement.parentId;
+      insertedIndex = normalizeBackyInsertIndex(options.index, root.length);
+      root.splice(insertedIndex, 0, nextElement);
+      inserted = true;
+    }
+  }
+
+  if (!inserted) {
+    return null;
+  }
+
+  return {
+    content: refreshBackyEditorCompositionMetadata(nextContent),
+    elementId,
+    ...(parentId ? { parentId } : {}),
+    index: insertedIndex,
+  };
+}
+
+export function duplicateBackyContentElement<TContent extends BackyEditableContent>(
+  content: TContent | undefined | null,
+  elementId: string,
+  options: BackyContentDuplicateElementOptions = {},
+): BackyContentDuplicateElementResult<TContent> | null {
+  if (!content || !elementId) {
+    return null;
+  }
+
+  const nextContent = cloneBackyContent(content);
+  const idSuffix = options.idSuffix || `copy-${Date.now().toString(36)}`;
+  const offsetX = typeof options.offsetX === "number" ? options.offsetX : 16;
+  const offsetY = typeof options.offsetY === "number" ? options.offsetY : 16;
+  let result: BackyContentDuplicateElementResult<TContent> | null = null;
+
+  const cloneForDuplicate = (
+    source: Record<string, unknown>,
+    parentId: string | undefined,
+    isRoot: boolean,
+  ): Record<string, unknown> => {
+    const clone = cloneBackyRecord(source);
+    const sourceId = backyElementId(source) || "element";
+    const duplicateId = isRoot && options.duplicateId
+      ? options.duplicateId
+      : nextBackyContentElementId(sourceId, idSuffix);
+    clone.id = duplicateId;
+    if (parentId) {
+      clone.parentId = parentId;
+    } else {
+      delete clone.parentId;
+    }
+    if (isRoot) {
+      clone.x = backyNumberField(clone, "x", 0) + offsetX;
+      clone.y = backyNumberField(clone, "y", 0) + offsetY;
+    }
+    if (Array.isArray(clone.children)) {
+      clone.children = clone.children
+        .filter(isBackyRecord)
+        .map((child) => cloneForDuplicate(child, duplicateId, false));
+    }
+    return clone;
+  };
+
+  const duplicateInSiblings = (siblings: unknown[], parentId?: string): boolean => {
+    const sourceIndex = siblings.findIndex((item) => backyElementId(item) === elementId);
+    if (sourceIndex >= 0) {
+      const source = siblings[sourceIndex];
+      if (!isBackyRecord(source)) return false;
+      if (!options.allowLocked && isBackyElementLocked(source)) return false;
+
+      const duplicate = cloneForDuplicate(source, parentId, true);
+      const insertIndex = normalizeBackyInsertIndex(options.index, siblings.length);
+      siblings.splice(options.index === undefined ? sourceIndex + 1 : insertIndex, 0, duplicate);
+      result = {
+        content: nextContent,
+        sourceId: elementId,
+        duplicateId: String(duplicate.id),
+        duplicatedIds: collectBackyElementIds(duplicate),
+        ...(parentId ? { parentId } : {}),
+        index: options.index === undefined ? sourceIndex + 1 : insertIndex,
+      };
+      return true;
+    }
+
+    return siblings.some((item) => (
+      isBackyRecord(item) &&
+      Array.isArray(item.children) &&
+      duplicateInSiblings(item.children, backyElementId(item) || undefined)
+    ));
+  };
+
+  for (const root of contentElementRoots(nextContent)) {
+    if (duplicateInSiblings(root)) break;
+  }
+
+  const finalResult = result as BackyContentDuplicateElementResult<TContent> | null;
+  return finalResult
+    ? { ...finalResult, content: refreshBackyEditorCompositionMetadata(nextContent) }
+    : null;
+}
+
+export function deleteBackyContentElements<TContent extends BackyEditableContent>(
+  content: TContent | undefined | null,
+  elementIds: readonly string[],
+  options: BackyContentDeleteElementsOptions = {},
+): BackyContentDeleteElementsResult<TContent> | null {
+  const selectedIds = Array.from(new Set(elementIds.filter(Boolean)));
+  if (!content || selectedIds.length === 0) {
+    return null;
+  }
+
+  const selectedSet = new Set(selectedIds);
+  let lockedSelected = false;
+  let foundSelected = false;
+  visitBackyContentElements(contentElementRoots(content), (element) => {
+    const id = backyElementId(element);
+    if (!id || !selectedSet.has(id)) return;
+    foundSelected = true;
+    if (!options.allowLocked && isBackyElementLocked(element)) {
+      lockedSelected = true;
+    }
+  });
+
+  if (!foundSelected || lockedSelected) {
+    return null;
+  }
+
+  const nextContent = cloneBackyContent(content);
+  const deletedIds: string[] = [];
+  const deleteFromSiblings = (siblings: unknown[]): void => {
+    const kept: unknown[] = [];
+    siblings.forEach((item) => {
+      const id = backyElementId(item);
+      if (id && selectedSet.has(id) && isBackyRecord(item)) {
+        deletedIds.push(...collectBackyElementIds(item));
+        return;
+      }
+      if (isBackyRecord(item) && Array.isArray(item.children)) {
+        deleteFromSiblings(item.children);
+      }
+      kept.push(item);
+    });
+    siblings.splice(0, siblings.length, ...kept);
+  };
+
+  contentElementRoots(nextContent).forEach(deleteFromSiblings);
+  return deletedIds.length > 0
+    ? {
+        content: refreshBackyEditorCompositionMetadata(nextContent),
+        deletedIds: Array.from(new Set(deletedIds)),
+      }
+    : null;
+}
+
+export function transformBackyContentElements<TContent extends BackyEditableContent>(
+  content: TContent | undefined | null,
+  transforms: readonly BackyContentElementTransform[],
+  options: BackyContentTransformElementsOptions = {},
+): BackyContentTransformElementsResult<TContent> | null {
+  const validTransforms = transforms.filter((transform) => transform.elementId);
+  if (!content || validTransforms.length === 0) {
+    return null;
+  }
+
+  const transformById = new Map(validTransforms.map((transform) => [transform.elementId, transform]));
+  let lockedSelected = false;
+  let foundSelected = false;
+  visitBackyContentElements(contentElementRoots(content), (element) => {
+    const id = backyElementId(element);
+    if (!id || !transformById.has(id)) return;
+    foundSelected = true;
+    if (!options.allowLocked && isBackyElementLocked(element)) {
+      lockedSelected = true;
+    }
+  });
+
+  if (!foundSelected || lockedSelected) {
+    return null;
+  }
+
+  const minWidth = typeof options.minWidth === "number" ? options.minWidth : 1;
+  const minHeight = typeof options.minHeight === "number" ? options.minHeight : 1;
+  const nextContent = cloneBackyContent(content);
+  const transformedIds = new Set<string>();
+  const breakpoints = new Set<BackyContentTransformBreakpoint>();
+
+  const applyTransform = (target: Record<string, unknown>, transform: BackyContentElementTransform) => {
+    const breakpoint = transform.breakpoint || "desktop";
+    const updateTarget = breakpoint === "desktop"
+      ? target
+      : (() => {
+          const responsive = isBackyRecord(target.responsive)
+            ? { ...target.responsive }
+            : {};
+          const currentOverride = isBackyRecord(responsive[breakpoint])
+            ? { ...(responsive[breakpoint] as Record<string, unknown>) }
+            : {};
+          responsive[breakpoint] = currentOverride;
+          target.responsive = responsive;
+          return currentOverride;
+        })();
+
+    const currentNumber = (field: string, fallback: number) => (
+      backyNumberField(updateTarget, field, backyNumberField(target, field, fallback))
+    );
+    const setNumber = (field: string, value: number | undefined) => {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        updateTarget[field] = value;
+      }
+    };
+
+    setNumber("x", transform.x ?? (transform.deltaX !== undefined ? currentNumber("x", 0) + transform.deltaX : undefined));
+    setNumber("y", transform.y ?? (transform.deltaY !== undefined ? currentNumber("y", 0) + transform.deltaY : undefined));
+    setNumber("width", transform.width !== undefined
+      ? Math.max(minWidth, transform.width)
+      : transform.deltaWidth !== undefined
+        ? Math.max(minWidth, currentNumber("width", minWidth) + transform.deltaWidth)
+        : undefined);
+    setNumber("height", transform.height !== undefined
+      ? Math.max(minHeight, transform.height)
+      : transform.deltaHeight !== undefined
+        ? Math.max(minHeight, currentNumber("height", minHeight) + transform.deltaHeight)
+        : undefined);
+    setNumber("zIndex", transform.zIndex);
+    setNumber("rotation", transform.rotation);
+    transformedIds.add(transform.elementId);
+    breakpoints.add(breakpoint);
+  };
+
+  visitBackyContentElements(contentElementRoots(nextContent), (element) => {
+    const id = backyElementId(element);
+    if (!id) return;
+    const transform = transformById.get(id);
+    if (transform) {
+      applyTransform(element, transform);
+    }
+  });
+
+  return transformedIds.size > 0
+    ? {
+        content: refreshBackyEditorCompositionMetadata(nextContent),
+        transformedIds: Array.from(transformedIds),
+        breakpoints: Array.from(breakpoints),
+      }
+    : null;
+}
+
 export function groupBackyContentElements<TContent extends BackyEditableContent>(
   content: TContent | undefined | null,
   elementIds: readonly string[],
@@ -4592,7 +7914,7 @@ export function groupBackyContentElements<TContent extends BackyEditableContent>
     });
 
     if (selectedSiblings.length === selectedIds.length) {
-      if (!options.allowLocked && selectedSiblings.some((item) => item.locked === true)) {
+      if (!options.allowLocked && selectedSiblings.some(isBackyElementLocked)) {
         return false;
       }
 
@@ -4663,12 +7985,13 @@ export function groupBackyContentElements<TContent extends BackyEditableContent>
   };
 
   for (const root of contentElementRoots(nextContent)) {
-    if (groupInSiblings(root)) {
-      break;
-    }
+    groupInSiblings(root);
   }
 
-  return result;
+  const finalResult = result as BackyContentGroupResult<TContent> | null;
+  return finalResult
+    ? { ...finalResult, content: refreshBackyEditorCompositionMetadata(nextContent) }
+    : null;
 }
 
 export function ungroupBackyContentElements<TContent extends BackyEditableContent>(
@@ -4690,7 +8013,7 @@ export function ungroupBackyContentElements<TContent extends BackyEditableConten
     const selectedGroups = siblings.filter((item): item is Record<string, unknown> => {
       const id = backyElementId(item);
       if (!id || !selectedSet.has(id) || !isBackyRecord(item)) return false;
-      if (!options.allowLocked && item.locked === true) return false;
+      if (!options.allowLocked && isBackyElementLocked(item)) return false;
       if (!Array.isArray(item.children) || item.children.length === 0) return false;
       if (requireEditorGroup && !(isBackyRecord(item.props) && item.props.editorGroup === true)) {
         return false;
@@ -4755,12 +8078,13 @@ export function ungroupBackyContentElements<TContent extends BackyEditableConten
   };
 
   for (const root of contentElementRoots(nextContent)) {
-    if (ungroupInSiblings(root)) {
-      break;
-    }
+    ungroupInSiblings(root);
   }
 
-  return result;
+  const finalResult = result as BackyContentUngroupResult<TContent> | null;
+  return finalResult
+    ? { ...finalResult, content: refreshBackyEditorCompositionMetadata(nextContent) }
+    : null;
 }
 
 export function patchBackyContentElement<TContent extends BackyEditableContent>(
@@ -4768,6 +8092,21 @@ export function patchBackyContentElement<TContent extends BackyEditableContent>(
   patch: BackyContentElementPatch,
 ): TContent | null {
   return patchBackyContentElements(content, [patch]);
+}
+
+export function patchBackyContentElementDownloadFile<
+  TContent extends BackyEditableContent,
+>(
+  content: TContent | undefined | null,
+  elementId: string,
+  siteId: string,
+  mediaId: string,
+  options: BackyContentDownloadFilePatchOptions = {},
+): TContent | null {
+  return patchBackyContentElement(
+    content,
+    buildBackyContentDownloadFilePatch(elementId, siteId, mediaId, options),
+  );
 }
 
 export function patchBackyContentEditableField<
@@ -4928,7 +8267,7 @@ export function patchBackyContentElements<TContent extends BackyEditableContent>
     changed = true;
   });
 
-  return changed ? nextContent : null;
+  return changed ? refreshBackyEditorCompositionMetadata(nextContent) : null;
 }
 
 function liveManagementHeaders(
@@ -5104,6 +8443,15 @@ export interface BackyReusableSection {
     canvasSize?: Record<string, unknown>;
     customCSS?: string;
     customJS?: string;
+    contentDocument?: BackyContentDocument | Record<string, unknown>;
+    themeTokenRefs?: Record<string, string>;
+    assets?: unknown[] | Record<string, unknown>;
+    animations?: BackyDesignArrayOrRecord;
+    interactions?: unknown[] | Record<string, unknown>;
+    dataBindings?: Record<string, unknown>;
+    editableMap?: Record<string, unknown>;
+    seo?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
     [key: string]: unknown;
   };
   metadata?: Record<string, unknown>;
@@ -6289,6 +9637,106 @@ export type BackyMediaSignedUrlResponse = BackyEnvelope<{
   disposition: BackyMediaSignedUrlDisposition;
 }>;
 
+export type BackyMediaFileDisposition = BackyMediaSignedUrlDisposition;
+
+export interface BackyMediaFileUrlAccess {
+  siteId?: string;
+  token?: string;
+  expiresAt?: number | string;
+  disposition?: BackyMediaFileDisposition | string;
+}
+
+export interface BackyMediaFileUrlOptions extends BackyMediaFileUrlAccess {
+  baseUrl?: string;
+}
+
+export interface BackyMediaFileCachedOptions
+  extends BackyMediaFileUrlAccess,
+    BackyConditionalRequestOptions {}
+
+export type BackyMediaFileCachedResult = BackyConditionalResult<ArrayBuffer>;
+
+export interface BackyMediaTransformUrlOptions {
+  siteId?: string;
+  baseUrl?: string;
+  width: number;
+  quality?: number;
+}
+
+export interface BackyMediaTransformCachedOptions
+  extends BackyConditionalRequestOptions {
+  width: number;
+  quality?: number;
+}
+
+export type BackyMediaTransformCachedResult = BackyConditionalResult<null>;
+
+export interface BackyMediaDownloadLinkPropsOptions extends BackyMediaFileUrlOptions {
+  href?: string;
+  url?: string;
+  fileMediaName?: string;
+  mediaName?: string;
+  fileName?: string;
+  filename?: string;
+  name?: string;
+  fileMediaType?: string;
+  mediaType?: string;
+  fileMediaVisibility?: string;
+  visibility?: string;
+  fileSignedUrlRequired?: boolean;
+  signedUrlRequired?: boolean;
+  targetBlank?: boolean;
+  signedUrlEndpoint?: string;
+}
+
+export interface BackyMediaDownloadLinkProps {
+  href: string;
+  target: "_blank" | "_self";
+  rel: "noopener noreferrer" | "";
+  download: true;
+  fileId: string;
+  fileIds: string[];
+  fileMediaId: string;
+  fileMediaIds: string[];
+  downloadMediaId: string;
+  downloadMediaIds: string[];
+  fileMediaUrl: string;
+  fileUrl: string;
+  fileMediaName?: string;
+  fileMediaType?: string;
+  fileMediaVisibility?: string;
+  fileDownloadDisposition: "attachment";
+  fileSignedUrlRequired?: boolean;
+  fileSignedUrlEndpoint: string;
+  fileName?: string;
+  [key: string]: unknown;
+}
+
+export type BackyContentDownloadFilePatchOptions =
+  BackyMediaDownloadLinkPropsOptions;
+
+const BACKY_DOWNLOAD_FILE_PROP_PATCH_KEYS = [
+  "href",
+  "target",
+  "rel",
+  "download",
+  "fileId",
+  "fileIds",
+  "fileMediaId",
+  "fileMediaIds",
+  "downloadMediaId",
+  "downloadMediaIds",
+  "fileMediaUrl",
+  "fileUrl",
+  "fileMediaName",
+  "fileMediaType",
+  "fileMediaVisibility",
+  "fileDownloadDisposition",
+  "fileSignedUrlRequired",
+  "fileSignedUrlEndpoint",
+  "fileName",
+] as const;
+
 const backyMediaBindingRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -6511,6 +9959,138 @@ export function buildBackyMediaSignedUrlInput(
   return input;
 }
 
+const normalizeBackyMediaFileExpiresAt = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  const text = backyMediaBindingText(value);
+  if (!text) return undefined;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : undefined;
+};
+
+export function buildBackyMediaFilePath(
+  siteId: string,
+  mediaId: string,
+  access: BackyMediaFileUrlAccess = {},
+): string {
+  const searchParams = new URLSearchParams();
+  const token = backyMediaBindingText(access.token);
+  const expiresAt = normalizeBackyMediaFileExpiresAt(access.expiresAt);
+  const disposition = normalizeBackyMediaSignedUrlDisposition(access.disposition);
+  if (token) searchParams.set("token", token);
+  if (expiresAt !== undefined) searchParams.set("expiresAt", String(expiresAt));
+  if (disposition) searchParams.set("disposition", disposition);
+  const query = searchParams.toString();
+  return `/api/sites/${encodeURIComponent(siteId)}/media/${encodeURIComponent(mediaId)}/file${query ? `?${query}` : ""}`;
+}
+
+export function buildBackyMediaFileUrl(
+  baseUrl: string,
+  siteId: string,
+  mediaId: string,
+  access: BackyMediaFileUrlAccess = {},
+): string {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+  return `${normalizedBaseUrl}${buildBackyMediaFilePath(siteId, mediaId, access)}`;
+}
+
+export function buildBackyMediaTransformPath(
+  siteId: string,
+  mediaId: string,
+  options: Pick<BackyMediaTransformUrlOptions, "width" | "quality">,
+): string {
+  const searchParams = new URLSearchParams({
+    width: String(options.width),
+  });
+  if (options.quality !== undefined) {
+    searchParams.set("quality", String(options.quality));
+  }
+  return `/api/sites/${encodeURIComponent(siteId)}/media/${encodeURIComponent(mediaId)}/transform?${searchParams.toString()}`;
+}
+
+export function buildBackyMediaTransformUrl(
+  baseUrl: string,
+  siteId: string,
+  mediaId: string,
+  options: Pick<BackyMediaTransformUrlOptions, "width" | "quality">,
+): string {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+  return `${normalizedBaseUrl}${buildBackyMediaTransformPath(siteId, mediaId, options)}`;
+}
+
+export function buildBackyMediaDownloadLinkProps(
+  siteId: string,
+  mediaId: string,
+  options: BackyMediaDownloadLinkPropsOptions = {},
+): BackyMediaDownloadLinkProps {
+  const explicitHref = backyMediaBindingText(options.href, options.url);
+  const href = explicitHref || (options.baseUrl
+    ? buildBackyMediaFileUrl(options.baseUrl, siteId, mediaId, {
+      ...options,
+      disposition: "attachment",
+    })
+    : buildBackyMediaFilePath(siteId, mediaId, {
+      ...options,
+      disposition: "attachment",
+    }));
+  const fileName = backyMediaBindingText(
+    options.fileName,
+    options.fileMediaName,
+    options.mediaName,
+    options.filename,
+    options.name,
+  );
+  const fileMediaType = backyMediaBindingText(options.fileMediaType, options.mediaType);
+  const fileMediaVisibility = backyMediaBindingText(options.fileMediaVisibility, options.visibility);
+  const fileSignedUrlRequired = options.fileSignedUrlRequired === true ||
+    options.signedUrlRequired === true ||
+    fileMediaVisibility === "private";
+  const signedUrlEndpoint = backyMediaBindingText(options.signedUrlEndpoint) ||
+    `/api/admin/sites/${encodeURIComponent(siteId)}/media/${encodeURIComponent(mediaId)}/signed-url`;
+  const target = options.targetBlank ? "_blank" : "_self";
+
+  return {
+    href,
+    target,
+    rel: target === "_blank" ? "noopener noreferrer" : "",
+    download: true,
+    fileId: mediaId,
+    fileIds: [mediaId],
+    fileMediaId: mediaId,
+    fileMediaIds: [mediaId],
+    downloadMediaId: mediaId,
+    downloadMediaIds: [mediaId],
+    fileMediaUrl: href,
+    fileUrl: href,
+    ...(fileName ? { fileMediaName: fileName } : {}),
+    ...(fileMediaType ? { fileMediaType } : {}),
+    ...(fileMediaVisibility ? { fileMediaVisibility } : {}),
+    fileDownloadDisposition: "attachment",
+    ...(fileSignedUrlRequired ? { fileSignedUrlRequired: true } : {}),
+    fileSignedUrlEndpoint: signedUrlEndpoint,
+    ...(fileName ? { fileName } : {}),
+  };
+}
+
+export function buildBackyContentDownloadFilePatch(
+  elementId: string,
+  siteId: string,
+  mediaId: string,
+  options: BackyContentDownloadFilePatchOptions = {},
+): BackyContentElementPatch {
+  const props = buildBackyMediaDownloadLinkProps(siteId, mediaId, options);
+  const changes = BACKY_DOWNLOAD_FILE_PROP_PATCH_KEYS.reduce<Record<string, unknown>>((acc, key) => {
+    acc[`props.${key}`] = props[key];
+    return acc;
+  }, {});
+
+  return {
+    elementId,
+    changes,
+  };
+}
+
 export interface BackyPageListOptions extends BackyListOptions {
   path?: string;
   slug?: string;
@@ -6545,7 +10125,6 @@ export interface BackyFormSubmissionInput {
   postId?: string;
   honeypot?: string;
   startedAt?: string | number;
-  contactShareOverride?: unknown;
   [fieldKey: string]: unknown;
 }
 
@@ -6560,9 +10139,7 @@ export interface BackyFormSubmissionInputBuildOptions {
   postId?: string;
   honeypot?: string;
   startedAt?: string | number;
-  contactShareOverride?: unknown;
   captchaToken?: string;
-  rateLimitBypass?: boolean;
   includeUnmappedValues?: boolean;
 }
 
@@ -6576,7 +10153,6 @@ const BACKY_FORM_SUBMISSION_TRANSPORT_KEYS = new Set([
   "postId",
   "honeypot",
   "startedAt",
-  "contactShareOverride",
   "captcha",
   "captchaToken",
   "turnstileToken",
@@ -6584,7 +10160,6 @@ const BACKY_FORM_SUBMISSION_TRANSPORT_KEYS = new Set([
   "recaptchaToken",
   "g-recaptcha-response",
   "cf-turnstile-response",
-  "rateLimitBypass",
 ]);
 
 const backyFormRecord = (value: unknown): Record<string, unknown> =>
@@ -6685,38 +10260,6 @@ const normalizeBackyFormValues = (
   );
 };
 
-const normalizeBackyFormContactShareOverride = (
-  form: BackyFormDefinition | undefined | null,
-  value: unknown,
-): unknown => {
-  const raw = backyFormRecord(value);
-  if (Object.keys(raw).length === 0) {
-    return undefined;
-  }
-  const fieldKeys = backyFormFieldKeySet(form);
-  const frontendFieldKeyMap = backyFormFrontendFieldKeyMap(form);
-  const normalized: Record<string, unknown> = {};
-  if (typeof raw.enabled === "boolean") {
-    normalized.enabled = raw.enabled;
-  }
-  if (typeof raw.dedupeByEmail === "boolean") {
-    normalized.dedupeByEmail = raw.dedupeByEmail;
-  }
-  for (const key of ["nameField", "emailField", "phoneField", "notesField"]) {
-    const rawField = raw[key];
-    if (typeof rawField !== "string") continue;
-    const resolved = resolveBackyFormFieldKey(
-      rawField,
-      fieldKeys,
-      frontendFieldKeyMap,
-    );
-    if (resolved) {
-      normalized[key] = resolved;
-    }
-  }
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
-};
-
 const backyFormCaptchaToken = (
   source: Record<string, unknown>,
   options: BackyFormSubmissionInputBuildOptions,
@@ -6772,16 +10315,6 @@ export function buildBackyFormSubmissionInput(
   const honeypot = backyFormText(options.honeypot, body.honeypot);
   const captchaToken = backyFormCaptchaToken(body, options);
   const startedAt = options.startedAt ?? body.startedAt;
-  const contactShareOverride = normalizeBackyFormContactShareOverride(
-    form,
-    options.contactShareOverride ?? body.contactShareOverride,
-  );
-  const rateLimitBypass =
-    typeof options.rateLimitBypass === "boolean"
-      ? options.rateLimitBypass
-      : typeof body.rateLimitBypass === "boolean"
-        ? body.rateLimitBypass
-        : undefined;
 
   if (requestId) input.requestId = requestId;
   if (pageId) input.pageId = pageId;
@@ -6790,14 +10323,8 @@ export function buildBackyFormSubmissionInput(
   if (typeof startedAt === "string" || typeof startedAt === "number") {
     input.startedAt = startedAt;
   }
-  if (contactShareOverride) {
-    input.contactShareOverride = contactShareOverride;
-  }
   if (captchaToken) {
     input.captchaToken = captchaToken;
-  }
-  if (typeof rateLimitBypass === "boolean") {
-    input.rateLimitBypass = rateLimitBypass;
   }
 
   return input;
@@ -6838,7 +10365,6 @@ export interface BackyCommentInput {
   hcaptchaToken?: string;
   recaptchaToken?: string;
   moderationMode?: "manual" | "auto-approve";
-  rateLimitBypass?: boolean;
   [key: string]: unknown;
 }
 
@@ -6854,7 +10380,6 @@ export interface BackyCommentInputBuildOptions {
   startedAt?: string | number;
   captchaToken?: string;
   moderationMode?: "manual" | "auto-approve";
-  rateLimitBypass?: boolean;
 }
 
 const backyCommentRecord = (value: unknown): Record<string, unknown> =>
@@ -6946,12 +10471,6 @@ export function buildBackyCommentInput(
   const moderationMode =
     options.moderationMode ??
     normalizeBackyCommentModerationMode(body.moderationMode);
-  const rateLimitBypass =
-    typeof options.rateLimitBypass === "boolean"
-      ? options.rateLimitBypass
-      : typeof body.rateLimitBypass === "boolean"
-        ? body.rateLimitBypass
-        : undefined;
 
   const input: BackyCommentInput = { content };
   if (authorName) input.authorName = authorName;
@@ -6967,9 +10486,6 @@ export function buildBackyCommentInput(
   }
   if (captchaToken) input.captchaToken = captchaToken;
   if (moderationMode) input.moderationMode = moderationMode;
-  if (typeof rateLimitBypass === "boolean") {
-    input.rateLimitBypass = rateLimitBypass;
-  }
   return input;
 }
 
@@ -7459,6 +10975,7 @@ export interface BackyDynamicItemRoute extends BackyResolvedRouteBase<"dynamicIt
     renderUrl?: string;
     frontendDesign?: BackyFrontendDesignProvenance;
     collectionFrontendDesign?: BackyFrontendDesignProvenance;
+    designReadiness?: BackyCommerceProductDesignReadiness;
   };
 }
 
@@ -7514,6 +11031,28 @@ export type BackyRouteResolveResult =
       success: false;
       data: BackyRouteResolve & { route: BackyGoneRoute };
     });
+
+export type BackyRenderRoute = Record<string, unknown> & {
+  type:
+    | "page"
+    | "post"
+    | "dynamicList"
+    | "dynamicItem"
+    | "redirect"
+    | "notFound"
+    | "gone"
+    | string;
+  path?: string;
+  status?: string;
+  canonical?: string;
+  params?: Record<string, string>;
+  dataset?: Record<string, unknown> | null;
+  resource?: Record<string, unknown> & {
+    frontendDesign?: BackyFrontendDesignProvenance;
+    collectionFrontendDesign?: BackyFrontendDesignProvenance;
+    designReadiness?: BackyCommerceProductDesignReadiness;
+  };
+};
 
 export interface BackySeoRoute {
   type: "page" | "post" | "dynamicList" | "dynamicItem" | string;
@@ -7719,10 +11258,17 @@ export interface BackyManifestPagesRuntimeModule {
     frontendDesignProvenance: boolean;
     previewTokens: boolean;
     liveManagement: boolean;
+    authenticatedManagement: boolean;
+    pageCreation: boolean;
+    templateCloning: boolean;
+    readinessChecks: boolean;
+    publishArchive: boolean;
+    revisionHistory: boolean;
     conditionalRequests: boolean;
     cacheablePages: boolean;
     [key: string]: unknown;
   };
+  managementPolicy: BackyManifestContentManagementPolicy;
   cache: {
     list: string;
     detail: string;
@@ -7851,10 +11397,17 @@ export interface BackyManifestBlogRuntimeModule {
     frontendDesignProvenance: boolean;
     previewTokens: boolean;
     liveManagement: boolean;
+    authenticatedManagement: boolean;
+    postCreation: boolean;
+    templateCloning: boolean;
+    readinessChecks: boolean;
+    publishArchive: boolean;
+    revisionHistory: boolean;
     conditionalRequests: boolean;
     cacheablePosts: boolean;
     [key: string]: unknown;
   };
+  managementPolicy: BackyManifestContentManagementPolicy;
   cache: {
     list: string;
     detail: string;
@@ -8231,6 +11784,23 @@ export interface BackyManifestMediaManagementPolicy {
     [key: string]: unknown;
   };
   uploadFields: string[];
+  filters: {
+    types: Array<"image" | "video" | "audio" | "document" | "file" | "font" | "other" | "all">;
+    typeAliases: {
+      file: Array<"document" | "other">;
+      [key: string]: unknown;
+    };
+    visibility: Array<"public" | "private" | "all">;
+    scopes: Array<"global" | "page" | "post" | "all">;
+    queryParams: string[];
+    maxLimit: 100;
+    aliases: {
+      blogId: "postId";
+      fileType: "file";
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   sdkHelpers: {
     list: "adminMedia";
     upload: "uploadMedia";
@@ -8321,7 +11891,7 @@ export interface BackyManifestMediaModule {
   filters: {
     types: string[];
     typeAliases: {
-      file: "document";
+      file: Array<"document" | "other">;
       [key: string]: unknown;
     };
     visibility: Array<"public" | "private">;
@@ -8332,7 +11902,7 @@ export interface BackyManifestMediaModule {
       q: "search";
       folder: "folderId";
       blogId: "postId";
-      fileType: "document";
+      fileType: "file";
       [key: string]: unknown;
     };
     [key: string]: unknown;
@@ -8390,9 +11960,19 @@ export interface BackyManifestThemeModule {
   tokenSchemaVersion: "backy.theme.v1";
   tokens: BackyThemeTokens & { schemaVersion: "backy.theme.v1" };
   cssVariables: Record<string, string>;
+  tokenReferences: Record<string, string>;
+  styleSheet: string;
   selectors: {
     root: string;
     scoped: string;
+    [key: string]: unknown;
+  };
+  inheritance: {
+    elementTokenRefPath: "tokenRefs";
+    documentTokenRefPath?: "themeTokenRefs";
+    legacyElementTokenRefPath?: "themeTokenRefs";
+    fallbackOrder: string[];
+    supportedElementPaths: string[];
     [key: string]: unknown;
   };
   editableFields: string[];
@@ -8403,22 +11983,101 @@ export interface BackyManifestThemeModule {
     spacingScale: boolean;
     liveEditable: boolean;
     frontendDesignOverrides: boolean;
+    styleSheet: boolean;
+    tokenReferences: boolean;
+    perBlockTokenRefs: boolean;
+    animationTokenRefs: boolean;
     [key: string]: unknown;
   };
   [key: string]: unknown;
 }
 
 export interface BackyManifestEditorCompositionCommand {
-  id: "group" | "ungroup";
+  id: "add" | "duplicate" | "delete" | "move" | "resize" | "group" | "ungroup";
   label: string;
   shortcut: string;
-  sdkHelper: "groupBackyContentElements" | "ungroupBackyContentElements";
+  sdkHelper:
+    | "addBackyContentElement"
+    | "duplicateBackyContentElement"
+    | "deleteBackyContentElements"
+    | "transformBackyContentElements"
+    | "groupBackyContentElements"
+    | "ungroupBackyContentElements";
   minSelected: number;
   sameParentRequired: boolean;
   unlockedRequired: boolean;
+  mutates?: string[];
   createsEditorGroup?: boolean;
   editorGroupRequired?: boolean;
   preservesResponsiveGeometry: boolean;
+  [key: string]: unknown;
+}
+
+export interface BackyManifestEditorCommandRegistryCommand {
+  id: string;
+  label: string;
+  category:
+    | "history"
+    | "selection"
+    | "clipboard"
+    | "composition"
+    | "layer-state"
+    | "layer-order"
+    | "layout"
+    | "view"
+    | "shell"
+    | "workflow";
+  targetScope:
+    | "canvas"
+    | "selected-layer"
+    | "selected-layers"
+    | "selected-sibling-scope"
+    | "selected-child-scope"
+    | "selected-container"
+    | "viewport"
+    | "shell"
+    | "document";
+  testId: string;
+  shortcut?: string;
+  ariaKeyshortcuts?: string;
+  minSelected?: number;
+  sameParentRequired?: boolean;
+  unlockedRequired?: boolean;
+  editorGroupRequired?: boolean;
+  sdkHelper?: string;
+  apiHelper?: string;
+  mutates?: string[];
+  targetPaths?: string[];
+  stateRule: string;
+  [key: string]: unknown;
+}
+
+export interface BackyManifestEditorCommandRegistry {
+  schemaVersion: "backy.editor-command-registry.v1";
+  source: "live-management-discovery";
+  generatedFrom: "page-editor";
+  stateModel: {
+    runtimeState: "computed-by-editor-client";
+    stateValues: Array<"ready" | "disabled" | "hidden">;
+    reasonField: "reason";
+    selectionFields: string[];
+    clipboardFields: string[];
+    documentFields: string[];
+    [key: string]: unknown;
+  };
+  categories: Array<{
+    id: string;
+    label: string;
+    commandIds: string[];
+    [key: string]: unknown;
+  }>;
+  commands: BackyManifestEditorCommandRegistryCommand[];
+  privacy: {
+    includesSecretValues: false;
+    includesAdminSessionValues: false;
+    endpointTemplatesOnly: true;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -8427,6 +12086,10 @@ export interface BackyManifestEditorComposition {
   sdkHelpers: {
     listElements: "listBackyContentElements";
     findElement: "findBackyContentElement";
+    addElement: "addBackyContentElement";
+    duplicateElement: "duplicateBackyContentElement";
+    deleteElements: "deleteBackyContentElements";
+    transformElements: "transformBackyContentElements";
     group: "groupBackyContentElements";
     ungroup: "ungroupBackyContentElements";
     patchElement: "patchBackyContentElement";
@@ -8436,12 +12099,126 @@ export interface BackyManifestEditorComposition {
     [key: string]: unknown;
   };
   commands: BackyManifestEditorCompositionCommand[];
+  commandRegistry: BackyManifestEditorCommandRegistry;
   constraints: {
     sameParentRequired: true;
     lockedLayersBlocked: true;
     editorGroupMarker: "props.editorGroup";
     responsiveBreakpoints: Array<"tablet" | "mobile">;
     updateTarget: "content";
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface BackyManifestContentLifecycleCommands {
+  schemaVersion: "backy.content-lifecycle-commands.v1";
+  cloneField: "frontendDesignTemplateId";
+  permissions: {
+    read: "pages.view";
+    create: "pages.edit";
+    update: "pages.edit";
+    delete: "pages.delete";
+    publish: "pages.publish";
+    [key: string]: unknown;
+  };
+  sdkHelpers: {
+    listPages: "adminPages";
+    createPage: "createAdminPage";
+    readPage: "adminPage";
+    updatePage: "updateAdminPage";
+    deletePage: "deleteAdminPage";
+    pageReadiness: "adminPageReadiness";
+    publishPage: "publishAdminPage";
+    archivePage: "archiveAdminPage";
+    createPagePreview: "createAdminPagePreviewToken";
+    pageRevisions: "adminPageRevisions";
+    rollbackPage: "rollbackAdminPage";
+    listPosts: "adminBlogPosts";
+    createPost: "createAdminBlogPost";
+    readPost: "adminBlogPost";
+    updatePost: "updateAdminBlogPost";
+    deletePost: "deleteAdminBlogPost";
+    postReadiness: "adminBlogPostReadiness";
+    publishPost: "publishAdminBlogPost";
+    archivePost: "archiveAdminBlogPost";
+    createPostPreview: "createAdminBlogPostPreviewToken";
+    postRevisions: "adminBlogPostRevisions";
+    rollbackPost: "rollbackAdminBlogPost";
+    [key: string]: unknown;
+  };
+  requestBodies: Record<string, Record<string, string>>;
+  responseContracts: {
+    pageRevisions: "backy.admin-page-revisions.v1" | string;
+    postRevisions: "backy.admin-blog-post-revisions.v1" | string;
+    revisionBranchMetadata: "backy.content-revision-branch-metadata.v1" | string;
+    branchMetadataField: "revision.branchMetadata" | string;
+    pageRollbackRequest: "backy.admin-page-rollback-request.v1" | string;
+    postRollbackRequest: "backy.admin-blog-post-rollback-request.v1" | string;
+    [key: string]: string;
+  };
+  [key: string]: unknown;
+}
+
+export interface BackyManifestContentManagementPolicy {
+  schemaVersion: "backy.pages-management.v1" | "backy.blog-management.v1" | string;
+  cloneField: "frontendDesignTemplateId";
+  endpoints: {
+    list: string;
+    create: string;
+    detail: string;
+    readiness: string;
+    publish: string;
+    archive: string;
+    preview: string;
+    revisions: string;
+    rollback: string;
+    templateRegistry: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    list: "GET";
+    create: "POST";
+    read: "GET";
+    update: "PATCH";
+    delete: "DELETE";
+    readiness: "GET";
+    publish: "POST";
+    archive: "POST";
+    preview: "POST";
+    revisions: "GET";
+    rollback: "POST";
+    [key: string]: unknown;
+  };
+  auth: {
+    modes: Array<"session" | "api-key">;
+    headers: string[];
+    requiredPermissions: {
+      read: "pages.view";
+      create: "pages.edit";
+      update: "pages.edit";
+      delete: "pages.delete";
+      publish: "pages.publish";
+      [key: string]: unknown;
+    };
+    siteScope: true;
+    [key: string]: unknown;
+  };
+  sdkHelpers: Record<string, string>;
+  responseContracts: Record<string, string>;
+  designState: {
+    acceptsContentDocument: boolean;
+    acceptsCanvasElements: boolean;
+    acceptsFrontendDesignTemplateId: boolean;
+    preservesCustomCssJs: boolean;
+    preservesAssetsAnimationsInteractions: boolean;
+    preservesEditableMapAndDataBindings: boolean;
+    [key: string]: unknown;
+  };
+  privacy: {
+    routesRequireAuthenticatedAdmin: boolean;
+    publicManifestExposesEndpointTemplatesOnly: boolean;
+    adminSessionsAndApiKeysNeverReturned: boolean;
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -8488,6 +12265,7 @@ export interface BackyManifestLiveManagementModule {
     [key: string]: unknown;
   };
   editableTargets: string[];
+  lifecycle: BackyManifestContentLifecycleCommands;
   editorComposition: BackyManifestEditorComposition;
   updateBody: {
     expectedUpdatedAt: string;
@@ -8620,114 +12398,44 @@ export interface BackyFrontendDatabaseCertification {
   [key: string]: unknown;
 }
 
-export interface BackySettingsProviderCertification {
-  schemaVersion: "backy.settings-provider-certification-handoff.v1";
-  status: "external-live-provider-gate" | string;
-  settingsGate?: string;
-  commerceGate?: string;
-  localPreflight?: string;
-  releasePreflight?: string;
-  secretHandling?: string;
-  runtimeEvidence?: Record<string, unknown>;
-  scenarioEvidence?: {
-    schemaVersion: "backy.settings-provider-certification-evidence.v1" | string;
-    status?: "ready" | "attention" | "blocked" | string;
-    requiredGate?: string;
-    coverage?: {
-      covered?: number;
-      total?: number;
-      missing?: string[];
+export type BackySettingsProviderCertificationEvidence =
+  GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidence &
+    Record<string, unknown>;
+
+export type BackySettingsProviderCertificationEvidencePacket =
+  GeneratedBackyOpenApiAdminSettingsProviderCertificationEvidencePacket &
+    Record<string, unknown>;
+
+export type BackySettingsProviderCertification =
+  GeneratedBackyOpenApiAdminSettingsProviderCertification &
+    Record<string, unknown>;
+
+export type BackySettingsMediaStorageHandoff =
+  GeneratedBackyOpenApiAdminSettingsMediaStorageHandoff &
+    Record<string, unknown>;
+
+export type BackySettingsThemeDesignImpact =
+  GeneratedBackyOpenApiAdminSettingsThemeDesignImpact &
+    Record<string, unknown>;
+
+export type BackyAdminSettings = GeneratedBackyOpenApiAdminSettings &
+  Record<string, unknown>;
+
+export type BackySiteSettingsScope =
+  GeneratedBackyOpenApiAdminSiteSettingsScope & Record<string, unknown>;
+
+export type BackyAdminSettingsResponse =
+  GeneratedBackyOpenApiAdminSettingsEnvelope &
+    BackyEnvelope<{
+      settings: BackyAdminSettings;
+    }>;
+
+export type BackyAdminSettingsActionResponse =
+  GeneratedBackyOpenApiAdminSettingsActionEnvelope &
+    BackyEnvelope<{
+      settings: BackyAdminSettings;
       [key: string]: unknown;
-    };
-    scenarios?: Array<Record<string, unknown>>;
-    [key: string]: unknown;
-  };
-  operatorCommandTemplate?: Record<string, unknown>;
-  operatorEnvTemplate?: {
-    schemaVersion: "backy.settings-provider-certification-env-template.v1" | string;
-    format?: "shell-env" | string;
-    fileName?: string;
-    body?: string;
-    secretHandling?: string;
-    [key: string]: unknown;
-  };
-  groups?: Array<Record<string, unknown>>;
-  [key: string]: unknown;
-}
-
-export interface BackyAdminSettings {
-  schemaVersion: "backy.admin-settings.v1" | string;
-  scope?: {
-    workspaceSettingsScope?: "global" | string;
-    siteSettingsScope?: "site" | string;
-    siteSettingsEndpointTemplate?: string;
-    [key: string]: unknown;
-  };
-  endpoints?: {
-    workspaceSettings?: string;
-    siteSettings?: string;
-    [key: string]: unknown;
-  };
-  deliveryMode?: "managed-hosting" | "custom-frontend" | string;
-  apiKeys?: {
-    publicApiKey?: string;
-    adminApiKey?: string;
-    [key: string]: unknown;
-  };
-  storage?: Record<string, unknown>;
-  auth?: Record<string, unknown>;
-  integrations?: Record<string, unknown>;
-  runtimeStorage?: Record<string, unknown>;
-  runtimeDatabase?: Record<string, unknown>;
-  runtimeSupabase?: Record<string, unknown>;
-  runtimeMediaScanner?: Record<string, unknown>;
-  runtimeVercel?: Record<string, unknown>;
-  runtimeNotifications?: Record<string, unknown>;
-  runtimeCommerce?: Record<string, unknown>;
-  runtimeInteractiveComponents?: Record<string, unknown>;
-  runtimePublicApi?: Record<string, unknown>;
-  providerCertification?: BackySettingsProviderCertification;
-  frontendDatabaseCertification?: BackyFrontendDatabaseCertification;
-  updatedAt?: string;
-  [key: string]: unknown;
-}
-
-export interface BackySiteSettingsScope {
-  schemaVersion: "backy.site-settings-scope.v1" | string;
-  scope: {
-    level: "site" | string;
-    siteId: string;
-    siteSlug?: string;
-    teamId?: string | null;
-    workspaceSettingsScope?: "global" | string;
-    siteSettingsScope?: "site" | string;
-    [key: string]: unknown;
-  };
-  siteSettings: Record<string, unknown>;
-  workspaceSettings: Record<string, unknown>;
-  effectiveSettings: {
-    workspace?: Record<string, unknown>;
-    site?: Record<string, unknown>;
-    [key: string]: unknown;
-  };
-  frontendDatabaseCertification?: BackyFrontendDatabaseCertification;
-  endpoints?: {
-    workspaceSettings?: string;
-    siteSettings?: string;
-    siteDetail?: string;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
-
-export type BackyAdminSettingsResponse = BackyEnvelope<{
-  settings: BackyAdminSettings;
-}>;
-
-export type BackyAdminSettingsActionResponse = BackyEnvelope<{
-  settings: BackyAdminSettings;
-  [key: string]: unknown;
-}>;
+    }>;
 
 export interface BackyAdminIssuedApiKey {
   id: string;
@@ -8873,13 +12581,23 @@ export type BackySiteSettingsResponse = BackyEnvelope<{
   settings: BackySiteSettingsScope;
 }>;
 
-export type BackyAdminSettingsUpdateInput = Record<string, unknown> & {
-  requestId?: string;
-};
+export type BackyAdminSettingsUpdateInput =
+  GeneratedBackyOpenApiAdminSettingsUpdateRequest & {
+    requestId?: string;
+    [key: string]: unknown;
+  };
 
-export type BackySiteSettingsUpdateInput = Record<string, unknown> & {
-  requestId?: string;
-};
+export type BackyAdminSettingsActionInput =
+  GeneratedBackyOpenApiAdminSettingsActionRequest & {
+    requestId?: string;
+    [key: string]: unknown;
+  };
+
+export type BackySiteSettingsUpdateInput =
+  GeneratedBackyOpenApiAdminSiteSettingsPatchRequest & {
+    requestId?: string;
+    [key: string]: unknown;
+  };
 
 export interface BackySiteNavigationConfig {
   primary: BackyNavigationItem[];
@@ -9601,6 +13319,7 @@ export interface BackyFrontendLaunchReadiness {
     reusableSections?: number;
     forms?: number;
     media?: number;
+    fonts?: number;
     [key: string]: unknown;
   };
   checks: Array<{
@@ -9631,18 +13350,46 @@ export interface BackyFrontendLaunchReadiness {
   [key: string]: unknown;
 }
 
+export interface BackyCompletionEvidenceArtifact {
+  key: "settings-provider-certification-json" | "commerce-provider-certification-json";
+  label: string;
+  workflow: string;
+  alternateWorkflows?: string[];
+  artifactName: "backy-settings-provider-certification-evidence" | "backy-commerce-provider-certification-evidence";
+  path: "artifacts/backy-settings-provider-certification.json" | "artifacts/backy-commerce-provider-certification.json";
+  schemaVersion:
+    | "backy.settings-provider-certification-artifact.v1"
+    | "backy.commerce-provider-certification-artifact.v1";
+  producerEnv: "BACKY_SETTINGS_CERTIFICATION_OUTPUT" | "BACKY_COMMERCE_CERTIFICATION_OUTPUT";
+  requiredForReady: true;
+  includesSecretValues: false;
+  [key: string]: unknown;
+}
+
+export interface BackyCompletionArtifactVerifier {
+  command: "npm run doctor:release-certification";
+  requiredEnv: string;
+  pathEnv: string;
+  schemaVersion:
+    | "backy.settings-provider-certification-artifact.v1"
+    | "backy.commerce-provider-certification-artifact.v1";
+  validates: string[];
+  includesSecretValues: false;
+  [key: string]: unknown;
+}
+
 export interface BackyCompletionStatus {
   schemaVersion: "backy.completion-status.v1";
   status: "certification-ready" | "external-gates-required";
   summary?: string;
   audit: {
     source: string;
-    ready: 39;
-    partial: 6;
+    ready: 41;
+    partial: 4;
     prototype: 0;
     missing: 0;
     total: 45;
-    readyPercent: 87;
+    readyPercent: 91;
     [key: string]: unknown;
   };
   surfaces: Array<{
@@ -9653,8 +13400,36 @@ export interface BackyCompletionStatus {
     gate: string;
     [key: string]: unknown;
   }>;
+  surfaceRunbooks: Array<{
+    key: "settings" | "settings-admin-apis" | "products" | "orders";
+    label: string;
+    gate: "settings-provider-certification" | "commerce-provider-certification";
+    command: string;
+    preflight: string;
+    workflow: string;
+    targetInputs: string[];
+    evidencePacketSchema:
+      | "backy.settings-provider-certification-evidence-packet.v1"
+      | "backy.commerce-provider-certification-evidence-packet.v1"
+      | "backy.order-provider-certification-evidence-packet.v1";
+    evidenceApi: string;
+    evidenceUiPanel: string;
+    sourceOnlyGuard: string;
+    proofSources: string[];
+	    expectedArtifacts: string[];
+	    evidenceArtifacts: BackyCompletionEvidenceArtifact[];
+	    artifactVerifier: BackyCompletionArtifactVerifier;
+	    runtime: Record<string, unknown>;
+    secretBoundary: {
+      includesSecretValues: false;
+      excludes: string[];
+      [key: string]: unknown;
+    };
+    nextAction: string;
+    [key: string]: unknown;
+  }>;
   gates: Array<{
-    key: "forms-postgres" | "sdk-postgres" | "settings-provider-certification" | "commerce-provider-certification";
+    key: "settings-provider-certification" | "commerce-provider-certification";
     label: string;
     status: "ready-to-run" | "blocked-missing-inputs";
     command: string;
@@ -9664,6 +13439,17 @@ export interface BackyCompletionStatus {
     affectedSurfaces: string[];
     requiredEnvAliases: string[];
     runtime: Record<string, unknown>;
+    [key: string]: unknown;
+  }>;
+  certifiedGates?: Array<{
+    key: "forms-postgres" | "sdk-postgres";
+    label: string;
+    status: "certified";
+    command: string;
+    workflow: string;
+    affectedSurfaces: string[];
+    certifiedAt: string;
+    evidence: string;
     [key: string]: unknown;
   }>;
   nextAction: string;
@@ -9728,8 +13514,8 @@ export interface BackyRenderPayload {
     [key: string]: unknown;
   };
   frontendDesign?: BackyRenderFrontendDesign;
-  route: Record<string, unknown>;
-  content: BackyContentDocument;
+  route: BackyRenderRoute;
+  content: BackyRenderContent;
   assets: {
     media: BackyMediaAsset[];
     fonts: BackyFontAsset[];
@@ -12366,32 +16152,68 @@ export class BackyClient {
 
   mediaFileUrl(
     mediaId: string,
-    access: {
-      token?: string;
-      expiresAt?: number;
-      disposition?: "inline" | "attachment";
-    } = {},
+    access: BackyMediaFileUrlAccess = {},
   ): string {
-    const searchParams = new URLSearchParams();
-    if (access.token) searchParams.set("token", access.token);
-    if (access.expiresAt)
-      searchParams.set("expiresAt", String(access.expiresAt));
-    if (access.disposition) searchParams.set("disposition", access.disposition);
-    const query = searchParams.toString();
-    return `${this.baseUrl}/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/file${query ? `?${query}` : ""}`;
+    return buildBackyMediaFileUrl(
+      this.baseUrl,
+      access.siteId ?? this.requireSiteId(),
+      mediaId,
+      access,
+    );
+  }
+
+  mediaFileCached(
+    mediaId: string,
+    options: BackyMediaFileCachedOptions = {},
+  ): Promise<BackyMediaFileCachedResult> {
+    return this.requestConditionalArrayBuffer(
+      buildBackyMediaFilePath(options.siteId ?? this.requireSiteId(), mediaId, options),
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  mediaDownloadLinkProps(
+    mediaId: string,
+    options: BackyMediaDownloadLinkPropsOptions = {},
+  ): BackyMediaDownloadLinkProps {
+    return buildBackyMediaDownloadLinkProps(
+      options.siteId ?? this.requireSiteId(),
+      mediaId,
+      {
+        baseUrl: this.baseUrl,
+        ...options,
+      },
+    );
   }
 
   mediaTransformUrl(
     mediaId: string,
-    options: { width: number; quality?: number },
+    options: BackyMediaTransformUrlOptions,
   ): string {
-    const searchParams = new URLSearchParams({
-      width: String(options.width),
-    });
-    if (options.quality !== undefined) {
-      searchParams.set("quality", String(options.quality));
-    }
-    return `${this.baseUrl}/api/sites/${encodeURIComponent(this.requireSiteId())}/media/${encodeURIComponent(mediaId)}/transform?${searchParams.toString()}`;
+    return buildBackyMediaTransformUrl(
+      this.baseUrl,
+      options.siteId ?? this.requireSiteId(),
+      mediaId,
+      options,
+    );
+  }
+
+  mediaTransformCached(
+    mediaId: string,
+    options: BackyMediaTransformCachedOptions,
+  ): Promise<BackyMediaTransformCachedResult> {
+    return this.requestConditionalRedirect(
+      buildBackyMediaTransformPath(options.siteId ?? this.requireSiteId(), mediaId, options),
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+        credentials: options.credentials,
+      },
+    );
   }
 
   collections(
@@ -13753,6 +17575,24 @@ export class BackyClient {
     });
   }
 
+  commerceOrderPublicStatusHandoff(
+    orderIdOrSlug: string,
+    statusToken: string,
+    options: BackyCommerceOrderPublicStatusOptions = {},
+  ): Promise<BackyCommerceOrderStatusHandoffResponse> {
+    const lookupBy = options.lookupBy ?? "orderId";
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders`,
+      {
+        query: {
+          [lookupBy]: orderIdOrSlug,
+          statusToken,
+        },
+        requestId: options.requestId,
+      },
+    );
+  }
+
   createCommerceOrder(
     input: BackyCommerceOrderInput,
     siteId = this.requireSiteId(),
@@ -13761,7 +17601,12 @@ export class BackyClient {
       schemaVersion: "backy.commerce-orders.v1";
       order: BackyCommerceOrderSummary;
       checkoutSession?: BackyCommerceCheckoutSession;
+      quote: Record<string, unknown>;
       lineItems: Array<Record<string, unknown>>;
+      statusHandoff: BackyCommerceOrderStatusHandoff;
+      statusAccess: BackyCommerceOrderStatusAccess;
+      risk?: Record<string, unknown>;
+      deliveries?: Array<Record<string, unknown>>;
     }>
   > {
     return this.request(
@@ -14985,6 +18830,86 @@ export class BackyClient {
     };
   }
 
+  private async requestConditionalArrayBuffer(
+    path: string,
+    options: {
+      requestId?: string;
+      ifNoneMatch?: string;
+      headers?: HeadersInit;
+      credentials?: RequestCredentials;
+    } = {},
+  ): Promise<BackyConditionalResult<ArrayBuffer>> {
+    const response = await this.fetchRaw(path, options);
+    const meta = extractResponseMeta(response);
+    const responsePath = response.url ? new URL(response.url).pathname : path;
+
+    if (response.status === 304) {
+      return {
+        notModified: true,
+        status: 304,
+        body: null,
+        meta,
+      };
+    }
+
+    if (!response.ok) {
+      await throwBackyResponseError(response, responsePath);
+    }
+
+    return {
+      notModified: false,
+      status: response.status,
+      body: await response.arrayBuffer(),
+      meta,
+    };
+  }
+
+  private async requestConditionalRedirect(
+    path: string,
+    options: {
+      requestId?: string;
+      ifNoneMatch?: string;
+      headers?: HeadersInit;
+      credentials?: RequestCredentials;
+    } = {},
+  ): Promise<BackyConditionalResult<null>> {
+    const response = await this.fetchRaw(path, {
+      ...options,
+      redirect: "manual",
+    });
+    const meta = extractResponseMeta(response);
+    const responsePath = response.url ? new URL(response.url).pathname : path;
+
+    if (response.status === 304) {
+      return {
+        notModified: true,
+        status: 304,
+        body: null,
+        meta,
+      };
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      return {
+        notModified: false,
+        status: response.status,
+        body: null,
+        meta,
+      };
+    }
+
+    if (!response.ok) {
+      await throwBackyResponseError(response, responsePath);
+    }
+
+    return {
+      notModified: false,
+      status: response.status,
+      body: null,
+      meta,
+    };
+  }
+
   private async requestText(
     path: string,
     options: {
@@ -15034,6 +18959,38 @@ export class BackyClient {
     }
 
     return response.text();
+  }
+
+  private async fetchRaw(
+    path: string,
+    options: {
+      requestId?: string;
+      ifNoneMatch?: string;
+      headers?: HeadersInit;
+      credentials?: RequestCredentials;
+      redirect?: RequestRedirect;
+    } = {},
+  ): Promise<Response> {
+    const url = new URL(
+      path.startsWith("http") ? path : `${this.baseUrl}${path}`,
+    );
+
+    const headers = new Headers(this.defaultHeaders);
+    new Headers(options.headers).forEach((value, key) => {
+      headers.set(key, value);
+    });
+    headers.set("x-request-id", options.requestId ?? this.requestIdFactory());
+    if (options.ifNoneMatch) {
+      headers.set("if-none-match", options.ifNoneMatch);
+    }
+    const credentials = options.credentials ?? this.defaultCredentials;
+
+    return this.fetchImpl(url, {
+      method: "GET",
+      headers,
+      ...(credentials ? { credentials } : {}),
+      ...(options.redirect ? { redirect: options.redirect } : {}),
+    });
   }
 
   private async fetchJson(
@@ -15119,6 +19076,19 @@ function isBackyErrorEnvelope(value: unknown): value is BackyErrorEnvelope {
   );
 }
 
+async function throwBackyResponseError(
+  response: Response,
+  responsePath: string,
+): Promise<never> {
+  const json = await response.clone().json().catch(() => null);
+  if (isBackyErrorEnvelope(json)) {
+    throw new BackyApiError(response.status, json);
+  }
+  throw new Error(
+    `Backy API request failed with HTTP ${response.status} for ${responsePath}.`,
+  );
+}
+
 function isBackyGoneRouteResolveEnvelope(
   value: unknown,
 ): value is BackyRouteResolveResult {
@@ -15152,5 +19122,15 @@ function extractResponseMeta(response: Response): BackyResponseMeta {
     schemaVersion: response.headers.get("x-backy-schema-version") || undefined,
     requestId: response.headers.get("x-backy-request-id") || undefined,
     siteId: response.headers.get("x-backy-site-id") || undefined,
+    location: response.headers.get("location") || undefined,
+    contentType: response.headers.get("content-type") || undefined,
+    contentLength: response.headers.get("content-length") || undefined,
+    contentDisposition: response.headers.get("content-disposition") || undefined,
+    mediaId: response.headers.get("x-backy-media-id") || undefined,
+    mediaDeliveryPolicy:
+      response.headers.get("x-backy-media-delivery-policy") || undefined,
+    transformWidth: response.headers.get("x-backy-transform-width") || undefined,
+    transformQuality:
+      response.headers.get("x-backy-transform-quality") || undefined,
   };
 }

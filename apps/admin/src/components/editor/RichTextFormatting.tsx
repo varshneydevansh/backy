@@ -11,7 +11,7 @@
 import { useActiveEditor } from './ActiveEditorContext';
 import { useStore } from '@/stores/mockStore';
 import { cn } from '@/lib/utils';
-import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
+import { getFontFamilyOptions, toFontFamilyStyle, type FontOption } from './fontCatalog';
 import { EmojiPickerModal } from './EmojiPickerModal';
 import {
   applyListIndentToNodes,
@@ -83,6 +83,14 @@ const MARK_MIXED = Symbol('richtext-mark-mixed');
 type MarkStateValue = string | number | boolean | null | undefined | symbol;
 type InsertDialogMode = 'link' | 'image';
 
+const FONT_MEDIA_MARK_KEYS = [
+  'fontMediaId',
+  'fontMediaIds',
+  'fontRegistration',
+  'fontSource',
+  'fontFileUrl',
+] as const;
+
 const normalizeTextFallbackContent = (raw: unknown): unknown[] => {
   if (Array.isArray(raw)) {
     return raw;
@@ -99,6 +107,69 @@ const normalizeTextFallbackContent = (raw: unknown): unknown[] => {
     type: 'p',
     children: [{ text: '' }],
   }];
+};
+
+const uniqueFontFaceMediaIds = (font: FontOption): string[] => {
+  const ids = [
+    font.mediaId,
+    ...(font.faces || []).map((face) => face.mediaId),
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+  return Array.from(new Set(ids));
+};
+
+const buildRichTextFontMarkUpdates = (value: string, font?: FontOption): Record<string, unknown> => {
+  if (!value || value === 'inherit') {
+    return {
+      fontFamily: '',
+      fontMediaId: '',
+      fontMediaIds: '',
+      fontRegistration: '',
+      fontSource: '',
+      fontFileUrl: '',
+    };
+  }
+
+  if (font?.source !== 'custom') {
+    return {
+      fontFamily: value,
+      fontMediaId: '',
+      fontMediaIds: '',
+      fontRegistration: '',
+      fontSource: '',
+      fontFileUrl: '',
+    };
+  }
+
+  const faces = font.faces || [];
+  const primaryFace = faces[0];
+  const mediaIds = uniqueFontFaceMediaIds(font);
+  const primaryMediaId = font.mediaId || mediaIds[0] || primaryFace?.mediaId || '';
+  const primaryUrl = font.url || primaryFace?.url || '';
+
+  return {
+    fontFamily: value,
+    fontMediaId: primaryMediaId,
+    fontMediaIds: mediaIds,
+    fontSource: 'media-library',
+    fontFileUrl: primaryUrl,
+    fontRegistration: {
+      family: value,
+      mediaId: primaryMediaId,
+      mediaIds,
+      weight: font.weight || primaryFace?.weight || '400',
+      style: font.style || primaryFace?.style || 'normal',
+      display: font.display || primaryFace?.display || 'swap',
+      faces: faces.map((face) => ({
+        mediaId: face.mediaId,
+        url: face.url,
+        weight: face.weight,
+        style: face.style,
+        display: face.display,
+        format: face.format,
+      })),
+    },
+  };
 };
 
 export function RichTextFormatting({
@@ -300,6 +371,86 @@ export function RichTextFormatting({
       [format]: value === undefined || value === null || value === '' || value === false ? '' : value,
     });
   }, [applyTextMarksToElementContent]);
+
+  const applyTextMarksToActiveEditor = useCallback((updates: Record<string, unknown>): boolean => {
+    const editor = getActiveEditor();
+    if (!editor) {
+      return false;
+    }
+
+    if (!editor.selection || !SlateRange.isRange(editor.selection)) {
+      return false;
+    }
+
+    if (
+      !Node.has(editor as any, editor.selection.anchor.path) ||
+      !Node.has(editor as any, editor.selection.focus.path)
+    ) {
+      return false;
+    }
+
+    const entries = Object.entries(updates);
+    const keysToUnset = entries
+      .filter(([, value]) => value === undefined || value === null || value === '' || value === false)
+      .map(([format]) => format);
+    const valuesToSet = Object.fromEntries(entries.filter(([, value]) => !(
+      value === undefined || value === null || value === '' || value === false
+    )));
+
+    try {
+      if (SlateRange.isCollapsed(editor.selection)) {
+        if (keysToUnset.length > 0) {
+          Transforms.unsetNodes(editor as any, keysToUnset, {
+            at: [],
+            match: Text.isText,
+          });
+        }
+
+        if (Object.keys(valuesToSet).length > 0) {
+          Transforms.setNodes(editor as any, valuesToSet, {
+            at: [],
+            match: Text.isText,
+          });
+        }
+
+        syncActiveEditorContentAfterCommand();
+        return true;
+      }
+
+      const selectionRef = Editor.rangeRef(editor as any, editor.selection, { affinity: 'outward' });
+
+      if (keysToUnset.length > 0) {
+        Transforms.unsetNodes(editor as any, keysToUnset, {
+          at: editor.selection,
+          match: Text.isText,
+          split: true,
+        });
+      }
+
+      if (Object.keys(valuesToSet).length > 0) {
+        Transforms.setNodes(editor as any, valuesToSet, {
+          at: editor.selection,
+          match: Text.isText,
+          split: true,
+        });
+      }
+
+      const nextSelection = selectionRef.unref();
+      if (
+        nextSelection &&
+        SlateRange.isRange(nextSelection) &&
+        Node.has(editor as any, nextSelection.anchor.path) &&
+        Node.has(editor as any, nextSelection.focus.path)
+      ) {
+        Transforms.select(editor as any, nextSelection);
+      }
+
+      syncActiveEditorContentAfterCommand();
+      return true;
+    } catch {
+      return false;
+    }
+  }, [getActiveEditor, syncActiveEditorContentAfterCommand]);
 
   const applyBlockPropertiesToElementContent = useCallback((updates: Record<string, unknown>): boolean => {
     if (!canWriteElementContent()) {
@@ -1554,6 +1705,7 @@ export function RichTextFormatting({
   }, []);
 
   const toggleElementListType = useCallback((format: 'ul' | 'ol') => {
+    restoreSelection({ requireTextSelection: false });
     const selectedListItemIndentSnapshot = readSelectedListItemIndentSnapshot();
     const editorBeforeListTypeChange = getActiveEditor();
     const selectedTextBeforeListTypeChange = selectedListItemIndentSnapshot?.text || (
@@ -1621,6 +1773,7 @@ export function RichTextFormatting({
     isTargetEditorUsable,
     onElementContentChange,
     readSelectedListItemIndentSnapshot,
+    restoreSelection,
     restoreSelectedListItemIndentSnapshot,
     runForTextSelectionOrCaret,
     syncActiveEditorContentAfterCommand,
@@ -1780,16 +1933,16 @@ export function RichTextFormatting({
     event.stopPropagation();
   }, []);
 
-  const runMark = useCallback((format: string, value?: any) => {
+  const runMarks = useCallback((updates: Record<string, unknown>) => {
     if (canTargetEditorControlContent()) {
       let didApplyToActiveEditor = false;
       const didRunSelectionCommand = runForTextSelectionOrCaretNoFallback(() => {
-        didApplyToActiveEditor = applyTextMarkToActiveEditor(format, value);
+        didApplyToActiveEditor = applyTextMarksToActiveEditor(updates);
       });
 
       if (!didRunSelectionCommand || !didApplyToActiveEditor) {
-        logTextAction('runMark.active-editor-apply-failed', {
-          format,
+        logTextAction('runMarks.active-editor-apply-failed', {
+          formats: Object.keys(updates),
           actionName: activePropertyActionRef.current,
           didRunSelectionCommand,
           didApplyToActiveEditor,
@@ -1799,26 +1952,30 @@ export function RichTextFormatting({
     }
 
     if (!canUseActiveTextFormatting()) {
-      applyTextMarkToElementContent(format, value);
+      applyTextMarksToElementContent(updates);
       return;
     }
 
     let didApplyToActiveEditor = false;
     const didRunSelectionCommand = runForTextSelectionOrCaretNoFallback(() => {
-      didApplyToActiveEditor = applyTextMarkToActiveEditor(format, value);
+      didApplyToActiveEditor = applyTextMarksToActiveEditor(updates);
     });
 
     if (!didRunSelectionCommand || !didApplyToActiveEditor) {
-      applyTextMarkToElementContent(format, value);
+      applyTextMarksToElementContent(updates);
     }
   }, [
-    applyTextMarkToActiveEditor,
-    applyTextMarkToElementContent,
+    applyTextMarksToActiveEditor,
+    applyTextMarksToElementContent,
     canUseActiveTextFormatting,
     canTargetEditorControlContent,
     runForTextSelectionOrCaretNoFallback,
     logTextAction,
   ]);
+
+  const runMark = useCallback((format: string, value?: any) => {
+    runMarks({ [format]: value });
+  }, [runMarks]);
 
   const toggleTextMark = useCallback((format: string) => {
     if (!canUseActiveTextFormatting()) {
@@ -1926,6 +2083,11 @@ export function RichTextFormatting({
       color: '',
       backgroundColor: '',
       fontFamily: '',
+      fontMediaId: '',
+      fontMediaIds: '',
+      fontRegistration: '',
+      fontSource: '',
+      fontFileUrl: '',
       fontSize: '',
       fontStyle: '',
       textDecoration: '',
@@ -1943,6 +2105,7 @@ export function RichTextFormatting({
             'color',
             'backgroundColor',
             'fontFamily',
+            ...FONT_MEDIA_MARK_KEYS,
             'fontSize',
             'fontStyle',
             'textDecoration',
@@ -1970,6 +2133,7 @@ export function RichTextFormatting({
         'color',
         'backgroundColor',
         'fontFamily',
+        ...FONT_MEDIA_MARK_KEYS,
         'fontSize',
         'fontStyle',
         'textDecoration',
@@ -2061,14 +2225,20 @@ export function RichTextFormatting({
   }, []);
 
   const onFontFamilyChange = useCallback((value: string) => {
+    const selectedFont = fontFamilies.find((font) => font.value === value);
+    const fontMarkUpdates = buildRichTextFontMarkUpdates(value, selectedFont);
+
     logTextAction('content-property.font-family-change', {
       actionName: 'fontFamily',
       value,
+      source: selectedFont?.source || 'manual',
+      mediaId: selectedFont?.mediaId || '',
+      faceCount: selectedFont?.faces?.length || 0,
     });
     setSelectedFontValue(value);
     const applyFontFamily = () => {
       restoreSelection({ requireTextSelection: false });
-      runMark('fontFamily', value === 'inherit' ? '' : value);
+      runMarks(fontMarkUpdates);
     };
 
     if (canTargetEditorControlContent()) {
@@ -2077,7 +2247,7 @@ export function RichTextFormatting({
     }
 
     runContentProperty('fontFamily', applyFontFamily);
-  }, [canTargetEditorControlContent, restoreSelection, runMark, runContentProperty]);
+  }, [canTargetEditorControlContent, fontFamilies, restoreSelection, runContentProperty, runMarks]);
 
   const onFontSizeChange = useCallback((value: string) => {
     const normalizedValue = value.trim();
@@ -2861,6 +3031,9 @@ export function RichTextFormatting({
               <option
                 key={`${font.source}-${font.value}`}
                 value={font.value}
+                data-font-source={font.source}
+                data-font-media-id={font.mediaId || ''}
+                data-font-face-count={font.faces?.length || 0}
                 style={{ fontFamily: toFontFamilyStyle(font.value) }}
               >
                 {font.label}

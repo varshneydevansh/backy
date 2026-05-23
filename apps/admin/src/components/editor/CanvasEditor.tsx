@@ -12,7 +12,12 @@
  */
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import {
+  buildBackyThemeCssVariables,
+  buildBackyThemeTokens,
+  type ThemeConfig,
+} from '@backy-cms/core';
 import {
   AlignHorizontalJustifyCenter,
   AlignHorizontalJustifyEnd,
@@ -134,6 +139,59 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 type CanvasDistribution = 'horizontal' | 'vertical';
 type CanvasZOrderAction = 'front' | 'forward' | 'backward' | 'back';
+type EditorCommandCategory =
+  | 'history'
+  | 'selection'
+  | 'clipboard'
+  | 'composition'
+  | 'layer-state'
+  | 'layer-order'
+  | 'layout'
+  | 'view'
+  | 'shell'
+  | 'workflow';
+type EditorCommandTargetScope =
+  | 'canvas'
+  | 'selected-layer'
+  | 'selected-layers'
+  | 'selected-sibling-scope'
+  | 'selected-child-scope'
+  | 'selected-container'
+  | 'viewport'
+  | 'shell'
+  | 'document';
+type EditorCommandState = 'ready' | 'disabled' | 'hidden';
+type EditorCommandRegistryItem = {
+  id: string;
+  label: string;
+  category: EditorCommandCategory;
+  targetScope: EditorCommandTargetScope;
+  shortcut?: string;
+  ariaKeyshortcuts?: string;
+  testId?: string;
+  enabled: boolean;
+  state: EditorCommandState;
+  reason: string;
+};
+type EditorCommandRegistry = {
+  schemaVersion: 'backy.editor-command-registry.v1';
+  generatedFrom: 'page-editor';
+  summary: {
+    totalCommandCount: number;
+    readyCommandCount: number;
+    disabledCommandCount: number;
+    hiddenCommandCount: number;
+    selectedLayerCount: number;
+    categories: Array<{
+      category: EditorCommandCategory;
+      total: number;
+      ready: number;
+      disabled: number;
+      hidden: number;
+    }>;
+  };
+  commands: EditorCommandRegistryItem[];
+};
 type EditorSaveStatus = 'saved' | 'dirty' | 'saving' | 'autosaving' | 'error';
 type EditorSaveMode = 'manual' | 'autosave';
 type EditorSavePersistence = 'editor' | 'parent';
@@ -343,6 +401,47 @@ const EDITOR_RESPONSIVE_BREAKPOINTS = ['tablet', 'mobile'] as const satisfies re
 const RESPONSIVE_GEOMETRY_FIELDS = ['x', 'y', 'width', 'height', 'zIndex', 'rotation'] as const;
 const RESPONSIVE_LAYER_STATE_FIELDS = ['visible', 'locked'] as const;
 const RESPONSIVE_LAYOUT_FIELDS = [...RESPONSIVE_GEOMETRY_FIELDS, ...RESPONSIVE_LAYER_STATE_FIELDS] as const;
+const EDITOR_ASSET_REFERENCE_KEYS = new Set([
+  'assetId',
+  'assetIds',
+  'mediaIds',
+  'mediaId',
+  'fileIds',
+  'fileId',
+  'fileMediaIds',
+  'fileMediaId',
+  'downloadMediaIds',
+  'downloadMediaId',
+  'imageIds',
+  'imageId',
+  'videoIds',
+  'videoId',
+  'audioIds',
+  'audioId',
+  'fontIds',
+  'fontId',
+  'documentIds',
+  'documentId',
+  'iconIds',
+  'iconId',
+  'fontMediaIds',
+  'fontMediaId',
+  'fallbackImageMediaIds',
+  'fallbackImageMediaId',
+  'backgroundMediaIds',
+  'backgroundMediaId',
+  'posterMediaIds',
+  'posterMediaId',
+]);
+const EDITOR_ACTION_PROP_KEYS = new Set([
+  'href',
+  'url',
+  'action',
+  'actionUrl',
+  'formId',
+  'successRedirectUrl',
+  'redirectUrl',
+]);
 type BreakpointOverrideGroup = 'layout' | 'layer' | 'content' | 'style';
 
 const BREAKPOINT_OVERRIDE_GROUPS: Array<{
@@ -360,16 +459,46 @@ const isResponsiveLayoutField = (key: string): key is typeof RESPONSIVE_LAYOUT_F
   (RESPONSIVE_LAYOUT_FIELDS as readonly string[]).includes(key)
 );
 
+const parseEditorBoolean = (value: unknown, fallback = false): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return fallback;
+};
+
+const isLayerHidden = (element: Pick<CanvasElement, 'visible'> | null | undefined): boolean => (
+  parseEditorBoolean(element?.visible, true) === false
+);
+
+const isLayerLocked = (element: Pick<CanvasElement, 'locked'> | null | undefined): boolean => (
+  parseEditorBoolean(element?.locked, false)
+);
+
 const normalizeResponsiveFieldValue = (
   key: typeof RESPONSIVE_LAYOUT_FIELDS[number],
   value: unknown,
 ) => {
   if (key === 'visible') {
-    return value === false ? false : true;
+    return parseEditorBoolean(value, true);
   }
 
   if (key === 'locked') {
-    return value === true;
+    return parseEditorBoolean(value, false);
   }
 
   return value;
@@ -377,6 +506,14 @@ const normalizeResponsiveFieldValue = (
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const hasNonEmptyArray = (value: unknown): boolean => (
+  Array.isArray(value) && value.length > 0
+);
+
+const hasNonEmptyRecord = (value: unknown): value is Record<string, unknown> => (
+  isPlainRecord(value) && Object.keys(value).length > 0
 );
 
 const INTERACTIVE_ELEMENT_TYPES = new Set<CanvasElement['type']>(['interactiveFigure', 'codeComponent']);
@@ -575,8 +712,8 @@ const normalizeHistoryElement = (element: CanvasElement): Record<string, unknown
   };
 
   if (element.rotation !== undefined) next.rotation = element.rotation;
-  if (element.visible === false) next.visible = false;
-  if (element.locked === true) next.locked = true;
+  if (isLayerHidden(element)) next.visible = false;
+  if (isLayerLocked(element)) next.locked = true;
   if (element.parentId) next.parentId = element.parentId;
 
   const props = normalizeHistoryProps(element.props || {});
@@ -592,6 +729,11 @@ const normalizeHistoryElement = (element: CanvasElement): Record<string, unknown
   const responsive = stableComparableValue(element.responsive || {});
   if (isPlainRecord(responsive) && Object.keys(responsive).length > 0) {
     next.responsive = responsive;
+  }
+
+  const tokenRefs = stableComparableValue(element.tokenRefs || {});
+  if (isPlainRecord(tokenRefs) && Object.keys(tokenRefs).length > 0) {
+    next.tokenRefs = tokenRefs;
   }
 
   if (element.animation !== undefined && element.animation !== null) {
@@ -675,9 +817,16 @@ const hasResponsiveOverrideGroup = (
   }
 
   return Boolean(
-    override.styles &&
-    Object.keys(override.styles).length > 0 &&
-    (!baseElement || !jsonEqual(override.styles, baseElement.styles || {})),
+    (
+      override.styles &&
+      Object.keys(override.styles).length > 0 &&
+      (!baseElement || !jsonEqual(override.styles, baseElement.styles || {}))
+    ) ||
+    (
+      override.tokenRefs &&
+      Object.keys(override.tokenRefs).length > 0 &&
+      (!baseElement || !jsonEqual(override.tokenRefs, baseElement.tokenRefs || {}))
+    ),
   );
 };
 
@@ -708,6 +857,7 @@ const clearResponsiveOverrideGroup = (
     delete nextOverride.props;
   } else {
     delete nextOverride.styles;
+    delete nextOverride.tokenRefs;
   }
 
   return nextOverride;
@@ -780,6 +930,7 @@ const applyResponsiveOverrideToElement = (
     }, {}),
     props: override.props ? { ...element.props, ...override.props } : element.props,
     styles: override.styles ? { ...(element.styles || {}), ...override.styles } : element.styles,
+    tokenRefs: override.tokenRefs ? { ...(element.tokenRefs || {}), ...override.tokenRefs } : element.tokenRefs,
     ...(children ? { children } : {}),
   };
 };
@@ -838,6 +989,12 @@ const mergeDisplayedElementsIntoBreakpoint = (
       delete nextOverride.styles;
     }
 
+    if (!jsonEqual(displayed.tokenRefs || {}, base.tokenRefs || {})) {
+      nextOverride.tokenRefs = displayed.tokenRefs;
+    } else {
+      delete nextOverride.tokenRefs;
+    }
+
     const nextChildren = displayed.children?.map(mergeNode);
     return setResponsiveOverride(
       {
@@ -884,6 +1041,15 @@ const applyUpdatesForBreakpoint = (
 
     if (key === 'styles' && isPlainRecord(value)) {
       override.styles = value as ResponsiveElementOverride['styles'];
+      return;
+    }
+
+    if (key === 'tokenRefs') {
+      if (isPlainRecord(value) && Object.keys(value).length > 0) {
+        override.tokenRefs = value as ResponsiveElementOverride['tokenRefs'];
+      } else {
+        delete override.tokenRefs;
+      }
       return;
     }
 
@@ -1094,10 +1260,10 @@ const restoreUngroupedChildResponsive = (
     }
 
     if (groupOverride?.visible !== undefined && childOverride?.visible === undefined) {
-      override.visible = groupOverride.visible;
+      override.visible = parseEditorBoolean(groupOverride.visible, true);
     }
     if (groupOverride?.locked !== undefined && childOverride?.locked === undefined) {
-      override.locked = groupOverride.locked;
+      override.locked = parseEditorBoolean(groupOverride.locked, false);
     }
 
     return setResponsiveOverride({ responsive: acc } as CanvasElement, breakpoint, override).responsive;
@@ -1152,6 +1318,7 @@ export interface CanvasEditorProps {
   saveOwnerVersion?: string | number | null;
   initialSize?: CanvasSize;
   initialSelectedElementId?: string;
+  theme?: ThemeConfig;
   mediaContext?: MediaContext;
   onChange?: (
     elements: CanvasElement[],
@@ -1275,15 +1442,58 @@ const collectEditorCompositionMetrics = (nodes: CanvasElement[]) => {
     nestedLayers: 0,
     childContainerLayers: 0,
     responsiveOverrideLayers: 0,
+    animatedLayers: 0,
+    actionLayers: 0,
+    dataBoundLayers: 0,
+    tokenRefLayers: 0,
+    assetBoundLayers: 0,
+    interactiveLayers: 0,
     hiddenLayers: 0,
     lockedLayers: 0,
     maxDepth: 0,
     typeCounts,
   };
 
+  const valueHasAssetReference = (value: unknown): boolean => {
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    if (Array.isArray(value)) {
+      return value.some(valueHasAssetReference);
+    }
+    if (isPlainRecord(value)) {
+      return Object.entries(value).some(([key, entry]) => (
+        EDITOR_ASSET_REFERENCE_KEYS.has(key) && valueHasAssetReference(entry)
+      ));
+    }
+    return false;
+  };
+
+  const recordHasAssetReference = (record: unknown): boolean => (
+    isPlainRecord(record) && Object.entries(record).some(([key, value]) => (
+      EDITOR_ASSET_REFERENCE_KEYS.has(key) && valueHasAssetReference(value)
+    ))
+  );
+
+  const responsiveHasTokenRefs = (responsive: CanvasElement['responsive']): boolean => (
+    isPlainRecord(responsive) && Object.values(responsive).some((override) => (
+      isPlainRecord(override) && hasNonEmptyRecord(override.tokenRefs)
+    ))
+  );
+
+  const responsiveHasAssetReference = (responsive: CanvasElement['responsive']): boolean => (
+    isPlainRecord(responsive) && Object.values(responsive).some((override) => (
+      isPlainRecord(override) && (
+        recordHasAssetReference(override.props) ||
+        recordHasAssetReference(override.styles)
+      )
+    ))
+  );
+
   const walk = (items: CanvasElement[], depth: number) => {
     metrics.maxDepth = Math.max(metrics.maxDepth, depth);
     items.forEach((item) => {
+      const elementRecord = item as CanvasElement & Record<string, unknown>;
       const type = normalizeElementType(item.type);
       metrics.totalLayers += 1;
       typeCounts[type] = (typeCounts[type] || 0) + 1;
@@ -1292,8 +1502,32 @@ const collectEditorCompositionMetrics = (nodes: CanvasElement[]) => {
       if (isEditorGroupElement(item)) metrics.groupLayers += 1;
       if (item.children?.length) metrics.childContainerLayers += 1;
       if (item.responsive && Object.keys(item.responsive).length > 0) metrics.responsiveOverrideLayers += 1;
-      if (item.visible === false) metrics.hiddenLayers += 1;
-      if (item.locked === true) metrics.lockedLayers += 1;
+      if (item.animation) metrics.animatedLayers += 1;
+      if (
+        hasNonEmptyArray(elementRecord.actions) ||
+        hasNonEmptyArray(item.props.actions) ||
+        Array.from(EDITOR_ACTION_PROP_KEYS).some((key) => getNonEmptyString(item.props[key]))
+      ) metrics.actionLayers += 1;
+      if (hasNonEmptyArray(item.dataBindings) || hasNonEmptyArray(item.bindingSlots)) metrics.dataBoundLayers += 1;
+      if (
+        hasNonEmptyRecord(item.tokenRefs) ||
+        hasNonEmptyRecord(item.animation?.tokenRefs) ||
+        responsiveHasTokenRefs(item.responsive)
+      ) metrics.tokenRefLayers += 1;
+      if (
+        hasNonEmptyArray(item.assetIds) ||
+        recordHasAssetReference(item.props) ||
+        recordHasAssetReference(item.styles) ||
+        responsiveHasAssetReference(item.responsive)
+      ) metrics.assetBoundLayers += 1;
+      if (
+        INTERACTIVE_ELEMENT_TYPES.has(item.type) ||
+        getNonEmptyString(item.props.componentKey) ||
+        hasNonEmptyArray(item.props.controls) ||
+        hasNonEmptyRecord(item.props.renderCapabilities)
+      ) metrics.interactiveLayers += 1;
+      if (isLayerHidden(item)) metrics.hiddenLayers += 1;
+      if (isLayerLocked(item)) metrics.lockedLayers += 1;
 
       if (item.children?.length) {
         walk(item.children, depth + 1);
@@ -1324,6 +1558,7 @@ export function CanvasEditor({
   saveOwnerVersion,
   initialSize,
   initialSelectedElementId,
+  theme,
   mediaContext,
   onChange,
   validateSettings,
@@ -1348,6 +1583,11 @@ export function CanvasEditor({
   const setMedia = useStore((state) => state.setMedia);
   const fontOptions = useMemo(() => getFontFamilyOptions(media), [media]);
   const activeSiteId = mediaContext?.siteId;
+  const editorThemeTokens = useMemo(() => buildBackyThemeTokens(theme || {}), [theme]);
+  const editorThemeCssVariables = useMemo(
+    () => buildBackyThemeCssVariables(editorThemeTokens) as CSSProperties,
+    [editorThemeTokens],
+  );
   const [reusableSections, setReusableSections] = useState<ReusableSection[]>([]);
   const [reusableSectionsLoading, setReusableSectionsLoading] = useState(false);
   const [reusableSectionsError, setReusableSectionsError] = useState<string | null>(null);
@@ -1355,6 +1595,7 @@ export function CanvasEditor({
   const [interactiveComponentsLoading, setInteractiveComponentsLoading] = useState(false);
   const [interactiveComponentsError, setInteractiveComponentsError] = useState<string | null>(null);
   const [isSavingReusableSection, setIsSavingReusableSection] = useState(false);
+  const [reusableSectionDraftSubmitted, setReusableSectionDraftSubmitted] = useState(false);
   const [pendingDeleteReusableSection, setPendingDeleteReusableSection] = useState<ReusableSection | null>(null);
   const [reusableSectionDraft, setReusableSectionDraft] = useState<{
     mode: 'save' | 'rename';
@@ -1362,6 +1603,9 @@ export function CanvasEditor({
     sourceElementId?: string;
     sectionId?: string;
   } | null>(null);
+  const reusableSectionDraftNameInlineError = reusableSectionDraftSubmitted && reusableSectionDraft?.name.trim().length === 0
+    ? 'Enter a section name before saving.'
+    : null;
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [libraryDragItem, setLibraryDragItem] = useState<ComponentLibraryItem | null>(null);
 
@@ -1871,7 +2115,7 @@ export function CanvasEditor({
     const ids: string[] = [];
     const walk = (nodes: CanvasElement[], parentVisible = true) => {
       nodes.forEach((element) => {
-        const isVisible = parentVisible && element.visible !== false;
+        const isVisible = parentVisible && !isLayerHidden(element);
         if (!isVisible) {
           return;
         }
@@ -2562,7 +2806,7 @@ export function CanvasEditor({
       .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
         !!entry &&
         entry.parentId === primaryEntry.parentId &&
-        (!options.requireUnlocked || !entry.element.locked)
+        (!options.requireUnlocked || !isLayerLocked(entry.element))
       ));
   }, [findElementEntry, selectedId, selectedIds]);
 
@@ -2629,7 +2873,7 @@ export function CanvasEditor({
 
       const previousElements = elementsRef.current;
       const selectedElement = selectedId ? findElementById(previousElements, selectedId) : null;
-      const canNest = selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type);
+      const canNest = selectedElement && !isLayerLocked(selectedElement) && canAcceptNestedDrop(selectedElement.type);
       const parentId = canNest ? selectedElement.id : null;
       const usedElementIds = collectCanvasElementIds(previousElements);
       const rootZIndex = Math.max(walkTreeMaxZ(previousElements), 0) + 1;
@@ -2810,8 +3054,8 @@ export function CanvasEditor({
         !toEntry ||
         fromId === toId ||
         fromEntry.parentId !== toEntry.parentId ||
-        fromEntry.element.locked ||
-        toEntry.element.locked
+        isLayerLocked(fromEntry.element) ||
+        isLayerLocked(toEntry.element)
       ) {
         return currentElements;
       }
@@ -2868,7 +3112,7 @@ export function CanvasEditor({
     }
 
     const entry = findElementEntry(elements, elementId);
-    if (!entry || entry.element.locked) {
+    if (!entry || isLayerLocked(entry.element)) {
       return;
     }
 
@@ -3000,7 +3244,7 @@ export function CanvasEditor({
     }
 
     const parentEntry = findElementEntry(elements, parentId);
-    if (!parentEntry || parentEntry.element.locked || !canAcceptNestedDrop(parentEntry.element.type)) {
+    if (!parentEntry || isLayerLocked(parentEntry.element) || !canAcceptNestedDrop(parentEntry.element.type)) {
       return;
     }
 
@@ -3022,7 +3266,7 @@ export function CanvasEditor({
         !entryForMove ||
         !candidateOffset ||
         entryForMove.parentId === parentId ||
-        entryForMove.element.locked ||
+        isLayerLocked(entryForMove.element) ||
         elementContainsId(entryForMove.element, parentId)
       ) {
         return;
@@ -3072,7 +3316,7 @@ export function CanvasEditor({
 
   const handleLayerVisibilityToggle = useCallback((elementId: string) => {
     const activeElement = findElementById(displayedElements, elementId) || findElementById(elements, elementId);
-    const nextVisible = activeElement?.visible === false;
+    const nextVisible = Boolean(activeElement) && isLayerHidden(activeElement);
 
     updateElementsWithHistory((currentElements) => {
       const result = updateElementById(currentElements, elementId, (element) => (
@@ -3085,7 +3329,7 @@ export function CanvasEditor({
 
   const handleLayerLockToggle = useCallback((elementId: string) => {
     const activeElement = findElementById(displayedElements, elementId) || findElementById(elements, elementId);
-    const nextLocked = !activeElement?.locked;
+    const nextLocked = !isLayerLocked(activeElement);
 
     updateElementsWithHistory((currentElements) => {
       const result = updateElementById(currentElements, elementId, (element) => (
@@ -3101,7 +3345,7 @@ export function CanvasEditor({
 
     updateElementsWithHistory((currentElements) => {
       const result = updateElementById(currentElements, elementId, (element) => {
-        if (element.locked) {
+        if (isLayerLocked(element)) {
           return element;
         }
 
@@ -3158,7 +3402,7 @@ export function CanvasEditor({
     }
 
     const entry = findElementEntry(currentElements, elementId);
-    if (!entry || entry.element.locked) {
+    if (!entry || isLayerLocked(entry.element)) {
       return;
     }
 
@@ -3190,7 +3434,7 @@ export function CanvasEditor({
 
     const currentElements = elementsRef.current;
     const selectedEntry = findElementEntry(currentElements, elementId);
-    if (!selectedEntry || selectedEntry.element.locked) return;
+    if (!selectedEntry || isLayerLocked(selectedEntry.element)) return;
 
     const selectedLayerAction = selectedIds.includes(elementId) && selectedIds.length > 1;
     const selectedLayerEntries = selectedLayerAction
@@ -3261,7 +3505,7 @@ export function CanvasEditor({
     }
 
     const parentId = entries[0].parentId;
-    if (!entries.every((entry) => entry.parentId === parentId && !entry.element.locked)) {
+    if (!entries.every((entry) => entry.parentId === parentId && !isLayerLocked(entry.element))) {
       return;
     }
 
@@ -3381,7 +3625,7 @@ export function CanvasEditor({
     const parentId = entries[0]?.parentId ?? null;
     const groupEntries = entries.filter((entry) => (
       entry.parentId === parentId &&
-      !entry.element.locked &&
+      !isLayerLocked(entry.element) &&
       isEditorGroupElement(entry.element) &&
       Boolean(entry.element.children?.length)
     ));
@@ -3504,7 +3748,7 @@ export function CanvasEditor({
       : elements;
 
     return siblings
-      .filter((item) => item.visible !== false && !item.locked)
+      .filter((item) => !isLayerHidden(item) && !isLayerLocked(item))
       .map((item) => item.id);
   }, [elements, findElementEntry, selectedId]);
   const selectedSiblingLayerCount = useMemo(() => {
@@ -3518,40 +3762,40 @@ export function CanvasEditor({
   }, [elements, findElementEntry, selectedId]);
   const canGroupSelected = selectedEntries.length > 1
     && selectedEntriesShareParent
-    && selectedEntries.every((entry) => !entry.element.locked);
+    && selectedEntries.every((entry) => !isLayerLocked(entry.element));
   const canUngroupSelected = selectedEntries.length > 0
     && selectedEntriesShareParent
     && selectedEntries.every((entry) => (
-      !entry.element.locked &&
+      !isLayerLocked(entry.element) &&
       isEditorGroupElement(entry.element) &&
       Boolean(entry.element.children?.length)
     ));
   const canAlignSelected = selectedEntries.length > 0
     && selectedEntriesShareParent
     && selectedEntries.every((entry) => (
-      !entry.element.locked &&
-      entry.element.visible !== false
+      !isLayerLocked(entry.element) &&
+      !isLayerHidden(entry.element)
     ));
   const canZOrderSelected = selectedEntries.length > 0
     && selectedEntriesShareParent
     && selectedSiblingLayerCount > selectedEntries.length
-    && selectedEntries.every((entry) => !entry.element.locked);
+    && selectedEntries.every((entry) => !isLayerLocked(entry.element));
   const canDistributeSelected = selectedEntries.length >= 3
     && selectedEntriesShareParent
     && selectedEntries.every((entry) => (
-      !entry.element.locked &&
-      entry.element.visible !== false
+      !isLayerLocked(entry.element) &&
+      !isLayerHidden(entry.element)
     ));
   const canCopySelected = selectedEntries.length > 0 && selectedEntriesShareParent;
-  const canCutSelected = selectedEntriesShareParent && selectedEntries.some((entry) => !entry.element.locked);
+  const canCutSelected = selectedEntriesShareParent && selectedEntries.some((entry) => !isLayerLocked(entry.element));
   const canDuplicateSelected = canCutSelected;
   const canDeleteSelected = canCutSelected;
   const canToggleSelectedVisibility = selectedActiveElements.length > 0
-    && selectedActiveElements.every((element) => !element.locked);
+    && selectedActiveElements.every((element) => !isLayerLocked(element));
   const selectedLayersAreHidden = selectedActiveElements.length > 0
-    && selectedActiveElements.every((element) => element.visible === false);
+    && selectedActiveElements.every(isLayerHidden);
   const selectedLayersAreLocked = selectedActiveElements.length > 0
-    && selectedActiveElements.every((element) => element.locked === true);
+    && selectedActiveElements.every(isLayerLocked);
   const selectedLayerActionLabel = selectedIds.length > 1 ? 'selected layers' : 'selected layer';
   const selectedElementTypeLabel = selectedElement
     ? normalizeElementType(selectedElement.type)
@@ -3566,25 +3810,576 @@ export function CanvasEditor({
     : null;
   const clipboardLayerLabel = clipboardElements.length === 1 ? 'layer' : 'layers';
   const canPasteIntoSelectedContainer = Boolean(
-    selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type),
+    selectedElement && !isLayerLocked(selectedElement) && canAcceptNestedDrop(selectedElement.type),
   );
   const pasteTargetMode = canPasteIntoSelectedContainer ? 'selected-container' : 'canvas-root';
   const pasteTargetLabel = canPasteIntoSelectedContainer && selectedElementLabel
     ? `Paste ${clipboardLayerLabel} into ${selectedElementLabel}`
     : `Paste ${clipboardLayerLabel} on canvas`;
   const selectableChildLayer = selectedElement?.children?.find((child) => (
-    child.visible !== false && !child.locked
+    !isLayerHidden(child) && !isLayerLocked(child)
   )) ?? null;
   const selectableChildLayerIds = useMemo(() => (
     selectedElement?.children
-      ?.filter((child) => child.visible !== false && !child.locked)
+      ?.filter((child) => !isLayerHidden(child) && !isLayerLocked(child))
       .map((child) => child.id) || []
   ), [selectedElement]);
   const canSelectParentLayer = selectedEntriesShareParent && Boolean(selectedParentId);
   const canSelectChildLayer = Boolean(selectableChildLayer);
   const canSelectChildLayerScope = selectableChildLayerIds.length > 0;
+  const editorCommandRegistry = useMemo<EditorCommandRegistry>(() => {
+    const mutationDisabledReason = editDisabledReason || 'Canvas mutation is disabled.';
+    const command = ({
+      enabled,
+      visible = true,
+      reason,
+      disabledReason,
+      hiddenReason,
+      ...item
+    }: Omit<EditorCommandRegistryItem, 'enabled' | 'state' | 'reason'> & {
+      enabled: boolean;
+      visible?: boolean;
+      reason: string;
+      disabledReason: string;
+      hiddenReason?: string;
+    }): EditorCommandRegistryItem => ({
+      ...item,
+      enabled: visible && enabled,
+      state: visible ? enabled ? 'ready' : 'disabled' : 'hidden',
+      reason: visible ? enabled ? reason : disabledReason : hiddenReason || 'Command is not visible in the current editor mode.',
+    });
+
+    const selectionScopeReason = selectedEntriesShareParent
+      ? `${selectedIds.length} selected layer${selectedIds.length === 1 ? '' : 's'} share the active parent scope.`
+      : 'Selected layers must share one parent scope.';
+    const saveDisabledReason = isSaving
+      ? 'Save is already in progress.'
+      : !canEdit
+        ? editDisabledReason
+        : 'Save is disabled in this editor context.';
+    const publishVisible = !hideSave && mode === 'page';
+    const publishEnabled = publishVisible
+      && !isSaving
+      && canEdit
+      && canPublish
+      && (pageSettings.status === 'published' || !effectivePublishDisabled);
+    const publishCommandDisabledReason = isSaving
+      ? 'Save or publish is already in progress.'
+      : !canEdit
+        ? editDisabledReason
+        : !canPublish
+          ? publishDisabledReason || 'Publication status is disabled for this user.'
+          : effectivePublishDisabled
+            ? effectivePublishDisabledReason || 'Resolve page readiness issues before publishing.'
+            : 'Publish is disabled in this editor state.';
+
+    const commands: EditorCommandRegistryItem[] = [
+      command({
+        id: 'undo',
+        label: 'Undo',
+        category: 'history',
+        targetScope: 'canvas',
+        shortcut: 'Cmd/Ctrl+Z',
+        ariaKeyshortcuts: 'Control+Z Meta+Z',
+        testId: 'editor-undo',
+        enabled: !isCanvasMutationDisabled && historyIndex > 0,
+        reason: 'The editor history has an earlier state.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'No earlier history state is available.',
+      }),
+      command({
+        id: 'redo',
+        label: 'Redo',
+        category: 'history',
+        targetScope: 'canvas',
+        shortcut: 'Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z',
+        ariaKeyshortcuts: 'Control+Y Meta+Y Shift+Control+Z Shift+Meta+Z',
+        testId: 'editor-redo',
+        enabled: !isCanvasMutationDisabled && historyIndex < history.length - 1,
+        reason: 'The editor history has a later state.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'No later history state is available.',
+      }),
+      command({
+        id: 'copy-selection',
+        label: 'Copy selection',
+        category: 'clipboard',
+        targetScope: selectedIds.length > 1 ? 'selected-layers' : 'selected-layer',
+        shortcut: 'Cmd/Ctrl+C',
+        ariaKeyshortcuts: 'Control+C Meta+C',
+        testId: 'editor-copy-selection',
+        enabled: !isCanvasMutationDisabled && canCopySelected,
+        reason: `Copy ${selectedLayerActionLabel}. ${selectionScopeReason}`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select one or more layers in the same parent scope before copying.',
+      }),
+      command({
+        id: 'cut-selection',
+        label: 'Cut selection',
+        category: 'clipboard',
+        targetScope: selectedIds.length > 1 ? 'selected-layers' : 'selected-layer',
+        shortcut: 'Cmd/Ctrl+X',
+        ariaKeyshortcuts: 'Control+X Meta+X',
+        testId: 'editor-cut-selection',
+        enabled: !isCanvasMutationDisabled && canCutSelected,
+        reason: `Cut ${selectedLayerActionLabel}. ${selectionScopeReason}`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers in the same parent scope before cutting.',
+      }),
+      command({
+        id: 'paste-selection',
+        label: pasteTargetLabel,
+        category: 'clipboard',
+        targetScope: pasteTargetMode === 'selected-container' ? 'selected-container' : 'canvas',
+        shortcut: 'Cmd/Ctrl+V',
+        ariaKeyshortcuts: 'Control+V Meta+V',
+        testId: 'editor-paste-selection',
+        enabled: !isCanvasMutationDisabled && clipboardElements.length > 0,
+        reason: `${clipboardElements.length} clipboard ${clipboardLayerLabel} can be pasted into ${pasteTargetMode}.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Copy or cut at least one layer before pasting.',
+      }),
+      command({
+        id: 'duplicate-selection',
+        label: 'Duplicate selection',
+        category: 'clipboard',
+        targetScope: selectedIds.length > 1 ? 'selected-layers' : 'selected-layer',
+        shortcut: 'Cmd/Ctrl+D',
+        ariaKeyshortcuts: 'Control+D Meta+D',
+        testId: 'editor-duplicate-selection',
+        enabled: !isCanvasMutationDisabled && canDuplicateSelected,
+        reason: `Duplicate ${selectedLayerActionLabel}. ${selectionScopeReason}`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers in the same parent scope before duplicating.',
+      }),
+      command({
+        id: 'select-sibling-layers',
+        label: 'Select sibling layers',
+        category: 'selection',
+        targetScope: 'selected-sibling-scope',
+        shortcut: 'Cmd/Ctrl+A',
+        ariaKeyshortcuts: 'Control+A Meta+A',
+        testId: 'editor-select-sibling-layers',
+        enabled: !isCanvasMutationDisabled && selectableSiblingIds.length >= 2,
+        reason: `${selectableSiblingIds.length} visible unlocked siblings are available.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select a layer with at least one visible unlocked sibling.',
+      }),
+      command({
+        id: 'select-child-layers',
+        label: 'Select child layers',
+        category: 'selection',
+        targetScope: 'selected-child-scope',
+        shortcut: 'Shift+Cmd/Ctrl+A',
+        ariaKeyshortcuts: 'Shift+Control+A Shift+Meta+A',
+        testId: 'editor-select-child-layers',
+        enabled: !isCanvasMutationDisabled && canSelectChildLayerScope,
+        reason: `${selectableChildLayerIds.length} visible unlocked child layers are available.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select a container or group with visible unlocked child layers.',
+      }),
+      command({
+        id: 'select-parent-layer',
+        label: 'Select parent layer',
+        category: 'selection',
+        targetScope: 'selected-layer',
+        shortcut: 'Shift+Enter',
+        ariaKeyshortcuts: 'Shift+Enter',
+        testId: 'editor-select-parent-layer',
+        enabled: !isCanvasMutationDisabled && canSelectParentLayer,
+        reason: `Parent layer ${selectedParentId} can be selected.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'The current selection has no parent layer.',
+      }),
+      command({
+        id: 'select-child-layer',
+        label: 'Select first child layer',
+        category: 'selection',
+        targetScope: 'selected-child-scope',
+        shortcut: 'Enter',
+        ariaKeyshortcuts: 'Enter',
+        testId: 'editor-select-child-layer',
+        enabled: !isCanvasMutationDisabled && canSelectChildLayer,
+        reason: `Child layer ${selectableChildLayer?.id} can be selected.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'The current layer has no visible unlocked child layer.',
+      }),
+      command({
+        id: 'group-selection',
+        label: 'Group selected layers',
+        category: 'composition',
+        targetScope: 'selected-sibling-scope',
+        shortcut: 'Cmd/Ctrl+G',
+        ariaKeyshortcuts: 'Control+G Meta+G',
+        testId: 'editor-group-selection',
+        enabled: !isCanvasMutationDisabled && canGroupSelected,
+        reason: `Group ${selectedIds.length} unlocked sibling layers.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select at least two unlocked layers in the same parent scope.',
+      }),
+      command({
+        id: 'ungroup-selection',
+        label: 'Ungroup selected groups',
+        category: 'composition',
+        targetScope: 'selected-sibling-scope',
+        shortcut: 'Shift+Cmd/Ctrl+G',
+        ariaKeyshortcuts: 'Shift+Control+G Shift+Meta+G',
+        testId: 'editor-ungroup-selection',
+        enabled: !isCanvasMutationDisabled && canUngroupSelected,
+        reason: `Ungroup ${selectedIds.length} selected editor group${selectedIds.length === 1 ? '' : 's'}.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked editor groups in the same parent scope.',
+      }),
+      command({
+        id: 'toggle-selection-visibility',
+        label: selectedLayersAreHidden ? 'Show selected layers' : 'Hide selected layers',
+        category: 'layer-state',
+        targetScope: selectedIds.length > 1 ? 'selected-layers' : 'selected-layer',
+        testId: 'editor-toggle-selection-visibility',
+        enabled: !isCanvasMutationDisabled && canToggleSelectedVisibility,
+        reason: selectedLayersAreHidden ? 'Selected layers can be shown.' : 'Selected layers can be hidden.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers before toggling visibility.',
+      }),
+      command({
+        id: 'toggle-selection-lock',
+        label: selectedLayersAreLocked ? 'Unlock selected layers' : 'Lock selected layers',
+        category: 'layer-state',
+        targetScope: selectedIds.length > 1 ? 'selected-layers' : 'selected-layer',
+        testId: 'editor-toggle-selection-lock',
+        enabled: !isCanvasMutationDisabled && selectedActiveElements.length > 0,
+        reason: selectedLayersAreLocked ? 'Selected layers can be unlocked.' : 'Selected layers can be locked.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select at least one layer before toggling lock state.',
+      }),
+      ...([
+        ['send-to-back', 'Send to back', 'Shift+Cmd/Ctrl+[', 'Shift+Control+[ Shift+Meta+[', 'editor-send-to-back'],
+        ['send-backward', 'Send backward', 'Cmd/Ctrl+[', 'Control+[ Meta+[', 'editor-send-backward'],
+        ['bring-forward', 'Bring forward', 'Cmd/Ctrl+]', 'Control+] Meta+]', 'editor-bring-forward'],
+        ['bring-to-front', 'Bring to front', 'Shift+Cmd/Ctrl+]', 'Shift+Control+] Shift+Meta+]', 'editor-bring-to-front'],
+      ] as const).map(([id, label, shortcut, ariaKeyshortcuts, testId]) => command({
+        id,
+        label,
+        category: 'layer-order',
+        targetScope: selectedIds.length > 1 ? 'selected-layers' : 'selected-layer',
+        shortcut,
+        ariaKeyshortcuts,
+        testId,
+        enabled: !isCanvasMutationDisabled && canZOrderSelected,
+        reason: `Reorder ${selectedLayerActionLabel} inside the current parent scope.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers with neighboring siblings before changing layer order.',
+      })),
+      ...([
+        ['align-left', 'Align left', 'editor-align-left'],
+        ['align-center', 'Align horizontal center', 'editor-align-center'],
+        ['align-right', 'Align right', 'editor-align-right'],
+        ['align-top', 'Align top', 'editor-align-top'],
+        ['align-middle', 'Align vertical center', 'editor-align-middle'],
+        ['align-bottom', 'Align bottom', 'editor-align-bottom'],
+      ] as const).map(([id, label, testId]) => command({
+        id,
+        label,
+        category: 'layout',
+        targetScope: selectedIds.length > 1 ? 'selected-layers' : 'selected-layer',
+        testId,
+        enabled: !isCanvasMutationDisabled && canAlignSelected,
+        reason: `Align ${selectedLayerActionLabel}. ${selectionScopeReason}`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select visible unlocked layers in the same parent scope before aligning.',
+      })),
+      command({
+        id: 'distribute-horizontal',
+        label: 'Distribute horizontal spacing',
+        category: 'layout',
+        targetScope: 'selected-layers',
+        testId: 'editor-distribute-horizontal',
+        enabled: !isCanvasMutationDisabled && canDistributeSelected,
+        reason: `Distribute ${selectedIds.length} visible unlocked sibling layers horizontally.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select at least three visible unlocked sibling layers before distributing.',
+      }),
+      command({
+        id: 'distribute-vertical',
+        label: 'Distribute vertical spacing',
+        category: 'layout',
+        targetScope: 'selected-layers',
+        testId: 'editor-distribute-vertical',
+        enabled: !isCanvasMutationDisabled && canDistributeSelected,
+        reason: `Distribute ${selectedIds.length} visible unlocked sibling layers vertically.`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select at least three visible unlocked sibling layers before distributing.',
+      }),
+      command({
+        id: 'delete-selection',
+        label: 'Delete selection',
+        category: 'selection',
+        targetScope: selectedIds.length > 1 ? 'selected-layers' : 'selected-layer',
+        shortcut: 'Delete/Backspace',
+        ariaKeyshortcuts: 'Delete Backspace',
+        testId: 'editor-delete-selection',
+        enabled: !isCanvasMutationDisabled && canDeleteSelected,
+        reason: `Delete ${selectedLayerActionLabel}. ${selectionScopeReason}`,
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers in the same parent scope before deleting.',
+      }),
+      command({
+        id: 'toggle-component-panel',
+        label: showComponentPanel && !isCanvasFocusMode ? 'Hide components panel' : 'Show components panel',
+        category: 'shell',
+        targetScope: 'shell',
+        shortcut: 'B',
+        ariaKeyshortcuts: 'B',
+        testId: 'editor-toggle-component-panel',
+        enabled: true,
+        reason: showComponentPanel && !isCanvasFocusMode ? 'Components panel is visible.' : 'Components panel can be opened.',
+        disabledReason: 'Components panel command is unavailable.',
+      }),
+      command({
+        id: 'toggle-layers-panel',
+        label: rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'Show properties panel' : 'Show layers panel',
+        category: 'shell',
+        targetScope: 'shell',
+        shortcut: 'L',
+        ariaKeyshortcuts: 'L',
+        testId: 'editor-toggle-layers-panel',
+        enabled: true,
+        reason: rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'Layers panel is active.' : 'Layers panel can be opened.',
+        disabledReason: 'Layers panel command is unavailable.',
+      }),
+      command({
+        id: 'toggle-inspector-panel',
+        label: showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel' : 'Show inspector panel',
+        category: 'shell',
+        targetScope: 'shell',
+        shortcut: 'I',
+        ariaKeyshortcuts: 'I',
+        testId: 'editor-toggle-inspector-panel',
+        enabled: true,
+        reason: showInspectorPanel && !isCanvasFocusMode ? 'Inspector panel is visible.' : 'Inspector panel can be opened.',
+        disabledReason: 'Inspector panel command is unavailable.',
+      }),
+      command({
+        id: 'toggle-focus-mode',
+        label: isCanvasFocusMode ? 'Exit wide canvas focus' : 'Enter wide canvas focus',
+        category: 'shell',
+        targetScope: 'shell',
+        shortcut: 'F',
+        ariaKeyshortcuts: 'F',
+        testId: 'editor-toggle-focus-mode',
+        enabled: true,
+        reason: isCanvasFocusMode ? 'Focus mode is active.' : 'Focus mode can be entered.',
+        disabledReason: 'Focus mode command is unavailable.',
+      }),
+      command({
+        id: 'toggle-preview',
+        label: isPreview ? 'Return to edit mode' : 'Preview page',
+        category: 'view',
+        targetScope: 'canvas',
+        testId: 'editor-preview-toggle',
+        enabled: !isSaving,
+        reason: isPreview ? 'Preview mode is active.' : 'Preview mode can be opened.',
+        disabledReason: 'Wait for the current save before toggling preview.',
+      }),
+      command({
+        id: 'toggle-grid',
+        label: showGrid ? 'Hide grid' : 'Show grid',
+        category: 'view',
+        targetScope: 'viewport',
+        shortcut: 'G',
+        ariaKeyshortcuts: 'G',
+        testId: 'editor-grid-visibility-toggle',
+        enabled: !isPreview,
+        visible: !isPreview,
+        reason: showGrid ? 'Grid is visible.' : 'Grid can be shown.',
+        disabledReason: 'Grid controls are disabled in preview mode.',
+      }),
+      command({
+        id: 'toggle-snap',
+        label: snapEnabled ? 'Disable snapping' : 'Enable snapping',
+        category: 'view',
+        targetScope: 'viewport',
+        shortcut: 'S',
+        ariaKeyshortcuts: 'S',
+        testId: 'editor-snap-toggle',
+        enabled: !isPreview,
+        visible: !isPreview,
+        reason: snapEnabled ? 'Snapping is enabled.' : 'Snapping can be enabled.',
+        disabledReason: 'Snap controls are disabled in preview mode.',
+      }),
+      command({
+        id: 'toggle-pan',
+        label: isCanvasPanMode ? 'Disable pan navigation' : 'Enable pan navigation',
+        category: 'view',
+        targetScope: 'viewport',
+        shortcut: 'H or Space',
+        ariaKeyshortcuts: 'H Space',
+        testId: 'editor-pan-toggle',
+        enabled: !isPreview,
+        visible: !isPreview,
+        reason: isCanvasPanMode ? 'Pan navigation is enabled.' : 'Pan navigation can be enabled.',
+        disabledReason: 'Pan controls are disabled in preview mode.',
+      }),
+      command({
+        id: 'zoom-out',
+        label: 'Zoom out',
+        category: 'view',
+        targetScope: 'viewport',
+        shortcut: 'Cmd/Ctrl+-',
+        ariaKeyshortcuts: 'Control+- Meta+-',
+        testId: 'editor-zoom-out',
+        enabled: !isPreview,
+        visible: !isPreview,
+        reason: 'Canvas viewport can zoom out.',
+        disabledReason: 'Zoom controls are disabled in preview mode.',
+      }),
+      command({
+        id: 'zoom-in',
+        label: 'Zoom in',
+        category: 'view',
+        targetScope: 'viewport',
+        shortcut: 'Cmd/Ctrl+=',
+        ariaKeyshortcuts: 'Control+= Meta+=',
+        testId: 'editor-zoom-in',
+        enabled: !isPreview,
+        visible: !isPreview,
+        reason: 'Canvas viewport can zoom in.',
+        disabledReason: 'Zoom controls are disabled in preview mode.',
+      }),
+      command({
+        id: 'zoom-fit',
+        label: 'Fit canvas',
+        category: 'view',
+        targetScope: 'viewport',
+        shortcut: 'Cmd/Ctrl+0',
+        ariaKeyshortcuts: 'Control+0 Meta+0',
+        testId: 'editor-zoom-fit',
+        enabled: !isPreview,
+        visible: !isPreview,
+        reason: 'Canvas viewport can fit the current canvas.',
+        disabledReason: 'Zoom controls are disabled in preview mode.',
+      }),
+      command({
+        id: 'open-page-settings',
+        label: `${editorEntityLabel} settings`,
+        category: 'workflow',
+        targetScope: 'document',
+        testId: 'editor-page-settings',
+        enabled: !isSaving,
+        visible: !hideSettings,
+        reason: `${editorEntityLabel} settings can be opened.`,
+        disabledReason: 'Wait for the current save before opening settings.',
+        hiddenReason: `${editorEntityLabel} settings are hidden for this embedded editor.`,
+      }),
+      command({
+        id: 'reload-page',
+        label: `Reload ${editorEntityLabel.toLowerCase()}`,
+        category: 'workflow',
+        targetScope: 'document',
+        testId: 'editor-reload-page',
+        enabled: !isSaving,
+        reason: `${editorEntityLabel} can be reloaded from the last saved state.`,
+        disabledReason: 'Wait for the current save before reloading.',
+      }),
+      command({
+        id: 'publish-page',
+        label: pageSettings.status === 'published' ? 'Unpublish page' : 'Publish page',
+        category: 'workflow',
+        targetScope: 'document',
+        testId: 'editor-publish-page',
+        enabled: publishEnabled,
+        visible: publishVisible,
+        reason: pageSettings.status === 'published' ? 'Published page can be returned to draft.' : 'Page is ready to publish.',
+        disabledReason: publishCommandDisabledReason,
+        hiddenReason: 'Publish is only available in page editing mode with save controls visible.',
+      }),
+      command({
+        id: 'save-page',
+        label: `Save ${editorEntityLabel.toLowerCase()}`,
+        category: 'workflow',
+        targetScope: 'document',
+        shortcut: 'Ctrl+S',
+        testId: 'editor-save-page',
+        enabled: !hideSave && !isSaving && canEdit,
+        visible: !hideSave,
+        reason: `${editorEntityLabel} changes can be saved.`,
+        disabledReason: saveDisabledReason,
+        hiddenReason: `${editorEntityLabel} save is handled by the parent editor surface.`,
+      }),
+    ];
+
+    const categories: EditorCommandRegistry['summary']['categories'] = [];
+    commands.forEach((registryCommand) => {
+      let category = categories.find((item) => item.category === registryCommand.category);
+      if (!category) {
+        category = {
+          category: registryCommand.category,
+          total: 0,
+          ready: 0,
+          disabled: 0,
+          hidden: 0,
+        };
+        categories.push(category);
+      }
+
+      category.total += 1;
+      category[registryCommand.state] += 1;
+    });
+
+    return {
+      schemaVersion: 'backy.editor-command-registry.v1',
+      generatedFrom: 'page-editor',
+      summary: {
+        totalCommandCount: commands.length,
+        readyCommandCount: commands.filter((item) => item.state === 'ready').length,
+        disabledCommandCount: commands.filter((item) => item.state === 'disabled').length,
+        hiddenCommandCount: commands.filter((item) => item.state === 'hidden').length,
+        selectedLayerCount: selectedIds.length,
+        categories,
+      },
+      commands,
+    };
+  }, [
+    canAlignSelected,
+    canCopySelected,
+    canCutSelected,
+    canDeleteSelected,
+    canDistributeSelected,
+    canDuplicateSelected,
+    canEdit,
+    canGroupSelected,
+    canPublish,
+    canSelectChildLayer,
+    canSelectChildLayerScope,
+    canSelectParentLayer,
+    canToggleSelectedVisibility,
+    canUngroupSelected,
+    canZOrderSelected,
+    clipboardElements.length,
+    clipboardLayerLabel,
+    editDisabledReason,
+    editorEntityLabel,
+    effectivePublishDisabled,
+    effectivePublishDisabledReason,
+    hideSave,
+    hideSettings,
+    history.length,
+    historyIndex,
+    isCanvasFocusMode,
+    isCanvasMutationDisabled,
+    isCanvasPanMode,
+    isPreview,
+    isSaving,
+    mode,
+    pageSettings.status,
+    pasteTargetLabel,
+    pasteTargetMode,
+    publishDisabledReason,
+    rightPanel,
+    selectableChildLayer?.id,
+    selectableChildLayerIds.length,
+    selectableSiblingIds.length,
+    selectedActiveElements.length,
+    selectedEntriesShareParent,
+    selectedIds.length,
+    selectedLayerActionLabel,
+    selectedLayersAreHidden,
+    selectedLayersAreLocked,
+    selectedParentId,
+    showComponentPanel,
+    showGrid,
+    showInspectorPanel,
+    snapEnabled,
+  ]);
   const editorCompositionReadiness = useMemo(() => {
     const metrics = collectEditorCompositionMetrics(elements);
+    const designStateLayerCount = metrics.animatedLayers +
+      metrics.actionLayers +
+      metrics.dataBoundLayers +
+      metrics.tokenRefLayers +
+      metrics.assetBoundLayers +
+      metrics.interactiveLayers;
     const topTypes = Object.entries(metrics.typeCounts)
       .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
       .slice(0, 8)
@@ -3615,6 +4410,13 @@ export function CanvasEditor({
         ready: selectionCanCompose,
       },
       {
+        label: 'Design wiring',
+        detail: designStateLayerCount > 0
+          ? `${metrics.animatedLayers} animated, ${metrics.dataBoundLayers} data-bound, ${metrics.assetBoundLayers} asset-bound, and ${metrics.interactiveLayers} interactive layers.`
+          : 'No animation, data, media, token, action, or interactive wiring yet.',
+        ready: true,
+      },
+      {
         label: 'Responsive handoff',
         detail: metrics.responsiveOverrideLayers > 0
           ? `${metrics.responsiveOverrideLayers} layers carry breakpoint overrides.`
@@ -3631,11 +4433,13 @@ export function CanvasEditor({
 
     return {
       schemaVersion: 'backy.editor-composition-readiness.v1',
+      commandRegistrySchemaVersion: editorCommandRegistry.schemaVersion,
       ready: readyCount === checks.length,
       readyCount,
       checkCount: checks.length,
       metrics: {
         ...metrics,
+        designStateLayerCount,
         topTypes,
       },
       selection: {
@@ -3647,6 +4451,7 @@ export function CanvasEditor({
         canUngroup: canUngroupSelected,
         canSelectChildren: canSelectChildLayerScope,
       },
+      commandRegistry: editorCommandRegistry,
       shortcuts: {
         group: 'Cmd/Ctrl+G',
         ungroup: 'Shift+Cmd/Ctrl+G',
@@ -3669,6 +4474,13 @@ export function CanvasEditor({
           nestedLayers: metrics.nestedLayers,
           childContainerLayers: metrics.childContainerLayers,
           responsiveOverrideLayers: metrics.responsiveOverrideLayers,
+          animatedLayers: metrics.animatedLayers,
+          actionLayers: metrics.actionLayers,
+          dataBoundLayers: metrics.dataBoundLayers,
+          tokenRefLayers: metrics.tokenRefLayers,
+          assetBoundLayers: metrics.assetBoundLayers,
+          interactiveLayers: metrics.interactiveLayers,
+          designStateLayerCount,
           hiddenLayers: metrics.hiddenLayers,
           lockedLayers: metrics.lockedLayers,
           maxDepth: metrics.maxDepth,
@@ -3683,6 +4495,7 @@ export function CanvasEditor({
           canUngroup: canUngroupSelected,
           canSelectChildren: canSelectChildLayerScope,
         },
+        commandRegistry: editorCommandRegistry,
         shortcuts: {
           group: 'Cmd/Ctrl+G',
           ungroup: 'Shift+Cmd/Ctrl+G',
@@ -3698,6 +4511,7 @@ export function CanvasEditor({
     canGroupSelected,
     canSelectChildLayerScope,
     canUngroupSelected,
+    editorCommandRegistry,
     elements,
     selectedEntriesShareParent,
     selectedIds,
@@ -3712,17 +4526,26 @@ export function CanvasEditor({
       setEditorNotice('Unable to copy the editor composition action plan.');
     }
   }, [editorCompositionReadiness.actionPlan]);
+  const copyEditorCommandRegistry = useCallback(async () => {
+    const registry = JSON.stringify(editorCompositionReadiness.commandRegistry, null, 2);
+    try {
+      await navigator.clipboard.writeText(registry);
+      setEditorNotice('Editor command registry copied.');
+    } catch {
+      setEditorNotice('Unable to copy the editor command registry.');
+    }
+  }, [editorCompositionReadiness.commandRegistry]);
 
   const handleSelectedVisibilityToggle = useCallback(() => {
     if (!canToggleSelectedVisibility || selectedActiveElements.length === 0) return;
-    const nextVisible = selectedActiveElements.every((element) => element.visible === false);
+    const nextVisible = selectedActiveElements.every(isLayerHidden);
 
     updateElementsWithHistory((currentElements) => {
       let nextElements = currentElements;
       let changed = false;
       for (const id of selectedIds) {
         const result = updateElementById(nextElements, id, (element) => (
-          element.locked ? element : applyUpdatesForBreakpoint(element, { visible: nextVisible }, breakpoint)
+          isLayerLocked(element) ? element : applyUpdatesForBreakpoint(element, { visible: nextVisible }, breakpoint)
         ));
         if (result.updated) {
           nextElements = result.elements;
@@ -3735,7 +4558,7 @@ export function CanvasEditor({
 
   const handleSelectedLockToggle = useCallback(() => {
     if (selectedActiveElements.length === 0) return;
-    const nextLocked = !selectedActiveElements.every((element) => element.locked === true);
+    const nextLocked = !selectedActiveElements.every(isLayerLocked);
 
     updateElementsWithHistory((currentElements) => {
       let nextElements = currentElements;
@@ -3844,7 +4667,7 @@ export function CanvasEditor({
     }
 
     const selectedEntry = findElementEntry(elements, selectedId);
-    if (!selectedEntry || selectedEntry.element.locked) {
+    if (!selectedEntry || isLayerLocked(selectedEntry.element)) {
       return;
     }
 
@@ -3994,7 +4817,7 @@ export function CanvasEditor({
       const selectedElementId = selectedId;
       updateElementsWithHistory((currentElements) => {
         const result = updateElementById(currentElements, selectedElementId, (element) => (
-          element.locked ? element : applyUpdatesForBreakpoint(element, updates, breakpoint)
+          isLayerLocked(element) ? element : applyUpdatesForBreakpoint(element, updates, breakpoint)
         ));
 
         if (!result.updated) {
@@ -4069,7 +4892,7 @@ export function CanvasEditor({
 
     updateElementsWithHistory((currentElements) => {
       const primaryEntry = findElementEntry(currentElements, selectedId);
-      if (!primaryEntry || primaryEntry.element.locked) {
+      if (!primaryEntry || isLayerLocked(primaryEntry.element)) {
         return currentElements;
       }
 
@@ -4079,8 +4902,8 @@ export function CanvasEditor({
             .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
               !!entry &&
               entry.parentId === primaryEntry.parentId &&
-              !entry.element.locked &&
-              entry.element.visible !== false
+              !isLayerLocked(entry.element) &&
+              !isLayerHidden(entry.element)
             ))
         : [primaryEntry]
       );
@@ -4129,7 +4952,7 @@ export function CanvasEditor({
 
     updateElementsWithHistory((currentElements) => {
       const primaryEntry = findElementEntry(currentElements, selectedId);
-      if (!primaryEntry || primaryEntry.element.locked) {
+      if (!primaryEntry || isLayerLocked(primaryEntry.element)) {
         return currentElements;
       }
 
@@ -4139,8 +4962,8 @@ export function CanvasEditor({
             .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
               !!entry &&
               entry.parentId === primaryEntry.parentId &&
-              !entry.element.locked &&
-              entry.element.visible !== false
+              !isLayerLocked(entry.element) &&
+              !isLayerHidden(entry.element)
             ))
         : [primaryEntry]
       );
@@ -4254,8 +5077,8 @@ export function CanvasEditor({
         .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
           !!entry &&
           entry.parentId === primaryEntry.parentId &&
-          !entry.element.locked &&
-          entry.element.visible !== false
+          !isLayerLocked(entry.element) &&
+          !isLayerHidden(entry.element)
         ));
 
       if (distributeEntries.length < 3) {
@@ -4348,7 +5171,7 @@ export function CanvasEditor({
     const normalizedType = normalizeElementType(item.type);
     const highestZ = Math.max(walkTreeMaxZ(elements), 0);
     const selectedElement = selectedId ? findElementById(elements, selectedId) : null;
-    const canNestInSelection = selectedElement && !selectedElement.locked && canAcceptNestedDrop(selectedElement.type);
+    const canNestInSelection = selectedElement && !isLayerLocked(selectedElement) && canAcceptNestedDrop(selectedElement.type);
     const nestedInsertionPoint = getNestedInsertionPoint();
 
     if (item.reusableContent?.elements?.length) {
@@ -4437,6 +5260,7 @@ export function CanvasEditor({
     }
 
     const fallbackName = selectedElement.name || `${selectedElement.type} section`;
+    setReusableSectionDraftSubmitted(false);
     setReusableSectionDraft({
       mode: 'save',
       name: fallbackName,
@@ -4461,8 +5285,10 @@ export function CanvasEditor({
       return;
     }
 
+    setReusableSectionDraftSubmitted(true);
     const name = reusableSectionDraft.name.trim();
     if (!name) {
+      setEditorNotice('Fix required reusable section fields before saving.');
       return;
     }
 
@@ -4500,6 +5326,7 @@ export function CanvasEditor({
       } else if (reusableSectionDraft.sectionId) {
         const section = reusableSections.find((item) => item.id === reusableSectionDraft.sectionId);
         if (!section || section.name === name) {
+          setReusableSectionDraftSubmitted(false);
           setReusableSectionDraft(null);
           return;
         }
@@ -4511,6 +5338,7 @@ export function CanvasEditor({
         setReusableSections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       }
 
+      setReusableSectionDraftSubmitted(false);
       setReusableSectionDraft(null);
     } catch (error) {
       setEditorNotice(error instanceof Error ? error.message : 'Unable to save reusable section');
@@ -4544,6 +5372,7 @@ export function CanvasEditor({
       return;
     }
 
+    setReusableSectionDraftSubmitted(false);
     setReusableSectionDraft({
       mode: 'rename',
       name: section.name,
@@ -5974,28 +6803,30 @@ export function CanvasEditor({
             </button>
 
             {/* Settings */}
-            {!hideSettings && (
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              disabled={isSaving}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-              title="Page settings"
-                aria-label="Page settings"
-              >
-                <Settings className="w-4 h-4" />
-                <span className="ml-1">Settings</span>
-              </button>
+	            {!hideSettings && (
+	              <button
+	                type="button"
+	                onClick={() => setIsSettingsOpen(true)}
+	                disabled={isSaving}
+	                className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+	                title="Page settings"
+	                aria-label="Page settings"
+	                data-testid="editor-page-settings"
+	              >
+	                <Settings className="w-4 h-4" />
+	                <span className="ml-1">Settings</span>
+	              </button>
             )}
 
-            <button
-              type="button"
-              onClick={handleReload}
-              disabled={isSaving}
-              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-              title="Reload page from last saved state"
-              aria-label="Reload page"
-            >
+	            <button
+	              type="button"
+	              onClick={handleReload}
+	              disabled={isSaving}
+	              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+	              title="Reload page from last saved state"
+	              aria-label="Reload page"
+	              data-testid="editor-reload-page"
+	            >
               <RefreshCw className="w-4 h-4" />
               <span className="ml-1">Reload</span>
             </button>
@@ -6030,16 +6861,17 @@ export function CanvasEditor({
                               ? effectivePublishDisabledReason || 'Resolve page readiness issues before publishing'
                               : 'Publish page'
                     }
-                    aria-label={
-                      !canPublish
-                        ? publishDisabledReason || 'Publication status disabled'
-                        : pageSettings.status === 'published'
-                          ? 'Unpublish page'
-                          : effectivePublishDisabled
-                            ? effectivePublishDisabledReason || 'Publish disabled'
-                            : 'Publish page'
-                    }
-                  >
+	                    aria-label={
+	                      !canPublish
+	                        ? publishDisabledReason || 'Publication status disabled'
+	                        : pageSettings.status === 'published'
+	                          ? 'Unpublish page'
+	                          : effectivePublishDisabled
+	                            ? effectivePublishDisabledReason || 'Publish disabled'
+	                            : 'Publish page'
+	                    }
+	                    data-testid="editor-publish-page"
+	                  >
                     {pageSettings.status === 'published' ? 'Unpublish' : 'Publish'}
                   </button>
                 )}
@@ -6159,6 +6991,7 @@ export function CanvasEditor({
                     data-testid="editor-canvas-scale-surface"
                     data-canvas-scale={activeCanvasScale}
                     style={{
+                      ...editorThemeCssVariables,
                       width: size.width,
                       height: size.height,
                       transform: `scale(${activeCanvasScale})`,
@@ -6249,6 +7082,7 @@ export function CanvasEditor({
                         data-testid="editor-canvas-scale-surface"
                         data-canvas-scale={activeCanvasScale}
                         style={{
+                          ...editorThemeCssVariables,
                           width: size.width,
                           height: size.height,
                           transform: `scale(${activeCanvasScale})`,
@@ -6470,12 +7304,22 @@ export function CanvasEditor({
 
                 <div
                   className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/50 px-3 py-2.5 text-xs"
-                  data-testid="editor-composition-readiness"
-                  data-composition-schema={editorCompositionReadiness.schemaVersion}
-                  data-action-plan-schema={editorCompositionReadiness.actionPlan.schemaVersion}
-                  data-total-layers={editorCompositionReadiness.metrics.totalLayers}
-                  data-group-layers={editorCompositionReadiness.metrics.groupLayers}
+	                  data-testid="editor-composition-readiness"
+	                  data-composition-schema={editorCompositionReadiness.schemaVersion}
+	                  data-action-plan-schema={editorCompositionReadiness.actionPlan.schemaVersion}
+	                  data-command-registry-schema={editorCompositionReadiness.commandRegistry.schemaVersion}
+	                  data-command-count={editorCompositionReadiness.commandRegistry.summary.totalCommandCount}
+	                  data-command-ready-count={editorCompositionReadiness.commandRegistry.summary.readyCommandCount}
+	                  data-command-disabled-count={editorCompositionReadiness.commandRegistry.summary.disabledCommandCount}
+	                  data-command-hidden-count={editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount}
+	                  data-total-layers={editorCompositionReadiness.metrics.totalLayers}
+	                  data-group-layers={editorCompositionReadiness.metrics.groupLayers}
                   data-nested-layers={editorCompositionReadiness.metrics.nestedLayers}
+                  data-animated-layers={editorCompositionReadiness.metrics.animatedLayers}
+                  data-data-bound-layers={editorCompositionReadiness.metrics.dataBoundLayers}
+                  data-asset-bound-layers={editorCompositionReadiness.metrics.assetBoundLayers}
+                  data-interactive-layers={editorCompositionReadiness.metrics.interactiveLayers}
+                  data-design-state-layers={editorCompositionReadiness.metrics.designStateLayerCount}
                   data-selected-layers={editorCompositionReadiness.selection.selectedLayerCount}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -6518,7 +7362,70 @@ export function CanvasEditor({
                       <div className="text-[10px] uppercase tracking-wide text-indigo-700">Breakpoints</div>
                     </div>
                   </div>
-                </div>
+                  <div className="mt-1.5 grid grid-cols-4 gap-1.5" data-testid="editor-composition-design-state-metrics">
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.animatedLayers}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Motion</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.dataBoundLayers}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Data</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.assetBoundLayers}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Assets</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1">
+                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.interactiveLayers}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Interactive</div>
+	                    </div>
+	                  </div>
+	                  <div
+	                    className="mt-2 border-t border-indigo-200/80 pt-2"
+	                    data-testid="editor-command-registry"
+	                    data-command-schema={editorCompositionReadiness.commandRegistry.schemaVersion}
+	                    data-command-count={editorCompositionReadiness.commandRegistry.summary.totalCommandCount}
+	                    data-ready-count={editorCompositionReadiness.commandRegistry.summary.readyCommandCount}
+	                    data-disabled-count={editorCompositionReadiness.commandRegistry.summary.disabledCommandCount}
+	                    data-hidden-count={editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount}
+	                    data-command-ids={editorCompositionReadiness.commandRegistry.commands.map((command) => command.id).join(' ')}
+	                  >
+	                    <div className="flex items-start justify-between gap-2">
+	                      <div className="min-w-0">
+	                        <div className="font-semibold text-indigo-950">Command registry</div>
+	                        <div className="mt-0.5 text-[11px] leading-4 text-indigo-900/75">
+	                          {editorCompositionReadiness.commandRegistry.summary.readyCommandCount}/{editorCompositionReadiness.commandRegistry.summary.totalCommandCount} ready,
+	                          {' '}
+	                          {editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount} hidden
+	                        </div>
+	                      </div>
+	                      <button
+	                        type="button"
+	                        onClick={() => void copyEditorCommandRegistry()}
+	                        title="Copy editor command registry"
+	                        aria-label="Copy editor command registry"
+	                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-100"
+	                        data-testid="editor-copy-command-registry"
+	                      >
+	                        <Copy className="h-3 w-3" />
+	                        Copy commands
+	                      </button>
+	                    </div>
+	                    <div className="mt-2 flex flex-wrap gap-1" data-testid="editor-command-registry-categories">
+	                      {editorCompositionReadiness.commandRegistry.summary.categories.map((category) => (
+	                        <span
+	                          key={category.category}
+	                          className="rounded border border-indigo-100 bg-white px-1.5 py-0.5 text-[10px] font-medium text-indigo-800"
+	                          data-command-category={category.category}
+	                          data-command-category-ready={category.ready}
+	                          data-command-category-total={category.total}
+	                        >
+	                          {category.category.replace('-', ' ')} {category.ready}/{category.total}
+	                        </span>
+	                      ))}
+	                    </div>
+	                  </div>
+	                </div>
 
                 <div
                   className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
@@ -6843,12 +7750,12 @@ export function CanvasEditor({
                           <div className="truncate text-xs text-slate-500" data-testid="editor-inspector-selection-detail">{selectedElementDetail}</div>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
-                          {selectedElement.locked && (
+                          {isLayerLocked(selectedElement) && (
                             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
                               Locked
                             </span>
                           )}
-                          {selectedElement.visible === false && (
+                          {isLayerHidden(selectedElement) && (
                             <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
                               Hidden
                             </span>
@@ -6861,7 +7768,7 @@ export function CanvasEditor({
                           type="text"
                           value={selectedElement.name || ''}
                           onChange={(event) => handleLayerRename(selectedElement.id, event.target.value)}
-                          disabled={isCanvasMutationDisabled || selectedElement.locked}
+                          disabled={isCanvasMutationDisabled || isLayerLocked(selectedElement)}
                           placeholder={selectedElementTypeLabel || 'Layer'}
                           className="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                           data-testid="editor-inspector-layer-name"
@@ -7103,7 +8010,7 @@ export function CanvasEditor({
                             <button
                               type="button"
                               onClick={handleRefreshSelectedReusableSection}
-                              disabled={isCanvasMutationDisabled || !selectedReusableSectionSource || selectedElement.locked}
+                              disabled={isCanvasMutationDisabled || !selectedReusableSectionSource || isLayerLocked(selectedElement)}
                               className="inline-flex items-center justify-center gap-1 rounded border border-violet-200 bg-white px-2 py-1 font-semibold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
                               data-testid="editor-refresh-reusable-instance"
                             >
@@ -7113,7 +8020,7 @@ export function CanvasEditor({
                             <button
                               type="button"
                               onClick={handleDetachSelectedReusableSection}
-                              disabled={isCanvasMutationDisabled || selectedElement.locked}
+                              disabled={isCanvasMutationDisabled || isLayerLocked(selectedElement)}
                               className="inline-flex items-center justify-center gap-1 rounded border border-violet-200 bg-white px-2 py-1 font-semibold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
                               data-testid="editor-detach-reusable-instance"
                             >
@@ -7206,6 +8113,7 @@ export function CanvasEditor({
                     element={selectedElement}
                     onChange={handleElementUpdate}
                     onDelete={deleteElement}
+                    theme={theme}
                     mediaContext={mediaContext}
                     disabled={isCanvasMutationDisabled}
                     canViewMedia={canViewMedia}
@@ -7274,27 +8182,40 @@ export function CanvasEditor({
               <label className="mt-5 block space-y-2">
                 <span className="text-xs font-semibold text-slate-600">Section name</span>
                 <input
+                  id="reusable-section-draft-name-input"
+                  data-testid="editor-reusable-section-name-input"
                   type="text"
                   value={reusableSectionDraft.name}
                   onChange={(event) => setReusableSectionDraft((current) => current ? {
                     ...current,
                     name: event.target.value,
                   } : current)}
+                  aria-invalid={Boolean(reusableSectionDraftNameInlineError)}
+                  aria-describedby={reusableSectionDraftNameInlineError ? 'editor-reusable-section-name-error' : undefined}
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-sky-400"
                   autoFocus
                 />
+                {reusableSectionDraftNameInlineError && (
+                  <p id="editor-reusable-section-name-error" data-testid="editor-reusable-section-name-error" className="text-xs text-red-600" role="alert">
+                    {reusableSectionDraftNameInlineError}
+                  </p>
+                )}
               </label>
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setReusableSectionDraft(null)}
+                  onClick={() => {
+                    setReusableSectionDraftSubmitted(false);
+                    setReusableSectionDraft(null);
+                  }}
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isSavingReusableSection || reusableSectionDraft.name.trim().length === 0}
+                  data-testid="editor-reusable-section-save"
+                  disabled={isSavingReusableSection}
                   className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSavingReusableSection

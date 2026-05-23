@@ -206,6 +206,107 @@ const parseLineItemCount = (value: unknown): number => {
   return 0;
 };
 
+const parseLineItemRecords = (value: unknown): Array<Record<string, unknown>> => {
+  const raw = typeof value === "string" ? value.trim() : value;
+  if (!raw) return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+        .map((item) => item as Record<string, unknown>);
+    }
+    const record = toRecord(parsed);
+    if (Array.isArray(record.items)) {
+      return record.items
+        .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+        .map((item) => item as Record<string, unknown>);
+    }
+  } catch {
+    return [];
+  }
+  return [];
+};
+
+const booleanValue = (value: unknown): boolean =>
+  value === true ||
+  value === 1 ||
+  (typeof value === "string" &&
+    ["true", "1", "yes", "download", "digital"].includes(value.trim().toLowerCase()));
+
+const lineItemProductType = (item: Record<string, unknown>): string =>
+  textValue(item.productType || item.product_type || item.type || item.kind).toLowerCase();
+
+const lineItemDeliveryMetadata = (item: Record<string, unknown>) => {
+  const productType = lineItemProductType(item);
+  const downloadMediaPresent = Boolean(
+    textValue(item.downloadMediaId || item.download_media_id || item.mediaId || item.media_id),
+  );
+  const downloadUrlPresent = Boolean(
+    textValue(item.downloadUrl || item.download_url || item.deliveryUrl || item.delivery_url),
+  );
+  const digitalDeliveryConfigured =
+    booleanValue(item.digitalDelivery) ||
+    booleanValue(item.hasDigitalDelivery) ||
+    booleanValue(item.downloadable) ||
+    downloadMediaPresent ||
+    downloadUrlPresent;
+
+  return {
+    productType,
+    digitalDeliveryConfigured,
+    downloadMediaPresent,
+    downloadUrlPresent,
+  };
+};
+
+const buildDigitalDeliveryHandoff = (
+  itemValue: unknown,
+  paymentStatus: PaymentStatus,
+  fulfillmentStatus: FulfillmentStatus,
+) => {
+  const digitalItems = parseLineItemRecords(itemValue)
+    .map(lineItemDeliveryMetadata)
+    .filter((item) =>
+      item.productType === "digital" ||
+      item.productType === "download" ||
+      item.digitalDeliveryConfigured,
+    );
+  const configuredItemCount = digitalItems.filter((item) => item.digitalDeliveryConfigured).length;
+  const pendingItemCount = Math.max(0, digitalItems.length - configuredItemCount);
+  const isPaid = paymentStatus === "paid" || paymentStatus === "refunded";
+  const status = digitalItems.length === 0
+    ? "not-applicable"
+    : pendingItemCount > 0
+      ? "attention"
+      : fulfillmentStatus === "fulfilled"
+        ? "fulfilled"
+        : isPaid
+          ? "ready"
+          : "pending-payment";
+  const customerAction = digitalItems.length === 0
+    ? "No digital delivery items were detected for this order."
+    : pendingItemCount > 0
+      ? `${pendingItemCount} digital item${pendingItemCount === 1 ? "" : "s"} still need delivery metadata before customer portal handoff.`
+      : status === "pending-payment"
+        ? "Digital delivery is configured and will become customer-visible after payment is confirmed."
+        : status === "fulfilled"
+          ? "Digital delivery items are configured and fulfillment is complete."
+          : "Digital delivery items are configured for the customer-safe order status view.";
+
+  return {
+    schemaVersion: "backy.order-digital-delivery-handoff.v1",
+    itemCount: digitalItems.length,
+    configuredItemCount,
+    pendingItemCount,
+    status,
+    customerAction,
+    customerSafeFieldsOnly: true,
+    includesDownloadUrls: false,
+    includesDownloadMediaIds: false,
+  };
+};
+
 const ordersApiReady = (collection: HandoffCollection): boolean => {
   const permissions = collection.permissions || {};
   return Boolean(
@@ -227,6 +328,129 @@ const summarizeStatus = (
 
 const endpointFor = (origin: string, path: string): string =>
   `${origin.replace(/\/$/, "")}${path}`;
+
+const buildFrontendBindings = (
+  endpoints: Record<string, string>,
+  order: HandoffRecord,
+): Record<string, unknown> => ({
+  schemaVersion: "backy.order-status-frontend-bindings.v1",
+  targetViews: ["order-confirmation", "order-tracking", "refund-status", "support-widget"],
+  dataset: {
+    key: "orderStatusHandoff",
+    source: "admin-order-status-handoff-api",
+    endpoint: endpoints.adminStatusHandoff,
+    selectedOrderId: order.id,
+    selectedOrderSlug: order.slug,
+    auth: "admin-session-or-service-key",
+    refreshMethod: "GET",
+  },
+  safeBindingPaths: [
+    "order.orderNumber",
+    "order.total",
+    "order.currency",
+    "order.itemCount",
+    "order.orderStatus",
+    "order.paymentStatus",
+    "order.fulfillmentStatus",
+    "customer.displayName",
+    "customer.maskedEmail",
+    "customer.maskedPhone",
+    "customer.customerProfileLinked",
+    "tracking.carrier",
+    "tracking.trackingNumber",
+    "tracking.trackingUrl",
+    "tracking.trackingStatus",
+    "tracking.fulfilledAt",
+    "refund.refundAmount",
+    "refund.providerRefundStatus",
+    "digitalDelivery.itemCount",
+    "digitalDelivery.configuredItemCount",
+    "digitalDelivery.pendingItemCount",
+    "digitalDelivery.status",
+    "digitalDelivery.customerAction",
+    "actionPlan.recommendation",
+    "checks[].status",
+    "nextSteps[]",
+  ],
+  maskedBindingPaths: ["customer.maskedEmail", "customer.maskedPhone"],
+  editableRegions: [
+    {
+      key: "confirmation-summary",
+      label: "Confirmation summary",
+      targetViews: ["order-confirmation"],
+      recommendedBindings: [
+        "order.orderNumber",
+        "order.total",
+        "order.currency",
+        "order.paymentStatus",
+      ],
+    },
+    {
+      key: "tracking-timeline",
+      label: "Tracking timeline",
+      targetViews: ["order-tracking"],
+      recommendedBindings: [
+        "order.fulfillmentStatus",
+        "tracking.carrier",
+        "tracking.trackingNumber",
+        "tracking.trackingUrl",
+        "tracking.trackingStatus",
+      ],
+    },
+    {
+      key: "refund-support",
+      label: "Refund and support status",
+      targetViews: ["refund-status", "support-widget"],
+      recommendedBindings: [
+        "refund.refundAmount",
+        "refund.providerRefundStatus",
+        "actionPlan.recommendation",
+        "nextSteps[]",
+      ],
+    },
+    {
+      key: "digital-delivery-status",
+      label: "Digital delivery status",
+      targetViews: ["order-confirmation", "order-tracking", "support-widget"],
+      recommendedBindings: [
+        "digitalDelivery.itemCount",
+        "digitalDelivery.configuredItemCount",
+        "digitalDelivery.status",
+        "digitalDelivery.customerAction",
+      ],
+    },
+  ],
+  actionBindings: [
+    {
+      key: "refresh-status",
+      label: "Refresh status",
+      method: "GET",
+      endpoint: endpoints.adminStatusHandoff,
+      requiresPermission: "commerce.view",
+    },
+    {
+      key: "refresh-tracking",
+      label: "Refresh tracking",
+      method: "POST",
+      endpoint: endpoints.adminTracking,
+      requiresPermission: "commerce.edit",
+    },
+    {
+      key: "request-provider-refund",
+      label: "Request provider refund",
+      method: "POST",
+      endpoint: endpoints.adminProviderRefund,
+      requiresPermission: "commerce.edit",
+    },
+    {
+      key: "open-admin-order-detail",
+      label: "Open private order detail",
+      method: "GET",
+      endpoint: endpoints.adminOrderDetail,
+      requiresPermission: "commerce.view",
+    },
+  ],
+});
 
 const buildActionPlan = (
   values: Record<string, unknown>,
@@ -423,7 +647,9 @@ const buildStatusHandoff = (params: {
     orderStatus === "cancelled" ||
     orderStatus === "refunded" ||
     paymentStatus === "refunded";
-  const itemCount = parseLineItemCount(readOrderValue(values, "items"));
+  const orderItems = readOrderValue(values, "items");
+  const itemCount = parseLineItemCount(orderItems);
+  const digitalDelivery = buildDigitalDeliveryHandoff(orderItems, paymentStatus, fulfillmentStatus);
   const actionPlan = buildActionPlan(values);
   const checks = [
     {
@@ -504,6 +730,12 @@ const buildStatusHandoff = (params: {
               : "No refund or return is active for this order.",
     },
     {
+      key: "digital-delivery",
+      label: "Digital delivery",
+      status: digitalDelivery.status === "attention" ? ("attention" as const) : ("ready" as const),
+      detail: digitalDelivery.customerAction,
+    },
+    {
       key: "private-order-queue",
       label: "Customer portal safety",
       status: ready ? ("ready" as const) : ("blocked" as const),
@@ -519,6 +751,7 @@ const buildStatusHandoff = (params: {
     .map((check) => check.detail)
     .slice(0, 4);
   const adminOrderBase = `/api/admin/sites/${encodeURIComponent(siteId)}/commerce/orders/${encodeURIComponent(order.id)}`;
+  const adminOrderDetail = `/api/admin/sites/${encodeURIComponent(siteId)}/collections/${encodeURIComponent(collection.id)}/records/${encodeURIComponent(order.id)}`;
 
   return {
     schemaVersion: ORDER_STATUS_HANDOFF_SCHEMA_VERSION,
@@ -585,12 +818,29 @@ const buildStatusHandoff = (params: {
         readOrderValue(values, "providerrefundcompletedat"),
       ),
     },
+    digitalDelivery,
     endpoints: {
       checkoutIntake: endpointFor(origin, `/api/sites/${encodeURIComponent(siteId)}/commerce/orders`),
+      publicStatusHandoff: endpointFor(
+        origin,
+        `/api/sites/${encodeURIComponent(siteId)}/commerce/orders?orderId=${encodeURIComponent(order.id)}&statusToken={statusToken}`,
+      ),
       adminStatusHandoff: endpointFor(origin, `${adminOrderBase}/status-handoff`),
+      adminOrderDetail: endpointFor(origin, adminOrderDetail),
       adminTracking: endpointFor(origin, `${adminOrderBase}/tracking`),
       adminProviderRefund: endpointFor(origin, `${adminOrderBase}/provider-refund`),
     },
+    frontendBindings: buildFrontendBindings({
+      checkoutIntake: endpointFor(origin, `/api/sites/${encodeURIComponent(siteId)}/commerce/orders`),
+      publicStatusHandoff: endpointFor(
+        origin,
+        `/api/sites/${encodeURIComponent(siteId)}/commerce/orders?orderId=${encodeURIComponent(order.id)}&statusToken={statusToken}`,
+      ),
+      adminStatusHandoff: endpointFor(origin, `${adminOrderBase}/status-handoff`),
+      adminOrderDetail: endpointFor(origin, adminOrderDetail),
+      adminTracking: endpointFor(origin, `${adminOrderBase}/tracking`),
+      adminProviderRefund: endpointFor(origin, `${adminOrderBase}/provider-refund`),
+    }, order),
     privacy: {
       publicCollectionReadBlocked: ready,
       customerSafeFieldsOnly: true,
@@ -599,11 +849,16 @@ const buildStatusHandoff = (params: {
       includesPaymentReferences: false,
       includesAddresses: false,
       includesInternalNotes: false,
+      includesDigitalDeliveryUrls: false,
+      includesDownloadMediaIds: false,
       excludedFields: [
         "email",
         "phone",
         "customerid",
         "checkoutsessionid",
+        "statusaccesstokenhash",
+        "statusaccesstokenissuedat",
+        "statusaccesstokenexpiresat",
         "shippingaddress",
         "billingaddress",
         "notes",
@@ -615,6 +870,10 @@ const buildStatusHandoff = (params: {
         "providerrefundid",
         "providerrefundreference",
         "providerrefundpayload",
+        "downloadurl",
+        "downloadmediaid",
+        "downloadmediaorganization",
+        "digitaldeliverypayload",
       ],
     },
     actionPlan,

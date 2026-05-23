@@ -9,13 +9,13 @@
 - Deliver a headless Wix/Canva/WordPress-class CMS platform where `backy-admin` is the authoring control plane and **any UI/UX can be used** as frontend consumer by relying only on stable `backy-public` contracts.
 - Note: this is alphabetic slicing; for numeric roadmap conversion see `backy-alpha-vs-numeric-phase-progress-2026-02-27.md`.
 
-Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md` tracks **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. Remaining Partial work is external certification: configured Forms/SDK Supabase/Postgres service-data smokes, live Settings/Commerce provider execution, and live provider-managed webhook/billing certification. Local editor parity is guarded for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress through focused smoke coverage.
+Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md` tracks **41 Ready / 4 Partial / 0 Prototype / 0 Missing**. Remaining Partial work is external certification: live Settings/Commerce provider execution and live provider-managed webhook/billing certification. Forms/SDK Supabase/Postgres service-data smokes passed against a migrated disposable Postgres target on 2026-05-21. Local editor parity is guarded for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress through focused smoke coverage. The release certification doctor now also verifies saved redacted Settings/Commerce provider artifact JSON through `BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH` and `BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH`, and completion-status `surfaceRunbooks[].artifactVerifier` exposes the same verifier command/path/schema/no-secret checks to custom admin clients before workflow outputs are treated as closure evidence.
 
 ### Phase A — Contracts, persistence boundary, auth
 
 - status: ready baseline with database/provider certification gates
 - done: core type contracts, backend-backed auth routes, httpOnly admin session cookies, Supabase Auth support, MFA, server-side RBAC/site/team scoping, repository-backed admin writes for primary content/settings flows, route-level ownership checks, and source/smoke coverage for auth/RBAC/site-scope contracts
-- remaining: run configured Forms and SDK Supabase/Postgres service-data gates against a migrated disposable database; continue restricting demo fixtures to explicit local fallback paths
+- remaining: certify live Settings and Commerce provider families; continue restricting demo fixtures to explicit local fallback paths
 
 ### Phase B — Editor action wiring
 
@@ -27,7 +27,7 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 - status: ready baseline with database-service certification gate
 - done: form/comment payload compatibility, moderation queue, bulk moderation, blocklist CRUD, reports, analytics, CSV/JSON export, anti-abuse policy controls and validation, contact-share flows, delivery retry, consent retention/export controls, RBAC/billing enforcement, and repository persistence smoke coverage
-- remaining: run the configured Forms Supabase/Postgres service-data smoke against a migrated disposable database; continue operator-depth improvements after certification
+- remaining: continue operator-depth improvements after certification; the configured Forms Supabase/Postgres service-data smoke passed on 2026-05-21
 
 ### Phase C — forms/comments operator hardening outcome
 - status: ready for current local scope
@@ -36,8 +36,8 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 ### Phase A → B → C run-order for this sprint
 
-- Immediate: run or unblock the configured Forms/SDK Supabase/Postgres service-data gates with a disposable migrated database.
-- Then: run live Settings and Commerce provider certification against configured external services.
+- Immediate: run live Settings and Commerce provider certification against configured external services.
+- Then: keep the Forms/SDK Supabase/Postgres certification smokes in release regression paths so the certified database gates stay guarded.
 - Next: keep editor regression guards current as new controls are added; do not treat optional cross-browser visual-regression expansion as a blocker for the current local editor slice.
 - Final in this phase: update page-surface audit rows only when the corresponding live gate or focused smoke evidence exists.
 
@@ -51,7 +51,7 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 - status: ready baseline with SDK/Postgres certification gate
 - done: public render, manifest, OpenAPI, generated SDK, media, forms, comments, commerce catalog/order, reusable-section, interactive component, preview, cache/header, and route-resolution contracts are locally guarded
-- remaining: run `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` against a migrated disposable Supabase/Postgres service before the public manifest/OpenAPI/SDK database-mode gate can move from Partial to Ready
+- remaining: keep `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` in release regression paths; the public manifest/OpenAPI/SDK database-mode gate moved to Ready after passing on 2026-05-21
 
 ### Phase F — Versioning and publish workflow
 
@@ -75,18 +75,18 @@ Current audit baseline: `specs/page-completion-audit/backy-page-surface-audit.md
 
 - status: ready baseline with SDK/Postgres certification gate
 - done: AI frontend contract schemas/examples, frontend manifest, OpenAPI, generated SDK, render payloads, editable maps, media/forms/comments/commerce/reusable-section contracts, and custom frontend onboarding evidence are locally guarded
-- remaining: run the SDK Postgres gate against a migrated disposable database and keep new endpoints covered by manifest/OpenAPI/SDK smokes
+- remaining: keep new endpoints covered by manifest/OpenAPI/SDK smokes after the SDK Postgres gate passed against a migrated disposable database on 2026-05-21
 
 ### Phase J — Extensibility and operations
 
 - status: ready baseline with live-provider operations gates
-- done: interactive component registry/runtime, sandboxed custom code components, bundle governance, migration/rollback tooling, site webhooks, release certification workflow, non-secret readiness doctor, provider preflight contracts, and setup runbooks are implemented for the current local scope
+- done: interactive component registry/runtime, sandboxed custom code components, bundle governance, migration/rollback tooling, site webhooks, release certification workflow, non-secret readiness doctor with provider artifact verification, provider preflight contracts, and setup runbooks are implemented for the current local scope
 - remaining: execute live Settings/Commerce provider certification and keep plugin/provider runbooks current as new integrations ship
 
 ## 2) Execution order for “asap to usable” delivery
 
-1. Run the database certification gates for Forms and SDK manifests against a disposable migrated Supabase/Postgres service.
-2. Run live Settings and Commerce provider certification for Supabase, Vercel, storage, notifications, billing/payment, catalog, tax, shipping, subscription, and provider-managed webhook paths.
+1. Run live Settings and Commerce provider certification for Supabase, Vercel, storage, notifications, billing/payment, catalog, tax, shipping, subscription, and provider-managed webhook paths.
+2. Keep the certified Forms and SDK database smokes in release regression paths.
 3. Keep focused editor regression guards current for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress.
 4. Keep public contract and custom frontend onboarding evidence tied to manifest/OpenAPI/SDK smokes.
 5. Defer broad new feature expansion until the remaining Partial certification rows are closed.

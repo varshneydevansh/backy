@@ -1,7 +1,7 @@
 import {
     DEFAULT_SITE_SETTINGS,
     DEFAULT_THEME,
-    canvasElementsToBackyContentDocument,
+    canvasContentPayloadToBackyContentDocument,
     isBackyContentDocument,
     type BackyContentDocument,
     type BackyListResult,
@@ -76,6 +76,10 @@ const asDb = (db: DatabaseInstance): QueryDatabase => db as unknown as QueryData
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const isUuidIdentifier = (value: string): boolean => (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 );
 
 const toIso = (value: Date | string | null | undefined): string => {
@@ -296,20 +300,14 @@ const normalizeContentDocument = (
         return rawContent;
     }
 
-    if (isRecord(rawContent) && isBackyContentDocument(rawContent.contentDocument)) {
-        return rawContent.contentDocument;
-    }
-
-    return canvasElementsToBackyContentDocument({
+    return canvasContentPayloadToBackyContentDocument({
         id: input.id,
         kind: input.kind,
         title: input.title,
         slug: input.slug,
         status: input.status,
         version: input.version,
-        elements: isRecord(rawContent) ? rawContent : [],
-        canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
-        customCSS: isRecord(rawContent) && typeof rawContent.customCSS === 'string' ? rawContent.customCSS : undefined,
+        rawContent,
     });
 };
 
@@ -427,6 +425,8 @@ export function createSiteRepository(db: DatabaseInstance): BackySiteRepository 
         },
 
         async getById(siteId: string): Promise<Site | null> {
+            if (!isUuidIdentifier(siteId)) return null;
+
             const row = await firstOrNull<SiteRow>(
                 database.select().from(sites).where(eq(sites.id, siteId)).limit(1),
             );
@@ -512,6 +512,8 @@ export function createPageRepository(db: DatabaseInstance): BackyPageRepository 
         },
 
         async getById(siteId: string, pageId: string): Promise<BackyPage | null> {
+            if (!isUuidIdentifier(siteId) || !isUuidIdentifier(pageId)) return null;
+
             const row = await firstOrNull<PageRow>(
                 database.select().from(pages).where(and(eq(pages.siteId, siteId), eq(pages.id, pageId))).limit(1),
             );
@@ -619,6 +621,8 @@ export function createPostRepository(db: DatabaseInstance): BackyPostRepository 
         },
 
         async getById(siteId: string, postId: string): Promise<BackyPost | null> {
+            if (!isUuidIdentifier(siteId) || !isUuidIdentifier(postId)) return null;
+
             const row = await firstOrNull<BlogPostRow>(
                 database.select().from(blogPosts).where(and(eq(blogPosts.siteId, siteId), eq(blogPosts.id, postId))).limit(1),
             );

@@ -41,9 +41,19 @@ function ResetPasswordPage() {
   const [resetState, setResetState] = useState<ResetState>('ready');
   const [message, setMessage] = useState<string | null>(null);
   const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH);
+  const [resetSubmitted, setResetSubmitted] = useState(false);
   const passwordIsValid = password.length >= minPasswordLength;
   const passwordsMatch = Boolean(password) && password === confirmPassword;
   const passwordRequirement = `Use at least ${minPasswordLength} characters.`;
+  const tokenInlineError = resetSubmitted && !token
+    ? 'Open a valid password reset link with a recovery token.'
+    : null;
+  const passwordInlineError = resetSubmitted && !passwordIsValid
+    ? passwordRequirement
+    : null;
+  const confirmInlineError = resetSubmitted && !passwordsMatch
+    ? 'Confirm password must match the new password.'
+    : null;
   const readiness = useMemo(() => (
     Math.round(([Boolean(token), passwordIsValid, passwordsMatch, !isLoading].filter(Boolean).length / 4) * 100)
   ), [isLoading, passwordIsValid, passwordsMatch, token]);
@@ -82,11 +92,14 @@ function ResetPasswordPage() {
 
   const handleResetPassword = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!token || isLoading) return;
+    if (isLoading) return;
+    setResetSubmitted(true);
 
-    if (!passwordIsValid || !passwordsMatch) {
+    if (!token || !passwordIsValid || !passwordsMatch) {
       setResetState('error');
-      setMessage(`Use a matching password with at least ${minPasswordLength} characters.`);
+      setMessage(!token
+        ? 'Use a valid reset link before saving a new password.'
+        : `Use a matching password with at least ${minPasswordLength} characters.`);
       return;
     }
 
@@ -166,7 +179,14 @@ function ResetPasswordPage() {
             </div>
           </div>
 
-          <form onSubmit={handleResetPassword} className="rounded-lg border border-border bg-card p-6 shadow-sm">
+          <form
+            onSubmit={handleResetPassword}
+            noValidate
+            data-testid="reset-password-form"
+            data-reset-status={resetState}
+            data-readiness={readiness}
+            className="rounded-lg border border-border bg-card p-6 shadow-sm"
+          >
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-primary/10 p-2 text-primary">
                 <KeyRound className="h-5 w-5" />
@@ -184,18 +204,35 @@ function ResetPasswordPage() {
               <div className="mt-1 truncate font-mono text-xs font-semibold text-foreground">
                 {maskToken(token)}
               </div>
+              {tokenInlineError && (
+                <p id="reset-token-error" data-testid="reset-password-token-error" className="mt-2 text-xs font-medium text-red-600" role="alert">
+                  {tokenInlineError}
+                </p>
+              )}
             </div>
 
-            <label className="mt-5 block text-sm">
+            <label className="mt-5 block text-sm" htmlFor="reset-password-new">
               <span className="font-medium">New password</span>
-              <div className="mt-2 flex rounded-lg border border-border bg-background focus-within:ring-2 focus-within:ring-ring">
+              <div className={cn(
+                'mt-2 flex rounded-lg border bg-background focus-within:ring-2 focus-within:ring-ring',
+                passwordInlineError ? 'border-red-500 focus-within:ring-red-500' : 'border-border',
+              )}
+              >
                 <input
+                  id="reset-password-new"
+                  data-testid="reset-password-new-input"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setResetState('ready');
+                    setMessage(null);
+                  }}
                   className="min-h-11 flex-1 rounded-l-lg bg-transparent px-3 text-sm outline-none"
                   autoComplete="new-password"
                   minLength={minPasswordLength}
+                  aria-invalid={Boolean(passwordInlineError)}
+                  aria-describedby="reset-password-requirement"
                 />
                 <button
                   type="button"
@@ -206,19 +243,40 @@ function ResetPasswordPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <span className="mt-1 block text-xs text-muted-foreground">{passwordRequirement}</span>
+              <span
+                id="reset-password-requirement"
+                className={cn('mt-1 block text-xs', passwordInlineError ? 'font-medium text-red-600' : 'text-muted-foreground')}
+              >
+                {passwordInlineError || passwordRequirement}
+              </span>
             </label>
 
-            <label className="mt-4 block text-sm">
+            <label className="mt-4 block text-sm" htmlFor="reset-password-confirm">
               <span className="font-medium">Confirm password</span>
               <input
+                id="reset-password-confirm"
+                data-testid="reset-password-confirm-input"
                 type={showPassword ? 'text' : 'password'}
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                className="mt-2 min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none transition focus:ring-2 focus:ring-ring"
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  setResetState('ready');
+                  setMessage(null);
+                }}
+                className={cn(
+                  'mt-2 min-h-11 w-full rounded-lg border bg-background px-3 text-sm outline-none transition focus:ring-2 focus:ring-ring',
+                  confirmInlineError ? 'border-red-500 focus:ring-red-500' : 'border-border',
+                )}
                 autoComplete="new-password"
                 minLength={minPasswordLength}
+                aria-invalid={Boolean(confirmInlineError)}
+                aria-describedby={confirmInlineError ? 'reset-password-confirm-error' : undefined}
               />
+              {confirmInlineError && (
+                <p id="reset-password-confirm-error" data-testid="reset-password-confirm-error" className="mt-1 text-xs font-medium text-red-600" role="alert">
+                  {confirmInlineError}
+                </p>
+              )}
             </label>
 
             {message && (
@@ -228,6 +286,8 @@ function ResetPasswordPage() {
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                   : 'border-amber-200 bg-amber-50 text-amber-800',
               )}
+                role={resetState === 'error' ? 'alert' : 'status'}
+                data-testid="reset-password-message"
               >
                 {message}
               </div>
@@ -236,7 +296,7 @@ function ResetPasswordPage() {
             <div className="mt-6 grid gap-3">
               <Button
                 type="submit"
-                disabled={!token || !passwordIsValid || !passwordsMatch || isLoading || resetState === 'reset'}
+                disabled={isLoading || resetState === 'reset'}
                 iconStart={isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 className="w-full"
               >

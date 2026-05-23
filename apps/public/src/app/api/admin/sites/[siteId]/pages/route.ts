@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   DEFAULT_SITE_SETTINGS,
-  canvasElementsToBackyContentDocument,
+  canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
   type BackyJsonObject,
   type BackyContentDocument,
@@ -36,7 +36,10 @@ import {
 } from "@/lib/repositoryRuntime";
 import { findPageRouteConflict } from "@/lib/routeConflicts";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
-import { seedInputFromFrontendDesignTemplate } from "@/lib/frontendDesignContract";
+import {
+  normalizeInputFromDirectFrontendDesignEnvelope,
+  seedInputFromFrontendDesignTemplate,
+} from "@/lib/frontendDesignContract";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import { getRepositoryPageByPublicPath } from "@/lib/repositoryPages";
 import {
@@ -137,38 +140,50 @@ const contentDocumentFromInput = (
     status: "draft" | "published" | "scheduled" | "archived";
   },
 ): BackyContentDocument => {
-  if (isBackyContentDocument(rawContent)) {
-    return rawContent;
-  }
-  if (
-    isRecord(rawContent) &&
-    isBackyContentDocument(rawContent.contentDocument)
-  ) {
-    return rawContent.contentDocument;
-  }
-
-  return canvasElementsToBackyContentDocument({
+  return canvasContentPayloadToBackyContentDocument({
     id: input.id,
     kind: "page",
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements: contentElementsFromInput(rawContent),
-    canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
-    customCSS:
-      isRecord(rawContent) && typeof rawContent.customCSS === "string"
-        ? rawContent.customCSS
-        : undefined,
+    rawContent,
   });
 };
 
 const storePageContentFromInput = (
   rawContent: unknown,
+  input: {
+    id: string;
+    title: string;
+    slug: string;
+    status: "draft" | "published" | "scheduled" | "archived";
+  },
 ): StorePage["content"] => {
   const contentInput = isRecord(rawContent) ? rawContent : {};
   const canvasSizeInput = isRecord(contentInput.canvasSize)
     ? contentInput.canvasSize
     : {};
+  const contentDocument = canvasContentPayloadToBackyContentDocument({
+    id: input.id,
+    kind: "page",
+    title: input.title,
+    slug: input.slug,
+    status: input.status,
+    rawContent,
+  });
+  const metadata = isRecord(contentDocument.metadata)
+    ? contentDocument.metadata
+    : {};
+  const designStateValue = <T = unknown>(key: string): T | undefined => {
+    const sourceValue =
+      contentInput[key] !== undefined
+        ? contentInput[key]
+        : (contentDocument as unknown as Record<string, unknown>)[key] ??
+          metadata[key];
+    return Array.isArray(sourceValue) || isRecord(sourceValue)
+      ? (sourceValue as T)
+      : undefined;
+  };
 
   return {
     elements: contentElementsFromInput(
@@ -181,16 +196,26 @@ const storePageContentFromInput = (
     customCSS:
       typeof contentInput.customCSS === "string"
         ? contentInput.customCSS
-        : undefined,
+        : typeof metadata.customCSS === "string"
+          ? metadata.customCSS
+          : undefined,
     customJS:
       typeof contentInput.customJS === "string"
         ? contentInput.customJS
-        : undefined,
-    contentDocument: isBackyContentDocument(rawContent)
-      ? rawContent
-      : isBackyContentDocument(contentInput.contentDocument)
-        ? contentInput.contentDocument
-        : undefined,
+        : typeof metadata.customJS === "string"
+          ? metadata.customJS
+          : undefined,
+    contentDocument,
+    themeTokenRefs: designStateValue<Record<string, string>>("themeTokenRefs"),
+    assets: designStateValue<unknown[] | Record<string, unknown>>("assets"),
+    animations: designStateValue<unknown[] | Record<string, unknown>>("animations"),
+    interactions: designStateValue<unknown[] | Record<string, unknown>>(
+      "interactions",
+    ),
+    dataBindings: designStateValue<Record<string, unknown>>("dataBindings"),
+    editableMap: designStateValue<Record<string, unknown>>("editableMap"),
+    seo: designStateValue<Record<string, unknown>>("seo"),
+    metadata: designStateValue<Record<string, unknown>>("metadata"),
   };
 };
 
@@ -380,7 +405,21 @@ const adminPageFromRepositoryPage = (
         typeof page.content.metadata?.customCSS === "string"
           ? page.content.metadata.customCSS
           : undefined,
+      customJS:
+        typeof page.content.metadata?.customJS === "string"
+          ? page.content.metadata.customJS
+          : undefined,
       contentDocument: page.content,
+      themeTokenRefs: page.content.themeTokenRefs,
+      assets: page.content.assets,
+      animations: Array.isArray(page.content.metadata?.animations) || isRecord(page.content.metadata?.animations)
+        ? page.content.metadata.animations
+        : undefined,
+      interactions: page.content.interactions,
+      dataBindings: page.content.dataBindings,
+      editableMap: page.content.editableMap,
+      seo: page.content.seo,
+      metadata: page.content.metadata,
     },
   };
 };
@@ -691,7 +730,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, seeded.code, seeded.message, requestId);
       }
 
-      const createBody = seeded.body;
+      const createBody = normalizeInputFromDirectFrontendDesignEnvelope(
+        seeded.body,
+      );
       const contentValidationError = pageContentValidationError(
         createBody.content,
         requestId,
@@ -904,9 +945,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
 
-    const scheduledAt = normalizeScheduledAtInput(seeded.body.scheduledAt);
+    const createBody = normalizeInputFromDirectFrontendDesignEnvelope(
+      seeded.body,
+    );
+    const scheduledAt = normalizeScheduledAtInput(createBody.scheduledAt);
     const contentValidationError = pageContentValidationError(
-      seeded.body.content,
+      createBody.content,
       requestId,
     );
     if (contentValidationError) {
@@ -925,26 +969,32 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
     const now = new Date().toISOString();
+    const previewPageId =
+      typeof createBody.id === "string" && createBody.id.trim().length > 0
+        ? createBody.id.trim()
+        : `page_${slug}`;
     const previewPage = {
-      id:
-        typeof seeded.body.id === "string" && seeded.body.id.trim().length > 0
-          ? seeded.body.id.trim()
-          : `page_${slug}`,
+      id: previewPageId,
       siteId: site.id,
       title,
       slug,
       description:
-        typeof seeded.body.description === "string"
-          ? seeded.body.description
+        typeof createBody.description === "string"
+          ? createBody.description
           : null,
       status,
       isHomepage,
       parentId:
-        typeof seeded.body.parentId === "string" ? seeded.body.parentId : null,
+        typeof createBody.parentId === "string" ? createBody.parentId : null,
       sortOrder:
-        typeof seeded.body.sortOrder === "number" ? seeded.body.sortOrder : 0,
-      content: storePageContentFromInput(seeded.body.content),
-      meta: isRecord(seeded.body.meta) ? seeded.body.meta : {},
+        typeof createBody.sortOrder === "number" ? createBody.sortOrder : 0,
+      content: storePageContentFromInput(createBody.content, {
+        id: previewPageId,
+        title,
+        slug,
+        status,
+      }),
+      meta: isRecord(createBody.meta) ? createBody.meta : {},
       forms: [],
       createdAt: now,
       updatedAt: now,
@@ -962,7 +1012,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const page = createAdminPage(site.id, {
-      ...seeded.body,
+      ...createBody,
       title,
       slug,
       status,

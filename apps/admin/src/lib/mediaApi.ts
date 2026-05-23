@@ -23,10 +23,28 @@ interface ApiMediaItem {
   tags?: string[];
   metadata?: Record<string, unknown>;
   responsive?: MediaAsset['responsive'];
+  organization?: MediaAsset['organization'];
   uploadedBy?: string | null;
   pageIds?: string[];
   postIds?: string[];
 }
+
+const collectionRecordIdsFromMediaMetadata = (
+  metadata: Record<string, unknown> | undefined,
+): string[] => {
+  const bindings = metadata?.bindings;
+  if (!Array.isArray(bindings)) {
+    return [];
+  }
+
+  return Array.from(new Set(bindings
+    .filter((binding): binding is Record<string, unknown> => (
+      Boolean(binding) && typeof binding === 'object' && !Array.isArray(binding)
+    ))
+    .filter((binding) => binding.scope === 'collectionRecord')
+    .map((binding) => typeof binding.targetId === 'string' ? binding.targetId.trim() : '')
+    .filter(Boolean)));
+};
 
 interface ApiMediaListResponse {
   success: boolean;
@@ -461,9 +479,7 @@ const toAdminMediaType = (type: ApiMediaItem['type']): MediaAsset['type'] => {
   return 'file';
 };
 
-const toApiMediaListType = (type: MediaListType): ApiMediaItem['type'] => (
-  type === 'file' ? 'document' : type
-);
+const toApiMediaListType = (type: MediaListType): MediaListType => type;
 
 const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   id: item.id,
@@ -477,6 +493,7 @@ const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   tags: item.tags || [],
   metadata: item.metadata || {},
   responsive: item.responsive,
+  organization: item.organization,
   folderId: item.folderId || null,
   scope: item.scope || 'global',
   scopeTargetId: item.scopeTargetId || null,
@@ -484,6 +501,7 @@ const toMediaAsset = (item: ApiMediaItem): MediaAsset => ({
   uploadedBy: item.uploadedBy || 'admin',
   targetPageIds: item.pageIds || [],
   targetPostIds: item.postIds || [],
+  targetCollectionRecordIds: collectionRecordIdsFromMediaMetadata(item.metadata),
 });
 
 const normalizeApiTimestamp = (value: string | number): string => {

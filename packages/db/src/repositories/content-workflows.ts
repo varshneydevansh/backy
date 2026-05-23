@@ -3,6 +3,7 @@ import {
     type BackyContentRevision,
     type BackyContentRevisionCreateInput,
     type BackyContentRevisionListInput,
+    type BackyContentRevisionOperation,
     type BackyContentTargetType,
     type BackyContentWorkflowRepository,
     type BackyJsonObject,
@@ -94,6 +95,31 @@ const normalizeSnapshot = (value: unknown): BackyJsonObject => (
     isRecord(value) ? value as BackyJsonObject : {}
 );
 
+const normalizeMetadata = (value: unknown): BackyJsonObject => (
+    isRecord(value) ? value as BackyJsonObject : {}
+);
+
+const RESTORE_TARGET_PATTERN = /\b(?:rollback|restore)\s+to\s+([a-zA-Z0-9_-]+)/i;
+
+const restoreTargetFromNote = (note?: string | null): string | null => (
+    note?.match(RESTORE_TARGET_PATTERN)?.[1] || null
+);
+
+const inferRevisionOperation = (
+    operation?: BackyContentRevisionOperation | null,
+    note?: string | null,
+    restoreTargetRevisionId?: string | null,
+): BackyContentRevisionOperation => {
+    if (operation && operation.trim()) return operation.trim() as BackyContentRevisionOperation;
+    if (restoreTargetRevisionId) return 'rollback';
+    const normalized = (note || '').toLowerCase();
+    if (normalized.includes('publish')) return 'publish';
+    if (normalized.includes('archive')) return 'archive';
+    if (normalized.includes('rollback') || normalized.includes('restore')) return 'rollback';
+    if (normalized.includes('migration') || normalized.includes('migrate')) return 'migration';
+    return 'update';
+};
+
 const toRevision = (row: RevisionRow): BackyContentRevision => ({
     id: row.id,
     siteId: row.siteId,
@@ -101,6 +127,10 @@ const toRevision = (row: RevisionRow): BackyContentRevision => ({
     targetId: row.targetId,
     snapshot: normalizeSnapshot(row.snapshot),
     note: row.note,
+    parentRevisionId: row.parentRevisionId || null,
+    operation: row.operation as BackyContentRevisionOperation | null,
+    restoreTargetRevisionId: row.restoreTargetRevisionId || restoreTargetFromNote(row.note),
+    metadata: normalizeMetadata(row.metadata),
     createdBy: row.createdBy,
     createdAt: toIso(row.createdAt),
 });
@@ -141,12 +171,42 @@ export function createContentWorkflowRepository(db: DatabaseInstance): BackyCont
         },
 
         async createRevision(input: BackyContentRevisionCreateInput): Promise<BackyContentRevision> {
+            const [latest] = await database
+                .select()
+                .from(contentRevisions)
+                .where(and(
+                    eq(contentRevisions.siteId, input.siteId),
+                    eq(contentRevisions.targetType, input.targetType),
+                    eq(contentRevisions.targetId, input.targetId),
+                ))
+                .orderBy(desc(contentRevisions.createdAt))
+                .limit(1) as RevisionRow[];
+            const note = input.note || null;
+            const parentRevisionId = input.parentRevisionId === undefined
+                ? latest?.id || null
+                : input.parentRevisionId || null;
+            const restoreTargetRevisionId = input.restoreTargetRevisionId || restoreTargetFromNote(note);
+            const operation = inferRevisionOperation(input.operation, note, restoreTargetRevisionId);
+            const metadata = {
+                ...normalizeMetadata(input.metadata),
+                schemaVersion: 'backy.content-revision-metadata.v1',
+                operation,
+                parentRevisionId,
+                restoreTargetRevisionId,
+                targetType: input.targetType,
+                targetId: input.targetId,
+            } satisfies BackyJsonObject;
+
             const [row] = await database.insert(contentRevisions).values({
                 siteId: input.siteId,
                 targetType: input.targetType,
                 targetId: input.targetId,
                 snapshot: input.snapshot,
-                note: input.note || null,
+                note,
+                parentRevisionId,
+                operation,
+                restoreTargetRevisionId,
+                metadata,
                 createdBy: input.createdBy || null,
             }).returning() as RevisionRow[];
             return toRevision(row);

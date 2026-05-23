@@ -99,6 +99,24 @@ export interface MediaResponsiveManifest {
   storageProvider?: string;
 }
 
+export interface MediaOrganization {
+  schemaVersion: 'backy.media.organization.v1' | string;
+  folderId: string | null;
+  folderName: string;
+  folderPath: string;
+  folderSegments: string[];
+  folderAncestors?: Array<{
+    id: string;
+    name: string;
+    parentId: string | null;
+    sortOrder: number;
+  }>;
+  folderDepth: number;
+  folderSortOrder: number | null;
+  root: boolean;
+  missingFolder: boolean;
+}
+
 export interface MediaAsset {
   id: string;
   name: string;
@@ -108,6 +126,7 @@ export interface MediaAsset {
   url: string;
   metadata?: Record<string, unknown>;
   responsive?: MediaResponsiveManifest;
+  organization?: MediaOrganization;
   altText?: string | null;
   caption?: string | null;
   tags?: string[];
@@ -118,6 +137,7 @@ export interface MediaAsset {
   uploadedBy?: string | null;
   targetPageIds?: string[];
   targetPostIds?: string[];
+  targetCollectionRecordIds?: string[];
 }
 
 export type DeliveryMode = 'managed-hosting' | 'custom-frontend';
@@ -255,6 +275,7 @@ const INITIAL_MEDIA: MediaAsset[] = [
     uploadedBy: 'admin',
     targetPageIds: ['1'],
     targetPostIds: [],
+    targetCollectionRecordIds: [],
   },
   {
     id: '2',
@@ -268,6 +289,7 @@ const INITIAL_MEDIA: MediaAsset[] = [
     uploadedBy: 'admin',
     targetPageIds: [],
     targetPostIds: [],
+    targetCollectionRecordIds: [],
   },
   {
     id: '3',
@@ -281,6 +303,7 @@ const INITIAL_MEDIA: MediaAsset[] = [
     uploadedBy: 'admin',
     targetPageIds: [],
     targetPostIds: [],
+    targetCollectionRecordIds: [],
   },
 ];
 

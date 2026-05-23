@@ -45,6 +45,33 @@ const getStringMetadata = (metadata: Record<string, unknown> | undefined, key: s
 };
 
 const cleanCssString = (value: string) => value.replace(/["\\\r\n]/g, '');
+const FONT_DISPLAY_VALUES = new Set(['auto', 'block', 'swap', 'fallback', 'optional']);
+
+const normalizeFontWeight = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  if (['normal', 'bold', 'lighter', 'bolder'].includes(normalized)) {
+    return normalized;
+  }
+
+  if (/^\d{1,4}$/.test(normalized)) {
+    const numeric = Number(normalized);
+    if (numeric >= 1 && numeric <= 1000) {
+      return String(numeric);
+    }
+  }
+
+  return '400';
+};
+
+const normalizeFontStyle = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'italic' || normalized === 'oblique' ? normalized : 'normal';
+};
+
+const normalizeFontDisplay = (value: string): string => {
+  const normalized = value.trim().toLowerCase();
+  return FONT_DISPLAY_VALUES.has(normalized) ? normalized : 'swap';
+};
 
 const fontFamilyFromMedia = (font: MediaItem) => (
   getStringMetadata(font.metadata, 'fontFamily') ||
@@ -77,9 +104,9 @@ export const buildPublicFontManifest = (
     .map((font): PublicFontVariant => {
       const family = fontFamilyFromMedia(font);
       const fallbackStack = getStringMetadata(font.metadata, 'fontFallback') || 'system-ui, sans-serif';
-      const display = getStringMetadata(font.metadata, 'fontDisplay') || 'swap';
-      const weight = getStringMetadata(font.metadata, 'fontWeight') || '400';
-      const style = getStringMetadata(font.metadata, 'fontStyle') || 'normal';
+      const display = normalizeFontDisplay(getStringMetadata(font.metadata, 'fontDisplay') || 'swap');
+      const weight = normalizeFontWeight(getStringMetadata(font.metadata, 'fontWeight') || '400');
+      const style = normalizeFontStyle(getStringMetadata(font.metadata, 'fontStyle') || 'normal');
 
       return {
         id: `${font.id}:${weight}:${style}`,

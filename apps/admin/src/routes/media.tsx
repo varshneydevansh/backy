@@ -69,6 +69,7 @@ type MediaUsageFilter = 'all' | 'unused' | 'referenced' | 'replaced' | 'quaranti
 type MediaAuditActionFilter = 'all' | 'create' | 'update' | 'media.replace' | 'media.version.restore' | 'media.version.delete' | 'media.transforms.prepare' | 'media.provider-analytics.ingest' | 'media.bind' | 'media.unbind' | 'delete';
 type MediaBulkSafetyAction = 'keep' | 'quarantine' | 'release';
 type MediaUploadMode = 'all' | 'image' | 'font' | 'file';
+type MediaStorageSecretManagerMutationMode = Extract<SettingsStorageSecretManagerResult['mode'], 'promote' | 'revoke-replacement'>;
 type MediaUsageMetric = {
   label: string;
   value: number;
@@ -225,6 +226,7 @@ interface MediaStorageProviderCertificationHandoff {
 }
 type MediaAssetPlacementStatus = 'ready' | 'private' | 'quarantined';
 type MediaAssetPlacementKind = 'image' | 'video' | 'audio' | 'download' | 'font-face' | 'file';
+type MediaAssetPlacementEditorElementType = 'image' | 'video' | 'audio' | 'button' | 'link' | 'text' | 'container' | 'gallery' | 'file';
 interface MediaAssetPlacementHandoff {
   schemaVersion: 'backy.media-asset-placement.v1';
   status: MediaAssetPlacementStatus;
@@ -241,6 +243,7 @@ interface MediaAssetPlacementHandoff {
     visibility: 'public' | 'private';
     folderId: string | null;
     folderPath: string;
+    organization: NonNullable<MediaAsset['organization']>;
     tags: string[];
     altText?: string | null;
     caption?: string | null;
@@ -267,6 +270,24 @@ interface MediaAssetPlacementHandoff {
     css?: string;
     reactProps?: Record<string, string | number | boolean>;
     notes: string[];
+  };
+  editorBinding: {
+    schemaVersion: 'backy.media-editor-binding.v1';
+    recommendedElementType: MediaAssetPlacementEditorElementType;
+    compatibleElementTypes: MediaAssetPlacementEditorElementType[];
+    assetIds: string[];
+    editableTargets: string[];
+    responsiveEditableTargets: string[];
+    propsPatch: Record<string, unknown>;
+    bindingEndpoint: string;
+    bindingRequestTemplate: {
+      action: 'bind';
+      targetType: 'page' | 'post';
+      targetId: '{pageId}' | '{postId}';
+      usageType: MediaAssetPlacementKind;
+      attachedBy: 'admin';
+    };
+    preservedDesignState: string[];
   };
   image?: {
     src: string;
@@ -298,6 +319,7 @@ interface MediaAssetPlacementHandoff {
   references: {
     pages: string[];
     posts: string[];
+    collectionRecords: string[];
     total: number;
   };
   safety: {
@@ -308,6 +330,7 @@ interface MediaAssetPlacementHandoff {
 }
 
 const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'file', 'font', 'other'];
+const MEDIA_FILE_FILTER_TYPES = new Set<MediaAsset['type']>(['file', 'other']);
 const MEDIA_VISIBILITY_FILTERS: MediaVisibilityFilter[] = ['all', 'public', 'private'];
 const MEDIA_USAGE_FILTERS: MediaUsageFilter[] = ['all', 'unused', 'referenced', 'replaced', 'quarantined'];
 const MEDIA_AUDIT_ACTION_FILTERS: Array<{ value: MediaAuditActionFilter; label: string }> = [
@@ -756,6 +779,7 @@ const MEDIA_EXPORT_COLUMNS = [
   'transform_url',
   'referenced_pages',
   'referenced_posts',
+  'referenced_collection_records',
   'font_family',
   'font_weight',
   'font_style',
@@ -780,6 +804,7 @@ type MediaFolderTreeOption = MediaFolder & {
   depth: number;
   label: string;
   path: string;
+  ancestorIds: string[];
 };
 
 const buildMediaFolderOptions = (folders: MediaFolder[]): MediaFolderTreeOption[] => {
@@ -809,6 +834,7 @@ const buildMediaFolderOptions = (folders: MediaFolder[]): MediaFolderTreeOption[
       depth,
       label: `${'-- '.repeat(depth)}${folder.name}`,
       path: pathParts.join(' / '),
+      ancestorIds: [...ancestors, folder.id],
     });
 
     const nextAncestors = new Set(ancestors);
@@ -822,6 +848,74 @@ const buildMediaFolderOptions = (folders: MediaFolder[]): MediaFolderTreeOption[
     .forEach((folder) => walk(folder, 0, [], new Set()));
 
   return options;
+};
+
+const buildAdminMediaOrganization = (
+  asset: Pick<MediaAsset, 'folderId' | 'organization'>,
+  folderOptions: MediaFolderTreeOption[],
+): NonNullable<MediaAsset['organization']> => {
+  if (asset.organization) {
+    return asset.organization;
+  }
+
+  if (!asset.folderId) {
+    return {
+      schemaVersion: 'backy.media.organization.v1',
+      folderId: null,
+      folderName: 'Root',
+      folderPath: 'Root',
+      folderSegments: [],
+      folderAncestors: [],
+      folderDepth: -1,
+      folderSortOrder: null,
+      root: true,
+      missingFolder: false,
+    };
+  }
+
+  const folder = folderOptions.find((item) => item.id === asset.folderId);
+  if (!folder) {
+    return {
+      schemaVersion: 'backy.media.organization.v1',
+      folderId: asset.folderId,
+      folderName: 'Unresolved folder',
+      folderPath: 'Unresolved folder',
+      folderSegments: [],
+      folderAncestors: [],
+      folderDepth: -1,
+      folderSortOrder: null,
+      root: false,
+      missingFolder: true,
+    };
+  }
+
+  const folderSegments = folder.path
+    .split(' / ')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const folderById = new Map(folderOptions.map((item) => [item.id, item]));
+  const folderAncestors = folder.ancestorIds.map((ancestorId) => {
+    const ancestor = folderById.get(ancestorId);
+    return ancestor ? {
+      id: ancestor.id,
+      name: ancestor.name,
+      parentId: ancestor.parentId,
+      sortOrder: ancestor.sortOrder,
+    } : null;
+  }).filter((ancestor): ancestor is { id: string; name: string; parentId: string | null; sortOrder: number } => Boolean(ancestor));
+
+  return {
+    schemaVersion: 'backy.media.organization.v1',
+    folderId: folder.id,
+    folderName: folder.name,
+    folderPath: folderSegments.join('/'),
+    folderSegments,
+    folderAncestors,
+    folderDepth: folderSegments.length - 1,
+    folderSortOrder: folder.sortOrder,
+    root: false,
+    missingFolder: false,
+  };
 };
 
 const getMediaFolderDescendantIds = (folders: MediaFolder[], folderId: string): Set<string> => {
@@ -887,6 +981,12 @@ const isFileAllowedForUploadMode = (file: File, mode: MediaUploadMode): boolean 
   const uploadType = getCentralUploadType(file);
   if (mode === 'file') return uploadType === 'file' || uploadType === 'other';
   return uploadType === mode;
+};
+
+const mediaTypeMatchesFilter = (mediaType: MediaAsset['type'], filter: MediaTypeFilter): boolean => {
+  if (filter === 'all') return true;
+  if (filter === 'file') return MEDIA_FILE_FILTER_TYPES.has(mediaType);
+  return mediaType === filter;
 };
 
 const uploadModeRejectMessage = (file: File, mode: MediaUploadMode): string => {
@@ -1000,6 +1100,7 @@ function MediaPage() {
   const [comparisonVersionId, setComparisonVersionId] = useState<string | null>(null);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [pendingDeleteFolder, setPendingDeleteFolder] = useState<MediaFolder | null>(null);
+  const [pendingStorageSecretManagerAction, setPendingStorageSecretManagerAction] = useState<MediaStorageSecretManagerMutationMode | null>(null);
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [tagFilter, setTagFilter] = useState(routeSearch.tag || '');
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>(routeSearch.type || 'all');
@@ -1018,6 +1119,8 @@ function MediaPage() {
   const [recentUploadSummary, setRecentUploadSummary] = useState<MediaUploadSummary | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderParentId, setNewFolderParentId] = useState<'root' | string>('root');
+  const [folderCreateSubmitted, setFolderCreateSubmitted] = useState(false);
+  const [folderRenameSubmitted, setFolderRenameSubmitted] = useState(false);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
@@ -1253,6 +1356,29 @@ function MediaPage() {
   );
   const folderOptions = useMemo(() => buildMediaFolderOptions(folders), [folders]);
   const folderOptionById = useMemo(() => new Map(folderOptions.map((folder) => [folder.id, folder])), [folderOptions]);
+  const folderExistsAtParent = useCallback((name: string, parentId: string | null, excludeFolderId?: string) => (
+    folders.some((folder) => (
+      folder.id !== excludeFolderId &&
+      folder.parentId === parentId &&
+      folder.name.trim().toLowerCase() === name.trim().toLowerCase()
+    ))
+  ), [folders]);
+  const newFolderParentSelection = newFolderParentId === 'root' ? null : newFolderParentId;
+  const editingFolderParentSelection = editingFolderParentId === 'root' ? null : editingFolderParentId;
+  const newFolderNameInlineError = folderCreateSubmitted
+    ? !newFolderName.trim()
+      ? 'Folder name is required.'
+      : folderExistsAtParent(newFolderName, newFolderParentSelection)
+        ? `A sibling folder named ${newFolderName.trim()} already exists.`
+        : null
+    : null;
+  const editingFolderNameInlineError = folderRenameSubmitted && editingFolderId
+    ? !editingFolderName.trim()
+      ? 'Folder name is required.'
+      : folderExistsAtParent(editingFolderName, editingFolderParentSelection, editingFolderId)
+        ? `A sibling folder named ${editingFolderName.trim()} already exists.`
+        : null
+    : null;
   const selectedFolderFilterIds = useMemo(() => {
     if (typeof selectedFolderId !== 'string') {
       return null;
@@ -1367,7 +1493,7 @@ function MediaPage() {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const normalizedTagFilter = tagFilter.trim().toLowerCase();
 
-    if (typeFilter !== 'all' && file.type !== typeFilter) {
+    if (!mediaTypeMatchesFilter(file.type, typeFilter)) {
       return false;
     }
 
@@ -1850,6 +1976,7 @@ function MediaPage() {
       sizeBytes: asset.sizeBytes,
       visibility: asset.visibility || 'public',
       folderId: asset.folderId || null,
+      organization: buildAdminMediaOrganization(asset, folderOptions),
       tags: asset.tags || [],
       altText: asset.altText,
       caption: asset.caption,
@@ -1860,6 +1987,7 @@ function MediaPage() {
       references: {
         pages: asset.targetPageIds || [],
         posts: asset.targetPostIds || [],
+        collectionRecords: asset.targetCollectionRecordIds || [],
       },
       font: asset.type === 'font'
         ? {
@@ -1935,12 +2063,17 @@ function MediaPage() {
     [runtimeStorage, selectedAsset, storageSettings],
   );
   const selectedAssetFolderPath = selectedAsset?.folderId ? getFolderPath(selectedAsset.folderId) : 'Root';
+  const selectedAssetOrganization = useMemo(
+    () => selectedAsset ? buildAdminMediaOrganization(selectedAsset, folderOptions) : undefined,
+    [folderOptions, selectedAsset],
+  );
   const selectedAssetPlacementHandoff = useMemo(
-    () => selectedAsset ? buildMediaAssetPlacementHandoff({
+    () => selectedAsset && selectedAssetOrganization ? buildMediaAssetPlacementHandoff({
       asset: selectedAsset,
       siteId,
       publicBaseUrl,
       folderPath: selectedAssetFolderPath,
+      organization: selectedAssetOrganization,
       responsiveManifest,
       providerInsight: selectedProviderInsight,
     }) : null,
@@ -1949,6 +2082,7 @@ function MediaPage() {
       responsiveManifest,
       selectedAsset,
       selectedAssetFolderPath,
+      selectedAssetOrganization,
       selectedProviderInsight,
       siteId,
     ],
@@ -1988,7 +2122,7 @@ function MediaPage() {
         limit: MEDIA_LIBRARY_PAGE_SIZE,
         search: searchQuery.trim() || undefined,
         tag: tagFilter.trim() || undefined,
-        type: typeFilter === 'file' ? 'document' : typeFilter === 'all' ? undefined : typeFilter,
+        type: typeFilter === 'all' ? undefined : typeFilter,
         visibility: visibilityFilter === 'all' ? undefined : visibilityFilter,
         folderId: selectedFolderId === null ? null : undefined,
       };
@@ -2277,15 +2411,6 @@ function MediaPage() {
       setStorageCheckError('This admin account needs media.configure to run the storage secret manager.');
       return;
     }
-    if (!dryRun) {
-      const confirmed = window.confirm(
-        mode === 'revoke-replacement'
-          ? 'Remove replacement storage environment variables from the connected Vercel project?'
-          : 'Promote replacement storage credentials into active Vercel environment variables?',
-      );
-      if (!confirmed) return;
-    }
-
     setIsRunningStorageSecretManager(true);
     setStorageCheckError(null);
     try {
@@ -3443,6 +3568,7 @@ function MediaPage() {
   };
 
   const handleCreateFolder = async () => {
+    setFolderCreateSubmitted(true);
     if (isMediaMutationBusy) return;
     if (!canCreateMedia) {
       setError(deniedCreateMessage);
@@ -3450,7 +3576,9 @@ function MediaPage() {
     }
 
     const name = newFolderName.trim();
-    if (!name) {
+    const parentId = newFolderParentId === 'root' ? null : newFolderParentId;
+    if (!name || folderExistsAtParent(name, parentId)) {
+      setError('Fix media folder fields before saving.');
       return;
     }
 
@@ -3458,16 +3586,6 @@ function MediaPage() {
     setError(null);
 
     try {
-      const parentId = newFolderParentId === 'root' ? null : newFolderParentId;
-      const duplicateFolder = folders.find((folder) => (
-        folder.parentId === parentId &&
-        folder.name.trim().toLowerCase() === name.toLowerCase()
-      ));
-      if (duplicateFolder) {
-        setError(`A sibling folder named ${name} already exists.`);
-        return;
-      }
-
       const folder = await createMediaFolder(name, siteId, { parentId });
       setFolders((current) => [...current, folder].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
       setSelectedFolderId(folder.id);
@@ -3477,6 +3595,7 @@ function MediaPage() {
       setEditingFolderParentId('root');
       setNewFolderName('');
       setNewFolderParentId(parentId || 'root');
+      setFolderCreateSubmitted(false);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create folder.');
     } finally {
@@ -3494,6 +3613,7 @@ function MediaPage() {
     setEditingFolderId(folder.id);
     setEditingFolderName(folder.name);
     setEditingFolderParentId(folder.parentId || 'root');
+    setFolderRenameSubmitted(false);
     setError(null);
   };
 
@@ -3501,9 +3621,11 @@ function MediaPage() {
     setEditingFolderId(null);
     setEditingFolderName('');
     setEditingFolderParentId('root');
+    setFolderRenameSubmitted(false);
   };
 
   const handleRenameFolder = async (folderId: string) => {
+    setFolderRenameSubmitted(true);
     if (isMediaMutationBusy) return;
     if (!canEditMedia) {
       setError(deniedEditMessage);
@@ -3511,19 +3633,9 @@ function MediaPage() {
     }
 
     const name = editingFolderName.trim();
-    if (!name) {
-      setError('Folder name is required.');
-      return;
-    }
-
     const parentId = editingFolderParentId === 'root' ? null : editingFolderParentId;
-    const duplicateFolder = folders.find((folder) => (
-      folder.id !== folderId &&
-      folder.parentId === parentId &&
-      folder.name.trim().toLowerCase() === name.toLowerCase()
-    ));
-    if (duplicateFolder) {
-      setError(`A sibling folder named ${name} already exists.`);
+    if (!name || folderExistsAtParent(name, parentId, folderId)) {
+      setError('Fix media folder fields before saving.');
       return;
     }
 
@@ -3727,6 +3839,11 @@ function MediaPage() {
     ? (selectedAsset.targetPostIds || []).map((postId) => ({
         id: postId,
         post: posts.find((post) => post.id === postId),
+      }))
+    : [];
+  const referencedCollectionRecords = selectedAsset
+    ? (selectedAsset.targetCollectionRecordIds || []).map((recordId) => ({
+        id: recordId,
       }))
     : [];
 
@@ -4465,8 +4582,9 @@ function MediaPage() {
                 type="button"
                 size="sm"
                 variant="ghost"
-                onClick={() => void runStorageSecretManager('promote', false)}
+                onClick={() => setPendingStorageSecretManagerAction('promote')}
                 disabled={isRunningStorageSecretManager || !canConfigureMediaStorage}
+                data-testid="media-storage-secret-manager-promote-open"
               >
                 Promote secrets
               </Button>
@@ -4474,8 +4592,9 @@ function MediaPage() {
                 type="button"
                 size="sm"
                 variant="ghost"
-                onClick={() => void runStorageSecretManager('revoke-replacement', false)}
+                onClick={() => setPendingStorageSecretManagerAction('revoke-replacement')}
                 disabled={isRunningStorageSecretManager || !canConfigureMediaStorage}
+                data-testid="media-storage-secret-manager-revoke-open"
               >
                 Revoke NEXT vars
               </Button>
@@ -5416,7 +5535,7 @@ function MediaPage() {
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">{asset.name}</span>
                         <span className="block text-xs text-muted-foreground">
-                          {mediaTypeLabel(asset.type)} · {(asset.targetPageIds?.length || 0) + (asset.targetPostIds?.length || 0)} references
+	                          {mediaTypeLabel(asset.type)} · {mediaReferenceCount(asset)} references
                         </span>
                       </span>
                       <span className="shrink-0 font-mono text-xs text-muted-foreground">{formatBytes(bytes)}</span>
@@ -5907,23 +6026,35 @@ function MediaPage() {
                   void handleCreateFolder();
                 }
               }}
-              className="w-full max-w-xs rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              className={cn(
+                'w-full max-w-xs rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
+                newFolderNameInlineError && 'border-destructive focus-visible:outline-destructive',
+              )}
               placeholder="New folder name"
               aria-label="New folder name"
+              aria-invalid={Boolean(newFolderNameInlineError)}
+              aria-describedby={newFolderNameInlineError ? 'media-new-folder-name-error' : undefined}
+              data-testid="media-new-folder-name-input"
             />
             <button
               type="button"
-              disabled={isMediaLibraryBusy || !canCreateMedia || !newFolderName.trim()}
+              disabled={isMediaLibraryBusy || !canCreateMedia}
               title={canCreateMedia ? undefined : createPermissionTitle}
               onClick={() => void handleCreateFolder()}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               aria-label="Create media folder"
+              data-testid="media-new-folder-create"
             >
               <FolderPlus className="h-4 w-4" />
               Add
             </button>
           </div>
         </div>
+        {newFolderNameInlineError ? (
+          <p id="media-new-folder-name-error" className="mb-3 text-xs font-medium text-destructive" data-testid="media-new-folder-name-error">
+            {newFolderNameInlineError}
+          </p>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <button
@@ -5956,64 +6087,76 @@ function MediaPage() {
           >
             Root
           </button>
-          {folderOptions.map((folder) => (
-            <div key={folder.id} className="inline-flex min-h-10 overflow-hidden rounded-lg border border-border bg-background">
-              {editingFolderId === folder.id ? (
-                <div className="flex min-w-[360px] flex-wrap items-center gap-1 px-1.5 py-1">
-                  <input
-                    type="text"
-                    value={editingFolderName}
-                    disabled={isMediaLibraryBusy || !canEditMedia}
-                    title={canEditMedia ? undefined : editPermissionTitle}
-                    onChange={(event) => setEditingFolderName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        void handleRenameFolder(folder.id);
-                      }
-                      if (event.key === 'Escape') {
-                        event.preventDefault();
-                        cancelEditingFolder();
-                      }
-                    }}
-                    className="h-8 min-w-[150px] flex-1 rounded-md border bg-background px-2 text-sm"
-                    aria-label={`Rename folder ${folder.name}`}
-                    autoFocus
-                  />
-                  <select
-                    value={editingFolderParentId}
-                    disabled={isMediaLibraryBusy || !canEditMedia}
-                    title={canEditMedia ? undefined : editPermissionTitle}
-                    onChange={(event) => setEditingFolderParentId(event.target.value)}
-                    className="h-8 min-w-[140px] rounded-md border bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
-                    aria-label={`Parent folder for ${folder.name}`}
-                  >
-                    <option value="root">Root</option>
-                    {getFolderParentOptions(folder.id).map((parentFolder) => (
-                      <option key={parentFolder.id} value={parentFolder.id}>{parentFolder.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={isMediaLibraryBusy || !canEditMedia || !editingFolderName.trim()}
-                    onClick={() => void handleRenameFolder(folder.id)}
-                    className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    title={canEditMedia ? 'Save folder name' : editPermissionTitle}
-                    aria-label={`Save folder name for ${folder.name}`}
-                  >
-                    <Save className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isMediaLibraryBusy}
-                    onClick={cancelEditingFolder}
-                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-ring disabled:opacity-50"
-                    title="Cancel rename"
-                    aria-label={`Cancel renaming ${folder.name}`}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+	          {folderOptions.map((folder) => (
+	            <div key={folder.id} className="inline-flex min-h-10 overflow-hidden rounded-lg border border-border bg-background">
+	              {editingFolderId === folder.id ? (
+	                <div className="flex min-w-[360px] flex-wrap items-center gap-1 px-1.5 py-1">
+	                  <input
+	                    type="text"
+	                    value={editingFolderName}
+	                    disabled={isMediaLibraryBusy || !canEditMedia}
+	                    title={canEditMedia ? undefined : editPermissionTitle}
+	                    onChange={(event) => setEditingFolderName(event.target.value)}
+	                    onKeyDown={(event) => {
+	                      if (event.key === 'Enter') {
+	                        event.preventDefault();
+	                        void handleRenameFolder(folder.id);
+	                      }
+	                      if (event.key === 'Escape') {
+	                        event.preventDefault();
+	                        cancelEditingFolder();
+	                      }
+	                    }}
+	                    className={cn(
+	                      'h-8 min-w-[150px] flex-1 rounded-md border bg-background px-2 text-sm',
+	                      editingFolderNameInlineError && 'border-destructive focus-visible:outline-destructive',
+	                    )}
+	                    aria-label={`Rename folder ${folder.name}`}
+	                    aria-invalid={Boolean(editingFolderNameInlineError)}
+	                    aria-describedby={editingFolderNameInlineError ? `media-folder-rename-error-${folder.id}` : undefined}
+	                    data-testid="media-folder-rename-input"
+	                    autoFocus
+	                  />
+	                  <select
+	                    value={editingFolderParentId}
+	                    disabled={isMediaLibraryBusy || !canEditMedia}
+	                    title={canEditMedia ? undefined : editPermissionTitle}
+	                    onChange={(event) => setEditingFolderParentId(event.target.value)}
+	                    className="h-8 min-w-[140px] rounded-md border bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+	                    aria-label={`Parent folder for ${folder.name}`}
+	                  >
+	                    <option value="root">Root</option>
+	                    {getFolderParentOptions(folder.id).map((parentFolder) => (
+	                      <option key={parentFolder.id} value={parentFolder.id}>{parentFolder.label}</option>
+	                    ))}
+	                  </select>
+	                  <button
+	                    type="button"
+	                    disabled={isMediaLibraryBusy || !canEditMedia}
+	                    onClick={() => void handleRenameFolder(folder.id)}
+	                    className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+	                    title={canEditMedia ? 'Save folder name' : editPermissionTitle}
+	                    aria-label={`Save folder name for ${folder.name}`}
+	                    data-testid="media-folder-rename-save"
+	                  >
+	                    <Save className="h-3.5 w-3.5" />
+	                  </button>
+	                  <button
+	                    type="button"
+	                    disabled={isMediaLibraryBusy}
+	                    onClick={cancelEditingFolder}
+	                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-ring disabled:opacity-50"
+	                    title="Cancel rename"
+	                    aria-label={`Cancel renaming ${folder.name}`}
+	                  >
+	                    <X className="h-3.5 w-3.5" />
+	                  </button>
+	                  {editingFolderNameInlineError ? (
+	                    <p id={`media-folder-rename-error-${folder.id}`} className="basis-full px-1 text-xs font-medium text-destructive" data-testid="media-folder-rename-error">
+	                      {editingFolderNameInlineError}
+	                    </p>
+	                  ) : null}
+	                </div>
               ) : (
                 <>
                   <button
@@ -7486,12 +7629,13 @@ function MediaPage() {
                         </Button>
                       </div>
                     </div>
-                    <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                      <MediaApiStat label="Kind" value={selectedAssetPlacementHandoff.placement.kind} />
-                      <MediaApiStat label="Folder" value={selectedAssetPlacementHandoff.asset.folderPath} />
-                      <MediaApiStat label="References" value={`${selectedAssetPlacementHandoff.references.total}`} />
-                      <MediaApiStat label="Delivery" value={selectedAssetPlacementHandoff.delivery.publicFileReady ? 'public' : selectedAssetPlacementHandoff.status} />
-                    </div>
+	                    <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+	                      <MediaApiStat label="Kind" value={selectedAssetPlacementHandoff.placement.kind} />
+	                      <MediaApiStat label="Folder" value={selectedAssetPlacementHandoff.asset.folderPath} />
+	                      <MediaApiStat label="Editor" value={`${selectedAssetPlacementHandoff.editorBinding.recommendedElementType} · ${selectedAssetPlacementHandoff.editorBinding.editableTargets.length} targets`} />
+	                      <MediaApiStat label="References" value={`${selectedAssetPlacementHandoff.references.total}`} />
+	                      <MediaApiStat label="Delivery" value={selectedAssetPlacementHandoff.delivery.publicFileReady ? 'public' : selectedAssetPlacementHandoff.status} />
+	                    </div>
                     <textarea
                       readOnly
                       value={selectedAssetPlacementHandoffText}
@@ -7740,11 +7884,11 @@ function MediaPage() {
                   <div>
                     <div className="font-medium">Used in</div>
                     <div className="text-xs text-muted-foreground">
-                      Bind this asset to pages or posts so usage tracking and frontend references stay explicit.
+	                      Bind this asset to pages, posts, or product records so usage tracking and frontend references stay explicit.
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {referencedPages.length + referencedPosts.length} references
+	                    {referencedPages.length + referencedPosts.length + referencedCollectionRecords.length} references
                   </div>
                 </div>
 
@@ -7826,14 +7970,14 @@ function MediaPage() {
                   )}
                 </div>
 
-                {referencedPages.length === 0 && referencedPosts.length === 0 ? (
-                  <EmptyState
-                    icon={Layout}
-                    title="No page or post references"
-                    description="Bind this asset to pages or blog posts to track usage before cleanup or replacement."
-                  />
-                ) : (
-                  <div className="grid gap-3 md:grid-cols-2">
+	                {referencedPages.length === 0 && referencedPosts.length === 0 && referencedCollectionRecords.length === 0 ? (
+	                  <EmptyState
+	                    icon={Layout}
+	                    title="No page, post, or product references"
+	                    description="Bind this asset to pages, blog posts, or product records to track usage before cleanup or replacement."
+	                  />
+	                ) : (
+	                  <div className="grid gap-3 md:grid-cols-2">
                     {referencedPages.map(({ id, page }) => (
                       <div
                         key={`page-${id}`}
@@ -7866,7 +8010,7 @@ function MediaPage() {
                       </div>
                     ))}
 
-                    {referencedPosts.map(({ id, post }) => (
+	                    {referencedPosts.map(({ id, post }) => (
                       <div
                         key={`post-${id}`}
                         className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3"
@@ -7896,9 +8040,23 @@ function MediaPage() {
                           Remove
                         </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
+	                    ))}
+	                    {referencedCollectionRecords.map(({ id }) => (
+	                      <div
+	                        key={`collection-record-${id}`}
+	                        className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3"
+	                      >
+	                        <div>
+	                          <div className="text-sm font-medium text-foreground">Collection record</div>
+	                          <div className="font-mono text-xs text-muted-foreground">{id}</div>
+	                        </div>
+	                        <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+	                          Product/CMS
+	                        </span>
+	                      </div>
+	                    ))}
+	                  </div>
+	                )}
               </div>
 
               <div className="md:col-span-2 rounded-xl border border-border bg-muted/30 p-4">
@@ -8190,6 +8348,71 @@ function MediaPage() {
                 aria-label={`Confirm deleting folder ${pendingDeleteFolder.name}`}
               >
                 {isDeletingFolder ? 'Deleting...' : 'Delete folder'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingStorageSecretManagerAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+          <div
+            className="w-full max-w-lg rounded-lg border border-border bg-card p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="media-storage-secret-manager-title"
+            aria-describedby="media-storage-secret-manager-description"
+            data-testid="media-storage-secret-manager-confirmation"
+          >
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-warning/10 p-2 text-warning">
+                <KeyRound className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 id="media-storage-secret-manager-title" className="text-lg font-semibold text-foreground">
+                  {pendingStorageSecretManagerAction === 'promote' ? 'Promote storage secrets?' : 'Revoke replacement storage secrets?'}
+                </h2>
+                <p id="media-storage-secret-manager-description" className="mt-1 text-sm text-muted-foreground">
+                  {pendingStorageSecretManagerAction === 'promote'
+                    ? 'This applies the replacement storage credentials to the active production and preview Vercel environment variables.'
+                    : 'This removes the replacement NEXT storage variables from the connected Vercel project after a completed rotation.'}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
+              Run the secret plan first and confirm the target project/team before applying a non-dry-run credential change. Secret values stay redacted in the response.
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingStorageSecretManagerAction(null)}
+                disabled={isRunningStorageSecretManager}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Cancel storage secret manager mutation"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const mode = pendingStorageSecretManagerAction;
+                  if (!mode) return;
+                  void (async () => {
+                    await runStorageSecretManager(mode, false);
+                    setPendingStorageSecretManagerAction(null);
+                  })();
+                }}
+                disabled={isRunningStorageSecretManager || !canConfigureMediaStorage}
+                title={canConfigureMediaStorage ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.configure')}
+                className="rounded-lg bg-warning px-4 py-2 text-sm font-semibold text-warning-foreground transition-colors hover:bg-warning/90 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={pendingStorageSecretManagerAction === 'promote' ? 'Confirm promoting storage secrets' : 'Confirm revoking replacement storage secrets'}
+                data-testid="media-storage-secret-manager-confirm"
+              >
+                {isRunningStorageSecretManager
+                  ? 'Applying...'
+                  : pendingStorageSecretManagerAction === 'promote'
+                    ? 'Promote secrets'
+                    : 'Revoke NEXT vars'}
               </button>
             </div>
           </div>
@@ -8790,6 +9013,7 @@ const mediaAssetToExportRecord = (
       : '',
     referenced_pages: (asset.targetPageIds || []).join('; '),
     referenced_posts: (asset.targetPostIds || []).join('; '),
+    referenced_collection_records: (asset.targetCollectionRecordIds || []).join('; '),
     font_family: metadataText(asset.metadata?.fontFamily),
     font_weight: metadataText(asset.metadata?.fontWeight),
     font_style: metadataText(asset.metadata?.fontStyle),
@@ -9261,11 +9485,201 @@ const buildFontFaceCss = (asset: MediaAsset, publicFileUrl: string): string | un
   return `@font-face { font-family: "${safeFamily}"; src: url("${safeUrl}"); font-weight: ${weight}; font-style: ${style}; font-display: ${display}; }`;
 };
 
+const mediaEditorElementTypes = (asset: MediaAsset): {
+  recommended: MediaAssetPlacementEditorElementType;
+  compatible: MediaAssetPlacementEditorElementType[];
+} => {
+  if (asset.type === 'image') {
+    return { recommended: 'image', compatible: ['image', 'container', 'gallery'] };
+  }
+  if (asset.type === 'video') {
+    return { recommended: 'video', compatible: ['video', 'container'] };
+  }
+  if (asset.type === 'audio') {
+    return { recommended: 'audio', compatible: ['audio', 'container'] };
+  }
+  if (asset.type === 'font') {
+    return { recommended: 'text', compatible: ['text', 'button', 'link'] };
+  }
+  return { recommended: 'button', compatible: ['button', 'link', 'file'] };
+};
+
+const mediaOrganizationPatch = (asset: MediaAsset): Record<string, unknown> => (
+  asset.organization
+    ? {
+        mediaOrganization: asset.organization,
+        mediaFolderPath: asset.organization.folderPath,
+        mediaFolderSegments: asset.organization.folderSegments,
+        mediaFolderName: asset.organization.folderName,
+        mediaFolderDepth: asset.organization.folderDepth,
+        mediaFolderMissing: asset.organization.missingFolder,
+      }
+    : {
+        mediaFolderPath: null,
+        mediaFolderSegments: [],
+        mediaFolderName: null,
+        mediaFolderDepth: null,
+        mediaFolderMissing: false,
+      }
+);
+
+const buildMediaEditorBinding = ({
+  asset,
+  siteId,
+  publicFileUrl,
+  signedUrlEndpoint,
+  imagePresentation,
+}: {
+  asset: MediaAsset;
+  siteId: string;
+  publicFileUrl: string;
+  signedUrlEndpoint: string;
+  imagePresentation?: ReturnType<typeof getImagePresentationMetadata>;
+}): MediaAssetPlacementHandoff['editorBinding'] => {
+  const elementTypes = mediaEditorElementTypes(asset);
+  const organization = mediaOrganizationPatch(asset);
+  const baseIdentity: Record<string, unknown> = {
+    mediaId: asset.id,
+    mediaIds: [asset.id],
+    mediaType: asset.type,
+    mediaName: asset.name,
+    mediaFolderId: asset.folderId || null,
+    ...organization,
+    mediaVisibility: asset.visibility || 'public',
+    mediaScope: asset.scope || 'global',
+    mediaScopeTargetId: asset.scopeTargetId || null,
+  };
+  const editableTargets = new Set<string>([
+    'props.mediaId',
+    'props.mediaIds',
+    'props.mediaName',
+    'props.mediaFolderId',
+    'props.mediaOrganization',
+    'props.mediaFolderPath',
+    'assetIds',
+  ]);
+  const addTargets = (targets: string[]) => targets.forEach((target) => editableTargets.add(target));
+
+  let propsPatch: Record<string, unknown> = baseIdentity;
+
+  if (asset.type === 'image') {
+    addTargets(['props.src', 'props.alt', 'props.objectFit', 'props.objectPosition']);
+    propsPatch = {
+      ...baseIdentity,
+      src: publicFileUrl,
+      url: publicFileUrl,
+      alt: asset.altText || asset.name,
+      ...(imagePresentation ? {
+        objectFit: imagePresentation.objectFit,
+        objectPosition: `${imagePresentation.focalX}% ${imagePresentation.focalY}%`,
+        focalPoint: { x: imagePresentation.focalX, y: imagePresentation.focalY },
+      } : {}),
+    };
+  } else if (asset.type === 'video' || asset.type === 'audio') {
+    addTargets(['props.src']);
+    propsPatch = {
+      ...baseIdentity,
+      src: publicFileUrl,
+      url: publicFileUrl,
+    };
+  } else if (asset.type === 'font') {
+    const family = metadataText(asset.metadata?.fontFamily) || asset.name.replace(/\.[a-z0-9]+$/i, '');
+    const weight = metadataText(asset.metadata?.fontWeight) || '400';
+    const style = metadataText(asset.metadata?.fontStyle) || 'normal';
+    const fallback = metadataText(asset.metadata?.fontFallback) || 'system-ui, sans-serif';
+    const display = metadataText(asset.metadata?.fontDisplay) || 'swap';
+    addTargets(['props.fontFamily', 'props.fontMediaId', 'props.fontMediaIds', 'props.fontRegistration']);
+    propsPatch = {
+      ...baseIdentity,
+      fontFamily: family,
+      fontMediaId: asset.id,
+      fontMediaIds: [asset.id],
+      fontMediaName: asset.name,
+      fontMediaFolderId: asset.folderId || null,
+      fontMediaFolderPath: asset.organization?.folderPath || null,
+      fontMediaOrganization: asset.organization || null,
+      fontMediaVisibility: asset.visibility || 'public',
+      fontFileUrl: publicFileUrl,
+      fontSource: 'media-library',
+      fontFallback: fallback,
+      fontDisplay: display,
+      fontRegistration: {
+        family,
+        weight,
+        style,
+        fallback,
+        display,
+        mediaId: asset.id,
+        url: publicFileUrl,
+      },
+    };
+  } else {
+    addTargets(['props.href', 'props.fileIds', 'props.downloadMediaId', 'props.downloadMediaIds', 'props.download']);
+    propsPatch = {
+      ...baseIdentity,
+      href: publicFileUrl,
+      actionPreset: 'download',
+      actionValue: publicFileUrl,
+      download: true,
+      fileId: asset.id,
+      fileIds: [asset.id],
+      fileMediaId: asset.id,
+      fileMediaIds: [asset.id],
+      downloadMediaId: asset.id,
+      downloadMediaIds: [asset.id],
+      fileMediaType: asset.type,
+      fileMediaName: asset.name,
+      fileMediaUrl: publicFileUrl,
+      fileUrl: publicFileUrl,
+      fileMediaFolderId: asset.folderId || null,
+      fileMediaFolderPath: asset.organization?.folderPath || null,
+      fileMediaOrganization: asset.organization || null,
+      fileMediaVisibility: asset.visibility || 'public',
+    };
+  }
+
+  const editableTargetList = Array.from(editableTargets);
+
+  return {
+    schemaVersion: 'backy.media-editor-binding.v1',
+    recommendedElementType: elementTypes.recommended,
+    compatibleElementTypes: elementTypes.compatible,
+    assetIds: [asset.id],
+    editableTargets: editableTargetList,
+    responsiveEditableTargets: editableTargetList
+      .filter((target) => target.startsWith('props.'))
+      .flatMap((target) => [`responsive.tablet.${target}`, `responsive.mobile.${target}`]),
+    propsPatch,
+    bindingEndpoint: `${signedUrlEndpoint.split('/signed-url')[0]}/bind`,
+    bindingRequestTemplate: {
+      action: 'bind',
+      targetType: 'page',
+      targetId: '{pageId}',
+      usageType: mediaPlacementKind(asset),
+      attachedBy: 'admin',
+    },
+    preservedDesignState: [
+      'assetIds',
+      'props.mediaId',
+      'props.mediaIds',
+      'props.mediaOrganization',
+      'props.mediaFolderPath',
+      'props.fileIds',
+      'props.downloadMediaIds',
+      'props.fontMediaId',
+      'responsive.tablet.props.*',
+      'responsive.mobile.props.*',
+      `site:${siteId}`,
+    ],
+  };
+};
+
 const buildMediaAssetPlacementHandoff = ({
   asset,
   siteId,
   publicBaseUrl,
   folderPath,
+  organization,
   responsiveManifest,
   providerInsight,
 }: {
@@ -9273,6 +9687,7 @@ const buildMediaAssetPlacementHandoff = ({
   siteId: string;
   publicBaseUrl: string;
   folderPath: string;
+  organization: NonNullable<MediaAsset['organization']>;
   responsiveManifest?: NonNullable<MediaAsset['responsive']>;
   providerInsight?: MediaProviderInsight;
 }): MediaAssetPlacementHandoff => {
@@ -9323,7 +9738,7 @@ const buildMediaAssetPlacementHandoff = ({
     visibility === 'private' && security.status !== 'quarantined' ? 'Generate a signed URL at runtime for protected delivery.' : '',
     asset.type === 'image' && !asset.altText ? 'Add alt text before final image placement.' : '',
     asset.type === 'image' && !responsiveManifest?.preparedAt ? 'Prepare responsive variants for production image delivery.' : '',
-    ((asset.targetPageIds || []).length + (asset.targetPostIds || []).length) === 0 ? 'Bind the asset after placement so usage tracking stays accurate.' : '',
+    mediaReferenceCount(asset) === 0 ? 'Bind the asset after placement so usage tracking stays accurate.' : '',
   ].filter(Boolean);
 
   return {
@@ -9342,6 +9757,7 @@ const buildMediaAssetPlacementHandoff = ({
       visibility,
       folderId: asset.folderId || null,
       folderPath,
+      organization,
       tags: asset.tags || [],
       altText: asset.altText || null,
       caption: asset.caption || null,
@@ -9369,6 +9785,13 @@ const buildMediaAssetPlacementHandoff = ({
       ...(reactProps ? { reactProps } : {}),
       notes: placementNotes,
     },
+    editorBinding: buildMediaEditorBinding({
+      asset,
+      siteId,
+      publicFileUrl,
+      signedUrlEndpoint,
+      imagePresentation,
+    }),
     ...(asset.type === 'image' && responsiveManifest && imagePresentation ? {
       image: {
         src: responsiveManifest.src || publicFileUrl,
@@ -9403,7 +9826,8 @@ const buildMediaAssetPlacementHandoff = ({
     references: {
       pages: asset.targetPageIds || [],
       posts: asset.targetPostIds || [],
-      total: (asset.targetPageIds || []).length + (asset.targetPostIds || []).length,
+      collectionRecords: asset.targetCollectionRecordIds || [],
+      total: mediaReferenceCount(asset),
     },
     safety: {
       status: security.status,
@@ -9435,8 +9859,14 @@ const assetSizeBytes = (asset: MediaAsset): number => {
   return Math.round(value);
 };
 
+const mediaReferenceCount = (asset: MediaAsset): number => (
+  (asset.targetPageIds?.length || 0) +
+  (asset.targetPostIds?.length || 0) +
+  (asset.targetCollectionRecordIds?.length || 0)
+);
+
 const hasMediaReferences = (asset: MediaAsset): boolean => (
-  (asset.targetPageIds?.length || 0) + (asset.targetPostIds?.length || 0) > 0
+  mediaReferenceCount(asset) > 0
 );
 
 const replacementBytesForAsset = (asset: MediaAsset): number => (

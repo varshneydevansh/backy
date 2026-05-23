@@ -13,6 +13,7 @@ import type {
   ComponentLibraryChild,
   ComponentLibraryItem,
   ElementType,
+  ResponsiveElementOverride,
 } from '@/types/editor';
 
 // ============================================
@@ -53,6 +54,14 @@ export interface SavedCanvasPayload {
   elements: CanvasElement[];
   canvasSize: CanvasSize;
   customCSS?: string;
+  customJS?: string;
+  themeTokenRefs?: BackyContentDocument['themeTokenRefs'];
+  assets?: BackyContentDocument['assets'];
+  interactions?: BackyContentDocument['interactions'];
+  seo?: BackyContentDocument['seo'];
+  dataBindings?: BackyContentDocument['dataBindings'];
+  editableMap?: BackyContentDocument['editableMap'];
+  metadata?: BackyContentDocument['metadata'];
   contentDocument?: BackyContentDocument;
 }
 
@@ -64,6 +73,37 @@ export interface SerializeCanvasContentOptions {
   status?: BackyContentStatus;
   locale?: string;
   version?: string;
+  customJS?: string;
+  themeTokenRefs?: BackyContentDocument['themeTokenRefs'];
+  assets?: BackyContentDocument['assets'];
+  interactions?: BackyContentDocument['interactions'];
+  seo?: BackyContentDocument['seo'];
+  dataBindings?: BackyContentDocument['dataBindings'];
+  editableMap?: BackyContentDocument['editableMap'];
+  metadata?: BackyContentDocument['metadata'];
+}
+
+export interface FrontendTemplateDesignSerialization {
+  customCSS?: string;
+  options: Pick<
+    SerializeCanvasContentOptions,
+    'customJS' | 'themeTokenRefs' | 'assets' | 'interactions' | 'seo' | 'dataBindings' | 'editableMap' | 'metadata'
+  >;
+  provenance: {
+    customCSS?: string;
+    customJS?: string;
+    contentDocument?: Record<string, unknown>;
+    elements?: unknown[];
+    canvasSize?: Record<string, unknown>;
+    themeTokenRefs?: Record<string, unknown>;
+    assets?: Array<Record<string, unknown>> | Record<string, unknown>;
+    animations?: Array<Record<string, unknown>> | Record<string, unknown>;
+    interactions?: Array<Record<string, unknown>> | Record<string, unknown>;
+    dataBindings?: Record<string, unknown>;
+    editableMap?: Record<string, unknown>;
+    seo?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 const cloneDefaultProps = (value: Record<string, unknown>): Record<string, unknown> =>
@@ -81,6 +121,123 @@ const cloneDefaultBindingSlots = (value?: CanvasElement['bindingSlots']): Canvas
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+
+const cloneUnknownRecord = <T = Record<string, unknown>>(value: unknown): T | undefined =>
+  isRecord(value) ? JSON.parse(JSON.stringify(value)) as T : undefined;
+
+const cloneUnknownArray = <T>(value: unknown): T[] | undefined =>
+  Array.isArray(value) ? JSON.parse(JSON.stringify(value)) as T[] : undefined;
+
+const firstTemplateString = (...values: unknown[]): string | undefined => {
+  const value = values.find((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
+  return typeof value === 'string' ? value : undefined;
+};
+
+const firstTemplateRecord = <T = Record<string, unknown>>(...values: unknown[]): T | undefined => {
+  for (const value of values) {
+    const record = cloneUnknownRecord<Record<string, unknown>>(value);
+    if (record && Object.keys(record).length > 0) {
+      return record as T;
+    }
+  }
+  return undefined;
+};
+
+const templateProvenanceArrayOrRecord = (
+  value: unknown,
+): Array<Record<string, unknown>> | Record<string, unknown> | undefined => {
+  const array = cloneUnknownArray<Record<string, unknown>>(value);
+  if (array) {
+    const records = array.filter(isRecord);
+    return records.length > 0 ? records : undefined;
+  }
+
+  const record = cloneUnknownRecord<Record<string, unknown>>(value);
+  return record && Object.keys(record).length > 0 ? record : undefined;
+};
+
+const RESPONSIVE_DEFAULT_BREAKPOINTS = ['desktop', 'tablet', 'mobile'] as const satisfies readonly EditorBreakpoint[];
+
+const mergeUnknownRecord = (
+  base?: Record<string, unknown>,
+  override?: Record<string, unknown>,
+): Record<string, unknown> | undefined => {
+  if (!base && !override) {
+    return undefined;
+  }
+  return {
+    ...(base || {}),
+    ...(override || {}),
+  };
+};
+
+const mergeStringRecord = (
+  base?: Record<string, string>,
+  override?: Record<string, string>,
+): Record<string, string> | undefined => {
+  if (!base && !override) {
+    return undefined;
+  }
+  return {
+    ...(base || {}),
+    ...(override || {}),
+  };
+};
+
+const mergeCssProperties = (base?: CSSProperties, override?: CSSProperties): CSSProperties | undefined => {
+  if (!base && !override) {
+    return undefined;
+  }
+  return {
+    ...(base || {}),
+    ...(override || {}),
+  };
+};
+
+const mergeResponsiveOverride = (
+  base?: ResponsiveElementOverride,
+  override?: ResponsiveElementOverride,
+): ResponsiveElementOverride | undefined => {
+  if (!base && !override) {
+    return undefined;
+  }
+  const merged: ResponsiveElementOverride = {
+    ...(base || {}),
+    ...(override || {}),
+  };
+  const props = mergeUnknownRecord(base?.props, override?.props);
+  const styles = mergeCssProperties(base?.styles, override?.styles);
+  const tokenRefs = mergeStringRecord(base?.tokenRefs, override?.tokenRefs);
+  if (props) {
+    merged.props = props;
+  }
+  if (styles) {
+    merged.styles = styles;
+  }
+  if (tokenRefs) {
+    merged.tokenRefs = tokenRefs;
+  }
+  return merged;
+};
+
+const mergeResponsiveDefaults = (
+  base?: CanvasElement['responsive'],
+  override?: CanvasElement['responsive'],
+): CanvasElement['responsive'] | undefined => {
+  const baseClone = cloneDefaultResponsive(base);
+  const overrideClone = cloneDefaultResponsive(override);
+  if (!baseClone && !overrideClone) {
+    return undefined;
+  }
+  return RESPONSIVE_DEFAULT_BREAKPOINTS.reduce<CanvasElement['responsive']>((acc, breakpoint) => {
+    const merged = mergeResponsiveOverride(baseClone?.[breakpoint], overrideClone?.[breakpoint]);
+    if (merged) {
+      acc = acc || {};
+      acc[breakpoint] = merged;
+    }
+    return acc;
+  }, undefined);
+};
 
 // ============================================
 // COMPONENT LIBRARY DEFINITIONS
@@ -100,6 +257,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       color: '#000000',
     },
     defaultSize: { width: 300, height: 50 },
+    defaultResponsive: {
+      tablet: { width: 300, height: 58, props: { fontSize: 30 } },
+      mobile: { width: 335, height: 72, props: { fontSize: 28, lineHeight: 1.15 } },
+    },
     description: 'Section heading with multiple levels',
   },
   {
@@ -114,6 +275,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       color: '#333333',
     },
     defaultSize: { width: 300, height: 80 },
+    defaultResponsive: {
+      tablet: { width: 300, height: 86 },
+      mobile: { width: 335, height: 104, props: { fontSize: 15 } },
+    },
     description: 'Paragraph text block',
   },
   {
@@ -129,6 +294,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       fontSize: 16,
     },
     defaultSize: { width: 150, height: 48 },
+    defaultResponsive: {
+      tablet: { width: 150, height: 48 },
+      mobile: { width: 160, height: 48 },
+    },
     description: 'Clickable button with customizable styles',
   },
   {
@@ -142,6 +311,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       objectFit: 'cover',
     },
     defaultSize: { width: 300, height: 200 },
+    defaultResponsive: {
+      tablet: { width: 300, height: 200 },
+      mobile: { width: 335, height: 220 },
+    },
     description: 'Image with various fit options',
   },
   {
@@ -156,6 +329,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       objectFit: 'cover',
     },
     defaultSize: { width: 400, height: 225 },
+    defaultResponsive: {
+      tablet: { width: 380, height: 214 },
+      mobile: { width: 335, height: 188 },
+    },
     description: 'Video player with controls',
   },
   {
@@ -199,6 +376,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
     },
     defaultSize: { width: 640, height: 360 },
+    defaultResponsive: {
+      tablet: { width: 560, height: 320 },
+      mobile: { width: 335, height: 280 },
+    },
     defaultStyles: {
       backgroundColor: '#f8fafc',
       borderColor: '#cbd5e1',
@@ -255,6 +436,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
     },
     defaultSize: { width: 640, height: 360 },
+    defaultResponsive: {
+      tablet: { width: 560, height: 320 },
+      mobile: { width: 335, height: 300 },
+    },
     defaultStyles: {
       backgroundColor: '#ffffff',
       borderColor: '#94a3b8',
@@ -297,6 +482,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
     },
     defaultSize: { width: 640, height: 360 },
+    defaultResponsive: {
+      tablet: { width: 560, height: 320 },
+      mobile: { width: 335, height: 300 },
+    },
     defaultStyles: {
       backgroundColor: '#f8fafc',
       borderColor: '#cbd5e1',
@@ -347,6 +536,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
     },
     defaultSize: { width: 720, height: 360 },
+    defaultResponsive: {
+      tablet: { width: 640, height: 340 },
+      mobile: { width: 335, height: 320 },
+    },
     defaultStyles: {
       backgroundColor: '#ffffff',
       borderColor: '#cbd5e1',
@@ -397,6 +590,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
     },
     defaultSize: { width: 720, height: 420 },
+    defaultResponsive: {
+      tablet: { width: 640, height: 380 },
+      mobile: { width: 335, height: 390 },
+    },
     defaultStyles: {
       backgroundColor: '#f8fafc',
       borderColor: '#94a3b8',
@@ -444,6 +641,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
     },
     defaultSize: { width: 760, height: 460 },
+    defaultResponsive: {
+      tablet: { width: 680, height: 420 },
+      mobile: { width: 335, height: 420 },
+    },
     defaultStyles: {
       backgroundColor: '#ffffff',
       borderColor: '#cbd5e1',
@@ -487,6 +688,27 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           step: 5,
           defaultValue: 50,
         },
+        {
+          key: 'accentColor',
+          label: 'Accent color',
+          type: 'color',
+          defaultValue: '#38bdf8',
+        },
+        {
+          key: 'caption',
+          label: 'Fallback caption',
+          type: 'textarea',
+          defaultValue: 'Animated canvas module with a static accessible fallback.',
+        },
+        {
+          key: 'runtimeConfig',
+          label: 'Runtime config',
+          type: 'json',
+          defaultValue: {
+            reducedMotionFallback: true,
+            frameBudget: 60,
+          },
+        },
       ],
       renderCapabilities: {
         hydrationMode: 'sandbox-iframe',
@@ -499,6 +721,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
     },
     defaultSize: { width: 720, height: 420 },
+    defaultResponsive: {
+      tablet: { width: 640, height: 380 },
+      mobile: { width: 335, height: 360 },
+    },
     defaultStyles: {
       backgroundColor: '#0b1120',
       color: '#f8fafc',
@@ -537,6 +763,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
     },
     defaultSize: { width: 640, height: 360 },
+    defaultResponsive: {
+      tablet: { width: 560, height: 320 },
+      mobile: { width: 335, height: 300 },
+    },
     defaultStyles: {
       backgroundColor: '#111827',
       color: '#f9fafb',
@@ -557,6 +787,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       borderRadius: 8,
     },
     defaultSize: { width: 200, height: 200 },
+    defaultResponsive: {
+      tablet: { width: 240, height: 200 },
+      mobile: { width: 335, height: 200 },
+    },
     description: 'Container box for grouping elements',
   },
   {
@@ -570,6 +804,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       padding: 16,
     },
     defaultSize: { width: 1200, height: 280 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 300 },
+      mobile: { width: 375, height: 340 },
+    },
     description: 'Full-width section for major page blocks',
   },
   {
@@ -584,6 +822,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       padding: 0,
     },
     defaultSize: { width: 1200, height: 520 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 620 },
+      mobile: { width: 375, height: 700 },
+    },
     description: 'Composed hero with headline, copy, button, and media frame',
     defaultChildren: [
       {
@@ -600,6 +842,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           lineHeight: 1.08,
           color: '#ffffff',
         },
+        responsive: {
+          tablet: { x: 40, y: 58, width: 365, height: 118, props: { fontSize: 38, lineHeight: 1.12 } },
+          mobile: { x: 20, y: 42, width: 335, height: 132, props: { fontSize: 32, lineHeight: 1.12 } },
+        },
       },
       {
         type: 'paragraph',
@@ -612,6 +858,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontSize: 18,
           lineHeight: 1.55,
           color: '#cbd5e1',
+        },
+        responsive: {
+          tablet: { x: 42, y: 196, width: 350, height: 100, props: { fontSize: 16 } },
+          mobile: { x: 20, y: 192, width: 335, height: 112, props: { fontSize: 15, lineHeight: 1.5 } },
         },
       },
       {
@@ -628,6 +878,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontSize: 16,
           fontWeight: '700',
         },
+        responsive: {
+          tablet: { x: 42, y: 320, width: 160, height: 48 },
+          mobile: { x: 20, y: 328, width: 156, height: 46, props: { fontSize: 15 } },
+        },
       },
       {
         type: 'box',
@@ -643,6 +897,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           borderStyle: 'solid',
           boxShadow: '0 24px 70px rgba(2, 6, 23, 0.35)',
         },
+        responsive: {
+          tablet: { x: 430, y: 70, width: 285, height: 310 },
+          mobile: { x: 20, y: 420, width: 335, height: 230 },
+        },
         children: [
           {
             type: 'image',
@@ -656,6 +914,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               objectFit: 'cover',
               borderRadius: 6,
             },
+            responsive: {
+              tablet: { x: 16, y: 16, width: 253, height: 166 },
+              mobile: { x: 16, y: 16, width: 303, height: 132 },
+            },
           },
           {
             type: 'text',
@@ -668,6 +930,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontSize: 18,
               fontWeight: '700',
               color: '#0f172a',
+            },
+            responsive: {
+              tablet: { x: 18, y: 202, width: 225, height: 46, props: { fontSize: 16 } },
+              mobile: { x: 18, y: 166, width: 260, height: 42, props: { fontSize: 16 } },
             },
           },
         ],
@@ -686,6 +952,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       padding: 0,
     },
     defaultSize: { width: 1200, height: 460 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 650 },
+      mobile: { width: 375, height: 850 },
+    },
     description: 'Reusable three-card feature section with editable nested blocks',
     defaultChildren: [
       {
@@ -701,6 +971,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontWeight: '800',
           color: '#111827',
         },
+        responsive: {
+          tablet: { x: 40, y: 48, width: 520, height: 70, props: { fontSize: 32 } },
+          mobile: { x: 20, y: 42, width: 335, height: 88, props: { fontSize: 29, lineHeight: 1.15 } },
+        },
       },
       {
         type: 'paragraph',
@@ -713,6 +987,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           fontSize: 16,
           lineHeight: 1.5,
           color: '#4b5563',
+        },
+        responsive: {
+          tablet: { x: 42, y: 132, width: 590, height: 56 },
+          mobile: { x: 20, y: 148, width: 335, height: 84, props: { fontSize: 15 } },
         },
       },
       ...['Content model', 'Media workflow', 'Responsive sizing'].map((title, index) => ({
@@ -729,6 +1007,20 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           borderStyle: 'solid',
           padding: 18,
         },
+        responsive: {
+          tablet: {
+            x: index === 1 ? 408 : 40,
+            y: index === 2 ? 440 : 230,
+            width: 320,
+            height: 170,
+          },
+          mobile: {
+            x: 20,
+            y: 270 + index * 180,
+            width: 335,
+            height: 156,
+          },
+        },
         children: [
           {
             type: 'heading' as ElementType,
@@ -743,6 +1035,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontWeight: '750',
               color: '#0f172a',
             },
+            responsive: {
+              tablet: { x: 20, y: 22, width: 260, height: 38 },
+              mobile: { x: 18, y: 20, width: 290, height: 36, props: { fontSize: 20 } },
+            },
           },
           {
             type: 'paragraph' as ElementType,
@@ -755,6 +1051,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
               fontSize: 14,
               lineHeight: 1.5,
               color: '#475569',
+            },
+            responsive: {
+              tablet: { x: 20, y: 76, width: 260, height: 70 },
+              mobile: { x: 18, y: 68, width: 295, height: 66, props: { fontSize: 13 } },
             },
           },
         ],
@@ -1377,6 +1677,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       padding: 16,
     },
     defaultSize: { width: 1200, height: 120 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 126 },
+      mobile: { width: 375, height: 150 },
+    },
     description: 'Reusable page header block',
   },
   {
@@ -1391,6 +1695,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       navItems: ['Home', 'About', 'Contact'],
     },
     defaultSize: { width: 1200, height: 72 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 76 },
+      mobile: { width: 375, height: 112, props: { gap: 12 } },
+    },
     description: 'Navigation container for page menu items',
   },
   {
@@ -1404,6 +1712,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       padding: 24,
     },
     defaultSize: { width: 1200, height: 180 },
+    defaultResponsive: {
+      tablet: { width: 768, height: 190 },
+      mobile: { width: 375, height: 240 },
+    },
     description: 'Reusable page footer block',
   },
   {
@@ -1417,6 +1729,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       margin: '16px',
     },
     defaultSize: { width: 300, height: 2 },
+    defaultResponsive: {
+      tablet: { width: 300, height: 2 },
+      mobile: { width: 335, height: 2 },
+    },
     description: 'Horizontal divider line',
   },
   {
@@ -1426,6 +1742,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
     category: 'layout',
     defaultProps: {},
     defaultSize: { width: 50, height: 50 },
+    defaultResponsive: {
+      tablet: { width: 50, height: 50 },
+      mobile: { width: 50, height: 50 },
+    },
     description: 'Empty space for layout',
   },
   {
@@ -1441,6 +1761,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       underline: true,
     },
     defaultSize: { width: 100, height: 24 },
+    defaultResponsive: {
+      tablet: { width: 110, height: 24 },
+      mobile: { width: 140, height: 28 },
+    },
     description: 'Clickable link',
   },
   {
@@ -1453,6 +1777,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       listType: 'bullet',
     },
     defaultSize: { width: 200, height: 100 },
+    defaultResponsive: {
+      tablet: { width: 240, height: 110 },
+      mobile: { width: 335, height: 128 },
+    },
     description: 'Ordered or unordered list',
   },
   {
@@ -1466,6 +1794,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       fontStyle: 'italic',
     },
     defaultSize: { width: 300, height: 80 },
+    defaultResponsive: {
+      tablet: { width: 320, height: 90 },
+      mobile: { width: 335, height: 112, props: { fontSize: 17 } },
+    },
     description: 'Blockquote for citations',
   },
   {
@@ -1478,6 +1810,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       borderRadius: 8,
     },
     defaultSize: { width: 400, height: 300 },
+    defaultResponsive: {
+      tablet: { width: 380, height: 280 },
+      mobile: { width: 335, height: 260 },
+    },
     description: 'Embed external content',
   },
   {
@@ -1492,6 +1828,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       borderRadius: 8,
     },
     defaultSize: { width: 360, height: 180 },
+    defaultResponsive: {
+      tablet: { width: 340, height: 180 },
+      mobile: { width: 335, height: 190 },
+    },
     description: 'Sandboxed custom HTML block',
   },
   {
@@ -1506,6 +1846,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       borderRadius: 8,
     },
     defaultSize: { width: 420, height: 220 },
+    defaultResponsive: {
+      tablet: { width: 380, height: 240 },
+      mobile: { width: 335, height: 260 },
+    },
     description: 'Editable HTML table block',
   },
   {
@@ -1522,6 +1866,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       borderRadius: 8,
     },
     defaultSize: { width: 300, height: 200 },
+    defaultResponsive: {
+      tablet: { width: 300, height: 220 },
+      mobile: { width: 335, height: 250 },
+    },
     description: 'Form container',
   },
   {
@@ -1543,6 +1891,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       enableCaptcha: false,
     },
     defaultSize: { width: 420, height: 430 },
+    defaultResponsive: {
+      tablet: { width: 400, height: 440 },
+      mobile: { width: 335, height: 455 },
+    },
     description: 'Composed form with name, email, message, and submit button',
     defaultChildren: [
       {
@@ -1556,6 +1908,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           name: 'name',
           placeholder: 'Your name',
           required: true,
+        },
+        responsive: {
+          tablet: { x: 20, y: 78, width: 340, height: 54 },
+          mobile: { x: 18, y: 78, width: 299, height: 56 },
         },
       },
       {
@@ -1571,6 +1927,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           placeholder: 'you@example.com',
           required: true,
         },
+        responsive: {
+          tablet: { x: 20, y: 150, width: 340, height: 54 },
+          mobile: { x: 18, y: 152, width: 299, height: 56 },
+        },
       },
       {
         type: 'textarea',
@@ -1583,6 +1943,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           name: 'message',
           placeholder: 'Tell us about your project',
           required: false,
+        },
+        responsive: {
+          tablet: { x: 20, y: 222, width: 340, height: 102 },
+          mobile: { x: 18, y: 226, width: 299, height: 108 },
         },
       },
       {
@@ -1597,6 +1961,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           color: '#ffffff',
           borderRadius: 8,
           fontWeight: '700',
+        },
+        responsive: {
+          tablet: { x: 20, y: 350, width: 174, height: 48 },
+          mobile: { x: 18, y: 360, width: 180, height: 48 },
         },
       },
     ],
@@ -1628,6 +1996,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       padding: 18,
     },
     defaultSize: { width: 430, height: 560 },
+    defaultResponsive: {
+      tablet: { width: 400, height: 570 },
+      mobile: { width: 335, height: 625 },
+    },
     description: 'Reusable member signup form with consent and contact routing',
     defaultChildren: [
       {
@@ -1641,6 +2013,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           name: 'full_name',
           placeholder: 'Ada Lovelace',
           required: true,
+        },
+        responsive: {
+          tablet: { x: 20, y: 82, width: 340, height: 54 },
+          mobile: { x: 18, y: 82, width: 299, height: 56 },
         },
       },
       {
@@ -1656,6 +2032,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           placeholder: 'you@example.com',
           required: true,
         },
+        responsive: {
+          tablet: { x: 20, y: 154, width: 340, height: 54 },
+          mobile: { x: 18, y: 158, width: 299, height: 56 },
+        },
       },
       {
         type: 'input',
@@ -1669,6 +2049,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           inputType: 'tel',
           placeholder: '+1 555 0100',
           required: false,
+        },
+        responsive: {
+          tablet: { x: 20, y: 226, width: 340, height: 54 },
+          mobile: { x: 18, y: 234, width: 299, height: 56 },
         },
       },
       {
@@ -1684,6 +2068,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           placeholder: 'Choose a type',
           required: true,
         },
+        responsive: {
+          tablet: { x: 20, y: 298, width: 340, height: 54 },
+          mobile: { x: 18, y: 310, width: 299, height: 56 },
+        },
       },
       {
         type: 'checkbox',
@@ -1695,6 +2083,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           label: 'I agree to be contacted about this registration.',
           name: 'consent',
           required: true,
+        },
+        responsive: {
+          tablet: { x: 20, y: 380, width: 340, height: 52 },
+          mobile: { x: 18, y: 394, width: 299, height: 70 },
         },
       },
       {
@@ -1709,6 +2101,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           color: '#ffffff',
           borderRadius: 8,
           fontWeight: '700',
+        },
+        responsive: {
+          tablet: { x: 20, y: 470, width: 190, height: 50 },
+          mobile: { x: 18, y: 505, width: 190, height: 50 },
         },
       },
     ],
@@ -1726,6 +2122,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       borderColor: '#d1d5db',
     },
     defaultSize: { width: 250, height: 40 },
+    defaultResponsive: {
+      tablet: { width: 280, height: 44 },
+      mobile: { width: 335, height: 48 },
+    },
     description: 'Text input field',
   },
   {
@@ -1742,6 +2142,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       required: true,
     },
     defaultSize: { width: 300, height: 120 },
+    defaultResponsive: {
+      tablet: { width: 320, height: 130 },
+      mobile: { width: 335, height: 140 },
+    },
     description: 'Multi-line text input',
   },
   {
@@ -1758,6 +2162,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       required: false,
     },
     defaultSize: { width: 220, height: 44 },
+    defaultResponsive: {
+      tablet: { width: 260, height: 46 },
+      mobile: { width: 335, height: 48 },
+    },
     description: 'Dropdown selector',
   },
   {
@@ -1772,6 +2180,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       required: false,
     },
     defaultSize: { width: 260, height: 80 },
+    defaultResponsive: {
+      tablet: { width: 280, height: 84 },
+      mobile: { width: 335, height: 96 },
+    },
     description: 'Checkbox inputs',
   },
   {
@@ -1786,6 +2198,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       required: false,
     },
     defaultSize: { width: 260, height: 80 },
+    defaultResponsive: {
+      tablet: { width: 280, height: 84 },
+      mobile: { width: 335, height: 96 },
+    },
     description: 'Radio inputs',
   },
   {
@@ -1799,6 +2215,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       color: '#374151',
     },
     defaultSize: { width: 60, height: 60 },
+    defaultResponsive: {
+      tablet: { width: 60, height: 60 },
+      mobile: { width: 60, height: 60 },
+    },
     description: 'Icon or emoji symbol',
   },
   {
@@ -1811,6 +2231,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       gap: 16,
     },
     defaultSize: { width: 500, height: 200 },
+    defaultResponsive: {
+      tablet: { width: 420, height: 220 },
+      mobile: { width: 335, height: 320, props: { columns: 1, gap: 12 } },
+    },
     description: 'Multi-column layout',
   },
   {
@@ -1823,6 +2247,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       zoom: 14,
     },
     defaultSize: { width: 400, height: 300 },
+    defaultResponsive: {
+      tablet: { width: 380, height: 280 },
+      mobile: { width: 335, height: 260 },
+    },
     description: 'Google Maps embed',
   },
   {
@@ -1836,6 +2264,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       lineHeight: 1.6,
     },
     defaultSize: { width: 300, height: 100 },
+    defaultResponsive: {
+      tablet: { width: 320, height: 110 },
+      mobile: { width: 335, height: 128 },
+    },
     description: 'Body paragraph text',
   },
   {
@@ -1852,6 +2284,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       emptyMessage: 'No records yet.',
     },
     defaultSize: { width: 680, height: 320 },
+    defaultResponsive: {
+      tablet: { width: 640, height: 320, props: { columns: 2, gap: 16, limit: 4 } },
+      mobile: { width: 335, height: 440, props: { columns: 1, gap: 14, limit: 3 } },
+    },
     description: 'Collection-backed grid',
   },
   {
@@ -1869,6 +2305,10 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       commentSortOrder: 'newest',
     },
     defaultSize: { width: 360, height: 320 },
+    defaultResponsive: {
+      tablet: { width: 360, height: 320 },
+      mobile: { width: 335, height: 360 },
+    },
     description: 'Moderated public comment thread',
   },
 ];
@@ -1989,8 +2429,16 @@ export function createCanvasElement(
   overrides: Partial<CanvasElement> = {}
 ): CanvasElement {
   const definition = CANVAS_ITEM_BY_TYPE[type];
-  const props = definition ? cloneDefaultProps(definition.defaultProps || {}) : {};
+  const props = mergeUnknownRecord(
+    definition ? cloneDefaultProps(definition.defaultProps || {}) : {},
+    overrides.props,
+  ) || {};
   const size = definition?.defaultSize || { width: 200, height: 100 };
+  const styles = mergeCssProperties(definition ? cloneDefaultStyles(definition.defaultStyles) : undefined, overrides.styles);
+  const responsive = mergeResponsiveDefaults(definition?.defaultResponsive, overrides.responsive);
+  const bindingSlots = overrides.bindingSlots
+    ? cloneDefaultBindingSlots(overrides.bindingSlots)
+    : definition ? cloneDefaultBindingSlots(definition.defaultBindingSlots) : undefined;
 
   return {
     id: generateId(),
@@ -2000,8 +2448,11 @@ export function createCanvasElement(
     width: size.width,
     height: size.height,
     zIndex: 1,
-    props,
     ...overrides,
+    props,
+    styles,
+    bindingSlots,
+    responsive,
   };
 }
 
@@ -2011,19 +2462,134 @@ export function createCanvasElementFromLibraryItem(
   y: number,
   overrides: Partial<CanvasElement> = {}
 ): CanvasElement {
+  const {
+    props: overrideProps,
+    styles: overrideStyles,
+    responsive: overrideResponsive,
+    bindingSlots: overrideBindingSlots,
+    children: overrideChildren,
+    ...restOverrides
+  } = overrides;
   const base = createCanvasElement(item.type, x, y, {
     width: item.defaultSize?.width,
     height: item.defaultSize?.height,
-    props: cloneDefaultProps(item.defaultProps || {}),
-    styles: cloneDefaultStyles(item.defaultStyles),
-    responsive: cloneDefaultResponsive(item.defaultResponsive),
-    bindingSlots: cloneDefaultBindingSlots(item.defaultBindingSlots),
+    ...restOverrides,
+    props: mergeUnknownRecord(cloneDefaultProps(item.defaultProps || {}), overrideProps) || {},
+    styles: mergeCssProperties(cloneDefaultStyles(item.defaultStyles), overrideStyles),
+    responsive: mergeResponsiveDefaults(item.defaultResponsive, overrideResponsive),
+    bindingSlots: overrideBindingSlots
+      ? cloneDefaultBindingSlots(overrideBindingSlots)
+      : cloneDefaultBindingSlots(item.defaultBindingSlots),
   });
 
   return {
     ...base,
-    children: item.defaultChildren?.map((child, index) => createPresetChild(child, index + 1)),
-    ...overrides,
+    children: overrideChildren ?? item.defaultChildren?.map((child, index) => createPresetChild(child, index + 1)),
+  };
+}
+
+export function extractFrontendTemplateDesignSerialization(
+  templateContent: unknown,
+  fallbackCustomCSS?: string,
+): FrontendTemplateDesignSerialization {
+  const content = isRecord(templateContent) ? templateContent : {};
+  const contentDocument = cloneUnknownRecord<Record<string, unknown>>(content.contentDocument);
+  const contentDocumentMetadata = contentDocument && isRecord(contentDocument.metadata)
+    ? contentDocument.metadata
+    : undefined;
+  const metadata = firstTemplateRecord<Record<string, unknown>>(content.metadata, contentDocumentMetadata) || {};
+  const customCSS = firstTemplateString(
+    content.customCSS,
+    content.customCss,
+    metadata.customCSS,
+    metadata.customCss,
+    fallbackCustomCSS,
+  );
+  const customJS = firstTemplateString(
+    content.customJS,
+    content.customJs,
+    metadata.customJS,
+    metadata.customJs,
+  );
+  const elements = cloneUnknownArray<unknown>(content.elements)
+    || cloneUnknownArray<unknown>(contentDocument?.elements);
+  const canvasSize = firstTemplateRecord<Record<string, unknown>>(
+    content.canvasSize,
+    contentDocument?.canvasSize,
+    metadata.canvasSize,
+  );
+  const themeTokenRefs = firstTemplateRecord<BackyContentDocument['themeTokenRefs']>(
+    content.themeTokenRefs,
+    contentDocument?.themeTokenRefs,
+    metadata.themeTokenRefs,
+  );
+  const assets = firstTemplateRecord<NonNullable<BackyContentDocument['assets']>>(
+    content.assets,
+    contentDocument?.assets,
+    metadata.assets,
+  );
+  const interactions = firstTemplateRecord<NonNullable<BackyContentDocument['interactions']>>(
+    content.interactions,
+    contentDocument?.interactions,
+    metadata.interactions,
+  );
+  const dataBindings = firstTemplateRecord<NonNullable<BackyContentDocument['dataBindings']>>(
+    content.dataBindings,
+    contentDocument?.dataBindings,
+    metadata.dataBindings,
+  );
+  const editableMap = firstTemplateRecord<BackyContentDocument['editableMap']>(
+    content.editableMap,
+    contentDocument?.editableMap,
+    metadata.editableMap,
+  );
+  const seo = firstTemplateRecord<NonNullable<BackyContentDocument['seo']>>(
+    content.seo,
+    contentDocument?.seo,
+    metadata.seo,
+  );
+  const seoProvenance = firstTemplateRecord<Record<string, unknown>>(
+    content.seo,
+    contentDocument?.seo,
+    metadata.seo,
+  );
+  const animations = templateProvenanceArrayOrRecord(content.animations) || templateProvenanceArrayOrRecord(metadata.animations);
+  const interactionProvenance = templateProvenanceArrayOrRecord(content.interactions) || templateProvenanceArrayOrRecord(metadata.interactions);
+  const assetProvenance = templateProvenanceArrayOrRecord(content.assets) || templateProvenanceArrayOrRecord(metadata.assets);
+  const mergedMetadata: Record<string, unknown> = {
+    ...metadata,
+    ...(animations ? { animations } : {}),
+    ...(interactionProvenance ? { interactions: interactionProvenance } : {}),
+    ...(assetProvenance ? { assets: assetProvenance } : {}),
+  };
+
+  return {
+    customCSS,
+    options: {
+      ...(customJS ? { customJS } : {}),
+      ...(themeTokenRefs ? { themeTokenRefs } : {}),
+      ...(assets ? { assets } : {}),
+      ...(interactions ? { interactions } : {}),
+      ...(seo ? { seo } : {}),
+      ...(dataBindings ? { dataBindings } : {}),
+      ...(editableMap ? { editableMap } : {}),
+      ...(Object.keys(mergedMetadata).length > 0 ? { metadata: mergedMetadata as BackyContentDocument['metadata'] } : {}),
+    },
+    provenance: {
+      ...(customCSS ? { customCSS } : {}),
+      ...(customJS ? { customJS } : {}),
+      ...(contentDocument ? { contentDocument } : {}),
+      ...(elements ? { elements } : {}),
+      ...(canvasSize ? { canvasSize } : {}),
+      ...(themeTokenRefs ? { themeTokenRefs } : {}),
+      ...(assetProvenance ? { assets: assetProvenance } : {}),
+      ...(animations ? { animations } : {}),
+      ...(interactionProvenance ? { interactions: interactionProvenance } : {}),
+      ...(dataBindings ? { dataBindings } : {}),
+      ...(editableMap ? { editableMap } : {}),
+      ...(seoProvenance ? { seo: seoProvenance } : {}),
+      ...(Object.keys(mergedMetadata).length > 0 ? { metadata: mergedMetadata } : {}),
+    },
   };
 }
 
@@ -2055,6 +2621,17 @@ export function normalizeSavedCanvasContent(raw?: string | null): SavedCanvasPay
     }
 
     if (isRecord(parsed) && (Array.isArray(parsed.elements) || contentDocument)) {
+      const customCSS = typeof parsed.customCSS === 'string'
+        ? parsed.customCSS
+        : typeof contentDocument?.metadata?.customCSS === 'string'
+          ? contentDocument.metadata.customCSS
+          : undefined;
+      const customJS = typeof parsed.customJS === 'string'
+        ? parsed.customJS
+        : typeof contentDocument?.metadata?.customJS === 'string'
+          ? contentDocument.metadata.customJS
+          : undefined;
+
       return {
         elements: Array.isArray(parsed.elements)
           ? normalizeSavedCanvasElements(parsed.elements)
@@ -2062,11 +2639,29 @@ export function normalizeSavedCanvasContent(raw?: string | null): SavedCanvasPay
             ? normalizeSavedCanvasElements(contentDocument.elements)
             : [],
         canvasSize: normalizeCanvasSize(isRecord(parsed.canvasSize) ? parsed.canvasSize : documentCanvasSize),
-        customCSS: typeof parsed.customCSS === 'string'
-          ? parsed.customCSS
-          : typeof contentDocument?.metadata?.customCSS === 'string'
-            ? contentDocument.metadata.customCSS
-            : undefined,
+        customCSS,
+        customJS,
+        themeTokenRefs: isRecord(parsed.themeTokenRefs)
+          ? parsed.themeTokenRefs as BackyContentDocument['themeTokenRefs']
+          : contentDocument?.themeTokenRefs,
+        assets: isRecord(parsed.assets)
+          ? parsed.assets as BackyContentDocument['assets']
+          : contentDocument?.assets,
+        interactions: isRecord(parsed.interactions)
+          ? parsed.interactions as BackyContentDocument['interactions']
+          : contentDocument?.interactions,
+        seo: isRecord(parsed.seo)
+          ? parsed.seo as BackyContentDocument['seo']
+          : contentDocument?.seo,
+        dataBindings: isRecord(parsed.dataBindings)
+          ? parsed.dataBindings as BackyContentDocument['dataBindings']
+          : contentDocument?.dataBindings,
+        editableMap: isRecord(parsed.editableMap)
+          ? parsed.editableMap as BackyContentDocument['editableMap']
+          : contentDocument?.editableMap,
+        metadata: isRecord(parsed.metadata)
+          ? parsed.metadata as BackyContentDocument['metadata']
+          : contentDocument?.metadata,
         contentDocument,
       };
     }
@@ -2080,12 +2675,13 @@ export function normalizeSavedCanvasContent(raw?: string | null): SavedCanvasPay
   };
 }
 
-function normalizeSavedCanvasElements(input: unknown): CanvasElement[] {
+function normalizeSavedCanvasElements(input: unknown, parentId?: string): CanvasElement[] {
   if (!Array.isArray(input)) return [];
 
   return input
     .filter(isRecord)
     .map((rawElement, index) => {
+      const id = typeof rawElement.id === 'string' ? rawElement.id : generateId();
       const props = isRecord(rawElement.props)
         ? rawElement.props
         : isRecord(rawElement.content)
@@ -2094,13 +2690,20 @@ function normalizeSavedCanvasElements(input: unknown): CanvasElement[] {
       const styles = isRecord(rawElement.styles)
         ? rawElement.styles as CSSProperties
         : undefined;
+      const metadata = isRecord(rawElement.metadata) ? rawElement.metadata : {};
+      const rawParentId = typeof rawElement.parentId === 'string'
+        ? rawElement.parentId
+        : typeof metadata.parentId === 'string'
+          ? metadata.parentId
+          : undefined;
+      const resolvedParentId = parentId || rawParentId;
       const children = Array.isArray(rawElement.children)
-        ? normalizeSavedCanvasElements(rawElement.children)
+        ? normalizeSavedCanvasElements(rawElement.children, id)
         : undefined;
 
       return {
         ...rawElement,
-        id: typeof rawElement.id === 'string' ? rawElement.id : generateId(),
+        id,
         type: typeof rawElement.type === 'string' ? rawElement.type as ElementType : 'text',
         x: typeof rawElement.x === 'number' ? rawElement.x : 0,
         y: typeof rawElement.y === 'number' ? rawElement.y : 0,
@@ -2109,6 +2712,7 @@ function normalizeSavedCanvasElements(input: unknown): CanvasElement[] {
         zIndex: typeof rawElement.zIndex === 'number' ? rawElement.zIndex : index + 1,
         props,
         styles,
+        ...(resolvedParentId ? { parentId: resolvedParentId } : {}),
         ...(children ? { children } : {}),
       } as CanvasElement;
     });
@@ -2130,7 +2734,15 @@ export function serializeCanvasContent(
   const payload: SavedCanvasPayload = {
     elements,
     canvasSize,
-    customCSS,
+    ...(customCSS !== undefined ? { customCSS } : {}),
+    ...(options.customJS !== undefined ? { customJS: options.customJS } : {}),
+    ...(options.themeTokenRefs !== undefined ? { themeTokenRefs: options.themeTokenRefs } : {}),
+    ...(options.assets !== undefined ? { assets: options.assets } : {}),
+    ...(options.interactions !== undefined ? { interactions: options.interactions } : {}),
+    ...(options.seo !== undefined ? { seo: options.seo } : {}),
+    ...(options.dataBindings !== undefined ? { dataBindings: options.dataBindings } : {}),
+    ...(options.editableMap !== undefined ? { editableMap: options.editableMap } : {}),
+    ...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
   };
 
   if (options.documentId) {
@@ -2145,7 +2757,16 @@ export function serializeCanvasContent(
       elements,
       canvasSize,
       customCSS,
+      customJS: options.customJS,
+      themeTokenRefs: options.themeTokenRefs,
+      assets: options.assets,
+      interactions: options.interactions,
+      seo: options.seo,
+      dataBindings: options.dataBindings,
+      editableMap: options.editableMap,
+      metadata: options.metadata,
     });
+    payload.metadata = payload.contentDocument.metadata;
   }
 
   return JSON.stringify(payload);

@@ -225,6 +225,72 @@ const ROLE_BADGES: Record<TeamRole, { bg: string; color: string; label: string }
     viewer: { bg: '#f3f4f6', color: '#374151', label: 'Viewer' },
 };
 
+const TEAM_INVITE_ROLES: TeamRole[] = ['viewer', 'editor', 'admin'];
+const TEAM_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const fieldErrorStyle: React.CSSProperties = {
+    color: '#dc2626',
+    fontSize: '12px',
+    marginTop: '6px',
+    marginBottom: 0,
+};
+
+const inlineAlertStyle: React.CSSProperties = {
+    border: '1px solid #fecaca',
+    backgroundColor: '#fef2f2',
+    color: '#991b1b',
+    borderRadius: '8px',
+    padding: '10px 12px',
+    fontSize: '13px',
+    marginBottom: '12px',
+};
+
+const inputStyle = (hasError: boolean): React.CSSProperties => ({
+    ...styles.input,
+    ...(hasError ? {
+        borderColor: '#dc2626',
+        boxShadow: '0 0 0 1px #fecaca',
+    } : {}),
+});
+
+const selectStyle = (hasError: boolean): React.CSSProperties => ({
+    ...styles.select,
+    width: '100%',
+    ...(hasError ? {
+        borderColor: '#dc2626',
+        boxShadow: '0 0 0 1px #fecaca',
+    } : {}),
+});
+
+const validateTeamName = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Team name is required.';
+    if (trimmed.length < 2) return 'Team name must be at least 2 characters.';
+    if (trimmed.length > 80) return 'Team name must be 80 characters or fewer.';
+    return '';
+};
+
+const validateTeamSlug = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Team slug is required.';
+    if (trimmed.length > 80) return 'Team slug must be 80 characters or fewer.';
+    if (!TEAM_SLUG_PATTERN.test(trimmed)) {
+        return 'Use lowercase letters, numbers, and single hyphens only.';
+    }
+    return '';
+};
+
+const validateTeamInviteEmail = (value: string): string => {
+    const trimmed = value.trim();
+    if (!trimmed) return 'Email address is required.';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return 'Enter a valid email address.';
+    return '';
+};
+
+const validateTeamInviteRole = (value: TeamRole): string => (
+    TEAM_INVITE_ROLES.includes(value) ? '' : 'Choose viewer, editor, or admin for team invites.'
+);
+
 // ==========================================================================
 // SUB-COMPONENTS
 // ==========================================================================
@@ -239,20 +305,29 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
     const [role, setRole] = useState<TeamRole>('editor');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<{ email?: string; role?: string }>({});
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (email) {
-            setIsSubmitting(true);
-            setError('');
-            try {
-                await onInvite(email, role);
-                onClose();
-            } catch (submitError) {
-                setError(submitError instanceof Error ? submitError.message : 'Unable to invite team member');
-            } finally {
-                setIsSubmitting(false);
-            }
+        const nextErrors = {
+            email: validateTeamInviteEmail(email),
+            role: validateTeamInviteRole(role),
+        };
+        setFieldErrors(nextErrors);
+        if (nextErrors.email || nextErrors.role) {
+            setError('Fix invitation fields before sending.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError('');
+        try {
+            await onInvite(email.trim(), role);
+            onClose();
+        } catch (submitError) {
+            setError(submitError instanceof Error ? submitError.message : 'Unable to invite team member');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -262,40 +337,61 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
                 <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>
                     Invite Team Member
                 </h3>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} noValidate>
                     <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
+                        <label htmlFor="teams-invite-email-input" style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
                             Email Address
                         </label>
                         <input
+                            id="teams-invite-email-input"
                             data-testid="teams-invite-email-input"
                             type="email"
-                            style={styles.input}
+                            style={inputStyle(Boolean(fieldErrors.email))}
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={(e) => {
+                                setEmail(e.target.value);
+                                setFieldErrors((current) => ({ ...current, email: '' }));
+                            }}
                             placeholder="colleague@company.com"
                             disabled={isSubmitting}
-                            required
+                            aria-invalid={Boolean(fieldErrors.email)}
+                            aria-describedby={fieldErrors.email ? 'teams-invite-email-error' : undefined}
                         />
+                        {fieldErrors.email && (
+                            <p id="teams-invite-email-error" style={fieldErrorStyle}>
+                                {fieldErrors.email}
+                            </p>
+                        )}
                     </div>
                     <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
+                        <label htmlFor="teams-invite-role-select" style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
                             Role
                         </label>
                         <select
+                            id="teams-invite-role-select"
                             data-testid="teams-invite-role-select"
-                            style={{ ...styles.select, width: '100%' }}
+                            style={selectStyle(Boolean(fieldErrors.role))}
                             value={role}
-                            onChange={(e) => setRole(e.target.value as TeamRole)}
+                            onChange={(e) => {
+                                setRole(e.target.value as TeamRole);
+                                setFieldErrors((current) => ({ ...current, role: '' }));
+                            }}
                             disabled={isSubmitting}
+                            aria-invalid={Boolean(fieldErrors.role)}
+                            aria-describedby={fieldErrors.role ? 'teams-invite-role-error' : undefined}
                         >
                             <option value="viewer">Viewer - Can view sites</option>
                             <option value="editor">Editor - Can edit content</option>
                             <option value="admin">Admin - Full access except billing</option>
                         </select>
+                        {fieldErrors.role && (
+                            <p id="teams-invite-role-error" style={fieldErrorStyle}>
+                                {fieldErrors.role}
+                            </p>
+                        )}
                     </div>
                     {error && (
-                        <p style={{ color: '#dc2626', fontSize: '13px', marginBottom: '12px' }}>
+                        <p role="alert" data-testid="teams-invite-inline-error" style={inlineAlertStyle}>
                             {error}
                         </p>
                     )}
@@ -332,20 +428,26 @@ function CreateTeamModal({ onClose, onCreate }: CreateTeamModalProps) {
     const [name, setName] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [nameError, setNameError] = useState('');
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (name) {
-            setIsSubmitting(true);
-            setError('');
-            try {
-                await onCreate(name);
-                onClose();
-            } catch (submitError) {
-                setError(submitError instanceof Error ? submitError.message : 'Unable to create team');
-            } finally {
-                setIsSubmitting(false);
-            }
+        const nextNameError = validateTeamName(name);
+        setNameError(nextNameError);
+        if (nextNameError) {
+            setError('Fix team fields before creating.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        setError('');
+        try {
+            await onCreate(name.trim());
+            onClose();
+        } catch (submitError) {
+            setError(submitError instanceof Error ? submitError.message : 'Unable to create team');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -355,24 +457,34 @@ function CreateTeamModal({ onClose, onCreate }: CreateTeamModalProps) {
                 <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>
                     Create New Team
                 </h3>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} noValidate>
                     <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
+                        <label htmlFor="teams-create-name-input" style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
                             Team Name
                         </label>
                         <input
+                            id="teams-create-name-input"
                             data-testid="teams-create-name-input"
                             type="text"
-                            style={styles.input}
+                            style={inputStyle(Boolean(nameError))}
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            onChange={(e) => {
+                                setName(e.target.value);
+                                setNameError('');
+                            }}
                             placeholder="My Awesome Team"
                             disabled={isSubmitting}
-                            required
+                            aria-invalid={Boolean(nameError)}
+                            aria-describedby={nameError ? 'teams-create-name-error' : undefined}
                         />
+                        {nameError && (
+                            <p id="teams-create-name-error" style={fieldErrorStyle}>
+                                {nameError}
+                            </p>
+                        )}
                     </div>
                     {error && (
-                        <p style={{ color: '#dc2626', fontSize: '13px', marginBottom: '12px' }}>
+                        <p role="alert" data-testid="teams-create-inline-error" style={inlineAlertStyle}>
                             {error}
                         </p>
                     )}
@@ -411,13 +523,24 @@ function EditTeamModal({ team, onClose, onUpdate }: EditTeamModalProps) {
     const [slug, setSlug] = useState(team.slug);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<{ name?: string; slug?: string }>({});
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const nextErrors = {
+            name: validateTeamName(name),
+            slug: validateTeamSlug(slug),
+        };
+        setFieldErrors(nextErrors);
+        if (nextErrors.name || nextErrors.slug) {
+            setError('Fix team fields before saving.');
+            return;
+        }
+
         setIsSubmitting(true);
         setError('');
         try {
-            await onUpdate({ name, slug });
+            await onUpdate({ name: name.trim(), slug: slug.trim() });
             onClose();
         } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : 'Unable to save team');
@@ -432,37 +555,57 @@ function EditTeamModal({ team, onClose, onUpdate }: EditTeamModalProps) {
                 <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>
                     Edit Team
                 </h3>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} noValidate>
                     <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
+                        <label htmlFor="teams-edit-name-input" style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
                             Team Name
                         </label>
                         <input
+                            id="teams-edit-name-input"
                             data-testid="teams-edit-name-input"
                             type="text"
-                            style={styles.input}
+                            style={inputStyle(Boolean(fieldErrors.name))}
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            onChange={(e) => {
+                                setName(e.target.value);
+                                setFieldErrors((current) => ({ ...current, name: '' }));
+                            }}
                             disabled={isSubmitting}
-                            required
+                            aria-invalid={Boolean(fieldErrors.name)}
+                            aria-describedby={fieldErrors.name ? 'teams-edit-name-error' : undefined}
                         />
+                        {fieldErrors.name && (
+                            <p id="teams-edit-name-error" style={fieldErrorStyle}>
+                                {fieldErrors.name}
+                            </p>
+                        )}
                     </div>
                     <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
+                        <label htmlFor="teams-edit-slug-input" style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
                             Slug
                         </label>
                         <input
+                            id="teams-edit-slug-input"
                             data-testid="teams-edit-slug-input"
                             type="text"
-                            style={styles.input}
+                            style={inputStyle(Boolean(fieldErrors.slug))}
                             value={slug}
-                            onChange={(e) => setSlug(e.target.value)}
+                            onChange={(e) => {
+                                setSlug(e.target.value);
+                                setFieldErrors((current) => ({ ...current, slug: '' }));
+                            }}
                             disabled={isSubmitting}
-                            required
+                            aria-invalid={Boolean(fieldErrors.slug)}
+                            aria-describedby={fieldErrors.slug ? 'teams-edit-slug-error' : undefined}
                         />
+                        {fieldErrors.slug && (
+                            <p id="teams-edit-slug-error" style={fieldErrorStyle}>
+                                {fieldErrors.slug}
+                            </p>
+                        )}
                     </div>
                     {error && (
-                        <p style={{ color: '#dc2626', fontSize: '13px', marginBottom: '12px' }}>
+                        <p role="alert" data-testid="teams-edit-inline-error" style={inlineAlertStyle}>
                             {error}
                         </p>
                     )}
@@ -516,6 +659,8 @@ export function TeamManagement({
     const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
     const [actionError, setActionError] = useState('');
     const [busyMemberAction, setBusyMemberAction] = useState<string | null>(null);
+    const [pendingDeleteTeam, setPendingDeleteTeam] = useState<Team | null>(null);
+    const [pendingRemoveMember, setPendingRemoveMember] = useState<{ team: Team; member: TeamMember } | null>(null);
 
     const currentTeam = teams.find((t) => t.id === currentTeamId);
     const mutationsDisabled = isMutating || !canManageTeams;
@@ -593,9 +738,6 @@ export function TeamManagement({
                 setActionError(mutationDisabledReason);
                 return;
             }
-            const confirmed = window.confirm(`Delete "${team.name}"? This cannot be undone.`);
-            if (!confirmed) return;
-
             setActionError('');
             try {
                 await onDeleteTeam(team.id);
@@ -739,7 +881,7 @@ export function TeamManagement({
                         <button
                             data-testid="teams-delete-button"
                             style={{ ...styles.button, ...styles.dangerButton }}
-                            onClick={() => handleDelete(currentTeam)}
+                            onClick={() => setPendingDeleteTeam(currentTeam)}
                             disabled={teamDeleteDisabled}
                             title={teamDeleteTitle}
                         >
@@ -890,7 +1032,7 @@ export function TeamManagement({
                                     <button
                                         data-testid={`teams-member-remove-${member.id}`}
                                         style={{ ...styles.button, ...styles.dangerButton }}
-                                        onClick={() => handleRemoveMember(currentTeam.id, member.id)}
+                                        onClick={() => setPendingRemoveMember({ team: currentTeam, member })}
                                         disabled={removeDisabled}
                                         title={removeBlockReason || mutationTitle}
                                     >
@@ -923,6 +1065,104 @@ export function TeamManagement({
                     onClose={() => setEditTeam(null)}
                     onUpdate={handleUpdate}
                 />
+            )}
+            {pendingDeleteTeam && (
+                <div
+                    style={styles.modal}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="teams-delete-team-title"
+                    aria-describedby="teams-delete-team-description"
+                    data-testid="teams-delete-team-confirmation"
+                    onClick={() => {
+                        if (!isMutating) setPendingDeleteTeam(null);
+                    }}
+                >
+                    <div style={styles.modalContent} onClick={(event) => event.stopPropagation()}>
+                        <h3 id="teams-delete-team-title" style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>
+                            Delete {pendingDeleteTeam.name}?
+                        </h3>
+                        <p id="teams-delete-team-description" style={{ color: '#6b7280', fontSize: '13px', lineHeight: 1.5, marginBottom: '16px' }}>
+                            This permanently removes the team shell after its workspace sites have been moved or deleted. Members keep their user accounts.
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button
+                                type="button"
+                                style={{ ...styles.button, ...styles.secondaryButton }}
+                                onClick={() => setPendingDeleteTeam(null)}
+                                disabled={isMutating}
+                                aria-label={`Cancel deleting team ${pendingDeleteTeam.name}`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                data-testid="teams-delete-team-confirm"
+                                style={{ ...styles.button, backgroundColor: '#dc2626', color: '#ffffff' }}
+                                onClick={() => {
+                                    const team = pendingDeleteTeam;
+                                    void (async () => {
+                                        await handleDelete(team);
+                                        setPendingDeleteTeam(null);
+                                    })();
+                                }}
+                                disabled={isMutating}
+                                aria-label={`Confirm deleting team ${pendingDeleteTeam.name}`}
+                            >
+                                {isMutating ? 'Deleting...' : 'Delete team'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {pendingRemoveMember && (
+                <div
+                    style={styles.modal}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="teams-remove-member-title"
+                    aria-describedby="teams-remove-member-description"
+                    data-testid="teams-remove-member-confirmation"
+                    onClick={() => {
+                        if (!busyMemberAction) setPendingRemoveMember(null);
+                    }}
+                >
+                    <div style={styles.modalContent} onClick={(event) => event.stopPropagation()}>
+                        <h3 id="teams-remove-member-title" style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>
+                            Remove {pendingRemoveMember.member.name}?
+                        </h3>
+                        <p id="teams-remove-member-description" style={{ color: '#6b7280', fontSize: '13px', lineHeight: 1.5, marginBottom: '16px' }}>
+                            This removes {pendingRemoveMember.member.email} from {pendingRemoveMember.team.name}. Their user account remains available for other teams and future invites.
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button
+                                type="button"
+                                style={{ ...styles.button, ...styles.secondaryButton }}
+                                onClick={() => setPendingRemoveMember(null)}
+                                disabled={Boolean(busyMemberAction)}
+                                aria-label={`Cancel removing ${pendingRemoveMember.member.name}`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                data-testid="teams-remove-member-confirm"
+                                style={{ ...styles.button, backgroundColor: '#dc2626', color: '#ffffff' }}
+                                onClick={() => {
+                                    const pending = pendingRemoveMember;
+                                    void (async () => {
+                                        await handleRemoveMember(pending.team.id, pending.member.id);
+                                        setPendingRemoveMember(null);
+                                    })();
+                                }}
+                                disabled={Boolean(busyMemberAction)}
+                                aria-label={`Confirm removing ${pendingRemoveMember.member.name}`}
+                            >
+                                {busyMemberAction === `remove:${pendingRemoveMember.member.id}` ? 'Removing...' : 'Remove member'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

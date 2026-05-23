@@ -27,8 +27,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | 13 | Delete Element | ✅ | Toolbar and Delete/Backspace remove unlocked selections with undo/redo and persistence coverage |
 | 14 | Duplicate Element | ✅ | Toolbar and Ctrl+D duplicate selected sibling elements with offset |
 | 15 | Rich Text Editing | ✅ | List/selected-text flow, imported-depth normalization, list toggle/indent/button-reorder/drag-reorder tools, nested child list targeting guards, bounded list indent edits, markdown shortcuts, persisted selected-range leaf marks including cross-node split marks, blockquote/table panel controls, row/column table growth/duplication/removal/reorder, table header row/column/cell toggles, table-cell merge/split, table-cell alignment/fill/border/vertical alignment including selected multi-cell style ranges, table captions, whole-table removal, and text-mark rendering are covered |
-| 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render |
-| 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on element payloads; animation contract now uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom` to match renderer payload |
+| 16 | Font Selection | ✅ | Font family and size now apply from shared style props on canvas render; custom Google font entry uses an inline editor control with guarded error state |
+| 17 | Animation Controls | ✅ | Animation panel is connected in PropertyPanel and persisted on canonical element payloads; animation contract uses `fadeIn/slideIn/scaleIn/rotate/bounce/custom`, preserves custom/scroll-trigger data, exposes custom GSAP `from`/`to` JSON controls, and supports motion token refs for duration/easing |
 | 18 | Emoji Picker | ✅ | Icon elements expose a tested emoji picker with common quick picks and full picker modal |
 | 19 | Grid/Snap | ✅ | Configurable grid size, grid visibility, and snap toggle with focused smoke coverage |
 | 20 | Layers Panel | ✅ | Hierarchical rows support select/multi-select, drag reorder, visibility, lock, duplicate/delete, nesting/outdent, save persistence |
@@ -46,8 +46,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 | quote | ✅ | ✅ | ✅ | Public renderer now carries quote appearance, typography, citation, and border styles | ✅ |
 | image | ✅ source/fit/alt/upload picker | ✅ | ✅ | Transform/version-management UX lives in the central media route and is covered by media smoke tests | ✅ |
 | video | ✅ source/controls | ✅ | ✅ | autoplay/loop/muted/playsInline public output is now covered; version-management UX lives in the central media route | ✅ |
-| button | ✅ label/link-like styling + action presets | ✅ | ✅ | Action presets now normalize page/section/email/phone/download/custom href behavior with smoke coverage | ✅ |
-| link | ✅ href/content/underline/target/rel | ✅ | ✅ | `_blank` target now enforces `noopener noreferrer` in property controls, editor preview, persistence, and public rendering | ✅ |
+| button | ✅ label/link-like styling + action presets + downloadable media picker | ✅ | ✅ | Download actions can bind uploaded files and persist `fileId`/`fileIds`, media/download id aliases, file metadata, attachment URL, and synchronized `assetIds` | ✅ |
+| link | ✅ href/content/underline/target/rel + downloadable media picker | ✅ | ✅ | `_blank` target enforces `noopener noreferrer`; download links now render `download` and retain uploaded-file identity for custom frontends | ✅ |
 | divider | ✅ style controls | ✅ | ✅ | Public renderer now matches editor border-only line geometry and margin spacing | ✅ |
 | spacer | ✅ layout-only | ✅ | ✅ | no visual handle difference in preview | ✅ |
 | icon | ✅ symbol/size/color | ✅ | ✅ | Public renderer now preserves icon/symbol fallback, size, color, title, and aria label | ✅ |
@@ -65,6 +65,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - media library modal (`components/editor/MediaLibraryModal.tsx`), through `listMediaLibrary`, `uploadMedia`, `replaceMedia`, and scoped `pageId`/`postId` filters.
   - media management route (`routes/media.tsx`), through `/api/admin/sites/:siteId/media`, folders, versions, transforms, signed URLs, provider analytics, and storage/runtime settings.
 - The finalized media scope model is `global|page|post`; `blogId` remains an API alias for `postId`. Page/post uploads send `scopeTargetId`, and returned selections persist `mediaId`, `mediaScope`, and `mediaScopeTargetId` into canvas payloads.
+- Button and link download controls use the same media picker with `allowedTypes="file"` and persist `/file?disposition=attachment` URLs plus `fileId`/`fileIds`, `fileMediaId`/`fileMediaIds`, `downloadMediaId`/`downloadMediaIds`, file name/type/folder/scope/visibility metadata, signed-delivery endpoint metadata for private files, and synchronized `assetIds`; editor preview, hosted live-management, and public rendering all honor boolean-like `props.download`, and both editor-preview plus hosted anchors expose `data-backy-file-*` attributes, including generic `data-backy-file-id`, for custom frontend handoff.
+- Layer visibility/locking and renderer `props.hidden` flags normalize boolean-like values across the core content migration, SDK edit/command helpers, full admin editor canvas/Layers panel/inspector controls, hosted live-management, and public rendering, so imported custom frontend JSON does not expose hidden layers or unlock locked commands because a flag arrived as a string or number.
 - `embed/map` now support:
   - normalized embed source parsing (YouTube/Vimeo/watch/watch URLs + iframe snippets)
   - address-based map conversion to Google Maps embed URL when non-URL text is provided
@@ -138,6 +140,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
     - Table cell fill and border color controls can clear previously applied selected-cell colors and persist the removed metadata.
     - Selected table cells can receive independent vertical alignment from the rich-text toolbar, render on the cell, and persist without leaking to adjacent cells.
     - Selected multi-cell table ranges can receive persisted fill color, border color, and vertical alignment metadata across the selected rectangle without leaking into unselected cells.
+    - Registry-driven interactive component controls now normalize saved boolean-like toggle values, color values, and bounded number/range values before writing them back to element props and persisted control metadata.
     - Selected table ranges now resolve through a span-aware visual grid, so ranges that cross `rowSpan`/`colSpan` cells include visually covered sibling cells instead of relying only on raw Slate child indexes.
     - Editor smoke coverage now guards the rich-text table range-selection source path plus the merged/multi-cell browser smoke assertions so table fill, border, and vertical alignment remain applied across the selected rectangle only.
     - Added richer appearance controls (border style/width/color, box shadow, spacing).
@@ -216,8 +219,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - General tab edits page title, slug, status, and scheduled publish time.
 - SEO tab edits meta title, meta description, keywords, and JSON-LD with JSON validation.
 - Social tab edits/removes OG image URL and can select an image from the media library.
-- Save validates route/title/scheduled status, persists through the page editor `onSave` path, closes the dialog, and updates editor save metadata.
-- `BACKY_EDITOR_PAGE_SETTINGS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers scheduled-date validation, settings save status, and persisted title/slug/status/meta/keywords/JSON-LD/OG image.
+- Save stays reachable for editors, validates route/title/slug/scheduled status/JSON-LD inline with field-level `aria-invalid`/`aria-describedby` errors, persists through the page editor `onSave` path, closes the dialog, and updates editor save metadata.
+- `BACKY_EDITOR_PAGE_SETTINGS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`, `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin`, and `npm run test:editor-smoke-coverage --workspace @backy-cms/admin` cover scheduled-date validation, reachable settings validation source, settings save status, and persisted title/slug/status/meta/keywords/JSON-LD/OG image.
 
 ### 12. Z-Index Control (Bring to Front/Back)
 **File:** `PropertyPanel.tsx` (Layout section)
@@ -286,9 +289,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - No known rich-text table/list editing blockers remain in this spec slice; imported-depth normalization, selected nested list targeting, selected-range marks, and span-aware table-range styling are covered by focused smokes.
 
 ### 16. Font Selection
-**File:** `PropertyPanel.tsx` (StyleProperties)
+**File:** `PropertyPanel.tsx` (StyleProperties), `packages/editor/src/ui/FontDropdown.tsx`
 **Current State:** ✅ Working
 - Font family/size/style props now resolve through shared renderer style layer and are applied on save-preview and initial render.
+- Shared rich-text font selection adds custom Google fonts through an inline dropdown form with stable test ids, duplicate prevention, and inline load errors instead of browser prompt/alert dialogs.
 
 ### 17. Emoji Picker
 **Current State:** ✅ Working for icon elements
@@ -299,14 +303,15 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ### 17a. Media Upload Modal
 **File:** `components/editor/MediaLibraryModal.tsx`
-**Current State:** ✅ Working for editor image, video, embed, and font uploads
+**Current State:** ✅ Working for editor image, video, embed, font, and downloadable file uploads
 - Image, video, embed, and font style consumers expose Select/Upload media actions from their property controls.
 - Upload opens the modal directly on the upload tab with consumer-appropriate filtering and file acceptance (`image/*`, `video/*`, unrestricted embed assets, and font extensions).
 - Upload defaults include visibility, folder, tags, and the active page/post/global scope context.
-- Uploaded page-scoped images, videos, and embed assets return to the library tab, can be selected, update the source/preview, and persist `src`, `mediaId`, `mediaScope`, and `mediaScopeTargetId` into the page canvas payload.
-- Uploaded fonts can be selected from the font media picker and persist the chosen `fontFamily` into styled text elements.
+- Uploaded page-scoped images, videos, and embed assets return to the library tab, can be selected, update the source/preview, and persist `src`, `mediaId`, `mediaName`, `mediaType`, `mediaFolderId`, `mediaScope`, `mediaScopeTargetId`, insert/focal presentation props, and element-level `assetIds` into the page canvas payload.
+- Uploaded fonts can be selected from the font media picker and persist the chosen `fontFamily`, `fontMediaId`, registration metadata, file URL, and element-level `assetIds` into styled text elements.
+- Downloadable file controls can opt into selecting private media while ordinary public image/video/embed/font fields remain blocked; private file selections persist signed-URL-required metadata instead of inserting raw private assets into public fields.
 - Focused smoke coverage: `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
-- Route-level media management coverage: `npm run test:media --workspace @backy-cms/admin` drives the `/media` route in Chrome and verifies folder create/rename/move/delete, storage settings/check/provisioning UI, upload intake layout, detail metadata edits, image presentation metadata, replacement/version compare/restore/delete, transform preparation, quarantine/release, signed URL generation, provider analytics, activity panels/filters, and UI deletion with cleanup.
+- Route-level media management coverage: `npm run test:media --workspace @backy-cms/admin` drives the `/media` route in Chrome and verifies folder create/rename/move/delete, storage settings/check/provisioning UI, in-app confirmation for non-dry-run storage secret promotion/revocation, upload intake layout, detail metadata edits, image presentation metadata, replacement/version compare/restore/delete, transform preparation, quarantine/release, signed URL generation, provider analytics, activity panels/filters, and UI deletion with cleanup.
 - Remaining: no known media upload/route workflow gaps in this spec slice.
 
 ### 18. Grid/Snap
@@ -372,6 +377,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 - Shortcut handling is guarded so focused form controls and dialogs do not trigger canvas nudge, delete, grouping, selection cycling, or save actions.
 - Shell panel shortcut coverage verifies Components, Inspector, Layers, and Focus commands update live panel visibility and exit focus mode when a requested side panel needs to become visible.
+- The inspector composition handoff exposes `backy.editor-command-registry.v1`, a copyable registry of stable command ids, shortcuts, test ids, target scopes, and enabled/disabled/hidden reasons for the editor toolbar, canvas viewport, grouping, selection, clipboard, layout, save, publish, reload, and shell commands.
+- Public manifest/OpenAPI live-management discovery also exposes `editorComposition.commandRegistry` with the same command ids, static state rules, SDK/API helper mappings, target paths, and privacy flags for custom editor clients.
+- Custom editor clients can call SDK `evaluateBackyEditorCommandRegistry()` to turn that registry plus local page/blog content state into `backy.editor-command-registry-evaluation.v1` ready/disabled/hidden command states for toolbar binding.
 - Grouping shortcut coverage now verifies Ctrl/Cmd+G preserves child geometry, Ctrl/Cmd+Z restores the sibling multi-selection, Ctrl/Cmd+Shift+Z restores the grouped selection, and Ctrl/Cmd+Shift+G expands children back into the original sibling geometry.
 - Ungrouping now converts tablet/mobile child layout overrides from group-relative coordinates back into absolute canvas coordinates, so breakpoint-authored grouped layouts do not jump when expanded.
 - Nested group smoke now verifies root-to-container paste target metadata, deterministic clone id selection, normalized local child placement, save persistence, and parent metadata for pasted layers.
@@ -463,10 +471,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Covered by `npm run test:status-badge --workspace @backy-cms/admin`.
 
 ### ✅ Selected rich-text style controls
-- Selected text range controls now preserve Slate selection across inspector focus changes for italic, clear formatting, font size, font family, and text color.
-- Selected range font size, font family, underline, strikethrough, and text color now persist as Slate leaf marks through the canvas history/save path instead of being collapsed to plain text.
-- Native input/select/color controls avoid stale whole-element content fallback while an active rich-text editor is targeted.
-- Covered by `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`, including backend page API assertions for persisted selected-range marks.
+  - Selected text range controls now preserve Slate selection across inspector focus changes for italic, clear formatting, font size, font family, and text color.
+  - Selected range font size, font family, underline, strikethrough, and text color now persist as Slate leaf marks through the canvas history/save path instead of being collapsed to plain text.
+  - Native input/select/color controls avoid stale whole-element content fallback while an active rich-text editor is targeted.
+  - The shared Plate-based editor advanced toolbar, fixed toolbar, selected-text floating toolbar, and right-pane portal toolbar now use Backy's `ColorPicker` popover for text and highlight colors instead of browser prompt dialogs, with accessible/testable trigger, popover, custom hex, clear controls, keyboard-open support, selection capture, icon labels, and menu state guarded by `npm run test:toolbar-controls --workspace @backy-cms/editor`.
+  - Shared advanced, fixed, floating, and property-panel portal toolbars now use inline URL forms for link/image insertion instead of browser prompt dialogs, preserving the active Slate selection before URL-field focus so inserts land in the intended rich-text range.
+  - Covered by `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`, including backend page API assertions for persisted selected-range marks.
 
 ### ✅ Rich-text list property parity
 - Extracted list content transforms into shared pure helpers so property-panel fallbacks preserve empty list rows and nested list item structure during list type changes.
@@ -478,9 +488,14 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 ### ✅ Media scope model and API contract
 - Finalized the media scope model as `global|page|post`, with `blogId` remaining a public API alias for `postId`.
 - Public/admin media filters return global assets plus assets explicitly scoped or bound to the requested page/post, while `global=true` isolates reusable global assets.
+- Public/admin `type=file` media filters now include both document and arbitrary safe `other` uploads, matching the central Files upload mode and library filter for PDFs, office files, JSON, archives, and custom downloads.
+- The editor media modal now mirrors that broad file bucket: `allowedTypes="file"`, the library File filter, and the upload File mode all include both document assets and safe `other` uploads, while the Other filter can still narrow to generic files only.
+- Public/admin media organization now includes folder path segments plus `folderAncestors` with stable folder ids, parent ids, names, and sort order, so external page builders and the editor picker can rebuild nested folder trees from media responses and persist `mediaOrganization` design state without a separate hierarchy lookup.
+- Public media file delivery and image transform redirects now emit stable `ETag` plus `x-backy-cache-revision` headers and honor `If-None-Match` with `304` responses after authorization/quarantine checks, so custom frontends can cheaply revalidate central images, fonts, documents, and optimized variants without losing Backy's delivery analytics boundary.
 - Page/post scoped uploads now require `scopeTargetId`, and admin media updates write the same scope, target, `pageIds`, and `postIds` metadata through both demo-store and DB-backed runtimes.
 - Central media bulk management can now load every asset matching the current search/type/visibility/folder/tag/usage filters and select that full loaded set before applying folder moves, visibility changes, quarantine/release, tag edits, or deletion.
 - The central Media command center now exports a copyable `backy.media-attribution-handoff.v1` block inside the media handoff manifest, packaging provider coverage, channel/source/window metrics, conversion value, missing evidence, and provider-analytics ingestion next steps for custom frontend ROI dashboards.
+- Storage secret promotion/revocation from the Media command center uses a source-guarded in-app confirmation dialog instead of browser-native confirm prompts, keeping credential rotation actions accessible and testable.
 - Covered by `npm run test:media-scope --workspace @backy/public` and `npm run typecheck --workspace @backy/public`.
 
 ### ✅ Blog post editor flow
@@ -582,22 +597,28 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - ⚠️ Responsive breakpoint editing
   - Desktop/tablet/mobile layout/content/style and layer visibility/lock overrides now persist and render publicly.
   - Group-level breakpoint reset controls now make desktop inheritance explicit for layout, layer, content, and style.
-  - Mobile and tablet persistence plus thresholded editor/public visual geometry are covered for heading, image, video, icon, box/nested-container, columns, navigation, form, comment, repeater, embed, map, interactive component, code component, one-level and multi-level nested children, select/checkbox/radio choice inputs, built-in starter page templates, frontend-design template-backed pages, collection dataset list/detail pages, and saved reusable section canvas content; still needs broader pixel-level comparison across cross-browser responsive combinations and additional composed-template permutations.
+  - Mobile and tablet persistence plus thresholded editor/public visual geometry are covered for heading, image, video, icon, box/nested-container, columns, navigation, form, comment, repeater, embed, map, interactive component, code component, one-level and multi-level nested children, select/checkbox/radio choice inputs, built-in starter page templates, frontend-design template-backed pages, collection dataset list/detail pages, hero/feature-grid/lead-capture/registration composed library presets, advanced embed/html/table library blocks, registry-backed interactive/code library presets, and saved reusable section canvas content; still needs broader pixel-level comparison across cross-browser responsive combinations and additional composed-template permutations.
 - Responsive smoke now also covers mobile/tablet columns, navigation, form, comment, repeater, embed/map, interactive/code, nested button, nested box, grandchild button, and choice-input layout overrides, reload hydration, and public preview CSS/visual geometry with clipped screenshots and hit-testing.
 - Long-session stress smoke now covers repeated keyboard edits across multiple elements, undo/redo recovery, a midpoint mobile responsive override edit, save/reload persistence, and runtime health sampling via `npm run test:editor-stress --workspace @backy-cms/admin`.
 - Public `PageRenderer` now uses the active breakpoint canvas size for tablet/mobile scaling so responsive overrides are positioned in the same coordinate system authored in the editor.
 - Editor smoke login now supports seeded admin MFA through `BACKY_EDITOR_SMOKE_MFA_CODE`, `BACKY_ADMIN_MFA_CODE`, or `BACKY_ADMIN_2FA_CODE` and seeds the httpOnly admin session cookie for browser-driven editor routes, matching the other admin smoke suites.
 - ✅ Media upload modal
+  - The shared editor media picker loads scoped page/post/global media, uploads images/videos/audio/documents/fonts/other files through the central media API, persists folder/scope/visibility/tag metadata, and now keeps folder creation reachable with inline required/duplicate-sibling validation instead of disabled-only empty-name controls.
 - ✅ Element locking
 - ⚠️ Page templates
   - Static composed library presets now exist for hero, feature-grid, lead-capture form, blog post card, latest posts, category list, and related content sections; latest posts, category list, and related content sections now seed collection-ready repeaters for dynamic archive/taxonomy/related-content widgets.
-  - Component-library presets can now carry root and child tablet/mobile responsive overrides, and the blog/content presets seed narrower-canvas geometry instead of relying on desktop-only placement after insertion.
+  - Component-library presets can now carry root and child tablet/mobile responsive overrides, and the basic text/media/layout/form/map/repeater/comment items, hero, feature-grid, lead-capture, registration, advanced embed/html/table, registry-backed interactive/code, and blog/content presets seed narrower-canvas geometry instead of relying on desktop-only placement after insertion. Source-only editor smoke now fails if any future component-library item with a default size omits `defaultResponsive`.
+  - Programmatic `createCanvasElement()` calls now clone catalog default styles, responsive overrides, and binding-slot metadata before explicit overrides, so starter pages, blog templates, site templates, and custom frontend seeds preserve the same mobile/tablet defaults as drag-in elements.
+  - Partial programmatic responsive overrides now merge with catalog defaults per breakpoint, so template code can adjust mobile/tablet position or props without dropping default responsive width/height/style metadata.
+  - Partial programmatic prop/style overrides now merge with catalog defaults, so starter fields, buttons, media, forms, and layout blocks keep baseline behavior while templates override only the values they need.
+  - Component-library insertion now merges item preset props, styles, responsive overrides, and binding slots with caller overrides before creating the element, while keeping preset children unless explicit replacement children are supplied.
+  - Page/blog creation from connected frontend templates now stores the full captured design envelope, including custom JS, assets, interactions, animation metadata, data bindings, editable maps, SEO, content-document provenance, and template metadata, in the initial content payload and frontend-design meta fields.
   - Blog/content presets now carry root and child binding-slot metadata for post title, excerpt, featured image, meta/category, link, taxonomy, and collection-record targets; the Data panel exposes those slots and can apply matching selected-collection fields as real `dataBindings` or repeater field props.
   - Selecting a composed card/section can now apply matching child binding slots across descendants in one editor history step, including named root slots that target child repeaters, repeater collection/field props, and virtual record slug/URL targets for link slots.
   - The Data panel now includes one-click composed-preset binding actions that apply matching root, named-descendant, and child binding slots together for the selected collection, clear collection bindings across the selected preset tree when editors need to remap a section, summarize slot coverage so required/matched/applied bindings are visible before publish or custom frontend handoff, copy a `backy.editor.binding-slot-coverage.v1` JSON brief for AI/custom frontend builders, copy a selected-element `backy.editor.dataset-binding.v1` brief with collection, field, target, join, preview-record, public records URL, query settings, and `backy.editor.dataset-binding-action-plan.v1`, and copy a `backy.editor.repeater-dataset.v1` brief for dynamic list section mapping, public records URL, query, layout, preview rows, and `backy.editor.repeater-dataset-action-plan.v1`.
   - Public repeaters can now render authored child templates once per hydrated record and resolve child collection `dataBindings` from the active record, while retaining the generic card fallback for non-designed repeaters.
   - Binding-slot metadata is preserved in the shared content contract and public render payload schema so custom frontend handoff can inspect intended field targets without scraping admin-only preset definitions.
-  - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree, insert saved sections as synced canvas instances, refresh a selected synced instance from its saved source, detach an instance into an independent editable copy, and expose active sections through public APIs, manifest/OpenAPI, and the SDK.
+  - Backend reusable-section APIs now persist saved canvas section patterns, the editor library can load active saved sections, save the selected element tree with reachable inline name validation, insert saved sections as synced canvas instances, refresh a selected synced instance from its saved source, detach an instance into an independent editable copy, and expose active sections through public APIs, manifest/OpenAPI, and the SDK.
   - Site frontend design contracts now persist page/blog template registries, and admin page/blog create APIs can seed editable content plus design provenance from `frontendDesignTemplateId`.
   - Blog-create smoke now exercises `frontendDesignTemplateId` handoff for captured frontend blog templates and verifies the selected template wrapper, autosave/recovery state, mobile override authoring, and persisted post metadata.
   - Reusable-section updates now expose optimistic conflict guards (`expectedVersion`/`expectedUpdatedAt`) and bounded version history through the admin versions endpoint.

@@ -59,6 +59,10 @@ const assert = (condition, message) => {
 const assertMediaRouteSourceContract = () => {
   const source = fs.readFileSync(new URL('../src/routes/media.tsx', import.meta.url), 'utf8');
   const modalSource = fs.readFileSync(new URL('../src/components/editor/MediaLibraryModal.tsx', import.meta.url), 'utf8');
+  const adminMediaApiSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/media/route.ts', import.meta.url), 'utf8');
+  const publicMediaApiSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/media/route.ts', import.meta.url), 'utf8');
+  const publicMediaResourceSource = fs.readFileSync(new URL('../../public/src/lib/publicMediaResource.ts', import.meta.url), 'utf8');
+  const openApiSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url), 'utf8');
   const editorSpec = fs.readFileSync(new URL('../../../specs/editor_complete_spec.md', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Media route must use the shared EmptyState component');
   assert(source.includes('title="No media audit records"'), 'Media library audit empty state must keep the shared title visible');
@@ -100,29 +104,89 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('Runtime storage data appears when admin settings report the current upload provider, bucket, path, and public URL.'), 'Media runtime storage empty state must explain provider metadata');
   assert(source.includes('title="No Backy delivery requests"'), 'Media asset delivery empty state must keep the shared title visible');
   assert(source.includes('title="No replacements recorded"'), 'Media asset replacement empty state must keep the shared title visible');
-  assert(source.includes('title="No page or post references"'), 'Media asset reference empty state must keep the shared title visible');
+  assert(source.includes('title="No page, post, or product references"'), 'Media asset reference empty state must keep the shared title visible');
+  assert(
+    source.includes('targetCollectionRecordIds') &&
+      source.includes('referenced_collection_records') &&
+      source.includes('mediaReferenceCount(asset)') &&
+      source.includes('product records'),
+    'Media route must count product/collection-record references beside page and post usage',
+  );
   assert(source.includes('title="No asset activity yet"'), 'Media asset activity empty state must keep the shared title visible');
   assert(source.includes('aria-labelledby="media-delete-asset-title"') && source.includes('aria-describedby="media-delete-asset-description"'), 'Media asset delete confirmation must expose accessible dialog title and description');
   assert(source.includes('aria-labelledby="media-bulk-delete-title"') && source.includes('aria-describedby="media-bulk-delete-description"'), 'Media bulk delete confirmation must expose accessible dialog title and description');
   assert(source.includes('aria-labelledby="media-delete-folder-title"') && source.includes('aria-describedby="media-delete-folder-description"'), 'Media folder delete confirmation must expose accessible dialog title and description');
+  assert(source.includes('aria-labelledby="media-storage-secret-manager-title"') && source.includes('aria-describedby="media-storage-secret-manager-description"'), 'Media storage secret manager mutation confirmation must expose accessible dialog title and description');
   assert(source.includes('aria-label={`Confirm deleting ${pendingDeleteAsset.name}`}') && source.includes('aria-label={`Cancel deleting ${pendingDeleteAsset.name}`}'), 'Media asset delete confirmation actions must have explicit labels');
   assert(source.includes('aria-label={`Confirm deleting folder ${pendingDeleteFolder.name}`}') && source.includes('aria-label={`Cancel deleting folder ${pendingDeleteFolder.name}`}'), 'Media folder delete confirmation actions must have explicit labels');
   assert(source.includes('aria-label={`Confirm deleting ${selectedMediaAssets.length} selected media asset') && source.includes('aria-label="Cancel deleting selected media"'), 'Media bulk delete confirmation actions must have explicit labels');
+  assert(
+    source.includes('const [folderCreateSubmitted, setFolderCreateSubmitted] = useState(false);') &&
+      source.includes('const [folderRenameSubmitted, setFolderRenameSubmitted] = useState(false);') &&
+      source.includes('const folderExistsAtParent = useCallback') &&
+      source.includes('data-testid="media-new-folder-name-error"') &&
+      source.includes('data-testid="media-folder-rename-error"') &&
+      source.includes("setError('Fix media folder fields before saving.')") &&
+      /disabled=\{isMediaLibraryBusy \|\| !canCreateMedia\}[\s\S]{0,450}data-testid="media-new-folder-create"/.test(source) &&
+      /disabled=\{isMediaLibraryBusy \|\| !canEditMedia\}[\s\S]{0,450}data-testid="media-folder-rename-save"/.test(source),
+    'Media folder create/rename controls must keep actions reachable and render source-guarded inline validation.',
+  );
+  assert(
+    source.includes('data-testid="media-storage-secret-manager-promote-open"') &&
+      source.includes('data-testid="media-storage-secret-manager-revoke-open"') &&
+      source.includes('data-testid="media-storage-secret-manager-confirmation"') &&
+      source.includes('data-testid="media-storage-secret-manager-confirm"') &&
+      source.includes('aria-label="Cancel storage secret manager mutation"') &&
+      source.includes("'promote' | 'revoke-replacement'"),
+    'Media storage secret manager mutations must use a testable in-app confirmation flow.',
+  );
+  assert(!source.includes('window.confirm'), 'Media route must not use browser confirm dialogs for storage or media mutations.');
   assert(source.includes('hover:bg-red-50 hover:text-red-600 focus-ring') && source.includes('text-red-600 hover:bg-red-50 focus-ring'), 'Media destructive icon controls must keep visible focus rings');
   assert(source.includes("value: 'all'") && source.includes("label: 'All files'") && source.includes('if (mode === \'all\') return true;'), 'Media upload mode controls must keep an unrestricted All files intake mode.');
   assert(source.includes('Backy accepts any file and classifies known formats for editor, API, and delivery workflows.'), 'Media upload intake rules must explain arbitrary file support.');
+  assert(
+    source.includes("const MEDIA_FILE_FILTER_TYPES = new Set<MediaAsset['type']>(['file', 'other'])") &&
+      source.includes("if (filter === 'file') return MEDIA_FILE_FILTER_TYPES.has(mediaType)") &&
+      source.includes('if (!mediaTypeMatchesFilter(file.type, typeFilter))') &&
+      source.includes("type: typeFilter === 'all' ? undefined : typeFilter"),
+    'Central Media library file filter must load and display documents plus arbitrary other safe files.',
+  );
+  assert(
+    adminMediaApiSource.includes('return { types: ["document", "other"] };') &&
+      adminMediaApiSource.includes('mediaMatchesRequestedType') &&
+      adminMediaApiSource.includes('const payload = mediaType.types') &&
+      adminMediaApiSource.includes('paginateMedia(demoMedia.media.filter((item) => mediaMatchesRequestedType(item, mediaType)), limit, offset, folders)') &&
+      publicMediaApiSource.includes("return { types: ['document', 'other'] };") &&
+      publicMediaApiSource.includes('mediaMatchesRequestedType') &&
+      publicMediaApiSource.includes('filter((item) => mediaMatchesRequestedType(item, mediaType))'),
+    'Admin and public media APIs must treat type=file as documents plus arbitrary other files.',
+  );
+  assert(
+    publicMediaResourceSource.includes('folderAncestors: Array<') &&
+      publicMediaResourceSource.includes('const folderAncestors = chain.map((folder) => ({') &&
+      publicMediaResourceSource.includes('folderAncestors,') &&
+      openApiSource.includes('"folderAncestors"') &&
+      openApiSource.includes('sortOrder: { type: "integer" }') &&
+      modalSource.includes('data-media-folder-ancestor-ids={folderAncestorIds.join'),
+    'Media organization contract must expose folder ancestor IDs for custom frontend folder-tree reconstruction.',
+  );
   assert(source.includes('buildPublicMediaListUrl') && source.includes("params.set('folderId', 'root')"), 'Media API handoff must keep root-folder-aware public media list URL generation.');
   assert(source.includes('filteredPublicMediaListUrl') && source.includes('Copy filtered') && source.includes('Filtered media list'), 'Media API panel must expose a copyable filtered public media list URL.');
-  assert(
-    source.includes("schemaVersion: 'backy.media-asset-placement.v1'") &&
-      source.includes('selectedAssetPlacementHandoff') &&
-      source.includes('data-testid="media-asset-placement-handoff"') &&
-      source.includes('copyMediaAssetPlacementHandoff') &&
-      source.includes('Copy placement') &&
-      source.includes('signedUrlEndpoint') &&
-      source.includes('responsiveManifest.srcSet'),
-    'Media details must expose a copyable selected-asset placement handoff for custom frontend/editor integrations.',
-  );
+	  assert(
+	    source.includes("schemaVersion: 'backy.media-asset-placement.v1'") &&
+	      source.includes("schemaVersion: 'backy.media-editor-binding.v1'") &&
+	      source.includes('selectedAssetPlacementHandoff') &&
+	      source.includes('data-testid="media-asset-placement-handoff"') &&
+	      source.includes('copyMediaAssetPlacementHandoff') &&
+	      source.includes('Copy placement') &&
+	      source.includes('signedUrlEndpoint') &&
+	      source.includes('responsiveManifest.srcSet') &&
+	      source.includes('editorBinding: buildMediaEditorBinding') &&
+	      source.includes('propsPatch') &&
+	      source.includes('responsiveEditableTargets') &&
+	      source.includes('bindingRequestTemplate'),
+	    'Media details must expose a copyable selected-asset placement handoff for custom frontend/editor integrations.',
+	  );
   assert(
     source.includes('const mediaMatchesCurrentFilters = useCallback') &&
       source.includes('const handleLoadAndSelectMatchingMedia = async () =>') &&
@@ -134,8 +198,29 @@ const assertMediaRouteSourceContract = () => {
   );
   assert(modalSource.includes('listMediaLibrary') && modalSource.includes("pageId: targetScope === 'page' ? targetId : undefined") && modalSource.includes("postId: targetScope === 'post' ? targetId : undefined"), 'Editor media picker must keep loading scoped media through the admin media API');
   assert(modalSource.includes('scope: targetScope') && modalSource.includes('scopeTargetId: targetId || null'), 'Editor media uploads must keep persisting page/post scope metadata');
+  assert(
+    modalSource.includes('const [newFolderSubmitted, setNewFolderSubmitted] = useState(false);') &&
+      modalSource.includes('const newFolderInlineError = useMemo') &&
+      modalSource.includes('data-testid="media-library-create-folder-name-error"') &&
+      modalSource.includes('aria-invalid={Boolean(newFolderInlineError)}') &&
+      modalSource.includes("setError('Fix media folder fields before creating.')") &&
+      /disabled=\{isUploading \|\| isCreatingFolder \|\| !canCreate\}[\s\S]{0,180}data-testid="media-library-create-folder"/.test(modalSource) &&
+      !modalSource.includes('disabled={isUploading || isCreatingFolder || !newFolderName.trim() || !canCreate}'),
+    'Editor media picker folder creation must keep Create reachable and render inline validation for organized media folders.',
+  );
+  assert(
+    modalSource.includes("const FILE_BUCKET_MEDIA_TYPES = new Set<MediaAsset['type']>(['file', 'other'])") &&
+      modalSource.includes("if (allowedTypes === 'file') return new Set(['file', 'other'])") &&
+      modalSource.includes("allowedTypes === 'any' || allowedTypes === 'file'") &&
+      modalSource.includes("if (filter === 'file') return FILE_BUCKET_MEDIA_TYPES.has(type)") &&
+      modalSource.includes("!mediaTypeMatchesFilter(item.type, libraryTypeFilter)") &&
+      modalSource.includes('mediaTypeMatchesFilter(resolvedType, filterHint)'),
+    'Editor media picker must treat allowedTypes=file and the file filter as documents plus arbitrary other safe files.',
+  );
   assert(!editorSpec.includes('shared in-memory store state inside admin'), 'Editor spec must not regress to stale in-memory media contract language');
   assert(editorSpec.includes('The finalized media scope model is `global|page|post`'), 'Editor spec must document the finalized media scope model');
+  assert(editorSpec.includes('Public/admin `type=file` media filters now include both document and arbitrary safe `other` uploads'), 'Editor spec must document broad file filter parity for custom frontend file pickers');
+  assert(editorSpec.includes('keeps folder creation reachable with inline required/duplicate-sibling validation'), 'Editor spec must document reachable folder validation in the shared media picker.');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

@@ -94,6 +94,8 @@ export function PageSettingsModal({
     const [settings, setSettings] = useState<PageSettings>(initialSettings);
     const [activeTab, setActiveTab] = useState<'general' | 'seo' | 'social'>('general');
     const [validationError, setValidationError] = useState<string | null>(null);
+    const [settingsSubmitted, setSettingsSubmitted] = useState(false);
+    const [jsonLdInlineError, setJsonLdInlineError] = useState<string | null>(null);
     const [jsonLdText, setJsonLdText] = useState(() => formatJsonLd(initialSettings.meta.jsonLd));
     const [keywordDraft, setKeywordDraft] = useState('');
     const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -104,6 +106,8 @@ export function PageSettingsModal({
         setJsonLdText(formatJsonLd(initialSettings.meta.jsonLd));
         setKeywordDraft('');
         setValidationError(null);
+        setSettingsSubmitted(false);
+        setJsonLdInlineError(null);
         setIsSavingSettings(false);
     }, [initialSettings, isOpen]);
 
@@ -115,10 +119,24 @@ export function PageSettingsModal({
         () => validateSettings?.(settings) || null,
         [settings, validateSettings],
     );
+    const showSettingsValidation = Boolean(settingsSubmitted && settingsValidation);
+    const titleInlineError = showSettingsValidation && settingsValidation && /title/i.test(settingsValidation)
+        ? settingsValidation
+        : null;
+    const slugInlineError = showSettingsValidation && settingsValidation && /(slug|url|route|path|\/)/i.test(settingsValidation)
+        ? settingsValidation
+        : null;
+    const generalInlineError = showSettingsValidation && !titleInlineError && !slugInlineError
+        ? settingsValidation
+        : null;
+    const scheduledAtInlineError = settingsSubmitted && settings.status === 'scheduled' && !settings.scheduledAt
+        ? 'Choose a publish date before scheduling this page.'
+        : null;
 
     if (!isOpen) return null;
 
     const handleSave = async () => {
+        setSettingsSubmitted(true);
         if (isSavingSettings) {
             return;
         }
@@ -135,24 +153,27 @@ export function PageSettingsModal({
 
         if (settings.status === 'scheduled' && !settings.scheduledAt) {
             setValidationError('Choose a publish date before scheduling this page.');
+            setActiveTab('general');
             return;
         }
 
         const parsedJsonLd = parseJsonLd(jsonLdText);
         if (!parsedJsonLd.ok) {
             setValidationError(parsedJsonLd.message);
+            setJsonLdInlineError(parsedJsonLd.message);
             setActiveTab('seo');
             return;
         }
 
         if (settingsValidation) {
-            setValidationError(settingsValidation);
+            setValidationError(null);
             setActiveTab('general');
             return;
         }
 
         setIsSavingSettings(true);
         setValidationError(null);
+        setJsonLdInlineError(null);
 
         try {
             const finalKeywords = normalizeKeywords([...keywords, keywordDraft]);
@@ -164,6 +185,7 @@ export function PageSettingsModal({
                     jsonLd: parsedJsonLd.value,
                 },
             }));
+            setSettingsSubmitted(false);
             onClose();
         } catch (error) {
             setValidationError(error instanceof Error ? error.message : 'Unable to save page settings.');
@@ -278,13 +300,27 @@ export function PageSettingsModal({
                                 <input
                                     type="text"
                                     value={settings.title}
-                                    onChange={(e) => setSettings({ ...settings, title: e.target.value })}
+                                    onChange={(e) => {
+                                        setValidationError(null);
+                                        setSettings({ ...settings, title: e.target.value });
+                                    }}
                                     disabled={!canEdit}
                                     title={canEdit ? undefined : editDisabledReason}
+                                    aria-invalid={Boolean(titleInlineError)}
+                                    aria-describedby={titleInlineError ? 'page-settings-title-error' : undefined}
                                     className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     placeholder="e.g. valid-title"
                                     data-testid="page-settings-title"
                                 />
+                                {titleInlineError && (
+                                    <p
+                                        id="page-settings-title-error"
+                                        className="mt-1 text-xs text-amber-700"
+                                        data-testid="page-settings-title-error"
+                                    >
+                                        {titleInlineError}
+                                    </p>
+                                )}
                             </div>
 
                             <div>
@@ -296,18 +332,36 @@ export function PageSettingsModal({
                                     <input
                                         type="text"
                                         value={settings.slug}
-                                        onChange={(e) => setSettings({ ...settings, slug: e.target.value })}
+                                        onChange={(e) => {
+                                            setValidationError(null);
+                                            setSettings({ ...settings, slug: e.target.value });
+                                        }}
                                         disabled={!canEdit}
                                         title={canEdit ? undefined : editDisabledReason}
+                                        aria-invalid={Boolean(slugInlineError)}
+                                        aria-describedby={slugInlineError ? 'page-settings-slug-error' : undefined}
                                         className="flex-1 px-3 py-2 border rounded-r-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                         placeholder="about-us"
                                         data-testid="page-settings-slug"
                                     />
                                 </div>
+                                {slugInlineError && (
+                                    <p
+                                        id="page-settings-slug-error"
+                                        className="mt-1 text-xs text-amber-700"
+                                        data-testid="page-settings-slug-error"
+                                    >
+                                        {slugInlineError}
+                                    </p>
+                                )}
                             </div>
-                            {settingsValidation && (
-                                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                                    {settingsValidation}
+                            {generalInlineError && (
+                                <div
+                                    className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
+                                    data-testid="page-settings-general-error"
+                                    role="alert"
+                                >
+                                    {generalInlineError}
                                 </div>
                             )}
 
@@ -349,9 +403,20 @@ export function PageSettingsModal({
                                         onFocus={() => setValidationError(null)}
                                         disabled={!canEdit || !canPublish}
                                         title={!canEdit ? editDisabledReason : !canPublish ? publishDisabledReason : undefined}
+                                        aria-invalid={Boolean(scheduledAtInlineError)}
+                                        aria-describedby={scheduledAtInlineError ? 'page-settings-scheduled-at-error' : undefined}
                                         className="w-full px-3 py-2 border rounded-md bg-background focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                         data-testid="page-settings-scheduled-at"
                                     />
+                                    {scheduledAtInlineError && (
+                                        <p
+                                            id="page-settings-scheduled-at-error"
+                                            className="mt-1 text-xs text-amber-700"
+                                            data-testid="page-settings-scheduled-at-error"
+                                        >
+                                            {scheduledAtInlineError}
+                                        </p>
+                                    )}
                                     <p className="mt-1 text-xs text-muted-foreground">
                                         Scheduled pages go live automatically after this time.
                                     </p>
@@ -477,15 +542,27 @@ export function PageSettingsModal({
                                     value={jsonLdText}
                                     onChange={(e) => {
                                         setValidationError(null);
+                                        setJsonLdInlineError(null);
                                         setJsonLdText(e.target.value);
                                     }}
                                     rows={6}
                                     disabled={!canEdit}
                                     title={canEdit ? undefined : editDisabledReason}
+                                    aria-invalid={Boolean(jsonLdInlineError)}
+                                    aria-describedby={jsonLdInlineError ? 'page-settings-json-ld-error' : undefined}
                                     className="w-full px-3 py-2 border rounded-md bg-background font-mono text-xs leading-5 focus:ring-1 focus:ring-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                                     placeholder='[{"@context":"https://schema.org","@type":"WebPage"}]'
                                     data-testid="page-settings-json-ld"
                                 />
+                                {jsonLdInlineError && (
+                                    <p
+                                        id="page-settings-json-ld-error"
+                                        className="mt-1 text-xs text-amber-700"
+                                        data-testid="page-settings-json-ld-error"
+                                    >
+                                        {jsonLdInlineError}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -577,7 +654,7 @@ export function PageSettingsModal({
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={Boolean(settingsValidation) || isSavingSettings || !canEdit}
+                        disabled={isSavingSettings || !canEdit}
                         title={canEdit ? undefined : editDisabledReason}
                         className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md disabled:cursor-not-allowed disabled:opacity-50"
                         data-testid="page-settings-save"

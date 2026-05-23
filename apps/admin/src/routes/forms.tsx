@@ -633,8 +633,27 @@ const FORM_ACCOUNT_HANDOFF_STEPS = [
   {
     key: 'profile',
     title: 'Profile handoff',
-    detail: 'Route approved values into Contacts or a mapped collection today; auth/session provisioning stays a dedicated user-account milestone.',
+    detail: 'Route approved values into Contacts or a mapped collection today, then use the Users/Auth provider handoff for credentialed member sessions.',
   },
+] as const;
+
+const FORM_ACCOUNT_REGISTRATION_HANDOFF_SCHEMA_VERSION = 'backy.form-account-registration-handoff.v1';
+
+const FORM_ACCOUNT_REGISTRATION_BINDINGS = [
+  { key: 'registration.identity', target: 'form fields', fields: ['full_name', 'email', 'phone'] },
+  { key: 'registration.memberType', target: 'member segmentation', fields: ['member_type'] },
+  { key: 'registration.consent', target: 'consent evidence', fields: ['consent', 'request_id', 'source_form_id'] },
+  { key: 'contact.review', target: 'Contacts review pipeline', fields: ['name', 'email', 'phone', 'notes', 'status'] },
+  { key: 'profile.collection', target: 'optional member profile collection record', fields: ['name', 'email', 'member_type', 'source_submission_id'] },
+] as const;
+
+const FORM_ACCOUNT_REGISTRATION_ACTIONS = [
+  { key: 'create-registration-form', route: '/forms', templateId: 'registration' },
+  { key: 'create-registration-page', route: '/pages/new', template: 'registration' },
+  { key: 'review-submissions', route: '/forms', endpoint: 'selectedAdminInbox' },
+  { key: 'review-contacts', route: '/contacts' },
+  { key: 'promote-member-profile', route: '/contacts', endpoint: 'promoteCustomer' },
+  { key: 'configure-member-auth', route: '/users' },
 ] as const;
 
 const FORM_PERSISTENCE_CERTIFICATION_CHECKS = [
@@ -872,6 +891,7 @@ function FormsRoute() {
   const [formsAuditLogs, setFormsAuditLogs] = useState<AdminAuditLog[]>([]);
   const [selectedFormId, setSelectedFormId] = useState<string | null>(routeSearch.formId || null);
   const [formDraft, setFormDraft] = useState<FormDefinition | null>(null);
+  const [formDraftSubmitted, setFormDraftSubmitted] = useState(false);
   const [newFormFieldType, setNewFormFieldType] = useState<FormFieldType>('text');
   const [formSearchQuery, setFormSearchQuery] = useState(routeSearch.q || '');
   const [formSourceFilter, setFormSourceFilter] = useState<FormSourceFilter>(routeSearch.source || 'all');
@@ -962,6 +982,18 @@ function FormsRoute() {
   const formDraftTargetCollectionWritable = Boolean(
     formDraftTargetCollection?.status === 'published' && formDraftTargetCollection.permissions.publicCreate,
   );
+  const formDraftInlineErrors = useMemo(() => (
+    formDraftSubmitted && formDraft ? buildFormDraftInlineErrors(formDraft, collections) : {}
+  ), [collections, formDraft, formDraftSubmitted]);
+  const formDraftInlineError = (key: string): string | undefined => formDraftInlineErrors[key];
+  const formDraftInputClassName = (key: string, className: string): string => cn(
+    className,
+    formDraftInlineError(key) && 'border-destructive focus:ring-destructive',
+  );
+  const formDraftErrorProps = (key: string) => ({
+    'aria-invalid': Boolean(formDraftInlineError(key)),
+    'aria-describedby': formDraftInlineError(key) ? `${key}-error` : undefined,
+  });
   const selectedFormDefinitionUrl = selectedForm
     ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/definition`
     : '';
@@ -1464,6 +1496,66 @@ function FormsRoute() {
     selectedDeliveryMetrics,
     selectedForm,
   ]);
+  const formsAccountRegistrationHandoff = useMemo(() => ({
+    schemaVersion: FORM_ACCOUNT_REGISTRATION_HANDOFF_SCHEMA_VERSION,
+    generatedAt: new Date().toISOString(),
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: activeSite?.slug,
+    },
+    template: {
+      id: REGISTRATION_FORM_TEMPLATE.id,
+      title: REGISTRATION_FORM_TEMPLATE.title,
+      pageTemplate: REGISTRATION_FORM_TEMPLATE.pageTemplate,
+      requiredFields: REGISTRATION_FORM_TEMPLATE.fields
+        .filter((field) => field.required)
+        .map((field) => field.key),
+      contactShare: REGISTRATION_FORM_TEMPLATE.contactShare,
+    },
+    pageTemplates: {
+      registration: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
+      memberLogin: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
+      memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
+    },
+    publicApis: {
+      formsCatalog: formsListUrl,
+      registrationDefinition: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/{registrationFormId}/definition`,
+      registrationSubmit: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/forms/{registrationFormId}/submissions`,
+    },
+    privateReviewApis: {
+      selectedInbox: selectedForm
+        ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(selectedForm.id)}/submissions?limit=100`
+        : '',
+      selectedContacts: selectedFormContactsUrl,
+      contactsWorkspace: `/contacts?siteId=${encodeURIComponent(activeSiteId)}`,
+      usersWorkspace: `/users?siteId=${encodeURIComponent(activeSiteId)}`,
+    },
+    bindings: FORM_ACCOUNT_REGISTRATION_BINDINGS,
+    actionBindings: FORM_ACCOUNT_REGISTRATION_ACTIONS,
+    providerGate: {
+      status: 'provider-gated',
+      usersRoute: `/users?siteId=${encodeURIComponent(activeSiteId)}`,
+      settingsRoute: '/settings?tab=infrastructure',
+      requiredFor: ['credentialed-public-member-sessions', 'member-password-reset', 'member-email-verification', 'protected-member-routes'],
+      boundary: 'Forms captures and validates registration values; Contacts/Collections review them; Users/Auth enforces credentialed member sessions.',
+    },
+    privacy: {
+      includesSubmissionValues: false,
+      includesContactIdentity: false,
+      excludes: ['raw submission values', 'raw contact values', 'private admin users', 'session cookies', 'auth provider secrets', 'invite tokens', 'reset tokens'],
+      note: 'Use public form APIs for visitor capture, private Forms/Contacts APIs for review, and Users/Auth provider readiness before enforcing member sessions.',
+    },
+  }), [
+    activeSite?.name,
+    activeSite?.slug,
+    activeSiteId,
+    adminBaseUrl,
+    formsListUrl,
+    publicBaseUrl,
+    selectedForm,
+    selectedFormContactsUrl,
+  ]);
   const formsHandoff = useMemo(() => ({
     site: {
       id: activeSiteId,
@@ -1509,8 +1601,9 @@ function FormsRoute() {
         .map((field) => field.key),
       contactShare: REGISTRATION_FORM_TEMPLATE.contactShare,
       handoffSteps: FORM_ACCOUNT_HANDOFF_STEPS,
+      frontendHandoff: formsAccountRegistrationHandoff,
       currentCapability: 'Backy can capture, moderate, export, and route registration submissions into contacts or collections.',
-      remainingAccountMilestone: 'Authenticated member accounts, password/session lifecycle, and role assignment are still handled by the Users/Auth roadmap.',
+      providerGate: 'Credentialed member accounts, password/session lifecycle, and protected routes are enforced through the Users/Auth provider handoff.',
     },
     persistenceCertification: formPersistenceCertification,
     selectedFormLaunchReadiness,
@@ -1615,6 +1708,7 @@ function FormsRoute() {
     formDestinationFilter,
     formPersistenceCertification,
     formsTemplatePack,
+    formsAccountRegistrationHandoff,
     formCommandReadiness.checks,
     formCommandReadiness.score,
     formReadinessFilter,
@@ -1641,6 +1735,7 @@ function FormsRoute() {
   const formPersistenceOperatorGate = formPersistenceCertification.operatorGate || FORM_PERSISTENCE_OPERATOR_GATE;
   const formPersistenceCertificationText = useMemo(() => JSON.stringify(formPersistenceCertification, null, 2), [formPersistenceCertification]);
   const formsHandoffText = useMemo(() => JSON.stringify(formsHandoff, null, 2), [formsHandoff]);
+  const formsAccountRegistrationHandoffText = useMemo(() => JSON.stringify(formsAccountRegistrationHandoff, null, 2), [formsAccountRegistrationHandoff]);
   const formsRouteSearch = useMemo<FormsSearch>(() => ({
     siteId: activeSiteId,
     ...(selectedFormId ? { formId: selectedFormId } : {}),
@@ -2074,6 +2169,7 @@ function FormsRoute() {
 
   useEffect(() => {
     setFormDraft(selectedForm ? cloneFormDefinition(selectedForm) : null);
+    setFormDraftSubmitted(false);
     setCreatedEmbedSectionId(null);
   }, [selectedForm]);
 
@@ -2363,6 +2459,14 @@ function FormsRoute() {
       return;
     }
 
+    setFormDraftSubmitted(true);
+    const draftInlineErrors = buildFormDraftInlineErrors(formDraft, collections);
+    if (Object.keys(draftInlineErrors).length > 0) {
+      setError('Fix form builder fields before saving.');
+      setNotice(null);
+      return;
+    }
+
     const payload = buildFormUpdatePayload(formDraft);
     if (!payload.name.trim()) {
       setError('Form name is required.');
@@ -2400,6 +2504,7 @@ function FormsRoute() {
         };
       });
       setFormDraft(cloneFormDefinition(updated));
+      setFormDraftSubmitted(false);
       setNotice('Form settings and fields saved.');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save form');
@@ -3333,10 +3438,21 @@ function FormsRoute() {
             <div>
               <h3 className="text-sm font-semibold">Registration/account handoff</h3>
               <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Backy can run signup-style public forms today: render the registration schema, capture consent, review submissions, and route approved values into contacts or collections. Authenticated member accounts remain a separate Users/Auth milestone.
+                Backy can run signup-style public forms today: render the registration schema, capture consent, review submissions, route approved values into contacts or collections, and hand credentialed sessions to Users/Auth provider enforcement.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void copyFormApiText(formsAccountRegistrationHandoffText, 'Registration account handoff')}
+                disabled={isFormsBusy || !canExportForms}
+                title={!canExportForms ? exportPermissionTitle : undefined}
+                iconStart={<Copy className="size-4" />}
+                data-testid="forms-account-registration-handoff-copy-button"
+              >
+                Copy account handoff
+              </Button>
               <Button
                 size="sm"
                 variant="primary"
@@ -3370,6 +3486,29 @@ function FormsRoute() {
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">{step.detail}</p>
               </div>
             ))}
+          </div>
+          <div data-testid="forms-account-registration-handoff" className="mt-4 rounded-lg border border-border bg-card p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">Custom frontend account handoff</div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {FORM_ACCOUNT_REGISTRATION_HANDOFF_SCHEMA_VERSION} packages registration form APIs, page templates, review endpoints, account bindings, provider gates, and privacy limits for member signup flows.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {formsAccountRegistrationHandoff.providerGate.status}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <FormMetaTile label="Bindings" value={`${FORM_ACCOUNT_REGISTRATION_BINDINGS.length}`} />
+              <FormMetaTile label="Actions" value={`${FORM_ACCOUNT_REGISTRATION_ACTIONS.length}`} />
+              <FormMetaTile label="Privacy" value={formsAccountRegistrationHandoff.privacy.includesSubmissionValues ? 'values included' : 'values excluded'} />
+            </div>
+            <div className="mt-3 grid gap-2 lg:grid-cols-3">
+              <ApiSnippet label="Registration definition" value={formsAccountRegistrationHandoff.publicApis.registrationDefinition} />
+              <ApiSnippet label="Registration submit" value={formsAccountRegistrationHandoff.publicApis.registrationSubmit} />
+              <ApiSnippet label="Users/Auth handoff" value={formsAccountRegistrationHandoff.providerGate.usersRoute} />
+            </div>
           </div>
         </div>
 
@@ -4456,7 +4595,10 @@ function FormsRoute() {
                           )}
                           <Button
                             variant="outline"
-                            onClick={() => setFormDraft(cloneFormDefinition(selectedForm))}
+                            onClick={() => {
+                              setFormDraft(cloneFormDefinition(selectedForm));
+                              setFormDraftSubmitted(false);
+                            }}
                             disabled={isFormsBusy || !formDraftDirty || !canEditForms}
                             title={!canEditForms ? editPermissionTitle : undefined}
                           >
@@ -4467,6 +4609,7 @@ function FormsRoute() {
                             disabled={isFormsBusy || !selectedFormIsStandalone || !formDraftDirty || !canEditForms}
                             title={!canEditForms ? editPermissionTitle : undefined}
                             iconStart={<Save className="size-4" />}
+                            data-testid="form-builder-save-button"
                           >
                             {isSavingForm ? 'Saving...' : 'Save form'}
                           </Button>
@@ -4498,7 +4641,17 @@ function FormsRoute() {
                             <input
                               value={formDraft.name}
                               onChange={(event) => patchFormDraft({ name: event.target.value })}
-                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              className={formDraftInputClassName(
+                                'form-builder-name',
+                                'min-h-10 rounded-lg border border-border bg-card px-3 py-2 font-mono text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+                              )}
+                              data-testid="form-builder-name-input"
+                              {...formDraftErrorProps('form-builder-name')}
+                            />
+                            <FormBuilderInlineError
+                              id="form-builder-name-error"
+                              error={formDraftInlineError('form-builder-name')}
+                              testId="form-builder-name-error"
                             />
                           </label>
                           <label className="grid gap-1.5 text-sm font-medium lg:col-span-2">
@@ -4550,7 +4703,17 @@ function FormsRoute() {
                               value={formDraft.successRedirectUrl || ''}
                               onChange={(event) => patchFormDraft({ successRedirectUrl: event.target.value })}
                               placeholder="/thanks"
-                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              className={formDraftInputClassName(
+                                'form-builder-success-redirect',
+                                'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+                              )}
+                              data-testid="form-builder-success-redirect-input"
+                              {...formDraftErrorProps('form-builder-success-redirect')}
+                            />
+                            <FormBuilderInlineError
+                              id="form-builder-success-redirect-error"
+                              error={formDraftInlineError('form-builder-success-redirect')}
+                              testId="form-builder-success-redirect-error"
                             />
                           </label>
                           <label className="grid gap-1.5 text-sm font-medium">
@@ -4561,7 +4724,16 @@ function FormsRoute() {
                               onChange={(event) => patchFormDraft({ notificationEmail: event.target.value })}
                               placeholder="leads@example.com"
                               data-testid="form-notification-email-input"
-                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              className={formDraftInputClassName(
+                                'form-builder-notification-email',
+                                'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+                              )}
+                              {...formDraftErrorProps('form-builder-notification-email')}
+                            />
+                            <FormBuilderInlineError
+                              id="form-builder-notification-email-error"
+                              error={formDraftInlineError('form-builder-notification-email')}
+                              testId="form-builder-notification-email-error"
                             />
                           </label>
                           <label className="grid gap-1.5 text-sm font-medium">
@@ -4572,7 +4744,16 @@ function FormsRoute() {
                               onChange={(event) => patchFormDraft({ notificationWebhook: event.target.value })}
                               placeholder="https://example.com/backy/forms"
                               data-testid="form-notification-webhook-input"
-                              className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+                              className={formDraftInputClassName(
+                                'form-builder-notification-webhook',
+                                'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+                              )}
+                              {...formDraftErrorProps('form-builder-notification-webhook')}
+                            />
+                            <FormBuilderInlineError
+                              id="form-builder-notification-webhook-error"
+                              error={formDraftInlineError('form-builder-notification-webhook')}
+                              testId="form-builder-notification-webhook-error"
                             />
                           </label>
                         </div>
@@ -4721,13 +4902,18 @@ function FormsRoute() {
                                 </span>
                               </span>
                             </label>
-                            {!formDraft.contactShare.emailField && !formDraft.contactShare.phoneField ? (
-                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                                Map an email or phone field before relying on contact creation.
-                              </div>
-                            ) : null}
-                          </div>
-                        )}
+	                            {!formDraft.contactShare.emailField && !formDraft.contactShare.phoneField ? (
+	                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+	                                Map an email or phone field before relying on contact creation.
+	                              </div>
+	                            ) : null}
+                            <FormBuilderInlineError
+                              id="form-builder-contact-share-error"
+                              error={formDraftInlineError('form-builder-contact-share')}
+                              testId="form-builder-contact-share-error"
+                            />
+	                          </div>
+	                        )}
 
                         <div data-testid="form-spam-settings-panel" className="rounded-lg border border-border bg-muted/30 p-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -4749,11 +4935,20 @@ function FormsRoute() {
                                 min={0}
                                 max={120000}
                                 value={readFormSpamSettings(formDraft).minFillMs}
-                                onChange={(event) => patchFormDraftSpamSettings({ minFillMs: Number(event.target.value) })}
-                                data-testid="form-spam-min-fill-ms-input"
-                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+	                                onChange={(event) => patchFormDraftSpamSettings({ minFillMs: Number(event.target.value) })}
+	                                data-testid="form-spam-min-fill-ms-input"
+	                                className={formDraftInputClassName(
+	                                  'form-builder-spam-min-fill-ms',
+	                                  'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+	                                )}
+	                                {...formDraftErrorProps('form-builder-spam-min-fill-ms')}
+	                              />
+                              <FormBuilderInlineError
+                                id="form-builder-spam-min-fill-ms-error"
+                                error={formDraftInlineError('form-builder-spam-min-fill-ms')}
+                                testId="form-builder-spam-min-fill-ms-error"
                               />
-                            </label>
+	                            </label>
                             <label className="grid gap-1.5 text-sm font-medium">
                               Rate window sec
                               <input
@@ -4761,11 +4956,20 @@ function FormsRoute() {
                                 min={1}
                                 max={86400}
                                 value={Math.round(readFormSpamSettings(formDraft).rateLimitWindowMs / 1000)}
-                                onChange={(event) => patchFormDraftSpamSettings({ rateLimitWindowMs: Number(event.target.value) * 1000 })}
-                                data-testid="form-spam-rate-window-seconds-input"
-                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+	                                onChange={(event) => patchFormDraftSpamSettings({ rateLimitWindowMs: Number(event.target.value) * 1000 })}
+	                                data-testid="form-spam-rate-window-seconds-input"
+	                                className={formDraftInputClassName(
+	                                  'form-builder-spam-rate-window',
+	                                  'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+	                                )}
+	                                {...formDraftErrorProps('form-builder-spam-rate-window')}
+	                              />
+                              <FormBuilderInlineError
+                                id="form-builder-spam-rate-window-error"
+                                error={formDraftInlineError('form-builder-spam-rate-window')}
+                                testId="form-builder-spam-rate-window-error"
                               />
-                            </label>
+	                            </label>
                             <label className="grid gap-1.5 text-sm font-medium">
                               Max submissions
                               <input
@@ -4773,11 +4977,20 @@ function FormsRoute() {
                                 min={1}
                                 max={1000}
                                 value={readFormSpamSettings(formDraft).rateLimitMax}
-                                onChange={(event) => patchFormDraftSpamSettings({ rateLimitMax: Number(event.target.value) })}
-                                data-testid="form-spam-rate-limit-max-input"
-                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+	                                onChange={(event) => patchFormDraftSpamSettings({ rateLimitMax: Number(event.target.value) })}
+	                                data-testid="form-spam-rate-limit-max-input"
+	                                className={formDraftInputClassName(
+	                                  'form-builder-spam-rate-limit-max',
+	                                  'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+	                                )}
+	                                {...formDraftErrorProps('form-builder-spam-rate-limit-max')}
+	                              />
+                              <FormBuilderInlineError
+                                id="form-builder-spam-rate-limit-max-error"
+                                error={formDraftInlineError('form-builder-spam-rate-limit-max')}
+                                testId="form-builder-spam-rate-limit-max-error"
                               />
-                            </label>
+	                            </label>
                             <label className="grid gap-1.5 text-sm font-medium">
                               Duplicate window sec
                               <input
@@ -4785,11 +4998,20 @@ function FormsRoute() {
                                 min={1}
                                 max={86400}
                                 value={Math.round(readFormSpamSettings(formDraft).duplicateWindowMs / 1000)}
-                                onChange={(event) => patchFormDraftSpamSettings({ duplicateWindowMs: Number(event.target.value) * 1000 })}
-                                data-testid="form-spam-duplicate-window-seconds-input"
-                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+	                                onChange={(event) => patchFormDraftSpamSettings({ duplicateWindowMs: Number(event.target.value) * 1000 })}
+	                                data-testid="form-spam-duplicate-window-seconds-input"
+	                                className={formDraftInputClassName(
+	                                  'form-builder-spam-duplicate-window',
+	                                  'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+	                                )}
+	                                {...formDraftErrorProps('form-builder-spam-duplicate-window')}
+	                              />
+                              <FormBuilderInlineError
+                                id="form-builder-spam-duplicate-window-error"
+                                error={formDraftInlineError('form-builder-spam-duplicate-window')}
+                                testId="form-builder-spam-duplicate-window-error"
                               />
-                            </label>
+	                            </label>
                           </div>
                           <label className="mt-3 grid gap-1.5 text-sm font-medium">
                             Blocked terms
@@ -4836,22 +5058,40 @@ function FormsRoute() {
                                 min={0}
                                 max={3650}
                                 value={readFormConsentSettings(formDraft).deleteAfterDays}
-                                onChange={(event) => patchFormDraftConsentSettings({ deleteAfterDays: Number(event.target.value) })}
-                                data-testid="form-consent-delete-after-days-input"
-                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+	                                onChange={(event) => patchFormDraftConsentSettings({ deleteAfterDays: Number(event.target.value) })}
+	                                data-testid="form-consent-delete-after-days-input"
+	                                className={formDraftInputClassName(
+	                                  'form-builder-consent-delete-after-days',
+	                                  'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+	                                )}
+	                                {...formDraftErrorProps('form-builder-consent-delete-after-days')}
+	                              />
+                              <FormBuilderInlineError
+                                id="form-builder-consent-delete-after-days-error"
+                                error={formDraftInlineError('form-builder-consent-delete-after-days')}
+                                testId="form-builder-consent-delete-after-days-error"
                               />
-                            </label>
+	                            </label>
                             <label className="grid gap-1.5 text-sm font-medium xl:col-span-2">
                               Privacy request email
                               <input
                                 type="email"
                                 value={readFormConsentSettings(formDraft).requestEmail || ''}
-                                onChange={(event) => patchFormDraftConsentSettings({ requestEmail: event.target.value })}
-                                data-testid="form-consent-request-email-input"
-                                placeholder="privacy@example.com"
-                                className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring"
+	                                onChange={(event) => patchFormDraftConsentSettings({ requestEmail: event.target.value })}
+	                                data-testid="form-consent-request-email-input"
+	                                placeholder="privacy@example.com"
+	                                className={formDraftInputClassName(
+	                                  'form-builder-consent-request-email',
+	                                  'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:ring-2 focus:ring-ring',
+	                                )}
+	                                {...formDraftErrorProps('form-builder-consent-request-email')}
+	                              />
+                              <FormBuilderInlineError
+                                id="form-builder-consent-request-email-error"
+                                error={formDraftInlineError('form-builder-consent-request-email')}
+                                testId="form-builder-consent-request-email-error"
                               />
-                            </label>
+	                            </label>
                           </div>
                           <label className="mt-3 grid gap-1.5 text-sm font-medium">
                             Policy label
@@ -4912,11 +5152,15 @@ function FormsRoute() {
                                       collectionId: event.target.value,
                                       fieldMap: buildDefaultCollectionFieldMap(formDraft, nextCollection),
                                     });
-                                  }}
-                                  disabled={!canEditForms || !canUseCollectionTargets}
-                                  className="min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                                  aria-label="Collection target collection"
-                                >
+	                                  }}
+	                                  disabled={!canEditForms || !canUseCollectionTargets}
+	                                  className={formDraftInputClassName(
+	                                    'form-builder-collection-target',
+	                                    'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60',
+	                                  )}
+	                                  aria-label="Collection target collection"
+	                                  {...formDraftErrorProps('form-builder-collection-target')}
+	                                >
                                   <option value="">Select collection</option>
                                   {formDraftTargetCollection && !formDraftTargetCollectionWritable ? (
                                     <option value={formDraftTargetCollection.id}>
@@ -4977,12 +5221,17 @@ function FormsRoute() {
                                 ))}
                               </div>
                             ) : (
-                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                                {collectionTargetUnavailableReason || 'Select a published public-create collection before mapping writes.'}
-                              </div>
-                            )}
-                          </div>
-                        )}
+	                              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+	                                {collectionTargetUnavailableReason || 'Select a published public-create collection before mapping writes.'}
+	                              </div>
+	                            )}
+                            <FormBuilderInlineError
+                              id="form-builder-collection-target-error"
+                              error={formDraftInlineError('form-builder-collection-target')}
+                              testId="form-builder-collection-target-error"
+                            />
+	                          </div>
+	                        )}
 
                         <div className="rounded-lg border border-border bg-muted/30 p-3">
                           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -5008,33 +5257,63 @@ function FormsRoute() {
                               <Button size="sm" variant="outline" onClick={() => addFormDraftField()} disabled={!canEditForms} title={!canEditForms ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>
                                 Add field
                               </Button>
-                            </div>
-                          </div>
-                          <div className="mt-3 grid gap-3">
-                            {formDraft.fields.map((field, fieldIndex) => {
-                              const fieldType = normalizeFormFieldType(field.type);
-                              const fieldValidationRuleDefinitions = getFormFieldValidationRuleDefinitions(fieldType);
-                              const fieldValidationCount = normalizeValidationRules({ ...field, type: fieldType })?.length || 0;
+	                            </div>
+	                          </div>
+                          <FormBuilderInlineError
+                            id="form-builder-fields-error"
+                            error={formDraftInlineError('form-builder-fields')}
+                            testId="form-builder-fields-error"
+                          />
+	                          <div className="mt-3 grid gap-3">
+	                            {formDraft.fields.map((field, fieldIndex) => {
+	                              const fieldType = normalizeFormFieldType(field.type);
+	                              const fieldValidationRuleDefinitions = getFormFieldValidationRuleDefinitions(fieldType);
+	                              const fieldValidationCount = normalizeValidationRules({ ...field, type: fieldType })?.length || 0;
+                              const fieldKeyErrorKey = `form-builder-field-${fieldIndex}-key`;
+                              const fieldLabelErrorKey = `form-builder-field-${fieldIndex}-label`;
+                              const fieldDefaultErrorKey = `form-builder-field-${fieldIndex}-default`;
+                              const fieldOptionsErrorKey = `form-builder-field-${fieldIndex}-options`;
+                              const fieldValidationErrorKey = `form-builder-field-${fieldIndex}-validation`;
 
-                              return (
-                                <div key={`${field.key}-${fieldIndex}`} className="rounded-lg border border-border bg-card p-3">
-                                <div className="grid gap-3 xl:grid-cols-[minmax(120px,0.8fr)_minmax(140px,1fr)_140px_110px_auto]">
-                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+	                              return (
+	                                <div key={`${field.key}-${fieldIndex}`} className="rounded-lg border border-border bg-card p-3">
+	                                <div className="grid gap-3 xl:grid-cols-[minmax(120px,0.8fr)_minmax(140px,1fr)_140px_110px_auto]">
+	                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
                                     Key
-                                    <input
-                                      value={field.key}
-                                      onChange={(event) => patchFormDraftField(fieldIndex, { key: normalizeFieldKey(event.target.value) })}
-                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+	                                    <input
+	                                      value={field.key}
+	                                      onChange={(event) => patchFormDraftField(fieldIndex, { key: normalizeFieldKey(event.target.value) })}
+	                                      className={formDraftInputClassName(
+	                                        fieldKeyErrorKey,
+	                                        'min-h-10 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring',
+	                                      )}
+                                        data-testid={`form-builder-field-${fieldIndex}-key-input`}
+                                        {...formDraftErrorProps(fieldKeyErrorKey)}
+	                                    />
+                                    <FormBuilderInlineError
+                                      id={`${fieldKeyErrorKey}-error`}
+                                      error={formDraftInlineError(fieldKeyErrorKey)}
+                                      testId={`${fieldKeyErrorKey}-error`}
                                     />
-                                  </label>
-                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                                    Label
-                                    <input
-                                      value={field.label}
-                                      onChange={(event) => patchFormDraftField(fieldIndex, { label: event.target.value })}
-                                      className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+	                                  </label>
+	                                  <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+	                                    Label
+	                                    <input
+	                                      value={field.label}
+	                                      onChange={(event) => patchFormDraftField(fieldIndex, { label: event.target.value })}
+	                                      className={formDraftInputClassName(
+	                                        fieldLabelErrorKey,
+	                                        'min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring',
+	                                      )}
+                                        data-testid={`form-builder-field-${fieldIndex}-label-input`}
+                                        {...formDraftErrorProps(fieldLabelErrorKey)}
+	                                    />
+                                    <FormBuilderInlineError
+                                      id={`${fieldLabelErrorKey}-error`}
+                                      error={formDraftInlineError(fieldLabelErrorKey)}
+                                      testId={`${fieldLabelErrorKey}-error`}
                                     />
-                                  </label>
+	                                  </label>
                                   <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
                                     Type
                                     <select
@@ -5120,10 +5399,14 @@ function FormsRoute() {
                                     {field.type === 'select' || field.type === 'radio' ? (
                                       <select
                                         value={field.defaultValue || ''}
-                                        onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value || undefined })}
-                                        data-testid="form-field-default-value-input"
-                                        className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
-                                      >
+	                                        onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value || undefined })}
+	                                        data-testid="form-field-default-value-input"
+	                                        className={formDraftInputClassName(
+	                                          fieldDefaultErrorKey,
+	                                          'min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring',
+	                                        )}
+                                          {...formDraftErrorProps(fieldDefaultErrorKey)}
+	                                      >
                                         <option value="">No default</option>
                                         {(field.options || []).map((option) => (
                                           <option key={option} value={option}>{option}</option>
@@ -5133,24 +5416,43 @@ function FormsRoute() {
                                       <input
                                         value={field.defaultValue || ''}
                                         onChange={(event) => patchFormDraftField(fieldIndex, { defaultValue: event.target.value })}
-                                        placeholder={field.options?.[0] || field.placeholder || 'Optional default'}
-                                        data-testid="form-field-default-value-input"
-                                        className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
+	                                        placeholder={field.options?.[0] || field.placeholder || 'Optional default'}
+	                                        data-testid="form-field-default-value-input"
+	                                        className={formDraftInputClassName(
+	                                          fieldDefaultErrorKey,
+	                                          'min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring',
+	                                        )}
+                                          {...formDraftErrorProps(fieldDefaultErrorKey)}
+	                                      />
+	                                    )}
+                                    <FormBuilderInlineError
+                                      id={`${fieldDefaultErrorKey}-error`}
+                                      error={formDraftInlineError(fieldDefaultErrorKey)}
+                                      testId={`${fieldDefaultErrorKey}-error`}
+                                    />
+	                                  </label>
+	                                  {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') ? (
+	                                    <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
+	                                      Options
+	                                      <input
+	                                        value={(field.options || []).join(', ')}
+	                                        onChange={(event) => patchFormDraftFieldOptions(fieldIndex, parseOptionsText(event.target.value))}
+	                                        placeholder="Option one, Option two"
+	                                        className={formDraftInputClassName(
+	                                          fieldOptionsErrorKey,
+	                                          'min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring',
+	                                        )}
+                                          data-testid={`form-builder-field-${fieldIndex}-options-input`}
+                                          {...formDraftErrorProps(fieldOptionsErrorKey)}
+	                                      />
+                                      <FormBuilderInlineError
+                                        id={`${fieldOptionsErrorKey}-error`}
+                                        error={formDraftInlineError(fieldOptionsErrorKey)}
+                                        testId={`${fieldOptionsErrorKey}-error`}
                                       />
-                                    )}
-                                  </label>
-                                  {(field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') ? (
-                                    <label className="grid gap-1.5 text-xs font-semibold text-muted-foreground">
-                                      Options
-                                      <input
-                                        value={(field.options || []).join(', ')}
-                                        onChange={(event) => patchFormDraftFieldOptions(fieldIndex, parseOptionsText(event.target.value))}
-                                        placeholder="Option one, Option two"
-                                        className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring"
-                                      />
-                                    </label>
-                                  ) : null}
-                                </div>
+	                                    </label>
+	                                  ) : null}
+	                                </div>
                                 <div className="mt-3 rounded-lg border border-border bg-muted/30 p-3">
                                   <div className="flex flex-wrap items-start justify-between gap-2">
                                     <div>
@@ -5209,16 +5511,21 @@ function FormsRoute() {
                                         );
                                       })}
                                     </div>
-                                  ) : (
-                                    <div
+	                                  ) : (
+	                                    <div
                                       className="mt-3 rounded-lg border border-dashed border-border bg-card px-3 py-2 text-xs text-muted-foreground"
                                       data-testid="form-field-validation-unavailable"
                                     >
                                       No configurable validation rules for this field type.
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+	                                    </div>
+	                                  )}
+                                  <FormBuilderInlineError
+                                    id={`${fieldValidationErrorKey}-error`}
+                                    error={formDraftInlineError(fieldValidationErrorKey)}
+                                    testId={`${fieldValidationErrorKey}-error`}
+                                  />
+	                                </div>
+	                              </div>
                               );
                             })}
                           </div>
@@ -6053,6 +6360,16 @@ function FormAuditLogCard({ log }: { log: AdminAuditLog }) {
   );
 }
 
+function FormBuilderInlineError({ id, error, testId }: { id: string; error?: string; testId: string }) {
+  if (!error) return null;
+
+  return (
+    <span id={id} className="text-xs font-medium text-destructive" data-testid={testId}>
+      {error}
+    </span>
+  );
+}
+
 function FormReadinessCheck({ label, detail, ready }: { label: string; detail: string; ready: boolean }) {
   const Icon = ready ? CheckCircle2 : AlertTriangle;
 
@@ -6110,6 +6427,15 @@ function ApiSnippet({ label, value }: { label: string; value: string }) {
       <code className="block min-w-0 overflow-x-auto rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-muted-foreground">
         {value}
       </code>
+    </div>
+  );
+}
+
+function FormMetaTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background px-3 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold text-foreground">{value}</div>
     </div>
   );
 }
@@ -7021,6 +7347,186 @@ const normalizeFormFieldDefaultValue = (
   }
 
   return value;
+};
+
+const isValidFormBuilderEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
+const isValidFormBuilderHttpUrl = (value: string): boolean => {
+  try {
+    const parsedUrl = new URL(value.trim());
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const isValidFormBuilderRedirectUrl = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return true;
+  return isValidFormBuilderHttpUrl(trimmed);
+};
+
+const addFormDraftInlineError = (
+  errors: Record<string, string>,
+  key: string,
+  message: string,
+) => {
+  if (!errors[key]) {
+    errors[key] = message;
+  }
+};
+
+const buildFormDraftInlineErrors = (
+  form: FormDefinition,
+  collections: Collection[],
+): Record<string, string> => {
+  const errors: Record<string, string> = {};
+  const formName = form.name.trim();
+  const notificationEmail = form.notificationEmail?.trim() || '';
+  const notificationWebhook = form.notificationWebhook?.trim() || '';
+  const successRedirectUrl = form.successRedirectUrl?.trim() || '';
+  const consentSettings = readFormConsentSettings(form);
+  const spamSettings = readFormSpamSettings(form);
+  const normalizedFieldKeys = form.fields.map((field) => normalizeFieldKey(field.key));
+  const fieldKeyCounts = normalizedFieldKeys.reduce<Record<string, number>>((counts, key) => {
+    if (key) {
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }, {});
+
+  if (!formName) {
+    addFormDraftInlineError(errors, 'form-builder-name', 'Machine name is required.');
+  }
+  if (notificationEmail && !isValidFormBuilderEmail(notificationEmail)) {
+    addFormDraftInlineError(errors, 'form-builder-notification-email', 'Use a valid notification email address.');
+  }
+  if (notificationWebhook && !isValidFormBuilderHttpUrl(notificationWebhook)) {
+    addFormDraftInlineError(errors, 'form-builder-notification-webhook', 'Use a valid https:// or http:// webhook URL.');
+  }
+  if (successRedirectUrl && !isValidFormBuilderRedirectUrl(successRedirectUrl)) {
+    addFormDraftInlineError(errors, 'form-builder-success-redirect', 'Use a relative path or a valid https:// or http:// redirect URL.');
+  }
+  if (consentSettings.requestEmail && !isValidFormBuilderEmail(consentSettings.requestEmail)) {
+    addFormDraftInlineError(errors, 'form-builder-consent-request-email', 'Use a valid privacy request email address.');
+  }
+  if (consentSettings.deleteAfterDays > 0 && consentSettings.deleteAfterDays < consentSettings.retentionDays) {
+    addFormDraftInlineError(errors, 'form-builder-consent-delete-after-days', 'Delete-after days must be greater than or equal to retention days.');
+  }
+  if (spamSettings.minFillMs > 120_000) {
+    addFormDraftInlineError(errors, 'form-builder-spam-min-fill-ms', 'Min fill time must be 120000 ms or less.');
+  }
+  if (spamSettings.rateLimitWindowMs > 86_400_000) {
+    addFormDraftInlineError(errors, 'form-builder-spam-rate-window', 'Rate window must be 86400 seconds or less.');
+  }
+  if (spamSettings.rateLimitMax > 1000) {
+    addFormDraftInlineError(errors, 'form-builder-spam-rate-limit-max', 'Max submissions must be 1000 or less.');
+  }
+  if (spamSettings.duplicateWindowMs > 86_400_000) {
+    addFormDraftInlineError(errors, 'form-builder-spam-duplicate-window', 'Duplicate window must be 86400 seconds or less.');
+  }
+
+  if (form.fields.length === 0) {
+    addFormDraftInlineError(errors, 'form-builder-fields', 'At least one form field is required.');
+  }
+
+  form.fields.forEach((field, index) => {
+    const fieldPrefix = `form-builder-field-${index}`;
+    const fieldType = normalizeFormFieldType(field.type);
+    const fieldKey = normalizedFieldKeys[index];
+    const fieldLabel = field.label.trim();
+    const options = formFieldTypeSupportsOptions(fieldType) ? normalizeFormFieldOptions(field.options) : undefined;
+    const defaultValue = typeof field.defaultValue === 'string' ? field.defaultValue.trim() : '';
+    const allowedValidationTypes = new Set(validationTypesForFieldType(fieldType));
+
+    if (!fieldKey) {
+      addFormDraftInlineError(errors, `${fieldPrefix}-key`, 'Field key is required for API payloads.');
+    } else if (fieldKeyCounts[fieldKey] > 1) {
+      addFormDraftInlineError(errors, `${fieldPrefix}-key`, 'Field key must be unique in this form.');
+    }
+    if (!fieldLabel) {
+      addFormDraftInlineError(errors, `${fieldPrefix}-label`, 'Field label is required.');
+    }
+    if (formFieldTypeSupportsOptions(fieldType) && !options?.length) {
+      addFormDraftInlineError(errors, `${fieldPrefix}-options`, 'Add at least one option for this field type.');
+    }
+    if (defaultValue && !normalizeFormFieldDefaultValue(defaultValue, fieldType, options)) {
+      addFormDraftInlineError(errors, `${fieldPrefix}-default`, 'Default value must match this field type and options.');
+    }
+
+    const validationRules = field.validation || [];
+    const minLengthRule = validationRules.find((rule) => rule.type === 'minLength');
+    const maxLengthRule = validationRules.find((rule) => rule.type === 'maxLength');
+    const minRule = validationRules.find((rule) => rule.type === 'min');
+    const maxRule = validationRules.find((rule) => rule.type === 'max');
+
+    validationRules.forEach((rule) => {
+      const ruleDefinition = FORM_VALIDATION_RULES.find((candidate) => candidate.type === rule.type);
+      if (!allowedValidationTypes.has(rule.type as FormValidationRuleType) || !ruleDefinition) {
+        addFormDraftInlineError(errors, `${fieldPrefix}-validation`, 'Remove validation rules that do not apply to this field type.');
+        return;
+      }
+      if (!formValidationRuleHasValue(rule)) {
+        return;
+      }
+      if (ruleDefinition.valueMode === 'number' && !Number.isFinite(Number(rule.value))) {
+        addFormDraftInlineError(errors, `${fieldPrefix}-validation`, 'Validation rule values must be valid numbers.');
+      }
+      if (rule.type === 'pattern') {
+        try {
+          new RegExp(String(rule.value));
+        } catch {
+          addFormDraftInlineError(errors, `${fieldPrefix}-validation`, 'Pattern validation must be a valid regular expression.');
+        }
+      }
+    });
+
+    if (
+      formValidationRuleHasValue(minLengthRule) &&
+      formValidationRuleHasValue(maxLengthRule) &&
+      Number(minLengthRule?.value) > Number(maxLengthRule?.value)
+    ) {
+      addFormDraftInlineError(errors, `${fieldPrefix}-validation`, 'Min length must be less than or equal to max length.');
+    }
+    if (
+      formValidationRuleHasValue(minRule) &&
+      formValidationRuleHasValue(maxRule) &&
+      Number(minRule?.value) > Number(maxRule?.value)
+    ) {
+      addFormDraftInlineError(errors, `${fieldPrefix}-validation`, 'Min value must be less than or equal to max value.');
+    }
+  });
+
+  if (form.contactShare?.enabled && !form.contactShare.emailField && !form.contactShare.phoneField) {
+    addFormDraftInlineError(errors, 'form-builder-contact-share', 'Map an email or phone field before enabling contact creation.');
+  }
+
+  if (form.collectionTarget?.enabled) {
+    const targetCollection = collections.find((collection) => collection.id === form.collectionTarget?.collectionId) || null;
+    const normalizedFieldMap = normalizeFormCollectionFieldMap(form.collectionTarget.fieldMap, form.fields);
+    const mappedCollectionFields = new Set(Object.values(normalizedFieldMap).filter(Boolean));
+    if (!targetCollection) {
+      addFormDraftInlineError(errors, 'form-builder-collection-target', 'Select a target collection before enabling collection writes.');
+    } else if (targetCollection.status !== 'published' || !targetCollection.permissions.publicCreate) {
+      addFormDraftInlineError(errors, 'form-builder-collection-target', 'Target collection must be published and allow public create.');
+    } else if (mappedCollectionFields.size === 0) {
+      addFormDraftInlineError(errors, 'form-builder-collection-target', 'Map at least one form field into the target collection.');
+    } else {
+      const missingRequiredFields = targetCollection.fields
+        .filter((field) => field.required && !mappedCollectionFields.has(field.key))
+        .map((field) => field.label || field.key);
+      if (missingRequiredFields.length > 0) {
+        addFormDraftInlineError(
+          errors,
+          'form-builder-collection-target',
+          `Map required collection fields: ${missingRequiredFields.slice(0, 4).join(', ')}${missingRequiredFields.length > 4 ? ', ...' : ''}.`,
+        );
+      }
+    }
+  }
+
+  return errors;
 };
 
 const applyFormFieldTypeDefaults = (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
+import { mediaDeliveryCacheMetadata } from '@/lib/mediaDeliveryCache';
 import { isMediaQuarantined, requiresAttachmentDelivery } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { verifySignedMediaAccess } from '@/lib/mediaSigning';
@@ -111,6 +112,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return jsonError(404, 'MEDIA_FILE_NOT_FOUND', 'Media file could not be resolved from storage.', requestId);
     }
 
+    const cacheMetadata = mediaDeliveryCacheMetadata(request, site.id, media, {
+      delivery: 'file',
+      disposition,
+    });
+    const commonHeaders = {
+      'cache-control': isPrivateMedia ? 'private, max-age=60' : 'public, max-age=31536000, immutable',
+      vary: 'Accept, Origin',
+      'x-content-type-options': 'nosniff',
+      'x-backy-cache-scope': isPrivateMedia ? 'private' : 'discovery',
+      'x-backy-cache-revision': cacheMetadata.cacheRevision,
+      'x-backy-contract-version': BACKY_PUBLIC_CONTRACT_VERSION,
+      'x-backy-schema-version': MEDIA_FILE_SCHEMA_VERSION,
+      'x-backy-request-id': requestId,
+      'x-backy-site-id': site.id,
+      'x-backy-media-id': media.id,
+      etag: cacheMetadata.etag,
+      ...(requiresAttachment ? { 'x-backy-media-delivery-policy': 'attachment-only' } : {}),
+    };
+
+    if (cacheMetadata.notModified) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: commonHeaders,
+      });
+    }
+
     const storage = await getMediaStorageAdapter();
     const buffer = await storage.read(storagePath);
     await recordMediaDelivery({
@@ -126,19 +153,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const response = new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {
+        ...commonHeaders,
         'content-type': media.mimeType || 'application/octet-stream',
         'content-length': String(buffer.byteLength),
         'content-disposition': contentDispositionHeader(disposition, media.originalName || media.filename),
-        'cache-control': isPrivateMedia ? 'private, max-age=60' : 'public, max-age=31536000, immutable',
-        vary: 'Accept, Origin',
-        'x-content-type-options': 'nosniff',
-        'x-backy-cache-scope': isPrivateMedia ? 'private' : 'discovery',
-        'x-backy-contract-version': BACKY_PUBLIC_CONTRACT_VERSION,
-        'x-backy-schema-version': MEDIA_FILE_SCHEMA_VERSION,
-        'x-backy-request-id': requestId,
-        'x-backy-site-id': site.id,
-        'x-backy-media-id': media.id,
-        ...(requiresAttachment ? { 'x-backy-media-delivery-policy': 'attachment-only' } : {}),
       },
     });
 

@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-  canvasElementsToBackyContentDocument,
+  canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
   type BackyJsonObject,
   type BackyContentDocument,
@@ -26,7 +26,10 @@ import {
   getSiteByIdOrSlug,
 } from "@/lib/backyStore";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
-import { seedInputFromFrontendDesignTemplate } from "@/lib/frontendDesignContract";
+import {
+  normalizeInputFromDirectFrontendDesignEnvelope,
+  seedInputFromFrontendDesignTemplate,
+} from "@/lib/frontendDesignContract";
 import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
@@ -135,14 +138,6 @@ const stringArrayFromInput = (value: unknown): string[] =>
       )
     : [];
 
-const contentElementsFromInput = (rawContent: unknown): unknown[] => {
-  if (isRecord(rawContent) && Array.isArray(rawContent.elements)) {
-    return rawContent.elements;
-  }
-
-  return Array.isArray(rawContent) ? rawContent : [];
-};
-
 const contentDocumentFromInput = (
   rawContent: unknown,
   input: {
@@ -152,28 +147,13 @@ const contentDocumentFromInput = (
     status: "draft" | "published" | "scheduled" | "archived";
   },
 ): BackyContentDocument => {
-  if (isBackyContentDocument(rawContent)) {
-    return rawContent;
-  }
-  if (
-    isRecord(rawContent) &&
-    isBackyContentDocument(rawContent.contentDocument)
-  ) {
-    return rawContent.contentDocument;
-  }
-
-  return canvasElementsToBackyContentDocument({
+  return canvasContentPayloadToBackyContentDocument({
     id: input.id,
     kind: "post",
     title: input.title,
     slug: input.slug,
     status: input.status,
-    elements: contentElementsFromInput(rawContent),
-    canvasSize: isRecord(rawContent) ? rawContent.canvasSize : undefined,
-    customCSS:
-      isRecord(rawContent) && typeof rawContent.customCSS === "string"
-        ? rawContent.customCSS
-        : undefined,
+    rawContent,
   });
 };
 
@@ -304,7 +284,21 @@ const adminPostFromRepositoryPost = (post: BackyPost) => {
         typeof post.content.metadata?.customCSS === "string"
           ? post.content.metadata.customCSS
           : undefined,
+      customJS:
+        typeof post.content.metadata?.customJS === "string"
+          ? post.content.metadata.customJS
+          : undefined,
       contentDocument: post.content,
+      themeTokenRefs: post.content.themeTokenRefs,
+      assets: post.content.assets,
+      animations: Array.isArray(post.content.metadata?.animations) || isRecord(post.content.metadata?.animations)
+        ? post.content.metadata.animations
+        : undefined,
+      interactions: post.content.interactions,
+      dataBindings: post.content.dataBindings,
+      editableMap: post.content.editableMap,
+      seo: post.content.seo,
+      metadata: post.content.metadata,
     },
   };
 };
@@ -567,7 +561,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, seeded.code, seeded.message, requestId);
       }
 
-      const createBody = seeded.body;
+      const createBody = normalizeInputFromDirectFrontendDesignEnvelope(
+        seeded.body,
+      );
       const contentValidationError = postContentValidationError(
         createBody.content,
         requestId,
@@ -726,9 +722,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, seeded.code, seeded.message, requestId);
     }
 
-    const scheduledAt = normalizeScheduledAtInput(seeded.body.scheduledAt);
+    const createBody = normalizeInputFromDirectFrontendDesignEnvelope(
+      seeded.body,
+    );
+    const scheduledAt = normalizeScheduledAtInput(createBody.scheduledAt);
     const contentValidationError = postContentValidationError(
-      seeded.body.content,
+      createBody.content,
       requestId,
     );
     if (contentValidationError) {
@@ -748,7 +747,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const post = createAdminBlogPost(site.id, {
-      ...seeded.body,
+      ...createBody,
       title,
       slug,
       status,

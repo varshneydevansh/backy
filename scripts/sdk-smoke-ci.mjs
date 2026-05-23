@@ -320,6 +320,9 @@ const requiredDatabaseConstraints = {
   ],
 };
 
+const SDK_DATABASE_DISCOVERY_SITE_SLUG = 'site-demo';
+const SDK_DATABASE_DISCOVERY_TEAM_SLUG = 'sdk-postgres-smoke';
+
 const baseEnv = {
   ...process.env,
   BACKY_ADMIN_MFA_CODE: process.env.BACKY_ADMIN_MFA_CODE || sdkSmokeMfaCode,
@@ -334,6 +337,192 @@ const baseEnv = {
           || 'backy-sdk-postgres-smoke-admin-key',
       }
     : {}),
+};
+
+const ensureSdkDatabaseDiscoverySite = async () => {
+  if (!requireDatabaseMode) return { seeded: false, teamId: null };
+
+  const postgres = (await import('postgres')).default;
+  const sql = postgres(configuredDatabaseUrl, { max: 1 });
+  const theme = JSON.stringify({
+    colors: {
+      primary: '#0f766e',
+      secondary: '#334155',
+      accent: '#f97316',
+      background: '#ffffff',
+      foreground: '#111827',
+    },
+    fonts: {
+      heading: 'Inter',
+      body: 'Inter',
+    },
+    spacing: {},
+    customCSS: '',
+  });
+  const settings = JSON.stringify({
+    siteStatus: 'published',
+    seo: {
+      title: 'Backy SDK Postgres Smoke',
+      description: 'Disposable database discovery site for the SDK Postgres certification gate.',
+    },
+    navigation: {
+      primary: [],
+      footer: [],
+    },
+  });
+  const homepageContent = JSON.stringify({
+    schemaVersion: 'backy.content.v1',
+    id: 'sdk-database-discovery-home',
+    kind: 'page',
+    title: 'Backy SDK Postgres Smoke',
+    slug: 'index',
+    status: 'published',
+    version: 'draft',
+    elements: [],
+    editableMap: {},
+    metadata: {
+      canvasSize: {
+        width: 1200,
+        height: 900,
+      },
+    },
+  });
+  const homepageMeta = JSON.stringify({
+    title: 'Backy SDK Postgres Smoke',
+    description: 'Disposable database homepage for SDK Postgres route and render certification.',
+  });
+
+  try {
+    let seeded = false;
+    const existingTeam = await sql`
+      SELECT id
+      FROM public.teams
+      WHERE slug = ${SDK_DATABASE_DISCOVERY_TEAM_SLUG}
+      ORDER BY created_at ASC
+      LIMIT 1
+    `;
+    let teamId = existingTeam[0]?.id || null;
+    if (!teamId) {
+      const insertedTeam = await sql`
+        INSERT INTO public.teams (
+          name,
+          slug,
+          settings
+        )
+        VALUES (
+          'Backy SDK Postgres Smoke',
+          ${SDK_DATABASE_DISCOVERY_TEAM_SLUG},
+          ${JSON.stringify({ source: 'sdk-postgres-smoke' })}::jsonb
+        )
+        RETURNING id
+      `;
+      teamId = insertedTeam[0]?.id || null;
+      seeded = true;
+    }
+
+    const existing = await sql`
+      SELECT id, is_published, team_id
+      FROM public.sites
+      WHERE slug = ${SDK_DATABASE_DISCOVERY_SITE_SLUG}
+      ORDER BY created_at ASC
+      LIMIT 1
+    `;
+    let siteId = existing[0]?.id;
+
+    if (existing[0]) {
+      if (existing[0].is_published !== true || existing[0].team_id !== teamId) {
+        await sql`
+          UPDATE public.sites
+          SET team_id = ${teamId},
+              is_published = true,
+              published_at = COALESCE(published_at, NOW()),
+              updated_at = NOW()
+          WHERE id = ${existing[0].id}
+        `;
+        seeded = true;
+      }
+    } else {
+      const inserted = await sql`
+        INSERT INTO public.sites (
+          team_id,
+          name,
+          slug,
+          description,
+          theme,
+          settings,
+          is_published,
+          published_at
+        )
+        VALUES (
+          ${teamId},
+          'Backy SDK Postgres Smoke',
+          ${SDK_DATABASE_DISCOVERY_SITE_SLUG},
+          'Disposable database discovery site for the SDK Postgres certification gate.',
+          ${theme}::jsonb,
+          ${settings}::jsonb,
+          true,
+          NOW()
+        )
+        RETURNING id
+      `;
+      siteId = inserted[0]?.id;
+      seeded = true;
+    }
+
+    const homepage = await sql`
+      SELECT id, status
+      FROM public.pages
+      WHERE site_id = ${siteId}
+        AND (is_homepage = true OR slug IN ('index', 'home'))
+      ORDER BY is_homepage DESC, created_at ASC
+      LIMIT 1
+    `;
+
+    if (homepage[0]) {
+      if (homepage[0].status !== 'published') {
+        await sql`
+          UPDATE public.pages
+          SET status = 'published',
+              is_homepage = true,
+              published_at = COALESCE(published_at, NOW()),
+              updated_at = NOW()
+          WHERE id = ${homepage[0].id}
+        `;
+      }
+    } else {
+      await sql`
+        INSERT INTO public.pages (
+          site_id,
+          title,
+          slug,
+          description,
+          content,
+          meta,
+          status,
+          published_at,
+          is_homepage,
+          sort_order
+        )
+        VALUES (
+          ${siteId},
+          'Backy SDK Postgres Smoke',
+          'index',
+          'Disposable database homepage for SDK Postgres route and render certification.',
+          ${homepageContent}::jsonb,
+          ${homepageMeta}::jsonb,
+          'published',
+          NOW(),
+          true,
+          0
+        )
+      `;
+      seeded = true;
+    }
+
+    return { seeded, teamId };
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
 };
 
 const assertSdkDatabaseSchemaReady = async () => {
@@ -533,6 +722,10 @@ try {
   originalNextEnv = await readFile(nextEnvUrl, 'utf8').catch(() => null);
 
   await assertSdkDatabaseSchemaReady();
+  const databaseDiscovery = await ensureSdkDatabaseDiscoverySite();
+  if (databaseDiscovery.teamId && !baseEnv.BACKY_DEFAULT_TEAM_ID) {
+    baseEnv.BACKY_DEFAULT_TEAM_ID = databaseDiscovery.teamId;
+  }
   await runStep('SDK generated contract types', ['run', 'test:frontend-contract-types']);
   await runStep('SDK typecheck', ['--workspace', '@backy/sdk-js', 'run', 'typecheck']);
   await runStep('SDK build', ['--workspace', '@backy/sdk-js', 'run', 'build']);
@@ -577,8 +770,16 @@ try {
       'SDK package build',
       'public app discovery',
       'SDK runtime smoke',
+      ...(requireDatabaseMode ? ['database-mode published discovery site'] : []),
       ...(requireDatabaseMode ? ['configured Postgres/Supabase schema preflight'] : []),
     ],
+    databaseDiscovery: requireDatabaseMode
+      ? {
+          slug: SDK_DATABASE_DISCOVERY_SITE_SLUG,
+          teamId: databaseDiscovery.teamId,
+          seeded: databaseDiscovery.seeded,
+        }
+      : null,
   }, null, 2));
 } finally {
   await stopServer(server);

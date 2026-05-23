@@ -5,6 +5,7 @@
  * POST /api/sites/[siteId]/commerce/orders
  */
 
+import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { NextRequest } from "next/server";
 import type {
   BackyCollectionField,
@@ -110,12 +111,149 @@ interface CheckoutQuoteProviderAdjustment {
 const ORDERS_COLLECTION_SLUG = "orders";
 const CUSTOMERS_COLLECTION_SLUG = "customers";
 const ORDER_CONTRACT_VERSION = "backy.commerce-orders.v1";
+const ORDER_STATUS_HANDOFF_SCHEMA_VERSION = "backy.order-status-handoff.v1";
+const ORDER_STATUS_ACCESS_SCHEMA_VERSION = "backy.order-status-access.v1";
+const ORDER_STATUS_ACCESS_TOKEN_BYTES = 32;
+const ORDER_STATUS_ACCESS_TOKEN_TTL_DAYS = 90;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_CHECKOUT_ITEM_QUANTITY = 999;
 type OrderRiskLevel = "low" | "medium" | "high";
+type OrderStatusHandoffStatus = "ready" | "attention" | "blocked";
+type OrderWorkflowStatus =
+  | "open"
+  | "paid"
+  | "fulfilled"
+  | "cancelled"
+  | "refunded";
+type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+type FulfillmentStatus =
+  | "unfulfilled"
+  | "processing"
+  | "fulfilled"
+  | "cancelled";
+type ShippingLabelStatus = "none" | "draft" | "purchased" | "voided";
+type ProviderRefundStatus =
+  | "none"
+  | "requested"
+  | "succeeded"
+  | "failed"
+  | "requires_action";
+
+interface OrderStatusHandoffCollection {
+  id: string;
+  slug: string;
+  name?: string;
+  status?: string;
+  permissions?: {
+    publicRead?: boolean;
+    publicCreate?: boolean;
+    publicUpdate?: boolean;
+    publicDelete?: boolean;
+  } | null;
+}
+
+interface OrderStatusHandoffOrder {
+  id: string;
+  slug: string;
+  status: string;
+  values?: Record<string, unknown> | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+interface CheckoutCustomerProfile {
+  record: {
+    id: string;
+    slug: string;
+    status?: string | null;
+    values?: Record<string, unknown> | null;
+  };
+  existingRecord: boolean;
+}
+
+const ORDER_STATUSES: OrderWorkflowStatus[] = [
+  "open",
+  "paid",
+  "fulfilled",
+  "cancelled",
+  "refunded",
+];
+const PAYMENT_STATUSES: PaymentStatus[] = [
+  "pending",
+  "paid",
+  "failed",
+  "refunded",
+];
+const FULFILLMENT_STATUSES: FulfillmentStatus[] = [
+  "unfulfilled",
+  "processing",
+  "fulfilled",
+  "cancelled",
+];
+const SHIPPING_LABEL_STATUSES: ShippingLabelStatus[] = [
+  "none",
+  "draft",
+  "purchased",
+  "voided",
+];
+const PROVIDER_REFUND_STATUSES: ProviderRefundStatus[] = [
+  "none",
+  "requested",
+  "succeeded",
+  "failed",
+  "requires_action",
+];
 
 const makeRequestId = () =>
   `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const createOrderStatusAccessToken = (): string =>
+  randomBytes(ORDER_STATUS_ACCESS_TOKEN_BYTES).toString("base64url");
+
+const orderStatusAccessTokenHash = (siteId: string, token: string): string =>
+  createHash("sha256")
+    .update(`backy.order-status:${siteId}:${token}`)
+    .digest("hex");
+
+const orderStatusAccessExpiresAt = (issuedAt: string): string => {
+  const issued = Date.parse(issuedAt);
+  const base = Number.isFinite(issued) ? issued : Date.now();
+  return new Date(
+    base + ORDER_STATUS_ACCESS_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+};
+
+const timingSafeStringEquals = (left: string, right: string): boolean => {
+  if (!left || !right) return false;
+  const leftBuffer = Buffer.from(left, "utf8");
+  const rightBuffer = Buffer.from(right, "utf8");
+  return (
+    leftBuffer.length === rightBuffer.length &&
+    timingSafeEqual(leftBuffer, rightBuffer)
+  );
+};
+
+const verifyOrderStatusAccessToken = ({
+  siteId,
+  values,
+  token,
+}: {
+  siteId: string;
+  values: Record<string, unknown>;
+  token: string;
+}): "valid" | "missing" | "expired" | "invalid" => {
+  const storedHash = textValue(readOrderValue(values, "statusaccesstokenhash"));
+  const issuedAt = textValue(readOrderValue(values, "statusaccesstokenissuedat"));
+  const expiresAt =
+    textValue(readOrderValue(values, "statusaccesstokenexpiresat")) ||
+    (issuedAt ? orderStatusAccessExpiresAt(issuedAt) : "");
+  if (!storedHash || !issuedAt) return "missing";
+  if (Date.now() > Date.parse(expiresAt)) {
+    return "expired";
+  }
+  const candidateHash = orderStatusAccessTokenHash(siteId, token);
+  return timingSafeStringEquals(storedHash, candidateHash) ? "valid" : "invalid";
+};
 
 class CheckoutProviderError extends Error {
   code: string;
@@ -3243,6 +3381,855 @@ const notifyLowStockProductsFromReservations = async ({
   return deliveries;
 };
 
+const statusValue = <T extends string>(
+  value: unknown,
+  allowed: T[],
+  fallback: T,
+): T => {
+  const normalized = textValue(value).toLowerCase();
+  return allowed.includes(normalized as T) ? (normalized as T) : fallback;
+};
+
+const camelizeOrderKey = (key: string): string =>
+  key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
+const readOrderValue = (
+  values: Record<string, unknown>,
+  normalizedKey: string,
+  fallback: unknown = "",
+): unknown =>
+  values[normalizedKey] ?? values[camelizeOrderKey(normalizedKey)] ?? fallback;
+
+const normalizeOrderCurrency = (value: unknown): string => {
+  const currency = textValue(value).toUpperCase();
+  return /^[A-Z]{3}$/.test(currency) ? currency : "USD";
+};
+
+const maskCustomerEmail = (email: string): string => {
+  const trimmed = email.trim();
+  const [local, domain] = trimmed.split("@");
+  if (!local || !domain) return "";
+  const visible = local.length <= 2 ? local.slice(0, 1) : local.slice(0, 2);
+  return `${visible}${"*".repeat(Math.max(3, local.length - visible.length))}@${domain}`;
+};
+
+const maskCustomerPhone = (phone: string): string => {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  return `${digits.length > 4 ? "***-" : ""}${digits.slice(-4)}`;
+};
+
+const parseLineItemCount = (value: unknown): number => {
+  const raw = typeof value === "string" ? value.trim() : value;
+  if (!raw) return 0;
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (Array.isArray(parsed)) return parsed.length;
+    const record = toRecord(parsed);
+    if (Array.isArray(record.items)) return record.items.length;
+  } catch {
+    if (typeof raw === "string") {
+      return raw.split(/\n+/).filter((line) => line.trim()).length;
+    }
+  }
+  return 0;
+};
+
+const parseLineItemRecords = (
+  value: unknown,
+): Array<Record<string, unknown>> => {
+  const raw = typeof value === "string" ? value.trim() : value;
+  if (!raw) return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (Array.isArray(parsed)) {
+      return parsed.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item && typeof item === "object" && !Array.isArray(item)),
+      );
+    }
+    const record = toRecord(parsed);
+    if (Array.isArray(record.items)) {
+      return record.items.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item && typeof item === "object" && !Array.isArray(item)),
+      );
+    }
+  } catch {
+    return [];
+  }
+  return [];
+};
+
+const booleanValue = (value: unknown): boolean =>
+  value === true ||
+  value === 1 ||
+  (typeof value === "string" &&
+    ["true", "1", "yes", "download", "digital"].includes(
+      value.trim().toLowerCase(),
+    ));
+
+const checkoutLineItemProductType = (item: Record<string, unknown>): string =>
+  textValue(item.productType || item.product_type || item.type || item.kind)
+    .toLowerCase();
+
+const checkoutLineItemDeliveryMetadata = (item: Record<string, unknown>) => {
+  const productType = checkoutLineItemProductType(item);
+  const downloadMediaPresent = Boolean(
+    textValue(
+      item.downloadMediaId ||
+        item.download_media_id ||
+        item.mediaId ||
+        item.media_id,
+    ),
+  );
+  const downloadUrlPresent = Boolean(
+    textValue(
+      item.downloadUrl ||
+        item.download_url ||
+        item.deliveryUrl ||
+        item.delivery_url,
+    ),
+  );
+  const digitalDeliveryConfigured =
+    booleanValue(item.digitalDelivery) ||
+    booleanValue(item.hasDigitalDelivery) ||
+    booleanValue(item.downloadable) ||
+    downloadMediaPresent ||
+    downloadUrlPresent;
+
+  return {
+    productType,
+    digitalDeliveryConfigured,
+    downloadMediaPresent,
+    downloadUrlPresent,
+  };
+};
+
+const buildCheckoutDigitalDeliveryHandoff = (
+  itemValue: unknown,
+  paymentStatus: PaymentStatus,
+  fulfillmentStatus: FulfillmentStatus,
+) => {
+  const digitalItems = parseLineItemRecords(itemValue)
+    .map(checkoutLineItemDeliveryMetadata)
+    .filter(
+      (item) =>
+        item.productType === "digital" ||
+        item.productType === "download" ||
+        item.digitalDeliveryConfigured,
+    );
+  const configuredItemCount = digitalItems.filter(
+    (item) => item.digitalDeliveryConfigured,
+  ).length;
+  const pendingItemCount = Math.max(
+    0,
+    digitalItems.length - configuredItemCount,
+  );
+  const isPaid = paymentStatus === "paid" || paymentStatus === "refunded";
+  const status =
+    digitalItems.length === 0
+      ? "not-applicable"
+      : pendingItemCount > 0
+        ? "attention"
+        : fulfillmentStatus === "fulfilled"
+          ? "fulfilled"
+          : isPaid
+            ? "ready"
+            : "pending-payment";
+  const customerAction =
+    digitalItems.length === 0
+      ? "No digital delivery items were detected for this order."
+      : pendingItemCount > 0
+        ? `${pendingItemCount} digital item${pendingItemCount === 1 ? "" : "s"} still need delivery metadata before customer portal handoff.`
+        : status === "pending-payment"
+          ? "Digital delivery is configured and will become customer-visible after payment is confirmed."
+          : status === "fulfilled"
+            ? "Digital delivery items are configured and fulfillment is complete."
+            : "Digital delivery items are configured for the customer-safe order status view.";
+
+  return {
+    schemaVersion: "backy.order-digital-delivery-handoff.v1",
+    itemCount: digitalItems.length,
+    configuredItemCount,
+    pendingItemCount,
+    status,
+    customerAction,
+    customerSafeFieldsOnly: true,
+    includesDownloadUrls: false,
+    includesDownloadMediaIds: false,
+  };
+};
+
+const ordersApiReady = (collection: OrderStatusHandoffCollection): boolean => {
+  const permissions = collection.permissions || {};
+  return Boolean(
+    collection.status === "published" &&
+      !permissions.publicRead &&
+      !permissions.publicCreate &&
+      !permissions.publicUpdate &&
+      !permissions.publicDelete,
+  );
+};
+
+const summarizeStatus = (
+  checks: Array<{ status: OrderStatusHandoffStatus }>,
+): OrderStatusHandoffStatus => {
+  if (checks.some((check) => check.status === "blocked")) return "blocked";
+  if (checks.some((check) => check.status === "attention")) return "attention";
+  return "ready";
+};
+
+const endpointFor = (origin: string, path: string): string =>
+  `${origin.replace(/\/$/, "")}${path}`;
+
+const buildOrderStatusAccess = ({
+  origin,
+  siteId,
+  order,
+  token,
+}: {
+  origin: string;
+  siteId: string;
+  order: OrderStatusHandoffOrder;
+  token?: string;
+}) => {
+  const values = toRecord(order.values);
+  const issuedAt =
+    textValue(readOrderValue(values, "statusaccesstokenissuedat")) ||
+    new Date().toISOString();
+  const expiresAt =
+    textValue(readOrderValue(values, "statusaccesstokenexpiresat")) ||
+    orderStatusAccessExpiresAt(issuedAt);
+  const path = `/api/sites/${encodeURIComponent(siteId)}/commerce/orders?orderId=${encodeURIComponent(order.id)}`;
+
+  return {
+    schemaVersion: ORDER_STATUS_ACCESS_SCHEMA_VERSION,
+    auth: "status-token",
+    tokenReturnedOnce: Boolean(token),
+    ...(token ? { statusToken: token } : {}),
+    tokenStorage:
+      "store-in-customer-session-or-email-link; Backy stores only statusaccesstokenhash",
+    tokenExpiresAt: expiresAt,
+    orderId: order.id,
+    orderSlug: order.slug,
+    endpoint: endpointFor(origin, path),
+    endpointTemplate: `${endpointFor(origin, path)}&statusToken={statusToken}`,
+    refreshMethod: "GET",
+    responseContract: ORDER_STATUS_HANDOFF_SCHEMA_VERSION,
+    privacy: {
+      rawTokenStoredByBacky: false,
+      tokenHashField: "statusaccesstokenhash",
+      includesRawOrder: false,
+      customerSafeFieldsOnly: true,
+    },
+  };
+};
+
+const buildCheckoutStatusFrontendBindings = (
+  endpoints: Record<string, string>,
+  order: OrderStatusHandoffOrder,
+): Record<string, unknown> => ({
+  schemaVersion: "backy.order-status-frontend-bindings.v1",
+  targetViews: [
+    "order-confirmation",
+    "order-tracking",
+    "refund-status",
+    "support-widget",
+  ],
+  dataset: {
+    key: "orderStatusHandoff",
+    source: "public-commerce-order-intake-api",
+    endpoint: endpoints.publicStatusHandoff || endpoints.checkoutIntake,
+    selectedOrderId: order.id,
+    selectedOrderSlug: order.slug,
+    auth: endpoints.publicStatusHandoff
+      ? "post-checkout-status-token"
+      : "post-checkout-response",
+    refreshMethod: endpoints.publicStatusHandoff ? "GET" : "POST-response",
+  },
+  safeBindingPaths: [
+    "order.orderNumber",
+    "order.total",
+    "order.currency",
+    "order.itemCount",
+    "order.orderStatus",
+    "order.paymentStatus",
+    "order.fulfillmentStatus",
+    "customer.displayName",
+    "customer.maskedEmail",
+    "customer.maskedPhone",
+    "customer.customerProfileLinked",
+    "tracking.carrier",
+    "tracking.trackingNumber",
+    "tracking.trackingUrl",
+    "tracking.trackingStatus",
+    "tracking.fulfilledAt",
+    "refund.refundAmount",
+    "refund.providerRefundStatus",
+    "digitalDelivery.itemCount",
+    "digitalDelivery.configuredItemCount",
+    "digitalDelivery.pendingItemCount",
+    "digitalDelivery.status",
+    "digitalDelivery.customerAction",
+    "actionPlan.recommendation",
+    "checks[].status",
+    "nextSteps[]",
+  ],
+  maskedBindingPaths: ["customer.maskedEmail", "customer.maskedPhone"],
+  editableRegions: [
+    {
+      key: "confirmation-summary",
+      label: "Confirmation summary",
+      targetViews: ["order-confirmation"],
+      recommendedBindings: [
+        "order.orderNumber",
+        "order.total",
+        "order.currency",
+        "order.paymentStatus",
+      ],
+    },
+    {
+      key: "tracking-timeline",
+      label: "Tracking timeline",
+      targetViews: ["order-tracking"],
+      recommendedBindings: [
+        "order.fulfillmentStatus",
+        "tracking.carrier",
+        "tracking.trackingNumber",
+        "tracking.trackingUrl",
+        "tracking.trackingStatus",
+      ],
+    },
+    {
+      key: "refund-support",
+      label: "Refund and support status",
+      targetViews: ["refund-status", "support-widget"],
+      recommendedBindings: [
+        "refund.refundAmount",
+        "refund.providerRefundStatus",
+        "actionPlan.recommendation",
+        "nextSteps[]",
+      ],
+    },
+    {
+      key: "digital-delivery-status",
+      label: "Digital delivery status",
+      targetViews: ["order-confirmation", "order-tracking", "support-widget"],
+      recommendedBindings: [
+        "digitalDelivery.itemCount",
+        "digitalDelivery.configuredItemCount",
+        "digitalDelivery.status",
+        "digitalDelivery.customerAction",
+      ],
+    },
+  ],
+  actionBindings: [
+    {
+      key: "use-checkout-status-handoff",
+      label: "Use checkout status handoff",
+      method: "POST-response",
+      endpoint: endpoints.checkoutIntake,
+      requiresPermission: "public-checkout-session",
+    },
+    {
+      key: "refresh-public-status",
+      label: "Refresh customer status",
+      method: "GET",
+      endpoint: endpoints.publicStatusHandoff,
+      requiresPermission: "post-checkout-status-token",
+    },
+    {
+      key: "refresh-admin-status",
+      label: "Refresh admin status",
+      method: "GET",
+      endpoint: endpoints.adminStatusHandoff,
+      requiresPermission: "commerce.view",
+    },
+    {
+      key: "open-admin-order-detail",
+      label: "Open private order detail",
+      method: "GET",
+      endpoint: endpoints.adminOrderDetail,
+      requiresPermission: "commerce.view",
+    },
+  ],
+});
+
+const buildCheckoutStatusActionPlan = ({
+  paymentStatus,
+  fulfillmentStatus,
+  digitalDeliveryStatus,
+  trackingPresent,
+}: {
+  paymentStatus: PaymentStatus;
+  fulfillmentStatus: FulfillmentStatus;
+  digitalDeliveryStatus: string;
+  trackingPresent: boolean;
+}) => {
+  const recommendedAction =
+    paymentStatus === "pending"
+      ? "confirm-payment"
+      : paymentStatus === "failed"
+        ? "route-to-support"
+        : fulfillmentStatus === "unfulfilled" && !trackingPresent
+          ? "prepare-fulfillment"
+          : digitalDeliveryStatus === "attention"
+            ? "complete-digital-delivery"
+            : "none";
+
+  return {
+    schemaVersion: "backy.order-operation-action-plan.v1",
+    attention: recommendedAction !== "none",
+    recommendedAction,
+    recommendation:
+      recommendedAction === "confirm-payment"
+        ? "Keep the confirmation page in a pending-payment state until the provider webhook marks the order paid."
+        : recommendedAction === "route-to-support"
+          ? "Route the customer to support or payment retry because payment failed."
+          : recommendedAction === "prepare-fulfillment"
+            ? "Prepare fulfillment before promising a tracking date in the customer view."
+            : recommendedAction === "complete-digital-delivery"
+              ? "Complete digital delivery metadata before exposing download status."
+              : "The checkout response is ready for customer-safe confirmation, tracking, refund, and support views.",
+    handoffRequired:
+      paymentStatus === "pending" || fulfillmentStatus !== "fulfilled",
+    executableNow: recommendedAction !== "none",
+    availableActions: [
+      {
+        key: "confirm-payment",
+        enabled: paymentStatus === "pending",
+        executionMode: "provider-webhook",
+      },
+      {
+        key: "prepare-fulfillment",
+        enabled:
+          paymentStatus === "paid" &&
+          fulfillmentStatus !== "fulfilled" &&
+          fulfillmentStatus !== "cancelled",
+        executionMode: "admin-or-provider-handoff",
+      },
+      {
+        key: "complete-digital-delivery",
+        enabled: digitalDeliveryStatus === "attention",
+        executionMode: "admin-editor",
+      },
+      {
+        key: "refresh-admin-status",
+        enabled: true,
+        executionMode: "authenticated-admin-api",
+      },
+    ],
+  };
+};
+
+const buildCheckoutStatusHandoff = ({
+  origin,
+  siteId,
+  collection,
+  order,
+  customerProfile,
+}: {
+  origin: string;
+  siteId: string;
+  collection: OrderStatusHandoffCollection;
+  order: OrderStatusHandoffOrder;
+  customerProfile: CheckoutCustomerProfile | null;
+}) => {
+  const values = toRecord(order.values);
+  const ready = ordersApiReady(collection);
+  const currency = normalizeOrderCurrency(readOrderValue(values, "currency"));
+  const orderNumber =
+    textValue(readOrderValue(values, "ordernumber")) || order.slug;
+  const customerName = textValue(readOrderValue(values, "customername"));
+  const email = textValue(readOrderValue(values, "email"));
+  const phone = textValue(readOrderValue(values, "phone"));
+  const orderStatus = statusValue(
+    readOrderValue(values, "orderstatus"),
+    ORDER_STATUSES,
+    "open",
+  );
+  const paymentStatus = statusValue(
+    readOrderValue(values, "paymentstatus"),
+    PAYMENT_STATUSES,
+    "pending",
+  );
+  const fulfillmentStatus = statusValue(
+    readOrderValue(values, "fulfillmentstatus"),
+    FULFILLMENT_STATUSES,
+    "unfulfilled",
+  );
+  const trackingNumber = textValue(readOrderValue(values, "trackingnumber"));
+  const trackingUrl = textValue(readOrderValue(values, "trackingurl"));
+  const fulfillmentCarrier = textValue(
+    readOrderValue(values, "fulfillmentcarrier"),
+  );
+  const providerRefundStatus = statusValue(
+    readOrderValue(values, "providerrefundstatus"),
+    PROVIDER_REFUND_STATUSES,
+    "none",
+  );
+  const refundAmountValue = readOrderValue(
+    values,
+    "refundamount",
+    readOrderValue(values, "providerrefundamount", null),
+  );
+  const refundAmount =
+    refundAmountValue === null || refundAmountValue === undefined
+      ? null
+      : numberValue(refundAmountValue);
+  const shippingLabelReferencePresent = Boolean(
+    textValue(readOrderValue(values, "shippinglabelid")) ||
+      textValue(readOrderValue(values, "shippinglabelurl")),
+  );
+  const providerRefundReferencePresent = Boolean(
+    textValue(readOrderValue(values, "providerrefundid")) ||
+      textValue(readOrderValue(values, "providerrefundreference")),
+  );
+  const orderItems = readOrderValue(values, "items");
+  const itemCount = parseLineItemCount(orderItems);
+  const digitalDelivery = buildCheckoutDigitalDeliveryHandoff(
+    orderItems,
+    paymentStatus,
+    fulfillmentStatus,
+  );
+  const trackingPresent = Boolean(trackingNumber || trackingUrl);
+  const actionPlan = buildCheckoutStatusActionPlan({
+    paymentStatus,
+    fulfillmentStatus,
+    digitalDeliveryStatus: digitalDelivery.status,
+    trackingPresent,
+  });
+  const checks = [
+    {
+      key: "created-order",
+      label: "Created order",
+      status: "ready" as const,
+      detail: `${orderNumber} was created with ${itemCount} line item${itemCount === 1 ? "" : "s"} and ${numberValue(readOrderValue(values, "total"))} ${currency} total.`,
+    },
+    {
+      key: "customer-contact",
+      label: "Customer contact",
+      status: email && customerName ? ("ready" as const) : ("blocked" as const),
+      detail:
+        email && customerName
+          ? `${maskCustomerEmail(email)} can receive customer-safe status updates.`
+          : "Customer name and email are required before customer status can be projected.",
+    },
+    {
+      key: "payment-status",
+      label: "Payment status",
+      status:
+        paymentStatus === "failed"
+          ? ("blocked" as const)
+          : paymentStatus === "pending"
+            ? ("attention" as const)
+            : ("ready" as const),
+      detail:
+        paymentStatus === "paid"
+          ? "Payment is paid and the customer status view can proceed to fulfillment state."
+          : paymentStatus === "refunded"
+            ? "Payment is refunded and the customer status view can show the order as closed."
+            : paymentStatus === "failed"
+              ? "Payment failed; customer status should direct the buyer to support or retry flow."
+              : "Payment is still pending; keep the customer status view in a checkout-confirmation state.",
+    },
+    {
+      key: "fulfillment-tracking",
+      label: "Fulfillment and tracking",
+      status:
+        fulfillmentStatus === "fulfilled" || trackingPresent
+          ? ("ready" as const)
+          : paymentStatus === "paid" || fulfillmentStatus === "processing"
+            ? ("attention" as const)
+            : ("ready" as const),
+      detail:
+        fulfillmentStatus === "fulfilled"
+          ? "Fulfillment is complete; tracking is optional for digital or pickup orders."
+          : trackingPresent
+            ? "Tracking details are present while fulfillment continues."
+            : paymentStatus === "paid"
+              ? "Paid order still needs fulfillment or tracking metadata."
+              : "Tracking will become available after payment and fulfillment progress.",
+    },
+    {
+      key: "refund-status",
+      label: "Refund and return",
+      status:
+        providerRefundStatus === "failed" ||
+        providerRefundStatus === "requires_action"
+          ? ("blocked" as const)
+          : providerRefundStatus === "requested"
+            ? ("attention" as const)
+            : ("ready" as const),
+      detail:
+        providerRefundStatus === "succeeded" ||
+        paymentStatus === "refunded" ||
+        (refundAmount || 0) > 0
+          ? "Refund or return metadata is present for customer support."
+          : providerRefundStatus === "requested"
+            ? "Provider refund is requested and should be refreshed before promising a final customer state."
+            : providerRefundStatus === "failed" ||
+                providerRefundStatus === "requires_action"
+              ? "Provider refund needs operator action before customer-facing status is final."
+              : "No refund or return is active for this order.",
+    },
+    {
+      key: "digital-delivery",
+      label: "Digital delivery",
+      status:
+        digitalDelivery.status === "attention"
+          ? ("attention" as const)
+          : ("ready" as const),
+      detail: digitalDelivery.customerAction,
+    },
+    {
+      key: "private-order-queue",
+      label: "Customer portal safety",
+      status: ready ? ("ready" as const) : ("blocked" as const),
+      detail: ready
+        ? "Raw order collection access is blocked; this handoff only exposes a bounded customer-safe projection."
+        : "Orders collection privacy or schema readiness needs repair before customer status projection.",
+    },
+  ];
+  const status = summarizeStatus(checks);
+  const readyCount = checks.filter((check) => check.status === "ready").length;
+  const nextSteps = checks
+    .filter((check) => check.status !== "ready")
+    .map((check) => check.detail)
+    .slice(0, 4);
+  const adminOrderBase = `/api/admin/sites/${encodeURIComponent(siteId)}/commerce/orders/${encodeURIComponent(order.id)}`;
+  const adminOrderDetail = `/api/admin/sites/${encodeURIComponent(siteId)}/collections/${encodeURIComponent(collection.id)}/records/${encodeURIComponent(order.id)}`;
+  const endpoints = {
+    checkoutIntake: endpointFor(
+      origin,
+      `/api/sites/${encodeURIComponent(siteId)}/commerce/orders`,
+    ),
+    publicStatusHandoff: endpointFor(
+      origin,
+      `/api/sites/${encodeURIComponent(siteId)}/commerce/orders?orderId=${encodeURIComponent(order.id)}&statusToken={statusToken}`,
+    ),
+    adminStatusHandoff: endpointFor(origin, `${adminOrderBase}/status-handoff`),
+    adminOrderDetail: endpointFor(origin, adminOrderDetail),
+    adminTracking: endpointFor(origin, `${adminOrderBase}/tracking`),
+    adminProviderRefund: endpointFor(
+      origin,
+      `${adminOrderBase}/provider-refund`,
+    ),
+  };
+
+  return {
+    schemaVersion: ORDER_STATUS_HANDOFF_SCHEMA_VERSION,
+    generatedAt: new Date().toISOString(),
+    source: "public-commerce-order-intake-api",
+    status,
+    score: Math.round((readyCount / checks.length) * 100),
+    selectedSiteId: siteId,
+    order: {
+      id: order.id,
+      slug: order.slug,
+      orderNumber,
+      recordStatus: order.status,
+      total: numberValue(readOrderValue(values, "total")),
+      currency,
+      itemCount,
+      orderStatus,
+      paymentStatus,
+      fulfillmentStatus,
+      createdAt: order.createdAt || "",
+      updatedAt: order.updatedAt || "",
+    },
+    customer: {
+      displayName: customerName,
+      maskedEmail: maskCustomerEmail(email),
+      maskedPhone: maskCustomerPhone(phone),
+      customerProfileLinked: Boolean(
+        customerProfile || textValue(readOrderValue(values, "customerid")),
+      ),
+      customerProfileSlug: "",
+      customerProfileStatus: textValue(customerProfile?.record.values?.status),
+    },
+    tracking: {
+      carrier: fulfillmentCarrier,
+      trackingNumber,
+      trackingUrl,
+      trackingStatus: textValue(readOrderValue(values, "trackingstatus")),
+      trackingLastCheckedAt: textValue(
+        readOrderValue(values, "trackinglastcheckedat"),
+      ),
+      fulfilledAt: textValue(readOrderValue(values, "fulfilledat")),
+      shippingLabelStatus: statusValue(
+        readOrderValue(values, "shippinglabelstatus"),
+        SHIPPING_LABEL_STATUSES,
+        "none",
+      ),
+      shippingLabelProvider: textValue(
+        readOrderValue(values, "shippinglabelprovider"),
+      ),
+      shippingLabelReferencePresent,
+    },
+    refund: {
+      refundAmount,
+      refundReasonPresent: Boolean(
+        textValue(readOrderValue(values, "refundreason")),
+      ),
+      providerRefundStatus,
+      providerRefundProvider: textValue(
+        readOrderValue(values, "providerrefundprovider"),
+      ),
+      providerRefundReferencePresent,
+      providerRefundRequestedAt: textValue(
+        readOrderValue(values, "providerrefundrequestedat"),
+      ),
+      providerRefundCompletedAt: textValue(
+        readOrderValue(values, "providerrefundcompletedat"),
+      ),
+    },
+    digitalDelivery,
+    endpoints,
+    frontendBindings: buildCheckoutStatusFrontendBindings(endpoints, order),
+    privacy: {
+      publicCollectionReadBlocked: ready,
+      customerSafeFieldsOnly: true,
+      includesRawCustomerContact: false,
+      includesProviderExecutionIds: false,
+      includesPaymentReferences: false,
+      includesAddresses: false,
+      includesInternalNotes: false,
+      includesDigitalDeliveryUrls: false,
+      includesDownloadMediaIds: false,
+      excludedFields: [
+        "email",
+        "phone",
+        "customerid",
+        "checkoutsessionid",
+        "statusaccesstokenhash",
+        "statusaccesstokenissuedat",
+        "statusaccesstokenexpiresat",
+        "shippingaddress",
+        "billingaddress",
+        "notes",
+        "paymentreference",
+        "shippinglabelid",
+        "shippinglabelurl",
+        "fulfillmentid",
+        "fulfillmentpayload",
+        "providerrefundid",
+        "providerrefundreference",
+        "providerrefundpayload",
+        "downloadurl",
+        "downloadmediaid",
+        "downloadmediaorganization",
+        "digitaldeliverypayload",
+      ],
+    },
+    actionPlan,
+    checks,
+    nextSteps: nextSteps.length
+      ? nextSteps
+      : [
+          "Customer status handoff is ready for order confirmation, tracking, refund, and support views.",
+      ],
+  };
+};
+
+const getOrderStatusLookupRequest = (request: NextRequest) => {
+  const searchParams = request.nextUrl.searchParams;
+  const lookupId = firstText(
+    searchParams.get("orderId"),
+    searchParams.get("orderSlug"),
+    searchParams.get("slug"),
+    searchParams.get("orderNumber")?.toLowerCase(),
+  );
+
+  if (!lookupId) return null;
+
+  return {
+    lookupId,
+    statusToken: firstText(
+      searchParams.get("statusToken"),
+      searchParams.get("orderStatusToken"),
+      searchParams.get("token"),
+    ),
+  };
+};
+
+const orderStatusTokenErrorResponse = (
+  access: "missing" | "expired" | "invalid",
+  requestId: string,
+) => {
+  if (access === "missing") {
+    return errorResponse(
+      403,
+      "ORDER_STATUS_TOKEN_NOT_ISSUED",
+      "This order does not have a public status access token",
+      requestId,
+    );
+  }
+
+  if (access === "expired") {
+    return errorResponse(
+      403,
+      "ORDER_STATUS_TOKEN_EXPIRED",
+      "The order status access token has expired",
+      requestId,
+    );
+  }
+
+  return errorResponse(
+    403,
+    "ORDER_STATUS_TOKEN_INVALID",
+    "The order status access token is invalid",
+    requestId,
+  );
+};
+
+const publicOrderStatusHandoffResponse = ({
+  request,
+  requestId,
+  siteId,
+  collection,
+  order,
+}: {
+  request: NextRequest;
+  requestId: string;
+  siteId: string;
+  collection: OrderStatusHandoffCollection;
+  order: OrderStatusHandoffOrder;
+}) => {
+  const statusHandoff = buildCheckoutStatusHandoff({
+    origin: request.nextUrl.origin,
+    siteId,
+    collection,
+    order,
+    customerProfile: null,
+  });
+  const statusAccess = buildOrderStatusAccess({
+    origin: request.nextUrl.origin,
+    siteId,
+    order,
+  });
+
+  return publicContractJson(
+    {
+      success: true,
+      requestId,
+      data: {
+        schemaVersion: ORDER_STATUS_HANDOFF_SCHEMA_VERSION,
+        statusHandoff,
+        statusAccess,
+      },
+    },
+    {
+      requestId,
+      request,
+      cache: "private",
+      schemaVersion: ORDER_STATUS_HANDOFF_SCHEMA_VERSION,
+      siteId,
+    },
+  );
+};
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get("x-request-id") || makeRequestId();
 
@@ -3300,6 +4287,56 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           "Orders collection must remain private before public checkout intake is enabled",
           requestId,
         );
+      }
+
+      const statusLookup = getOrderStatusLookupRequest(request);
+      if (statusLookup) {
+        if (!statusLookup.statusToken) {
+          return errorResponse(
+            401,
+            "ORDER_STATUS_TOKEN_REQUIRED",
+            "A statusToken is required to refresh public order status",
+            requestId,
+          );
+        }
+
+        const order =
+          (await repositories.collections.getRecordById(
+            site.id,
+            ordersCollection.id,
+            statusLookup.lookupId,
+          )) ||
+          (await repositories.collections.getRecordBySlug(
+            site.id,
+            ordersCollection.id,
+            statusLookup.lookupId,
+          ));
+
+        if (!order) {
+          return errorResponse(
+            404,
+            "ORDER_NOT_FOUND",
+            "Order not found",
+            requestId,
+          );
+        }
+
+        const access = verifyOrderStatusAccessToken({
+          siteId: site.id,
+          values: toRecord(order.values),
+          token: statusLookup.statusToken,
+        });
+        if (access !== "valid") {
+          return orderStatusTokenErrorResponse(access, requestId);
+        }
+
+        return publicOrderStatusHandoffResponse({
+          request,
+          requestId,
+          siteId: site.id,
+          collection: ordersCollection as OrderStatusHandoffCollection,
+          order: order as OrderStatusHandoffOrder,
+        });
       }
 
       const commerce = buildCommerceStorefrontContract({
@@ -3375,6 +4412,52 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         requestId,
       );
     }
+
+    const statusLookup = getOrderStatusLookupRequest(request);
+    if (statusLookup) {
+      if (!statusLookup.statusToken) {
+        return errorResponse(
+          401,
+          "ORDER_STATUS_TOKEN_REQUIRED",
+          "A statusToken is required to refresh public order status",
+          requestId,
+        );
+      }
+
+      const order = getCollectionRecordByIdOrSlug(
+        site.id,
+        ordersCollection.id,
+        statusLookup.lookupId,
+        { includeUnpublished: true },
+      );
+
+      if (!order) {
+        return errorResponse(
+          404,
+          "ORDER_NOT_FOUND",
+          "Order not found",
+          requestId,
+        );
+      }
+
+      const access = verifyOrderStatusAccessToken({
+        siteId: site.id,
+        values: toRecord(order.values),
+        token: statusLookup.statusToken,
+      });
+      if (access !== "valid") {
+        return orderStatusTokenErrorResponse(access, requestId);
+      }
+
+      return publicOrderStatusHandoffResponse({
+        request,
+        requestId,
+        siteId: site.id,
+        collection: ordersCollection as OrderStatusHandoffCollection,
+        order: order as OrderStatusHandoffOrder,
+      });
+    }
+
     const commerce = buildCommerceStorefrontContract({
       siteId: site.id,
       settings: getAdminSettings().integrations?.commerce,
@@ -3641,6 +4724,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         suffix += 1;
       }
       const orderCreatedAt = new Date().toISOString();
+      const statusAccessToken = createOrderStatusAccessToken();
+      const statusAccessTokenIssuedAt = orderCreatedAt;
       const checkoutSession = await executeStripeCheckoutSession({
         handoff: buildCheckoutSessionHandoff({
           request,
@@ -3688,6 +4773,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ordersource: "web",
         checkoutsessionid: checkoutSession.id,
         customerid: customerProfile?.record.id || "",
+        statusaccesstokenhash: orderStatusAccessTokenHash(
+          site.id,
+          statusAccessToken,
+        ),
+        statusaccesstokenissuedat: statusAccessTokenIssuedAt,
+        statusaccesstokenexpiresat: orderStatusAccessExpiresAt(
+          statusAccessTokenIssuedAt,
+        ),
         orderstatus: "open",
         paymentstatus: "pending",
         paymentprovider: checkoutSession.provider,
@@ -3781,6 +4874,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       });
       const deliveries = [...orderDeliveries, ...productDeliveries];
+      const statusHandoff = buildCheckoutStatusHandoff({
+        origin: request.nextUrl.origin,
+        siteId: site.id,
+        collection: ordersCollection as OrderStatusHandoffCollection,
+        order: order as OrderStatusHandoffOrder,
+        customerProfile: customerProfile as CheckoutCustomerProfile | null,
+      });
+      const statusAccess = buildOrderStatusAccess({
+        origin: request.nextUrl.origin,
+        siteId: site.id,
+        order: order as OrderStatusHandoffOrder,
+        token: statusAccessToken,
+      });
 
       return publicContractJson(
         {
@@ -3814,6 +4920,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             checkoutSession,
             quote,
             lineItems,
+            statusHandoff,
+            statusAccess,
             risk,
             deliveries,
           },
@@ -4009,6 +5117,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       suffix += 1;
     }
     const orderCreatedAt = new Date().toISOString();
+    const statusAccessToken = createOrderStatusAccessToken();
+    const statusAccessTokenIssuedAt = orderCreatedAt;
     const checkoutSession = await executeStripeCheckoutSession({
       handoff: buildCheckoutSessionHandoff({
         request,
@@ -4046,6 +5156,58 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       productsCollectionId: productsCollection.id,
       reservations: reservationList,
     });
+    const values = {
+      ordernumber: orderNumber,
+      customername: input.customer?.name || "",
+      email: input.customer?.email || "",
+      phone: input.customer?.phone || "",
+      total: quote.total,
+      subtotal: quote.subtotal,
+      taxamount: quote.taxAmount,
+      shippingamount: quote.shippingAmount,
+      discountamount: quote.discountAmount,
+      currency,
+      items: JSON.stringify(lineItems, null, 2),
+      ordersource: "web",
+      checkoutsessionid: checkoutSession.id,
+      customerid: customerProfile?.record.id || "",
+      statusaccesstokenhash: orderStatusAccessTokenHash(
+        site.id,
+        statusAccessToken,
+      ),
+      statusaccesstokenissuedat: statusAccessTokenIssuedAt,
+      statusaccesstokenexpiresat: orderStatusAccessExpiresAt(
+        statusAccessTokenIssuedAt,
+      ),
+      orderstatus: "open",
+      paymentstatus: "pending",
+      paymentprovider: checkoutSession.provider,
+      paymentreference: checkoutSession.reference,
+      fulfillmentstatus: "unfulfilled",
+      shippinglabelstatus: "none",
+      shippinglabelprovider: "",
+      shippinglabelid: "",
+      shippinglabelurl: "",
+      shippingservicelevel: "",
+      shippinglabelcost: null,
+      shippinglabelcreatedat: null,
+      providerrefundstatus: "none",
+      providerrefundprovider: "",
+      providerrefundid: "",
+      providerrefundreference: "",
+      providerrefundamount: null,
+      providerrefundreason: "",
+      providerrefundrequestedat: null,
+      providerrefundcompletedat: null,
+      providerrefundpayload: "",
+      riskscore: risk.score,
+      risklevel: risk.level,
+      riskreasons: risk.reasons.join("\n"),
+      riskreviewstatus: risk.reviewStatus,
+      shippingaddress: input.shippingAddress || "",
+      billingaddress: input.billingAddress || "",
+      notes: input.notes || "",
+    };
 
     let order: NonNullable<ReturnType<typeof createAdminCollectionRecord>>;
     try {
@@ -4055,50 +5217,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         {
           slug,
           status: "published",
-          values: {
-            ordernumber: orderNumber,
-            customername: input.customer?.name || "",
-            email: input.customer?.email || "",
-            phone: input.customer?.phone || "",
-            total: quote.total,
-            subtotal: quote.subtotal,
-            taxamount: quote.taxAmount,
-            shippingamount: quote.shippingAmount,
-            discountamount: quote.discountAmount,
-            currency,
-            items: JSON.stringify(lineItems, null, 2),
-            ordersource: "web",
-            checkoutsessionid: checkoutSession.id,
-            customerid: customerProfile?.record.id || "",
-            orderstatus: "open",
-            paymentstatus: "pending",
-            paymentprovider: checkoutSession.provider,
-            paymentreference: checkoutSession.reference,
-            fulfillmentstatus: "unfulfilled",
-            shippinglabelstatus: "none",
-            shippinglabelprovider: "",
-            shippinglabelid: "",
-            shippinglabelurl: "",
-            shippingservicelevel: "",
-            shippinglabelcost: null,
-            shippinglabelcreatedat: null,
-            providerrefundstatus: "none",
-            providerrefundprovider: "",
-            providerrefundid: "",
-            providerrefundreference: "",
-            providerrefundamount: null,
-            providerrefundreason: "",
-            providerrefundrequestedat: null,
-            providerrefundcompletedat: null,
-            providerrefundpayload: "",
-            riskscore: risk.score,
-            risklevel: risk.level,
-            riskreasons: risk.reasons.join("\n"),
-            riskreviewstatus: risk.reviewStatus,
-            shippingaddress: input.shippingAddress || "",
-            billingaddress: input.billingAddress || "",
-            notes: input.notes || "",
-          },
+          values,
         },
       );
 
@@ -4151,6 +5270,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
     });
     const deliveries = [...orderDeliveries, ...productDeliveries];
+    const statusHandoff = buildCheckoutStatusHandoff({
+      origin: request.nextUrl.origin,
+      siteId: site.id,
+      collection: ordersCollection as OrderStatusHandoffCollection,
+      order: order as OrderStatusHandoffOrder,
+      customerProfile: customerProfile as CheckoutCustomerProfile | null,
+    });
+    const statusAccess = buildOrderStatusAccess({
+      origin: request.nextUrl.origin,
+      siteId: site.id,
+      order: order as OrderStatusHandoffOrder,
+      token: statusAccessToken,
+    });
 
     return publicContractJson(
       {
@@ -4184,6 +5316,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           checkoutSession,
           quote,
           lineItems,
+          statusHandoff,
+          statusAccess,
           risk,
           deliveries,
         },

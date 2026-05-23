@@ -43,6 +43,16 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('Capture a list canvas to create rollback-ready versions for generated collection index pages.'), 'Collections list template history empty state must explain the capture workflow');
   assert(source.includes('title="No item template capture history"'), 'Collections item template history must use a shared empty-state title');
   assert(source.includes('Capture an item canvas to create rollback-ready versions for generated collection detail pages.'), 'Collections item template history empty state must explain the capture workflow');
+  assert(
+    source.includes('customJS?: string;') &&
+      source.includes('themeTokenRefs?: Record<string, string>;') &&
+      source.includes('animations?: unknown[];') &&
+      source.includes('contentDocument?: Record<string, unknown>;') &&
+      source.includes('authoredDynamicTemplateDesignStateSummary') &&
+      source.includes('Design state') &&
+      source.includes('editable targets'),
+    'Collections authored dynamic templates must preserve and display rich custom frontend design state for list/detail pages',
+  );
   assert(source.includes('data-testid="collections-slug-policy-controls"'), 'Collections schema editor must expose dynamic record slug policy controls');
   assert(source.includes('backy.collection-slug-policy.v1'), 'Collections metadata must persist a named slug policy contract');
   assert(source.includes('backy.collection-slug-policy-readiness.v1'), 'Collections route must compute slug policy readiness for dynamic routes');
@@ -58,6 +68,21 @@ const assertCollectionsRouteSourceContract = () => {
       source.includes('data-testid="collections-record-bulk-clear-selection"') &&
       source.includes('outside this view'),
     'Collections record bulk toolbar must load/select every matching record and summarize hidden selected records before bulk mutations',
+  );
+  assert(
+    source.includes('const [recordFormSubmitted, setRecordFormSubmitted] = useState(false);') &&
+      source.includes('const validateRecordFieldValue = (field: CollectionField, value: string): string | null =>') &&
+      source.includes('<form id="collections-record-editor"') &&
+      source.includes('noValidate') &&
+      source.includes("setError('Fix collection record fields before saving.');") &&
+      source.includes('data-testid="collections-record-save-button"') &&
+      source.includes('disabled={recordMutationDisabled}') &&
+      source.includes('data-testid="collections-record-scheduled-at-error"') &&
+      source.includes('data-testid={`collections-record-field-error-${field.key}`}') &&
+      source.includes('inlineError={recordFieldInlineErrors[field.key] || null}') &&
+      source.includes("validateRecordFieldValue(field, recordForm.values[field.key] || '')") &&
+      !source.includes('disabled={recordMutationDisabled || scheduledRecordMissingTime}'),
+    'Collections record editor must use source-guarded inline validation with a reachable save action for scheduled time and schema field errors',
   );
 };
 
@@ -2406,6 +2431,7 @@ const main = async () => {
   try {
     assertCollectionsRouteSourceContract();
     if (process.env.BACKY_COLLECTIONS_SOURCE_ONLY === '1') {
+      console.log(JSON.stringify({ ok: true, mode: 'source-only', route: 'collections' }, null, 2));
       return;
     }
 

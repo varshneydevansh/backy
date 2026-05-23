@@ -74,6 +74,7 @@ export interface AdminSiteSettingsScope {
     site: SiteSettings;
   };
   frontendDatabaseCertification?: FrontendDatabaseCertificationHandoff;
+  mediaStorageHandoff?: SettingsMediaStorageHandoff;
   endpoints: {
     workspaceSettings: string;
     siteSettings: string;
@@ -408,6 +409,34 @@ interface ApiPageResponse {
   };
 }
 
+export interface ContentRevisionBranchMetadata {
+  schemaVersion: 'backy.content-revision-branch-metadata.v1';
+  source: 'admin-page-revisions-api' | 'admin-blog-revisions-api' | string;
+  targetType: 'page' | 'post';
+  position: number;
+  total: number;
+  order: 'newest-first' | string;
+  branchId: string;
+  branchLabel: string;
+  branchLane: number;
+  branchRole: 'trunk' | 'restore-checkpoint' | 'restore-branch' | string;
+  chronologicalParentId: string | null;
+  chronologicalChildId: string | null;
+  restoreTargetRevisionId: string | null;
+  restoreTargetPosition: number | null;
+  restoreTargetInWindow?: boolean;
+  restoreEdgeId: string | null;
+  branchPointRevisionId?: string | null;
+  inference?: {
+    source?: string;
+    lineageSource?: string;
+    rollbackNotePattern?: string;
+    confidence?: string;
+    persistedFields?: string[];
+    limitation?: string;
+  };
+}
+
 interface ApiRevision {
   id: string;
   siteId: string;
@@ -415,8 +444,13 @@ interface ApiRevision {
   targetId: string;
   snapshot: ApiPage | ApiBlogPost;
   note: string | null;
+  parentRevisionId?: string | null;
+  operation?: string | null;
+  restoreTargetRevisionId?: string | null;
+  metadata?: Record<string, unknown>;
   createdBy: string | null;
   createdAt: string;
+  branchMetadata?: ContentRevisionBranchMetadata | null;
 }
 
 interface ApiRevisionListResponse {
@@ -1361,6 +1395,168 @@ export interface FrontendDatabaseCertificationHandoff {
   secretHandling: string;
 }
 
+export interface SettingsProviderCertificationHandoff {
+  schemaVersion: 'backy.settings-provider-certification-handoff.v1';
+  status: 'external-live-provider-gate' | string;
+  settingsGate?: string;
+  commerceGate?: string;
+  localPreflight?: string;
+  releasePreflight?: string;
+  secretHandling?: string;
+  runtimeEvidence?: {
+    missingInputAliases?: string[];
+    localRuntimeInputsConfigured?: boolean;
+    liveProviderGateRequired?: boolean;
+    [key: string]: unknown;
+  };
+  scenarioEvidence?: {
+    schemaVersion: 'backy.settings-provider-certification-evidence.v1' | string;
+    status?: 'ready' | 'attention' | string;
+    requiredGate?: string;
+    coverage?: {
+      covered?: number;
+      total?: number;
+      missing?: string[];
+      [key: string]: unknown;
+    };
+    scenarios?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  operatorEvidencePacket?: ProviderCertificationEvidencePacket;
+  operatorCommandTemplate?: {
+    command?: string;
+    envTemplate?: string;
+    envTemplateSchemaVersion?: string;
+    requiredInputAliases?: string[];
+    [key: string]: unknown;
+  };
+  operatorEnvTemplate?: {
+    schemaVersion?: string;
+    format?: string;
+    fileName?: string;
+    body?: string;
+    secretHandling?: string;
+    [key: string]: unknown;
+  };
+  groups?: Array<{
+    family: string;
+    providers: string[];
+    gate: string;
+    requiredInputs: string[];
+    evidence: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+export interface SettingsMediaStorageHandoff {
+  schemaVersion: 'backy.media-storage-handoff.v1';
+  status: 'ready' | 'needs-runtime-env' | string;
+  provider?: {
+    selected?: string;
+    bucket?: string;
+    publicBaseUrl?: string;
+    pathPrefix?: string;
+    runtime?: Record<string, unknown> | null;
+    supabase?: Record<string, unknown> | null;
+    [key: string]: unknown;
+  };
+  policies?: {
+    privateFilesEnabled?: boolean;
+    imageTransformsEnabled?: boolean;
+    maxFileSizeMb?: number | null;
+    workspaceStorageLimitGb?: number | null;
+    warningThresholdPercent?: number | null;
+    allowedFileTypes?: string;
+    [key: string]: unknown;
+  };
+  endpointTemplates?: Record<string, string>;
+  contracts?: {
+    organization?: 'backy.media.organization.v1' | string;
+    references?: 'backy.media.references.v1' | string;
+    editableMetadata?: 'backy.media.editable-metadata.v1' | string;
+    deliveryPolicy?: 'MediaDeliveryPolicy' | string;
+    fileCategories?: 'backy.media-file-categories.v1' | string;
+    [key: string]: unknown;
+  };
+  designStateUsage?: {
+    preservedFields?: string[];
+    editableSurfaces?: string[];
+    customFrontendUses?: string[];
+    [key: string]: unknown;
+  };
+  runtimeGate?: Record<string, unknown>;
+  privacy?: {
+    includesSecretValues?: boolean;
+    exposesSecretReferencesOnly?: boolean;
+    excludes?: string[];
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface SettingsThemeDesignImpact {
+  schemaVersion: 'backy.settings-theme-design-impact.v1';
+  status: 'ready' | 'attention' | string;
+  themeContract?: Record<string, unknown>;
+  designStatePersistence?: {
+    tokenRefPaths?: string[];
+    editableSurfaces?: string[];
+    preservedDesignFields?: string[];
+    [key: string]: unknown;
+  };
+  motion?: {
+    preset?: string;
+    bindingPaths?: string[];
+    animationStateFields?: string[];
+    [key: string]: unknown;
+  };
+  privacy?: {
+    includesSecretValues?: boolean;
+    includesAdminApiKeys?: boolean;
+    includesProviderCredentials?: boolean;
+    includesPrivateContent?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface BackyCompletionStatusHandoff {
+  schemaVersion: 'backy.completion-status.v1';
+  status: 'certification-ready' | 'external-gates-required' | string;
+  audit?: {
+    ready?: number;
+    partial?: number;
+    prototype?: number;
+    missing?: number;
+    total?: number;
+    readyPercent?: number;
+    [key: string]: unknown;
+  };
+  surfaces?: Array<Record<string, unknown>>;
+  surfaceRunbooks?: Array<{
+    key?: string;
+    evidencePacketSchema?: string;
+    evidenceApi?: string;
+    sourceOnlyGuard?: string;
+    secretBoundary?: {
+      includesSecretValues?: boolean;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }>;
+  gates?: Array<Record<string, unknown>>;
+  certifiedGates?: Array<Record<string, unknown>>;
+  recommendedCommands?: string[];
+  localPreflight?: string;
+  privacy?: {
+    includesSecretValues?: boolean;
+    exposesOnlyAliasPresence?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 interface ApiSettings {
   deliveryMode: SiteSettingsInput['deliveryMode'];
   apiKeys: {
@@ -1378,6 +1574,10 @@ interface ApiSettings {
   runtimeCommerce?: SiteSettingsInput['runtimeCommerce'];
   runtimeInteractiveComponents?: SiteSettingsInput['runtimeInteractiveComponents'];
   runtimePublicApi?: SiteSettingsInput['runtimePublicApi'];
+  completionStatus?: BackyCompletionStatusHandoff;
+  mediaStorageHandoff?: SettingsMediaStorageHandoff;
+  themeDesignImpact?: SettingsThemeDesignImpact;
+  providerCertification?: SettingsProviderCertificationHandoff;
   frontendDatabaseCertification?: FrontendDatabaseCertificationHandoff;
   updatedAt?: string;
 }
@@ -1723,6 +1923,7 @@ export interface ProductProviderCertificationHandoff {
     }>;
     secretHandling: string;
   };
+  operatorEvidencePacket?: ProviderCertificationEvidencePacket;
   groups?: Array<{
     family: string;
     providers: string[];
@@ -1730,6 +1931,64 @@ export interface ProductProviderCertificationHandoff {
     requiredInputs: string[];
     evidence: string;
   }>;
+  secretHandling: string;
+}
+
+export interface ProviderCertificationEvidencePacket {
+  schemaVersion:
+    | 'backy.commerce-provider-certification-evidence-packet.v1'
+    | 'backy.order-provider-certification-evidence-packet.v1'
+    | 'backy.settings-provider-certification-evidence-packet.v1'
+    | string;
+  generatedAt: string;
+  selectedSiteId?: string;
+  selectedProductId?: string;
+  status: 'no-family-selected' | 'needs-credentials' | 'needs-runtime-inputs' | 'needs-scenario-evidence' | 'evidence-complete' | string;
+  selectedFamilies: string[];
+  selectedProviderAliases?: Record<string, string>;
+  runtimeReadiness?: {
+    loaded?: boolean;
+    configuredFamilies?: string[];
+    missingSelectedFamilies?: string[];
+    missingInputAliases?: string[];
+    localRuntimeInputsConfigured?: boolean;
+    [key: string]: unknown;
+  };
+  operatorArtifacts: Array<{
+    key: string;
+    family: string;
+    providerAlias: string;
+    status: 'ready-to-run' | 'needs-credentials' | 'needs-runtime-inputs' | string;
+    requiredInputs: string[];
+    expectedArtifacts: string[];
+    captureSource: string;
+    redaction: string;
+  }>;
+  scenarioAttachments: Array<{
+    key: string;
+    label: string;
+    status: 'covered' | 'missing' | string;
+    evidenceCount: number;
+    expectedEvidence: string[];
+    nextAction?: string;
+  }>;
+  commandPreview?: {
+    command?: string;
+    envTemplate?: string;
+    requiredInputs?: string[];
+    requiredAliases?: string[];
+    targetInputs?: string[];
+    [key: string]: unknown;
+  };
+  target?: {
+    siteId?: string;
+    productId?: string;
+    siteSelectorEnv?: string;
+    settingsSiteSelectorEnv?: string;
+    commerceSiteSelectorEnv?: string;
+    [key: string]: unknown;
+  };
+  redactionPolicy?: Record<string, unknown>;
   secretHandling: string;
 }
 
@@ -2144,6 +2403,15 @@ interface ApiReusableSectionContent {
   canvasSize?: CanvasSize;
   customCSS?: string;
   customJS?: string;
+  contentDocument?: Record<string, unknown>;
+  themeTokenRefs?: Record<string, string>;
+  assets?: unknown[] | Record<string, unknown>;
+  animations?: unknown[] | Record<string, unknown>;
+  interactions?: unknown[] | Record<string, unknown>;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 interface ApiReusableSection {
@@ -2703,6 +2971,10 @@ export interface SiteSettingsInput {
     exposedContractHeaders: string[];
     missing: string[];
   };
+  completionStatus?: BackyCompletionStatusHandoff;
+  mediaStorageHandoff?: SettingsMediaStorageHandoff;
+  themeDesignImpact?: SettingsThemeDesignImpact;
+  providerCertification?: SettingsProviderCertificationHandoff;
   frontendDatabaseCertification?: FrontendDatabaseCertificationHandoff;
   runtimeVercel?: {
     configured: boolean;
@@ -3611,8 +3883,13 @@ export interface ContentRevision {
   id: string;
   targetType: 'page' | 'post';
   note: string | null;
+  parentRevisionId: string | null;
+  operation: string | null;
+  restoreTargetRevisionId: string | null;
+  metadata: Record<string, unknown>;
   createdBy: string | null;
   createdAt: string;
+  branchMetadata?: ContentRevisionBranchMetadata | null;
   snapshotTitle: string;
   snapshotSlug: string;
   snapshotStatus: Page['status'] | BlogPost['status'];
@@ -3821,6 +4098,15 @@ export interface ReusableSectionContent {
   canvasSize?: CanvasSize;
   customCSS?: string;
   customJS?: string;
+  contentDocument?: Record<string, unknown>;
+  themeTokenRefs?: Record<string, string>;
+  assets?: unknown[] | Record<string, unknown>;
+  animations?: unknown[] | Record<string, unknown>;
+  interactions?: unknown[] | Record<string, unknown>;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ReusableSection {
@@ -4482,8 +4768,13 @@ const toContentRevision = (revision: ApiRevision): ContentRevision => {
     id: revision.id,
     targetType: revision.targetType,
     note: revision.note,
+    parentRevisionId: revision.parentRevisionId || null,
+    operation: revision.operation || null,
+    restoreTargetRevisionId: revision.restoreTargetRevisionId || null,
+    metadata: revision.metadata || {},
     createdBy: revision.createdBy,
     createdAt: revision.createdAt,
+    branchMetadata: revision.branchMetadata || null,
     snapshotTitle: snapshot.title,
     snapshotSlug: typeof snapshot.slug === 'string' ? snapshot.slug : '',
     snapshotStatus: toContentStatus(snapshot.status, snapshot.status === 'published'),
@@ -4563,6 +4854,15 @@ const toReusableSection = (section: ApiReusableSection): ReusableSection => ({
     canvasSize: section.content?.canvasSize,
     customCSS: section.content?.customCSS,
     customJS: section.content?.customJS,
+    contentDocument: section.content?.contentDocument,
+    themeTokenRefs: section.content?.themeTokenRefs,
+    assets: section.content?.assets,
+    animations: section.content?.animations,
+    interactions: section.content?.interactions,
+    dataBindings: section.content?.dataBindings,
+    editableMap: section.content?.editableMap,
+    seo: section.content?.seo,
+    metadata: section.content?.metadata,
   },
   metadata: section.metadata || {},
   sourceElementId: section.sourceElementId || null,
@@ -5321,6 +5621,27 @@ export async function rollbackUsersImport(requestId?: string | null): Promise<Us
   return payload.data.rollback;
 }
 
+const toSiteSettingsInput = (settings: ApiSettings): SiteSettingsInput => ({
+  deliveryMode: settings.deliveryMode,
+  apiKeys: settings.apiKeys,
+  auth: settings.auth,
+  runtimeStorage: settings.runtimeStorage,
+  integrations: settings.integrations,
+  runtimeDatabase: settings.runtimeDatabase,
+  runtimeSupabase: settings.runtimeSupabase,
+  runtimeMediaScanner: settings.runtimeMediaScanner,
+  runtimeVercel: settings.runtimeVercel,
+  runtimeNotifications: settings.runtimeNotifications,
+  runtimeCommerce: settings.runtimeCommerce,
+  runtimeInteractiveComponents: settings.runtimeInteractiveComponents,
+  runtimePublicApi: settings.runtimePublicApi,
+  completionStatus: settings.completionStatus,
+  mediaStorageHandoff: settings.mediaStorageHandoff,
+  themeDesignImpact: settings.themeDesignImpact,
+  providerCertification: settings.providerCertification,
+  frontendDatabaseCertification: settings.frontendDatabaseCertification,
+});
+
 export async function getSettings(): Promise<SiteSettingsInput> {
   const response = await adminFetch(`${getAdminApiBase()}/settings`);
   const payload = await readJson<ApiSettingsResponse>(response);
@@ -5329,22 +5650,7 @@ export async function getSettings(): Promise<SiteSettingsInput> {
     throw new Error(payload.error?.message || 'Unable to load settings');
   }
 
-  return {
-    deliveryMode: payload.data.settings.deliveryMode,
-    apiKeys: payload.data.settings.apiKeys,
-    auth: payload.data.settings.auth,
-    runtimeStorage: payload.data.settings.runtimeStorage,
-    integrations: payload.data.settings.integrations,
-    runtimeDatabase: payload.data.settings.runtimeDatabase,
-    runtimeSupabase: payload.data.settings.runtimeSupabase,
-    runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
-    runtimeVercel: payload.data.settings.runtimeVercel,
-    runtimeNotifications: payload.data.settings.runtimeNotifications,
-    runtimeCommerce: payload.data.settings.runtimeCommerce,
-    runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
-    runtimePublicApi: payload.data.settings.runtimePublicApi,
-    frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
-  };
+  return toSiteSettingsInput(payload.data.settings);
 }
 
 export async function updateSettings(input: Partial<SiteSettingsInput>): Promise<SiteSettingsInput> {
@@ -5361,22 +5667,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
     throw new Error(payload.error?.message || 'Unable to save settings');
   }
 
-  return {
-    deliveryMode: payload.data.settings.deliveryMode,
-    apiKeys: payload.data.settings.apiKeys,
-    auth: payload.data.settings.auth,
-    runtimeStorage: payload.data.settings.runtimeStorage,
-    integrations: payload.data.settings.integrations,
-    runtimeDatabase: payload.data.settings.runtimeDatabase,
-    runtimeSupabase: payload.data.settings.runtimeSupabase,
-    runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
-    runtimeVercel: payload.data.settings.runtimeVercel,
-    runtimeNotifications: payload.data.settings.runtimeNotifications,
-    runtimeCommerce: payload.data.settings.runtimeCommerce,
-    runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
-    runtimePublicApi: payload.data.settings.runtimePublicApi,
-    frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
-  };
+  return toSiteSettingsInput(payload.data.settings);
 }
 
 export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin' = 'all'): Promise<SiteSettingsInput> {
@@ -5393,22 +5684,7 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
     throw new Error(payload.error?.message || 'Unable to regenerate API keys');
   }
 
-  return {
-    deliveryMode: payload.data.settings.deliveryMode,
-    apiKeys: payload.data.settings.apiKeys,
-    auth: payload.data.settings.auth,
-    runtimeStorage: payload.data.settings.runtimeStorage,
-    integrations: payload.data.settings.integrations,
-    runtimeDatabase: payload.data.settings.runtimeDatabase,
-    runtimeSupabase: payload.data.settings.runtimeSupabase,
-    runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
-    runtimeVercel: payload.data.settings.runtimeVercel,
-    runtimeNotifications: payload.data.settings.runtimeNotifications,
-    runtimeCommerce: payload.data.settings.runtimeCommerce,
-    runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
-    runtimePublicApi: payload.data.settings.runtimePublicApi,
-    frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
-  };
+  return toSiteSettingsInput(payload.data.settings);
 }
 
 export async function issueSettingsAdminApiKey(label: string): Promise<{
@@ -5429,22 +5705,7 @@ export async function issueSettingsAdminApiKey(label: string): Promise<{
   }
 
   return {
-    settings: {
-      deliveryMode: payload.data.settings.deliveryMode,
-      apiKeys: payload.data.settings.apiKeys,
-      auth: payload.data.settings.auth,
-      runtimeStorage: payload.data.settings.runtimeStorage,
-      integrations: payload.data.settings.integrations,
-      runtimeDatabase: payload.data.settings.runtimeDatabase,
-      runtimeSupabase: payload.data.settings.runtimeSupabase,
-      runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
-      runtimeVercel: payload.data.settings.runtimeVercel,
-      runtimeNotifications: payload.data.settings.runtimeNotifications,
-      runtimeCommerce: payload.data.settings.runtimeCommerce,
-      runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
-      runtimePublicApi: payload.data.settings.runtimePublicApi,
-      frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
-    },
+    settings: toSiteSettingsInput(payload.data.settings),
     issuedKey: payload.data.issuedKey,
   };
 }
@@ -5463,22 +5724,7 @@ export async function revokeSettingsAdminApiKey(keyId: string): Promise<SiteSett
     throw new Error(payload.error?.message || 'Unable to revoke admin API key');
   }
 
-  return {
-    deliveryMode: payload.data.settings.deliveryMode,
-    apiKeys: payload.data.settings.apiKeys,
-    auth: payload.data.settings.auth,
-    runtimeStorage: payload.data.settings.runtimeStorage,
-    integrations: payload.data.settings.integrations,
-    runtimeDatabase: payload.data.settings.runtimeDatabase,
-    runtimeSupabase: payload.data.settings.runtimeSupabase,
-    runtimeMediaScanner: payload.data.settings.runtimeMediaScanner,
-    runtimeVercel: payload.data.settings.runtimeVercel,
-    runtimeNotifications: payload.data.settings.runtimeNotifications,
-    runtimeCommerce: payload.data.settings.runtimeCommerce,
-    runtimeInteractiveComponents: payload.data.settings.runtimeInteractiveComponents,
-    runtimePublicApi: payload.data.settings.runtimePublicApi,
-    frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification,
-  };
+  return toSiteSettingsInput(payload.data.settings);
 }
 
 export async function validateSettingsInfrastructure(input: Pick<SiteSettingsInput, 'deliveryMode' | 'integrations'> & { recordHistory?: boolean }): Promise<SettingsInfrastructureCheckResult> {
@@ -7942,6 +8188,7 @@ export interface OrderProviderCertificationHandoff {
     }>;
     secretHandling: string;
   };
+  operatorEvidencePacket?: ProviderCertificationEvidencePacket;
   groups?: Array<{
     family: string;
     providers: string[];

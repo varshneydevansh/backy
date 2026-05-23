@@ -69,6 +69,7 @@ import {
   normalizeSavedCanvasContent,
   serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
+import { canvasElementsToBackyContentDocument } from '@backy-cms/core';
 
 interface BlogEditorSearch {
     siteId?: string;
@@ -198,6 +199,14 @@ const getMetaArray = (meta: Record<string, any> | undefined, key: string): unkno
     return Array.isArray(value) ? value : [];
 };
 
+const recordKeyCount = (value: unknown): number => (
+    isRecord(value) ? Object.keys(value).length : 0
+);
+
+const arrayCount = (value: unknown): number => (
+    Array.isArray(value) ? value.length : 0
+);
+
 type BlogCanvasTreeStats = {
     rootLayerCount: number;
     totalLayerCount: number;
@@ -244,9 +253,233 @@ type BlogRevisionTimelineNode = {
     olderId: string | null;
     isLatest: boolean;
     isOldest: boolean;
+    branchId: string;
+    branchLabel: string;
+    branchLane: number;
+    branchRole: BlogRevisionBranchRole;
+    chronologicalParentId: string | null;
+    chronologicalChildId: string | null;
+    restoreTargetId: string | null;
+    restoreTargetPosition: number | null;
+    restoreTargetLabel: string | null;
+    restoreEdgeId: string | null;
+    branchMetadata: ContentRevision['branchMetadata'] | null;
+};
+
+type BlogRevisionBranchRole = 'trunk' | 'restore-checkpoint' | 'restore-branch';
+
+type BlogRevisionGraphEdge = {
+    id: string;
+    fromId: string;
+    toId: string;
+    kind: 'chronological' | 'rollback-target';
+    label: string;
+    inferred: boolean;
+};
+
+type BlogRevisionBranchSummary = {
+    id: string;
+    label: string;
+    lane: number;
+    nodeIds: string[];
+    branchPointRevisionId: string | null;
+    restoreTargetRevisionId: string | null;
+    restoreTargetPosition: number | null;
+    status: 'active' | 'historical' | 'pending-save';
+};
+
+type BlogRevisionBranchGraph = {
+    schema: 'backy.blog-revision-branch-graph.v1';
+    totalNodes: number;
+    branchCount: number;
+    rootBranchId: string;
+    activeBranchId: string | null;
+    branches: BlogRevisionBranchSummary[];
+    edges: BlogRevisionGraphEdge[];
+    nodes: BlogRevisionTimelineNode[];
+    inference: {
+        source: 'revision-api-branch-metadata' | 'revision-notes';
+        rollbackNotePattern: string;
+        confidence: 'explicit-api-metadata' | 'inferred';
+        limitation: string;
+    };
 };
 
 const BLOG_REVISION_COLLAPSED_COUNT = 6;
+const BLOG_REVISION_RESTORE_TARGET_PATTERN = /\b(?:rollback|restore)\s+to\s+([a-zA-Z0-9_-]+)/i;
+
+const isBlogRevisionBranchRole = (value: unknown): value is BlogRevisionBranchRole => (
+    value === 'trunk' || value === 'restore-checkpoint' || value === 'restore-branch'
+);
+
+const getBlogRevisionBranchMetadata = (
+    revision: Pick<ContentRevision, 'branchMetadata'>,
+): NonNullable<ContentRevision['branchMetadata']> | null => (
+    revision.branchMetadata?.schemaVersion === 'backy.content-revision-branch-metadata.v1'
+        ? revision.branchMetadata
+        : null
+);
+
+const getBlogRevisionRestoreTargetId = (revision: Pick<ContentRevision, 'note' | 'branchMetadata'>): string | null => {
+    const metadataRestoreTargetId = getBlogRevisionBranchMetadata(revision)?.restoreTargetRevisionId;
+    if (metadataRestoreTargetId) return metadataRestoreTargetId;
+
+    const note = revision.note || '';
+    const match = note.match(BLOG_REVISION_RESTORE_TARGET_PATTERN);
+    return match?.[1] || null;
+};
+
+const buildBlogRevisionBranchGraph = (revisions: ContentRevision[]): BlogRevisionBranchGraph => {
+    const hasApiBranchMetadata = revisions.some((revision) => (
+        revision.branchMetadata?.schemaVersion === 'backy.content-revision-branch-metadata.v1'
+    ));
+    const revisionIds = new Set(revisions.map((revision) => revision.id));
+    const positionById = new Map(revisions.map((revision, index) => [revision.id, index + 1]));
+    const branchByRevisionId = new Map<string, string>();
+    const branches = new Map<string, Omit<BlogRevisionBranchSummary, 'status'>>();
+    const edges: BlogRevisionGraphEdge[] = [];
+    const rootBranchId = 'trunk';
+
+    branches.set(rootBranchId, {
+        id: rootBranchId,
+        label: 'Main timeline',
+        lane: 0,
+        nodeIds: [],
+        branchPointRevisionId: null,
+        restoreTargetRevisionId: null,
+        restoreTargetPosition: null,
+    });
+
+    const chronologicalRevisions = [...revisions].reverse();
+    let activeBranchId = rootBranchId;
+    let lane = 0;
+
+    chronologicalRevisions.forEach((revision, chronologicalIndex) => {
+        const activeBranch = branches.get(activeBranchId) || branches.get(rootBranchId);
+        activeBranch?.nodeIds.push(revision.id);
+        branchByRevisionId.set(revision.id, activeBranch?.id || rootBranchId);
+
+        const newerRevision = chronologicalRevisions[chronologicalIndex + 1];
+        if (newerRevision) {
+            edges.push({
+                id: `chronological-${revision.id}-${newerRevision.id}`,
+                fromId: revision.id,
+                toId: newerRevision.id,
+                kind: 'chronological',
+                label: `Chronological save #${positionById.get(revision.id) || '?'} to #${positionById.get(newerRevision.id) || '?'}`,
+                inferred: false,
+            });
+        }
+
+        const restoreTargetId = getBlogRevisionRestoreTargetId(revision);
+        if (restoreTargetId && revisionIds.has(restoreTargetId)) {
+            const restoreTargetPosition = positionById.get(restoreTargetId) || null;
+            const restoreBranchId = `restore-${revision.id}`;
+            edges.push({
+                id: `rollback-${revision.id}-${restoreTargetId}`,
+                fromId: revision.id,
+                toId: restoreTargetId,
+                kind: 'rollback-target',
+                label: `Rollback checkpoint restores from #${restoreTargetPosition || '?'}`,
+                inferred: !hasApiBranchMetadata,
+            });
+
+            lane += 1;
+            branches.set(restoreBranchId, {
+                id: restoreBranchId,
+                label: `Restore branch from #${restoreTargetPosition || '?'}`,
+                lane,
+                nodeIds: [],
+                branchPointRevisionId: revision.id,
+                restoreTargetRevisionId: restoreTargetId,
+                restoreTargetPosition,
+            });
+            activeBranchId = restoreBranchId;
+        }
+    });
+
+    const latestRevisionId = revisions[0]?.id || null;
+    const latestBranchId = latestRevisionId ? branchByRevisionId.get(latestRevisionId) || rootBranchId : null;
+    const branchSummaries: BlogRevisionBranchSummary[] = Array.from(branches.values()).map((branch) => ({
+        ...branch,
+        status: branch.nodeIds.length === 0
+            ? 'pending-save'
+            : branch.id === latestBranchId
+                ? 'active'
+                : 'historical',
+    }));
+    const branchSummaryById = new Map(branchSummaries.map((branch) => [branch.id, branch]));
+    const rollbackEdgesByFromId = new Map(
+        edges
+            .filter((edge) => edge.kind === 'rollback-target')
+            .map((edge) => [edge.fromId, edge]),
+    );
+    const nodes = revisions.map((revision, index) => {
+        const branchMetadata = getBlogRevisionBranchMetadata(revision);
+        const branchId = branchMetadata?.branchId || branchByRevisionId.get(revision.id) || rootBranchId;
+        const branch = branchSummaryById.get(branchId) || branchSummaries[0];
+        const restoreTargetId = getBlogRevisionRestoreTargetId(revision);
+        const restoreTargetPosition = branchMetadata?.restoreTargetPosition ?? (restoreTargetId ? positionById.get(restoreTargetId) || null : null);
+        const restoreEdge = rollbackEdgesByFromId.get(revision.id) || null;
+        const metadataBranchRole = branchMetadata?.branchRole;
+        const branchRole = isBlogRevisionBranchRole(metadataBranchRole)
+            ? metadataBranchRole
+            : restoreTargetId && revisionIds.has(restoreTargetId)
+                ? 'restore-checkpoint'
+                : branchId === rootBranchId
+                    ? 'trunk'
+                    : 'restore-branch';
+
+        return {
+            id: revision.id,
+            position: index + 1,
+            total: revisions.length,
+            label: `Revision ${index + 1} of ${revisions.length}`,
+            summary: getContentRevisionGraphNodeLabel(revision, index + 1, revisions.length),
+            createdAt: revision.createdAt,
+            createdBy: revision.createdBy,
+            actor: getContentRevisionActorLabel(revision),
+            action: getContentRevisionActionLabel(revision),
+            status: revision.snapshotStatus,
+            snapshotUpdatedAt: revision.snapshotUpdatedAt,
+            snapshotUpdatedLabel: getContentRevisionSnapshotUpdatedLabel(revision),
+            newerId: revisions[index - 1]?.id || null,
+            olderId: revisions[index + 1]?.id || null,
+            isLatest: index === 0,
+            isOldest: index === revisions.length - 1,
+            branchId,
+            branchLabel: branchMetadata?.branchLabel || branch?.label || 'Main timeline',
+            branchLane: branchMetadata?.branchLane ?? branch?.lane ?? 0,
+            branchRole,
+            chronologicalParentId: branchMetadata?.chronologicalParentId ?? revisions[index + 1]?.id ?? null,
+            chronologicalChildId: branchMetadata?.chronologicalChildId ?? revisions[index - 1]?.id ?? null,
+            restoreTargetId: restoreTargetId && revisionIds.has(restoreTargetId) ? restoreTargetId : null,
+            restoreTargetPosition,
+            restoreTargetLabel: restoreTargetPosition ? `Revision #${restoreTargetPosition}` : null,
+            restoreEdgeId: branchMetadata?.restoreEdgeId || restoreEdge?.id || null,
+            branchMetadata,
+        } satisfies BlogRevisionTimelineNode;
+    });
+
+    return {
+        schema: 'backy.blog-revision-branch-graph.v1',
+        totalNodes: nodes.length,
+        branchCount: branchSummaries.length,
+        rootBranchId,
+        activeBranchId: latestBranchId,
+        branches: branchSummaries,
+        edges,
+        nodes,
+        inference: {
+            source: hasApiBranchMetadata ? 'revision-api-branch-metadata' : 'revision-notes',
+            rollbackNotePattern: BLOG_REVISION_RESTORE_TARGET_PATTERN.source,
+            confidence: hasApiBranchMetadata ? 'explicit-api-metadata' : 'inferred',
+            limitation: hasApiBranchMetadata
+                ? 'Backy revision APIs return normalized branch metadata from persisted parent revision, operation, restore-target, order, and legacy rollback-note metadata.'
+                : 'Backy currently stores blog revision order and rollback notes for legacy revisions; new revisions persist parent revision, operation, and restore-target metadata.',
+        },
+    };
+};
 
 const getBlogCanvasTreeStats = (elements: CanvasElement[]): BlogCanvasTreeStats => {
     let totalLayerCount = 0;
@@ -730,7 +963,20 @@ function EditBlogPostPage() {
     }, [activeSiteId, canViewBlog, isPermissionMatrixPending, post, routeCheckRetry, viewBlogDeniedMessage]);
 
     // Canvas State (Content Body)
-    const { elements: savedElements, canvasSize: savedCanvasSize } = useMemo(
+    const {
+      elements: savedElements,
+      canvasSize: savedCanvasSize,
+      customCSS: savedCustomCSS,
+      customJS: savedCustomJS,
+      themeTokenRefs: savedThemeTokenRefs,
+      assets: savedDesignAssets,
+      interactions: savedDesignInteractions,
+      seo: savedDesignSeo,
+      dataBindings: savedDesignDataBindings,
+      editableMap: savedEditableMap,
+      metadata: savedDesignMetadata,
+      contentDocument: savedContentDocument,
+    } = useMemo(
       () => normalizeSavedCanvasContent(post?.content),
       [post?.content]
     );
@@ -791,24 +1037,12 @@ function EditBlogPostPage() {
         status,
         title,
     ]);
-    const blogRevisionTimeline = useMemo<BlogRevisionTimelineNode[]>(() => revisions.map((revision, index) => ({
-        id: revision.id,
-        position: index + 1,
-        total: revisions.length,
-        label: `Revision ${index + 1} of ${revisions.length}`,
-        summary: getContentRevisionGraphNodeLabel(revision, index + 1, revisions.length),
-        createdAt: revision.createdAt,
-        createdBy: revision.createdBy,
-        actor: getContentRevisionActorLabel(revision),
-        action: getContentRevisionActionLabel(revision),
-        status: revision.snapshotStatus,
-        snapshotUpdatedAt: revision.snapshotUpdatedAt,
-        snapshotUpdatedLabel: getContentRevisionSnapshotUpdatedLabel(revision),
-        newerId: revisions[index - 1]?.id || null,
-        olderId: revisions[index + 1]?.id || null,
-        isLatest: index === 0,
-        isOldest: index === revisions.length - 1,
-    })), [revisions]);
+    const blogRevisionBranchGraph = useMemo(() => buildBlogRevisionBranchGraph(revisions), [revisions]);
+    const blogRevisionTimeline = blogRevisionBranchGraph.nodes;
+    const blogRevisionBranchGraphText = useMemo(
+        () => JSON.stringify(blogRevisionBranchGraph, null, 2),
+        [blogRevisionBranchGraph],
+    );
     const blogRevisionTimelineById = useMemo(
         () => new Map(blogRevisionTimeline.map((node) => [node.id, node])),
         [blogRevisionTimeline],
@@ -833,6 +1067,44 @@ function EditBlogPostPage() {
       ? `Resolve interactive block readiness before publishing: ${interactiveReadinessIssues[0]}`
       : null;
     const interactivePublishReady = interactiveReadinessIssues.length === 0;
+    const currentDesignDocument = useMemo(() => canvasElementsToBackyContentDocument({
+        id: post?.id || postId,
+        kind: 'post',
+        title: title || post?.title,
+        slug: slugify(slug || post?.slug || postId),
+        status,
+        locale: 'en',
+        elements: canvasElements,
+        canvasSize,
+        customCSS: savedCustomCSS,
+        customJS: savedCustomJS,
+        themeTokenRefs: savedThemeTokenRefs,
+        assets: savedDesignAssets,
+        interactions: savedDesignInteractions,
+        seo: savedDesignSeo,
+        dataBindings: savedDesignDataBindings,
+        editableMap: savedEditableMap,
+        metadata: savedDesignMetadata,
+    }), [
+        canvasElements,
+        canvasSize,
+        post?.id,
+        post?.slug,
+        post?.title,
+        postId,
+        savedCustomCSS,
+        savedCustomJS,
+        savedDesignAssets,
+        savedDesignDataBindings,
+        savedDesignInteractions,
+        savedDesignMetadata,
+        savedDesignSeo,
+        savedEditableMap,
+        savedThemeTokenRefs,
+        slug,
+        status,
+        title,
+    ]);
 
     const loadPostReadiness = useCallback(async () => {
       if (!canViewBlog) {
@@ -1021,13 +1293,21 @@ function EditBlogPostPage() {
         setIsLoading(true);
         setSaveWarning(null);
 
-        const content = serializeCanvasContent(canvasElements, canvasSize, undefined, {
+        const content = serializeCanvasContent(canvasElements, canvasSize, savedCustomCSS, {
             documentId: post.id,
             kind: 'post',
             title,
             slug,
             status,
             locale: 'en',
+            customJS: savedCustomJS,
+            themeTokenRefs: savedThemeTokenRefs,
+            assets: savedDesignAssets,
+            interactions: savedDesignInteractions,
+            seo: savedDesignSeo,
+            dataBindings: savedDesignDataBindings,
+            editableMap: savedEditableMap,
+            metadata: savedDesignMetadata,
         });
         try {
             const savedPost = await updateBlogPost(activeSiteId, postId, {
@@ -1406,6 +1686,12 @@ function EditBlogPostPage() {
     const selectedFeaturedImageUrl = selectedFeaturedImage
         ? selectedFeaturedImage.url || getPublicMediaFileUrl(selectedFeaturedImage.id, activeSiteId)
         : null;
+    const selectedCategories = categories
+        .filter((category) => selectedCategoryIds.includes(category.id))
+        .map((category) => ({ id: category.id, name: category.name, slug: category.slug }));
+    const selectedTags = tags
+        .filter((tag) => selectedTagIds.includes(tag.id))
+        .map((tag) => ({ id: tag.id, name: tag.name, slug: tag.slug }));
     const frontendDesignTemplate = {
         id: getMetaString(post.meta, 'frontendDesignTemplateId'),
         name: getMetaString(post.meta, 'frontendDesignTemplateName'),
@@ -1504,6 +1790,57 @@ function EditBlogPostPage() {
     const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading || isCheckingRoutes;
     const editorFormDisabled = editorBusy || !canEditBlog || isUsingLocalPostCopy;
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
+    const routeBlockedReason = routeCheckError
+        ? 'Backy could not verify existing blog routes for this site. Retry the route check before publishing.'
+        : routeConflict
+            ? `The ${publicPath} route is already used by "${routeConflict.title}". Choose another slug before publishing.`
+            : isCheckingRoutes
+                ? 'Backy is still checking route availability. Wait for the route check before publishing.'
+                : null;
+    const saveDisabledReason = !canEditBlog
+        ? editBlogDeniedMessage
+        : isUsingLocalPostCopy
+            ? localPostCopyDisabledMessage
+            : (status === 'published' || status === 'scheduled') && !canPublishBlog
+                ? publishBlogDeniedMessage
+                : !canSave
+                    ? scheduleValidationMessage
+                        || routeBlockedReason
+                        || (!canonicalValid ? 'Use a canonical path that starts with / before saving.' : null)
+                        || (!interactivePublishReady ? interactivePublishDisabledReason : null)
+                        || (!title.trim() ? 'Add a title before saving.' : null)
+                        || (!normalizedSlug ? 'Add a slug before saving.' : null)
+                        || 'Resolve editor validation before saving.'
+                    : null;
+    const publishWorkflowDisabledReason = !canPublishBlog
+        ? publishBlogDeniedMessage
+        : isUsingLocalPostCopy
+            ? localPostCopyDisabledMessage
+            : editorHasUnsavedChanges
+                ? 'Save this post before publishing so the backend publishes the latest title, SEO, taxonomy, media, and canvas changes.'
+                : status === 'published'
+                    ? 'Post is already published.'
+                    : routeBlockedReason
+                        || interactivePublishDisabledReason
+                        || (readinessBlocked
+                            ? postReadiness?.checks.find((check) => check.status !== 'pass' && check.severity === 'error')?.message || 'Resolve post readiness errors before publishing.'
+                            : null);
+    const archiveWorkflowDisabledReason = !canEditBlog
+        ? editBlogDeniedMessage
+        : isUsingLocalPostCopy
+            ? localPostCopyDisabledMessage
+            : editorHasUnsavedChanges
+                ? 'Save or discard local changes before archiving.'
+                : status === 'archived'
+                    ? 'Post is already archived.'
+                    : null;
+    const previewWorkflowDisabledReason = !canPublishBlog
+        ? publishBlogDeniedMessage
+        : isUsingLocalPostCopy
+            ? localPostCopyDisabledMessage
+            : editorHasUnsavedChanges
+                ? 'Save this post before generating a preview.'
+                : null;
     const backendReadinessDetail = postReadiness
         ? `${postReadiness.score}% ${postReadiness.statusLabel.replace('-', ' ')}.`
         : readinessError || 'Run readiness before publishing.';
@@ -1594,6 +1931,119 @@ function EditBlogPostPage() {
     const publicResolveUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(publicPath)}`;
     const publicPostCommentsUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/blog/${encodeURIComponent(postId)}/comments`;
     const moderationCommentsUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/comments?targetType=post&targetId=${encodeURIComponent(postId)}&limit=100&sort=newest`;
+    const siteCommentPolicy = selectedSite?.settings?.commentPolicy || null;
+    const blogPublishImpact = {
+        schemaVersion: 'backy.blog-publish-impact.v1',
+        generatedAt: new Date().toISOString(),
+        post: {
+            id: post.id,
+            title: title || post.title,
+            slug: normalizedSlug || post.slug,
+            path: publicPath,
+            status,
+            scheduledAt: status === 'scheduled' ? scheduledAt : null,
+        },
+        route: {
+            path: publicPath,
+            canonical: normalizedCanonicalPath,
+            backendVerified: !isCheckingRoutes && !routeCheckError,
+            checkedPosts: existingBlogPosts.length,
+            availability: routeAvailability,
+            conflict: routeConflict
+                ? {
+                    id: routeConflict.id,
+                    title: routeConflict.title,
+                    path: `/blog/${slugify(routeConflict.slug)}`,
+                }
+                : null,
+            blockedReason: routeBlockedReason,
+        },
+        taxonomy: {
+            author: selectedAuthor
+                ? { id: selectedAuthor.id, name: selectedAuthor.name }
+                : { id: selectedAuthorId, name: selectedAuthorId },
+            categoryCount: selectedCategoryIds.length,
+            tagCount: selectedTagIds.length,
+            categories: selectedCategories,
+            tags: selectedTags,
+            unresolvedCategoryIds: selectedCategoryIds.filter((id) => !selectedCategories.some((category) => category.id === id)),
+            unresolvedTagIds: selectedTagIds.filter((id) => !selectedTags.some((tag) => tag.id === id)),
+        },
+        media: {
+            featuredImageId,
+            featuredImageReady: Boolean(selectedFeaturedImage),
+            featuredImage: selectedFeaturedImage
+                ? {
+                    id: selectedFeaturedImage.id,
+                    name: selectedFeaturedImage.name,
+                    url: selectedFeaturedImageUrl,
+                    altText: selectedFeaturedImage.altText || null,
+                    visibility: selectedFeaturedImage.visibility || null,
+                }
+                : featuredImageId
+                    ? { id: featuredImageId, name: null, url: null, altText: null, visibility: null }
+                    : null,
+            ogImage: ogImage.trim() || null,
+        },
+        comments: {
+            enabled: siteCommentPolicy?.enabled !== false,
+            moderationMode: siteCommentPolicy?.moderationMode || 'manual',
+            allowReplies: siteCommentPolicy?.allowReplies !== false,
+            requireEmail: Boolean(siteCommentPolicy?.requireEmail),
+            total: commentMetrics.total,
+            loaded: commentMetrics.loaded,
+            pending: commentMetrics.pending,
+            approved: commentMetrics.approved,
+            reported: commentMetrics.reported,
+            spam: commentMetrics.spam,
+            blocked: commentMetrics.blocked,
+            flagged: flaggedCommentCount,
+            moderated: commentsModerated,
+            error: commentError,
+            publicThreadUrl: publicPostCommentsUrl,
+            moderationUrl: moderationCommentsUrl,
+        },
+        readiness: {
+            statusLabel: postReadiness?.statusLabel || null,
+            score: postReadiness?.score ?? null,
+            localScore: blogEditorReadiness.score,
+            blockingFindings: readinessFindings.map((finding) => ({
+                id: finding.id,
+                severity: finding.severity,
+                message: finding.message,
+            })),
+            localChecks: localReadinessChecks.map((check) => ({
+                label: check.label,
+                complete: check.complete,
+            })),
+        },
+        actions: {
+            save: {
+                allowed: canEditBlog && canSave && !isUsingLocalPostCopy && !((status === 'published' || status === 'scheduled') && !canPublishBlog),
+                disabledReason: saveDisabledReason,
+            },
+            preview: {
+                allowed: canPublishBlog && !editorHasUnsavedChanges && !isUsingLocalPostCopy,
+                disabledReason: previewWorkflowDisabledReason,
+            },
+            publish: {
+                allowed: canPublishBlog && status !== 'published' && !editorHasUnsavedChanges && !isUsingLocalPostCopy && !routeBlocked && interactivePublishReady && !readinessBlocked,
+                disabledReason: publishWorkflowDisabledReason,
+            },
+            archive: {
+                allowed: canEditBlog && status !== 'archived' && !editorHasUnsavedChanges && !isUsingLocalPostCopy,
+                disabledReason: archiveWorkflowDisabledReason,
+            },
+        },
+        privacy: {
+            includesCanvasContent: false,
+            includesPrivateComments: false,
+            includesRawCommentContent: false,
+            includesCommentModerationEndpoint: true,
+            note: 'This impact handoff exposes route, taxonomy, media, comment counts, readiness, and action safety metadata only.',
+        },
+    };
+    const blogPublishImpactText = JSON.stringify(blogPublishImpact, null, 2);
     const editorHandoff = {
         generatedAt: new Date().toISOString(),
         post: {
@@ -1661,12 +2111,8 @@ function EditBlogPostPage() {
                 : { id: selectedAuthorId, name: selectedAuthorId },
             categoryIds: selectedCategoryIds,
             tagIds: selectedTagIds,
-            categories: categories
-                .filter((category) => selectedCategoryIds.includes(category.id))
-                .map((category) => ({ id: category.id, name: category.name, slug: category.slug })),
-            tags: tags
-                .filter((tag) => selectedTagIds.includes(tag.id))
-                .map((tag) => ({ id: tag.id, name: tag.name, slug: tag.slug })),
+            categories: selectedCategories,
+            tags: selectedTags,
         },
         comments: {
             total: commentMetrics.total,
@@ -1695,6 +2141,33 @@ function EditBlogPostPage() {
                 scope: 'post',
                 targetId: postId,
             },
+        },
+        design: {
+            schemaVersion: 'backy.custom-frontend-design-envelope.v1',
+            source: savedContentDocument ? 'stored-content-document' : 'normalized-editor-canvas',
+            contentDocumentSummary: {
+                id: currentDesignDocument.id,
+                kind: currentDesignDocument.kind,
+                schemaVersion: currentDesignDocument.schemaVersion,
+                status: currentDesignDocument.status || status,
+                slug: currentDesignDocument.slug || normalizedSlug || post.slug,
+            },
+            contentDocument: currentDesignDocument,
+            elements: canvasElements,
+            canvasSize,
+            customCSS: savedCustomCSS || '',
+            customJS: savedCustomJS || '',
+            customCSSPresent: Boolean(savedCustomCSS?.trim()),
+            customJSPresent: Boolean(savedCustomJS?.trim()),
+            themeTokenRefCount: recordKeyCount(currentDesignDocument.themeTokenRefs),
+            assetCount: arrayCount(currentDesignDocument.assets?.media) + arrayCount(currentDesignDocument.assets?.fonts),
+            animationTimelineCount: arrayCount(currentDesignDocument.metadata?.animations),
+            interactionGroupCount: recordKeyCount(currentDesignDocument.interactions),
+            dataBindingDatasetCount: arrayCount(currentDesignDocument.dataBindings?.datasets),
+            dataBindingCount: arrayCount(currentDesignDocument.dataBindings?.bindings),
+            editableFieldCount: recordKeyCount(currentDesignDocument.editableMap),
+            metadata: currentDesignDocument.metadata || {},
+            editorComposition: currentDesignDocument.metadata?.editorComposition || null,
         },
         template: hasFrontendDesignTemplate
             ? {
@@ -1734,9 +2207,14 @@ function EditBlogPostPage() {
                 }
                 : null,
         },
+        publishImpact: blogPublishImpact,
         revisions: revisions.map((revision) => ({
             id: revision.id,
             note: revision.note,
+            parentRevisionId: revision.parentRevisionId,
+            operation: revision.operation,
+            restoreTargetRevisionId: revision.restoreTargetRevisionId,
+            metadata: revision.metadata,
             createdAt: revision.createdAt,
             createdBy: revision.createdBy,
             actor: getContentRevisionActorLabel(revision),
@@ -1762,6 +2240,7 @@ function EditBlogPostPage() {
             order: 'newest-first',
             collapsedCount: BLOG_REVISION_COLLAPSED_COUNT,
             nodes: blogRevisionTimeline,
+            branchGraph: blogRevisionBranchGraph,
         },
         preview: previewUrl
             ? {
@@ -1837,6 +2316,10 @@ function EditBlogPostPage() {
         revision: {
             id: revision.id,
             note: revision.note,
+            parentRevisionId: revision.parentRevisionId,
+            operation: revision.operation,
+            restoreTargetRevisionId: revision.restoreTargetRevisionId,
+            metadata: revision.metadata,
             createdAt: revision.createdAt,
             createdBy: revision.createdBy,
             actor: getContentRevisionActorLabel(revision),
@@ -2470,6 +2953,7 @@ function EditBlogPostPage() {
                                     initialSettings={dummySettings}
                                     initialSize={canvasSize}
                                     initialSelectedElementId={routeSearch.elementId}
+                                    theme={selectedSite?.theme}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
                                         if (editorBusy || !canEditBlog || isUsingLocalPostCopy) return;
@@ -2578,10 +3062,10 @@ function EditBlogPostPage() {
                                     </div>
                                 )}
 
-                                {(postReadiness || readinessLoading || readinessError) && (
-                                    <div className={cn('rounded-lg border px-4 py-3 text-sm', readinessTone)}>
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex min-w-0 items-start gap-2">
+	                                {(postReadiness || readinessLoading || readinessError) && (
+	                                    <div className={cn('rounded-lg border px-4 py-3 text-sm', readinessTone)}>
+	                                        <div className="flex items-start justify-between gap-3">
+	                                            <div className="flex min-w-0 items-start gap-2">
                                                 {readinessBlocked ? (
                                                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                                                 ) : (
@@ -2619,12 +3103,74 @@ function EditBlogPostPage() {
                                                 ))}
                                             </div>
                                         )}
-                                    </div>
-                                )}
+	                                    </div>
+	                                )}
 
-                                {editorHasUnsavedChanges && (
-                                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="blog-editor-unsaved-workflow-guard">
-                                        Save this post before preview, publish, archive, or revision restore. Workflow actions use the latest saved backend copy.
+	                                <div
+	                                    className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs leading-5 text-muted-foreground"
+	                                    data-testid="blog-editor-publish-impact"
+	                                    data-schema-version={blogPublishImpact.schemaVersion}
+	                                    data-category-count={selectedCategoryIds.length}
+	                                    data-tag-count={selectedTagIds.length}
+	                                    data-featured-media-ready={selectedFeaturedImage ? 'true' : 'false'}
+	                                >
+	                                    <div className="flex flex-wrap items-start justify-between gap-2">
+	                                        <div>
+	                                            <div className="font-medium text-foreground">Publish impact</div>
+	                                            <div className="mt-0.5">
+	                                                {publicPath} · {selectedCategoryIds.length} categor{selectedCategoryIds.length === 1 ? 'y' : 'ies'}, {selectedTagIds.length} tag{selectedTagIds.length === 1 ? '' : 's'}, {commentMetrics.pending} pending comment{commentMetrics.pending === 1 ? '' : 's'}.
+	                                            </div>
+	                                        </div>
+	                                        <Button
+	                                            type="button"
+	                                            size="sm"
+	                                            variant="ghost"
+	                                            disabled={editorActionBusy || !canViewBlog}
+	                                            title={viewBlogPermissionTitle}
+	                                            onClick={() => void copyEditorHandoffText(blogPublishImpactText, 'Blog publish impact')}
+	                                            data-testid="blog-editor-copy-publish-impact"
+	                                        >
+	                                            Copy impact
+	                                        </Button>
+	                                    </div>
+	                                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+	                                        <div>
+	                                            <span className="font-medium text-foreground">Route</span>
+	                                            <div>{routeAvailability.status} · {blogPublishImpact.route.backendVerified ? `${existingBlogPosts.length} backend posts checked` : 'backend route check pending'}</div>
+	                                            {routeConflict ? (
+	                                                <div className="text-red-700">Conflicts with {routeConflict.title}</div>
+	                                            ) : null}
+	                                        </div>
+	                                        <div>
+	                                            <span className="font-medium text-foreground">Media and comments</span>
+	                                            <div>{featuredImageId ? (selectedFeaturedImage ? 'featured media loaded' : 'featured media reference saved') : 'no featured media'}</div>
+	                                            <div>{commentMetrics.approved} approved · {flaggedCommentCount} flagged</div>
+	                                        </div>
+	                                    </div>
+	                                    {(selectedCategories.length > 0 || selectedTags.length > 0) ? (
+	                                        <div className="mt-2 flex flex-wrap gap-1" data-testid="blog-editor-publish-impact-taxonomy">
+	                                            {selectedCategories.slice(0, 4).map((category) => (
+	                                                <span key={`category-${category.id}`} className="rounded bg-background px-1.5 py-0.5">
+	                                                    {category.name}
+	                                                </span>
+	                                            ))}
+	                                            {selectedTags.slice(0, 4).map((tag) => (
+	                                                <span key={`tag-${tag.id}`} className="rounded bg-background px-1.5 py-0.5">
+	                                                    #{tag.name}
+	                                                </span>
+	                                            ))}
+	                                            {selectedCategoryIds.length + selectedTagIds.length > selectedCategories.slice(0, 4).length + selectedTags.slice(0, 4).length ? (
+	                                                <span className="rounded bg-background px-1.5 py-0.5">
+	                                                    +{selectedCategoryIds.length + selectedTagIds.length - selectedCategories.slice(0, 4).length - selectedTags.slice(0, 4).length} more
+	                                                </span>
+	                                            ) : null}
+	                                        </div>
+	                                    ) : null}
+	                                </div>
+
+	                                {editorHasUnsavedChanges && (
+	                                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-testid="blog-editor-unsaved-workflow-guard">
+	                                        Save this post before preview, publish, archive, or revision restore. Workflow actions use the latest saved backend copy.
                                     </div>
                                 )}
 
@@ -3039,20 +3585,32 @@ function EditBlogPostPage() {
                                         <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground" data-testid="blog-editor-revision-graph">
                                             <div className="flex flex-wrap items-center justify-between gap-2">
                                                 <div>
-                                                    <span className="font-medium text-foreground">Revision timeline</span>
-                                                    <span> · {revisions.length} saved node{revisions.length === 1 ? '' : 's'} newest to oldest</span>
+                                                    <span className="font-medium text-foreground">Revision branch graph</span>
+                                                    <span> · {revisions.length} saved node{revisions.length === 1 ? '' : 's'} across {blogRevisionBranchGraph.branchCount} branch{blogRevisionBranchGraph.branchCount === 1 ? '' : 'es'}</span>
                                                 </div>
-                                                {revisions.length > BLOG_REVISION_COLLAPSED_COUNT ? (
+                                                <div className="flex flex-wrap items-center gap-1">
                                                     <button
                                                         type="button"
-                                                        className="rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
-                                                        onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
+                                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
+                                                        onClick={() => void copyEditorHandoffText(blogRevisionBranchGraphText, 'Blog revision branch graph')}
                                                         disabled={editorActionBusy}
-                                                        data-testid="blog-editor-toggle-revision-graph"
+                                                        data-testid="blog-editor-copy-revision-branch-graph"
                                                     >
-                                                        {isRevisionTimelineExpanded ? 'Show latest' : `Show all ${revisions.length}`}
+                                                        <Copy className="size-3.5" />
+                                                        Copy graph
                                                     </button>
-                                                ) : null}
+                                                    {revisions.length > BLOG_REVISION_COLLAPSED_COUNT ? (
+                                                        <button
+                                                            type="button"
+                                                            className="rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
+                                                            onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
+                                                            disabled={editorActionBusy}
+                                                            data-testid="blog-editor-toggle-revision-graph"
+                                                        >
+                                                            {isRevisionTimelineExpanded ? 'Show latest' : `Show all ${revisions.length}`}
+                                                        </button>
+                                                    ) : null}
+                                                </div>
                                             </div>
                                             <div className="mt-1 flex flex-wrap gap-1">
                                                 {blogRevisionTimeline.map((node) => {
@@ -3093,6 +3651,92 @@ function EditBlogPostPage() {
                                                     );
                                                 })}
                                             </div>
+                                            <div className="mt-3 grid gap-2" data-testid="blog-editor-revision-branch-graph" data-branch-count={blogRevisionBranchGraph.branchCount}>
+                                                {blogRevisionBranchGraph.branches.map((branch) => (
+                                                    <div
+                                                        key={branch.id}
+                                                        className="rounded-md border border-border bg-background px-2 py-2"
+                                                        data-testid={`blog-editor-revision-branch-${branch.id}`}
+                                                        data-lane={branch.lane}
+                                                        data-node-count={branch.nodeIds.length}
+                                                        data-restore-target-id={branch.restoreTargetRevisionId || ''}
+                                                    >
+                                                        <div className="flex flex-wrap items-center gap-1">
+                                                            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">lane {branch.lane}</span>
+                                                            <span className="font-medium text-foreground">{branch.label}</span>
+                                                            <span className={cn(
+                                                                'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                                                                branch.status === 'active'
+                                                                    ? 'bg-emerald-50 text-emerald-700'
+                                                                    : branch.status === 'pending-save'
+                                                                        ? 'bg-amber-50 text-amber-700'
+                                                                        : 'bg-muted text-muted-foreground',
+                                                            )}
+                                                            >
+                                                                {branch.status}
+                                                            </span>
+                                                        </div>
+                                                        {branch.branchPointRevisionId && (
+                                                            <div className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                                                                Forked after rollback checkpoint #{blogRevisionTimelineById.get(branch.branchPointRevisionId)?.position || '?'} from revision #{branch.restoreTargetPosition || '?'}.
+                                                            </div>
+                                                        )}
+                                                        <div className="mt-2 flex flex-wrap gap-1">
+                                                            {branch.nodeIds.length > 0 ? branch.nodeIds.map((nodeId) => {
+                                                                const node = blogRevisionTimelineById.get(nodeId);
+                                                                if (!node) return null;
+
+                                                                return visibleRevisionIds.has(nodeId) ? (
+                                                                    <a
+                                                                        key={nodeId}
+                                                                        href={`#blog-editor-revision-${nodeId}`}
+                                                                        className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary"
+                                                                        title={node.summary}
+                                                                        data-testid={`blog-editor-revision-branch-node-${nodeId}`}
+                                                                        data-branch-id={node.branchId}
+                                                                        data-branch-role={node.branchRole}
+                                                                    >
+                                                                        #{node.position}
+                                                                    </a>
+                                                                ) : (
+                                                                    <button
+                                                                        key={nodeId}
+                                                                        type="button"
+                                                                        className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground opacity-70 hover:border-primary/50 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                                                                        onClick={() => expandRevisionTimelineTo(nodeId)}
+                                                                        disabled={editorActionBusy}
+                                                                        title={node.summary}
+                                                                        data-testid={`blog-editor-revision-branch-node-${nodeId}`}
+                                                                        data-branch-id={node.branchId}
+                                                                        data-branch-role={node.branchRole}
+                                                                    >
+                                                                        #{node.position}
+                                                                    </button>
+                                                                );
+                                                            }) : (
+                                                                <span className="rounded-md border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                                                                    Next save after restore will appear on this branch.
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {blogRevisionBranchGraph.edges.some((edge) => edge.kind === 'rollback-target') ? (
+                                                <div className="mt-2 grid gap-1" data-testid="blog-editor-revision-branch-edges">
+                                                    {blogRevisionBranchGraph.edges
+                                                        .filter((edge) => edge.kind === 'rollback-target')
+                                                        .map((edge) => (
+                                                            <div key={edge.id} className="flex flex-wrap items-center gap-1 text-[11px]">
+                                                                <span className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground">
+                                                                    #{blogRevisionTimelineById.get(edge.fromId)?.position || '?'} restores #{blogRevisionTimelineById.get(edge.toId)?.position || '?'}
+                                                                </span>
+                                                                <span>{edge.label}</span>
+                                                                {edge.inferred && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">inferred</span>}
+                                                            </div>
+                                                        ))}
+                                                </div>
+                                            ) : null}
                                             <div className="mt-2 grid gap-1" data-testid="blog-editor-revision-graph-summary">
                                                 {blogRevisionTimeline.slice(0, 3).map((node) => (
                                                     <div key={node.id} className="flex flex-wrap items-center gap-1">
@@ -3128,6 +3772,16 @@ function EditBlogPostPage() {
                                                                 <span className="rounded bg-muted px-1.5 py-0.5">Actor: {getContentRevisionActorLabel(revision)}</span>
                                                                 <span className="rounded bg-muted px-1.5 py-0.5">Snapshot updated: {getContentRevisionSnapshotUpdatedLabel(revision)}</span>
                                                             </div>
+                                                            {revisionGraphNode && (
+                                                                <div className="mt-1 text-[11px] text-muted-foreground">
+                                                                    Branch: lane {revisionGraphNode.branchLane} · {revisionGraphNode.branchLabel}
+                                                                </div>
+                                                            )}
+                                                            {revisionGraphNode?.restoreTargetLabel && (
+                                                                <div className="mt-1 text-[11px] text-amber-700">
+                                                                    Restores {revisionGraphNode.restoreTargetLabel}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div className="flex shrink-0 items-center gap-1">
                                                             {revisionGraphNode?.newerId ? (

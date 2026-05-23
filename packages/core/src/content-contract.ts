@@ -138,6 +138,27 @@ export interface BackyElementAccessibility {
   aria?: Record<string, string | number | boolean>;
 }
 
+export type BackyElementAnimationType = 'fadeIn' | 'slideIn' | 'scaleIn' | 'bounce' | 'rotate' | 'custom';
+export type BackyElementAnimationTrigger = 'load' | 'scroll' | 'hover';
+export type BackyElementAnimationDirection = 'left' | 'right' | 'up' | 'down';
+
+export interface BackyElementAnimation {
+  type: BackyElementAnimationType;
+  duration: number;
+  delay?: number;
+  easing?: string;
+  direction?: BackyElementAnimationDirection;
+  trigger?: BackyElementAnimationTrigger;
+  scrollTrigger?: {
+    start?: string;
+    end?: string;
+    scrub?: boolean;
+  };
+  from?: BackyJsonObject;
+  to?: BackyJsonObject;
+  tokenRefs?: Record<string, string>;
+}
+
 export type BackyInteractiveElementType = 'interactiveFigure' | 'codeComponent';
 export type BackyInteractiveHydrationMode = 'trusted-component' | 'sandbox-iframe' | 'static-fallback';
 
@@ -177,6 +198,7 @@ export interface BackyContentElement extends BackyElementLayout {
   id: string;
   type: string;
   name?: string;
+  parentId?: string;
   children: BackyContentElement[];
   props: Record<string, BackyJsonValue>;
   componentKey?: string;
@@ -187,6 +209,7 @@ export interface BackyContentElement extends BackyElementLayout {
   styles?: Record<string, BackyJsonValue>;
   responsive?: Partial<Record<BackyBreakpoint, BackyResponsiveElementOverride>>;
   tokenRefs?: Record<string, string>;
+  animation?: BackyElementAnimation;
   actions?: BackyElementAction[];
   dataBindings?: BackyDataBinding[];
   bindingSlots?: BackyComponentBindingSlot[];
@@ -320,6 +343,34 @@ const isObject = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
+const withElementParentScopes = (
+  elements: BackyContentElement[],
+  parentId?: string,
+): BackyContentElement[] => (
+  elements.map((element) => {
+    const resolvedParentId = parentId || element.parentId;
+    const children = withElementParentScopes(
+      Array.isArray(element.children) ? element.children : [],
+      element.id,
+    );
+    const metadata = (isObject(element.metadata) ? element.metadata : {}) as Record<string, BackyJsonValue>;
+    const next: BackyContentElement = {
+      ...element,
+      ...(resolvedParentId ? { parentId: resolvedParentId } : {}),
+      children,
+    };
+
+    if (resolvedParentId) {
+      next.metadata = {
+        ...metadata,
+        parentId: metadata.parentId ?? resolvedParentId,
+      };
+    }
+
+    return next;
+  })
+);
+
 const validateElement = (
   element: BackyContentElement,
   path: string,
@@ -424,6 +475,7 @@ export function createBackyContentDocument(
     ...input,
     schemaVersion: input.schemaVersion || BACKY_CONTENT_SCHEMA_VERSION,
     version: input.version || 'draft',
+    elements: withElementParentScopes(input.elements),
     editableMap: input.editableMap || {},
   };
 }

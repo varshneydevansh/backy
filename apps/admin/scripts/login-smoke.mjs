@@ -9,6 +9,9 @@ const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:517
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_LOGIN_CDP_PORT || 9392);
+const SOURCE_ONLY_MODE = process.env.BACKY_LOGIN_SOURCE_ONLY === '1'
+  || process.env.BACKY_AUTH_SOURCE_ONLY === '1'
+  || process.env.BACKY_LOGIN_SMOKE_SOURCE_ONLY === '1';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -174,6 +177,48 @@ const assertAuthAuditEvents = async () => {
       log.metadata?.revoked === true
     )),
     `Auth logout audit event was not recorded: ${JSON.stringify(auditPayload).slice(0, 1000)}`,
+  );
+};
+
+const assertAuthRecoverySource = () => {
+  const forgotSource = fs.readFileSync(new URL('../src/routes/forgot-password.tsx', import.meta.url), 'utf8');
+  const resetSource = fs.readFileSync(new URL('../src/routes/reset-password.tsx', import.meta.url), 'utf8');
+
+  assert(
+    forgotSource.includes('data-testid="forgot-password-form"') &&
+      forgotSource.includes('noValidate') &&
+      forgotSource.includes('recoverySubmitted') &&
+      forgotSource.includes('emailInlineError') &&
+      forgotSource.includes('data-testid="forgot-password-email-input"') &&
+      forgotSource.includes('aria-invalid={Boolean(emailInlineError)}') &&
+      forgotSource.includes('aria-describedby={emailInlineError ?') &&
+      forgotSource.includes('data-testid="forgot-password-email-error"') &&
+      forgotSource.includes('role={recoveryState ===') &&
+      forgotSource.includes('data-testid="forgot-password-message"') &&
+      forgotSource.includes('disabled={isSubmitting}') &&
+      !forgotSource.includes('disabled={!emailIsValid || isSubmitting}'),
+    'Forgot password page must expose custom inline email validation and keep the recovery action reachable for invalid submissions',
+  );
+
+  assert(
+    resetSource.includes('data-testid="reset-password-form"') &&
+      resetSource.includes('noValidate') &&
+      resetSource.includes('resetSubmitted') &&
+      resetSource.includes('tokenInlineError') &&
+      resetSource.includes('passwordInlineError') &&
+      resetSource.includes('confirmInlineError') &&
+      resetSource.includes('data-testid="reset-password-token-error"') &&
+      resetSource.includes('data-testid="reset-password-new-input"') &&
+      resetSource.includes('aria-invalid={Boolean(passwordInlineError)}') &&
+      resetSource.includes('id="reset-password-requirement"') &&
+      resetSource.includes('data-testid="reset-password-confirm-input"') &&
+      resetSource.includes('aria-invalid={Boolean(confirmInlineError)}') &&
+      resetSource.includes('data-testid="reset-password-confirm-error"') &&
+      resetSource.includes('role={resetState ===') &&
+      resetSource.includes('data-testid="reset-password-message"') &&
+      resetSource.includes('disabled={isLoading || resetState ===') &&
+      !resetSource.includes('disabled={!token || !passwordIsValid || !passwordsMatch || isLoading || resetState ==='),
+    'Reset password page must expose token/password/confirmation inline validation and keep reset submission reachable for custom errors',
   );
 };
 
@@ -387,6 +432,12 @@ const main = async () => {
   let userDataDir;
 
   try {
+    assertAuthRecoverySource();
+    if (SOURCE_ONLY_MODE) {
+      console.log(JSON.stringify({ ok: true, mode: 'login-source-only', route: '/login' }, null, 2));
+      return;
+    }
+
     await assertEditorCanReadOwnPermissionMatrix();
     await assertHttpOnlySessionCookieFlow();
     await assertAuthAuditEvents();

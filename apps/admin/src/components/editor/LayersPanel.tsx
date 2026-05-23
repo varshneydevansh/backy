@@ -37,6 +37,36 @@ interface LayersPanelProps {
 
 type LayerMoveAction = 'up' | 'down' | 'outdent';
 
+const parseLayerBoolean = (value: unknown, fallback = false): boolean => {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value !== 0;
+    }
+
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes') {
+            return true;
+        }
+        if (normalized === 'false' || normalized === '0' || normalized === 'off' || normalized === 'no') {
+            return false;
+        }
+    }
+
+    return fallback;
+};
+
+const isLayerHidden = (element: Pick<CanvasElement, 'visible'>): boolean => (
+    parseLayerBoolean(element.visible, true) === false
+);
+
+const isLayerLocked = (element: Pick<CanvasElement, 'locked'>): boolean => (
+    parseLayerBoolean(element.locked, false)
+);
+
 interface LayerItemProps {
     element: CanvasElement;
     isSelected: boolean;
@@ -894,13 +924,13 @@ export function LayersPanel({
                     <LayerItem
                         element={element}
                         isSelected={selectedIds.includes(element.id)}
-                        isHidden={element.visible === false}
-                        isLocked={element.locked === true}
+                        isHidden={isLayerHidden(element)}
+                        isLocked={isLayerLocked(element)}
                         isFocusable={!disabled && element.id === (focusedLayerId || selectedIds[0] || renderedLayerIds[0])}
                         isDragTarget={dragTargetId === element.id}
                         hasChildren={hasChildren}
                         isExpanded={isExpanded}
-                        canReorder={!disabled && element.locked !== true}
+                        canReorder={!disabled && !isLayerLocked(element)}
                         canAcceptChildren={CHILD_ACCEPTING_TYPES.has(element.type)}
                         selectedIds={selectedIds}
                         disabled={disabled}

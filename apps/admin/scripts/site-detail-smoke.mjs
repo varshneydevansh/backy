@@ -74,6 +74,21 @@ const assertSiteDetailSourceContract = () => {
   assert((source.match(/readWorkflowApiPayload\(/g) || []).length >= 6, 'Site detail workflow public API calls must use the guarded JSON reader');
   assert(source.includes('data-testid="site-workflow-error"'), 'Site detail workflow error notice must expose a stable test id');
   assert(!source.includes('const payload = await response.json();'), 'Site detail workflow public API calls must not leak raw JSON parser errors');
+  assert(
+    source.includes('buildSiteSettingsInlineErrors') &&
+      source.includes('const [siteSettingsSubmitted, setSiteSettingsSubmitted] = useState(false);') &&
+      source.includes('data-testid="site-settings-form"') &&
+      source.includes('noValidate') &&
+      source.includes('data-testid="site-settings-inline-error"') &&
+      source.includes('data-testid="site-settings-name-error"') &&
+      source.includes('data-testid="site-settings-slug-error"') &&
+      source.includes('data-testid="site-settings-custom-domain-error"') &&
+      source.includes('aria-invalid={Boolean(') &&
+      source.includes('aria-describedby=') &&
+      source.includes('Fix site settings fields before saving.') &&
+      source.includes('normalizeSiteSettingsDomain(formData.customDomain) || null'),
+    'Site detail settings form must use source-guarded inline validation for saved site identity and custom domain updates',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {

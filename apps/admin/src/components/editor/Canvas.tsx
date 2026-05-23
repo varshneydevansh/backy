@@ -90,6 +90,42 @@ const sanitizeText = (value: unknown): string => {
   return '';
 };
 
+const firstTextFromList = (value: unknown): string => {
+  if (!Array.isArray(value)) {
+    return '';
+  }
+
+  for (const item of value) {
+    const text = sanitizeText(item);
+    if (text) {
+      return text;
+    }
+  }
+
+  return '';
+};
+
+const fileDownloadDataAttributes = (props: Record<string, unknown>): Record<string, string | undefined> => {
+  const fileMediaId = sanitizeText(props.fileMediaId)
+    || sanitizeText(props.fileId)
+    || sanitizeText(props.downloadMediaId)
+    || firstTextFromList(props.fileIds)
+    || firstTextFromList(props.fileMediaIds)
+    || firstTextFromList(props.downloadMediaIds);
+  const signedUrlRequired = getBooleanWithFallback(props.fileSignedUrlRequired, false) ||
+    sanitizeText(props.fileMediaVisibility) === 'private';
+
+  return {
+    'data-backy-file-id': fileMediaId || undefined,
+    'data-backy-file-media-id': fileMediaId || undefined,
+    'data-backy-file-media-name': sanitizeText(props.fileMediaName) || undefined,
+    'data-backy-file-media-type': sanitizeText(props.fileMediaType) || undefined,
+    'data-backy-file-media-visibility': sanitizeText(props.fileMediaVisibility) || undefined,
+    'data-backy-file-signed-url-required': signedUrlRequired ? 'true' : undefined,
+    'data-backy-file-signed-url-endpoint': sanitizeText(props.fileSignedUrlEndpoint) || undefined,
+  };
+};
+
 const normalizeLinkTargetValue = (value: unknown): '_self' | '_blank' | '_parent' | '_top' => {
   const target = sanitizeText(value);
   return target === '_blank' || target === '_parent' || target === '_top' ? target : '_self';
@@ -412,7 +448,7 @@ const collectSmartGuideTargets = (
 
   const collect = (nodes: CanvasElement[], origin = { x: 0, y: 0 }) => {
     for (const element of nodes) {
-      if (activeIds.has(element.id) || element.visible === false) {
+      if (activeIds.has(element.id) || isCanvasElementHidden(element)) {
         continue;
       }
 
@@ -741,7 +777,7 @@ const elementIntersectsRect = (
 
 const collectRootMarqueeCandidates = (elements: CanvasElement[]): SelectionInfoMetric[] => (
   elements
-    .filter((element) => element.visible !== false && element.locked !== true)
+    .filter((element) => !isCanvasElementHidden(element) && !isCanvasElementLocked(element))
     .map((element) => ({
       id: element.id,
       type: element.type,
@@ -1148,6 +1184,14 @@ const getBoolean = (value: unknown): boolean => parseBooleanSetting(value, false
 
 const getBooleanWithFallback = (value: unknown, fallback: boolean): boolean => (
   value === undefined || value === null ? fallback : parseBooleanSetting(value, fallback)
+);
+
+const isCanvasElementHidden = (element: Pick<CanvasElement, 'visible'> | null | undefined): boolean => (
+  getBooleanWithFallback(element?.visible, true) === false
+);
+
+const isCanvasElementLocked = (element: Pick<CanvasElement, 'locked'> | null | undefined): boolean => (
+  getBooleanWithFallback(element?.locked, false)
 );
 
 const formatFieldLabel = (value: unknown): string => {
@@ -1805,7 +1849,7 @@ export function Canvas({
         return;
       }
 
-      if (clickedElement.locked) {
+      if (isCanvasElementLocked(clickedElement)) {
         e.preventDefault();
         e.stopPropagation();
         onSelect(elementId);
@@ -1844,7 +1888,7 @@ export function Canvas({
             .filter((snapshot): snapshot is DragSnapshot => !!snapshot);
       const dragSnapshots = candidateDragSnapshots.filter((snapshot) => {
         const snapshotElement = findElementById(elementsRef.current, snapshot.id);
-        return snapshotElement?.locked !== true;
+        return !isCanvasElementLocked(snapshotElement);
       });
       if (!dragSnapshots.length) {
         return;
@@ -1891,7 +1935,7 @@ export function Canvas({
       }
 
       const element = findElementById(elements, elementId);
-      if (!element || element.locked) return;
+      if (!element || isCanvasElementLocked(element)) return;
 
       const selectedSet = new Set(selectedIds);
       const allSelectedSnapshots = selectedSet.has(elementId) && selectedIds.length > 1
@@ -1903,7 +1947,7 @@ export function Canvas({
             const snapshotElement = findElementById(elementsRef.current, snapshot.id);
             return (
               snapshotElement &&
-              !snapshotElement.locked &&
+              !isCanvasElementLocked(snapshotElement) &&
               snapshot.parentId === activeSnapshot.parentId &&
               snapshot.boundsWidth === activeSnapshot.boundsWidth &&
               snapshot.boundsHeight === activeSnapshot.boundsHeight
@@ -2219,7 +2263,7 @@ export function Canvas({
 
         if (forcedParentId) {
           const parent = findElementById(elements, forcedParentId);
-          const isDropTarget = parent && !parent.locked && canAcceptNestedDrop(parent.type);
+          const isDropTarget = parent && !isCanvasElementLocked(parent) && canAcceptNestedDrop(parent.type);
 
           const dropHost = canvasRef.current?.querySelector<HTMLElement>(
             `[data-element-id="${forcedParentId}"]`
@@ -2869,8 +2913,8 @@ function CanvasElementComponent({
   const sharedStyle = buildSharedElementStyle(element);
   const childElements = element.children || [];
   const resolvedSelectedId = selectedId ?? null;
-  const isHidden = element.visible === false;
-  const isLocked = element.locked === true;
+  const isHidden = isCanvasElementHidden(element);
+  const isLocked = isCanvasElementLocked(element);
   const isEditingEnabled = isEditing && !isPreview && !disabled;
   const canReceiveNestedDrop = !disabled && !isLocked && canAcceptNestedDrop(element.type);
   const [isNestedDropActive, setIsNestedDropActive] = useState(false);
@@ -3135,6 +3179,7 @@ function CanvasElementComponent({
         const commonInteractiveProps = {
           title: typeof p.title === 'string' && p.title.trim() ? p.title : undefined,
           'aria-label': typeof p.ariaLabel === 'string' && p.ariaLabel.trim() ? p.ariaLabel : undefined,
+          ...fileDownloadDataAttributes(p),
         };
         const buttonStyle: CSSProperties = {
           ...sharedStyle,
@@ -3161,7 +3206,7 @@ function CanvasElementComponent({
               href={p.href}
               target={target}
               rel={rel}
-              download={p.download === true ? '' : undefined}
+              download={getBooleanWithFallback(p.download, false) ? '' : undefined}
               style={buttonStyle}
               {...commonInteractiveProps}
             >
@@ -3843,6 +3888,8 @@ function CanvasElementComponent({
             href={isPreview ? (p.href ?? '#') : undefined}
             target={target}
             rel={rel}
+            download={getBooleanWithFallback(p.download, false) ? '' : undefined}
+            {...fileDownloadDataAttributes(p)}
             title={typeof p.title === 'string' && p.title.trim() ? p.title : undefined}
             aria-label={typeof p.ariaLabel === 'string' && p.ariaLabel.trim() ? p.ariaLabel : undefined}
             style={{

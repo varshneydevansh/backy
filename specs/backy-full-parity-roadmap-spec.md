@@ -21,7 +21,7 @@
 
 ## 1) Phase completion status (current snapshot)
 
-The canonical page-surface audit now tracks the platform at **39 Ready / 6 Partial / 0 Prototype / 0 Missing**. The remaining Partial gates are configured Forms and SDK Supabase/Postgres service-data gates plus live Settings and Commerce provider certification. Local editor parity for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress is covered by focused smoke paths and is no longer counted as a Partial gate.
+The canonical page-surface audit now tracks the platform at **41 Ready / 4 Partial / 0 Prototype / 0 Missing**. The remaining Partial gates are live Settings and Commerce provider certification; Forms and SDK Supabase/Postgres service-data gates were certified against a migrated disposable Postgres target on 2026-05-21. Local editor parity for rich-text table/list depth, imported list-indent edits, responsive breakpoints, grouping, and long-session stress is covered by focused smoke paths and is no longer counted as a Partial gate.
 
 ### Phase 0/1 (Contracts + persistence + auth) — **Ready baseline with external certification gates**
 **Done**
@@ -34,7 +34,6 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 - Release, database, Forms Postgres, SDK Postgres, Settings provider, Commerce provider, RBAC, site-scope, and auth preflight/smoke gates document the current backend-backed baseline.
 
 **Remaining certification**
-- Run the configured Forms and SDK Supabase/Postgres service-data gates against a migrated disposable database.
 - Certify live Settings provider connections, live Commerce provider flows, and external provider-managed webhooks.
 - Continue shrinking any demo fixtures to non-authoritative local development paths.
 
@@ -48,7 +47,7 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 - Keep publish/rollback provider-backed certification tied to the release certification workflow.
 - Optional expansion remains available for additional cross-browser visual-regression breadth, but no known editor-completion blocker remains in this spec slice.
 
-### Forms/comments module — **Ready baseline with database-service certification gate**
+### Forms/comments module — **Ready**
 **Done**
 - Form schema expansion, settings fields, submission endpoint compatibility, reusable embed blocks, advanced validation rules, anti-spam signals, consent/retention controls, delivery retry, analytics, and contact-share status tracking are implemented for the local product scope.
 - Comment moderation settings, queue/status transitions, threaded replies, reparenting, bulk actions, reporting, blocklists, notification/webhook delivery retry, analytics, export, and admin UI workflows are implemented for the local product scope.
@@ -62,8 +61,8 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 - Anti-abuse policy write path now enforces strict server-side value bounds and returns actionable validation errors.
 - `test:forms`, `test:contacts`, `test:comments`, repository coverage, and the Forms Postgres preflight guard the local implementation.
 
-**Remaining certification**
-- Execute `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres` against a migrated disposable Supabase/Postgres service before the Forms/Contacts service-data gate can move from Partial to Ready.
+**Certification evidence**
+- `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:forms-postgres` passed against a migrated disposable local Postgres target on 2026-05-21, covering durable form definition, submission, contact, spam/consent, moderation, promotion, merge, and cleanup flows.
 
 ### Core composition / CMS blocks — **Ready baseline with reusable-section regression guards**
 **Done**
@@ -75,14 +74,14 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 **Remaining certification**
 - No known local composition blocker remains in this spec slice; keep reusable-section, page-create, renderer, and SDK contract smokes in the release preflight path as new block types ship.
 
-### Public API hardening — **Ready baseline with SDK/Postgres certification gate**
+### Public API hardening — **Ready**
 **Done**
 - Public render, manifest, OpenAPI, generated SDK, media, forms, comments, commerce catalog/order, interactive component, and frontend handoff contracts are locally guarded.
 - Public routes expose stable Backy contract/cache headers, published/preview behavior, route resolution, moderation-aware forms/comments, scoped media, reusable sections, and external-frontend-safe payloads without requiring admin internals.
 - `test:frontend-contract-types`, `test:page-renderer`, `test:public-security`, `test:sdk-postgres-preflight-contract`, and the generated SDK smoke guard the local public API surface.
 
-**Remaining certification**
-- Execute `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` against a migrated disposable Supabase/Postgres service before the public manifest/OpenAPI/SDK database-mode gate can move from Partial to Ready.
+**Certification evidence**
+- `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true npm run ci:sdk-postgres-smoke` passed against a migrated disposable local Postgres target on 2026-05-21, covering database-mode discovery, manifest, OpenAPI, render, media, CMS, reusable sections, forms, comments, events, commerce contracts, and SDK write flows.
 
 ## 2) Phase map (now + future)
 
@@ -120,7 +119,7 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
 1. Selection and edit stability:
    - Fix pointer and focus boundaries across text/containers.
 2. Action graph:
-   - Add command patterns for element CRUD + transform operations.
+   - External editor command patterns now cover element add, duplicate, delete, move, resize, group, ungroup, direct patch, and editable-map patch operations through SDK helpers and manifest/OpenAPI `backy.editor-composition-commands.v1` discovery.
 3. State reconciliation:
    - Save produces immutable payload + revision reference.
 4. Publish workflow:
@@ -220,7 +219,7 @@ The canonical page-surface audit now tracks the platform at **39 Ready / 6 Parti
    - page/blog revision records with actor/timestamp.
 2. Diff tooling:
    - field-level and content payload diffs for admin.
-   - Page and blog editor revision cards now expose first-pass current-vs-snapshot field rows for title, route, status, SEO, taxonomy/media where applicable, canvas layer count deltas, canvas element/property change rows with expandable property drill-downs for added/removed/updated elements, side-by-side snapshot/current visual canvas maps, numbered changed-element focus markers, sampled rendered-pixel comparison metrics, restore-confirmation impact previews, and actor/action metadata, plus copyable `backy.page-revision-compare.v1` and `backy.blog-revision-compare.v1` briefs for AI/custom frontend handoff. Page and blog editors also expose enriched first-pass `backy.page-revision-graph.v1` / `backy.blog-revision-graph.v1` timeline metadata with newest/oldest node navigation plus per-node action, actor, status, and snapshot timing; remaining work is true branching graph views.
+   - Page and blog editor revision cards now expose first-pass current-vs-snapshot field rows for title, route, status, SEO, taxonomy/media where applicable, canvas layer count deltas, canvas element/property change rows with expandable property drill-downs for added/removed/updated elements, side-by-side snapshot/current visual canvas maps, numbered changed-element focus markers, sampled rendered-pixel comparison metrics, restore-confirmation impact previews, and actor/action metadata, plus copyable `backy.page-revision-compare.v1` and `backy.blog-revision-compare.v1` briefs for AI/custom frontend handoff. Page and blog editors also expose enriched first-pass `backy.page-revision-graph.v1` / `backy.blog-revision-graph.v1` timeline metadata with newest/oldest node navigation plus per-node action, actor, status, snapshot timing, persisted parent revision ids, operation metadata, restore-target ids, and `backy.page-revision-branch-graph.v1` / `backy.blog-revision-branch-graph.v1` branch lanes with rollback-target edges for recovery handoff. Remaining revision-model work is deeper publish snapshot/audit certification.
 3. Rollback:
    - restore to prior revision and re-publish guard.
 4. Safety:

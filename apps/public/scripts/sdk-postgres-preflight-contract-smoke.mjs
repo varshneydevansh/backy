@@ -147,7 +147,9 @@ assert(
     adminContentApi.includes("schemaVersion: 'backy.frontend-database-certification.v1'") &&
     adminContentApi.includes("schemaVersion: 'backy.frontend-database-certification-evidence.v1'") &&
     adminContentApi.includes('frontendDatabaseCertification?: FrontendDatabaseCertificationHandoff') &&
-    adminContentApi.includes('frontendDatabaseCertification: payload.data.settings.frontendDatabaseCertification'),
+    adminContentApi.includes('const toSiteSettingsInput = (settings: ApiSettings): SiteSettingsInput') &&
+    adminContentApi.includes('frontendDatabaseCertification: settings.frontendDatabaseCertification') &&
+    adminContentApi.includes('return toSiteSettingsInput(payload.data.settings)'),
   'Admin content API must type and preserve the Settings frontend database certification handoff.',
 );
 
@@ -267,7 +269,7 @@ assert(
     openApiRoute.includes('getMediaList') &&
     openApiRoute.includes('media.pagination.total') &&
     openApiRoute.includes('routing-render-contracts') &&
-    openApiRoute.includes('cms-service-data') &&
+    openApiRoute.includes('content-design-modules') &&
     openApiRoute.includes('commerce-handoff') &&
     openApiRoute.includes('database-certification') &&
     openApiRoute.includes('frontendDatabaseCertification.gate.command') &&
@@ -401,12 +403,15 @@ assert(
     sdkSmokeCi.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_DATABASE') &&
     sdkSmokeCi.includes('SDK Postgres certification expected database host') &&
     sdkSmokeCi.includes('SDK Postgres certification expected database name') &&
+    sdkSmokeCi.includes('SDK_DATABASE_DISCOVERY_SITE_SLUG') &&
+    sdkSmokeCi.includes('ensureSdkDatabaseDiscoverySite') &&
+    sdkSmokeCi.includes("'database-mode published discovery site'") &&
     sdkSmokeCi.includes('backy.sdk-postgres-smoke-ci.v1') &&
     sdkSmokeCi.includes('targetGuard') &&
     sdkSmokeCi.includes('urlValid: requireDatabaseMode ? true : null') &&
     sdkSmokeCi.includes('expectedHostConfigured') &&
     sdkSmokeCi.includes('expectedDatabaseConfigured'),
-  'SDK Postgres smoke must preflight target host/name, schema, enum, RLS, policy, index, and constraint readiness, then emit machine-readable certification evidence.',
+  'SDK Postgres smoke must preflight target host/name, seed a database-mode discovery site, verify schema, enum, RLS, policy, index, and constraint readiness, then emit machine-readable certification evidence.',
 );
 
 assert(
@@ -427,10 +432,11 @@ assert(
 assert(
   sdkSmokeCi.includes("contract: 'backy.sdk-postgres-smoke-ci.v1'") &&
     sdkSmokeCi.includes('targetGuard') &&
+    sdkSmokeCi.includes('databaseDiscovery') &&
     sdkSmokeCi.includes('urlValid: requireDatabaseMode ? true : null') &&
     sdkSmokeCi.includes('expectedHostConfigured') &&
     sdkSmokeCi.includes('expectedDatabaseConfigured'),
-  'SDK Postgres smoke must emit machine-readable target-guard evidence after the configured database run.',
+  'SDK Postgres smoke must emit machine-readable target-guard and discovery-site evidence after the configured database run.',
 );
 
 assert(
@@ -579,7 +585,7 @@ assert(
     sdkPostgresWorkflow.includes('npm run doctor:release-certification') &&
     sdkPostgresWorkflow.includes('Write non-secret SDK database summary') &&
     sdkPostgresWorkflow.includes('GITHUB_STEP_SUMMARY') &&
-    sdkPostgresWorkflow.includes('| Partial row | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |') &&
+    sdkPostgresWorkflow.includes('| Certified regression gate | Gate | Requested | Aggregate preflight | Admin source guard | Non-secret target evidence |') &&
     sdkPostgresWorkflow.includes('| Frontend manifest/OpenAPI/SDK APIs | npm run ci:sdk-postgres-smoke | true | npm run test:partial-gate-preflights | npm run test:admin-contract-source |') &&
     sdkPostgresWorkflow.includes('disposable confirmed:') &&
     sdkPostgresWorkflow.includes('expected host configured:') &&

@@ -54,6 +54,24 @@ const assertCommentsRouteSourceContract = () => {
     'Comments moderation queue must expose the promised selected-comment bulk Block action',
   );
   assert(
+    source.includes('const COMMENT_POLICY_PRESETS') &&
+      source.includes("key: 'strict-launch'") &&
+      source.includes('data-testid="comments-anti-abuse-presets"') &&
+      source.includes('comments-anti-abuse-preset-${preset.key}') &&
+      source.includes('applyCommentPolicyPreset(preset)'),
+    'Comments policy panel must expose guarded operator anti-abuse presets',
+  );
+  assert(
+    source.includes('const COMMENT_LARGE_SCOPE_SELECTION_THRESHOLD') &&
+      source.includes('const bulkSafetyRequiresReason = hasSelection') &&
+      source.includes('const bulkDestructiveActionDisabled = !hasSelection') &&
+      source.includes('data-testid="comments-bulk-safety-review"') &&
+      source.includes('data-testid="comments-bulk-safety-reason-required"') &&
+      source.includes('title={bulkDestructiveActionTitle}') &&
+      source.includes("disabled={bulkDestructiveActionDisabled}"),
+    'Comments moderation queue must guard destructive bulk actions with large-scope/cross-filter safety review',
+  );
+  assert(
     source.includes('const loadCommentPermissions = useCallback(() => {') &&
       source.includes('data-testid="comments-permission-state"') &&
       source.includes('data-testid="comments-rbac-permission-state"') &&
@@ -64,6 +82,18 @@ const assertCommentsRouteSourceContract = () => {
       source.includes('Review users'),
     'Comments permission states must expose retryable permission recovery and user-access handoff',
   );
+  assert(
+    source.includes('const [replySubmitted, setReplySubmitted] = useState(false);') &&
+      source.includes('const replyContentInlineError = replySubmitted') &&
+      source.includes('replyContentError={replyingToId === comment.id ? replyContentInlineError : null}') &&
+      source.includes('data-testid="comments-reply-content"') &&
+      source.includes('data-testid="comments-reply-content-error"') &&
+      source.includes('aria-invalid={Boolean(replyContentError)}') &&
+      source.includes("aria-describedby={replyContentError ? 'comments-reply-content-error' : undefined}") &&
+      /disabled=\{disabled \|\| isSubmittingReply\}[\s\S]{0,300}data-testid="comments-reply-submit"/.test(source),
+    'Comments official reply composer must keep Add reply reachable and expose inline reply-content validation',
+  );
+  assert(!source.includes('disabled={disabled || isSubmittingReply || !replyDraft.content.trim()}'), 'Comments reply submit must not hide empty-content validation behind a disabled state');
 };
 
 const requestApi = async (endpoint, options = {}) => {

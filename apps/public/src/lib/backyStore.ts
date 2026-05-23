@@ -1,6 +1,7 @@
 import {
   DEFAULT_SITE_SETTINGS,
   DEFAULT_THEME,
+  canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
   type BackyContentDocument,
 } from "@backy-cms/core";
@@ -65,6 +66,18 @@ interface PageMeta {
   frontendDesignTokens?: Record<string, unknown> | null;
   frontendDesignChrome?: Record<string, unknown> | null;
   frontendDesignCustomCss?: string | null;
+  frontendDesignCustomJs?: string | null;
+  frontendDesignContentDocument?: Record<string, unknown> | null;
+  frontendDesignElements?: unknown[];
+  frontendDesignCanvasSize?: Record<string, unknown> | null;
+  frontendDesignThemeTokenRefs?: Record<string, unknown> | null;
+  frontendDesignAssets?: unknown[] | Record<string, unknown>;
+  frontendDesignAnimations?: unknown[] | Record<string, unknown>;
+  frontendDesignInteractions?: unknown[] | Record<string, unknown>;
+  frontendDesignDataBindings?: Record<string, unknown> | null;
+  frontendDesignEditableMap?: Record<string, unknown> | null;
+  frontendDesignSeo?: Record<string, unknown> | null;
+  frontendDesignMetadata?: Record<string, unknown> | null;
   frontendDesignBindingHints?: Array<Record<string, unknown>>;
   collectionDataset?: Record<string, unknown> | null;
 }
@@ -108,8 +121,156 @@ interface PageContent {
   };
   customCSS?: string;
   customJS?: string;
-  contentDocument?: BackyContentDocument;
+  contentDocument?: BackyContentDocument | Record<string, unknown>;
+  themeTokenRefs?: Record<string, string>;
+  assets?: unknown[] | Record<string, unknown>;
+  animations?: unknown[] | Record<string, unknown>;
+  interactions?: unknown[] | Record<string, unknown>;
+  dataBindings?: Record<string, unknown>;
+  editableMap?: Record<string, unknown>;
+  seo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
+
+const contentDocumentFromCanvasPayload = (
+  rawContent: unknown,
+  input: {
+    id: string;
+    kind: "page" | "post";
+    title: string;
+    slug: string;
+    status: "draft" | "published" | "scheduled" | "archived";
+    fallbackDocument?: BackyContentDocument;
+  },
+): BackyContentDocument =>
+  canvasContentPayloadToBackyContentDocument({
+    id: input.id,
+    kind: input.kind,
+    title: input.title,
+    slug: input.slug,
+    status: input.status,
+    rawContent,
+    fallbackDocument: input.fallbackDocument,
+  });
+
+const designStateValueFromContent = <T = unknown>(
+  contentInput: Record<string, unknown>,
+  contentDocument: BackyContentDocument,
+  existing: PageContent | undefined,
+  key: keyof PageContent,
+): T | undefined => {
+  const metadata = toRecord(contentDocument.metadata);
+  const sourceValue =
+    contentInput[key] !== undefined
+      ? contentInput[key]
+      : (contentDocument as unknown as Record<string, unknown>)[key] ??
+        metadata[key as string] ??
+        existing?.[key];
+
+  return Array.isArray(sourceValue) || isObjectRecord(sourceValue)
+    ? (clone(sourceValue) as T)
+    : undefined;
+};
+
+const pageContentFromCanvasInput = (
+  rawContent: unknown,
+  input: {
+    id: string;
+    kind: "page" | "post";
+    title: string;
+    slug: string;
+    status: "draft" | "published" | "scheduled" | "archived";
+    existing?: PageContent;
+  },
+): PageContent => {
+  const contentInput = toRecord(rawContent);
+  const canvasSizeInput = toRecord(contentInput.canvasSize);
+  const fallbackDocument = isBackyContentDocument(input.existing?.contentDocument)
+    ? input.existing.contentDocument
+    : undefined;
+  const contentDocument = contentDocumentFromCanvasPayload(rawContent, {
+    id: input.id,
+    kind: input.kind,
+    title: input.title,
+    slug: input.slug,
+    status: input.status,
+    fallbackDocument,
+  });
+  const existingCanvasSize = input.existing?.canvasSize || {
+    width: 1200,
+    height: 900,
+  };
+
+  return {
+    elements: Array.isArray(contentInput.elements)
+      ? clone(contentInput.elements as CanvasElement[])
+      : Array.isArray(rawContent)
+        ? clone(rawContent as CanvasElement[])
+        : input.existing?.elements
+          ? clone(input.existing.elements)
+          : [],
+    canvasSize: {
+      width: Number(canvasSizeInput.width) || existingCanvasSize.width || 1200,
+      height: Number(canvasSizeInput.height) || existingCanvasSize.height || 900,
+    },
+    customCSS:
+      contentInput.customCSS === undefined
+        ? (contentDocument.metadata?.customCSS as string | undefined) ||
+          input.existing?.customCSS
+        : sanitizeString(contentInput.customCSS),
+    customJS:
+      contentInput.customJS === undefined
+        ? (contentDocument.metadata?.customJS as string | undefined) ||
+          input.existing?.customJS
+        : sanitizeString(contentInput.customJS),
+    contentDocument,
+    themeTokenRefs: designStateValueFromContent<Record<string, string>>(
+      contentInput,
+      contentDocument,
+      input.existing,
+      "themeTokenRefs",
+    ),
+    assets: designStateValueFromContent<unknown[] | Record<string, unknown>>(
+      contentInput,
+      contentDocument,
+      input.existing,
+      "assets",
+    ),
+    animations: designStateValueFromContent<unknown[] | Record<string, unknown>>(
+      contentInput,
+      contentDocument,
+      input.existing,
+      "animations",
+    ),
+    interactions: designStateValueFromContent<
+      unknown[] | Record<string, unknown>
+    >(contentInput, contentDocument, input.existing, "interactions"),
+    dataBindings: designStateValueFromContent<Record<string, unknown>>(
+      contentInput,
+      contentDocument,
+      input.existing,
+      "dataBindings",
+    ),
+    editableMap: designStateValueFromContent<Record<string, unknown>>(
+      contentInput,
+      contentDocument,
+      input.existing,
+      "editableMap",
+    ),
+    seo: designStateValueFromContent<Record<string, unknown>>(
+      contentInput,
+      contentDocument,
+      input.existing,
+      "seo",
+    ),
+    metadata: designStateValueFromContent<Record<string, unknown>>(
+      contentInput,
+      contentDocument,
+      input.existing,
+      "metadata",
+    ),
+  };
+};
 
 interface StoreSite {
   id: string;
@@ -207,6 +368,10 @@ interface ContentRevision {
   targetId: string;
   snapshot: StorePage | StoreBlogPost;
   note: string | null;
+  parentRevisionId?: string | null;
+  operation?: string | null;
+  restoreTargetRevisionId?: string | null;
+  metadata?: Record<string, unknown>;
   createdBy: string | null;
   createdAt: string;
 }
@@ -1738,6 +1903,68 @@ const COLLECTIONS: StoreCollection[] = [
         helpText: null,
       },
       {
+        id: "field-order-source",
+        key: "ordersource",
+        label: "Order Source",
+        type: "select",
+        required: false,
+        unique: false,
+        sortOrder: 75,
+        helpText: null,
+        options: ["web", "manual", "api", "import", "pos"],
+        defaultValue: "web",
+      },
+      {
+        id: "field-order-checkout-session",
+        key: "checkoutsessionid",
+        label: "Checkout Session ID",
+        type: "text",
+        required: false,
+        unique: false,
+        sortOrder: 76,
+        helpText: null,
+      },
+      {
+        id: "field-order-customer-id",
+        key: "customerid",
+        label: "Customer ID",
+        type: "text",
+        required: false,
+        unique: false,
+        sortOrder: 77,
+        helpText: null,
+      },
+      {
+        id: "field-order-status-access-token-hash",
+        key: "statusaccesstokenhash",
+        label: "Status Access Token Hash",
+        type: "text",
+        required: false,
+        unique: false,
+        sortOrder: 78,
+        helpText: null,
+      },
+      {
+        id: "field-order-status-access-token-issued-at",
+        key: "statusaccesstokenissuedat",
+        label: "Status Access Token Issued At",
+        type: "date",
+        required: false,
+        unique: false,
+        sortOrder: 79,
+        helpText: null,
+      },
+      {
+        id: "field-order-status-access-token-expires-at",
+        key: "statusaccesstokenexpiresat",
+        label: "Status Access Token Expires At",
+        type: "date",
+        required: false,
+        unique: false,
+        sortOrder: 79.5,
+        helpText: null,
+      },
+      {
         id: "field-order-status",
         key: "orderstatus",
         label: "Order Status",
@@ -2206,6 +2433,12 @@ const COLLECTION_RECORDS: StoreCollectionRecord[] = [
       total: 49,
       currency: "USD",
       items: "Starter Site Template x1",
+      ordersource: "web",
+      checkoutsessionid: "cs_demo_1001",
+      customerid: "",
+      statusaccesstokenhash: "",
+      statusaccesstokenissuedat: "",
+      statusaccesstokenexpiresat: "",
       orderstatus: "paid",
       paymentstatus: "paid",
       paymentprovider: "stripe",
@@ -4261,6 +4494,85 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function normalizeFrontendDesignMetaFields(
+  metaInput: Record<string, unknown>,
+  current?: PageMeta,
+): Pick<
+  PageMeta,
+  | "frontendDesignTemplateId"
+  | "frontendDesignTemplateName"
+  | "frontendDesignSource"
+  | "frontendDesignRoutePattern"
+  | "frontendDesignTokens"
+  | "frontendDesignChrome"
+  | "frontendDesignCustomCss"
+  | "frontendDesignCustomJs"
+  | "frontendDesignContentDocument"
+  | "frontendDesignElements"
+  | "frontendDesignCanvasSize"
+  | "frontendDesignThemeTokenRefs"
+  | "frontendDesignAssets"
+  | "frontendDesignAnimations"
+  | "frontendDesignInteractions"
+  | "frontendDesignDataBindings"
+  | "frontendDesignEditableMap"
+  | "frontendDesignSeo"
+  | "frontendDesignMetadata"
+  | "frontendDesignBindingHints"
+> {
+  const valueFor = (key: keyof PageMeta): unknown => {
+    const incoming = metaInput[key];
+    if (incoming === undefined && current) return current[key];
+    return incoming;
+  };
+  const stringField = (key: keyof PageMeta): string | null => {
+    const value = valueFor(key);
+    return sanitizeString(value) || null;
+  };
+  const recordField = (key: keyof PageMeta): Record<string, unknown> | null => {
+    const value = valueFor(key);
+    return isObjectRecord(value) ? clone(value) : null;
+  };
+  const arrayField = (key: keyof PageMeta): unknown[] | undefined => {
+    const value = valueFor(key);
+    return Array.isArray(value) ? clone(value) : undefined;
+  };
+  const arrayOrRecordField = (key: keyof PageMeta): unknown[] | Record<string, unknown> | undefined => {
+    const value = valueFor(key);
+    if (Array.isArray(value) || isObjectRecord(value)) return clone(value);
+    return undefined;
+  };
+  const recordArrayField = (
+    key: keyof PageMeta,
+  ): Array<Record<string, unknown>> | undefined => {
+    const value = valueFor(key);
+    return Array.isArray(value) ? value.filter(isObjectRecord).map(clone) : undefined;
+  };
+
+  return {
+    frontendDesignTemplateId: stringField("frontendDesignTemplateId"),
+    frontendDesignTemplateName: stringField("frontendDesignTemplateName"),
+    frontendDesignSource: recordField("frontendDesignSource"),
+    frontendDesignRoutePattern: stringField("frontendDesignRoutePattern"),
+    frontendDesignTokens: recordField("frontendDesignTokens"),
+    frontendDesignChrome: recordField("frontendDesignChrome"),
+    frontendDesignCustomCss: stringField("frontendDesignCustomCss"),
+    frontendDesignCustomJs: stringField("frontendDesignCustomJs"),
+    frontendDesignContentDocument: recordField("frontendDesignContentDocument"),
+    frontendDesignElements: arrayField("frontendDesignElements"),
+    frontendDesignCanvasSize: recordField("frontendDesignCanvasSize"),
+    frontendDesignThemeTokenRefs: recordField("frontendDesignThemeTokenRefs"),
+    frontendDesignAssets: arrayOrRecordField("frontendDesignAssets"),
+    frontendDesignAnimations: arrayOrRecordField("frontendDesignAnimations"),
+    frontendDesignInteractions: arrayOrRecordField("frontendDesignInteractions"),
+    frontendDesignDataBindings: recordField("frontendDesignDataBindings"),
+    frontendDesignEditableMap: recordField("frontendDesignEditableMap"),
+    frontendDesignSeo: recordField("frontendDesignSeo"),
+    frontendDesignMetadata: recordField("frontendDesignMetadata"),
+    frontendDesignBindingHints: recordArrayField("frontendDesignBindingHints"),
+  };
+}
+
 function toJsonObjectArray(
   value: unknown,
 ): Array<Record<string, unknown>> | undefined {
@@ -4308,19 +4620,78 @@ function parseStatusInput<T extends string>(
   return allowed.includes(normalized as T) ? (normalized as T) : fallback;
 }
 
+const CONTENT_REVISION_RESTORE_TARGET_PATTERN = /\b(?:rollback|restore)\s+to\s+([a-zA-Z0-9_-]+)/i;
+
+function getLatestContentRevisionId(
+  siteId: string,
+  targetType: ContentRevision["targetType"],
+  targetId: string,
+): string | null {
+  return CONTENT_REVISIONS.find(
+    (revision) =>
+      revision.siteId === siteId &&
+      revision.targetType === targetType &&
+      revision.targetId === targetId,
+  )?.id || null;
+}
+
+function restoreTargetRevisionIdFromNote(note?: string | null): string | null {
+  return note?.match(CONTENT_REVISION_RESTORE_TARGET_PATTERN)?.[1] || null;
+}
+
+function inferContentRevisionOperation(
+  operation: string | null | undefined,
+  note: string | null | undefined,
+  restoreTargetRevisionId: string | null,
+): string {
+  if (operation?.trim()) return operation.trim();
+  if (restoreTargetRevisionId) return "rollback";
+  const normalized = (note || "").toLowerCase();
+  if (normalized.includes("publish")) return "publish";
+  if (normalized.includes("archive")) return "archive";
+  if (normalized.includes("rollback") || normalized.includes("restore")) return "rollback";
+  if (normalized.includes("migration") || normalized.includes("migrate")) return "migration";
+  return "update";
+}
+
 function createContentRevision(
   targetType: ContentRevision["targetType"],
   snapshot: StorePage | StoreBlogPost,
   note?: string | null,
   createdBy?: string | null,
+  options: {
+    parentRevisionId?: string | null;
+    operation?: string | null;
+    restoreTargetRevisionId?: string | null;
+    metadata?: Record<string, unknown> | null;
+  } = {},
 ): ContentRevision {
+  const normalizedNote = note || null;
+  const parentRevisionId = options.parentRevisionId === undefined
+    ? getLatestContentRevisionId(snapshot.siteId, targetType, snapshot.id)
+    : options.parentRevisionId || null;
+  const restoreTargetRevisionId =
+    options.restoreTargetRevisionId || restoreTargetRevisionIdFromNote(normalizedNote);
+  const operation = inferContentRevisionOperation(options.operation, normalizedNote, restoreTargetRevisionId);
   const revision: ContentRevision = {
     id: createRuntimeId("rev"),
     siteId: snapshot.siteId,
     targetType,
     targetId: snapshot.id,
     snapshot: clone(snapshot),
-    note: note || null,
+    note: normalizedNote,
+    parentRevisionId,
+    operation,
+    restoreTargetRevisionId,
+    metadata: {
+      ...(options.metadata || {}),
+      schemaVersion: "backy.content-revision-metadata.v1",
+      operation,
+      parentRevisionId,
+      restoreTargetRevisionId,
+      targetType,
+      targetId: snapshot.id,
+    },
     createdBy: createdBy || "admin",
     createdAt: new Date().toISOString(),
   };
@@ -4426,16 +4797,94 @@ export function validatePreviewToken(
   );
 }
 
+const MEDIA_REFERENCE_ID_KEYS = new Set([
+  "assetId",
+  "mediaIds",
+  "mediaId",
+  "fileIds",
+  "fileId",
+  "fileMediaIds",
+  "fileMediaId",
+  "downloadMediaIds",
+  "downloadMediaId",
+  "imageIds",
+  "imageId",
+  "videoIds",
+  "videoId",
+  "audioIds",
+  "audioId",
+  "fontIds",
+  "fontId",
+  "documentIds",
+  "documentId",
+  "iconIds",
+  "iconId",
+  "fontMediaIds",
+  "fontMediaId",
+  "fallbackImageMediaIds",
+  "fallbackImageMediaId",
+  "backgroundMediaIds",
+  "backgroundMediaId",
+  "posterMediaIds",
+  "posterMediaId",
+]);
+
+const MEDIA_REFERENCE_ASSET_COLLECTION_KEYS = new Set([
+  "media",
+  "fonts",
+  "images",
+  "videos",
+  "audio",
+  "documents",
+  "icons",
+  "files",
+]);
+
+type MediaReferenceBindingScope = "page" | "post" | "collectionRecord";
+
+interface MediaReferenceBindingRecord {
+  id: string;
+  mediaId: string;
+  scope: MediaReferenceBindingScope;
+  targetId: string;
+  usageType: string;
+  attachedBy: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  collectionId?: string;
+}
+
 function collectMediaReferenceIds(value: unknown): Set<string> {
   const references = new Set<string>();
 
-  const visit = (entry: unknown) => {
+  const addReference = (entry: unknown) => {
+    const id = sanitizeString(entry);
+    if (id) {
+      references.add(id);
+    }
+  };
+
+  const visit = (entry: unknown, key?: string, parentKey?: string) => {
     if (!entry) {
       return;
     }
 
+    if (key && MEDIA_REFERENCE_ID_KEYS.has(key)) {
+      if (Array.isArray(entry)) {
+        entry.forEach(addReference);
+      } else {
+        addReference(entry);
+      }
+      return;
+    }
+
     if (Array.isArray(entry)) {
-      entry.forEach(visit);
+      if (key === "assetIds") {
+        entry.forEach(addReference);
+        return;
+      }
+
+      entry.forEach((item) => visit(item, undefined, key));
       return;
     }
 
@@ -4444,36 +4893,13 @@ function collectMediaReferenceIds(value: unknown): Set<string> {
     }
 
     const record = entry as Record<string, unknown>;
-    const directMediaId = sanitizeString(record.mediaId);
-    const directAssetId = sanitizeString(record.assetId);
-
-    if (directMediaId) {
-      references.add(directMediaId);
+    if (parentKey && MEDIA_REFERENCE_ASSET_COLLECTION_KEYS.has(parentKey)) {
+      addReference(record.id);
     }
 
-    if (directAssetId) {
-      references.add(directAssetId);
-    }
-
-    if (
-      record.props &&
-      typeof record.props === "object" &&
-      !Array.isArray(record.props)
-    ) {
-      const props = record.props as Record<string, unknown>;
-      const propsMediaId = sanitizeString(props.mediaId);
-      const propsAssetId = sanitizeString(props.assetId);
-
-      if (propsMediaId) {
-        references.add(propsMediaId);
-      }
-
-      if (propsAssetId) {
-        references.add(propsAssetId);
-      }
-    }
-
-    Object.values(record).forEach(visit);
+    Object.entries(record).forEach(([entryKey, entryValue]) => {
+      visit(entryValue, entryKey, key);
+    });
   };
 
   visit(value);
@@ -4515,6 +4941,165 @@ function syncMediaReferencesForTarget(
       [key]: shouldReference
         ? [...currentRefs, targetId]
         : currentRefs.filter((id) => id !== targetId),
+      updatedAt: new Date().toISOString(),
+    };
+    changed = true;
+  });
+
+  if (changed) {
+    persistRuntimeMediaCatalog();
+  }
+}
+
+function mediaReferencePayloadForContent(
+  content: unknown,
+  meta: unknown,
+): Record<string, unknown> {
+  return { content, meta };
+}
+
+function mediaReferenceBindingRecords(value: unknown): MediaReferenceBindingRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is Record<string, unknown> =>
+      Boolean(entry) && typeof entry === "object" && !Array.isArray(entry),
+    )
+	    .map((entry): MediaReferenceBindingRecord | null => {
+	      const scope: MediaReferenceBindingScope | null =
+	        entry.scope === "page" ||
+	        entry.scope === "post" ||
+	        entry.scope === "collectionRecord"
+	          ? entry.scope
+	          : null;
+      const targetId = sanitizeString(entry.targetId);
+      if (!scope || !targetId) {
+        return null;
+      }
+
+	      const binding: MediaReferenceBindingRecord = {
+	        id: sanitizeString(entry.id) || createRuntimeId("binding"),
+	        mediaId: sanitizeString(entry.mediaId),
+	        scope,
+        targetId,
+        usageType: sanitizeString(entry.usageType) || "content",
+        attachedBy: sanitizeString(entry.attachedBy) || null,
+        createdAt: sanitizeString(entry.createdAt) || undefined,
+        updatedAt: sanitizeString(entry.updatedAt) || undefined,
+	        ...(sanitizeString(entry.collectionId)
+	          ? { collectionId: sanitizeString(entry.collectionId) }
+	          : {}),
+	      };
+	      return binding;
+	    })
+    .filter((entry): entry is MediaReferenceBindingRecord => Boolean(entry));
+}
+
+function isCollectionRecordMediaBinding(
+  binding: MediaReferenceBindingRecord,
+  collectionId: string,
+  recordId: string,
+): boolean {
+  return (
+    binding.scope === "collectionRecord" &&
+    binding.targetId === recordId &&
+    (!binding.collectionId || binding.collectionId === collectionId)
+  );
+}
+
+function syncMediaReferencesForCollectionRecord(
+  siteId: string,
+  collectionId: string,
+  recordId: string,
+  values: unknown,
+) {
+  ensurePersistedMediaLoaded();
+
+  const referenceIds = collectMediaReferenceIds(values);
+  let changed = false;
+
+  MEDIA_LIBRARY.forEach((item, index) => {
+    if (item.siteId !== siteId) {
+      return;
+    }
+
+    const currentBindings = mediaReferenceBindingRecords(item.metadata?.bindings);
+    const existingBinding = currentBindings.find((binding) =>
+      isCollectionRecordMediaBinding(binding, collectionId, recordId),
+    );
+    const shouldReference = referenceIds.has(item.id);
+
+    if (shouldReference && existingBinding) {
+      return;
+    }
+
+    const nextBindings = shouldReference
+      ? [
+          ...currentBindings,
+          {
+            id: `binding_${item.id}_${collectionId}_${recordId}`,
+            mediaId: item.id,
+            scope: "collectionRecord" as const,
+            targetId: recordId,
+            collectionId,
+            usageType: "collection-record",
+            attachedBy: "backy-store",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ]
+      : currentBindings.filter(
+          (binding) =>
+            !isCollectionRecordMediaBinding(binding, collectionId, recordId),
+        );
+
+    MEDIA_LIBRARY[index] = {
+      ...item,
+      metadata: {
+        ...(item.metadata || {}),
+        bindings: nextBindings,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    changed = true;
+  });
+
+  if (changed) {
+    persistRuntimeMediaCatalog();
+  }
+}
+
+function removeMediaReferencesForCollectionRecord(
+  siteId: string,
+  collectionId: string,
+  recordId: string,
+) {
+  ensurePersistedMediaLoaded();
+
+  let changed = false;
+
+  MEDIA_LIBRARY.forEach((item, index) => {
+    if (item.siteId !== siteId) {
+      return;
+    }
+
+    const currentBindings = mediaReferenceBindingRecords(item.metadata?.bindings);
+    const nextBindings = currentBindings.filter(
+      (binding) => !isCollectionRecordMediaBinding(binding, collectionId, recordId),
+    );
+
+    if (nextBindings.length === currentBindings.length) {
+      return;
+    }
+
+    MEDIA_LIBRARY[index] = {
+      ...item,
+      metadata: {
+        ...(item.metadata || {}),
+        bindings: nextBindings,
+      },
       updatedAt: new Date().toISOString(),
     };
     changed = true;
@@ -5836,6 +6421,7 @@ function normalizeSiteSettingsInput(
         : normalizeFrontendDesignContract(settingsInput.frontendDesign, {
             fallback: base.frontendDesign,
             updatedAt: new Date().toISOString(),
+            mergeFallback: true,
           }),
     contacts:
       settingsInput.contacts === undefined
@@ -7061,6 +7647,12 @@ const normalizeCollectionRecordValues = (
     }
   }
 
+  for (const [key, value] of Object.entries(existingValues)) {
+    if (!(key in normalized) && values[key] === undefined) {
+      normalized[key] = value;
+    }
+  }
+
   for (const [key, value] of Object.entries(values)) {
     if (!(key in normalized)) {
       normalized[key] = value;
@@ -7302,7 +7894,14 @@ const normalizeReusableSectionContent = (
   };
   const contentDocument = isBackyContentDocument(input.contentDocument)
     ? clone(input.contentDocument)
+    : isObjectRecord(input.contentDocument)
+      ? clone(input.contentDocument)
     : existing?.contentDocument;
+  const designStateValue = <T = unknown>(key: string): T | undefined => {
+    if (input[key] === undefined) return existing?.[key as keyof PageContent] as T | undefined;
+    const next = input[key];
+    return Array.isArray(next) || isObjectRecord(next) ? clone(next) as T : undefined;
+  };
 
   return {
     elements: Array.isArray(input.elements)
@@ -7324,6 +7923,14 @@ const normalizeReusableSectionContent = (
         ? existing?.customJS
         : sanitizeString(input.customJS),
     contentDocument,
+    themeTokenRefs: designStateValue<Record<string, string>>("themeTokenRefs"),
+    assets: designStateValue<unknown[] | Record<string, unknown>>("assets"),
+    animations: designStateValue<unknown[] | Record<string, unknown>>("animations"),
+    interactions: designStateValue<unknown[] | Record<string, unknown>>("interactions"),
+    dataBindings: designStateValue<Record<string, unknown>>("dataBindings"),
+    editableMap: designStateValue<Record<string, unknown>>("editableMap"),
+    seo: designStateValue<Record<string, unknown>>("seo"),
+    metadata: designStateValue<Record<string, unknown>>("metadata"),
   };
 };
 
@@ -8383,6 +8990,12 @@ export function createAdminCollectionRecord(
 
   COLLECTION_RECORDS.unshift(record);
   persistAdminContent();
+  syncMediaReferencesForCollectionRecord(
+    siteId,
+    collection.id,
+    record.id,
+    record.values,
+  );
   return clone(record);
 }
 
@@ -8444,6 +9057,12 @@ export function updateAdminCollectionRecord(
 
   COLLECTION_RECORDS[index] = updated;
   persistAdminContent();
+  syncMediaReferencesForCollectionRecord(
+    siteId,
+    collection.id,
+    updated.id,
+    updated.values,
+  );
   return clone(updated);
 }
 
@@ -8474,6 +9093,7 @@ export function deleteAdminCollectionRecord(
 
   COLLECTION_RECORDS.splice(index, 1);
   persistAdminContent();
+  removeMediaReferencesForCollectionRecord(siteId, collection.id, recordId);
   return true;
 }
 
@@ -8605,11 +9225,17 @@ export function createAdminPage(
     "draft",
   );
   const metaInput = toRecord(input.meta);
-  const contentInput = toRecord(input.content);
-  const canvasSizeInput = toRecord(contentInput.canvasSize);
+  const pageId = sanitizeString(input.id) || createRuntimeId("page");
+  const content = pageContentFromCanvasInput(input.content, {
+    id: pageId,
+    kind: "page",
+    title,
+    slug,
+    status,
+  });
 
   const page: StorePage = {
-    id: sanitizeString(input.id) || createRuntimeId("page"),
+    id: pageId,
     siteId,
     title,
     slug,
@@ -8621,20 +9247,7 @@ export function createAdminPage(
     isHomepage: parseBooleanInput(input.isHomepage, false),
     parentId: sanitizeString(input.parentId) || null,
     sortOrder: Number(input.sortOrder) || 0,
-    content: {
-      elements: Array.isArray(contentInput.elements)
-        ? (contentInput.elements as CanvasElement[])
-        : [],
-      canvasSize: {
-        width: Number(canvasSizeInput.width) || 1200,
-        height: Number(canvasSizeInput.height) || 900,
-      },
-      customCSS: sanitizeString(contentInput.customCSS),
-      customJS: sanitizeString(contentInput.customJS),
-      contentDocument: isBackyContentDocument(contentInput.contentDocument)
-        ? clone(contentInput.contentDocument)
-        : undefined,
-    },
+    content,
     meta: {
       title: sanitizeString(metaInput.title) || title,
       description:
@@ -8654,28 +9267,7 @@ export function createAdminPage(
       noFollow: parseBooleanInput(metaInput.noFollow, false),
       parentPageId: sanitizeString(metaInput.parentPageId) || null,
       parentPageTitle: sanitizeString(metaInput.parentPageTitle) || null,
-      frontendDesignTemplateId:
-        sanitizeString(metaInput.frontendDesignTemplateId) || null,
-      frontendDesignTemplateName:
-        sanitizeString(metaInput.frontendDesignTemplateName) || null,
-      frontendDesignSource: isObjectRecord(metaInput.frontendDesignSource)
-        ? clone(metaInput.frontendDesignSource)
-        : null,
-      frontendDesignRoutePattern:
-        sanitizeString(metaInput.frontendDesignRoutePattern) || null,
-      frontendDesignTokens: isObjectRecord(metaInput.frontendDesignTokens)
-        ? clone(metaInput.frontendDesignTokens)
-        : null,
-      frontendDesignChrome: isObjectRecord(metaInput.frontendDesignChrome)
-        ? clone(metaInput.frontendDesignChrome)
-        : null,
-      frontendDesignCustomCss:
-        sanitizeString(metaInput.frontendDesignCustomCss) || null,
-      frontendDesignBindingHints: Array.isArray(
-        metaInput.frontendDesignBindingHints,
-      )
-        ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
-        : undefined,
+      ...normalizeFrontendDesignMetaFields(metaInput),
       collectionDataset: isObjectRecord(metaInput.collectionDataset)
         ? clone(metaInput.collectionDataset)
         : null,
@@ -8691,7 +9283,12 @@ export function createAdminPage(
 
   PAGE_LIST.unshift(page);
   persistAdminContent();
-  syncMediaReferencesForTarget(siteId, "page", page.id, page.content);
+  syncMediaReferencesForTarget(
+    siteId,
+    "page",
+    page.id,
+    mediaReferencePayloadForContent(page.content, page.meta),
+  );
   return clone(page);
 }
 
@@ -8720,25 +9317,37 @@ export function updateAdminPage(
           current.status,
         );
   const metaInput = toRecord(input.meta);
-  const contentInput = toRecord(input.content);
-  const canvasSizeInput = toRecord(contentInput.canvasSize);
+  const nextTitle =
+    input.title === undefined
+      ? current.title
+      : sanitizeString(input.title) || current.title;
+  const nextSlug =
+    input.slug === undefined
+      ? current.slug
+      : normalizeSlugInput(input.slug, current.slug);
+  const nextContent =
+    input.content === undefined
+      ? current.content
+      : pageContentFromCanvasInput(input.content, {
+          id: current.id,
+          kind: "page",
+          title: nextTitle,
+          slug: nextSlug,
+          status,
+          existing: current.content,
+        });
   createContentRevision(
     "page",
     current,
     sanitizeString(input.revisionNote) || "Before page update",
     sanitizeString(input.updatedBy),
+    { operation: "update" },
   );
 
   const updated: StorePage = {
     ...current,
-    title:
-      input.title === undefined
-        ? current.title
-        : sanitizeString(input.title) || current.title,
-    slug:
-      input.slug === undefined
-        ? current.slug
-        : normalizeSlugInput(input.slug, current.slug),
+    title: nextTitle,
+    slug: nextSlug,
     description:
       input.description === undefined
         ? current.description
@@ -8756,36 +9365,7 @@ export function updateAdminPage(
       input.sortOrder === undefined
         ? current.sortOrder
         : Number(input.sortOrder) || current.sortOrder || 0,
-    content:
-      input.content === undefined
-        ? current.content
-        : {
-            elements: Array.isArray(contentInput.elements)
-              ? (contentInput.elements as CanvasElement[])
-              : current.content.elements,
-            canvasSize: {
-              width:
-                Number(canvasSizeInput.width) ||
-                current.content.canvasSize.width,
-              height:
-                Number(canvasSizeInput.height) ||
-                current.content.canvasSize.height,
-            },
-            customCSS:
-              contentInput.customCSS === undefined
-                ? current.content.customCSS
-                : sanitizeString(contentInput.customCSS),
-            customJS:
-              contentInput.customJS === undefined
-                ? current.content.customJS
-                : sanitizeString(contentInput.customJS),
-            contentDocument:
-              contentInput.contentDocument === undefined
-                ? current.content.contentDocument
-                : isBackyContentDocument(contentInput.contentDocument)
-                  ? clone(contentInput.contentDocument)
-                  : undefined,
-          },
+    content: nextContent,
     meta:
       input.meta === undefined
         ? {
@@ -8840,48 +9420,7 @@ export function updateAdminPage(
               metaInput.parentPageTitle === undefined
                 ? current.meta.parentPageTitle
                 : sanitizeString(metaInput.parentPageTitle) || null,
-            frontendDesignTemplateId:
-              metaInput.frontendDesignTemplateId === undefined
-                ? current.meta.frontendDesignTemplateId
-                : sanitizeString(metaInput.frontendDesignTemplateId) || null,
-            frontendDesignTemplateName:
-              metaInput.frontendDesignTemplateName === undefined
-                ? current.meta.frontendDesignTemplateName
-                : sanitizeString(metaInput.frontendDesignTemplateName) || null,
-            frontendDesignSource:
-              metaInput.frontendDesignSource === undefined
-                ? current.meta.frontendDesignSource
-                : isObjectRecord(metaInput.frontendDesignSource)
-                  ? clone(metaInput.frontendDesignSource)
-                  : null,
-            frontendDesignRoutePattern:
-              metaInput.frontendDesignRoutePattern === undefined
-                ? current.meta.frontendDesignRoutePattern
-                : sanitizeString(metaInput.frontendDesignRoutePattern) || null,
-            frontendDesignTokens:
-              metaInput.frontendDesignTokens === undefined
-                ? current.meta.frontendDesignTokens
-                : isObjectRecord(metaInput.frontendDesignTokens)
-                  ? clone(metaInput.frontendDesignTokens)
-                  : null,
-            frontendDesignChrome:
-              metaInput.frontendDesignChrome === undefined
-                ? current.meta.frontendDesignChrome
-                : isObjectRecord(metaInput.frontendDesignChrome)
-                  ? clone(metaInput.frontendDesignChrome)
-                  : null,
-            frontendDesignCustomCss:
-              metaInput.frontendDesignCustomCss === undefined
-                ? current.meta.frontendDesignCustomCss
-                : sanitizeString(metaInput.frontendDesignCustomCss) || null,
-            frontendDesignBindingHints:
-              metaInput.frontendDesignBindingHints === undefined
-                ? current.meta.frontendDesignBindingHints
-                : Array.isArray(metaInput.frontendDesignBindingHints)
-                  ? metaInput.frontendDesignBindingHints
-                      .filter(isObjectRecord)
-                      .map(clone)
-                  : undefined,
+            ...normalizeFrontendDesignMetaFields(metaInput, current.meta),
             collectionDataset:
               metaInput.collectionDataset === undefined
                 ? current.meta.collectionDataset
@@ -8905,7 +9444,12 @@ export function updateAdminPage(
 
   PAGE_LIST[index] = updated;
   persistAdminContent();
-  syncMediaReferencesForTarget(siteId, "page", pageId, updated.content);
+  syncMediaReferencesForTarget(
+    siteId,
+    "page",
+    pageId,
+    mediaReferencePayloadForContent(updated.content, updated.meta),
+  );
   return clone(updated);
 }
 
@@ -9429,14 +9973,22 @@ export function createAdminBlogPost(
     "draft",
   );
   const metaInput = toRecord(input.meta);
+  const postId = sanitizeString(input.id) || createRuntimeId("post");
+  const content = pageContentFromCanvasInput(input.content, {
+    id: postId,
+    kind: "post",
+    title,
+    slug,
+    status,
+  }) as unknown as Record<string, unknown>;
 
   const post: StoreBlogPost = {
-    id: sanitizeString(input.id) || createRuntimeId("post"),
+    id: postId,
     siteId,
     title,
     slug,
     excerpt: sanitizeString(input.excerpt) || null,
-    content: toRecord(input.content),
+    content,
     status,
     featuredImageId: sanitizeString(input.featuredImageId) || null,
     authorId: sanitizeString(input.authorId) || "admin",
@@ -9455,28 +10007,7 @@ export function createAdminBlogPost(
         defaultNoIndexForStatus(status),
       ),
       noFollow: parseBooleanInput(metaInput.noFollow, false),
-      frontendDesignTemplateId:
-        sanitizeString(metaInput.frontendDesignTemplateId) || null,
-      frontendDesignTemplateName:
-        sanitizeString(metaInput.frontendDesignTemplateName) || null,
-      frontendDesignSource: isObjectRecord(metaInput.frontendDesignSource)
-        ? clone(metaInput.frontendDesignSource)
-        : null,
-      frontendDesignRoutePattern:
-        sanitizeString(metaInput.frontendDesignRoutePattern) || null,
-      frontendDesignTokens: isObjectRecord(metaInput.frontendDesignTokens)
-        ? clone(metaInput.frontendDesignTokens)
-        : null,
-      frontendDesignChrome: isObjectRecord(metaInput.frontendDesignChrome)
-        ? clone(metaInput.frontendDesignChrome)
-        : null,
-      frontendDesignCustomCss:
-        sanitizeString(metaInput.frontendDesignCustomCss) || null,
-      frontendDesignBindingHints: Array.isArray(
-        metaInput.frontendDesignBindingHints,
-      )
-        ? metaInput.frontendDesignBindingHints.filter(isObjectRecord).map(clone)
-        : undefined,
+      ...normalizeFrontendDesignMetaFields(metaInput),
     },
     categoryIds: Array.isArray(input.categoryIds)
       ? input.categoryIds.map(sanitizeString).filter(Boolean)
@@ -9496,7 +10027,7 @@ export function createAdminBlogPost(
     siteId,
     "post",
     post.id,
-    post.content,
+    mediaReferencePayloadForContent(post.content, post.meta),
     post.featuredImageId ? [post.featuredImageId] : [],
   );
   return clone(post);
@@ -9525,31 +10056,44 @@ export function updateAdminBlogPost(
           input.status,
           ["draft", "published", "scheduled", "archived"] as const,
           current.status,
-        );
+  );
   const metaInput = toRecord(input.meta);
+  const nextTitle =
+    input.title === undefined
+      ? current.title
+      : sanitizeString(input.title) || current.title;
+  const nextSlug =
+    input.slug === undefined
+      ? current.slug
+      : normalizeSlugInput(input.slug, current.slug);
+  const nextContent =
+    input.content === undefined
+      ? current.content
+      : (pageContentFromCanvasInput(input.content, {
+          id: current.id,
+          kind: "post",
+          title: nextTitle,
+          slug: nextSlug,
+          status,
+          existing: current.content as unknown as PageContent,
+        }) as unknown as Record<string, unknown>);
   createContentRevision(
     "post",
     current,
     sanitizeString(input.revisionNote) || "Before post update",
     sanitizeString(input.updatedBy),
+    { operation: "update" },
   );
 
   const updated: StoreBlogPost = {
     ...current,
-    title:
-      input.title === undefined
-        ? current.title
-        : sanitizeString(input.title) || current.title,
-    slug:
-      input.slug === undefined
-        ? current.slug
-        : normalizeSlugInput(input.slug, current.slug),
+    title: nextTitle,
+    slug: nextSlug,
     excerpt:
       input.excerpt === undefined
         ? current.excerpt
         : sanitizeString(input.excerpt) || null,
-    content:
-      input.content === undefined ? current.content : toRecord(input.content),
+    content: nextContent,
     status,
     featuredImageId:
       input.featuredImageId === undefined
@@ -9601,48 +10145,7 @@ export function updateAdminBlogPost(
               metaInput.noFollow === undefined
                 ? current.meta.noFollow
                 : parseBooleanInput(metaInput.noFollow, false),
-            frontendDesignTemplateId:
-              metaInput.frontendDesignTemplateId === undefined
-                ? current.meta.frontendDesignTemplateId
-                : sanitizeString(metaInput.frontendDesignTemplateId) || null,
-            frontendDesignTemplateName:
-              metaInput.frontendDesignTemplateName === undefined
-                ? current.meta.frontendDesignTemplateName
-                : sanitizeString(metaInput.frontendDesignTemplateName) || null,
-            frontendDesignSource:
-              metaInput.frontendDesignSource === undefined
-                ? current.meta.frontendDesignSource
-                : isObjectRecord(metaInput.frontendDesignSource)
-                  ? clone(metaInput.frontendDesignSource)
-                  : null,
-            frontendDesignRoutePattern:
-              metaInput.frontendDesignRoutePattern === undefined
-                ? current.meta.frontendDesignRoutePattern
-                : sanitizeString(metaInput.frontendDesignRoutePattern) || null,
-            frontendDesignTokens:
-              metaInput.frontendDesignTokens === undefined
-                ? current.meta.frontendDesignTokens
-                : isObjectRecord(metaInput.frontendDesignTokens)
-                  ? clone(metaInput.frontendDesignTokens)
-                  : null,
-            frontendDesignChrome:
-              metaInput.frontendDesignChrome === undefined
-                ? current.meta.frontendDesignChrome
-                : isObjectRecord(metaInput.frontendDesignChrome)
-                  ? clone(metaInput.frontendDesignChrome)
-                  : null,
-            frontendDesignCustomCss:
-              metaInput.frontendDesignCustomCss === undefined
-                ? current.meta.frontendDesignCustomCss
-                : sanitizeString(metaInput.frontendDesignCustomCss) || null,
-            frontendDesignBindingHints:
-              metaInput.frontendDesignBindingHints === undefined
-                ? current.meta.frontendDesignBindingHints
-                : Array.isArray(metaInput.frontendDesignBindingHints)
-                  ? metaInput.frontendDesignBindingHints
-                      .filter(isObjectRecord)
-                      .map(clone)
-                  : undefined,
+            ...normalizeFrontendDesignMetaFields(metaInput, current.meta),
           },
     categoryIds: Array.isArray(input.categoryIds)
       ? input.categoryIds.map(sanitizeString).filter(Boolean)
@@ -9667,7 +10170,7 @@ export function updateAdminBlogPost(
     siteId,
     "post",
     postId,
-    updated.content,
+    mediaReferencePayloadForContent(updated.content, updated.meta),
     updated.featuredImageId ? [updated.featuredImageId] : [],
   );
   return clone(updated);
@@ -9743,7 +10246,7 @@ export function publishAdminPage(
   }
 
   const current = PAGE_LIST[index];
-  createContentRevision("page", current, "Before publish", actor);
+  createContentRevision("page", current, "Before publish", actor, { operation: "publish" });
 
   const now = new Date().toISOString();
   const updated: StorePage = {
@@ -9760,7 +10263,12 @@ export function publishAdminPage(
 
   PAGE_LIST[index] = updated;
   persistAdminContent();
-  syncMediaReferencesForTarget(siteId, "page", pageId, updated.content);
+  syncMediaReferencesForTarget(
+    siteId,
+    "page",
+    pageId,
+    mediaReferencePayloadForContent(updated.content, updated.meta),
+  );
   return clone(updated);
 }
 
@@ -9779,7 +10287,7 @@ export function archiveAdminPage(
   }
 
   const current = PAGE_LIST[index];
-  createContentRevision("page", current, "Before archive", actor);
+  createContentRevision("page", current, "Before archive", actor, { operation: "archive" });
 
   const updated: StorePage = {
     ...current,
@@ -9794,7 +10302,12 @@ export function archiveAdminPage(
 
   PAGE_LIST[index] = updated;
   persistAdminContent();
-  syncMediaReferencesForTarget(siteId, "page", pageId, updated.content);
+  syncMediaReferencesForTarget(
+    siteId,
+    "page",
+    pageId,
+    mediaReferencePayloadForContent(updated.content, updated.meta),
+  );
   return clone(updated);
 }
 
@@ -9827,6 +10340,7 @@ export function rollbackAdminPage(
     current,
     `Before rollback to ${revisionId}`,
     actor,
+    { operation: "rollback", restoreTargetRevisionId: revisionId },
   );
 
   const snapshot = revision.snapshot as StorePage;
@@ -9837,7 +10351,12 @@ export function rollbackAdminPage(
 
   PAGE_LIST[index] = updated;
   persistAdminContent();
-  syncMediaReferencesForTarget(siteId, "page", pageId, updated.content);
+  syncMediaReferencesForTarget(
+    siteId,
+    "page",
+    pageId,
+    mediaReferencePayloadForContent(updated.content, updated.meta),
+  );
   return clone(updated);
 }
 
@@ -9856,7 +10375,7 @@ export function publishAdminBlogPost(
   }
 
   const current = BLOG_POSTS[index];
-  createContentRevision("post", current, "Before publish", actor);
+  createContentRevision("post", current, "Before publish", actor, { operation: "publish" });
 
   const now = new Date().toISOString();
   const updated: StoreBlogPost = {
@@ -9877,7 +10396,7 @@ export function publishAdminBlogPost(
     siteId,
     "post",
     postId,
-    updated.content,
+    mediaReferencePayloadForContent(updated.content, updated.meta),
     updated.featuredImageId ? [updated.featuredImageId] : [],
   );
   return clone(updated);
@@ -9898,7 +10417,7 @@ export function archiveAdminBlogPost(
   }
 
   const current = BLOG_POSTS[index];
-  createContentRevision("post", current, "Before archive", actor);
+  createContentRevision("post", current, "Before archive", actor, { operation: "archive" });
 
   const updated: StoreBlogPost = {
     ...current,
@@ -9917,7 +10436,7 @@ export function archiveAdminBlogPost(
     siteId,
     "post",
     postId,
-    updated.content,
+    mediaReferencePayloadForContent(updated.content, updated.meta),
     updated.featuredImageId ? [updated.featuredImageId] : [],
   );
   return clone(updated);
@@ -9952,6 +10471,7 @@ export function rollbackAdminBlogPost(
     current,
     `Before rollback to ${revisionId}`,
     actor,
+    { operation: "rollback", restoreTargetRevisionId: revisionId },
   );
 
   const snapshot = revision.snapshot as StoreBlogPost;
@@ -9966,7 +10486,7 @@ export function rollbackAdminBlogPost(
     siteId,
     "post",
     postId,
-    updated.content,
+    mediaReferencePayloadForContent(updated.content, updated.meta),
     updated.featuredImageId ? [updated.featuredImageId] : [],
   );
   return clone(updated);

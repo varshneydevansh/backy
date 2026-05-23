@@ -20,6 +20,10 @@ import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
 import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import {
+  removeRepositoryCollectionRecordMediaReferences,
+  syncRepositoryCollectionRecordMediaReferences,
+} from '@/lib/repositoryMediaReferenceSync';
 
 interface RouteParams {
   params: Promise<{
@@ -220,6 +224,13 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const updated = (await repositories.collections.updateRecord(site.id, collection.id, record.id, {
         values: toJsonRecord(values),
       })).item;
+      await syncRepositoryCollectionRecordMediaReferences({
+        mediaRepository: repositories.media,
+        siteId: site.id,
+        collectionId: collection.id,
+        recordId: updated.id,
+        values: updated.values,
+      });
 
       return privateResponse({
         success: true,
@@ -342,6 +353,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       }
 
       await repositories.collections.deleteRecord(site.id, collection.id, record.id);
+      await removeRepositoryCollectionRecordMediaReferences({
+        mediaRepository: repositories.media,
+        siteId: site.id,
+        collectionId: collection.id,
+        recordId: record.id,
+      });
       return privateResponse({
         success: true,
         requestId,

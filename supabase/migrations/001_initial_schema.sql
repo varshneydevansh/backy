@@ -125,30 +125,6 @@ CREATE TABLE public.teams (
 -- Enable RLS
 ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
 
--- Teams policies
-CREATE POLICY "Team members can view their teams" 
-  ON public.teams FOR SELECT 
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.team_members 
-      WHERE team_id = id AND user_id = auth.uid()
-    )
-    OR owner_id = auth.uid()
-  );
-
-CREATE POLICY "Team owners can update their teams" 
-  ON public.teams FOR UPDATE 
-  USING (owner_id = auth.uid());
-
-CREATE POLICY "Admins can manage all teams" 
-  ON public.teams FOR ALL 
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'admin'
-    )
-  );
-
 -- ============================================
 -- TEAM MEMBERS TABLE
 -- ============================================
@@ -183,6 +159,31 @@ CREATE POLICY "Team admins can manage members"
       WHERE tm2.team_id = team_id 
       AND tm2.user_id = auth.uid() 
       AND tm2.role = 'admin'
+    )
+  );
+
+-- Teams policies rely on public.team_members, so define them after the
+-- membership table exists for clean Postgres/Supabase bootstrap runs.
+CREATE POLICY "Team members can view their teams"
+  ON public.teams FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.team_members
+      WHERE team_id = id AND user_id = auth.uid()
+    )
+    OR owner_id = auth.uid()
+  );
+
+CREATE POLICY "Team owners can update their teams"
+  ON public.teams FOR UPDATE
+  USING (owner_id = auth.uid());
+
+CREATE POLICY "Admins can manage all teams"
+  ON public.teams FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'admin'
     )
   );
 
@@ -685,7 +686,7 @@ CREATE POLICY "Team members can manage links"
 CREATE TABLE public.activity_logs (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   site_id UUID REFERENCES public.sites(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES public.profiles(id),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   action activity_action NOT NULL,
   entity_type entity_type NOT NULL,
   entity_id UUID,
