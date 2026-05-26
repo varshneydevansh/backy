@@ -9,6 +9,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import type { AnimationConfig as SharedAnimationConfig } from '@/types/editor';
+import { buildEditorActionStatus } from './editorActionStatus';
 
 // ==========================================================================
 // TYPES
@@ -178,7 +179,22 @@ const styles = {
         gap: '8px',
         fontSize: '14px',
     } as React.CSSProperties,
+    srOnly: {
+        position: 'absolute',
+        width: '1px',
+        height: '1px',
+        padding: 0,
+        margin: '-1px',
+        overflow: 'hidden',
+        clip: 'rect(0, 0, 0, 0)',
+        whiteSpace: 'nowrap',
+        border: 0,
+    } as React.CSSProperties,
 };
+
+const optionLabel = <T extends readonly { value: string; label: string }[]>(options: T, value: string): string => (
+    options.find((option) => option.value === value)?.label || value
+);
 
 // ==========================================================================
 // ANIMATION BUILDER COMPONENT
@@ -254,9 +270,84 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
 
     const showDirectionOption = config.type === 'slideIn';
     const showScrollOptions = config.trigger === 'scroll';
+    const animationActionStatusId = 'editor-animation-action-status';
+    const activeAnimationLabel = optionLabel(ANIMATION_TYPES, config.type);
+    const activeTriggerLabel = optionLabel(TRIGGER_OPTIONS, config.trigger);
+    const hasCustomJsonError = Boolean(customJsonErrors.from || customJsonErrors.to);
+    const animationBuilderAction = buildEditorActionStatus({
+        label: 'Animation builder',
+        disabledReason: hasCustomJsonError ? customJsonErrors.from || customJsonErrors.to || 'Fix the custom animation JSON.' : '',
+        selected: config.type !== 'none',
+        readyStatus: 'Animation builder ready. Choose an animation type to enable motion.',
+        selectedStatus: `${activeAnimationLabel} animation uses ${activeTriggerLabel.toLowerCase()}, ${config.duration.toFixed(1)}s duration, and ${config.delay.toFixed(1)}s delay.`,
+    });
+    const animationTypeAction = buildEditorActionStatus({
+        label: 'Animation type',
+        selected: config.type !== 'none',
+        readyStatus: 'Animation type ready. Current value: None.',
+        selectedStatus: `Animation type ${activeAnimationLabel} selected.`,
+    });
+    const animationTriggerAction = buildEditorActionStatus({
+        label: 'Animation trigger',
+        readyStatus: `Animation trigger ${activeTriggerLabel} selected.`,
+    });
+    const animationDirectionAction = buildEditorActionStatus({
+        label: 'Animation direction',
+        readyStatus: `Animation direction ${optionLabel(DIRECTION_OPTIONS, config.direction || 'up')} selected.`,
+    });
+    const animationDurationAction = buildEditorActionStatus({
+        label: 'Animation duration',
+        readyStatus: `Animation duration ${config.duration.toFixed(1)} seconds selected.`,
+    });
+    const animationDelayAction = buildEditorActionStatus({
+        label: 'Animation delay',
+        readyStatus: `Animation delay ${config.delay.toFixed(1)} seconds selected.`,
+    });
+    const animationEasingAction = buildEditorActionStatus({
+        label: 'Animation easing',
+        readyStatus: `Animation easing ${optionLabel(EASING_OPTIONS, config.easing)} selected.`,
+    });
+    const customDefaultsAction = buildEditorActionStatus({
+        label: 'Reset custom motion',
+        readyStatus: 'Reset custom motion to the default from/to JSON objects.',
+    });
+    const scrollScrubAction = buildEditorActionStatus({
+        label: 'Scroll scrub',
+        selected: Boolean(config.scrollTrigger?.scrub),
+        readyStatus: 'Scroll scrub is off.',
+        selectedStatus: 'Scroll scrub is on.',
+    });
+    const previewAction = buildEditorActionStatus({
+        label: 'Preview animation',
+        busy: isPlaying,
+        busyStatus: `Previewing ${activeAnimationLabel} animation.`,
+        readyStatus: `Preview ${activeAnimationLabel} animation.`,
+    });
+    const animationActionSummary = [
+        animationBuilderAction.actionStatus,
+        hasCustomJsonError ? 'Custom JSON has validation errors.' : 'Custom JSON is valid.',
+        previewAction.actionStatus,
+    ].join(' ');
 
     return (
-        <div style={styles.container}>
+        <div
+            style={styles.container}
+            data-testid="editor-animation-builder"
+            data-animation-type={config.type}
+            data-animation-trigger={config.trigger}
+            data-animation-playing={isPlaying ? 'true' : 'false'}
+            data-action-state={animationBuilderAction.actionState}
+            data-action-status={animationBuilderAction.actionStatus}
+            data-disabled-reason={animationBuilderAction.disabledReason || undefined}
+        >
+            <span
+                id={animationActionStatusId}
+                style={styles.srOnly}
+                data-testid="editor-animation-action-status"
+                aria-live="polite"
+            >
+                {animationActionSummary}
+            </span>
             <h3
                 style={{
                     margin: '0 0 16px',
@@ -274,6 +365,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                 <select
                     style={styles.select}
                     data-testid="editor-animation-type"
+                    aria-describedby={animationActionStatusId}
+                    data-action-state={animationTypeAction.actionState}
+                    data-action-status={animationTypeAction.actionStatus}
                     value={config.type}
                     onChange={(e) =>
                         handleAnimationTypeChange(e.target.value as AnimationConfig['type'])
@@ -295,6 +389,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                         <select
                             style={styles.select}
                             data-testid="editor-animation-trigger"
+                            aria-describedby={animationActionStatusId}
+                            data-action-state={animationTriggerAction.actionState}
+                            data-action-status={animationTriggerAction.actionStatus}
                             value={config.trigger}
                             onChange={(e) =>
                                 updateConfig({ trigger: e.target.value as AnimationConfig['trigger'] })
@@ -315,6 +412,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             <select
                                 style={styles.select}
                                 data-testid="editor-animation-direction"
+                                aria-describedby={animationActionStatusId}
+                                data-action-state={animationDirectionAction.actionState}
+                                data-action-status={animationDirectionAction.actionStatus}
                                 value={config.direction || 'up'}
                                 onChange={(e) =>
                                     updateConfig({
@@ -340,6 +440,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             <input
                                 type="range"
                                 data-testid="editor-animation-duration"
+                                aria-describedby={animationActionStatusId}
+                                data-action-state={animationDurationAction.actionState}
+                                data-action-status={animationDurationAction.actionStatus}
                                 min="0.1"
                                 max="3"
                                 step="0.1"
@@ -357,6 +460,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             <input
                                 type="range"
                                 data-testid="editor-animation-delay"
+                                aria-describedby={animationActionStatusId}
+                                data-action-state={animationDelayAction.actionState}
+                                data-action-status={animationDelayAction.actionStatus}
                                 min="0"
                                 max="2"
                                 step="0.1"
@@ -392,7 +498,10 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                                         value={customFromText}
                                         onChange={(e) => handleCustomObjectChange('from', e.target.value)}
                                         style={{ ...styles.input, minHeight: '96px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                                        aria-describedby={animationActionStatusId}
                                         aria-invalid={customJsonErrors.from ? 'true' : 'false'}
+                                        data-action-state={customJsonErrors.from ? 'blocked' : 'ready'}
+                                        data-action-status={customJsonErrors.from ? `From JSON unavailable: ${customJsonErrors.from}` : 'From JSON ready.'}
                                     />
                                     {customJsonErrors.from ? (
                                         <div
@@ -412,7 +521,10 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                                         value={customToText}
                                         onChange={(e) => handleCustomObjectChange('to', e.target.value)}
                                         style={{ ...styles.input, minHeight: '96px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                                        aria-describedby={animationActionStatusId}
                                         aria-invalid={customJsonErrors.to ? 'true' : 'false'}
+                                        data-action-state={customJsonErrors.to ? 'blocked' : 'ready'}
+                                        data-action-status={customJsonErrors.to ? `To JSON unavailable: ${customJsonErrors.to}` : 'To JSON ready.'}
                                     />
                                     {customJsonErrors.to ? (
                                         <div
@@ -427,6 +539,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             <button
                                 type="button"
                                 data-testid="editor-animation-custom-defaults"
+                                aria-describedby={animationActionStatusId}
+                                data-action-state={customDefaultsAction.actionState}
+                                data-action-status={customDefaultsAction.actionStatus}
                                 onClick={() => {
                                     setCustomFromText(stringifyCustomAnimationObject(DEFAULT_CUSTOM_FROM));
                                     setCustomToText(stringifyCustomAnimationObject(DEFAULT_CUSTOM_TO));
@@ -458,6 +573,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                         <select
                             style={styles.select}
                             data-testid="editor-animation-easing"
+                            aria-describedby={animationActionStatusId}
+                            data-action-state={animationEasingAction.actionState}
+                            data-action-status={animationEasingAction.actionStatus}
                             value={config.easing}
                             onChange={(e) => updateConfig({ easing: e.target.value })}
                         >
@@ -490,6 +608,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                                     <input
                                         type="text"
                                         data-testid="editor-animation-scroll-start"
+                                        aria-describedby={animationActionStatusId}
+                                        data-action-state="ready"
+                                        data-action-status={`Scroll trigger starts at ${config.scrollTrigger?.start || 'top 80%'}.`}
                                         value={config.scrollTrigger?.start || 'top 80%'}
                                         onChange={(e) =>
                                             updateConfig({
@@ -512,6 +633,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                                     <input
                                         type="text"
                                         data-testid="editor-animation-scroll-end"
+                                        aria-describedby={animationActionStatusId}
+                                        data-action-state="ready"
+                                        data-action-status={`Scroll trigger ends at ${config.scrollTrigger?.end || 'bottom 20%'}.`}
                                         value={config.scrollTrigger?.end || 'bottom 20%'}
                                         onChange={(e) =>
                                             updateConfig({
@@ -532,6 +656,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                                 <input
                                     type="checkbox"
                                     data-testid="editor-animation-scroll-scrub"
+                                    aria-describedby={animationActionStatusId}
+                                    data-action-state={scrollScrubAction.actionState}
+                                    data-action-status={scrollScrubAction.actionStatus}
                                     checked={config.scrollTrigger?.scrub || false}
                                     onChange={(e) =>
                                         updateConfig({
@@ -554,6 +681,9 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                         <button
                             type="button"
                             data-testid="editor-animation-preview"
+                            aria-describedby={animationActionStatusId}
+                            data-action-state={previewAction.actionState}
+                            data-action-status={previewAction.actionStatus}
                             onClick={playPreview}
                             style={{
                                 width: '100%',

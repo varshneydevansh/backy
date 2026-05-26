@@ -1075,14 +1075,26 @@ const assertPropertyPanelColorControlsSource = () => {
     'Public page renderer must honor form field and submit appearance props from the editor',
   );
   assert(
-    animationBuilderSource.includes('parseCustomAnimationObject') &&
+    animationBuilderSource.includes("import { buildEditorActionStatus } from './editorActionStatus';") &&
+      animationBuilderSource.includes('parseCustomAnimationObject') &&
+      animationBuilderSource.includes("const animationActionStatusId = 'editor-animation-action-status';") &&
+      animationBuilderSource.includes('data-testid="editor-animation-builder"') &&
+      animationBuilderSource.includes('data-testid="editor-animation-action-status"') &&
+      animationBuilderSource.includes('data-animation-type={config.type}') &&
+      animationBuilderSource.includes('data-animation-trigger={config.trigger}') &&
+      animationBuilderSource.includes("data-animation-playing={isPlaying ? 'true' : 'false'}") &&
+      animationBuilderSource.includes('data-action-state={animationBuilderAction.actionState}') &&
+      animationBuilderSource.includes('data-action-status={animationBuilderAction.actionStatus}') &&
+      animationBuilderSource.includes('aria-describedby={animationActionStatusId}') &&
       animationBuilderSource.includes('data-testid="editor-animation-custom-props"') &&
       animationBuilderSource.includes('data-testid="editor-animation-custom-from"') &&
       animationBuilderSource.includes('data-testid="editor-animation-custom-to"') &&
       animationBuilderSource.includes('data-testid="editor-animation-custom-defaults"') &&
+      animationBuilderSource.includes('data-action-status={customDefaultsAction.actionStatus}') &&
+      animationBuilderSource.includes('data-action-status={previewAction.actionStatus}') &&
       animationBuilderSource.includes('updateConfig(target ===') &&
       animationBuilderSource.includes('Use a JSON object'),
-    'Editor animation builder must expose custom GSAP from/to JSON controls instead of a dead Custom option',
+    'Editor animation builder must expose custom GSAP from/to JSON controls plus shared action-state/status metadata instead of a dead Custom option',
   );
   assert(editorSource.includes('buildBackyThemeCssVariables') && editorSource.includes('editorThemeCssVariables') && editorSource.includes('theme={theme}'), 'Canvas editor must inject compiled theme CSS variables and pass site theme into the property panel');
   assert(editorSource.includes("key === 'tokenRefs'") && editorSource.includes('override.tokenRefs') && editorSource.includes('delete nextOverride.tokenRefs'), 'Canvas editor responsive style overrides must preserve and reset per-breakpoint tokenRefs');
@@ -13912,6 +13924,63 @@ const testAnimationControls = async (client, pageId, elementId = 'smoke-heading'
       authored.scrollEnd === expected.scrollTrigger.end &&
       authored.scrub === expected.scrollTrigger.scrub,
     `Animation controls did not reflect authored values: ${JSON.stringify(authored)}`,
+  );
+
+  const actionMetadata = await evaluate(client, `(() => {
+    const attr = (testId, name) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      return control instanceof HTMLElement ? control.getAttribute(name) || '' : '';
+    };
+    const builder = document.querySelector('[data-testid="editor-animation-builder"]');
+    const status = document.querySelector('[data-testid="editor-animation-action-status"]');
+    return {
+      builderExists: builder instanceof HTMLElement,
+      builderState: builder instanceof HTMLElement ? builder.getAttribute('data-action-state') || '' : '',
+      builderStatus: builder instanceof HTMLElement ? builder.getAttribute('data-action-status') || '' : '',
+      builderType: builder instanceof HTMLElement ? builder.getAttribute('data-animation-type') || '' : '',
+      builderTrigger: builder instanceof HTMLElement ? builder.getAttribute('data-animation-trigger') || '' : '',
+      builderPlaying: builder instanceof HTMLElement ? builder.getAttribute('data-animation-playing') || '' : '',
+      statusText: status?.textContent || '',
+      typeState: attr('editor-animation-type', 'data-action-state'),
+      typeStatus: attr('editor-animation-type', 'data-action-status'),
+      triggerStatus: attr('editor-animation-trigger', 'data-action-status'),
+      directionStatus: attr('editor-animation-direction', 'data-action-status'),
+      durationStatus: attr('editor-animation-duration', 'data-action-status'),
+      delayStatus: attr('editor-animation-delay', 'data-action-status'),
+      easingStatus: attr('editor-animation-easing', 'data-action-status'),
+      scrollStartStatus: attr('editor-animation-scroll-start', 'data-action-status'),
+      scrollEndStatus: attr('editor-animation-scroll-end', 'data-action-status'),
+      scrubState: attr('editor-animation-scroll-scrub', 'data-action-state'),
+      scrubStatus: attr('editor-animation-scroll-scrub', 'data-action-status'),
+      previewState: attr('editor-animation-preview', 'data-action-state'),
+      previewStatus: attr('editor-animation-preview', 'data-action-status'),
+      previewDescribedBy: attr('editor-animation-preview', 'aria-describedby'),
+    };
+  })()`);
+
+  assert(
+    actionMetadata.builderExists &&
+      actionMetadata.builderState === 'selected' &&
+      /Slide In animation uses on scroll into view/i.test(actionMetadata.builderStatus) &&
+      actionMetadata.builderType === expected.type &&
+      actionMetadata.builderTrigger === expected.trigger &&
+      actionMetadata.builderPlaying === 'false' &&
+      /Custom JSON is valid/i.test(actionMetadata.statusText) &&
+      actionMetadata.typeState === 'selected' &&
+      /Animation type Slide In selected/i.test(actionMetadata.typeStatus) &&
+      /Animation trigger On Scroll Into View selected/i.test(actionMetadata.triggerStatus) &&
+      /Animation direction .*Left selected/i.test(actionMetadata.directionStatus) &&
+      /Animation duration 1\.2 seconds selected/i.test(actionMetadata.durationStatus) &&
+      /Animation delay 0\.3 seconds selected/i.test(actionMetadata.delayStatus) &&
+      /Animation easing Back selected/i.test(actionMetadata.easingStatus) &&
+      /Scroll trigger starts at top 75%/i.test(actionMetadata.scrollStartStatus) &&
+      /Scroll trigger ends at bottom 25%/i.test(actionMetadata.scrollEndStatus) &&
+      actionMetadata.scrubState === 'selected' &&
+      /Scroll scrub is on/i.test(actionMetadata.scrubStatus) &&
+      actionMetadata.previewState === 'ready' &&
+      /Preview Slide In animation/i.test(actionMetadata.previewStatus) &&
+      actionMetadata.previewDescribedBy.includes('editor-animation-action-status'),
+    `Animation builder action metadata was not ready: ${JSON.stringify(actionMetadata)}`,
   );
 
   await clickControlByTestId(client, 'editor-animation-preview');
