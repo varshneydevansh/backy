@@ -352,6 +352,23 @@ const assertPageEditorFallbackIsReadOnly = () => {
       revisionBranchMetadataSource.includes('persistedFields'),
     'Page editor revision graph must consume persisted backend branch metadata, expose rollback graph lanes, copyable graph JSON, and handoff metadata.',
   );
+  assert(
+    source.includes("const pageEditorRevisionActionStatusId = 'page-editor-revision-action-status'") &&
+      source.includes('data-testid="page-editor-revision-action-status"') &&
+      source.includes('pageEditorRevisionActionProps') &&
+      source.includes('data-testid={`page-editor-restore-revision-${revision.id}`}') &&
+      source.includes('pageEditorRevisionRestoreActionStatus'),
+    'Page editor revision controls must expose action-state/status metadata for copy graph, expand, compare, and restore controls.',
+  );
+  assert(
+    source.includes("const pageEditorRestoreActionStatusId = 'page-editor-restore-action-status'") &&
+      source.includes('role="dialog"') &&
+      source.includes('aria-modal="true"') &&
+      source.includes('aria-labelledby="page-editor-restore-confirm-title"') &&
+      source.includes('data-testid="page-editor-restore-action-status"') &&
+      source.includes('pageEditorRestoreModalActionProps'),
+    'Page editor restore confirmation must expose dialog semantics and action-state/status metadata for cancel and confirm controls.',
+  );
 	  assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="page-editor-restore-impact"') && source.includes('data-testid="page-editor-confirm-restore"') && source.includes('Current </span>'), 'Page editor restore confirmation must preview restore impact before rollback');
 	  assert(source.includes('data-testid={`page-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('operation') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Page editor revisions must expose persisted operation plus actor/action metadata in cards and handoff summaries');
   assert(
@@ -9388,11 +9405,27 @@ const assertPageEditorRouteActionStatus = async (client) => {
     const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
     const commandCenter = document.querySelector('[data-testid="page-editor-command-center"]');
     const status = document.querySelector('[data-testid="page-editor-command-action-status"]');
+    const revisionGraph = document.querySelector('[data-testid="page-editor-revision-graph"]');
+    const revisionStatus = document.querySelector('[data-testid="page-editor-revision-action-status"]');
     const readControl = (testId) => {
       const control = document.querySelector('[data-testid="' + testId + '"]');
       return {
         testId,
         exists: control instanceof HTMLElement,
+        describedBy: control?.getAttribute('aria-describedby') || '',
+        actionState: control?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(control?.getAttribute('data-action-status')),
+        disabledReason: control?.getAttribute('data-disabled-reason') || '',
+        disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        text: normalize(control?.textContent),
+      };
+    };
+    const readRevisionButton = (selector, label) => {
+      const control = document.querySelector(selector);
+      return {
+        label,
+        testId: control?.getAttribute('data-testid') || label,
+        exists: control instanceof HTMLButtonElement,
         describedBy: control?.getAttribute('aria-describedby') || '',
         actionState: control?.getAttribute('data-action-state') || '',
         actionStatus: normalize(control?.getAttribute('data-action-status')),
@@ -9419,6 +9452,21 @@ const assertPageEditorRouteActionStatus = async (client) => {
     ];
     const back = readControl('page-editor-back-to-pages');
     const focusToggle = readControl('page-editor-focus-toggle');
+    const revisionControls = [
+      readRevisionButton('[data-testid="page-editor-copy-revision-branch-graph"]', 'copy graph'),
+      readRevisionButton('[data-testid="page-editor-toggle-revision-graph"]', 'toggle graph'),
+      readRevisionButton('button[data-testid^="page-editor-revision-graph-node-"]', 'expand timeline node'),
+      readRevisionButton('button[data-testid^="page-editor-revision-branch-node-"]', 'expand branch node'),
+      readRevisionButton('button[data-testid^="page-editor-revision-older-"]', 'expand older revision'),
+      readRevisionButton('button[data-testid^="page-editor-copy-revision-compare-"]', 'copy revision comparison'),
+      readRevisionButton('button[data-testid^="page-editor-restore-revision-"]', 'open restore review'),
+    ];
+    const requiredRevisionControls = ['copy graph', 'copy revision comparison', 'open restore review'];
+    const missingRevisionControls = revisionGraph
+      ? revisionControls
+        .filter((control) => requiredRevisionControls.includes(control.label) && !control.exists)
+        .map((control) => control.label)
+      : [];
     const malformedControls = controls.filter((control) => (
       !control.exists ||
       control.describedBy !== (status?.id || '') ||
@@ -9427,6 +9475,23 @@ const assertPageEditorRouteActionStatus = async (client) => {
       (control.disabled === true && control.actionState === 'ready') ||
       (control.actionState !== 'ready' && !control.disabledReason && control.actionState !== 'busy')
     ));
+    const presentRevisionControls = revisionControls.filter((control) => control.exists);
+    const malformedRevisionControls = presentRevisionControls.filter((control) => (
+      control.describedBy !== (revisionStatus?.id || '') ||
+      !['ready', 'busy', 'blocked'].includes(control.actionState) ||
+      !control.actionStatus ||
+      !/available|unavailable/i.test(control.actionStatus) ||
+      (control.disabled === true && control.actionState === 'ready') ||
+      (control.actionState !== 'ready' && !control.disabledReason && control.actionState !== 'busy')
+    ));
+    const revisionGraphState = {
+      exists: revisionGraph instanceof HTMLElement,
+      describedBy: revisionGraph?.getAttribute('aria-describedby') || '',
+      actionState: revisionGraph?.getAttribute('data-action-state') || '',
+      actionStatus: normalize(revisionGraph?.getAttribute('data-action-status')),
+      statusId: revisionStatus?.id || '',
+      statusText: normalize(revisionStatus?.textContent),
+    };
     return {
       ok: Boolean(commandCenter) &&
         Boolean(status?.id) &&
@@ -9442,7 +9507,16 @@ const assertPageEditorRouteActionStatus = async (client) => {
         ['ready', 'blocked'].includes(focusToggle.actionState) &&
         Boolean(focusToggle.actionStatus) &&
         controls.length === 14 &&
-        malformedControls.length === 0,
+        malformedControls.length === 0 &&
+        (!revisionGraphState.exists ||
+          (
+            Boolean(revisionStatus?.id) &&
+            revisionGraphState.describedBy === revisionStatus.id &&
+            ['ready', 'busy'].includes(revisionGraphState.actionState) &&
+            revisionGraphState.actionStatus === revisionGraphState.statusText &&
+            missingRevisionControls.length === 0 &&
+            malformedRevisionControls.length === 0
+          )),
       path: window.location.pathname,
       commandCenter: {
         exists: Boolean(commandCenter),
@@ -9456,6 +9530,10 @@ const assertPageEditorRouteActionStatus = async (client) => {
       focusToggle,
       controls,
       malformedControls,
+      revisionGraph: revisionGraphState,
+      revisionControls,
+      missingRevisionControls,
+      malformedRevisionControls,
     };
   })()`);
 

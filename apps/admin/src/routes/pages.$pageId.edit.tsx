@@ -1957,6 +1957,72 @@ function PageEditorRoute() {
     pageEditorUnpublishActionStatus,
     pageEditorArchiveActionStatus,
   ].join(' ');
+  const pageEditorRevisionActionStatusId = 'page-editor-revision-action-status';
+  const pageEditorRestoreActionStatusId = 'page-editor-restore-action-status';
+  const pageEditorRevisionPanelActionState = pageEditorCommandBusyReason ? 'busy' : 'ready';
+  const pageEditorRevisionReadonlyActionState = pageEditorCommandBusyReason ? 'busy' : 'ready';
+  const pageEditorRevisionGraphCopyActionStatus = pageEditorCommandBusyReason
+    ? `Revision graph copy unavailable: ${pageEditorCommandBusyReason}`
+    : 'Revision graph copy available for rollback handoff.';
+  const pageEditorRevisionToggleActionStatus = pageEditorCommandBusyReason
+    ? `Revision timeline toggle unavailable: ${pageEditorCommandBusyReason}`
+    : 'Revision timeline toggle available.';
+  const pageEditorRevisionNavigationActionStatus = pageEditorCommandBusyReason
+    ? `Revision navigation unavailable: ${pageEditorCommandBusyReason}`
+    : 'Revision navigation available.';
+  const pageEditorRevisionCompareActionStatus = pageEditorCommandBusyReason
+    ? `Revision comparison copy unavailable: ${pageEditorCommandBusyReason}`
+    : 'Revision comparison copy available for frontend handoff.';
+  const pageEditorRevisionRestoreDisabledReason = isPageEditorBusy
+    ? pageEditorCommandBusyReason
+    : isUsingLocalPageCopy
+      ? localPageCopyDisabledMessage
+      : editorHasUnsavedChanges
+        ? 'Save or reload the canvas before restoring.'
+        : !canEditPage
+          ? editPagePermissionTitle || 'Your account cannot restore page revisions.'
+          : '';
+  const pageEditorRevisionRestoreActionStatus = pageEditorRevisionRestoreDisabledReason
+    ? `Restore revision unavailable: ${pageEditorRevisionRestoreDisabledReason}`
+    : 'Restore revision review available.';
+  const pageEditorRevisionRestoreActionState = pageEditorWorkflowActionState(pageEditorRevisionRestoreDisabledReason);
+  const pageEditorRestoreCancelActionStatus = pageEditorCommandBusyReason
+    ? `Restore review close unavailable: ${pageEditorCommandBusyReason}`
+    : 'Restore review close available.';
+  const pageEditorRestoreCancelActionState = pageEditorCommandBusyReason ? 'busy' : 'ready';
+  const pageEditorRestoreConfirmActionStatus = pageEditorRevisionRestoreActionStatus;
+  const pageEditorRestoreConfirmActionState = pageEditorRevisionRestoreActionState;
+  const pageEditorRevisionActionStatus = [
+    pageEditorRevisionGraphCopyActionStatus,
+    pageEditorRevisionToggleActionStatus,
+    pageEditorRevisionNavigationActionStatus,
+    pageEditorRevisionCompareActionStatus,
+    pageEditorRevisionRestoreActionStatus,
+  ].join(' ');
+  const pageEditorRestoreActionStatus = [
+    pageEditorRestoreCancelActionStatus,
+    pageEditorRestoreConfirmActionStatus,
+  ].join(' ');
+  const pageEditorRevisionActionProps = (
+    actionState: string,
+    actionStatus: string,
+    disabledReason = '',
+  ) => ({
+    'aria-describedby': pageEditorRevisionActionStatusId,
+    'data-action-state': actionState,
+    'data-action-status': actionStatus,
+    'data-disabled-reason': disabledReason || undefined,
+  });
+  const pageEditorRestoreModalActionProps = (
+    actionState: string,
+    actionStatus: string,
+    disabledReason = '',
+  ) => ({
+    'aria-describedby': pageEditorRestoreActionStatusId,
+    'data-action-state': actionState,
+    'data-action-status': actionStatus,
+    'data-disabled-reason': disabledReason || undefined,
+  });
 
   return (
     <PageShell
@@ -2667,6 +2733,19 @@ function PageEditorRoute() {
           <Panel id="page-editor-revisions" className="scroll-mt-24">
             <PanelHeader title="Revisions" icon={<RotateCcw className="size-4" />} />
             <PanelContent className="space-y-3">
+              {revisions.length > 0 ? (
+                <span
+                  id={pageEditorRevisionActionStatusId}
+                  className="sr-only"
+                  data-testid="page-editor-revision-action-status"
+                  aria-live="polite"
+                  data-action-state={pageEditorRevisionPanelActionState}
+                  data-action-status={pageEditorRevisionActionStatus}
+                >
+                  {pageEditorRevisionActionStatus}
+                </span>
+              ) : null}
+
               {editorHasUnsavedChanges && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -2686,7 +2765,15 @@ function PageEditorRoute() {
                 </div>
               ) : (
                 <div className="grid gap-2">
-                  <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground" data-testid="page-editor-revision-graph">
+                  <div
+                    className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground"
+                    role="group"
+                    aria-label="Revision branch graph"
+                    aria-describedby={pageEditorRevisionActionStatusId}
+                    data-testid="page-editor-revision-graph"
+                    data-action-state={pageEditorRevisionPanelActionState}
+                    data-action-status={pageEditorRevisionActionStatus}
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <span className="font-medium text-foreground">Revision branch graph</span>
@@ -2699,6 +2786,11 @@ function PageEditorRoute() {
                           onClick={() => void copyEditorHandoffText(pageRevisionBranchGraphText, 'Page revision branch graph')}
                           disabled={isPageEditorBusy}
                           data-testid="page-editor-copy-revision-branch-graph"
+                          {...pageEditorRevisionActionProps(
+                            pageEditorRevisionReadonlyActionState,
+                            pageEditorRevisionGraphCopyActionStatus,
+                            pageEditorCommandBusyReason,
+                          )}
                         >
                           <Copy className="size-3.5" />
                           Copy graph
@@ -2710,6 +2802,11 @@ function PageEditorRoute() {
                             onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
                             disabled={isPageEditorBusy}
                             data-testid="page-editor-toggle-revision-graph"
+                            {...pageEditorRevisionActionProps(
+                              pageEditorRevisionReadonlyActionState,
+                              pageEditorRevisionToggleActionStatus,
+                              pageEditorCommandBusyReason,
+                            )}
                           >
                             {isRevisionTimelineExpanded ? 'Show latest' : `Show all ${revisions.length}`}
                           </button>
@@ -2749,6 +2846,11 @@ function PageEditorRoute() {
                             data-action={node.action}
                             data-actor={node.actor}
                             data-testid={`page-editor-revision-graph-node-${node.id}`}
+                            {...pageEditorRevisionActionProps(
+                              pageEditorRevisionReadonlyActionState,
+                              pageEditorRevisionNavigationActionStatus,
+                              pageEditorCommandBusyReason,
+                            )}
                           >
                             {node.position}
                           </button>
@@ -2813,6 +2915,11 @@ function PageEditorRoute() {
                                   data-testid={`page-editor-revision-branch-node-${nodeId}`}
                                   data-branch-id={node.branchId}
                                   data-branch-role={node.branchRole}
+                                  {...pageEditorRevisionActionProps(
+                                    pageEditorRevisionReadonlyActionState,
+                                    pageEditorRevisionNavigationActionStatus,
+                                    pageEditorCommandBusyReason,
+                                  )}
                                 >
                                   #{node.position}
                                 </button>
@@ -2914,6 +3021,11 @@ function PageEditorRoute() {
                                 onClick={() => expandRevisionTimelineTo(revisionGraphNode.olderId || revision.id)}
                                 disabled={isPageEditorBusy}
                                 data-testid={`page-editor-revision-older-${revision.id}`}
+                                {...pageEditorRevisionActionProps(
+                                  pageEditorRevisionReadonlyActionState,
+                                  pageEditorRevisionNavigationActionStatus,
+                                  pageEditorCommandBusyReason,
+                                )}
                               >
                                 Older
                               </button>
@@ -2926,6 +3038,11 @@ function PageEditorRoute() {
                               title="Copy revision comparison"
                               aria-label={`Copy comparison for revision ${revision.id}`}
                               data-testid={`page-editor-copy-revision-compare-${revision.id}`}
+                              {...pageEditorRevisionActionProps(
+                                pageEditorRevisionReadonlyActionState,
+                                pageEditorRevisionCompareActionStatus,
+                                pageEditorCommandBusyReason,
+                              )}
                             >
                               <Copy className="h-4 w-4" />
                             </button>
@@ -2934,7 +3051,14 @@ function PageEditorRoute() {
                               disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
                               onClick={() => setPendingRestoreRevision(revision)}
                               className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                              title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canEditPage ? editPagePermissionTitle : editorHasUnsavedChanges ? 'Save or reload the canvas before restoring' : 'Restore revision'}
+                              title={pageEditorRevisionRestoreDisabledReason || 'Restore revision'}
+                              aria-label={`Restore revision ${revision.id}`}
+                              data-testid={`page-editor-restore-revision-${revision.id}`}
+                              {...pageEditorRevisionActionProps(
+                                pageEditorRevisionRestoreActionState,
+                                pageEditorRevisionRestoreActionStatus,
+                                pageEditorRevisionRestoreDisabledReason,
+                              )}
                             >
                               <RotateCcw className="h-4 w-4" />
                             </button>
@@ -3027,15 +3151,34 @@ function PageEditorRoute() {
       </div>
 
       {pendingRestoreRevision && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="page-editor-restore-confirm">
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="page-editor-restore-confirm-title"
+          aria-describedby={`page-editor-restore-confirm-description ${pageEditorRestoreActionStatusId}`}
+          data-testid="page-editor-restore-confirm"
+          data-action-state={pageEditorRestoreConfirmActionState}
+          data-action-status={pageEditorRestoreActionStatus}
+        >
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-xl">
+            <span
+              id={pageEditorRestoreActionStatusId}
+              className="sr-only"
+              data-testid="page-editor-restore-action-status"
+              aria-live="polite"
+              data-action-state={pageEditorRestoreConfirmActionState}
+              data-action-status={pageEditorRestoreActionStatus}
+            >
+              {pageEditorRestoreActionStatus}
+            </span>
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
                 <RotateCcw className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Restore this page revision?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="page-editor-restore-confirm-title" className="text-lg font-semibold text-foreground">Restore this page revision?</h2>
+                <p id="page-editor-restore-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   Current page fields and canvas content will be replaced by this saved snapshot.
                 </p>
               </div>
@@ -3096,6 +3239,11 @@ function PageEditorRoute() {
                 disabled={isPageEditorBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="page-editor-cancel-restore"
+                {...pageEditorRestoreModalActionProps(
+                  pageEditorRestoreCancelActionState,
+                  pageEditorRestoreCancelActionStatus,
+                  pageEditorCommandBusyReason,
+                )}
               >
                 Cancel
               </button>
@@ -3103,9 +3251,14 @@ function PageEditorRoute() {
                 type="button"
                 onClick={() => void restoreRevision(pendingRestoreRevision)}
                 disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
-                title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : canEditPage ? undefined : editPagePermissionTitle}
+                title={pageEditorRevisionRestoreDisabledReason || undefined}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="page-editor-confirm-restore"
+                {...pageEditorRestoreModalActionProps(
+                  pageEditorRestoreConfirmActionState,
+                  pageEditorRestoreConfirmActionStatus,
+                  pageEditorRevisionRestoreDisabledReason,
+                )}
               >
                 {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
               </button>
