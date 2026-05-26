@@ -14,6 +14,12 @@ import { cn } from '@/lib/utils';
 import { getFontFamilyOptions, toFontFamilyStyle, type FontOption } from './fontCatalog';
 import { EmojiPickerModal } from './EmojiPickerModal';
 import {
+  getRichTextInsertDialogEmptyMessage,
+  isRichTextInsertDialogImagePathInvalid,
+  RichTextInsertDialog,
+  type RichTextInsertDialogState,
+} from './RichTextInsertDialog';
+import {
   applyListIndentToNodes,
   applyListIndentToSelectedListItemNodes,
   applyListTypeToSelectedListItemNodes,
@@ -83,7 +89,6 @@ const MARK_MIXED = Symbol('richtext-mark-mixed');
 const RICH_TEXT_TOOLBAR_ACTION_STATUS_ID = 'rich-text-toolbar-action-status';
 
 type MarkStateValue = string | number | boolean | null | undefined | symbol;
-type InsertDialogMode = 'link' | 'image';
 type RichTextToolbarActionState = 'ready' | 'selected' | 'blocked';
 
 const FONT_MEDIA_MARK_KEYS = [
@@ -2167,11 +2172,7 @@ export function RichTextFormatting({
   const [selectedTableCellBorderValue, setSelectedTableCellBorderValue] = useState('');
   const [selectedTableCellVerticalAlignValue, setSelectedTableCellVerticalAlignValue] = useState<'top' | 'middle' | 'bottom'>('top');
   const [selectedTableCaptionValue, setSelectedTableCaptionValue] = useState('');
-  const [insertDialog, setInsertDialog] = useState<{
-    mode: InsertDialogMode;
-    value: string;
-    error?: string;
-  } | null>(null);
+  const [insertDialog, setInsertDialog] = useState<RichTextInsertDialogState | null>(null);
   const openEmojiPicker = useCallback(() => {
     logTextAction('openEmojiPicker', { currentlyOpen: showEmojiPicker });
     const buttonRect = emojiButtonRef.current?.getBoundingClientRect();
@@ -2366,12 +2367,12 @@ export function RichTextFormatting({
     if (!value) {
       setInsertDialog((current) => current ? {
         ...current,
-        error: insertDialog.mode === 'link' ? 'Enter a link URL.' : 'Enter an image URL.',
+        error: getRichTextInsertDialogEmptyMessage(insertDialog.mode),
       } : current);
       return;
     }
 
-    if (insertDialog.mode === 'image' && !/^https?:\/\//i.test(value) && !value.startsWith('/')) {
+    if (isRichTextInsertDialogImagePathInvalid(insertDialog.mode, value)) {
       setInsertDialog((current) => current ? {
         ...current,
         error: 'Use an absolute URL or a site-relative path.',
@@ -3612,81 +3613,16 @@ export function RichTextFormatting({
       </label>
 
       {insertDialog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
-          <form
-            className="w-full max-w-md rounded-lg border border-border bg-background p-5 shadow-xl"
-            onSubmit={(event) => {
-              event.preventDefault();
-              confirmInsertDialog();
-            }}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <span className="rounded-lg bg-muted p-2 text-foreground">
-                  {insertDialog.mode === 'link' ? <Link className="h-5 w-5" /> : <Image className="h-5 w-5" />}
-                </span>
-                <div>
-                  <h2 className="text-base font-semibold text-foreground">
-                    {insertDialog.mode === 'link' ? 'Insert link' : 'Insert image'}
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {insertDialog.mode === 'link'
-                      ? 'Apply a URL to the selected text or current caret position.'
-                      : 'Add an image from a URL or site-relative media path.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInsertDialog(null)}
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Close insert dialog"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <label className="mt-5 block space-y-2">
-              <span className="text-xs font-semibold text-muted-foreground">
-                {insertDialog.mode === 'link' ? 'Link URL' : 'Image URL'}
-              </span>
-              <input
-                type="text"
-                value={insertDialog.value}
-                onChange={(event) => setInsertDialog((current) => current ? {
-                  ...current,
-                  value: event.target.value,
-                  error: undefined,
-                } : current)}
-                placeholder={insertDialog.mode === 'link' ? 'https://example.com' : 'https://example.com/image.jpg'}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
-                autoFocus
-              />
-            </label>
-
-            {insertDialog.error && (
-              <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {insertDialog.error}
-              </div>
-            )}
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setInsertDialog(null)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                {insertDialog.mode === 'link' ? 'Insert link' : 'Insert image'}
-              </button>
-            </div>
-          </form>
-        </div>
+        <RichTextInsertDialog
+          dialog={insertDialog}
+          onValueChange={(value) => setInsertDialog((current) => current ? {
+            ...current,
+            value,
+            error: undefined,
+          } : current)}
+          onClose={() => setInsertDialog(null)}
+          onConfirm={confirmInsertDialog}
+        />
       )}
 
     </div>

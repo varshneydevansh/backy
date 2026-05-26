@@ -394,6 +394,7 @@ const assertCanvasEditorShortcutSource = () => {
   const activeEditorSource = fs.readFileSync(new URL('../src/components/editor/ActiveEditorContext.tsx', import.meta.url), 'utf8');
   const richTextBlockSource = fs.readFileSync(new URL('../src/components/editor/blocks/RichTextBlock.tsx', import.meta.url), 'utf8');
   const richTextFormattingSource = fs.readFileSync(new URL('../src/components/editor/RichTextFormatting.tsx', import.meta.url), 'utf8');
+  const richTextInsertDialogSource = fs.readFileSync(new URL('../src/components/editor/RichTextInsertDialog.tsx', import.meta.url), 'utf8');
   const emojiPickerSource = fs.readFileSync(new URL('../src/components/editor/EmojiPickerModal.tsx', import.meta.url), 'utf8');
   const deterministicCloneStart = source.indexOf('const cloneElementTreeWithDeterministicIds');
   const deterministicCloneEnd = deterministicCloneStart >= 0
@@ -407,7 +408,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
   assert(source.includes('data-testid="editor-undo"') && source.includes('aria-keyshortcuts="Control+Z Meta+Z"'), 'Editor undo toolbar control must expose Cmd/Ctrl+Z metadata and a stable id');
   assert(source.includes('data-testid="editor-redo"') && source.includes('aria-keyshortcuts="Control+Y Meta+Y Shift+Control+Z Shift+Meta+Z"'), 'Editor redo toolbar control must expose Cmd/Ctrl+Y and Shift+Cmd/Ctrl+Z metadata with a stable id');
-	  assert(
+  assert(
     richTextFormattingSource.includes("const RICH_TEXT_TOOLBAR_ACTION_STATUS_ID = 'rich-text-toolbar-action-status';") &&
       richTextFormattingSource.includes('data-testid="rich-text-formatting-toolbar"') &&
       richTextFormattingSource.includes('data-testid="rich-text-toolbar-action-status"') &&
@@ -416,10 +417,30 @@ const assertCanvasEditorShortcutSource = () => {
       richTextFormattingSource.includes("{...richTextActionProps('Insert table')}") &&
       richTextFormattingSource.includes('data-testid="rich-text-insert-image"') &&
       richTextFormattingSource.includes('data-testid="rich-text-insert-link"') &&
+      richTextFormattingSource.includes('<RichTextInsertDialog') &&
+      richTextFormattingSource.includes('getRichTextInsertDialogEmptyMessage(insertDialog.mode)') &&
+      richTextFormattingSource.includes('isRichTextInsertDialogImagePathInvalid(insertDialog.mode, value)') &&
       richTextFormattingSource.includes('SmilePlus') &&
       !/\p{Emoji_Presentation}/u.test(richTextFormattingSource),
-    'Rich-text formatting toolbar must expose action-status metadata, stable insert hooks, and icon-system insert controls',
-	  );
+    'Rich-text formatting toolbar and inline insert dialogs must expose action-status metadata, stable insert hooks, and icon-system insert controls',
+  );
+  assert(
+    richTextInsertDialogSource.includes("const RICH_TEXT_INSERT_DIALOG_ACTION_STATUS_ID = 'rich-text-insert-dialog-action-status';") &&
+      richTextInsertDialogSource.includes('data-testid="rich-text-insert-dialog"') &&
+      richTextInsertDialogSource.includes('aria-labelledby={RICH_TEXT_INSERT_DIALOG_TITLE_ID}') &&
+      richTextInsertDialogSource.includes('aria-describedby={RICH_TEXT_INSERT_DIALOG_ACTION_STATUS_ID}') &&
+      richTextInsertDialogSource.includes('data-testid="rich-text-insert-dialog-action-status"') &&
+      richTextInsertDialogSource.includes('data-testid="rich-text-insert-dialog-input"') &&
+      richTextInsertDialogSource.includes('data-testid="rich-text-insert-dialog-confirm"') &&
+      richTextInsertDialogSource.includes('data-testid="rich-text-insert-dialog-cancel"') &&
+      richTextInsertDialogSource.includes('data-testid="rich-text-insert-dialog-close"') &&
+      richTextInsertDialogSource.includes('data-action-state={actionState}') &&
+      richTextInsertDialogSource.includes('data-action-status={actionStatus}') &&
+      richTextInsertDialogSource.includes('getRichTextInsertDialogEmptyMessage') &&
+      richTextInsertDialogSource.includes('isRichTextInsertDialogImagePathInvalid') &&
+      !/\p{Emoji_Presentation}/u.test(richTextInsertDialogSource),
+    'Rich-text insert dialog must stay decomposed with labeled dialog semantics, stable action hooks, and action-status metadata',
+  );
   assert(
     emojiPickerSource.includes("const EMOJI_PICKER_ACTION_STATUS_ID = 'editor-emoji-picker-action-status';") &&
       emojiPickerSource.includes("const EMOJI_PICKER_TITLE_ID = 'editor-emoji-picker-title';") &&
@@ -6496,6 +6517,50 @@ const focusPropertyControlByTestId = async (client, testId) => {
   return state;
 };
 
+const readRichTextInsertDialogMetadata = async (client) => (
+  evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const dialog = document.querySelector('[data-testid="rich-text-insert-dialog"]');
+    const status = document.querySelector('[data-testid="rich-text-insert-dialog-action-status"]');
+    const title = document.querySelector('#rich-text-insert-dialog-title');
+    const input = document.querySelector('[data-testid="rich-text-insert-dialog-input"]');
+    const confirm = document.querySelector('[data-testid="rich-text-insert-dialog-confirm"]');
+    const cancel = document.querySelector('[data-testid="rich-text-insert-dialog-cancel"]');
+    const close = document.querySelector('[data-testid="rich-text-insert-dialog-close"]');
+    const error = document.querySelector('[data-testid="rich-text-insert-dialog-error"]');
+    return {
+      exists: dialog instanceof HTMLElement,
+      role: dialog?.getAttribute('role') || '',
+      labelledBy: dialog?.getAttribute('aria-labelledby') || '',
+      describedBy: dialog?.getAttribute('aria-describedby') || '',
+      mode: dialog?.getAttribute('data-insert-mode') || '',
+      actionState: dialog?.getAttribute('data-action-state') || '',
+      actionStatus: normalize(dialog?.getAttribute('data-action-status')),
+      statusId: status?.id || '',
+      statusText: normalize(status?.textContent),
+      titleText: normalize(title?.textContent),
+      inputId: input?.id || '',
+      inputValue: input instanceof HTMLInputElement ? input.value : '',
+      inputPlaceholder: input?.getAttribute('placeholder') || '',
+      inputInvalid: input?.getAttribute('aria-invalid') || '',
+      inputDescribedBy: input?.getAttribute('aria-describedby') || '',
+      inputActionState: input?.getAttribute('data-action-state') || '',
+      inputActionStatus: normalize(input?.getAttribute('data-action-status')),
+      confirmText: normalize(confirm?.textContent),
+      confirmDescribedBy: confirm?.getAttribute('aria-describedby') || '',
+      confirmActionState: confirm?.getAttribute('data-action-state') || '',
+      confirmActionStatus: normalize(confirm?.getAttribute('data-action-status')),
+      cancelDescribedBy: cancel?.getAttribute('aria-describedby') || '',
+      cancelActionStatus: normalize(cancel?.getAttribute('data-action-status')),
+      closeLabel: close?.getAttribute('aria-label') || '',
+      closeDescribedBy: close?.getAttribute('aria-describedby') || '',
+      closeActionStatus: normalize(close?.getAttribute('data-action-status')),
+      errorId: error?.id || '',
+      errorText: normalize(error?.textContent),
+    };
+  })()`)
+);
+
 const testRichTextSelectionPreservedAcrossPropertyPanelFocus = async (client, elementId = 'smoke-heading') => {
   await activateTextEditing(client, elementId);
 
@@ -6636,6 +6701,60 @@ const testRichTextSelectionPreservedAcrossPropertyPanelFocus = async (client, el
   await mouseDownControlByTestId(client, 'editor-emoji-picker-close');
   const emojiPickerClosed = await evaluate(client, `(() => !document.querySelector('[data-testid="editor-emoji-picker-modal"]'))()`);
   assert(emojiPickerClosed, 'Rich-text emoji picker close control did not dismiss the dialog');
+
+  await mouseDownControlByTestId(client, 'rich-text-insert-link');
+  const linkInsertDialogInitial = await readRichTextInsertDialogMetadata(client);
+  assert(
+    linkInsertDialogInitial.exists &&
+      linkInsertDialogInitial.role === 'dialog' &&
+      linkInsertDialogInitial.labelledBy === 'rich-text-insert-dialog-title' &&
+      linkInsertDialogInitial.describedBy === 'rich-text-insert-dialog-action-status' &&
+      linkInsertDialogInitial.mode === 'link' &&
+      linkInsertDialogInitial.actionState === 'blocked' &&
+      linkInsertDialogInitial.actionStatus === 'Enter a link URL before inserting.' &&
+      linkInsertDialogInitial.statusText === linkInsertDialogInitial.actionStatus &&
+      linkInsertDialogInitial.titleText === 'Insert link' &&
+      linkInsertDialogInitial.inputId === 'rich-text-insert-dialog-input' &&
+      linkInsertDialogInitial.inputPlaceholder === 'https://example.com' &&
+      linkInsertDialogInitial.inputDescribedBy === 'rich-text-insert-dialog-action-status' &&
+      linkInsertDialogInitial.inputActionState === 'blocked' &&
+      linkInsertDialogInitial.confirmText === 'Insert link' &&
+      linkInsertDialogInitial.confirmDescribedBy === 'rich-text-insert-dialog-action-status' &&
+      linkInsertDialogInitial.confirmActionState === 'blocked' &&
+      linkInsertDialogInitial.cancelActionStatus === 'Close insert dialog without changing rich text.' &&
+      linkInsertDialogInitial.closeLabel === 'Close insert dialog',
+    `Rich-text link insert dialog metadata missing: ${JSON.stringify(linkInsertDialogInitial)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-insert-dialog-confirm');
+  const linkInsertDialogBlocked = await readRichTextInsertDialogMetadata(client);
+  assert(
+    linkInsertDialogBlocked.actionState === 'blocked' &&
+      linkInsertDialogBlocked.inputInvalid === 'true' &&
+      linkInsertDialogBlocked.inputDescribedBy === 'rich-text-insert-dialog-action-status rich-text-insert-dialog-error' &&
+      linkInsertDialogBlocked.errorId === 'rich-text-insert-dialog-error' &&
+      linkInsertDialogBlocked.errorText === 'Enter a link URL before inserting.',
+    `Rich-text link insert dialog validation metadata missing: ${JSON.stringify(linkInsertDialogBlocked)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-insert-dialog-cancel');
+  const linkInsertDialogClosed = await evaluate(client, `(() => !document.querySelector('[data-testid="rich-text-insert-dialog"]'))()`);
+  assert(linkInsertDialogClosed, 'Rich-text link insert dialog cancel control did not dismiss the dialog');
+
+  await mouseDownControlByTestId(client, 'rich-text-insert-image');
+  const imageInsertDialogInitial = await readRichTextInsertDialogMetadata(client);
+  assert(
+    imageInsertDialogInitial.exists &&
+      imageInsertDialogInitial.mode === 'image' &&
+      imageInsertDialogInitial.titleText === 'Insert image' &&
+      imageInsertDialogInitial.actionState === 'blocked' &&
+      imageInsertDialogInitial.actionStatus === 'Enter an image URL before inserting.' &&
+      imageInsertDialogInitial.inputPlaceholder === 'https://example.com/image.jpg' &&
+      imageInsertDialogInitial.confirmText === 'Insert image' &&
+      imageInsertDialogInitial.confirmActionState === 'blocked',
+    `Rich-text image insert dialog metadata missing: ${JSON.stringify(imageInsertDialogInitial)}`,
+  );
+  await mouseDownControlByTestId(client, 'rich-text-insert-dialog-close');
+  const imageInsertDialogClosed = await evaluate(client, `(() => !document.querySelector('[data-testid="rich-text-insert-dialog"]'))()`);
+  assert(imageInsertDialogClosed, 'Rich-text image insert dialog close control did not dismiss the dialog');
 
   await activateTextEditing(client, elementId);
   const selectedForInput = await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
