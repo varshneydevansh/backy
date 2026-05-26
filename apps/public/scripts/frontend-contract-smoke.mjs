@@ -154,6 +154,11 @@ assert(
     manifestRoute.includes("'BACKY_SETTINGS_CERTIFICATION_OUTPUT'") &&
     manifestRoute.includes("'backy.settings-provider-certification-artifact.v1'") &&
     manifestRoute.includes("'no raw secret-like values'") &&
+    manifestRoute.includes("'certifiedAtReady'") &&
+    manifestRoute.includes("'artifactFreshReady'") &&
+    manifestRoute.includes('freshnessWindow') &&
+    manifestRoute.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS') &&
+    manifestRoute.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES') &&
     manifestRoute.includes("'apiHandoffs.siteScopedSettingsApi present'") &&
     manifestRoute.includes("'settingsApiHandoffSiteTargetReady'") &&
     manifestRoute.includes("'settingsApiHandoffTargetSiteId'") &&
@@ -186,6 +191,11 @@ assert(
     openApiRoute.includes('"evidenceArtifacts"') &&
     openApiRoute.includes('"artifactVerifier"') &&
     openApiRoute.includes('"no raw secret-like values"') &&
+    openApiRoute.includes('"certifiedAtReady"') &&
+    openApiRoute.includes('"artifactFreshReady"') &&
+    openApiRoute.includes('freshnessWindow') &&
+    openApiRoute.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS') &&
+    openApiRoute.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES') &&
     openApiRoute.includes('"apiHandoffs.siteScopedSettingsApi present"') &&
     openApiRoute.includes('"settingsApiHandoffSiteTargetReady"') &&
     openApiRoute.includes('"settingsApiHandoffTargetSiteId"') &&
@@ -216,9 +226,14 @@ assert(
 	    frontendManifestSchema.includes('"artifactVerifier"') &&
 	    frontendManifestSchema.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
 	    frontendManifestSchema.includes('"no raw secret-like values"') &&
+	    frontendManifestSchema.includes('"certifiedAtReady"') &&
+	    frontendManifestSchema.includes('"artifactFreshReady"') &&
+	    frontendManifestSchema.includes('"freshnessWindow"') &&
+	    frontendManifestSchema.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS') &&
 	    frontendManifestSchema.includes('"producerEnv"') &&
 	    apiContracts.includes('surfaceRunbooks[].artifactVerifier') &&
 	    apiContracts.includes('noRawSecretValuesReady') &&
+	    apiContracts.includes('artifactFreshReady') &&
 	    apiContracts.includes('settingsApiHandoffSiteTargetReady') &&
 	    apiContracts.includes('settingsApiHandoffReady') &&
 	    apiContracts.includes('productApiHandoffSiteTargetReady') &&

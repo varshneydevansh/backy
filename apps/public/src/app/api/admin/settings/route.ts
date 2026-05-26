@@ -1093,7 +1093,13 @@ const buildSettingsCompletionStatus = () => {
     requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     pathEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT',
     schemaVersion: 'backy.settings-provider-certification-artifact.v1',
-    validates: ['file exists', 'valid JSON', 'ok: true', 'artifact schema version', 'no-secret boundary', 'no raw secret-like values', 'no forbidden artifact field names or credential URLs', 'apiHandoffs.settingsAdminApi present', 'apiHandoffs.siteScopedSettingsApi present', 'settingsApiHandoffSchemaReady', 'settingsApiHandoffSiteTargetReady', 'settingsApiHandoffTargetSiteId', 'settingsApiHandoffSettingsSiteSelectorEnv', 'settingsApiHandoffCommerceSiteSelectorEnv', 'settingsApiHandoffReady', 'siteSettingsApiHandoffReady', 'settingsScenarioEvidenceReady', 'settingsEvidencePacketReady', 'settingsCompletionStatusReady'],
+    validates: ['file exists', 'valid JSON', 'ok: true', 'artifact schema version', 'certifiedAtReady', 'artifactFreshReady', 'artifactAgeHours', 'artifactMaxAgeHours', 'artifactFutureSkewMinutes', 'no-secret boundary', 'no raw secret-like values', 'no forbidden artifact field names or credential URLs', 'apiHandoffs.settingsAdminApi present', 'apiHandoffs.siteScopedSettingsApi present', 'settingsApiHandoffSchemaReady', 'settingsApiHandoffSiteTargetReady', 'settingsApiHandoffTargetSiteId', 'settingsApiHandoffSettingsSiteSelectorEnv', 'settingsApiHandoffCommerceSiteSelectorEnv', 'settingsApiHandoffReady', 'siteSettingsApiHandoffReady', 'settingsScenarioEvidenceReady', 'settingsEvidencePacketReady', 'settingsCompletionStatusReady'],
+    freshnessWindow: {
+      maxAgeHoursEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS',
+      defaultMaxAgeHours: 168,
+      futureSkewMinutesEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES',
+      defaultFutureSkewMinutes: 15,
+    },
     includesSecretValues: false,
   };
   const commerceCertificationArtifactVerifier = {
@@ -1101,7 +1107,13 @@ const buildSettingsCompletionStatus = () => {
     requiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     pathEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT',
     schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
-    validates: ['file exists', 'valid JSON', 'ok: true', 'artifact schema version', 'no-secret boundary', 'no raw secret-like values', 'no forbidden artifact field names or credential URLs', 'apiHandoffs present', 'apiHandoffs.publicApis present', 'apiHandoffReady', 'publicCommerceApiHandoffReady', 'productApiHandoffSchemaReady', 'productApiHandoffSiteTargetReady', 'productApiHandoffTargetSiteId', 'productApiHandoffReady', 'orderApiHandoffSchemaReady', 'orderApiHandoffSiteTargetReady', 'orderApiHandoffTargetSiteId', 'orderApiHandoffReady', 'commerceApiHandoffSiteSelectorEnv'],
+    validates: ['file exists', 'valid JSON', 'ok: true', 'artifact schema version', 'certifiedAtReady', 'artifactFreshReady', 'artifactAgeHours', 'artifactMaxAgeHours', 'artifactFutureSkewMinutes', 'no-secret boundary', 'no raw secret-like values', 'no forbidden artifact field names or credential URLs', 'apiHandoffs present', 'apiHandoffs.publicApis present', 'apiHandoffReady', 'publicCommerceApiHandoffReady', 'productApiHandoffSchemaReady', 'productApiHandoffSiteTargetReady', 'productApiHandoffTargetSiteId', 'productApiHandoffReady', 'orderApiHandoffSchemaReady', 'orderApiHandoffSiteTargetReady', 'orderApiHandoffTargetSiteId', 'orderApiHandoffReady', 'commerceApiHandoffSiteSelectorEnv'],
+    freshnessWindow: {
+      maxAgeHoursEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS',
+      defaultMaxAgeHours: 168,
+      futureSkewMinutesEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES',
+      defaultFutureSkewMinutes: 15,
+    },
     includesSecretValues: false,
   };
   const runbookSecretBoundary = {
@@ -2524,12 +2536,12 @@ const validateSecretReferenceValue = (label: string, reference: string, example:
     return null;
   }
 
-  if (isSecretReference(reference)) {
-    return null;
-  }
-
   if (looksLikeRawSecret(reference)) {
     return `${label} must be stored in deployment environment variables or a connected secret store. Save an env reference such as ${example} instead of the raw secret.`;
+  }
+
+  if (isSecretReference(reference)) {
+    return null;
   }
 
   return `${label} must be an environment variable reference such as ${example}, $${secretReferenceEnvKey(example)}, or ${secretReferenceEnvKey(example)}.`;

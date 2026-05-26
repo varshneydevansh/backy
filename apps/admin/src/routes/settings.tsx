@@ -246,6 +246,12 @@ type BackyCompletionArtifactVerifier = {
   pathEnv: string;
   schemaVersion: string;
   validates: string[];
+  freshnessWindow: {
+    maxAgeHoursEnv: string;
+    defaultMaxAgeHours: number;
+    futureSkewMinutesEnv: string;
+    defaultFutureSkewMinutes: number;
+  };
   includesSecretValues: false;
 };
 
@@ -335,6 +341,13 @@ const COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS: BackyCompletionEvidenceArtifact[] 
   },
 ];
 
+const COMPLETION_ARTIFACT_FRESHNESS_WINDOW = {
+  maxAgeHoursEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS',
+  defaultMaxAgeHours: 168,
+  futureSkewMinutesEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES',
+  defaultFutureSkewMinutes: 15,
+};
+
 const SETTINGS_COMPLETION_ARTIFACT_VERIFIER: BackyCompletionArtifactVerifier = {
   command: 'npm run doctor:release-certification',
   requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
@@ -345,11 +358,19 @@ const SETTINGS_COMPLETION_ARTIFACT_VERIFIER: BackyCompletionArtifactVerifier = {
     'valid JSON',
     'ok: true',
     'artifact schema version',
+    'certifiedAtReady',
+    'artifactFreshReady',
+    'artifactAgeHours',
+    'artifactMaxAgeHours',
+    'artifactFutureSkewMinutes',
     'no-secret boundary',
+    'no raw secret-like values',
+    'no forbidden artifact field names or credential URLs',
     'apiHandoffs.settingsAdminApi present',
     'apiHandoffs.siteScopedSettingsApi present',
     'settingsCompletionStatusReady',
   ],
+  freshnessWindow: COMPLETION_ARTIFACT_FRESHNESS_WINDOW,
   includesSecretValues: false,
 };
 
@@ -363,11 +384,19 @@ const COMMERCE_COMPLETION_ARTIFACT_VERIFIER: BackyCompletionArtifactVerifier = {
     'valid JSON',
     'ok: true',
     'artifact schema version',
+    'certifiedAtReady',
+    'artifactFreshReady',
+    'artifactAgeHours',
+    'artifactMaxAgeHours',
+    'artifactFutureSkewMinutes',
     'no-secret boundary',
+    'no raw secret-like values',
+    'no forbidden artifact field names or credential URLs',
     'apiHandoffs.publicApis present',
     'productApiHandoffReady',
     'orderApiHandoffReady',
   ],
+  freshnessWindow: COMPLETION_ARTIFACT_FRESHNESS_WINDOW,
   includesSecretValues: false,
 };
 
@@ -4448,8 +4477,11 @@ function SettingsPage() {
                         <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Artifact verifier</div>
                         <div className="mt-1 break-words font-mono text-[10px] leading-4 text-foreground">{runbook.artifactVerifier.command}</div>
                         <div className="mt-1 break-words font-mono text-[10px] leading-4 text-muted-foreground">{runbook.artifactVerifier.requiredEnv}</div>
+                        <div className="mt-1 break-words text-[10px] leading-4 text-muted-foreground">
+                          Freshness: {runbook.artifactVerifier.freshnessWindow.defaultMaxAgeHours}h max via <span className="font-mono">{runbook.artifactVerifier.freshnessWindow.maxAgeHoursEnv}</span>; future skew {runbook.artifactVerifier.freshnessWindow.defaultFutureSkewMinutes}m via <span className="font-mono">{runbook.artifactVerifier.freshnessWindow.futureSkewMinutesEnv}</span>.
+                        </div>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          {runbook.artifactVerifier.validates.slice(0, 4).map((check) => (
+                          {runbook.artifactVerifier.validates.slice(0, 7).map((check) => (
                             <span key={check} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                               {check}
                             </span>
@@ -6860,16 +6892,21 @@ const validateEnvReferenceIssue = (
   rawSecretLabel: string,
 ): SettingsValidationIssue | null => {
   const reference = value?.trim();
-  if (!reference || isSecretEnvReference(reference)) {
+  if (!reference) {
+    return null;
+  }
+
+  const rawSecret = looksLikeRawSecret(reference);
+  if (!rawSecret && isSecretEnvReference(reference)) {
     return null;
   }
 
   return {
     tab,
-    label: looksLikeRawSecret(reference)
+    label: rawSecret
       ? `${label} looks like a raw secret`
       : `${label} must be an env reference`,
-    detail: looksLikeRawSecret(reference)
+    detail: rawSecret
       ? `Move ${rawSecretLabel} into deployment environment variables and save only ${example} here.`
       : `Use ${example}, $${secretReferenceEnvKey(example)}, or ${secretReferenceEnvKey(example)} so Settings never stores the raw secret.`,
     severity: 'error',

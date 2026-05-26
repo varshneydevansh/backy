@@ -13388,6 +13388,13 @@ export interface BackyCompletionArtifactVerifier {
     | "backy.settings-provider-certification-artifact.v1"
     | "backy.commerce-provider-certification-artifact.v1";
   validates: string[];
+  freshnessWindow: {
+    maxAgeHoursEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS";
+    defaultMaxAgeHours: 168;
+    futureSkewMinutesEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES";
+    defaultFutureSkewMinutes: 15;
+    [key: string]: unknown;
+  };
   includesSecretValues: false;
   [key: string]: unknown;
 }

@@ -500,12 +500,25 @@
 			                      "items": { "type": "string", "minLength": 1 },
 			                      "allOf": [
 			                        { "contains": { "const": "no-secret boundary" } },
-			                        { "contains": { "const": "no raw secret-like values" } }
+			                        { "contains": { "const": "no raw secret-like values" } },
+			                        { "contains": { "const": "certifiedAtReady" } },
+			                        { "contains": { "const": "artifactFreshReady" } }
 			                      ]
 			                    },
+		                    "freshnessWindow": {
+		                      "type": "object",
+		                      "properties": {
+		                        "maxAgeHoursEnv": { "const": "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS" },
+		                        "defaultMaxAgeHours": { "const": 168 },
+		                        "futureSkewMinutesEnv": { "const": "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES" },
+		                        "defaultFutureSkewMinutes": { "const": 15 }
+		                      },
+		                      "required": ["maxAgeHoursEnv", "defaultMaxAgeHours", "futureSkewMinutesEnv", "defaultFutureSkewMinutes"],
+		                      "additionalProperties": true
+		                    },
 		                    "includesSecretValues": { "const": false }
 		                  },
-		                  "required": ["command", "requiredEnv", "pathEnv", "schemaVersion", "validates", "includesSecretValues"]
+		                  "required": ["command", "requiredEnv", "pathEnv", "schemaVersion", "validates", "freshnessWindow", "includesSecretValues"]
 		                },
 		                "runtime": { "type": "object", "additionalProperties": true },
 	                "secretBoundary": {

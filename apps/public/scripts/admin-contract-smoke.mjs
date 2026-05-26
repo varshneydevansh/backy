@@ -7925,6 +7925,12 @@ try {
           runbook.evidenceApi.includes('data.settings.completionStatus') &&
           runbook.targetInputs?.includes?.('BACKY_SETTINGS_CERTIFY_SITE_ID') &&
           runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+          runbook.artifactVerifier?.freshnessWindow?.maxAgeHoursEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS' &&
+          runbook.artifactVerifier?.freshnessWindow?.defaultMaxAgeHours === 168 &&
+          runbook.artifactVerifier?.freshnessWindow?.futureSkewMinutesEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES' &&
+          runbook.artifactVerifier?.freshnessWindow?.defaultFutureSkewMinutes === 15 &&
+          runbook.artifactVerifier?.validates?.includes?.('certifiedAtReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('artifactFreshReady') &&
           runbook.artifactVerifier?.validates?.includes?.('settingsApiHandoffSiteTargetReady') &&
           runbook.artifactVerifier?.validates?.includes?.('settingsApiHandoffTargetSiteId') &&
           runbook.artifactVerifier?.validates?.includes?.('siteSettingsApiHandoffReady') &&
@@ -7944,6 +7950,9 @@ try {
           runbook.key === 'products' &&
           runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
           runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+          runbook.artifactVerifier?.freshnessWindow?.maxAgeHoursEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS' &&
+          runbook.artifactVerifier?.validates?.includes?.('certifiedAtReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('artifactFreshReady') &&
           runbook.artifactVerifier?.validates?.includes?.('productApiHandoffSiteTargetReady') &&
           runbook.artifactVerifier?.validates?.includes?.('productApiHandoffTargetSiteId') &&
           runbook.artifactVerifier?.validates?.includes?.('commerceApiHandoffSiteSelectorEnv'),
@@ -7956,6 +7965,9 @@ try {
           runbook.key === 'orders' &&
           runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
           runbook.targetInputs?.includes?.('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+          runbook.artifactVerifier?.freshnessWindow?.maxAgeHoursEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS' &&
+          runbook.artifactVerifier?.validates?.includes?.('certifiedAtReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('artifactFreshReady') &&
           runbook.artifactVerifier?.validates?.includes?.('orderApiHandoffSiteTargetReady') &&
           runbook.artifactVerifier?.validates?.includes?.('orderApiHandoffTargetSiteId') &&
           runbook.artifactVerifier?.validates?.includes?.('commerceApiHandoffSiteSelectorEnv'),

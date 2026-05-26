@@ -572,6 +572,13 @@ export type GeneratedBackyOpenApiBackyCompletionStatus = {
       pathEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT" | "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT";
       schemaVersion: "backy.settings-provider-certification-artifact.v1" | "backy.commerce-provider-certification-artifact.v1";
       validates: Array<string>;
+      freshnessWindow: {
+        maxAgeHoursEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS";
+        defaultMaxAgeHours: 168;
+        futureSkewMinutesEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES";
+        defaultFutureSkewMinutes: 15;
+        [key: string]: unknown;
+      };
       includesSecretValues: false;
       [key: string]: unknown;
     };
@@ -5382,7 +5389,14 @@ export type GeneratedBackyFrontendManifestCompletionStatus = {
       requiredEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" | "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1";
       pathEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT" | "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT";
       schemaVersion: "backy.settings-provider-certification-artifact.v1" | "backy.commerce-provider-certification-artifact.v1";
-      validates: unknown & unknown;
+      validates: unknown & unknown & unknown & unknown;
+      freshnessWindow: {
+        maxAgeHoursEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS";
+        defaultMaxAgeHours: 168;
+        futureSkewMinutesEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES";
+        defaultFutureSkewMinutes: 15;
+        [key: string]: unknown;
+      };
       includesSecretValues: false;
       [key: string]: unknown;
     };

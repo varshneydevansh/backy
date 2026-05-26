@@ -1854,6 +1854,12 @@ assert(manifest.data.contract.frontendLaunchReadiness.actionPlan?.recommendedCom
 	  runbook.artifactVerifier.pathEnv === expectedPathEnv &&
 	  runbook.artifactVerifier.requiredEnv?.includes?.('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
 	  runbook.artifactVerifier.validates?.includes?.('no-secret boundary') &&
+	  runbook.artifactVerifier.validates?.includes?.('certifiedAtReady') &&
+	  runbook.artifactVerifier.validates?.includes?.('artifactFreshReady') &&
+	  runbook.artifactVerifier.freshnessWindow?.maxAgeHoursEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS' &&
+	  runbook.artifactVerifier.freshnessWindow?.defaultMaxAgeHours === 168 &&
+	  runbook.artifactVerifier.freshnessWindow?.futureSkewMinutesEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES' &&
+	  runbook.artifactVerifier.freshnessWindow?.defaultFutureSkewMinutes === 15 &&
 	  expectedValidates.every((field) => runbook.artifactVerifier.validates?.includes?.(field)) &&
 	  runbook.artifactVerifier.includesSecretValues === false
 	);
@@ -2031,7 +2037,11 @@ assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendD
 assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignCustomJs?.type === 'string', 'openapi() missing product frontend design custom JS schema');
 assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignThemeTokenRefs?.additionalProperties?.type === 'string', 'openapi() missing product frontend design token refs schema');
 assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignElements?.type === 'array', 'openapi() missing product frontend design elements schema');
-assert(openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignAnimations?.type === 'array', 'openapi() missing product frontend design animations schema');
+assert(
+  openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignAnimations?.oneOf?.some?.((item) => item?.type === 'array') &&
+    openapi.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignAnimations?.oneOf?.some?.((item) => item?.type === 'object'),
+  'openapi() missing product frontend design animations schema',
+);
 assert(openapi.components?.schemas?.CommerceProductDesignReadiness?.properties?.schemaVersion?.const === 'backy.product-design-readiness.v1', 'openapi() missing product frontend design readiness schema');
 assert(openapi.components?.schemas?.CommerceProduct?.properties?.designReadiness?.$ref === '#/components/schemas/CommerceProductDesignReadiness', 'openapi() missing public product design readiness schema');
 assert(openapi.components?.schemas?.DynamicItemRouteResource?.properties?.designReadiness?.$ref === '#/components/schemas/CommerceProductDesignReadiness', 'openapi() missing dynamic product route design readiness schema');

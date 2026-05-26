@@ -381,6 +381,12 @@ const assertSettingsSourceContracts = () => {
     'COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS',
     'SETTINGS_COMPLETION_ARTIFACT_VERIFIER',
     'COMMERCE_COMPLETION_ARTIFACT_VERIFIER',
+    'COMPLETION_ARTIFACT_FRESHNESS_WINDOW',
+    'freshnessWindow: COMPLETION_ARTIFACT_FRESHNESS_WINDOW',
+    'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS',
+    'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES',
+    'certifiedAtReady',
+    'artifactFreshReady',
     'evidenceArtifacts: SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS',
     'artifactVerifier: SETTINGS_COMPLETION_ARTIFACT_VERIFIER',
     'evidenceArtifacts: COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS',
@@ -2313,6 +2319,11 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       completionRunbooksText.includes('backy-settings-provider-certification-evidence') &&
       completionRunbooksText.includes('backy-commerce-provider-certification-evidence') &&
       completionRunbooksText.includes('Artifact verifier') &&
+      completionRunbooksText.includes('Freshness: 168h max') &&
+      completionRunbooksText.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS') &&
+      completionRunbooksText.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES') &&
+      completionRunbooksText.includes('certifiedAtReady') &&
+      completionRunbooksText.includes('artifactFreshReady') &&
       completionRunbooksText.includes('npm run doctor:release-certification') &&
       completionRunbooksText.includes('/api/admin/settings data.settings.providerCertification.operatorEvidencePacket') &&
       completionRunbooksText.includes('/api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync') &&

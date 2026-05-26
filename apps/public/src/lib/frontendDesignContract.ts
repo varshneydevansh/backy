@@ -1925,9 +1925,9 @@ const buildFrontendDesignProvenanceFields = (
   const interactions = cloneProvenanceArray(current.frontendDesignInteractions)
     || cloneProvenanceArray(content.interactions)
     || cloneProvenanceArray(metadata.interactions);
-  const animations = cloneProvenanceArray(current.frontendDesignAnimations)
-    || cloneProvenanceArray(content.animations)
-    || cloneProvenanceArray(metadata.animations);
+  const animations = cloneArrayOrRecord(current.frontendDesignAnimations)
+    || cloneArrayOrRecord(content.animations)
+    || cloneArrayOrRecord(metadata.animations);
   const dataBindings = cloneRecord(current.frontendDesignDataBindings)
     || cloneRecord(content.dataBindings)
     || cloneRecord(metadata.dataBindings);

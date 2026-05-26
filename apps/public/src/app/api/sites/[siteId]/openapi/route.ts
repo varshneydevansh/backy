@@ -649,7 +649,13 @@ const buildBackyCompletionStatus = () => {
     requiredEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
     pathEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT",
     schemaVersion: "backy.settings-provider-certification-artifact.v1",
-    validates: ["file exists", "valid JSON", "ok: true", "artifact schema version", "no-secret boundary", "no raw secret-like values", "no forbidden artifact field names or credential URLs", "apiHandoffs.settingsAdminApi present", "apiHandoffs.siteScopedSettingsApi present", "settingsApiHandoffSchemaReady", "settingsApiHandoffSiteTargetReady", "settingsApiHandoffTargetSiteId", "settingsApiHandoffSettingsSiteSelectorEnv", "settingsApiHandoffCommerceSiteSelectorEnv", "settingsApiHandoffReady", "siteSettingsApiHandoffReady", "settingsScenarioEvidenceReady", "settingsEvidencePacketReady", "settingsCompletionStatusReady"],
+    validates: ["file exists", "valid JSON", "ok: true", "artifact schema version", "certifiedAtReady", "artifactFreshReady", "artifactAgeHours", "artifactMaxAgeHours", "artifactFutureSkewMinutes", "no-secret boundary", "no raw secret-like values", "no forbidden artifact field names or credential URLs", "apiHandoffs.settingsAdminApi present", "apiHandoffs.siteScopedSettingsApi present", "settingsApiHandoffSchemaReady", "settingsApiHandoffSiteTargetReady", "settingsApiHandoffTargetSiteId", "settingsApiHandoffSettingsSiteSelectorEnv", "settingsApiHandoffCommerceSiteSelectorEnv", "settingsApiHandoffReady", "siteSettingsApiHandoffReady", "settingsScenarioEvidenceReady", "settingsEvidencePacketReady", "settingsCompletionStatusReady"],
+    freshnessWindow: {
+      maxAgeHoursEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS",
+      defaultMaxAgeHours: 168,
+      futureSkewMinutesEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES",
+      defaultFutureSkewMinutes: 15,
+    },
     includesSecretValues: false,
   } as const;
   const commerceCertificationArtifactVerifier = {
@@ -657,7 +663,13 @@ const buildBackyCompletionStatus = () => {
     requiredEnv: "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
     pathEnv: "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT",
     schemaVersion: "backy.commerce-provider-certification-artifact.v1",
-    validates: ["file exists", "valid JSON", "ok: true", "artifact schema version", "no-secret boundary", "no raw secret-like values", "no forbidden artifact field names or credential URLs", "apiHandoffs present", "apiHandoffs.publicApis present", "apiHandoffReady", "publicCommerceApiHandoffReady", "productApiHandoffSchemaReady", "productApiHandoffSiteTargetReady", "productApiHandoffTargetSiteId", "productApiHandoffReady", "orderApiHandoffSchemaReady", "orderApiHandoffSiteTargetReady", "orderApiHandoffTargetSiteId", "orderApiHandoffReady", "commerceApiHandoffSiteSelectorEnv"],
+    validates: ["file exists", "valid JSON", "ok: true", "artifact schema version", "certifiedAtReady", "artifactFreshReady", "artifactAgeHours", "artifactMaxAgeHours", "artifactFutureSkewMinutes", "no-secret boundary", "no raw secret-like values", "no forbidden artifact field names or credential URLs", "apiHandoffs present", "apiHandoffs.publicApis present", "apiHandoffReady", "publicCommerceApiHandoffReady", "productApiHandoffSchemaReady", "productApiHandoffSiteTargetReady", "productApiHandoffTargetSiteId", "productApiHandoffReady", "orderApiHandoffSchemaReady", "orderApiHandoffSiteTargetReady", "orderApiHandoffTargetSiteId", "orderApiHandoffReady", "commerceApiHandoffSiteSelectorEnv"],
+    freshnessWindow: {
+      maxAgeHoursEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS",
+      defaultMaxAgeHours: 168,
+      futureSkewMinutesEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES",
+      defaultFutureSkewMinutes: 15,
+    },
     includesSecretValues: false,
   } as const;
   const surfaceRunbooks = [
@@ -6749,7 +6761,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 	                      },
 	                      artifactVerifier: {
 	                        type: "object",
-	                        required: ["command", "requiredEnv", "pathEnv", "schemaVersion", "validates", "includesSecretValues"],
+	                        required: ["command", "requiredEnv", "pathEnv", "schemaVersion", "validates", "freshnessWindow", "includesSecretValues"],
 	                        additionalProperties: true,
 	                        properties: {
 	                          command: { const: "npm run doctor:release-certification" },
@@ -6774,6 +6786,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 	                          validates: {
 	                            type: "array",
 	                            items: { type: "string" },
+	                          },
+	                          freshnessWindow: {
+	                            type: "object",
+	                            required: ["maxAgeHoursEnv", "defaultMaxAgeHours", "futureSkewMinutesEnv", "defaultFutureSkewMinutes"],
+	                            additionalProperties: true,
+	                            properties: {
+	                              maxAgeHoursEnv: { const: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS" },
+	                              defaultMaxAgeHours: { const: 168 },
+	                              futureSkewMinutesEnv: { const: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES" },
+	                              defaultFutureSkewMinutes: { const: 15 },
+	                            },
 	                          },
 	                          includesSecretValues: { const: false },
 	                        },
