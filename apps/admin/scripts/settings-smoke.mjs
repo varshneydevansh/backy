@@ -71,6 +71,12 @@ const assertSettingsSourceContracts = () => {
     'Show site controls',
     'Per-site SEO, analytics, localization, comment-policy, API scope, and audit controls',
     'data-testid="settings-site-scope-frontend-database-certification"',
+    "const siteScopeActionStatusId = 'settings-site-scope-action-status';",
+    'data-testid="settings-site-scope-action-group"',
+    'data-testid="settings-site-scope-action-status"',
+    'data-action-status={siteScopeActionStatus}',
+    'data-action-status={siteScopeSaveActionStatus}',
+    'data-disabled-reason={siteScopeSaveDisabledReason || undefined}',
     'data-testid="settings-permission-state"',
     'data-testid="settings-rbac-permission-state"',
     'data-testid="settings-permission-sync-state"',
@@ -1155,6 +1161,24 @@ const navigateToSettings = async (client) => {
         document.querySelector('[data-testid="settings-site-scope-details"]')?.open === false,
       siteScopeDetailsDefaultCollapsed: document.querySelector('[data-testid="settings-site-scope-details"]')?.getAttribute('data-default-collapsed') === 'true',
       siteScopeDetailsSummary: document.querySelector('[data-testid="settings-site-scope-details"]')?.textContent || '',
+      siteScopeActionStatusId: document.querySelector('[data-testid="settings-site-scope-action-status"]')?.id || '',
+      siteScopeActionStatusText: document.querySelector('[data-testid="settings-site-scope-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      siteScopeActionGroupRole: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('role') || '',
+      siteScopeActionGroupLabel: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('aria-label') || '',
+      siteScopeActionGroupDescribedBy: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('aria-describedby') || '',
+      siteScopeActionGroupStatus: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('data-action-status') || '',
+      siteScopeActionGroupState: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('data-action-state') || '',
+      siteScopeSelectState: document.querySelector('[data-testid="settings-site-scope-site"]')?.getAttribute('data-action-state') || '',
+      siteScopeSelectStatus: document.querySelector('[data-testid="settings-site-scope-site"]')?.getAttribute('data-action-status') || '',
+      siteScopeSelectDescribedBy: document.querySelector('[data-testid="settings-site-scope-site"]')?.getAttribute('aria-describedby') || '',
+      siteScopeSaveState: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-action-state') || '',
+      siteScopeSaveStatus: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-action-status') || '',
+      siteScopeSaveReason: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-disabled-reason') || '',
+      siteScopeSaveDescribedBy: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('aria-describedby') || '',
+      siteScopeDiscardState: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-action-state') || '',
+      siteScopeDiscardStatus: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-action-status') || '',
+      siteScopeDiscardReason: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-disabled-reason') || '',
+      siteScopeDiscardDescribedBy: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('aria-describedby') || '',
       ownershipMap: Boolean(document.querySelector('[data-testid="settings-platform-ownership-map"]')),
       launchReadiness: Boolean(document.querySelector('[data-testid="settings-launch-readiness"]')),
       launchReadinessDetailsCollapsed: document.querySelector('[data-testid="settings-launch-readiness-details"]')?.tagName === 'DETAILS' &&
@@ -1218,6 +1242,26 @@ const navigateToSettings = async (client) => {
       state.siteScopeDetailsDefaultCollapsed &&
       state.siteScopeDetailsSummary.includes('Show site controls') &&
       state.siteScopeDetailsSummary.includes('Per-site SEO') &&
+      state.siteScopeActionStatusId === 'settings-site-scope-action-status' &&
+      state.siteScopeActionStatusText.includes('Site selector available.') &&
+      state.siteScopeActionStatusText.includes('Discard site changes unavailable: No unsaved site-scoped settings changes to discard.') &&
+      state.siteScopeActionStatusText.includes('Save site settings unavailable: Make a site-scoped settings change before saving.') &&
+      state.siteScopeActionGroupRole === 'group' &&
+      state.siteScopeActionGroupLabel === 'Site-scoped settings actions' &&
+      state.siteScopeActionGroupDescribedBy === state.siteScopeActionStatusId &&
+      state.siteScopeActionGroupStatus === state.siteScopeActionStatusText &&
+      state.siteScopeActionGroupState === 'blocked' &&
+      state.siteScopeSelectState === 'ready' &&
+      state.siteScopeSelectStatus === 'Site selector available.' &&
+      state.siteScopeSelectDescribedBy === state.siteScopeActionStatusId &&
+      state.siteScopeSaveState === 'blocked' &&
+      state.siteScopeSaveStatus.includes('Save site settings unavailable') &&
+      state.siteScopeSaveReason === 'Make a site-scoped settings change before saving.' &&
+      state.siteScopeSaveDescribedBy === state.siteScopeActionStatusId &&
+      state.siteScopeDiscardState === 'blocked' &&
+      state.siteScopeDiscardStatus.includes('Discard site changes unavailable') &&
+      state.siteScopeDiscardReason === 'No unsaved site-scoped settings changes to discard.' &&
+      state.siteScopeDiscardDescribedBy === state.siteScopeActionStatusId &&
       state.ownershipMap &&
       state.launchReadiness &&
       state.launchReadinessDetailsCollapsed &&
@@ -2182,13 +2226,50 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       locales: document.querySelector('[data-testid="settings-site-scope-locales"]')?.value || '',
       moderationMode: document.querySelector('[data-testid="settings-site-scope-moderation"]')?.value || '',
       blockedTerms: document.querySelector('[data-testid="settings-site-scope-blocked-terms"]')?.value || '',
+      actionStatusId: document.querySelector('[data-testid="settings-site-scope-action-status"]')?.id || '',
+      actionGroupState: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('data-action-state') || '',
+      actionGroupStatus: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('data-action-status') || '',
+      saveState: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-action-state') || '',
+      saveStatus: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-action-status') || '',
+      saveReason: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-disabled-reason') || '',
+      saveDescribedBy: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('aria-describedby') || '',
+      discardState: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-action-state') || '',
+      discardStatus: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-action-status') || '',
+      discardReason: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-disabled-reason') || '',
+      discardDescribedBy: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('aria-describedby') || '',
     }))()`);
-    if (Object.entries(expectedSiteScopeDraft).every(([key, value]) => siteScopeDraftState?.[key] === value)) {
+    if (
+      Object.entries(expectedSiteScopeDraft).every(([key, value]) => siteScopeDraftState?.[key] === value) &&
+      siteScopeDraftState.actionStatusId === 'settings-site-scope-action-status' &&
+      siteScopeDraftState.actionGroupState === 'ready' &&
+      siteScopeDraftState.actionGroupStatus.includes('Save site settings available.') &&
+      siteScopeDraftState.actionGroupStatus.includes('Discard site changes available.') &&
+      siteScopeDraftState.saveState === 'ready' &&
+      siteScopeDraftState.saveStatus === 'Save site settings available.' &&
+      siteScopeDraftState.saveReason === '' &&
+      siteScopeDraftState.saveDescribedBy === siteScopeDraftState.actionStatusId &&
+      siteScopeDraftState.discardState === 'ready' &&
+      siteScopeDraftState.discardStatus === 'Discard site changes available.' &&
+      siteScopeDraftState.discardReason === '' &&
+      siteScopeDraftState.discardDescribedBy === siteScopeDraftState.actionStatusId
+    ) {
       break;
     }
   }
   assert(
-    Object.entries(expectedSiteScopeDraft).every(([key, value]) => siteScopeDraftState?.[key] === value),
+    Object.entries(expectedSiteScopeDraft).every(([key, value]) => siteScopeDraftState?.[key] === value) &&
+      siteScopeDraftState?.actionStatusId === 'settings-site-scope-action-status' &&
+      siteScopeDraftState.actionGroupState === 'ready' &&
+      siteScopeDraftState.actionGroupStatus.includes('Save site settings available.') &&
+      siteScopeDraftState.actionGroupStatus.includes('Discard site changes available.') &&
+      siteScopeDraftState.saveState === 'ready' &&
+      siteScopeDraftState.saveStatus === 'Save site settings available.' &&
+      siteScopeDraftState.saveReason === '' &&
+      siteScopeDraftState.saveDescribedBy === siteScopeDraftState.actionStatusId &&
+      siteScopeDraftState.discardState === 'ready' &&
+      siteScopeDraftState.discardStatus === 'Discard site changes available.' &&
+      siteScopeDraftState.discardReason === '' &&
+      siteScopeDraftState.discardDescribedBy === siteScopeDraftState.actionStatusId,
     `Site-scoped settings controls did not accept input: ${JSON.stringify({ actual: siteScopeDraftState, expected: expectedSiteScopeDraft, lastError: siteScopeDraftError })}`,
   );
   await clickByText(client, 'Save site settings');
@@ -2213,9 +2294,23 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     blockedTerms: document.querySelector('[data-testid="settings-site-scope-blocked-terms"]')?.value || '',
     notice: document.querySelector('[data-testid="settings-site-scope-panel"]')?.textContent || '',
     audit: document.querySelector('[data-testid="settings-site-scope-audit"]')?.textContent || '',
-    discardDisabled: Array.from(document.querySelectorAll('button')).some((button) => (
-      (button.textContent || '').includes('Discard site changes') && button.disabled
-    )),
+    actionStatusId: document.querySelector('[data-testid="settings-site-scope-action-status"]')?.id || '',
+    actionGroupState: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('data-action-state') || '',
+    actionGroupStatus: document.querySelector('[data-testid="settings-site-scope-action-group"]')?.getAttribute('data-action-status') || '',
+    saveDisabled: document.querySelector('[data-testid="settings-site-scope-save"]') instanceof HTMLButtonElement
+      ? document.querySelector('[data-testid="settings-site-scope-save"]').disabled
+      : null,
+    saveState: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-action-state') || '',
+    saveStatus: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-action-status') || '',
+    saveReason: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('data-disabled-reason') || '',
+    saveDescribedBy: document.querySelector('[data-testid="settings-site-scope-save"]')?.getAttribute('aria-describedby') || '',
+    discardDisabled: document.querySelector('[data-testid="settings-site-scope-discard"]') instanceof HTMLButtonElement
+      ? document.querySelector('[data-testid="settings-site-scope-discard"]').disabled
+      : null,
+    discardState: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-action-state') || '',
+    discardStatus: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-action-status') || '',
+    discardReason: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('data-disabled-reason') || '',
+    discardDescribedBy: document.querySelector('[data-testid="settings-site-scope-discard"]')?.getAttribute('aria-describedby') || '',
   }))()`);
   assert(
     siteScopeSaved.titleTemplate === `%s | Scoped ${suffix}` &&
@@ -2231,7 +2326,20 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       siteScopeSaved.moderationMode === 'auto-approve' &&
       siteScopeSaved.blockedTerms.includes(`scoped-${suffix}`) &&
       siteScopeSaved.notice.includes('Site-scoped settings changes discarded.') &&
-      siteScopeSaved.discardDisabled,
+      siteScopeSaved.actionStatusId === 'settings-site-scope-action-status' &&
+      siteScopeSaved.actionGroupState === 'blocked' &&
+      siteScopeSaved.actionGroupStatus.includes('Save site settings unavailable: Make a site-scoped settings change before saving.') &&
+      siteScopeSaved.actionGroupStatus.includes('Discard site changes unavailable: No unsaved site-scoped settings changes to discard.') &&
+      siteScopeSaved.saveDisabled === true &&
+      siteScopeSaved.saveState === 'blocked' &&
+      siteScopeSaved.saveStatus.includes('Save site settings unavailable') &&
+      siteScopeSaved.saveReason === 'Make a site-scoped settings change before saving.' &&
+      siteScopeSaved.saveDescribedBy === siteScopeSaved.actionStatusId &&
+      siteScopeSaved.discardDisabled === true &&
+      siteScopeSaved.discardState === 'blocked' &&
+      siteScopeSaved.discardStatus.includes('Discard site changes unavailable') &&
+      siteScopeSaved.discardReason === 'No unsaved site-scoped settings changes to discard.' &&
+      siteScopeSaved.discardDescribedBy === siteScopeSaved.actionStatusId,
     `Site-scoped settings UI did not retain saved values: ${JSON.stringify(siteScopeSaved)}`,
   );
   let siteScopeAudit = siteScopeSaved.audit;

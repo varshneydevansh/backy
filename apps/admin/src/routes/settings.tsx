@@ -5115,6 +5115,36 @@ function SiteScopedSettingsPanel({
     .split('\n')
     .map((term) => term.trim())
     .filter(Boolean);
+  const siteScopeActionStatusId = 'settings-site-scope-action-status';
+  const siteScopeBusyReason = saving
+    ? 'Site-scoped settings are saving.'
+    : loading
+      ? 'Site-scoped settings are loading.'
+      : null;
+  const siteScopeSelectDisabledReason = siteScopeBusyReason
+    || (sites.length === 0 ? 'No sites are available for site-scoped settings.' : null);
+  const siteScopeDiscardDisabledReason = siteScopeBusyReason
+    || (disabled ? permissionTitle || 'Your account cannot configure site-scoped settings.' : null)
+    || (!selectedSiteId ? 'Select a site before discarding site-scoped changes.' : null)
+    || (!hasUnsavedChanges ? 'No unsaved site-scoped settings changes to discard.' : null);
+  const siteScopeSaveDisabledReason = siteScopeBusyReason
+    || (disabled ? permissionTitle || 'Your account cannot configure site-scoped settings.' : null)
+    || (!selectedSiteId ? 'Select a site before saving site-scoped settings.' : null)
+    || (!hasUnsavedChanges ? 'Make a site-scoped settings change before saving.' : null);
+  const siteScopeSelectActionStatus = siteScopeSelectDisabledReason
+    ? `Site selector unavailable: ${siteScopeSelectDisabledReason}`
+    : 'Site selector available.';
+  const siteScopeDiscardActionStatus = siteScopeDiscardDisabledReason
+    ? `Discard site changes unavailable: ${siteScopeDiscardDisabledReason}`
+    : 'Discard site changes available.';
+  const siteScopeSaveActionStatus = siteScopeSaveDisabledReason
+    ? `Save site settings unavailable: ${siteScopeSaveDisabledReason}`
+    : 'Save site settings available.';
+  const siteScopeActionStatus = [
+    siteScopeSelectActionStatus,
+    siteScopeDiscardActionStatus,
+    siteScopeSaveActionStatus,
+  ].join(' ');
 
   if (!canView) {
     return (
@@ -5192,7 +5222,12 @@ function SiteScopedSettingsPanel({
               data-testid="settings-site-scope-site"
               value={selectedSiteId}
               onChange={(event) => onSelectSite(event.target.value)}
-              disabled={loading || saving || sites.length === 0}
+              disabled={Boolean(siteScopeSelectDisabledReason)}
+              title={siteScopeSelectDisabledReason || undefined}
+              aria-describedby={siteScopeActionStatusId}
+              data-action-state={siteScopeSelectDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={siteScopeSelectActionStatus}
+              data-disabled-reason={siteScopeSelectDisabledReason || undefined}
               className={cn(
                 'mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm',
                 'focus:outline-none focus:ring-2 focus:ring-ring',
@@ -5481,7 +5516,22 @@ function SiteScopedSettingsPanel({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+      <div
+        className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4"
+        role="group"
+        aria-label="Site-scoped settings actions"
+        aria-describedby={siteScopeActionStatusId}
+        data-testid="settings-site-scope-action-group"
+        data-action-state={siteScopeSaveDisabledReason ? 'blocked' : 'ready'}
+        data-action-status={siteScopeActionStatus}
+      >
+        <span
+          id={siteScopeActionStatusId}
+          className="sr-only"
+          data-testid="settings-site-scope-action-status"
+        >
+          {siteScopeActionStatus}
+        </span>
         <p className="text-xs leading-5 text-muted-foreground">
           The save request patches only allowlisted site sections and records a site-scoped audit event.
         </p>
@@ -5489,8 +5539,13 @@ function SiteScopedSettingsPanel({
           <Button
             type="button"
             variant="outline"
-            disabled={disabled || !selectedSiteId || !hasUnsavedChanges}
-            title={permissionTitle}
+            disabled={Boolean(siteScopeDiscardDisabledReason)}
+            title={siteScopeDiscardDisabledReason || undefined}
+            aria-describedby={siteScopeActionStatusId}
+            data-action-state={siteScopeDiscardDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={siteScopeDiscardActionStatus}
+            data-disabled-reason={siteScopeDiscardDisabledReason || undefined}
+            data-testid="settings-site-scope-discard"
             onClick={onDiscard}
           >
             Discard site changes
@@ -5498,8 +5553,13 @@ function SiteScopedSettingsPanel({
           <Button
             type="button"
             variant="primary"
-            disabled={disabled || !selectedSiteId || !hasUnsavedChanges}
-            title={permissionTitle}
+            disabled={Boolean(siteScopeSaveDisabledReason)}
+            title={siteScopeSaveDisabledReason || undefined}
+            aria-describedby={siteScopeActionStatusId}
+            data-action-state={siteScopeSaveDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={siteScopeSaveActionStatus}
+            data-disabled-reason={siteScopeSaveDisabledReason || undefined}
+            data-testid="settings-site-scope-save"
             onClick={onSave}
             iconStart={saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
           >
