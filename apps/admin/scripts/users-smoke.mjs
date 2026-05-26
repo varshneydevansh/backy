@@ -241,6 +241,34 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       detailSource.includes('Review users'),
     'User detail permission states must expose retryable permission recovery and role-default interaction while backend permission details hydrate',
   );
+  assert(
+    detailSource.includes("const userDetailRecoveryActionStatusId = 'user-detail-recovery-action-status';") &&
+      detailSource.includes("const userDetailMfaActionStatusId = 'user-detail-mfa-action-status';") &&
+      detailSource.includes("const userDetailOwnershipActionStatusId = 'user-detail-ownership-action-status';") &&
+      detailSource.includes("const userDetailDangerActionStatusId = 'user-detail-danger-action-status';") &&
+      detailSource.includes('data-testid="user-detail-recovery-action-status"') &&
+      detailSource.includes('data-testid="user-detail-mfa-action-status"') &&
+      detailSource.includes('data-testid="user-detail-ownership-action-status"') &&
+      detailSource.includes('data-testid="user-detail-danger-action-status"') &&
+      detailSource.includes('data-action-state={userDetailRecoveryActionState}') &&
+      detailSource.includes('data-action-status={userDetailRecoveryActionStatus}') &&
+      detailSource.includes('data-action-state={userDetailMfaActionState}') &&
+      detailSource.includes('data-action-status={userDetailMfaActionStatus}') &&
+      detailSource.includes("data-action-state={ownershipTransferDisabledReason ? 'blocked' : 'ready'}") &&
+      detailSource.includes('data-action-status={userDetailOwnershipActionStatus}') &&
+      detailSource.includes("data-action-state={userDetailDangerActionDisabledReason ? 'blocked' : 'ready'}") &&
+      detailSource.includes('data-action-status={userDetailDangerActionStatus}') &&
+      detailSource.includes('const userDetailActionMetadata = (statusId: string, actionStatus: string, disabledReason = \'\') => ({') &&
+      detailSource.includes('{...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, inviteTokenActionDisabledReason)}') &&
+      detailSource.includes('{...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, resetTokenActionDisabledReason)}') &&
+      detailSource.includes('{...userDetailActionMetadata(userDetailMfaActionStatusId, userDetailMfaActionStatus, mfaManageActionDisabledReason)}') &&
+      detailSource.includes('{...userDetailActionMetadata(userDetailOwnershipActionStatusId, userDetailOwnershipActionStatus, ownershipTransferDisabledReason)}') &&
+      detailSource.includes('{...userDetailActionMetadata(userDetailDangerActionStatusId, userDetailDangerActionStatus, userDetailDangerActionDisabledReason)}') &&
+      detailSource.includes('data-testid="user-detail-generate-invite-link"') &&
+      detailSource.includes('data-testid="user-detail-generate-reset-token"') &&
+      detailSource.includes('data-testid="user-detail-remove-user"'),
+    'User detail recovery, MFA, ownership, and destructive controls must expose shared ready/blocked action status metadata.',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -1409,6 +1437,135 @@ const openUserDetail = async (client, fullName) => {
       throw new Error(`User detail did not render: ${JSON.stringify(state)}`);
     }
     await sleep(250);
+  }
+
+  return null;
+};
+
+const assertUserDetailActionStatusContracts = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const readGroup = (selector, statusSelector) => {
+        const group = document.querySelector(selector);
+        const status = document.querySelector(statusSelector);
+        const statusText = (status?.textContent || '').replace(/\\s+/g, ' ').trim();
+        return {
+          present: group instanceof HTMLElement,
+          role: group?.getAttribute('role') || '',
+          describedBy: group?.getAttribute('aria-describedby') || '',
+          statusId: status?.id || '',
+          statusText,
+          statusAttr: group?.getAttribute('data-action-status') || '',
+          state: group?.getAttribute('data-action-state') || '',
+        };
+      };
+      const readControl = (selector) => {
+        const control = document.querySelector(selector);
+        return {
+          present: control instanceof HTMLElement,
+          disabled: control instanceof HTMLButtonElement || control instanceof HTMLSelectElement ? control.disabled : null,
+          ariaDisabled: control?.getAttribute('aria-disabled') || '',
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          state: control?.getAttribute('data-action-state') || '',
+          status: control?.getAttribute('data-action-status') || '',
+          reason: control?.getAttribute('data-disabled-reason') || '',
+          text: (control?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        };
+      };
+      const recovery = readGroup('[data-testid="user-detail-recovery"]', '[data-testid="user-detail-recovery-action-status"]');
+      const mfa = readGroup('[data-testid="user-detail-mfa"]', '[data-testid="user-detail-mfa-action-status"]');
+      const ownership = readGroup('[data-testid="user-detail-ownership-transfer"]', '[data-testid="user-detail-ownership-action-status"]');
+      const danger = readGroup('[data-testid="user-detail-danger"]', '[data-testid="user-detail-danger-action-status"]');
+      const lifecycle = Array.from(document.querySelectorAll('[data-testid^="user-detail-lifecycle-"]')).map((control) => ({
+        describedBy: control.getAttribute('aria-describedby') || '',
+        state: control.getAttribute('data-action-state') || '',
+        status: control.getAttribute('data-action-status') || '',
+        reason: control.getAttribute('data-disabled-reason') || '',
+        disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        text: (control.textContent || '').replace(/\\s+/g, ' ').trim(),
+      }));
+      return {
+        recovery,
+        invite: readControl('[data-testid="user-detail-generate-invite-link"]'),
+        reset: readControl('[data-testid="user-detail-generate-reset-token"]'),
+        email: readControl('[data-testid="user-detail-email-reset-instructions"]'),
+        lifecycle,
+        mfa,
+        mfaRefresh: readControl('[data-testid="user-detail-mfa-refresh"]'),
+        mfaToggle: readControl('[data-testid="user-detail-mfa-toggle"]'),
+        mfaGenerate: readControl('[data-testid="user-detail-mfa-generate-recovery"]'),
+        ownership,
+        transfer: readControl('[data-testid="user-detail-transfer-ownership-button"]'),
+        danger,
+        remove: readControl('[data-testid="user-detail-remove-user"]'),
+      };
+    })()`);
+
+    const groupsReady =
+      state.recovery.present &&
+      state.mfa.present &&
+      state.ownership.present &&
+      state.danger.present &&
+      state.mfaToggle.present &&
+      state.mfaGenerate.present;
+    if (!groupsReady) {
+      if (attempt === 99) {
+        throw new Error(`User detail action status groups did not render: ${JSON.stringify(state).slice(0, 2200)}`);
+      }
+      await sleep(250);
+      continue;
+    }
+
+    const groupContracts = [state.recovery, state.mfa, state.ownership, state.danger].every((group) => (
+      group.role === 'group' &&
+      group.describedBy === group.statusId &&
+      group.statusText.length > 20 &&
+      group.statusAttr === group.statusText &&
+      ['ready', 'blocked'].includes(group.state)
+    ));
+    const recoveryContracts =
+      state.recovery.statusText.includes('Invite link available.') &&
+      state.recovery.statusText.includes('Reset token available.') &&
+      state.invite.describedBy === state.recovery.statusId &&
+      state.invite.state === 'ready' &&
+      state.invite.disabled === false &&
+      state.reset.describedBy === state.recovery.statusId &&
+      state.reset.state === 'ready' &&
+      state.reset.disabled === false &&
+      state.email.describedBy === state.recovery.statusId &&
+      state.email.state === 'ready' &&
+      state.email.ariaDisabled === 'false' &&
+      state.lifecycle.length === 4 &&
+      state.lifecycle.some((item) => item.state === 'ready' && item.disabled === false) &&
+      state.lifecycle.some((item) => item.state === 'blocked' && item.reason.includes('already active')) &&
+      state.lifecycle.every((item) => item.describedBy === state.recovery.statusId && item.status === state.recovery.statusText);
+    const mfaContracts =
+      state.mfa.statusText.includes('MFA updates available.') &&
+      state.mfaRefresh.describedBy === state.mfa.statusId &&
+      ['ready', 'blocked'].includes(state.mfaRefresh.state) &&
+      state.mfaToggle.describedBy === state.mfa.statusId &&
+      state.mfaToggle.state === 'ready' &&
+      state.mfaToggle.disabled === false &&
+      state.mfaGenerate.describedBy === state.mfa.statusId &&
+      state.mfaGenerate.state === 'ready' &&
+      state.mfaGenerate.disabled === false;
+    const ownershipContracts =
+      state.ownership.statusText.includes('Ownership transfer unavailable') &&
+      state.transfer.describedBy === state.ownership.statusId &&
+      state.transfer.state === 'blocked' &&
+      state.transfer.disabled === true &&
+      state.transfer.reason.includes('Activate the target user');
+    const dangerContracts =
+      state.danger.statusText.includes('Remove user available.') &&
+      state.remove.describedBy === state.danger.statusId &&
+      state.remove.state === 'ready' &&
+      state.remove.disabled === false;
+
+    assert(
+      groupContracts && recoveryContracts && mfaContracts && ownershipContracts && dangerContracts,
+      `User detail action status contracts are incomplete: ${JSON.stringify(state).slice(0, 3500)}`,
+    );
+    return state;
   }
 
   return null;
@@ -2840,6 +2997,7 @@ const main = async () => {
 
     await openUserDetail(client, fullName);
     await waitForUserDetailPermissionMatrix(client);
+    await assertUserDetailActionStatusContracts(client);
     await setUserDetailPermissionOverride(client, createdUserId);
     const inviteState = await generateUserDetailInviteLink(client, email);
     await acceptUserInviteToken(inviteState?.token, createdUserId);

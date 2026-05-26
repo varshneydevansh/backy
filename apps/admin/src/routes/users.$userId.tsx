@@ -206,6 +206,13 @@ const maskSecret = (value: string) => {
   return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
 };
 
+const userDetailActionMetadata = (statusId: string, actionStatus: string, disabledReason = '') => ({
+  'aria-describedby': statusId,
+  'data-action-state': disabledReason ? 'blocked' : 'ready',
+  'data-action-status': actionStatus,
+  'data-disabled-reason': disabledReason || undefined,
+});
+
 function EditUserPage() {
   const navigate = useNavigate();
   const { userId } = Route.useParams();
@@ -605,6 +612,89 @@ function EditUserPage() {
     !isTransferringOwnership,
   );
   const canSaveUserDetail = canManageUsers && canSubmit && hasUnsavedChanges && !hasSelfAccessChanges;
+  const userDetailBusyDisabledReason = isUserDetailBusy ? 'User detail is busy while Backy loads or saves this account.' : '';
+  const userDetailManageDisabledReason = !canManageUsers
+    ? managePermissionTitle || 'Your account cannot manage users.'
+    : '';
+  const userDetailDeletePermissionDisabledReason = !canDeleteUsers
+    ? deletePermissionTitle || 'Your account cannot remove users.'
+    : '';
+  const userDetailRecoveryActionStatusId = 'user-detail-recovery-action-status';
+  const userDetailMfaActionStatusId = 'user-detail-mfa-action-status';
+  const userDetailOwnershipActionStatusId = 'user-detail-ownership-action-status';
+  const userDetailDangerActionStatusId = 'user-detail-danger-action-status';
+  const inviteTokenStatusDisabledReason = formData.status !== 'invited'
+    ? 'Set this account to invited before issuing a new invite link.'
+    : '';
+  const resetTokenStatusDisabledReason = formData.status === 'inactive' || formData.status === 'suspended'
+    ? 'Activate or invite this account before issuing a new reset token.'
+    : '';
+  const inviteTokenActionDisabledReason = userDetailManageDisabledReason ||
+    userDetailBusyDisabledReason ||
+    (isCreatingInviteToken ? 'Invite link generation is already running.' : '') ||
+    inviteTokenStatusDisabledReason;
+  const resetTokenActionDisabledReason = userDetailManageDisabledReason ||
+    userDetailBusyDisabledReason ||
+    (isCreatingResetToken ? 'Password reset token generation is already running.' : '') ||
+    resetTokenStatusDisabledReason;
+  const recoveryDeliveryActionDisabledReason = userDetailManageDisabledReason || userDetailBusyDisabledReason;
+  const inviteExpiryDisabledReason = userDetailManageDisabledReason ||
+    userDetailBusyDisabledReason ||
+    (isCreatingInviteToken ? 'Invite link generation is already running.' : '');
+  const resetExpiryDisabledReason = userDetailManageDisabledReason ||
+    userDetailBusyDisabledReason ||
+    (isCreatingResetToken ? 'Password reset token generation is already running.' : '');
+  const getLifecycleActionDisabledReason = (status: UserStatus) => {
+    if (isUserDetailBusy) return userDetailBusyDisabledReason;
+    if (status === formData.status) return 'This lifecycle state is already active.';
+    if (isCurrentUser) return 'Use another owner/admin account to change your own account status.';
+    return userDetailManageDisabledReason;
+  };
+  const userDetailRecoveryActionStatus = [
+    inviteTokenActionDisabledReason ? `Invite link unavailable: ${inviteTokenActionDisabledReason}` : 'Invite link available.',
+    resetTokenActionDisabledReason ? `Reset token unavailable: ${resetTokenActionDisabledReason}` : 'Reset token available.',
+    recoveryDeliveryActionDisabledReason ? `Email reset unavailable: ${recoveryDeliveryActionDisabledReason}` : 'Email reset available.',
+    ...LIFECYCLE_ACTIONS.map((action) => {
+      const disabledReason = getLifecycleActionDisabledReason(action.status);
+      return disabledReason ? `${action.label} unavailable: ${disabledReason}` : `${action.label} available.`;
+    }),
+  ].join(' ');
+  const userDetailRecoveryActionState = recoveryDeliveryActionDisabledReason || (inviteTokenActionDisabledReason && resetTokenActionDisabledReason)
+    ? 'blocked'
+    : 'ready';
+  const mfaRefreshActionDisabledReason = !canViewUsers
+    ? viewPermissionTitle || 'Your account cannot view user MFA settings.'
+    : isLoadingUserMfa
+      ? 'MFA settings are already loading.'
+      : '';
+  const mfaManageActionDisabledReason = userDetailManageDisabledReason ||
+    userDetailBusyDisabledReason ||
+    (isLoadingUserMfa ? 'MFA settings are still loading.' : '') ||
+    (isSavingUserMfa ? 'MFA settings are already being saved.' : '');
+  const mfaRecoveryCopyDisabledReason = userDetailManageDisabledReason ||
+    userDetailBusyDisabledReason ||
+    (mfaRecoveryCodes.length === 0 ? 'Generate new recovery codes before copying them.' : '');
+  const userDetailMfaActionStatus = [
+    mfaRefreshActionDisabledReason ? `MFA refresh unavailable: ${mfaRefreshActionDisabledReason}` : 'MFA refresh available.',
+    mfaManageActionDisabledReason ? `MFA updates unavailable: ${mfaManageActionDisabledReason}` : 'MFA updates available.',
+    mfaRecoveryCopyDisabledReason ? `Recovery code copy unavailable: ${mfaRecoveryCopyDisabledReason}` : 'Recovery code copy available.',
+  ].join(' ');
+  const userDetailMfaActionState = mfaManageActionDisabledReason ? 'blocked' : 'ready';
+  const ownershipTransferDisabledReason = userDetailManageDisabledReason ||
+    (currentAdmin?.role !== 'owner' ? 'Only the signed-in workspace owner can transfer ownership.' : '') ||
+    (isCurrentUser ? 'Ownership transfer needs a separate active target account.' : '') ||
+    (formData.status !== 'active' ? 'Activate the target user before transferring workspace ownership.' : '') ||
+    userDetailBusyDisabledReason ||
+    (isTransferringOwnership ? 'Ownership transfer is already running.' : '');
+  const userDetailOwnershipActionStatus = ownershipTransferDisabledReason
+    ? `Ownership transfer unavailable: ${ownershipTransferDisabledReason}`
+    : 'Ownership transfer available.';
+  const userDetailDangerActionDisabledReason = isCurrentUser
+    ? 'Use another owner/admin account to remove your own access.'
+    : userDetailDeletePermissionDisabledReason || userDetailBusyDisabledReason;
+  const userDetailDangerActionStatus = userDetailDangerActionDisabledReason
+    ? `Remove user unavailable: ${userDetailDangerActionDisabledReason}`
+    : 'Remove user available.';
   const accessReadiness = useMemo(() => {
     const enabledCapabilities = ROLE_CAPABILITIES.filter((capability) => capability.roles.includes(formData.role));
     const isPrivileged = formData.role === 'owner' || formData.role === 'admin';
@@ -1856,7 +1946,19 @@ function EditUserPage() {
             )}
           </section>
 
-          <section id="user-detail-recovery" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="user-detail-recovery">
+          <section
+            id="user-detail-recovery"
+            className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+            role="group"
+            aria-label="User recovery and lifecycle actions"
+            aria-describedby={userDetailRecoveryActionStatusId}
+            data-testid="user-detail-recovery"
+            data-action-state={userDetailRecoveryActionState}
+            data-action-status={userDetailRecoveryActionStatus}
+          >
+            <span id={userDetailRecoveryActionStatusId} className="sr-only" data-testid="user-detail-recovery-action-status" aria-live="polite">
+              {userDetailRecoveryActionStatus}
+            </span>
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
                 <ShieldAlert className="h-5 w-5" />
@@ -1884,8 +1986,9 @@ function EditUserPage() {
                 <select
                   aria-label="Invite link expiry"
                   value={inviteExpiresInMinutes}
-                  disabled={isUserDetailBusy || isCreatingInviteToken || !canManageUsers}
-                  title={!canManageUsers ? managePermissionTitle : undefined}
+                  disabled={Boolean(inviteExpiryDisabledReason)}
+                  title={inviteExpiryDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, inviteExpiryDisabledReason)}
                   onChange={(event) => setInviteExpiresInMinutes(Number(event.target.value))}
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -1900,8 +2003,9 @@ function EditUserPage() {
                 <select
                   aria-label="Reset link expiry"
                   value={resetExpiresInMinutes}
-                  disabled={isUserDetailBusy || isCreatingResetToken || !canManageUsers}
-                  title={!canManageUsers ? managePermissionTitle : undefined}
+                  disabled={Boolean(resetExpiryDisabledReason)}
+                  title={resetExpiryDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, resetExpiryDisabledReason)}
                   onChange={(event) => setResetExpiresInMinutes(Number(event.target.value))}
                   className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -1918,8 +2022,10 @@ function EditUserPage() {
                 variant="outline"
                 onClick={() => void createInviteToken()}
                 disabled={!canCreateInviteToken}
-                title={!canManageUsers ? managePermissionTitle : undefined}
+                title={inviteTokenActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, inviteTokenActionDisabledReason)}
                 iconStart={<Mail className="size-4" />}
+                data-testid="user-detail-generate-invite-link"
               >
                 {isCreatingInviteToken ? 'Generating...' : inviteToken ? 'Generate new invite link' : 'Generate invite link'}
               </Button>
@@ -1928,17 +2034,21 @@ function EditUserPage() {
                 variant="primary"
                 onClick={() => void createResetToken()}
                 disabled={!canCreateResetToken}
-                title={!canManageUsers ? managePermissionTitle : undefined}
+                title={resetTokenActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, resetTokenActionDisabledReason)}
                 iconStart={<KeyRound className="size-4" />}
+                data-testid="user-detail-generate-reset-token"
               >
                 {isCreatingResetToken ? 'Generating...' : passwordResetToken ? 'Generate new reset token' : 'Generate reset token'}
               </Button>
               <a
                 href={resetMailTo}
-                aria-disabled={isUserDetailBusy || !canManageUsers}
+                aria-disabled={Boolean(recoveryDeliveryActionDisabledReason)}
+                {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, recoveryDeliveryActionDisabledReason)}
+                data-testid="user-detail-email-reset-instructions"
                 className={cn(
                   'inline-flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring',
-                  (isUserDetailBusy || !canManageUsers) && 'pointer-events-none opacity-60',
+                  recoveryDeliveryActionDisabledReason && 'pointer-events-none opacity-60',
                 )}
               >
                 <Mail className="h-4 w-4" />
@@ -1978,9 +2088,11 @@ function EditUserPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void copyUserDetailText(inviteToken.inviteUrl, 'Invite URL')}
-                    disabled={isUserDetailBusy || !canManageUsers}
-                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    disabled={Boolean(recoveryDeliveryActionDisabledReason)}
+                    title={recoveryDeliveryActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, recoveryDeliveryActionDisabledReason)}
                     iconStart={<Copy className="size-3.5" />}
+                    data-testid="user-detail-copy-invite-url"
                   >
                     Copy invite URL
                   </Button>
@@ -1989,9 +2101,11 @@ function EditUserPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void copyUserDetailText(inviteToken.token, 'Invite token')}
-                    disabled={isUserDetailBusy || !canManageUsers}
-                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    disabled={Boolean(recoveryDeliveryActionDisabledReason)}
+                    title={recoveryDeliveryActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, recoveryDeliveryActionDisabledReason)}
                     iconStart={<Copy className="size-3.5" />}
+                    data-testid="user-detail-copy-invite-token"
                   >
                     Copy invite token
                   </Button>
@@ -2038,9 +2152,11 @@ function EditUserPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void copyUserDetailText(passwordResetToken.resetUrl, 'Reset URL')}
-                    disabled={isUserDetailBusy || !canManageUsers}
-                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    disabled={Boolean(recoveryDeliveryActionDisabledReason)}
+                    title={recoveryDeliveryActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, recoveryDeliveryActionDisabledReason)}
                     iconStart={<Copy className="size-3.5" />}
+                    data-testid="user-detail-copy-reset-url"
                   >
                     Copy reset URL
                   </Button>
@@ -2049,9 +2165,11 @@ function EditUserPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => void copyUserDetailText(passwordResetToken.token, 'Reset token')}
-                    disabled={isUserDetailBusy || !canManageUsers}
-                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    disabled={Boolean(recoveryDeliveryActionDisabledReason)}
+                    title={recoveryDeliveryActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, recoveryDeliveryActionDisabledReason)}
                     iconStart={<Copy className="size-3.5" />}
+                    data-testid="user-detail-copy-reset-token"
                   >
                     Copy token
                   </Button>
@@ -2079,13 +2197,16 @@ function EditUserPage() {
             <div className="mt-4 grid gap-2">
               {LIFECYCLE_ACTIONS.map((action) => {
                 const active = action.status === formData.status;
+                const lifecycleActionDisabledReason = getLifecycleActionDisabledReason(action.status);
                 return (
                   <button
                     key={action.status}
                     type="button"
                     onClick={() => void handleLifecycleAction(action.status)}
                     disabled={isUserDetailBusy || active || isCurrentUser || !canManageUsers}
-                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    title={lifecycleActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailRecoveryActionStatusId, userDetailRecoveryActionStatus, lifecycleActionDisabledReason)}
+                    data-testid={`user-detail-lifecycle-${action.status}`}
                     className={cn(
                       'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60',
                       active ? 'border-primary bg-primary/5 text-primary' : 'border-border hover:bg-accent',
@@ -2099,7 +2220,19 @@ function EditUserPage() {
             </div>
           </section>
 
-          <section id="user-detail-mfa" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="user-detail-mfa">
+          <section
+            id="user-detail-mfa"
+            className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+            role="group"
+            aria-label="User MFA actions"
+            aria-describedby={userDetailMfaActionStatusId}
+            data-testid="user-detail-mfa"
+            data-action-state={userDetailMfaActionState}
+            data-action-status={userDetailMfaActionStatus}
+          >
+            <span id={userDetailMfaActionStatusId} className="sr-only" data-testid="user-detail-mfa-action-status" aria-live="polite">
+              {userDetailMfaActionStatus}
+            </span>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
@@ -2118,8 +2251,10 @@ function EditUserPage() {
                 variant="outline"
                 onClick={() => void loadUserMfa()}
                 disabled={isLoadingUserMfa || !canViewUsers}
-                title={!canViewUsers ? viewPermissionTitle : undefined}
+                title={mfaRefreshActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailMfaActionStatusId, userDetailMfaActionStatus, mfaRefreshActionDisabledReason)}
                 iconStart={<RefreshCw className={cn('size-3.5', isLoadingUserMfa && 'animate-spin')} />}
+                data-testid="user-detail-mfa-refresh"
               >
                 Refresh
               </Button>
@@ -2166,7 +2301,8 @@ function EditUserPage() {
                     variant={userMfa?.enabled ? 'outline' : 'primary'}
                     onClick={() => void saveUserMfa({ enabled: !userMfa?.enabled })}
                     disabled={!canManageUserMfa}
-                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    title={mfaManageActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailMfaActionStatusId, userDetailMfaActionStatus, mfaManageActionDisabledReason)}
                     iconStart={<Shield className="size-4" />}
                     data-testid="user-detail-mfa-toggle"
                   >
@@ -2177,7 +2313,8 @@ function EditUserPage() {
                     variant="outline"
                     onClick={() => void saveUserMfa({ enabled: true, generateRecoveryCodes: true })}
                     disabled={!canManageUserMfa}
-                    title={!canManageUsers ? managePermissionTitle : undefined}
+                    title={mfaManageActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailMfaActionStatusId, userDetailMfaActionStatus, mfaManageActionDisabledReason)}
                     iconStart={<RefreshCw className="size-4" />}
                     data-testid="user-detail-mfa-generate-recovery"
                   >
@@ -2199,8 +2336,9 @@ function EditUserPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => void copyUserDetailText(mfaRecoveryCodes.join('\n'), 'MFA recovery codes')}
-                        disabled={!canManageUsers}
-                        title={!canManageUsers ? managePermissionTitle : undefined}
+                        disabled={Boolean(mfaRecoveryCopyDisabledReason)}
+                        title={mfaRecoveryCopyDisabledReason || undefined}
+                        {...userDetailActionMetadata(userDetailMfaActionStatusId, userDetailMfaActionStatus, mfaRecoveryCopyDisabledReason)}
                         iconStart={<Copy className="size-3.5" />}
                         data-testid="user-detail-mfa-copy-recovery"
                       >
@@ -2229,8 +2367,16 @@ function EditUserPage() {
           <section
             id="user-detail-ownership"
             className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+            role="group"
+            aria-label="User ownership transfer action"
+            aria-describedby={userDetailOwnershipActionStatusId}
             data-testid="user-detail-ownership-transfer"
+            data-action-state={ownershipTransferDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={userDetailOwnershipActionStatus}
           >
+            <span id={userDetailOwnershipActionStatusId} className="sr-only" data-testid="user-detail-ownership-action-status" aria-live="polite">
+              {userDetailOwnershipActionStatus}
+            </span>
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-violet-50 p-2 text-violet-700">
                 <Crown className="h-5 w-5" />
@@ -2267,7 +2413,8 @@ function EditUserPage() {
               className="mt-4 w-full"
               onClick={() => void handleOwnershipTransfer()}
               disabled={!canTransferOwnership}
-              title={!canTransferOwnership ? 'Ownership transfer requires a signed-in owner and a separate active target user.' : undefined}
+              title={ownershipTransferDisabledReason || undefined}
+              {...userDetailActionMetadata(userDetailOwnershipActionStatusId, userDetailOwnershipActionStatus, ownershipTransferDisabledReason)}
               data-testid="user-detail-transfer-ownership-button"
               iconStart={<Crown className="size-4" />}
             >
@@ -2284,7 +2431,16 @@ function EditUserPage() {
               'rounded-lg border p-5 scroll-mt-24',
               isCurrentUser ? 'border-primary/20 bg-primary/10' : 'border-red-200 bg-red-50',
             )}
+            role="group"
+            aria-label="Destructive user actions"
+            aria-describedby={userDetailDangerActionStatusId}
+            data-testid="user-detail-danger"
+            data-action-state={userDetailDangerActionDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={userDetailDangerActionStatus}
           >
+            <span id={userDetailDangerActionStatusId} className="sr-only" data-testid="user-detail-danger-action-status" aria-live="polite">
+              {userDetailDangerActionStatus}
+            </span>
             <h2 className={cn('text-sm font-semibold', isCurrentUser ? 'text-primary' : 'text-red-800')}>Danger zone</h2>
             <p className={cn('mt-1 text-sm', isCurrentUser ? 'text-primary' : 'text-red-700')}>
               {isCurrentUser
@@ -2295,7 +2451,9 @@ function EditUserPage() {
               type="button"
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isUserDetailBusy || isCurrentUser || !canDeleteUsers}
-              title={!canDeleteUsers ? deletePermissionTitle : undefined}
+              title={userDetailDangerActionDisabledReason || undefined}
+              {...userDetailActionMetadata(userDetailDangerActionStatusId, userDetailDangerActionStatus, userDetailDangerActionDisabledReason)}
+              data-testid="user-detail-remove-user"
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash2 className="h-4 w-4" />
@@ -2350,6 +2508,7 @@ function EditUserPage() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="user-detail-delete-confirm-title"
+          aria-describedby="user-detail-delete-confirm-description"
           data-testid="user-detail-delete-confirm-dialog"
         >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
@@ -2359,7 +2518,7 @@ function EditUserPage() {
               </span>
               <div>
                 <h2 id="user-detail-delete-confirm-title" className="text-lg font-semibold text-foreground">Remove {user.fullName}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p id="user-detail-delete-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   This account will lose Backy admin access immediately. Content history stays intact.
                 </p>
               </div>
@@ -2377,7 +2536,12 @@ function EditUserPage() {
                 type="button"
                 onClick={() => void handleDelete()}
                 disabled={isUserDetailBusy || !canDeleteUsers}
-                title={!canDeleteUsers ? deletePermissionTitle : undefined}
+                title={userDetailDeletePermissionDisabledReason || userDetailBusyDisabledReason || undefined}
+                aria-describedby="user-detail-delete-confirm-description"
+                data-action-state={userDetailDeletePermissionDisabledReason || userDetailBusyDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={userDetailDangerActionStatus}
+                data-disabled-reason={userDetailDeletePermissionDisabledReason || userDetailBusyDisabledReason || undefined}
+                data-testid="user-detail-confirm-remove-user"
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? 'Removing...' : 'Remove user'}
