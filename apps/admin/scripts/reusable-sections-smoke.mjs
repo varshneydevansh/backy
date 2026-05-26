@@ -50,6 +50,22 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes('data-testid="reusable-section-portability-readiness"'), 'Reusable sections command center must render portability readiness');
   assert(source.includes('data-testid="reusable-section-portability-action-plan"'), 'Reusable sections command center must keep the portability action-plan copy control');
   assert(
+    source.includes("const reusableSectionsCommandActionStatusId = 'reusable-sections-command-action-status';") &&
+      source.includes("const reusableSectionsWorkflowActionStatusId = 'reusable-sections-workflow-action-status';") &&
+      source.includes('data-testid="reusable-sections-command-action-status"') &&
+      source.includes('data-testid="reusable-sections-workflow-action-status"') &&
+      source.includes('data-testid="reusable-sections-copy-manifest"') &&
+      source.includes('data-testid="reusable-sections-command-refresh"') &&
+      source.includes('data-testid="reusable-sections-workflow-export-visible"') &&
+      source.includes('data-testid="reusable-sections-workflow-import"') &&
+      source.includes('data-testid="reusable-section-workflow-dry-run"') &&
+      source.includes('data-testid="reusable-section-workflow-refresh-instances"') &&
+      source.includes('data-testid={`reusable-section-version-restore-${version.version}`}') &&
+      source.includes('data-action-status={actionStatus(') &&
+      source.includes('data-action-state={actionStateFromDisabledReason('),
+    'Reusable sections command/workflow controls must publish explicit action status, state, and stable hooks instead of relying on disabled styling',
+  );
+  assert(
     source.includes('data-testid="reusable-sections-workflows-details"') &&
       source.includes('data-testid="reusable-sections-workflow-panels"') &&
       source.includes('Portable exports, version restore, metadata, and synced-instance refreshes.') &&
@@ -726,10 +742,43 @@ const assertReusableSectionsLayout = async (client) => {
     const portabilityText = portabilityDetails?.textContent || '';
     const workflowDetails = document.querySelector('[data-testid="reusable-sections-workflows-details"]');
     const workflowText = workflowDetails?.textContent || '';
+    const readAction = (testId) => {
+      const element = document.querySelector('[data-testid="' + testId + '"]');
+      return {
+        testId,
+        exists: element instanceof HTMLElement,
+        describedBy: element?.getAttribute('aria-describedby') || '',
+        state: element?.getAttribute('data-action-state') || '',
+        status: element?.getAttribute('data-action-status') || '',
+        reason: element?.getAttribute('data-disabled-reason') || '',
+        disabled: element instanceof HTMLButtonElement ? element.disabled : null,
+      };
+    };
+    const commandStatus = document.querySelector('[data-testid="reusable-sections-command-action-status"]');
+    const workflowStatus = document.querySelector('[data-testid="reusable-sections-workflow-action-status"]');
+    const commandActions = [
+      'reusable-sections-copy-manifest',
+      'reusable-sections-copy-portability-plan',
+      'reusable-sections-export-visible',
+      'reusable-sections-import',
+      'reusable-sections-command-refresh',
+      'reusable-section-portability-action-plan',
+    ].map(readAction);
+    const workflowActions = [
+      'reusable-sections-workflow-export-visible',
+      'reusable-sections-export-selected',
+      'reusable-sections-workflow-import',
+      'reusable-section-workflow-load',
+      'reusable-section-workflow-dry-run',
+      'reusable-section-workflow-refresh-instances',
+    ].map(readAction);
     return {
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="reusable-sections-command-center"]')),
+      commandStatusId: commandStatus?.id || '',
+      commandStatusText: commandStatus?.textContent?.trim() || '',
+      commandActions,
       portabilityReadinessCollapsed: portabilityDetails instanceof HTMLDetailsElement &&
         portabilityDetails.open === false &&
         portabilityDetails.getAttribute('data-default-collapsed') === 'true',
@@ -760,13 +809,38 @@ const assertReusableSectionsLayout = async (client) => {
         workflowText.includes('Import, versions, and instances') &&
         workflowText.includes('Show workflows') &&
         workflowText.includes('Instance propagation'),
+      workflowStatusId: workflowStatus?.id || '',
+      workflowStatusText: workflowStatus?.textContent?.trim() || '',
+      workflowActions,
     };
   })()`);
 
   assert(layout.scrollWidth <= layout.width + 8, `Reusable sections page has horizontal overflow: ${JSON.stringify(layout)}`);
+  const validActionStates = new Set(['ready', 'busy', 'blocked']);
+  const actionContractOk = (statusId, action) => (
+    action.exists &&
+    action.describedBy === statusId &&
+    validActionStates.has(action.state) &&
+    action.status.length > 0 &&
+    (action.disabled ? action.reason.length > 0 || action.state === 'busy' : action.state === 'ready')
+  );
   assert(
     layout.hasCommandCenter && layout.portabilityReadinessCollapsed && layout.hasPortabilityReadiness && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasVisualEditor && layout.workflowCollapsed && layout.hasWorkflowPanel,
     `Reusable sections page missing expected regions: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.commandStatusId === 'reusable-sections-command-action-status' &&
+      layout.commandStatusText.includes('Copy manifest available.') &&
+      layout.commandStatusText.includes('Refresh reusable sections available.') &&
+      layout.commandActions.every((action) => actionContractOk(layout.commandStatusId, action)),
+    `Reusable sections command actions are missing explicit ready/busy/blocked status: ${JSON.stringify(layout.commandActions)}`,
+  );
+  assert(
+    layout.workflowStatusId === 'reusable-sections-workflow-action-status' &&
+      layout.workflowStatusText.includes('Export visible reusable sections available.') &&
+      layout.workflowStatusText.includes('Load workflow state') &&
+      layout.workflowActions.every((action) => actionContractOk(layout.workflowStatusId, action)),
+    `Reusable sections workflow actions are missing explicit ready/busy/blocked status: ${JSON.stringify(layout.workflowActions)}`,
   );
   return layout;
 };
@@ -1188,6 +1262,56 @@ const exerciseReusableSectionWorkflows = async (client, section, pageIds = []) =
       }
       await sleep(250);
     }
+
+    const workflowActionState = await evaluate(client, `(() => {
+      const status = document.querySelector('[data-testid="reusable-sections-workflow-action-status"]');
+      const readAction = (testId) => {
+        const element = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          testId,
+          exists: element instanceof HTMLElement,
+          describedBy: element?.getAttribute('aria-describedby') || '',
+          state: element?.getAttribute('data-action-state') || '',
+          status: element?.getAttribute('data-action-status') || '',
+          reason: element?.getAttribute('data-disabled-reason') || '',
+          disabled: element instanceof HTMLButtonElement ? element.disabled : null,
+        };
+      };
+      return {
+        statusId: status?.id || '',
+        statusText: status?.textContent?.trim() || '',
+        actions: [
+          'reusable-section-workflow-load',
+          'reusable-section-workflow-dry-run',
+          'reusable-section-workflow-refresh-instances',
+          'reusable-section-metadata-save',
+        ].map(readAction),
+        restoreActions: Array.from(document.querySelectorAll('[data-testid^="reusable-section-version-restore-"]')).map((element) => ({
+          testId: element.getAttribute('data-testid') || '',
+          describedBy: element.getAttribute('aria-describedby') || '',
+          state: element.getAttribute('data-action-state') || '',
+          status: element.getAttribute('data-action-status') || '',
+          reason: element.getAttribute('data-disabled-reason') || '',
+          disabled: element instanceof HTMLButtonElement ? element.disabled : null,
+        })),
+      };
+    })()`);
+    const validWorkflowActionStates = new Set(['ready', 'busy', 'blocked']);
+    const workflowActionOk = (action) => (
+      action.exists &&
+      action.describedBy === workflowActionState.statusId &&
+      validWorkflowActionStates.has(action.state) &&
+      action.status.length > 0 &&
+      (action.disabled ? action.reason.length > 0 || action.state === 'busy' : action.state === 'ready')
+    );
+    assert(
+      workflowActionState.statusId === 'reusable-sections-workflow-action-status' &&
+        workflowActionState.statusText.includes('Save metadata available.') &&
+        workflowActionState.actions.every(workflowActionOk) &&
+        workflowActionState.restoreActions.length > 0 &&
+        workflowActionState.restoreActions.every((action) => action.describedBy === workflowActionState.statusId && validWorkflowActionStates.has(action.state) && action.status.length > 0),
+      `Reusable section workflow controls did not expose complete action metadata: ${JSON.stringify(workflowActionState)}`,
+    );
 
     const metadataSaved = await clickReusableSectionControl(client, 'reusable-section-metadata-save');
     assert(metadataSaved.ok, `Unable to save reusable section metadata: ${JSON.stringify(metadataSaved)}`);

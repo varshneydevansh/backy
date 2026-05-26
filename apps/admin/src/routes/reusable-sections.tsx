@@ -174,6 +174,19 @@ const stringOrEmpty = (value: unknown): string => (
 
 const actionState = (disabledReason: string) => (disabledReason ? 'blocked' : 'ready');
 
+const actionStateFromDisabledReason = (disabledReason: string) => {
+  if (!disabledReason) return 'ready';
+  return /\bis (updating|running|loading|saving|creating|deleting)\b|temporarily unavailable|while Backy updates/i.test(disabledReason) ? 'busy' : 'blocked';
+};
+
+const actionStatus = (availableText: string, disabledReason: string) => {
+  if (!disabledReason) return availableText;
+  const unavailableText = availableText
+    .replace(/\savailable\.$/, ' unavailable')
+    .replace(/\savailable$/, ' unavailable');
+  return `${unavailableText}: ${disabledReason}`;
+};
+
 const safeActionId = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '-');
 
 const metadataDraftFromLibrary = (metadata: ReusableSectionMetadata | null): SectionMetadataDraft => {
@@ -836,6 +849,54 @@ function ReusableSectionsRoute() {
     [reusableSectionPortabilityPack],
   );
   const reusableSectionPortabilityReadiness = reusableSectionPortabilityPack.readiness;
+  const reusableSectionsCommandActionStatusId = 'reusable-sections-command-action-status';
+  const reusableSectionsWorkflowActionStatusId = 'reusable-sections-workflow-action-status';
+  const reusableSectionsBusyReason = isBusy ? 'Reusable section library is updating.' : '';
+  const reusableSectionsWorkflowBusyReason = isWorkflowBusy ? 'Reusable section workflow is running.' : '';
+  const reusableSectionsViewDisabledReason = reusableSectionsBusyReason || (!canViewSections
+    ? viewPermissionTitle || 'Your account cannot view reusable sections.'
+    : '');
+  const reusableSectionsEditDisabledReason = reusableSectionsBusyReason || (!canEditSections
+    ? editPermissionTitle || 'Your account cannot edit reusable sections.'
+    : '');
+  const reusableSectionsWorkflowViewDisabledReason = reusableSectionsWorkflowBusyReason || (!canViewSections
+    ? viewPermissionTitle || 'Your account cannot view reusable section workflows.'
+    : '');
+  const reusableSectionsWorkflowEditDisabledReason = reusableSectionsWorkflowBusyReason || (!canEditSections
+    ? editPermissionTitle || 'Your account cannot edit reusable section workflows.'
+    : '');
+  const reusableSectionsExportVisibleDisabledReason = reusableSectionsWorkflowViewDisabledReason || (filteredSections.length === 0
+    ? 'No visible reusable sections to export.'
+    : '');
+  const reusableSectionsExportSelectedDisabledReason = reusableSectionsWorkflowViewDisabledReason || (!activeSection
+    ? 'Select a reusable section before exporting it.'
+    : '');
+  const reusableSectionsImportDisabledReason = reusableSectionsWorkflowEditDisabledReason;
+  const reusableSectionsWorkflowLoadDisabledReason = reusableSectionsWorkflowViewDisabledReason || (!activeSection
+    ? 'Select a reusable section before loading workflow state.'
+    : '');
+  const reusableSectionsInstanceRefreshDisabledReason = reusableSectionsWorkflowEditDisabledReason || (!activeSection
+    ? 'Select a reusable section before refreshing synced instances.'
+    : '');
+  const reusableSectionsMetadataSaveDisabledReason = reusableSectionsWorkflowEditDisabledReason || (!activeSection
+    ? 'Select a reusable section before saving metadata.'
+    : '');
+  const reusableSectionsCommandActionStatus = [
+    actionStatus('Copy manifest available.', reusableSectionsViewDisabledReason),
+    actionStatus('Copy portability plan available.', reusableSectionsViewDisabledReason),
+    actionStatus('Export visible reusable sections available.', reusableSectionsExportVisibleDisabledReason),
+    actionStatus('Import JSON available.', reusableSectionsImportDisabledReason),
+    actionStatus('Refresh reusable sections available.', reusableSectionsViewDisabledReason),
+  ].join(' ');
+  const reusableSectionsWorkflowActionStatus = [
+    actionStatus('Export visible reusable sections available.', reusableSectionsExportVisibleDisabledReason),
+    actionStatus('Export selected reusable section available.', reusableSectionsExportSelectedDisabledReason),
+    actionStatus('Import JSON available.', reusableSectionsImportDisabledReason),
+    actionStatus('Load workflow state available.', reusableSectionsWorkflowLoadDisabledReason),
+    actionStatus('Dry run instance refresh available.', reusableSectionsInstanceRefreshDisabledReason),
+    actionStatus('Refresh synced instances available.', reusableSectionsInstanceRefreshDisabledReason),
+    actionStatus('Save metadata available.', reusableSectionsMetadataSaveDisabledReason),
+  ].join(' ');
 
   const updateRouteSearch = (next: ReusableSectionsSearchUpdate) => {
     const nextSectionId = next.sectionId === null ? null : next.sectionId ?? selectedSectionId;
@@ -1509,7 +1570,18 @@ function ReusableSectionsRoute() {
       description="Manage saved editor sections and frontend-derived UI blocks for every custom site."
       action={
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => void loadSections()} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button
+            size="sm"
+            onClick={() => void loadSections()}
+            disabled={Boolean(reusableSectionsViewDisabledReason)}
+            title={reusableSectionsViewDisabledReason || undefined}
+            aria-describedby={reusableSectionsCommandActionStatusId}
+            data-testid="reusable-sections-header-refresh"
+            data-action-state={actionStateFromDisabledReason(reusableSectionsViewDisabledReason)}
+            data-action-status={actionStatus('Refresh reusable sections available.', reusableSectionsViewDisabledReason)}
+            data-disabled-reason={reusableSectionsViewDisabledReason || undefined}
+            iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+          >
             Refresh
           </Button>
           <Button
@@ -1524,8 +1596,13 @@ function ReusableSectionsRoute() {
               setFormFromSection(null);
               updateRouteSearch({ sectionId: null });
             }}
-            disabled={isBusy || !canEditSections}
-            title={!canEditSections ? editPermissionTitle : undefined}
+            disabled={Boolean(reusableSectionsEditDisabledReason)}
+            title={reusableSectionsEditDisabledReason || undefined}
+            aria-describedby={reusableSectionsCommandActionStatusId}
+            data-testid="reusable-sections-header-new"
+            data-action-state={actionStateFromDisabledReason(reusableSectionsEditDisabledReason)}
+            data-action-status={actionStatus('New reusable section available.', reusableSectionsEditDisabledReason)}
+            data-disabled-reason={reusableSectionsEditDisabledReason || undefined}
             iconStart={<Plus className="size-4" />}
           >
             New section
@@ -1600,6 +1677,9 @@ function ReusableSectionsRoute() {
       ) : null}
 
       <section className="mb-5 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="reusable-sections-command-center">
+        <span id={reusableSectionsCommandActionStatusId} className="sr-only" data-testid="reusable-sections-command-action-status" aria-live="polite">
+          {reusableSectionsCommandActionStatus}
+        </span>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1613,19 +1693,74 @@ function ReusableSectionsRoute() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => void copyText(handoffText, 'Reusable sections handoff manifest')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
+            <Button
+              size="sm"
+              onClick={() => void copyText(handoffText, 'Reusable sections handoff manifest')}
+              disabled={Boolean(reusableSectionsViewDisabledReason)}
+              title={reusableSectionsViewDisabledReason || undefined}
+              aria-describedby={reusableSectionsCommandActionStatusId}
+              data-testid="reusable-sections-copy-manifest"
+              data-action-state={actionStateFromDisabledReason(reusableSectionsViewDisabledReason)}
+              data-action-status={actionStatus('Copy manifest available.', reusableSectionsViewDisabledReason)}
+              data-disabled-reason={reusableSectionsViewDisabledReason || undefined}
+              iconStart={<Copy className="size-4" />}
+            >
               Copy manifest
             </Button>
-            <Button size="sm" onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />} data-testid="reusable-sections-copy-portability-plan">
+            <Button
+              size="sm"
+              onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')}
+              disabled={Boolean(reusableSectionsViewDisabledReason)}
+              title={reusableSectionsViewDisabledReason || undefined}
+              aria-describedby={reusableSectionsCommandActionStatusId}
+              data-testid="reusable-sections-copy-portability-plan"
+              data-action-state={actionStateFromDisabledReason(reusableSectionsViewDisabledReason)}
+              data-action-status={actionStatus('Copy portability plan available.', reusableSectionsViewDisabledReason)}
+              data-disabled-reason={reusableSectionsViewDisabledReason || undefined}
+              iconStart={<Copy className="size-4" />}
+            >
               Copy portability plan
             </Button>
-            <Button size="sm" onClick={() => void downloadReusableSectionsExport(false)} disabled={isWorkflowBusy || filteredSections.length === 0 || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />} data-testid="reusable-sections-export-visible">
+            <Button
+              size="sm"
+              onClick={() => void downloadReusableSectionsExport(false)}
+              disabled={Boolean(reusableSectionsExportVisibleDisabledReason)}
+              title={reusableSectionsExportVisibleDisabledReason || undefined}
+              aria-describedby={reusableSectionsCommandActionStatusId}
+              data-testid="reusable-sections-export-visible"
+              data-action-state={actionStateFromDisabledReason(reusableSectionsExportVisibleDisabledReason)}
+              data-action-status={actionStatus('Export visible reusable sections available.', reusableSectionsExportVisibleDisabledReason)}
+              data-disabled-reason={reusableSectionsExportVisibleDisabledReason || undefined}
+              iconStart={<Download className="size-4" />}
+            >
               Export visible
             </Button>
-            <Button size="sm" onClick={() => importInputRef.current?.click()} disabled={isWorkflowBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />} data-testid="reusable-sections-import">
+            <Button
+              size="sm"
+              onClick={() => importInputRef.current?.click()}
+              disabled={Boolean(reusableSectionsImportDisabledReason)}
+              title={reusableSectionsImportDisabledReason || undefined}
+              aria-describedby={reusableSectionsCommandActionStatusId}
+              data-testid="reusable-sections-import"
+              data-action-state={actionStateFromDisabledReason(reusableSectionsImportDisabledReason)}
+              data-action-status={actionStatus('Import JSON available.', reusableSectionsImportDisabledReason)}
+              data-disabled-reason={reusableSectionsImportDisabledReason || undefined}
+              iconStart={<Upload className="size-4" />}
+            >
               Import JSON
             </Button>
-            <Button size="sm" onClick={() => void loadSections()} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+            <Button
+              size="sm"
+              onClick={() => void loadSections()}
+              disabled={Boolean(reusableSectionsViewDisabledReason)}
+              title={reusableSectionsViewDisabledReason || undefined}
+              aria-describedby={reusableSectionsCommandActionStatusId}
+              data-testid="reusable-sections-command-refresh"
+              data-action-state={actionStateFromDisabledReason(reusableSectionsViewDisabledReason)}
+              data-action-status={actionStatus('Refresh reusable sections available.', reusableSectionsViewDisabledReason)}
+              data-disabled-reason={reusableSectionsViewDisabledReason || undefined}
+              iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+            >
               Refresh
             </Button>
           </div>
@@ -1664,7 +1799,18 @@ function ReusableSectionsRoute() {
               <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
                 Detailed evidence for portable reusable-section exports, restore/version handoff, stale instance refreshes, metadata, and custom frontend discovery.
               </p>
-              <Button size="sm" onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />} data-testid="reusable-section-portability-action-plan">
+              <Button
+                size="sm"
+                onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')}
+                disabled={Boolean(reusableSectionsViewDisabledReason)}
+                title={reusableSectionsViewDisabledReason || undefined}
+                aria-describedby={reusableSectionsCommandActionStatusId}
+                data-testid="reusable-section-portability-action-plan"
+                data-action-state={actionStateFromDisabledReason(reusableSectionsViewDisabledReason)}
+                data-action-status={actionStatus('Copy portability action plan available.', reusableSectionsViewDisabledReason)}
+                data-disabled-reason={reusableSectionsViewDisabledReason || undefined}
+                iconStart={<Copy className="size-4" />}
+              >
                 Copy action plan
               </Button>
             </div>
@@ -1779,6 +1925,9 @@ function ReusableSectionsRoute() {
           }
         />
         <PanelContent>
+          <span id={reusableSectionsWorkflowActionStatusId} className="sr-only" data-testid="reusable-sections-workflow-action-status" aria-live="polite">
+            {reusableSectionsWorkflowActionStatus}
+          </span>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div className="space-y-3 rounded-lg border border-border bg-background p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1789,13 +1938,46 @@ function ReusableSectionsRoute() {
                 {isWorkflowLoading ? <RefreshCw className="size-4 animate-spin text-muted-foreground" /> : null}
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => void downloadReusableSectionsExport(false)} disabled={isWorkflowBusy || filteredSections.length === 0 || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
+                <Button
+                  size="sm"
+                  onClick={() => void downloadReusableSectionsExport(false)}
+                  disabled={Boolean(reusableSectionsExportVisibleDisabledReason)}
+                  title={reusableSectionsExportVisibleDisabledReason || undefined}
+                  aria-describedby={reusableSectionsWorkflowActionStatusId}
+                  data-testid="reusable-sections-workflow-export-visible"
+                  data-action-state={actionStateFromDisabledReason(reusableSectionsExportVisibleDisabledReason)}
+                  data-action-status={actionStatus('Export visible reusable sections available.', reusableSectionsExportVisibleDisabledReason)}
+                  data-disabled-reason={reusableSectionsExportVisibleDisabledReason || undefined}
+                  iconStart={<Download className="size-4" />}
+                >
                   Export visible
                 </Button>
-                <Button size="sm" onClick={() => void downloadReusableSectionsExport(true)} disabled={isWorkflowBusy || !activeSection || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />} data-testid="reusable-sections-export-selected">
+                <Button
+                  size="sm"
+                  onClick={() => void downloadReusableSectionsExport(true)}
+                  disabled={Boolean(reusableSectionsExportSelectedDisabledReason)}
+                  title={reusableSectionsExportSelectedDisabledReason || undefined}
+                  aria-describedby={reusableSectionsWorkflowActionStatusId}
+                  data-testid="reusable-sections-export-selected"
+                  data-action-state={actionStateFromDisabledReason(reusableSectionsExportSelectedDisabledReason)}
+                  data-action-status={actionStatus('Export selected reusable section available.', reusableSectionsExportSelectedDisabledReason)}
+                  data-disabled-reason={reusableSectionsExportSelectedDisabledReason || undefined}
+                  iconStart={<Download className="size-4" />}
+                >
                   Export selected
                 </Button>
-                <Button size="sm" onClick={() => importInputRef.current?.click()} disabled={isWorkflowBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
+                <Button
+                  size="sm"
+                  onClick={() => importInputRef.current?.click()}
+                  disabled={Boolean(reusableSectionsImportDisabledReason)}
+                  title={reusableSectionsImportDisabledReason || undefined}
+                  aria-describedby={reusableSectionsWorkflowActionStatusId}
+                  data-testid="reusable-sections-workflow-import"
+                  data-action-state={actionStateFromDisabledReason(reusableSectionsImportDisabledReason)}
+                  data-action-status={actionStatus('Import JSON available.', reusableSectionsImportDisabledReason)}
+                  data-disabled-reason={reusableSectionsImportDisabledReason || undefined}
+                  iconStart={<Upload className="size-4" />}
+                >
                   Import JSON
                 </Button>
               </div>
@@ -1826,13 +2008,46 @@ function ReusableSectionsRoute() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => activeSection ? void loadReusableSectionWorkflow(activeSection.id) : undefined} disabled={isWorkflowBusy || !activeSection || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<RefreshCw className="size-4" />} data-testid="reusable-section-workflow-load">
+                <Button
+                  size="sm"
+                  onClick={() => activeSection ? void loadReusableSectionWorkflow(activeSection.id) : undefined}
+                  disabled={Boolean(reusableSectionsWorkflowLoadDisabledReason)}
+                  title={reusableSectionsWorkflowLoadDisabledReason || undefined}
+                  aria-describedby={reusableSectionsWorkflowActionStatusId}
+                  data-testid="reusable-section-workflow-load"
+                  data-action-state={actionStateFromDisabledReason(reusableSectionsWorkflowLoadDisabledReason)}
+                  data-action-status={actionStatus('Load workflow state available.', reusableSectionsWorkflowLoadDisabledReason)}
+                  data-disabled-reason={reusableSectionsWorkflowLoadDisabledReason || undefined}
+                  iconStart={<RefreshCw className="size-4" />}
+                >
                   Load workflow
                 </Button>
-                <Button size="sm" onClick={() => void refreshSectionInstances(true)} disabled={isWorkflowBusy || !activeSection || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined}>
+                <Button
+                  size="sm"
+                  onClick={() => void refreshSectionInstances(true)}
+                  disabled={Boolean(reusableSectionsInstanceRefreshDisabledReason)}
+                  title={reusableSectionsInstanceRefreshDisabledReason || undefined}
+                  aria-describedby={reusableSectionsWorkflowActionStatusId}
+                  data-testid="reusable-section-workflow-dry-run"
+                  data-action-state={actionStateFromDisabledReason(reusableSectionsInstanceRefreshDisabledReason)}
+                  data-action-status={actionStatus('Dry run instance refresh available.', reusableSectionsInstanceRefreshDisabledReason)}
+                  data-disabled-reason={reusableSectionsInstanceRefreshDisabledReason || undefined}
+                >
                   Dry run
                 </Button>
-                <Button size="sm" variant="primary" onClick={() => void refreshSectionInstances(false)} disabled={isWorkflowBusy || !activeSection || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<RotateCcw className="size-4" />}>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => void refreshSectionInstances(false)}
+                  disabled={Boolean(reusableSectionsInstanceRefreshDisabledReason)}
+                  title={reusableSectionsInstanceRefreshDisabledReason || undefined}
+                  aria-describedby={reusableSectionsWorkflowActionStatusId}
+                  data-testid="reusable-section-workflow-refresh-instances"
+                  data-action-state={actionStateFromDisabledReason(reusableSectionsInstanceRefreshDisabledReason)}
+                  data-action-status={actionStatus('Refresh synced instances available.', reusableSectionsInstanceRefreshDisabledReason)}
+                  data-disabled-reason={reusableSectionsInstanceRefreshDisabledReason || undefined}
+                  iconStart={<RotateCcw className="size-4" />}
+                >
                   Refresh instances
                 </Button>
               </div>
@@ -1850,19 +2065,35 @@ function ReusableSectionsRoute() {
                   <History className="size-4 text-muted-foreground" />
                 </div>
                 <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-                  {(sectionVersions?.versions || []).slice(0, 8).map((version) => (
-                    <div key={`${version.version}-${version.updatedAt}`} className="rounded-md border border-border p-3 text-xs">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="font-semibold text-foreground">v{version.version}{version.current ? ' current' : ''}</div>
-                          <div className="mt-1 truncate text-muted-foreground">{version.name} · {formatDate(version.updatedAt)}</div>
+                  {(sectionVersions?.versions || []).slice(0, 8).map((version) => {
+                    const versionRestoreDisabledReason = reusableSectionsWorkflowEditDisabledReason || (version.current
+                      ? 'This reusable section version is already current.'
+                      : '');
+                    return (
+                      <div key={`${version.version}-${version.updatedAt}`} className="rounded-md border border-border p-3 text-xs">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-foreground">v{version.version}{version.current ? ' current' : ''}</div>
+                            <div className="mt-1 truncate text-muted-foreground">{version.name} · {formatDate(version.updatedAt)}</div>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => void restoreSectionVersion(version.version)}
+                            disabled={Boolean(versionRestoreDisabledReason)}
+                            title={versionRestoreDisabledReason || undefined}
+                            aria-describedby={reusableSectionsWorkflowActionStatusId}
+                            data-testid={`reusable-section-version-restore-${version.version}`}
+                            data-action-state={actionStateFromDisabledReason(versionRestoreDisabledReason)}
+                            data-action-status={actionStatus(`Restore version ${version.version} available.`, versionRestoreDisabledReason)}
+                            data-disabled-reason={versionRestoreDisabledReason || undefined}
+                            iconStart={<RotateCcw className="size-3.5" />}
+                          >
+                            Restore
+                          </Button>
                         </div>
-                        <Button size="sm" onClick={() => void restoreSectionVersion(version.version)} disabled={isWorkflowBusy || version.current || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<RotateCcw className="size-3.5" />}>
-                          Restore
-                        </Button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {sectionVersions && sectionVersions.versions.length === 0 ? (
                     <EmptyState
                       icon={History}
@@ -1942,7 +2173,19 @@ function ReusableSectionsRoute() {
                   />
                 </label>
                 <div className="mt-3 flex justify-end">
-                  <Button size="sm" variant="primary" onClick={() => void saveSectionMetadata()} disabled={isWorkflowBusy || !canEditSections} title={!canEditSections ? editPermissionTitle : undefined} iconStart={<Save className="size-4" />} data-testid="reusable-section-metadata-save">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => void saveSectionMetadata()}
+                    disabled={Boolean(reusableSectionsMetadataSaveDisabledReason)}
+                    title={reusableSectionsMetadataSaveDisabledReason || undefined}
+                    aria-describedby={reusableSectionsWorkflowActionStatusId}
+                    data-testid="reusable-section-metadata-save"
+                    data-action-state={actionStateFromDisabledReason(reusableSectionsMetadataSaveDisabledReason)}
+                    data-action-status={actionStatus('Save metadata available.', reusableSectionsMetadataSaveDisabledReason)}
+                    data-disabled-reason={reusableSectionsMetadataSaveDisabledReason || undefined}
+                    iconStart={<Save className="size-4" />}
+                  >
                     Save metadata
                   </Button>
                 </div>
