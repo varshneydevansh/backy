@@ -397,6 +397,9 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('providerCertificationRuntimeGapDetail') &&
       source.includes('ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV') &&
       source.includes('ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT') &&
+      source.includes('ORDER_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV') &&
+      source.includes('ORDER_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV') &&
+      source.includes('ORDER_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND') &&
       source.includes('operatorEvidencePacket: providerCertificationEvidencePacket') &&
       source.includes('orderEvidence') &&
       source.includes('endpointEvidence') &&
@@ -417,7 +420,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('buildOrderProviderCertificationEnvTemplate') &&
       source.includes('operatorCommandTemplate') &&
       source.includes('operatorEnvTemplate') &&
-      source.includes('backy.order-provider-certification-env-template.v1') &&
+      source.includes('backy.commerce-provider-certification-env-template.v1') &&
+      source.includes('.env.backy-commerce-provider-certification') &&
       source.includes('Copy env template') &&
       source.includes('orders-provider-certification-payment-toggle') &&
       source.includes('data-testid="orders-provider-certification-tax-provider-select"') &&
@@ -426,6 +430,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER') &&
       source.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
       source.includes('BACKY_COMMERCE_CERTIFICATION_BASE_URL') &&
+      source.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH') &&
+      source.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED') &&
       source.includes('npm run test:commerce-provider-certification-preflight-contract') &&
       source.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification') &&
       source.includes('data-testid="orders-provider-runtime-evidence"') &&
@@ -2503,12 +2509,14 @@ const assertOrdersLayout = async (client) => {
           artifactOutput: text.includes('Artifact output'),
           artifactOutputEnv: text.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT'),
           artifactOutputPath: text.includes('artifacts/backy-commerce-provider-certification.json'),
+          artifactVerifierPathEnv: text.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH'),
+          artifactVerifierRequiredEnv: text.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED'),
           requiredSiteSelector: text.includes('Required site selector'),
           nextOperatorAction: text.includes('Next operator action'),
           nextOperatorCredentialAction: text.includes('Configure order provider credentials'),
           commandBuilderText: text.includes('Order certification command builder'),
           envTemplateText: text.includes('Env template') || text.includes('ENV TEMPLATE'),
-          envTemplateSchema: text.includes('backy.order-provider-certification-env-template.v1'),
+          envTemplateSchema: text.includes('backy.commerce-provider-certification-env-template.v1'),
           certificationRequiredEnv: text.includes('BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1'),
           paymentProviderEnv: text.includes('BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER'),
           siteTargetEnv: text.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),

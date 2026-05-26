@@ -424,6 +424,12 @@ jobs:
       - name: Run Settings provider certification
         run: npm run ci:settings-provider-certification
 
+      - name: Verify Settings provider certification artifact
+        env:
+          BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-settings-provider-certification.json
+          BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED: '1'
+        run: npm run doctor:release-certification
+
       - name: Upload Settings provider certification evidence
         uses: actions/upload-artifact@v4
         with:
@@ -435,6 +441,13 @@ jobs:
       - name: Run Commerce provider certification from Settings provider gate
         if: ${{ inputs.certify_commerce }}
         run: npm run ci:commerce-provider-certification
+
+      - name: Verify Commerce provider certification artifact from Settings gate
+        if: ${{ inputs.certify_commerce }}
+        env:
+          BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-commerce-provider-certification.json
+          BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED: '1'
+        run: npm run doctor:release-certification
 
       - name: Upload Commerce provider certification evidence from Settings gate
         if: ${{ inputs.certify_commerce }}

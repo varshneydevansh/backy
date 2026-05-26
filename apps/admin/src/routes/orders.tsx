@@ -951,6 +951,10 @@ const ORDER_PROVIDER_CERTIFICATION_GROUPS = [
 const ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE = 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification';
 const ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV = 'BACKY_COMMERCE_CERTIFICATION_OUTPUT';
 const ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-commerce-provider-certification.json';
+const ORDER_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH';
+const ORDER_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED';
+const ORDER_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND =
+  `${ORDER_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV}="$${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV}" ${ORDER_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
 const ORDER_PROVIDER_CERTIFICATION_PREFLIGHT_GATES = [
   'npm run test:commerce-provider-certification-preflight-contract',
   'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification',
@@ -1261,6 +1265,7 @@ const buildOrderProviderCertificationEnvEntries = (
   const envEntries: Array<[string, string]> = [
     ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', orderBoolEnv(selectedSelector)],
     ['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId],
+    [ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV, ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT],
     ['BACKY_COMMERCE_CERTIFY_PAYMENT', orderBoolEnv(options.certifyPayment)],
     ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', options.paymentProvider],
     ['BACKY_COMMERCE_CERTIFY_TAX', orderBoolEnv(options.certifyTax)],
@@ -1305,6 +1310,12 @@ const buildOrderProviderCertificationEnvEntries = (
 const buildOrderProviderCertificationCommand = (options: OrderProviderCertificationCommandOptions): string => {
   const selectedSelector = hasOrderProviderCertificationSelector(options);
   const envEntries = buildOrderProviderCertificationEnvEntries(options);
+  const commands = selectedSelector
+    ? [
+        'npm run ci:commerce-provider-certification',
+        ...(options.includeReleaseDoctor ? [ORDER_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND] : []),
+      ]
+    : ['# Select at least one commerce provider selector before running certification.'];
 
   return [
     ...envEntries.map(([key, value]) => `export ${key}=${quoteOrderShellValue(value)}`),
@@ -1313,7 +1324,7 @@ const buildOrderProviderCertificationCommand = (options: OrderProviderCertificat
     ] : []),
     '',
     ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
-    selectedSelector ? 'npm run ci:commerce-provider-certification' : '# Select at least one commerce provider selector before running certification.',
+    ...commands,
   ].join('\n');
 };
 
@@ -1332,6 +1343,9 @@ const buildOrderProviderCertificationRequiredInputs = (options: OrderProviderCer
   return uniqueOrderCertificationInputs([
     hasOrderProviderCertificationSelector(options) ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
     hasOrderProviderCertificationSelector(options) ? 'BACKY_COMMERCE_CERTIFY_SITE_ID' : '',
+    hasOrderProviderCertificationSelector(options) ? `${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT}` : '',
+    hasOrderProviderCertificationSelector(options) ? `${ORDER_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT` : '',
+    hasOrderProviderCertificationSelector(options) ? `${ORDER_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1` : '',
     options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT=1' : '',
     options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER' : '',
     ...(options.certifyPayment ? ORDER_PROVIDER_CERTIFICATION_PAYMENT_INPUTS[options.paymentProvider] : []),
@@ -1360,7 +1374,7 @@ const buildOrderProviderCertificationRequiredInputs = (options: OrderProviderCer
 const ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildOrderProviderCertificationCommand(DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
   envTemplate: buildOrderProviderCertificationEnvTemplate(DEFAULT_ORDER_PROVIDER_CERTIFICATION_COMMAND_OPTIONS),
-  envTemplateSchemaVersion: 'backy.order-provider-certification-env-template.v1',
+  envTemplateSchemaVersion: 'backy.commerce-provider-certification-env-template.v1',
   providerChoices: {
     payment: ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS.map((option) => option.value),
     tax: ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS.map((option) => option.value),
@@ -1373,6 +1387,9 @@ const ORDER_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   targetInputs: [
     'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
     'BACKY_COMMERCE_CERTIFY_SITE_ID',
+    `${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT}`,
+    `${ORDER_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT`,
+    `${ORDER_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
     'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
   ],
   secretHandling: 'Provider credential values stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
@@ -2291,7 +2308,7 @@ function OrdersRoute() {
           : {
               label: 'Attach certification artifact',
               detail: `Store the redacted artifact at ${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT} and expose it through ${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV}.`,
-              command: 'npm run doctor:release-certification',
+              command: ORDER_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND,
             };
 
     return {
@@ -2456,9 +2473,9 @@ function OrdersRoute() {
       requiredInputs: providerCertificationRequiredInputs,
     },
     operatorEnvTemplate: {
-      schemaVersion: 'backy.order-provider-certification-env-template.v1',
+      schemaVersion: 'backy.commerce-provider-certification-env-template.v1',
       format: 'shell-env',
-      fileName: '.env.backy-order-provider-certification',
+      fileName: '.env.backy-commerce-provider-certification',
       body: providerCertificationEnvTemplate,
       secretHandling: 'Generated template values are non-secret selectors and placeholders; replace placeholders with CI secrets or local shell values before execution.',
     },
@@ -5331,7 +5348,7 @@ function OrdersRoute() {
 	                          </p>
 	                        </div>
 	                        <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-	                          backy.order-provider-certification-env-template.v1
+	                          backy.commerce-provider-certification-env-template.v1
 	                        </span>
 	                      </div>
 	                      <pre

@@ -214,6 +214,18 @@ const quoteEnvTemplateValue = (value: string): string => (
   /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : quoteShellValue(value)
 );
 const boolEnv = (value: boolean): '1' | '0' => (value ? '1' : '0');
+const SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV = 'BACKY_SETTINGS_CERTIFICATION_OUTPUT';
+const SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-settings-provider-certification.json';
+const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV = 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH';
+const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV = 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED';
+const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND =
+  `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV}="$${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}" ${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
+const SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV = 'BACKY_COMMERCE_CERTIFICATION_OUTPUT';
+const SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-commerce-provider-certification.json';
+const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH';
+const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED';
+const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND =
+  `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV}="$${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}" ${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
 const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOptions) => (
   options.certifyStorage ||
   options.certifyRotation ||
@@ -239,8 +251,15 @@ const buildSettingsProviderCertificationEnvEntries = (options: SettingsCertifica
     ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', boolEnv(options.certifyCommerce)],
   ];
 
+  if (settingsSelected) {
+    envEntries.push([SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV, SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT]);
+  }
+
   if (options.certifyCommerce) {
-    envEntries.push(['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId]);
+    envEntries.push(
+      ['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId],
+      [SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV, SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT],
+    );
   }
 
   if (options.includeReleaseDoctor) {
@@ -278,9 +297,19 @@ const buildSettingsProviderCertificationCommand = (options: SettingsCertificatio
   const settingsSelected = hasSettingsCertificationGroup(options);
   const envEntries = buildSettingsProviderCertificationEnvEntries(options);
   const commands = [
-    settingsSelected ? 'npm run ci:settings-provider-certification' : '',
-    options.certifyCommerce ? 'npm run ci:commerce-provider-certification' : '',
-  ].filter(Boolean);
+    ...(settingsSelected
+      ? [
+          'npm run ci:settings-provider-certification',
+          ...(options.includeReleaseDoctor ? [SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND] : []),
+        ]
+      : []),
+    ...(options.certifyCommerce
+      ? [
+          'npm run ci:commerce-provider-certification',
+          ...(options.includeReleaseDoctor ? [SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND] : []),
+        ]
+      : []),
+  ];
 
   return [
     ...envEntries.map(([key, value]) => `export ${key}=${quoteShellValue(value)}`),
@@ -304,8 +333,14 @@ const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCert
   options.includeReleaseDoctor ? 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1' : '',
   hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
   hasSettingsCertificationGroup(options) ? 'BACKY_SETTINGS_CERTIFY_SITE_ID or BACKY_SETTINGS_CERTIFICATION_SITE_ID' : '',
+  hasSettingsCertificationGroup(options) ? `${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT}` : '',
+  hasSettingsCertificationGroup(options) ? `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_SETTINGS_CERTIFICATION_ARTIFACT` : '',
+  hasSettingsCertificationGroup(options) ? `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1` : '',
   options.certifyCommerce ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
   options.certifyCommerce ? 'BACKY_COMMERCE_CERTIFY_SITE_ID' : '',
+  options.certifyCommerce ? `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT}` : '',
+  options.certifyCommerce ? `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT` : '',
+  options.certifyCommerce ? `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1` : '',
   options.certifyStorage || options.certifyRotation ? 'BACKY_STORAGE_PROVIDER or BACKY_MEDIA_STORAGE_PROVIDER' : '',
   options.certifyStorage || options.certifyRotation ? 'BACKY_SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY' : '',
   options.certifyStorage || options.certifyRotation ? 'BACKY_S3_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY' : '',
@@ -338,7 +373,13 @@ const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
     'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
     'BACKY_SETTINGS_CERTIFY_SITE_ID',
     'BACKY_SETTINGS_CERTIFICATION_SITE_ID',
+    `${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT}`,
+    `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_SETTINGS_CERTIFICATION_ARTIFACT`,
+    `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
     'BACKY_COMMERCE_CERTIFY_SITE_ID',
+    `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT}`,
+    `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT`,
+    `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
     'BACKY_CORS_ALLOWED_ORIGINS',
     'BACKY_SETTINGS_CERTIFY_PUBLIC_API_ORIGIN',
     'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
@@ -1128,7 +1169,19 @@ const buildSettingsCompletionStatus = () => {
       command: 'npm run ci:settings-provider-certification',
       preflight: 'npm run test:settings-provider-certification-preflight-contract',
       workflow: '.github/workflows/settings-provider-certification.yml',
-      targetInputs: ['BACKY_SETTINGS_CERTIFICATION_BASE_URL', 'BACKY_SETTINGS_CERTIFY_SITE_ID', 'BACKY_COMMERCE_CERTIFICATION_BASE_URL', 'BACKY_COMMERCE_CERTIFY_SITE_ID', 'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY'],
+      targetInputs: [
+        'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+        'BACKY_SETTINGS_CERTIFY_SITE_ID',
+        `${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT}`,
+        `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_SETTINGS_CERTIFICATION_ARTIFACT`,
+        `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
+        'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+        'BACKY_COMMERCE_CERTIFY_SITE_ID',
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT}`,
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT`,
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
+        'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
+      ],
       evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
       evidenceApi: '/api/admin/settings data.settings.providerCertification.operatorEvidencePacket',
       evidenceUiPanel: 'settings-provider-certification-evidence-packet',
@@ -1160,7 +1213,15 @@ const buildSettingsCompletionStatus = () => {
       command: 'npm run ci:settings-provider-certification',
       preflight: 'npm run test:settings-provider-certification-preflight-contract',
       workflow: '.github/workflows/settings-provider-certification.yml',
-      targetInputs: ['BACKY_SETTINGS_CERTIFICATION_BASE_URL', 'BACKY_SETTINGS_CERTIFY_SITE_ID', 'BACKY_COMMERCE_CERTIFY_SITE_ID', 'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY'],
+      targetInputs: [
+        'BACKY_SETTINGS_CERTIFICATION_BASE_URL',
+        'BACKY_SETTINGS_CERTIFY_SITE_ID',
+        'BACKY_COMMERCE_CERTIFY_SITE_ID',
+        `${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT}`,
+        `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_SETTINGS_CERTIFICATION_ARTIFACT`,
+        `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
+        'BACKY_ADMIN_API_KEY or BACKY_SETTINGS_CERTIFICATION_ADMIN_KEY',
+      ],
       evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1',
       evidenceApi: '/api/admin/settings data.settings.completionStatus plus data.settings.providerCertification.operatorEvidencePacket and /api/admin/sites/{siteId}/settings data.settings.mediaStorageHandoff/frontendDatabaseCertification',
       evidenceUiPanel: 'settings-provider-certification-evidence-packet',
@@ -1190,7 +1251,14 @@ const buildSettingsCompletionStatus = () => {
       command: 'npm run ci:commerce-provider-certification',
       preflight: 'npm run test:commerce-provider-certification-preflight-contract',
       workflow: '.github/workflows/commerce-provider-certification.yml',
-      targetInputs: ['BACKY_COMMERCE_CERTIFICATION_BASE_URL', 'BACKY_COMMERCE_CERTIFY_SITE_ID', 'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY'],
+      targetInputs: [
+        'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+        'BACKY_COMMERCE_CERTIFY_SITE_ID',
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT}`,
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT`,
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
+        'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
+      ],
       evidencePacketSchema: 'backy.commerce-provider-certification-evidence-packet.v1',
       evidenceApi: '/api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync data.providerCertification.operatorEvidencePacket plus /api/sites/{siteId}/manifest and /api/sites/{siteId}/commerce/catalog data.commerce.providerCertification',
       evidenceUiPanel: 'products-provider-certification-evidence-packet',
@@ -1223,7 +1291,14 @@ const buildSettingsCompletionStatus = () => {
       command: 'npm run ci:commerce-provider-certification',
       preflight: 'npm run test:commerce-provider-certification-preflight-contract',
       workflow: '.github/workflows/commerce-provider-certification.yml',
-      targetInputs: ['BACKY_COMMERCE_CERTIFICATION_BASE_URL', 'BACKY_COMMERCE_CERTIFY_SITE_ID', 'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY'],
+      targetInputs: [
+        'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
+        'BACKY_COMMERCE_CERTIFY_SITE_ID',
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT}`,
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT`,
+        `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
+        'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
+      ],
       evidencePacketSchema: 'backy.order-provider-certification-evidence-packet.v1',
       evidenceApi: '/api/admin/sites/{siteId}/commerce/orders/analytics data.providerCertification.operatorEvidencePacket plus /api/sites/{siteId}/commerce/orders data.commerce.providerCertification',
       evidenceUiPanel: 'orders-provider-certification-evidence-packet',

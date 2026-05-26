@@ -1382,6 +1382,10 @@ const assertProductsApiContractsSource = () => {
       source.includes("providerCertificationRuntimeGapDetail") &&
       source.includes("PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV") &&
       source.includes("PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT") &&
+      source.includes("PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV") &&
+      source.includes("PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV") &&
+      source.includes("PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND") &&
+      source.includes("[PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV, PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT]") &&
       source.includes("operatorEvidencePacket: providerCertificationEvidencePacket") &&
       source.includes("backy.commerce-provider-certification-evidence-packet.v1") &&
       source.includes("Product certification readiness summary") &&
@@ -1521,6 +1525,8 @@ const assertProductsApiContractsSource = () => {
     "Artifact output",
     "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
     "artifacts/backy-commerce-provider-certification.json",
+    "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH",
+    "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED",
   ]) {
     assert(
       source.includes(providerLabel),

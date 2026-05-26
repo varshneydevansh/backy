@@ -275,6 +275,10 @@ const PRODUCT_PROVIDER_CERTIFICATION_GROUPS = [
 const PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_GATE = 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification';
 const PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV = 'BACKY_COMMERCE_CERTIFICATION_OUTPUT';
 const PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-commerce-provider-certification.json';
+const PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH';
+const PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED';
+const PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND =
+  `${PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV}="$${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV}" ${PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
 const PRODUCT_PROVIDER_CERTIFICATION_PREFLIGHT_GATES = [
   'npm run test:commerce-provider-certification-preflight-contract',
   'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification',
@@ -670,6 +674,7 @@ const buildProductProviderCertificationEnvEntries = (
   const envEntries: Array<[string, string]> = [
     ['BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED', productBoolEnv(selectedFamily)],
     ['BACKY_COMMERCE_CERTIFY_SITE_ID', siteId],
+    [PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV, PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT],
     ['BACKY_COMMERCE_CERTIFY_PAYMENT', productBoolEnv(options.certifyPayment)],
     ['BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER', options.paymentProvider],
     ['BACKY_COMMERCE_CERTIFY_TAX', productBoolEnv(options.certifyTax)],
@@ -719,12 +724,18 @@ const buildProductProviderCertificationEnvEntries = (
 const buildProductProviderCertificationCommand = (options: ProductProviderCertificationCommandOptions): string => {
   const selectedFamily = hasProductProviderCertificationFamily(options);
   const envEntries = buildProductProviderCertificationEnvEntries(options);
+  const commands = selectedFamily
+    ? [
+        'npm run ci:commerce-provider-certification',
+        ...(options.includeReleaseDoctor ? [PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND] : []),
+      ]
+    : ['# Select at least one commerce provider family before running certification.'];
 
   return [
     ...envEntries.map(([key, value]) => `export ${key}=${quoteProductShellValue(value)}`),
     '',
     ...(options.includeReleaseDoctor ? ['npm run doctor:release-certification'] : []),
-    selectedFamily ? 'npm run ci:commerce-provider-certification' : '# Select at least one commerce provider family before running certification.',
+    ...commands,
   ].join('\n');
 };
 
@@ -743,6 +754,9 @@ const buildProductProviderCertificationRequiredInputs = (options: ProductProvide
   return uniqueProductCertificationInputs([
     hasProductProviderCertificationFamily(options) ? 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1' : '',
     hasProductProviderCertificationFamily(options) ? 'BACKY_COMMERCE_CERTIFY_SITE_ID' : '',
+    hasProductProviderCertificationFamily(options) ? `${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT}` : '',
+    hasProductProviderCertificationFamily(options) ? `${PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT` : '',
+    hasProductProviderCertificationFamily(options) ? `${PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1` : '',
     options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT=1' : '',
     options.certifyPayment ? 'BACKY_COMMERCE_CERTIFY_PAYMENT_PROVIDER' : '',
     ...(options.certifyPayment ? PRODUCT_PROVIDER_CERTIFICATION_PAYMENT_INPUTS[options.paymentProvider] : []),
@@ -787,6 +801,9 @@ const PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   targetInputs: [
     'BACKY_COMMERCE_CERTIFICATION_BASE_URL',
     'BACKY_COMMERCE_CERTIFY_SITE_ID',
+    `${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT}`,
+    `${PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV} or BACKY_COMMERCE_CERTIFICATION_ARTIFACT`,
+    `${PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1`,
     'BACKY_ADMIN_API_KEY or BACKY_COMMERCE_CERTIFICATION_ADMIN_KEY',
   ],
   secretHandling: 'Provider credential values stay in CI secrets or local shell environment variables; this template only emits non-secret aliases and placeholders.',
@@ -2868,7 +2885,7 @@ function ProductsRoute() {
           : {
               label: 'Attach certification artifact',
               detail: `Store the redacted artifact at ${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT} and expose it through ${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV}.`,
-              command: 'npm run doctor:release-certification',
+              command: PRODUCT_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND,
             };
 
     return {

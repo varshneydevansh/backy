@@ -267,6 +267,16 @@ const assertSettingsSourceContracts = () => {
     'settingsCertificationRuntimeGapDetail',
     'SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV',
     'SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT',
+    'SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV',
+    'SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV',
+    'SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND',
+    'SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV',
+    'SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT',
+    'SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV',
+    'SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV',
+    'SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND',
+    '[SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV, SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT]',
+    '[SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV, SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT]',
     'backy.settings-provider-certification-evidence.v1',
     'backy.settings-provider-certification-evidence-packet.v1',
     'Certification readiness summary',
@@ -2580,9 +2590,11 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Runtime inputs') || false) &&
       (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Scenario coverage') || false) &&
       (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Artifact output') || false) &&
-      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('BACKY_SETTINGS_CERTIFICATION_OUTPUT') || false) &&
-      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('artifacts/backy-settings-provider-certification.json') || false) &&
-      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Gate command') || false) &&
+	      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('BACKY_SETTINGS_CERTIFICATION_OUTPUT') || false) &&
+	      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('artifacts/backy-settings-provider-certification.json') || false) &&
+	      (document.querySelector('[data-testid="settings-provider-certification"]')?.textContent?.includes('BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH') || false) &&
+	      (document.querySelector('[data-testid="settings-provider-certification"]')?.textContent?.includes('BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED') || false) &&
+	      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Gate command') || false) &&
       (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Required site selector') || false) &&
       (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Secret boundary: no provider credential values are stored in Settings metadata.') || false),
     hasProviderRuntimeEvidence: Boolean(document.querySelector('[data-testid="settings-provider-runtime-evidence"]')),

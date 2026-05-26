@@ -697,8 +697,15 @@ const assertCommerceProviderCertification = (commerce, label, expectedSiteId) =>
     operatorCommandTemplate.envTemplateSchemaVersion === 'backy.commerce-provider-certification-env-template.v1' &&
       Array.isArray(operatorCommandTemplate.requiredInputs) &&
       targetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+      targetInputs.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT=artifacts/backy-commerce-provider-certification.json') &&
+      targetInputs.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT') &&
+      targetInputs.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
       stringValue(operatorCommandTemplate.command).includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+      stringValue(operatorCommandTemplate.command).includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT') &&
+      stringValue(operatorCommandTemplate.command).includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH="$BACKY_COMMERCE_CERTIFICATION_OUTPUT"') &&
+      stringValue(operatorCommandTemplate.command).includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 npm run doctor:release-certification') &&
       stringValue(operatorCommandTemplate.envTemplate).includes('BACKY_COMMERCE_CERTIFY_SITE_ID=') &&
+      stringValue(operatorCommandTemplate.envTemplate).includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT=artifacts/backy-commerce-provider-certification.json') &&
       (!expectedSiteId || stringValue(operatorCommandTemplate.envTemplate).includes(expectedSiteId)),
     `${label} provider certification is missing operator command template inputs: ${previewJson(operatorCommandTemplate)}`,
   );
@@ -706,6 +713,7 @@ const assertCommerceProviderCertification = (commerce, label, expectedSiteId) =>
     operatorEnvTemplate.schemaVersion === 'backy.commerce-provider-certification-env-template.v1' &&
       operatorEnvTemplate.fileName === '.env.backy-commerce-provider-certification' &&
       stringValue(operatorEnvTemplate.body).includes('BACKY_COMMERCE_CERTIFY_SITE_ID=') &&
+      stringValue(operatorEnvTemplate.body).includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT=artifacts/backy-commerce-provider-certification.json') &&
       (!expectedSiteId || stringValue(operatorEnvTemplate.body).includes(expectedSiteId)),
     `${label} provider certification is missing operator env template: ${previewJson(operatorEnvTemplate)}`,
   );

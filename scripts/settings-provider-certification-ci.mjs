@@ -519,7 +519,16 @@ const assertSettingsAdminApiHandoff = (settingsPayload, siteId) => {
       operatorEvidenceTarget.settingsSiteSelectorEnv === 'BACKY_SETTINGS_CERTIFY_SITE_ID' &&
       operatorEvidenceTarget.commerceSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
       commandPreviewTargetInputs.includes('BACKY_SETTINGS_CERTIFY_SITE_ID') &&
-      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID') &&
+      commandPreviewTargetInputs.includes('BACKY_SETTINGS_CERTIFICATION_OUTPUT=artifacts/backy-settings-provider-certification.json') &&
+      commandPreviewTargetInputs.includes('BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT') &&
+      commandPreviewTargetInputs.includes('BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT=artifacts/backy-commerce-provider-certification.json') &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT') &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+      String(commandPreview.command || '').includes('BACKY_SETTINGS_CERTIFICATION_OUTPUT') &&
+      String(commandPreview.command || '').includes('BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH="$BACKY_SETTINGS_CERTIFICATION_OUTPUT"') &&
+      String(commandPreview.envTemplate || '').includes('BACKY_SETTINGS_CERTIFICATION_OUTPUT=artifacts/backy-settings-provider-certification.json'),
     `Settings admin API operator evidence packet is not tied to ${siteId}: ${JSON.stringify(operatorEvidencePacket).slice(0, 900)}`,
   );
   assert(
