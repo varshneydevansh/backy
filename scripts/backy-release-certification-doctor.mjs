@@ -719,6 +719,7 @@ const failures = [
 
 const aggregatePreflight = 'npm run test:partial-gate-preflights';
 const adminSourceGuard = 'npm run test:admin-contract-source';
+const artifactPathEnv = (artifact) => artifact.pathEnvNames.join(' or ');
 
 const partialGateMap = [
   {
@@ -729,7 +730,7 @@ const partialGateMap = [
     aggregatePreflight,
     adminSourceGuard,
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
-    artifactPathEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT',
+    artifactPathEnv: artifactPathEnv(certificationArtifacts.settings),
     artifactRequiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     artifactSchemaVersion: 'backy.settings-provider-certification-artifact.v1',
     workflow: '.github/workflows/settings-provider-certification.yml',
@@ -743,7 +744,7 @@ const partialGateMap = [
     aggregatePreflight,
     adminSourceGuard,
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
-    artifactPathEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT',
+    artifactPathEnv: artifactPathEnv(certificationArtifacts.settings),
     artifactRequiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     artifactSchemaVersion: 'backy.settings-provider-certification-artifact.v1',
     workflow: '.github/workflows/settings-provider-certification.yml',
@@ -758,7 +759,7 @@ const partialGateMap = [
     aggregatePreflight,
     adminSourceGuard,
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
-    artifactPathEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT',
+    artifactPathEnv: artifactPathEnv(certificationArtifacts.commerce),
     artifactRequiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     artifactSchemaVersion: 'backy.commerce-provider-certification-artifact.v1',
     workflow: '.github/workflows/commerce-provider-certification.yml',
@@ -773,7 +774,7 @@ const partialGateMap = [
     aggregatePreflight,
     adminSourceGuard,
     doctorRequiredEnv: 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1',
-    artifactPathEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT',
+    artifactPathEnv: artifactPathEnv(certificationArtifacts.commerce),
     artifactRequiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     artifactSchemaVersion: 'backy.commerce-provider-certification-artifact.v1',
     workflow: '.github/workflows/commerce-provider-certification.yml',
@@ -806,10 +807,75 @@ const certifiedGates = [
   },
 ];
 
+function closureReason(artifact, readyReason, configuredFallback, unconfiguredReason) {
+  if (artifact.ready) return readyReason;
+  if (artifact.configured) return artifact.failure || configuredFallback;
+  return unconfiguredReason;
+}
+
+function partialClosureRow(gate) {
+  const details = partialClosureDetailsByRow[gate.row];
+  const artifact = certificationArtifacts[details.artifactKey];
+
+  return {
+    row: gate.row,
+    artifactKey: details.artifactKey,
+    requiredArtifact: artifact.label,
+    artifactPathEnv: gate.artifactPathEnv,
+    ready: artifact.ready,
+    status: artifact.ready ? 'ready' : 'partial',
+    reason: closureReason(artifact, details.readyReason, details.configuredFallback, details.unconfiguredReason),
+  };
+}
+
+const partialClosureDetailsByRow = {
+  '/settings': {
+    artifactKey: 'settings',
+    readyReason: 'Settings provider certification artifact is accepted and fresh.',
+    configuredFallback: 'Settings provider certification artifact is configured but not ready.',
+    unconfiguredReason: 'Settings provider certification artifact is not configured.',
+  },
+  'Settings admin APIs': {
+    artifactKey: 'settings',
+    readyReason: 'Settings admin API provider handoff evidence is accepted and site-targeted.',
+    configuredFallback: 'Settings admin API provider handoff evidence is configured but not ready.',
+    unconfiguredReason: 'Settings admin API provider handoff evidence is not configured.',
+  },
+  '/products': {
+    artifactKey: 'commerce',
+    readyReason: 'Commerce provider certification artifact is accepted and product evidence is site-targeted.',
+    configuredFallback: 'Commerce provider certification artifact is configured but product evidence is not ready.',
+    unconfiguredReason: 'Commerce provider certification artifact is not configured.',
+  },
+  '/orders': {
+    artifactKey: 'commerce',
+    readyReason: 'Commerce provider certification artifact is accepted and order evidence is site-targeted.',
+    configuredFallback: 'Commerce provider certification artifact is configured but order evidence is not ready.',
+    unconfiguredReason: 'Commerce provider certification artifact is not configured.',
+  },
+};
+
+const partialClosureRows = partialGateMap.map(partialClosureRow);
+
+const partialClosureReadiness = {
+  schemaVersion: 'backy.partial-closure-readiness.v1',
+  source: 'release-certification-doctor',
+  ready: partialClosureRows.every((row) => row.ready),
+  readyCount: partialClosureRows.filter((row) => row.ready).length,
+  partialCount: partialClosureRows.filter((row) => !row.ready).length,
+  prototypeCount: 0,
+  missingCount: 0,
+  total: partialClosureRows.length,
+  aggregatePreflight,
+  artifactRequiredEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+  rows: partialClosureRows,
+};
+
 console.log(JSON.stringify({
   ok: failures.length === 0,
   contract: 'backy.release-certification-doctor.v1',
   partialGateMap,
+  partialClosureReadiness,
   certifiedGates,
   database,
   settings,

@@ -423,6 +423,43 @@ assert(
   Array.isArray(normalJson.partialGateMap) && normalJson.partialGateMap.length === 4,
   'Doctor default mode should expose the current Partial-to-gate map.',
 );
+assert(
+  normalJson.partialClosureReadiness?.schemaVersion === 'backy.partial-closure-readiness.v1' &&
+    normalJson.partialClosureReadiness?.source === 'release-certification-doctor' &&
+    normalJson.partialClosureReadiness?.ready === false &&
+    normalJson.partialClosureReadiness?.readyCount === 0 &&
+    normalJson.partialClosureReadiness?.partialCount === 4 &&
+    normalJson.partialClosureReadiness?.prototypeCount === 0 &&
+    normalJson.partialClosureReadiness?.missingCount === 0 &&
+    normalJson.partialClosureReadiness?.total === 4 &&
+    normalJson.partialClosureReadiness?.aggregatePreflight === 'npm run test:partial-gate-preflights' &&
+    normalJson.partialClosureReadiness?.artifactRequiredEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1' &&
+    Array.isArray(normalJson.partialClosureReadiness?.rows) &&
+    normalJson.partialClosureReadiness.rows.length === 4,
+  'Doctor default mode should expose explicit Partial closure readiness separate from diagnostic ok=true.',
+);
+for (const row of ['/settings', 'Settings admin APIs', '/products', '/orders']) {
+  const closure = normalJson.partialClosureReadiness.rows.find((item) => item.row === row);
+  assert(closure, `Doctor Partial closure readiness missing ${row}.`);
+  assert(closure.ready === false && closure.status === 'partial', `Doctor default closure row ${row} should remain partial without artifacts.`);
+  if (row === '/settings' || row === 'Settings admin APIs') {
+    assert(
+      closure.artifactKey === 'settings' &&
+        closure.requiredArtifact === 'Settings certification artifact' &&
+        closure.artifactPathEnv === 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT' &&
+        closure.reason.includes('not configured'),
+      `Doctor default closure row ${row} should point at the Settings artifact.`,
+    );
+  } else {
+    assert(
+      closure.artifactKey === 'commerce' &&
+        closure.requiredArtifact === 'Commerce certification artifact' &&
+        closure.artifactPathEnv === 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT' &&
+        closure.reason.includes('not configured'),
+      `Doctor default closure row ${row} should point at the Commerce artifact.`,
+    );
+  }
+}
 for (const { row, gate, preflight, workflow, requiredInputFamily, sourceOnlyGuard, mockGate, doctorRequiredEnv } of [
   {
     row: '/settings',
@@ -549,6 +586,13 @@ assert(
     missingCertificationArtifactsJson.failures.includes('Commerce certification artifact'),
   `Doctor artifact-required mode should report missing Settings and Commerce artifacts. Actual failures: ${JSON.stringify(missingCertificationArtifactsJson.failures)}`,
 );
+assert(
+  missingCertificationArtifactsJson.partialClosureReadiness?.ready === false &&
+    missingCertificationArtifactsJson.partialClosureReadiness?.readyCount === 0 &&
+    missingCertificationArtifactsJson.partialClosureReadiness?.partialCount === 4 &&
+    missingCertificationArtifactsJson.partialClosureReadiness?.rows.every((row) => row.status === 'partial'),
+  'Doctor artifact-required mode should keep all four Partial closure rows unready when artifacts are missing.',
+);
 
 const validCertificationArtifacts = await runDoctor({
   BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED: '1',
@@ -562,6 +606,15 @@ assert(
 );
 const validCertificationArtifactsJson = parseJson(validCertificationArtifacts, 'valid certification artifacts doctor');
 assert(validCertificationArtifactsJson.ok === true, 'Doctor valid artifact mode should report ok=true.');
+assert(
+  validCertificationArtifactsJson.partialClosureReadiness?.ready === true &&
+    validCertificationArtifactsJson.partialClosureReadiness?.readyCount === 4 &&
+    validCertificationArtifactsJson.partialClosureReadiness?.partialCount === 0 &&
+    validCertificationArtifactsJson.partialClosureReadiness?.rows.every((row) => row.ready === true && row.status === 'ready') &&
+    validCertificationArtifactsJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'settings').length === 2 &&
+    validCertificationArtifactsJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'commerce').length === 2,
+  'Doctor valid artifact mode should mark all four remaining Partial closure rows ready.',
+);
 assert(
     validCertificationArtifactsJson.certificationArtifacts.settings.ready === true &&
     validCertificationArtifactsJson.certificationArtifacts.settings.schemaReady === true &&
