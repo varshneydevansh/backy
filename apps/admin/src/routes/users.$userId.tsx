@@ -619,10 +619,62 @@ function EditUserPage() {
   const userDetailDeletePermissionDisabledReason = !canDeleteUsers
     ? deletePermissionTitle || 'Your account cannot remove users.'
     : '';
+  const userDetailCommandActionStatusId = 'user-detail-command-action-status';
+  const userDetailApiActionStatusId = 'user-detail-api-action-status';
+  const userDetailActivityActionStatusId = 'user-detail-activity-action-status';
+  const userDetailSessionsActionStatusId = 'user-detail-sessions-action-status';
   const userDetailRecoveryActionStatusId = 'user-detail-recovery-action-status';
   const userDetailMfaActionStatusId = 'user-detail-mfa-action-status';
   const userDetailOwnershipActionStatusId = 'user-detail-ownership-action-status';
   const userDetailDangerActionStatusId = 'user-detail-danger-action-status';
+  const userDetailHandoffActionDisabledReason = userDetailBusyDisabledReason;
+  const userDetailSaveActionDisabledReason = userDetailBusyDisabledReason ||
+    userDetailManageDisabledReason ||
+    (!canSubmit ? 'Enter a full name and a valid email address before saving.' : '') ||
+    (hasSelfAccessChanges ? 'Use another owner/admin account to change your own role or account status.' : '') ||
+    (!hasUnsavedChanges ? 'No account changes to save.' : '');
+  const userDetailResetActionDisabledReason = userDetailManageDisabledReason ||
+    userDetailBusyDisabledReason ||
+    (!hasUnsavedChanges ? 'No unsaved account edits to reset.' : '');
+  const userDetailCommandActionStatus = [
+    userDetailBusyDisabledReason ? `Back to users unavailable: ${userDetailBusyDisabledReason}` : 'Back to users available.',
+    userDetailHandoffActionDisabledReason ? `Copy manifest unavailable: ${userDetailHandoffActionDisabledReason}` : 'Copy manifest available.',
+    userDetailHandoffActionDisabledReason ? `Download JSON unavailable: ${userDetailHandoffActionDisabledReason}` : 'Download JSON available.',
+    userDetailSaveActionDisabledReason ? `Save changes unavailable: ${userDetailSaveActionDisabledReason}` : 'Save changes available.',
+    userDetailResetActionDisabledReason ? `Reset changes unavailable: ${userDetailResetActionDisabledReason}` : 'Reset changes available.',
+  ].join(' ');
+  const userDetailCommandActionState = isUserDetailBusy ? 'blocked' : 'ready';
+  const userDetailApiActionStatus = [
+    userDetailHandoffActionDisabledReason ? `Copy API URL unavailable: ${userDetailHandoffActionDisabledReason}` : 'Copy API URL available.',
+    userDetailHandoffActionDisabledReason ? `Copy API manifest unavailable: ${userDetailHandoffActionDisabledReason}` : 'Copy API manifest available.',
+  ].join(' ');
+  const userDetailActivityDisabledReason = !canExportActivity
+    ? activityPermissionTitle || 'Your account cannot export user activity.'
+    : isLoadingUserAudit
+      ? 'User activity is loading.'
+      : '';
+  const userDetailActivityClearDisabledReason = userDetailActivityDisabledReason ||
+    (userAuditActionFilter === 'all' && !userAuditRequestIdDraft && !userAuditRequestIdFilter
+      ? 'No activity filters are active.'
+      : '');
+  const userDetailActivityActionStatus = [
+    userDetailActivityDisabledReason ? `Activity refresh unavailable: ${userDetailActivityDisabledReason}` : 'Activity refresh available.',
+    userDetailActivityDisabledReason ? `Activity action filter unavailable: ${userDetailActivityDisabledReason}` : 'Activity action filter available.',
+    userDetailActivityDisabledReason ? `Activity request filter unavailable: ${userDetailActivityDisabledReason}` : 'Activity request filter available.',
+    userDetailActivityDisabledReason ? `Apply activity filters unavailable: ${userDetailActivityDisabledReason}` : 'Apply activity filters available.',
+    userDetailActivityClearDisabledReason ? `Clear activity filters unavailable: ${userDetailActivityClearDisabledReason}` : 'Clear activity filters available.',
+  ].join(' ');
+  const userDetailActivityActionState = userDetailActivityDisabledReason ? 'blocked' : 'ready';
+  const userDetailSessionsRefreshDisabledReason = userDetailManageDisabledReason ||
+    (isLoadingSessions ? 'Admin sessions are loading.' : '');
+  const userDetailSessionsActionStatus = [
+    userDetailSessionsRefreshDisabledReason ? `Session refresh unavailable: ${userDetailSessionsRefreshDisabledReason}` : 'Session refresh available.',
+    userSessions.length === 0
+      ? 'No revocable admin sessions are loaded.'
+      : `${userSessions.filter((session) => !session.current).length} revocable admin session${userSessions.filter((session) => !session.current).length === 1 ? '' : 's'} loaded.`,
+    'Current sessions are protected from revocation.',
+  ].join(' ');
+  const userDetailSessionsActionState = userDetailSessionsRefreshDisabledReason ? 'blocked' : 'ready';
   const inviteTokenStatusDisabledReason = formData.status !== 'invited'
     ? 'Set this account to invited before issuing a new invite link.'
     : '';
@@ -1292,6 +1344,9 @@ function EditUserPage() {
             }
           }}
           disabled={isUserDetailBusy}
+          title={userDetailBusyDisabledReason || undefined}
+          {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailBusyDisabledReason)}
+          data-testid="user-detail-back-to-users"
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1301,7 +1356,18 @@ function EditUserPage() {
       className="w-full"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="user-detail-command-center">
+        <section
+          className="rounded-lg border border-border bg-card p-5 shadow-sm"
+          role="group"
+          aria-label="User detail command actions"
+          aria-describedby={userDetailCommandActionStatusId}
+          data-testid="user-detail-command-center"
+          data-action-state={userDetailCommandActionState}
+          data-action-status={userDetailCommandActionStatus}
+        >
+          <span id={userDetailCommandActionStatusId} className="sr-only" data-testid="user-detail-command-action-status" aria-live="polite">
+            {userDetailCommandActionStatus}
+          </span>
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1324,7 +1390,10 @@ function EditUserPage() {
                 variant="outline"
                 onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
                 disabled={isUserDetailBusy}
+                title={userDetailHandoffActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailHandoffActionDisabledReason)}
                 iconStart={<Copy className="size-4" />}
+                data-testid="user-detail-command-copy-manifest"
               >
                 Copy manifest
               </Button>
@@ -1333,7 +1402,10 @@ function EditUserPage() {
                 variant="outline"
                 onClick={downloadUserDetailHandoff}
                 disabled={isUserDetailBusy}
+                title={userDetailHandoffActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailHandoffActionDisabledReason)}
                 iconStart={<Download className="size-4" />}
+                data-testid="user-detail-command-download-json"
               >
                 Download JSON
               </Button>
@@ -1343,7 +1415,9 @@ function EditUserPage() {
                   variant="outline"
                   onClick={resetForm}
                   disabled={isUserDetailBusy || !canManageUsers}
-                  title={!canManageUsers ? managePermissionTitle : undefined}
+                  title={userDetailResetActionDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailResetActionDisabledReason)}
+                  data-testid="user-detail-command-reset"
                 >
                   Reset changes
                 </Button>
@@ -1352,8 +1426,10 @@ function EditUserPage() {
                 type="submit"
                 variant="primary"
                 disabled={isUserDetailBusy || !canSaveUserDetail}
-                title={!canManageUsers ? managePermissionTitle : undefined}
+                title={userDetailSaveActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailSaveActionDisabledReason)}
                 iconStart={<Save className="size-4" />}
+                data-testid="user-detail-command-save"
               >
                 {isLoading ? 'Saving...' : isLoadingUser ? 'Loading user...' : 'Save changes'}
               </Button>
@@ -1719,7 +1795,19 @@ function EditUserPage() {
             </div>
           </section>
 
-          <section id="user-detail-api" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
+          <section
+            id="user-detail-api"
+            className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+            role="group"
+            aria-label="User detail API actions"
+            aria-describedby={userDetailApiActionStatusId}
+            data-testid="user-detail-api"
+            data-action-state={userDetailHandoffActionDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={userDetailApiActionStatus}
+          >
+            <span id={userDetailApiActionStatusId} className="sr-only" data-testid="user-detail-api-action-status" aria-live="polite">
+              {userDetailApiActionStatus}
+            </span>
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-primary/10 p-2 text-primary">
                 <Code2 className="h-5 w-5" />
@@ -1735,7 +1823,10 @@ function EditUserPage() {
                 variant="outline"
                 onClick={() => void copyUserDetailText(userDetailUrl, 'User detail API URL')}
                 disabled={isUserDetailBusy}
+                title={userDetailHandoffActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailApiActionStatusId, userDetailApiActionStatus, userDetailHandoffActionDisabledReason)}
                 iconStart={<Copy className="size-4" />}
+                data-testid="user-detail-api-copy-url"
               >
                 Copy URL
               </Button>
@@ -1744,7 +1835,10 @@ function EditUserPage() {
                 variant="outline"
                 onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
                 disabled={isUserDetailBusy}
+                title={userDetailHandoffActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailApiActionStatusId, userDetailApiActionStatus, userDetailHandoffActionDisabledReason)}
                 iconStart={<Copy className="size-4" />}
+                data-testid="user-detail-api-copy-manifest"
               >
                 Copy manifest
               </Button>
@@ -1759,7 +1853,19 @@ function EditUserPage() {
             </div>
           </section>
 
-          <section id="user-detail-activity" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="user-detail-activity">
+          <section
+            id="user-detail-activity"
+            className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+            role="group"
+            aria-label="User activity actions"
+            aria-describedby={userDetailActivityActionStatusId}
+            data-testid="user-detail-activity"
+            data-action-state={userDetailActivityActionState}
+            data-action-status={userDetailActivityActionStatus}
+          >
+            <span id={userDetailActivityActionStatusId} className="sr-only" data-testid="user-detail-activity-action-status" aria-live="polite">
+              {userDetailActivityActionStatus}
+            </span>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-sky-50 p-2 text-sky-700">
@@ -1778,8 +1884,10 @@ function EditUserPage() {
                 variant="outline"
                 onClick={() => void loadUserAuditLogs()}
                 disabled={isLoadingUserAudit || !canExportActivity}
-                title={!canExportActivity ? activityPermissionTitle : undefined}
+                title={userDetailActivityDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailActivityActionStatusId, userDetailActivityActionStatus, userDetailActivityDisabledReason)}
                 iconStart={<RefreshCw className={cn('size-3.5', isLoadingUserAudit && 'animate-spin')} />}
+                data-testid="user-detail-activity-refresh"
               >
                 Refresh
               </Button>
@@ -1798,6 +1906,8 @@ function EditUserPage() {
                   value={userAuditActionFilter}
                   onChange={(event) => setUserAuditActionFilter(event.target.value)}
                   disabled={isLoadingUserAudit || !canExportActivity}
+                  title={userDetailActivityDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailActivityActionStatusId, userDetailActivityActionStatus, userDetailActivityDisabledReason)}
                   data-testid="user-detail-activity-filter-action"
                   className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -1819,6 +1929,8 @@ function EditUserPage() {
                     }
                   }}
                   disabled={isLoadingUserAudit || !canExportActivity}
+                  title={userDetailActivityDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailActivityActionStatusId, userDetailActivityActionStatus, userDetailActivityDisabledReason)}
                   data-testid="user-detail-activity-filter-request"
                   placeholder="req_..."
                   className="mt-2 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
@@ -1831,6 +1943,8 @@ function EditUserPage() {
                   variant="outline"
                   onClick={applyUserAuditFilters}
                   disabled={isLoadingUserAudit || !canExportActivity}
+                  title={userDetailActivityDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailActivityActionStatusId, userDetailActivityActionStatus, userDetailActivityDisabledReason)}
                   data-testid="user-detail-activity-filter-apply"
                 >
                   Apply
@@ -1841,6 +1955,8 @@ function EditUserPage() {
                   variant="ghost"
                   onClick={clearUserAuditFilters}
                   disabled={isLoadingUserAudit || !canExportActivity || (userAuditActionFilter === 'all' && !userAuditRequestIdDraft && !userAuditRequestIdFilter)}
+                  title={userDetailActivityClearDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailActivityActionStatusId, userDetailActivityActionStatus, userDetailActivityClearDisabledReason)}
                   data-testid="user-detail-activity-filter-clear"
                 >
                   Clear
@@ -1884,7 +2000,19 @@ function EditUserPage() {
             )}
           </section>
 
-          <section id="user-detail-sessions" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24" data-testid="user-detail-sessions">
+          <section
+            id="user-detail-sessions"
+            className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24"
+            role="group"
+            aria-label="Admin session actions"
+            aria-describedby={userDetailSessionsActionStatusId}
+            data-testid="user-detail-sessions"
+            data-action-state={userDetailSessionsActionState}
+            data-action-status={userDetailSessionsActionStatus}
+          >
+            <span id={userDetailSessionsActionStatusId} className="sr-only" data-testid="user-detail-sessions-action-status" aria-live="polite">
+              {userDetailSessionsActionStatus}
+            </span>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-indigo-50 p-2 text-indigo-700">
@@ -1903,8 +2031,10 @@ function EditUserPage() {
                 variant="outline"
                 onClick={() => void loadUserSessions()}
                 disabled={isLoadingSessions || !canManageUsers}
-                title={!canManageUsers ? managePermissionTitle : undefined}
+                title={userDetailSessionsRefreshDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailSessionsActionStatusId, userDetailSessionsActionStatus, userDetailSessionsRefreshDisabledReason)}
                 iconStart={<RefreshCw className={cn('size-3.5', isLoadingSessions && 'animate-spin')} />}
+                data-testid="user-detail-sessions-refresh"
               >
                 Refresh
               </Button>
@@ -1939,6 +2069,8 @@ function EditUserPage() {
                     isRevoking={revokingSessionId === session.id}
                     canManageUsers={canManageUsers}
                     disabledReason={managePermissionTitle}
+                    actionStatusId={userDetailSessionsActionStatusId}
+                    actionStatus={userDetailSessionsActionStatus}
                     onRevoke={() => void revokeSession(session)}
                   />
                 ))}
@@ -2465,7 +2597,9 @@ function EditUserPage() {
             <button
               type="submit"
               disabled={isUserDetailBusy || !canSaveUserDetail}
-              title={!canManageUsers ? managePermissionTitle : undefined}
+              title={userDetailSaveActionDisabledReason || undefined}
+              {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailSaveActionDisabledReason)}
+              data-testid="user-detail-footer-save"
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ring',
                 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50',
@@ -2482,6 +2616,9 @@ function EditUserPage() {
                 }
               }}
               disabled={isUserDetailBusy}
+              title={userDetailBusyDisabledReason || undefined}
+              {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailBusyDisabledReason)}
+              data-testid="user-detail-footer-cancel"
               className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
@@ -2491,7 +2628,9 @@ function EditUserPage() {
                 type="button"
                 onClick={resetForm}
                 disabled={isUserDetailBusy || !canManageUsers}
-                title={!canManageUsers ? managePermissionTitle : undefined}
+                title={userDetailResetActionDisabledReason || undefined}
+                {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailResetActionDisabledReason)}
+                data-testid="user-detail-footer-reset"
                 className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Reset changes
@@ -2711,14 +2850,26 @@ function AdminSessionCard({
   isRevoking,
   canManageUsers,
   disabledReason,
+  actionStatusId,
+  actionStatus,
   onRevoke,
 }: {
   session: AdminSessionSummary;
   isRevoking: boolean;
   canManageUsers: boolean;
   disabledReason?: string;
+  actionStatusId: string;
+  actionStatus: string;
   onRevoke: () => void;
 }) {
+  const revokeDisabledReason = session.current
+    ? 'Current session is protected from revocation.'
+    : !canManageUsers
+      ? disabledReason || 'Your account cannot revoke user sessions.'
+      : isRevoking
+        ? 'Session revocation is already running.'
+        : '';
+
   return (
     <article className="rounded-lg border border-border bg-background p-3">
       <div className="flex items-start justify-between gap-3">
@@ -2754,7 +2905,9 @@ function AdminSessionCard({
           size="sm"
           variant="outline"
           disabled={session.current || isRevoking || !canManageUsers}
-          title={!canManageUsers ? disabledReason : undefined}
+          title={revokeDisabledReason || undefined}
+          {...userDetailActionMetadata(actionStatusId, actionStatus, revokeDisabledReason)}
+          data-testid={`user-detail-session-revoke-${session.id}`}
           onClick={onRevoke}
           iconStart={<LogOut className="size-3.5" />}
         >

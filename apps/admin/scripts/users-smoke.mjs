@@ -243,13 +243,28 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
   );
   assert(
     detailSource.includes("const userDetailRecoveryActionStatusId = 'user-detail-recovery-action-status';") &&
+      detailSource.includes("const userDetailCommandActionStatusId = 'user-detail-command-action-status';") &&
+      detailSource.includes("const userDetailApiActionStatusId = 'user-detail-api-action-status';") &&
+      detailSource.includes("const userDetailActivityActionStatusId = 'user-detail-activity-action-status';") &&
+      detailSource.includes("const userDetailSessionsActionStatusId = 'user-detail-sessions-action-status';") &&
       detailSource.includes("const userDetailMfaActionStatusId = 'user-detail-mfa-action-status';") &&
       detailSource.includes("const userDetailOwnershipActionStatusId = 'user-detail-ownership-action-status';") &&
       detailSource.includes("const userDetailDangerActionStatusId = 'user-detail-danger-action-status';") &&
+      detailSource.includes('data-testid="user-detail-command-action-status"') &&
+      detailSource.includes('data-testid="user-detail-api-action-status"') &&
+      detailSource.includes('data-testid="user-detail-activity-action-status"') &&
+      detailSource.includes('data-testid="user-detail-sessions-action-status"') &&
       detailSource.includes('data-testid="user-detail-recovery-action-status"') &&
       detailSource.includes('data-testid="user-detail-mfa-action-status"') &&
       detailSource.includes('data-testid="user-detail-ownership-action-status"') &&
       detailSource.includes('data-testid="user-detail-danger-action-status"') &&
+      detailSource.includes('data-action-state={userDetailCommandActionState}') &&
+      detailSource.includes('data-action-status={userDetailCommandActionStatus}') &&
+      detailSource.includes('data-action-status={userDetailApiActionStatus}') &&
+      detailSource.includes('data-action-state={userDetailActivityActionState}') &&
+      detailSource.includes('data-action-status={userDetailActivityActionStatus}') &&
+      detailSource.includes('data-action-state={userDetailSessionsActionState}') &&
+      detailSource.includes('data-action-status={userDetailSessionsActionStatus}') &&
       detailSource.includes('data-action-state={userDetailRecoveryActionState}') &&
       detailSource.includes('data-action-status={userDetailRecoveryActionStatus}') &&
       detailSource.includes('data-action-state={userDetailMfaActionState}') &&
@@ -264,6 +279,13 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       detailSource.includes('{...userDetailActionMetadata(userDetailMfaActionStatusId, userDetailMfaActionStatus, mfaManageActionDisabledReason)}') &&
       detailSource.includes('{...userDetailActionMetadata(userDetailOwnershipActionStatusId, userDetailOwnershipActionStatus, ownershipTransferDisabledReason)}') &&
       detailSource.includes('{...userDetailActionMetadata(userDetailDangerActionStatusId, userDetailDangerActionStatus, userDetailDangerActionDisabledReason)}') &&
+      detailSource.includes('data-testid="user-detail-command-copy-manifest"') &&
+      detailSource.includes('data-testid="user-detail-command-download-json"') &&
+      detailSource.includes('data-testid="user-detail-command-save"') &&
+      detailSource.includes('data-testid="user-detail-api-copy-url"') &&
+      detailSource.includes('data-testid="user-detail-activity-refresh"') &&
+      detailSource.includes('data-testid="user-detail-sessions-refresh"') &&
+      detailSource.includes('data-testid={`user-detail-session-revoke-${session.id}`}') &&
       detailSource.includes('data-testid="user-detail-generate-invite-link"') &&
       detailSource.includes('data-testid="user-detail-generate-reset-token"') &&
       detailSource.includes('data-testid="user-detail-remove-user"'),
@@ -1472,6 +1494,10 @@ const assertUserDetailActionStatusContracts = async (client) => {
           text: (control?.textContent || '').replace(/\\s+/g, ' ').trim(),
         };
       };
+      const command = readGroup('[data-testid="user-detail-command-center"]', '[data-testid="user-detail-command-action-status"]');
+      const api = readGroup('[data-testid="user-detail-api"]', '[data-testid="user-detail-api-action-status"]');
+      const activity = readGroup('[data-testid="user-detail-activity"]', '[data-testid="user-detail-activity-action-status"]');
+      const sessions = readGroup('[data-testid="user-detail-sessions"]', '[data-testid="user-detail-sessions-action-status"]');
       const recovery = readGroup('[data-testid="user-detail-recovery"]', '[data-testid="user-detail-recovery-action-status"]');
       const mfa = readGroup('[data-testid="user-detail-mfa"]', '[data-testid="user-detail-mfa-action-status"]');
       const ownership = readGroup('[data-testid="user-detail-ownership-transfer"]', '[data-testid="user-detail-ownership-action-status"]');
@@ -1485,6 +1511,24 @@ const assertUserDetailActionStatusContracts = async (client) => {
         text: (control.textContent || '').replace(/\\s+/g, ' ').trim(),
       }));
       return {
+        command,
+        back: readControl('[data-testid="user-detail-back-to-users"]'),
+        commandCopy: readControl('[data-testid="user-detail-command-copy-manifest"]'),
+        commandDownload: readControl('[data-testid="user-detail-command-download-json"]'),
+        commandSave: readControl('[data-testid="user-detail-command-save"]'),
+        footerSave: readControl('[data-testid="user-detail-footer-save"]'),
+        footerCancel: readControl('[data-testid="user-detail-footer-cancel"]'),
+        api,
+        apiCopyUrl: readControl('[data-testid="user-detail-api-copy-url"]'),
+        apiCopyManifest: readControl('[data-testid="user-detail-api-copy-manifest"]'),
+        activity,
+        activityRefresh: readControl('[data-testid="user-detail-activity-refresh"]'),
+        activityActionFilter: readControl('[data-testid="user-detail-activity-filter-action"]'),
+        activityRequestFilter: readControl('[data-testid="user-detail-activity-filter-request"]'),
+        activityApply: readControl('[data-testid="user-detail-activity-filter-apply"]'),
+        activityClear: readControl('[data-testid="user-detail-activity-filter-clear"]'),
+        sessions,
+        sessionsRefresh: readControl('[data-testid="user-detail-sessions-refresh"]'),
         recovery,
         invite: readControl('[data-testid="user-detail-generate-invite-link"]'),
         reset: readControl('[data-testid="user-detail-generate-reset-token"]'),
@@ -1502,6 +1546,14 @@ const assertUserDetailActionStatusContracts = async (client) => {
     })()`);
 
     const groupsReady =
+      state.command.present &&
+      state.api.present &&
+      state.activity.present &&
+      state.sessions.present &&
+      state.commandCopy.present &&
+      state.apiCopyUrl.present &&
+      state.activityRefresh.present &&
+      state.sessionsRefresh.present &&
       state.recovery.present &&
       state.mfa.present &&
       state.ownership.present &&
@@ -1516,13 +1568,54 @@ const assertUserDetailActionStatusContracts = async (client) => {
       continue;
     }
 
-    const groupContracts = [state.recovery, state.mfa, state.ownership, state.danger].every((group) => (
+    const groupContracts = [state.command, state.api, state.activity, state.sessions, state.recovery, state.mfa, state.ownership, state.danger].every((group) => (
       group.role === 'group' &&
       group.describedBy === group.statusId &&
       group.statusText.length > 20 &&
       group.statusAttr === group.statusText &&
       ['ready', 'blocked'].includes(group.state)
     ));
+    const commandContracts =
+      state.command.statusText.includes('Copy manifest available.') &&
+      state.command.statusText.includes('Download JSON available.') &&
+      state.command.statusText.includes('Save changes unavailable: No account changes to save.') &&
+      state.back.describedBy === state.command.statusId &&
+      state.back.state === 'ready' &&
+      state.commandCopy.describedBy === state.command.statusId &&
+      state.commandCopy.state === 'ready' &&
+      state.commandDownload.describedBy === state.command.statusId &&
+      state.commandDownload.state === 'ready' &&
+      state.commandSave.describedBy === state.command.statusId &&
+      state.commandSave.state === 'blocked' &&
+      state.commandSave.reason.includes('No account changes') &&
+      state.footerSave.describedBy === state.command.statusId &&
+      state.footerSave.state === 'blocked' &&
+      state.footerCancel.describedBy === state.command.statusId &&
+      state.footerCancel.state === 'ready';
+    const apiContracts =
+      state.api.statusText.includes('Copy API URL available.') &&
+      state.api.statusText.includes('Copy API manifest available.') &&
+      state.apiCopyUrl.describedBy === state.api.statusId &&
+      state.apiCopyUrl.state === 'ready' &&
+      state.apiCopyManifest.describedBy === state.api.statusId &&
+      state.apiCopyManifest.state === 'ready';
+    const activityContracts =
+      state.activity.statusText.includes('Activity refresh available.') &&
+      state.activityRefresh.describedBy === state.activity.statusId &&
+      state.activityRefresh.state === 'ready' &&
+      state.activityActionFilter.describedBy === state.activity.statusId &&
+      state.activityActionFilter.state === 'ready' &&
+      state.activityRequestFilter.describedBy === state.activity.statusId &&
+      state.activityRequestFilter.state === 'ready' &&
+      state.activityApply.describedBy === state.activity.statusId &&
+      state.activityApply.state === 'ready' &&
+      state.activityClear.describedBy === state.activity.statusId &&
+      state.activityClear.state === 'blocked' &&
+      state.activityClear.reason.includes('No activity filters');
+    const sessionsContracts =
+      state.sessions.statusText.includes('Session refresh available.') &&
+      state.sessionsRefresh.describedBy === state.sessions.statusId &&
+      state.sessionsRefresh.state === 'ready';
     const recoveryContracts =
       state.recovery.statusText.includes('Invite link available.') &&
       state.recovery.statusText.includes('Reset token available.') &&
@@ -1562,7 +1655,7 @@ const assertUserDetailActionStatusContracts = async (client) => {
       state.remove.disabled === false;
 
     assert(
-      groupContracts && recoveryContracts && mfaContracts && ownershipContracts && dangerContracts,
+      groupContracts && commandContracts && apiContracts && activityContracts && sessionsContracts && recoveryContracts && mfaContracts && ownershipContracts && dangerContracts,
       `User detail action status contracts are incomplete: ${JSON.stringify(state).slice(0, 3500)}`,
     );
     return state;
@@ -1604,20 +1697,50 @@ const waitForUserDetailSessions = async (client) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const panel = document.querySelector('[data-testid="user-detail-sessions"]');
+      const status = document.querySelector('[data-testid="user-detail-sessions-action-status"]');
+      const refresh = panel?.querySelector('[data-testid="user-detail-sessions-refresh"]');
       const text = panel?.textContent || '';
       const protectedButton = Array.from(panel?.querySelectorAll('button') || []).find((button) => (
         (button.textContent || '').includes('Protected')
       ));
+      const statusId = status?.id || '';
+      const statusText = (status?.textContent || '').replace(/\\s+/g, ' ').trim();
       return {
         ready: Boolean(panel),
+        role: panel?.getAttribute('role') || '',
+        describedBy: panel?.getAttribute('aria-describedby') || '',
+        statusId,
+        statusText,
+        statusAttr: panel?.getAttribute('data-action-status') || '',
+        panelState: panel?.getAttribute('data-action-state') || '',
         hasSessions: text.includes('Admin sessions'),
         hasCurrent: text.includes('Current session'),
         hasLocalDemo: text.includes('local-demo'),
+        refreshDescribedBy: refresh?.getAttribute('aria-describedby') || '',
+        refreshState: refresh?.getAttribute('data-action-state') || '',
         protectedDisabled: protectedButton instanceof HTMLButtonElement && protectedButton.disabled,
+        protectedDescribedBy: protectedButton?.getAttribute('aria-describedby') || '',
+        protectedState: protectedButton?.getAttribute('data-action-state') || '',
+        protectedReason: protectedButton?.getAttribute('data-disabled-reason') || '',
         text: text.slice(0, 1600),
       };
     })()`);
-    if (state.ready && state.hasSessions && state.hasCurrent && state.hasLocalDemo && state.protectedDisabled) {
+    if (
+      state.ready &&
+      state.role === 'group' &&
+      state.describedBy === state.statusId &&
+      state.statusAttr === state.statusText &&
+      state.panelState === 'ready' &&
+      state.hasSessions &&
+      state.hasCurrent &&
+      state.hasLocalDemo &&
+      state.refreshDescribedBy === state.statusId &&
+      state.refreshState === 'ready' &&
+      state.protectedDisabled &&
+      state.protectedDescribedBy === state.statusId &&
+      state.protectedState === 'blocked' &&
+      state.protectedReason.includes('Current session is protected')
+    ) {
       return state;
     }
     await sleep(250);

@@ -179,7 +179,7 @@ Legend:
 
 #### `/users.$userId` (`users.$userId.tsx`)
 - ✅ User detail supports role/status editing, permission preview, retryable permission recovery, active sessions, reset-password, session revocation, MFA/recovery-code management, and audit activity.
-- ✅ User detail recovery, lifecycle, MFA, ownership transfer, and destructive controls expose shared action-state/status metadata with disabled reasons for custom admin shells and regression smokes.
+- ✅ User detail command, API, activity, session, recovery, lifecycle, MFA, ownership transfer, and destructive controls expose shared action-state/status metadata with disabled reasons for custom admin shells and regression smokes.
 - ⚠️ Broader external auth-provider rollout remains globally tracked outside this page.
 
 #### `/settings` (`settings.tsx`)
