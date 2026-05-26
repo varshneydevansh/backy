@@ -1562,6 +1562,37 @@ const matchesInteractionInput = (
   return interaction.pointerId === undefined || event.pointerId === interaction.pointerId;
 };
 
+const geometryChanged = (current: number | undefined, previous: number, epsilon = 0.01): boolean => {
+  const normalizedCurrent = typeof current === 'number' && Number.isFinite(current) ? current : 0;
+  return Math.abs(normalizedCurrent - previous) > epsilon;
+};
+
+const hasTransformInteractionChanged = (
+  interaction: DragInteraction | ResizeInteraction,
+  currentElements: CanvasElement[],
+): boolean => {
+  const isResizeInteraction = 'handle' in interaction;
+
+  return interaction.snapshots.some((snapshot) => {
+    const element = findElementById(currentElements, snapshot.id);
+    if (!element) {
+      return true;
+    }
+
+    if (
+      geometryChanged(element.x, snapshot.x) ||
+      geometryChanged(element.y, snapshot.y)
+    ) {
+      return true;
+    }
+
+    return isResizeInteraction && (
+      geometryChanged(element.width, snapshot.width) ||
+      geometryChanged(element.height, snapshot.height)
+    );
+  });
+};
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -2207,12 +2238,15 @@ export function Canvas({
 
     const activeElementId = activeDragState?.elementId || activeResizeState?.elementId || selectedId;
     const hadActiveTransform = Boolean(activeInteraction);
+    const didTransformChange = activeInteraction
+      ? hasTransformInteractionChanged(activeInteraction, elementsRef.current)
+      : false;
     dragStateRef.current = null;
     resizeStateRef.current = null;
     setDragState(null);
     setResizeState(null);
     setAlignmentGuides([]);
-    if (hadActiveTransform) {
+    if (hadActiveTransform && didTransformChange) {
       exitTextEditingForTransform();
       onElementsChange(elementsRef.current, { commit: true, selectedId: activeElementId });
     }

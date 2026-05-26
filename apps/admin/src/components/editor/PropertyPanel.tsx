@@ -27,6 +27,8 @@ import {
   Upload,
   Download,
   FileText,
+  Search,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PORTAL_TOOLBAR_CONTAINER_ID } from '@backy-cms/editor';
@@ -130,6 +132,118 @@ const THEME_TOKEN_TARGETS: ThemeTokenTarget[] = [
   { targetPath: 'styles.borderRadius', propName: 'borderRadius', label: 'Radius', prefixes: ['radii.'] },
   { targetPath: 'styles.boxShadow', propName: 'boxShadow', label: 'Shadow', prefixes: ['shadows.'] },
 ];
+
+const PROPERTY_SECTION_IDS = ['content', 'layout', 'style', 'appearance', 'data', 'animation'] as const;
+type PropertySectionId = typeof PROPERTY_SECTION_IDS[number];
+
+const PROPERTY_ESSENTIAL_SECTION_IDS: PropertySectionId[] = ['content', 'layout', 'style'];
+type PropertySectionMode = 'essentials' | 'focused' | 'all' | 'custom' | 'search';
+
+const PROPERTY_SECTION_MODE_LABELS: Record<PropertySectionMode, string> = {
+  essentials: 'Essentials',
+  focused: 'Focused',
+  all: 'All',
+  custom: 'Custom',
+  search: 'Search',
+};
+
+const PROPERTY_SECTION_METADATA: Array<{
+  id: PropertySectionId;
+  title: string;
+  shortTitle: string;
+  icon: React.ElementType;
+  keywords: string[];
+}> = [
+  {
+    id: 'content',
+    title: 'Content',
+    shortTitle: 'Content',
+    icon: Type,
+    keywords: ['text', 'copy', 'heading', 'paragraph', 'quote', 'image', 'video', 'media', 'link', 'button', 'form', 'field', 'list', 'nav', 'html', 'icon', 'embed'],
+  },
+  {
+    id: 'layout',
+    title: 'Layout',
+    shortTitle: 'Layout',
+    icon: Layout,
+    keywords: ['position', 'size', 'width', 'height', 'x', 'y', 'responsive', 'breakpoint', 'spacing', 'padding', 'margin', 'grid', 'flex'],
+  },
+  {
+    id: 'style',
+    title: 'Style',
+    shortTitle: 'Style',
+    icon: Palette,
+    keywords: ['color', 'font', 'typography', 'type', 'background', 'border', 'radius', 'shadow', 'align', 'decoration', 'theme', 'token'],
+  },
+  {
+    id: 'appearance',
+    title: 'Appearance',
+    shortTitle: 'Look',
+    icon: Box,
+    keywords: ['look', 'opacity', 'visibility', 'blend', 'effect', 'filter', 'state', 'surface'],
+  },
+  {
+    id: 'data',
+    title: 'Data',
+    shortTitle: 'Data',
+    icon: Database,
+    keywords: ['cms', 'collection', 'binding', 'dataset', 'repeater', 'records', 'api', 'field map', 'slot', 'dynamic'],
+  },
+  {
+    id: 'animation',
+    title: 'Animation',
+    shortTitle: 'Motion',
+    icon: Sparkles,
+    keywords: ['motion', 'animate', 'animation', 'transition', 'duration', 'delay', 'easing', 'hover', 'scroll', 'trigger'],
+  },
+];
+
+const normalizePropertySectionQuery = (value: string) => value.trim().toLowerCase();
+
+const matchingPropertySectionsForQuery = (query: string): PropertySectionId[] => {
+  const normalizedQuery = normalizePropertySectionQuery(query);
+  if (!normalizedQuery) {
+    return [...PROPERTY_SECTION_IDS];
+  }
+
+  return PROPERTY_SECTION_METADATA
+    .filter((section) => {
+      const haystack = [
+        section.id,
+        section.title,
+        section.shortTitle,
+        ...section.keywords,
+      ].map((value) => value.toLowerCase());
+
+      return haystack.some((value) => (
+        value.includes(normalizedQuery) || normalizedQuery.includes(value)
+      ));
+    })
+    .map((section) => section.id);
+};
+
+const arePropertySectionSetsEqual = (
+  sections: readonly PropertySectionId[],
+  expected: readonly PropertySectionId[],
+) => (
+  sections.length === expected.length && expected.every((section) => sections.includes(section))
+);
+
+const propertySectionModeFor = (sections: readonly PropertySectionId[]): PropertySectionMode => {
+  if (arePropertySectionSetsEqual(sections, PROPERTY_ESSENTIAL_SECTION_IDS)) {
+    return 'essentials';
+  }
+
+  if (sections.length === 1) {
+    return 'focused';
+  }
+
+  if (arePropertySectionSetsEqual(sections, PROPERTY_SECTION_IDS)) {
+    return 'all';
+  }
+
+  return 'custom';
+};
 
 const themeTokenLabel = (path: string) => path
   .replace(/^typography\./, '')
@@ -812,8 +926,58 @@ const fontFamilyFromMedia = (font: MediaAsset): string => {
 // ============================================
 
 type EditorMediaField = 'src' | 'video' | 'embed' | 'interactiveFallbackImage' | 'downloadFile';
+type EditorMediaPickerTarget = EditorMediaField | 'font';
 type EditorMediaAllowedTypes = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'any';
 type EditorMediaUploadFilter = 'all' | 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
+type EditorMediaPickerMode = 'library' | 'upload';
+
+interface EditorMediaPickerActionInput {
+  field: EditorMediaPickerTarget;
+  mode: EditorMediaPickerMode;
+  disabled?: boolean;
+  canViewMedia?: boolean;
+  canCreateMedia?: boolean;
+  viewDisabledReason?: string;
+  createDisabledReason?: string;
+}
+
+const editorMediaPickerTargetLabel = (field: EditorMediaPickerTarget): string => {
+  if (field === 'video') return 'video';
+  if (field === 'embed') return 'embed media';
+  if (field === 'interactiveFallbackImage') return 'fallback image';
+  if (field === 'downloadFile') return 'download file';
+  if (field === 'font') return 'font file';
+  return 'image';
+};
+
+const buildEditorMediaPickerAction = ({
+  field,
+  mode,
+  disabled = false,
+  canViewMedia = true,
+  canCreateMedia = true,
+  viewDisabledReason = 'You do not have permission to view media.',
+  createDisabledReason = 'You do not have permission to upload media.',
+}: EditorMediaPickerActionInput) => {
+  const targetLabel = editorMediaPickerTargetLabel(field);
+  const actionLabel = `${mode === 'upload' ? 'Upload' : 'Select'} ${targetLabel}`;
+  const disabledReason = disabled
+    ? 'Inspector is read-only for this element.'
+    : !canViewMedia
+      ? viewDisabledReason
+      : mode === 'upload' && !canCreateMedia
+        ? createDisabledReason
+        : '';
+
+  return {
+    actionLabel,
+    actionState: disabledReason ? 'blocked' : 'ready',
+    actionStatus: disabledReason
+      ? `${actionLabel} unavailable: ${disabledReason}`
+      : `${actionLabel} available from the media library.`,
+    disabledReason,
+  };
+};
 
 interface PropertyPanelProps {
   /** Currently selected element */
@@ -867,10 +1031,8 @@ export function PropertyPanel({
   embedded = false,
   hideHeader = false,
 }: PropertyPanelProps) {
-  const [expandedSections, setExpandedSections] = useState<string[]>([
-    'content',
-    'layout',
-    'style',
+  const [expandedSections, setExpandedSections] = useState<PropertySectionId[]>([
+    ...PROPERTY_ESSENTIAL_SECTION_IDS,
   ]);
 
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
@@ -878,7 +1040,9 @@ export function PropertyPanel({
   const [mediaOpenTab, setMediaOpenTab] = useState<'library' | 'upload'>('library');
   const [mediaAllowedTypes, setMediaAllowedTypes] = useState<EditorMediaAllowedTypes>('image');
   const [mediaUploadFilter, setMediaUploadFilter] = useState<EditorMediaUploadFilter>('all');
+  const [mediaReturnFocusTargetId, setMediaReturnFocusTargetId] = useState('');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [propertySectionQuery, setPropertySectionQuery] = useState('');
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [collectionsLoaded, setCollectionsLoaded] = useState(false);
@@ -886,6 +1050,39 @@ export function PropertyPanel({
   const [appliedChangeCount, setAppliedChangeCount] = useState(0);
   const [showAppliedFeedback, setShowAppliedFeedback] = useState(false);
   const siteId = mediaContext?.siteId;
+  const openMediaLibrary = (field: EditorMediaField, mode: EditorMediaPickerMode = 'library', openerTestId = '') => {
+    const action = buildEditorMediaPickerAction({
+      field,
+      mode,
+      disabled,
+      canViewMedia,
+      canCreateMedia,
+      viewDisabledReason: mediaViewDisabledReason,
+      createDisabledReason: mediaCreateDisabledReason,
+    });
+
+    if (action.disabledReason) {
+      return;
+    }
+
+    setMediaField(field);
+    setMediaOpenTab(mode);
+    setMediaReturnFocusTargetId(openerTestId);
+    if (field === 'video') {
+      setMediaAllowedTypes('video');
+      setMediaUploadFilter('video');
+    } else if (field === 'embed') {
+      setMediaAllowedTypes('any');
+      setMediaUploadFilter('all');
+    } else if (field === 'downloadFile') {
+      setMediaAllowedTypes('file');
+      setMediaUploadFilter('file');
+    } else {
+      setMediaAllowedTypes('image');
+      setMediaUploadFilter('image');
+    }
+    setIsMediaLibraryOpen(true);
+  };
 
   useEffect(() => {
     if (!siteId || !canViewCollections) {
@@ -929,6 +1126,8 @@ export function PropertyPanel({
   useEffect(() => {
     setAppliedChangeCount(0);
     setShowAppliedFeedback(false);
+    setPropertySectionQuery('');
+    setExpandedSections([...PROPERTY_ESSENTIAL_SECTION_IDS]);
   }, [element?.id]);
 
   useEffect(() => {
@@ -943,6 +1142,44 @@ export function PropertyPanel({
 
     return () => window.clearTimeout(timeout);
   }, [appliedChangeCount]);
+
+  const expandedSectionSet = useMemo(() => new Set(expandedSections), [expandedSections]);
+  const normalizedPropertySectionQuery = useMemo(
+    () => normalizePropertySectionQuery(propertySectionQuery),
+    [propertySectionQuery],
+  );
+  const visiblePropertySectionIds = useMemo(
+    () => matchingPropertySectionsForQuery(normalizedPropertySectionQuery),
+    [normalizedPropertySectionQuery],
+  );
+  const visiblePropertySectionSet = useMemo(
+    () => new Set(visiblePropertySectionIds),
+    [visiblePropertySectionIds],
+  );
+  const propertySectionMode = useMemo(
+    () => normalizedPropertySectionQuery ? 'search' : propertySectionModeFor(expandedSections),
+    [expandedSections, normalizedPropertySectionQuery],
+  );
+  const focusedPropertySection = propertySectionMode === 'focused' ? expandedSections[0] : '';
+  const propertySectionActionStatusId = 'editor-property-section-action-status';
+  const propertySectionSearchStatusId = 'editor-property-section-search-status';
+  const propertySectionActionStatus = normalizedPropertySectionQuery
+    ? `${visiblePropertySectionIds.length} matching inspector sections for "${normalizedPropertySectionQuery}".`
+    : `${PROPERTY_SECTION_MODE_LABELS[propertySectionMode]} inspector view showing ${visiblePropertySectionIds.length} of ${PROPERTY_SECTION_IDS.length} sections.`;
+  const propertySectionSearchStatus = normalizedPropertySectionQuery
+    ? `${visiblePropertySectionIds.length} matching inspector sections`
+    : 'Inspector search cleared';
+  const propertySectionJumpStatus = (section: typeof PROPERTY_SECTION_METADATA[number], isOpen: boolean) => (
+    isOpen
+      ? `${section.title} inspector section selected.`
+      : `Focus ${section.title} inspector controls available.`
+  );
+  const propertySectionEssentialsStatus = propertySectionMode === 'essentials'
+    ? 'Essentials inspector sections selected.'
+    : 'Show essential inspector sections available.';
+  const propertySectionAllStatus = propertySectionMode === 'all'
+    ? 'All inspector sections selected.'
+    : 'Show all inspector sections available.';
 
   if (!element) {
     return (
@@ -962,13 +1199,59 @@ export function PropertyPanel({
     );
   }
 
-  const toggleSection = (section: string) => {
+  const toggleSection = (section: PropertySectionId) => {
     setExpandedSections((prev) =>
       prev.includes(section)
         ? prev.filter((s) => s !== section)
         : [...prev, section]
     );
   };
+
+  const focusPropertySection = (section: PropertySectionId) => {
+    setExpandedSections([section]);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`[data-property-section="${section}"]`)?.scrollIntoView({
+        block: 'nearest',
+        behavior: 'smooth',
+      });
+    });
+  };
+
+  const collapseToEssentialPropertySections = () => {
+    setPropertySectionQuery('');
+    setExpandedSections([...PROPERTY_ESSENTIAL_SECTION_IDS]);
+  };
+
+  const expandAllPropertySections = () => {
+    setPropertySectionQuery('');
+    setExpandedSections([...PROPERTY_SECTION_IDS]);
+  };
+
+  const updatePropertySectionSearch = (value: string) => {
+    setPropertySectionQuery(value);
+    const nextMatches = matchingPropertySectionsForQuery(value);
+    setExpandedSections(
+      normalizePropertySectionQuery(value)
+        ? nextMatches
+        : [...PROPERTY_ESSENTIAL_SECTION_IDS],
+    );
+  };
+
+  const clearPropertySectionSearch = () => {
+    setPropertySectionQuery('');
+    setExpandedSections([...PROPERTY_ESSENTIAL_SECTION_IDS]);
+  };
+
+  const deleteElementActionStatusId = 'editor-property-delete-action-status';
+  const deleteElementDisabledReason = disabled
+    ? 'Inspector is read-only for this element.'
+    : !onDelete
+      ? 'Delete is not available for this element.'
+      : '';
+  const deleteElementActionState = deleteElementDisabledReason ? 'blocked' : 'ready';
+  const deleteElementActionStatus = deleteElementDisabledReason
+    ? `Delete ${element.type} element unavailable: ${deleteElementDisabledReason}`
+    : `Delete ${element.type} element "${element.id}" available.`;
 
   const guardedOnChange = (updates: Partial<CanvasElement>) => {
     if (disabled) {
@@ -1038,132 +1321,324 @@ export function PropertyPanel({
           disabled && 'cursor-not-allowed opacity-70',
         )}
       >
-        {/* Content Section */}
-        <PropertySection
-          title="Content"
-          icon={Type}
-          isExpanded={expandedSections.includes('content')}
-          onToggle={() => toggleSection('content')}
+        <div
+          className="sticky top-0 z-10 -mx-2 mb-2 border-b border-border bg-card/95 px-2 py-2 backdrop-blur"
+          data-testid="editor-property-section-rail"
+          data-expanded-sections={expandedSections.join(' ')}
+          data-expanded-count={expandedSections.length}
+          data-section-count={PROPERTY_SECTION_IDS.length}
+          data-property-section-mode={propertySectionMode}
+          data-focused-section={focusedPropertySection || ''}
+          data-section-query={normalizedPropertySectionQuery}
+          data-visible-section-count={visiblePropertySectionIds.length}
+          data-matched-sections={visiblePropertySectionIds.join(' ')}
+          data-action-status={propertySectionActionStatus}
+          aria-describedby={propertySectionActionStatusId}
         >
-          <ContentProperties
-            element={element}
-            onChange={updateProps}
-            onElementChange={guardedOnChange}
-            collections={collections}
-            collectionsError={collectionsError}
-            interactiveComponents={interactiveComponents}
-            interactiveComponentsLoading={interactiveComponentsLoading}
-            interactiveComponentsError={interactiveComponentsError}
-            elementId={element.id}
-            onOpenMedia={(field, mode = 'library') => {
-              setMediaField(field);
-              setMediaOpenTab(mode);
-              if (field === 'video') {
-                setMediaAllowedTypes('video');
-                setMediaUploadFilter('video');
-              } else if (field === 'embed') {
-                setMediaAllowedTypes('any');
-                setMediaUploadFilter('all');
-              } else if (field === 'downloadFile') {
-                setMediaAllowedTypes('file');
-                setMediaUploadFilter('file');
-              } else {
-                setMediaAllowedTypes('image');
-                setMediaUploadFilter('image');
-              }
-              setIsMediaLibraryOpen(true);
-            }}
-            onOpenEmoji={() => setIsEmojiPickerOpen(true)}
-          />
-        </PropertySection>
+          <span
+            id={propertySectionActionStatusId}
+            className="sr-only"
+            aria-live="polite"
+            data-testid="editor-property-section-action-status"
+          >
+            {propertySectionActionStatus}
+          </span>
+          <div className="mb-2 flex items-center justify-between gap-2 px-1 text-[11px] font-medium text-muted-foreground">
+            <span className="truncate">Inspector sections</span>
+            <span className="shrink-0 tabular-nums">
+              {PROPERTY_SECTION_MODE_LABELS[propertySectionMode]} · {visiblePropertySectionIds.length} / {PROPERTY_SECTION_IDS.length}
+            </span>
+          </div>
+          <div className="mb-2 flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-500 shadow-sm">
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <label htmlFor="editor-property-section-search" className="sr-only">
+              Find inspector controls
+            </label>
+            <input
+              id="editor-property-section-search"
+              type="search"
+              value={propertySectionQuery}
+              onChange={(event) => updatePropertySectionSearch(event.target.value)}
+              placeholder="Find controls"
+              className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400"
+              aria-label="Find inspector controls"
+              aria-describedby={`${propertySectionActionStatusId} ${propertySectionSearchStatusId}`}
+              data-testid="editor-property-section-search"
+              data-action-state="ready"
+              data-action-status={propertySectionActionStatus}
+              data-target-query={normalizedPropertySectionQuery}
+              data-matched-sections={visiblePropertySectionIds.join(' ')}
+            />
+            {normalizedPropertySectionQuery && (
+              <button
+                type="button"
+                onClick={clearPropertySectionSearch}
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Clear inspector search"
+                aria-describedby={propertySectionActionStatusId}
+                data-testid="editor-property-section-clear-search"
+                data-action-state="ready"
+                data-action-status="Clear inspector search available."
+                data-target-query={normalizedPropertySectionQuery}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+            <span
+              id={propertySectionSearchStatusId}
+              className="sr-only"
+              aria-live="polite"
+              data-testid="editor-property-section-search-status"
+            >
+              {propertySectionSearchStatus}
+            </span>
+          </div>
+          <div
+            className="flex gap-1 overflow-x-auto pb-1"
+            data-testid="editor-property-section-scroll"
+          >
+            {PROPERTY_SECTION_METADATA.filter((section) => visiblePropertySectionSet.has(section.id)).map((section) => {
+              const SectionIcon = section.icon;
+              const isSectionOpen = expandedSectionSet.has(section.id);
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => focusPropertySection(section.id)}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-semibold transition-colors',
+                    isSectionOpen && propertySectionMode === 'focused'
+                      ? 'border-sky-300 bg-sky-50 text-sky-950 shadow-sm'
+                      : isSectionOpen
+                      ? 'border-slate-300 bg-white text-slate-950 shadow-sm'
+                      : 'border-transparent bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800'
+                  )}
+                  aria-pressed={isSectionOpen}
+                  aria-label={`Focus ${section.title} properties`}
+                  aria-describedby={propertySectionActionStatusId}
+                  data-testid={`editor-property-section-jump-${section.id}`}
+                  data-property-section-open={isSectionOpen ? 'true' : 'false'}
+                  data-action-state={isSectionOpen ? 'selected' : 'ready'}
+                  data-action-status={propertySectionJumpStatus(section, isSectionOpen)}
+                  data-target-section={section.id}
+                >
+                  <SectionIcon className="h-3.5 w-3.5" />
+                  {section.shortTitle}
+                </button>
+              );
+            })}
+            {normalizedPropertySectionQuery && visiblePropertySectionIds.length === 0 && (
+              <div
+                className="min-w-[14rem] rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+                data-testid="editor-property-section-search-empty"
+                data-empty-query={normalizedPropertySectionQuery}
+              >
+                <div className="font-semibold text-slate-700">No inspector controls match "{normalizedPropertySectionQuery}"</div>
+                <button
+                  type="button"
+                  onClick={collapseToEssentialPropertySections}
+                  className="mt-2 inline-flex items-center rounded border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                  data-testid="editor-property-section-empty-reset"
+                  data-action-state="ready"
+                  data-action-status="Show essential inspector sections available."
+                  data-target-section-mode="essentials"
+                  data-target-query={normalizedPropertySectionQuery}
+                  aria-describedby={propertySectionActionStatusId}
+                >
+                  Show essentials
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              onClick={collapseToEssentialPropertySections}
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              data-testid="editor-property-sections-essentials"
+              aria-pressed={propertySectionMode === 'essentials'}
+              aria-describedby={propertySectionActionStatusId}
+              data-action-state={propertySectionMode === 'essentials' ? 'selected' : 'ready'}
+              data-action-status={propertySectionEssentialsStatus}
+              data-target-section-mode="essentials"
+            >
+              Essentials
+            </button>
+            <button
+              type="button"
+              onClick={expandAllPropertySections}
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              data-testid="editor-property-sections-expand-all"
+              aria-pressed={propertySectionMode === 'all'}
+              aria-describedby={propertySectionActionStatusId}
+              data-action-state={propertySectionMode === 'all' ? 'selected' : 'ready'}
+              data-action-status={propertySectionAllStatus}
+              data-target-section-mode="all"
+            >
+              All sections
+            </button>
+          </div>
+        </div>
+
+        {/* Content Section */}
+        {visiblePropertySectionSet.has('content') && (
+          <PropertySection
+            id="content"
+            title="Content"
+            icon={Type}
+            isExpanded={expandedSectionSet.has('content')}
+            onToggle={() => toggleSection('content')}
+          >
+            <ContentProperties
+              element={element}
+              onChange={updateProps}
+              onElementChange={guardedOnChange}
+              collections={collections}
+              collectionsError={collectionsError}
+              interactiveComponents={interactiveComponents}
+              interactiveComponentsLoading={interactiveComponentsLoading}
+              interactiveComponentsError={interactiveComponentsError}
+              elementId={element.id}
+              onOpenMedia={openMediaLibrary}
+              onOpenEmoji={() => setIsEmojiPickerOpen(true)}
+              disabled={disabled}
+              canViewMedia={canViewMedia}
+              canCreateMedia={canCreateMedia}
+              mediaViewDisabledReason={mediaViewDisabledReason}
+              mediaCreateDisabledReason={mediaCreateDisabledReason}
+            />
+          </PropertySection>
+        )}
 
         {/* Layout Section */}
-        <PropertySection
-          title="Layout"
-          icon={Layout}
-          isExpanded={expandedSections.includes('layout')}
-          onToggle={() => toggleSection('layout')}
-        >
-          <LayoutProperties element={element} onChange={guardedOnChange} />
-        </PropertySection>
+        {visiblePropertySectionSet.has('layout') && (
+          <PropertySection
+            id="layout"
+            title="Layout"
+            icon={Layout}
+            isExpanded={expandedSectionSet.has('layout')}
+            onToggle={() => toggleSection('layout')}
+          >
+            <LayoutProperties element={element} onChange={guardedOnChange} />
+          </PropertySection>
+        )}
 
         {/* Style Section */}
-        <PropertySection
-          title="Style"
-          icon={Palette}
-          isExpanded={expandedSections.includes('style')}
-          onToggle={() => toggleSection('style')}
-        >
-          {/**
-            * Keep element-level styling available for text components while inline
-            * toolbar operations target selected text in the editor.
-          */}
-          <StyleProperties
-            element={element}
-            onChange={updateProps}
-            onElementChange={guardedOnChange}
-            theme={theme}
-            mediaContext={mediaContext}
-            canViewMedia={canViewMedia}
-            canCreateMedia={canCreateMedia}
-            mediaViewDisabledReason={mediaViewDisabledReason}
-            mediaCreateDisabledReason={mediaCreateDisabledReason}
-            supportsTextStyles={[
-              'text',
-              'heading',
-              'paragraph',
-              'quote',
-              'list',
-              'button',
-              'link',
-              'icon',
-            ].includes(element.type)}
-          />
-        </PropertySection>
+        {visiblePropertySectionSet.has('style') && (
+          <PropertySection
+            id="style"
+            title="Style"
+            icon={Palette}
+            isExpanded={expandedSectionSet.has('style')}
+            onToggle={() => toggleSection('style')}
+          >
+            {/**
+              * Keep element-level styling available for text components while inline
+              * toolbar operations target selected text in the editor.
+            */}
+            <StyleProperties
+              element={element}
+              onChange={updateProps}
+              onElementChange={guardedOnChange}
+              theme={theme}
+              mediaContext={mediaContext}
+              canViewMedia={canViewMedia}
+              canCreateMedia={canCreateMedia}
+              mediaViewDisabledReason={mediaViewDisabledReason}
+              mediaCreateDisabledReason={mediaCreateDisabledReason}
+              disabled={disabled}
+              supportsTextStyles={[
+                'text',
+                'heading',
+                'paragraph',
+                'quote',
+                'list',
+                'button',
+                'link',
+                'icon',
+              ].includes(element.type)}
+            />
+          </PropertySection>
+        )}
 
         {/* Appearance Section */}
-        <PropertySection
-          title="Appearance"
-          icon={Box}
-          isExpanded={expandedSections.includes('appearance')}
-          onToggle={() => toggleSection('appearance')}
-        >
-          <AppearanceProperties element={element} onChange={updateProps} />
-        </PropertySection>
+        {visiblePropertySectionSet.has('appearance') && (
+          <PropertySection
+            id="appearance"
+            title="Appearance"
+            icon={Box}
+            isExpanded={expandedSectionSet.has('appearance')}
+            onToggle={() => toggleSection('appearance')}
+          >
+            <AppearanceProperties element={element} onChange={updateProps} />
+          </PropertySection>
+        )}
 
         {/* Data Binding Section */}
-        <PropertySection
-          title="Data"
-          icon={Database}
-          isExpanded={expandedSections.includes('data')}
-          onToggle={() => toggleSection('data')}
-        >
-          <DataBindingProperties
-            element={element}
-            siteId={siteId}
-            collections={collections}
-            collectionsLoading={collectionsLoading || Boolean(siteId && canViewCollections && !collectionsLoaded && !collectionsError)}
-            collectionsError={collectionsError}
-            onChange={guardedOnChange}
-          />
-        </PropertySection>
+        {visiblePropertySectionSet.has('data') && (
+          <PropertySection
+            id="data"
+            title="Data"
+            icon={Database}
+            isExpanded={expandedSectionSet.has('data')}
+            onToggle={() => toggleSection('data')}
+          >
+            <DataBindingProperties
+              element={element}
+              siteId={siteId}
+              collections={collections}
+              collectionsLoading={collectionsLoading || Boolean(siteId && canViewCollections && !collectionsLoaded && !collectionsError)}
+              collectionsError={collectionsError}
+              onChange={guardedOnChange}
+            />
+          </PropertySection>
+        )}
 
         {/* Animation Section */}
-        <PropertySection
-          title="Animation"
-          icon={Sparkles}
-          isExpanded={expandedSections.includes('animation')}
-          onToggle={() => toggleSection('animation')}
-        >
-          <AnimationProperties element={element} onChange={guardedOnChange} theme={theme} />
-        </PropertySection>
+        {visiblePropertySectionSet.has('animation') && (
+          <PropertySection
+            id="animation"
+            title="Animation"
+            icon={Sparkles}
+            isExpanded={expandedSectionSet.has('animation')}
+            onToggle={() => toggleSection('animation')}
+          >
+            <AnimationProperties element={element} onChange={guardedOnChange} theme={theme} />
+          </PropertySection>
+        )}
 
         {/* Delete Button */}
         <div className="pt-2">
+          <span
+            id={deleteElementActionStatusId}
+            className="sr-only"
+            aria-live="polite"
+            data-testid="editor-property-delete-action-status"
+          >
+            {deleteElementActionStatus}
+          </span>
           <button
-            onClick={onDelete}
-            disabled={disabled}
-            className="w-full py-2 px-3 flex items-center justify-center gap-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors text-sm font-medium border border-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            onClick={() => {
+              if (deleteElementActionState !== 'ready') {
+                return;
+              }
+
+              onDelete?.();
+            }}
+            disabled={deleteElementActionState !== 'ready'}
+            title={deleteElementActionStatus}
+            aria-describedby={deleteElementActionStatusId}
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+              deleteElementActionState === 'ready' ? 'hover:bg-red-100 active:scale-[0.99]' : 'hover:bg-red-50',
+            )}
+            data-testid="editor-property-delete-element"
+            data-action-state={deleteElementActionState}
+            data-action-status={deleteElementActionStatus}
+            data-disabled-reason={deleteElementDisabledReason || undefined}
+            data-target-element-id={element.id}
+            data-target-element-type={element.type}
           >
             <Trash2 className="w-4 h-4" />
             Delete Element
@@ -1290,6 +1765,7 @@ export function PropertyPanel({
         }}
         initialTab={mediaOpenTab}
         initialUploadFilter={mediaUploadFilter}
+        returnFocusTargetId={mediaReturnFocusTargetId}
         mediaContext={mediaContext}
         allowedTypes={mediaAllowedTypes}
         replaceAssetId={typeof element.props.mediaId === 'string' ? element.props.mediaId : null}
@@ -1316,6 +1792,7 @@ export function PropertyPanel({
 // ============================================
 
 interface PropertySectionProps {
+  id: PropertySectionId;
   title: string;
   icon: React.ElementType;
   isExpanded: boolean;
@@ -1324,17 +1801,42 @@ interface PropertySectionProps {
 }
 
 function PropertySection({
+  id,
   title,
   icon: Icon,
   isExpanded,
   onToggle,
   children,
 }: PropertySectionProps) {
+  const sectionToggleStatusId = `editor-property-section-toggle-${id}-status`;
+  const sectionToggleActionStatus = isExpanded
+    ? `${title} inspector section expanded.`
+    : `Expand ${title} inspector section available.`;
+
   return (
-    <div className="border-b border-border">
+    <div
+      className="border-b border-border"
+      data-testid={`editor-property-section-${id}`}
+      data-property-section={id}
+      data-property-section-expanded={isExpanded ? 'true' : 'false'}
+    >
+      <span
+        id={sectionToggleStatusId}
+        className="sr-only"
+        data-testid={`editor-property-section-toggle-status-${id}`}
+      >
+        {sectionToggleActionStatus}
+      </span>
       <button
+        type="button"
         onClick={onToggle}
+        data-testid={`editor-property-section-toggle-${id}`}
+        data-action-state={isExpanded ? 'selected' : 'ready'}
+        data-action-status={sectionToggleActionStatus}
+        data-target-section={id}
         className="w-full flex items-center justify-between p-3 hover:bg-accent/50 transition-colors"
+        aria-expanded={isExpanded}
+        aria-describedby={sectionToggleStatusId}
       >
         <div className="flex items-center gap-2">
           <Icon className="w-4 h-4 text-muted-foreground" />
@@ -1360,7 +1862,7 @@ interface ContentPropertiesProps {
   element: CanvasElement;
   onChange: (updates: Partial<ElementProps>) => void;
   onElementChange?: (updates: Partial<CanvasElement>) => void;
-  onOpenMedia: (field: EditorMediaField, mode?: 'library' | 'upload') => void;
+  onOpenMedia: (field: EditorMediaField, mode?: EditorMediaPickerMode, openerTestId?: string) => void;
   onOpenEmoji: () => void;
   collections: Collection[];
   collectionsError: string | null;
@@ -1368,6 +1870,11 @@ interface ContentPropertiesProps {
   interactiveComponentsLoading: boolean;
   interactiveComponentsError: string | null;
   elementId?: string;
+  disabled?: boolean;
+  canViewMedia?: boolean;
+  canCreateMedia?: boolean;
+  mediaViewDisabledReason?: string;
+  mediaCreateDisabledReason?: string;
 }
 
 const interactiveComponentOptionValue = (component: Pick<InteractiveComponentRegistryEntry, 'componentKey' | 'version'>) => (
@@ -1714,6 +2221,11 @@ function ContentProperties({
   interactiveComponentsLoading,
   interactiveComponentsError,
   elementId,
+  disabled = false,
+  canViewMedia = true,
+  canCreateMedia = true,
+  mediaViewDisabledReason,
+  mediaCreateDisabledReason,
 }: ContentPropertiesProps) {
   const normalizedType = normalizeCanvasElementType(element.type);
   const textElementContent = normalizeTextElementContent(element.props.content, normalizedType, element.props);
@@ -1732,6 +2244,60 @@ function ContentProperties({
   const hasListContent = normalizedType === 'list';
   const fieldOptionsText = formatOptionValues(element.props.options);
   const listItems = getListItemsFromProps(element.props);
+  const mediaPickerActionStatusId = 'editor-media-picker-action-status';
+  const mediaPickerContext = {
+    disabled,
+    canViewMedia,
+    canCreateMedia,
+    viewDisabledReason: mediaViewDisabledReason,
+    createDisabledReason: mediaCreateDisabledReason,
+  };
+  const getMediaPickerAction = (field: EditorMediaPickerTarget, mode: EditorMediaPickerMode = 'library') => (
+    buildEditorMediaPickerAction({ field, mode, ...mediaPickerContext })
+  );
+  const openMediaPicker = (field: EditorMediaField, mode: EditorMediaPickerMode = 'library', openerTestId = '') => {
+    if (getMediaPickerAction(field, mode).disabledReason) {
+      return;
+    }
+
+    onOpenMedia(field, mode, openerTestId);
+  };
+  const renderMediaPickerButton = ({
+    field,
+    mode = 'library',
+    testId,
+    children,
+    className = 'px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-60',
+    title,
+  }: {
+    field: EditorMediaField;
+    mode?: EditorMediaPickerMode;
+    testId: string;
+    children: React.ReactNode;
+    className?: string;
+    title?: string;
+  }) => {
+    const action = getMediaPickerAction(field, mode);
+
+    return (
+      <button
+        type="button"
+        className={className}
+        title={action.disabledReason || title || action.actionLabel}
+        onClick={() => openMediaPicker(field, mode, testId)}
+        disabled={Boolean(action.disabledReason)}
+        aria-describedby={mediaPickerActionStatusId}
+        data-testid={testId}
+        data-action-state={action.actionState}
+        data-action-status={action.actionStatus}
+        data-disabled-reason={action.disabledReason || undefined}
+        data-target-media-field={field}
+        data-target-media-mode={mode}
+      >
+        {children}
+      </button>
+    );
+  };
   const interactiveFallback = element.props.fallback && typeof element.props.fallback === 'object' && !Array.isArray(element.props.fallback)
     ? element.props.fallback
     : {};
@@ -1950,6 +2516,13 @@ function ContentProperties({
 
   return (
       <div className="space-y-3">
+      <span
+        id={mediaPickerActionStatusId}
+        className="sr-only"
+        data-testid="editor-media-picker-action-status"
+      >
+        Media picker buttons expose ready or blocked status for the selected editor element.
+      </span>
       {/* Rich Text Controls */}
         {hasTextContent && (
           <RichTextFormatting
@@ -2062,22 +2635,19 @@ function ContentProperties({
                 )}
                 placeholder="https://example.com/image.jpg"
               />
-              <button
-                className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
-                title="Select from Media Library"
-                onClick={() => onOpenMedia('src')}
-                data-testid="editor-image-select-media"
-              >
-                Select
-              </button>
-              <button
-                className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
-                title="Upload media"
-                onClick={() => onOpenMedia('src', 'upload')}
-                data-testid="editor-image-upload-media"
-              >
-                Upload
-              </button>
+              {renderMediaPickerButton({
+                field: 'src',
+                testId: 'editor-image-select-media',
+                title: 'Select from Media Library',
+                children: 'Select',
+              })}
+              {renderMediaPickerButton({
+                field: 'src',
+                mode: 'upload',
+                testId: 'editor-image-upload-media',
+                title: 'Upload media',
+                children: 'Upload',
+              })}
             </div>
           </div>
           <div>
@@ -2230,22 +2800,19 @@ function ContentProperties({
                 )}
                 placeholder="https://example.com/video.mp4"
               />
-              <button
-                className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
-                title="Select from Media Library"
-                onClick={() => onOpenMedia('video')}
-                data-testid="editor-video-select-media"
-              >
-                Select
-              </button>
-              <button
-                className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
-                title="Upload video"
-                onClick={() => onOpenMedia('video', 'upload')}
-                data-testid="editor-video-upload-media"
-              >
-                Upload
-              </button>
+              {renderMediaPickerButton({
+                field: 'video',
+                testId: 'editor-video-select-media',
+                title: 'Select from Media Library',
+                children: 'Select',
+              })}
+              {renderMediaPickerButton({
+                field: 'video',
+                mode: 'upload',
+                testId: 'editor-video-upload-media',
+                title: 'Upload video',
+                children: 'Upload',
+              })}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Enter a direct video URL (.mp4, .webm)
@@ -2395,7 +2962,13 @@ function ContentProperties({
             prefix="link"
             props={element.props}
             onChange={updatePropsWithAssetSync}
-            onOpenDownloadMedia={(mode) => onOpenMedia('downloadFile', mode)}
+            onOpenDownloadMedia={(mode, openerTestId) => onOpenMedia('downloadFile', mode, openerTestId)}
+            mediaPickerStatusId={mediaPickerActionStatusId}
+            mediaPickerDisabled={disabled}
+            canViewMedia={canViewMedia}
+            canCreateMedia={canCreateMedia}
+            mediaViewDisabledReason={mediaViewDisabledReason}
+            mediaCreateDisabledReason={mediaCreateDisabledReason}
           />
         </div>
       )}
@@ -2474,8 +3047,14 @@ function ContentProperties({
             prefix="button"
             props={element.props}
             onChange={updatePropsWithAssetSync}
-            onOpenDownloadMedia={(mode) => onOpenMedia('downloadFile', mode)}
+            onOpenDownloadMedia={(mode, openerTestId) => onOpenMedia('downloadFile', mode, openerTestId)}
             includeButtonType
+            mediaPickerStatusId={mediaPickerActionStatusId}
+            mediaPickerDisabled={disabled}
+            canViewMedia={canViewMedia}
+            canCreateMedia={canCreateMedia}
+            mediaViewDisabledReason={mediaViewDisabledReason}
+            mediaCreateDisabledReason={mediaCreateDisabledReason}
           />
         </div>
       )}
@@ -4390,13 +4969,11 @@ function ContentProperties({
                 )}
                 placeholder="https://..."
               />
-              <button
-                className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
-                onClick={() => onOpenMedia('interactiveFallbackImage')}
-                data-testid="editor-interactive-select-fallback-image"
-              >
-                Select
-              </button>
+              {renderMediaPickerButton({
+                field: 'interactiveFallbackImage',
+                testId: 'editor-interactive-select-fallback-image',
+                children: 'Select',
+              })}
             </div>
           </div>
           <div>
@@ -4437,22 +5014,19 @@ function ContentProperties({
                 )}
                 placeholder="https://www.youtube.com/watch?v=... or HTML iframe src"
               />
-              <button
-                className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
-                title="Use current media item"
-                onClick={() => onOpenMedia('embed')}
-                data-testid="editor-embed-select-media"
-              >
-                Select
-              </button>
-              <button
-                className="px-2 py-1 bg-secondary text-secondary-foreground rounded-md text-xs hover:bg-secondary/80"
-                title="Upload media"
-                onClick={() => onOpenMedia('embed', 'upload')}
-                data-testid="editor-embed-upload-media"
-              >
-                Upload
-              </button>
+              {renderMediaPickerButton({
+                field: 'embed',
+                testId: 'editor-embed-select-media',
+                title: 'Use current media item',
+                children: 'Select',
+              })}
+              {renderMediaPickerButton({
+                field: 'embed',
+                mode: 'upload',
+                testId: 'editor-embed-upload-media',
+                title: 'Upload media',
+                children: 'Upload',
+              })}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Supports YouTube, Vimeo, iframe src links, or map/HTML sources.
@@ -4985,7 +5559,13 @@ interface LinkBehaviorPropertiesProps {
   prefix: 'button' | 'link';
   props: ElementProps;
   onChange: (updates: Partial<ElementProps>, options?: { staleAssetIds?: Array<unknown> }) => void;
-  onOpenDownloadMedia?: (mode?: 'library' | 'upload') => void;
+  onOpenDownloadMedia?: (mode?: EditorMediaPickerMode, openerTestId?: string) => void;
+  mediaPickerStatusId?: string;
+  mediaPickerDisabled?: boolean;
+  canViewMedia?: boolean;
+  canCreateMedia?: boolean;
+  mediaViewDisabledReason?: string;
+  mediaCreateDisabledReason?: string;
   includeButtonType?: boolean;
 }
 
@@ -4994,6 +5574,12 @@ function LinkBehaviorProperties({
   props,
   onChange,
   onOpenDownloadMedia,
+  mediaPickerStatusId,
+  mediaPickerDisabled = false,
+  canViewMedia = true,
+  canCreateMedia = true,
+  mediaViewDisabledReason,
+  mediaCreateDisabledReason,
   includeButtonType = false,
 }: LinkBehaviorPropertiesProps) {
   const target = normalizeLinkTarget(props.target);
@@ -5011,6 +5597,24 @@ function LinkBehaviorProperties({
     (isButton && actionPreset === 'download') || linkDownloadEnabled || Boolean(selectedFileName)
   );
   const staleDownloadAssetIds = downloadFileAssetIdsFromProps(props);
+  const getDownloadMediaAction = (mode: EditorMediaPickerMode) => buildEditorMediaPickerAction({
+    field: 'downloadFile',
+    mode,
+    disabled: mediaPickerDisabled,
+    canViewMedia,
+    canCreateMedia,
+    viewDisabledReason: mediaViewDisabledReason,
+    createDisabledReason: mediaCreateDisabledReason,
+  });
+  const openDownloadMedia = (mode: EditorMediaPickerMode, openerTestId = '') => {
+    if (getDownloadMediaAction(mode).disabledReason) {
+      return;
+    }
+
+    onOpenDownloadMedia?.(mode, openerTestId);
+  };
+  const downloadMediaAction = getDownloadMediaAction('library');
+  const uploadDownloadMediaAction = getDownloadMediaAction('upload');
 
   return (
     <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
@@ -5135,18 +5739,34 @@ function LinkBehaviorProperties({
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => onOpenDownloadMedia?.('library')}
+              onClick={() => openDownloadMedia('library', `editor-${prefix}-download-media`)}
+              disabled={Boolean(downloadMediaAction.disabledReason)}
+              aria-describedby={mediaPickerStatusId}
               data-testid={`editor-${prefix}-download-media`}
-              className="flex items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-muted"
+              data-action-state={downloadMediaAction.actionState}
+              data-action-status={downloadMediaAction.actionStatus}
+              data-disabled-reason={downloadMediaAction.disabledReason || undefined}
+              data-target-media-field="downloadFile"
+              data-target-media-mode="library"
+              title={downloadMediaAction.disabledReason || downloadMediaAction.actionLabel}
+              className="flex items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <FileText className="h-3.5 w-3.5" />
               Choose file
             </button>
             <button
               type="button"
-              onClick={() => onOpenDownloadMedia?.('upload')}
+              onClick={() => openDownloadMedia('upload', `editor-${prefix}-upload-download-media`)}
+              disabled={Boolean(uploadDownloadMediaAction.disabledReason)}
+              aria-describedby={mediaPickerStatusId}
               data-testid={`editor-${prefix}-upload-download-media`}
-              className="flex items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-muted"
+              data-action-state={uploadDownloadMediaAction.actionState}
+              data-action-status={uploadDownloadMediaAction.actionStatus}
+              data-disabled-reason={uploadDownloadMediaAction.disabledReason || undefined}
+              data-target-media-field="downloadFile"
+              data-target-media-mode="upload"
+              title={uploadDownloadMediaAction.disabledReason || uploadDownloadMediaAction.actionLabel}
+              className="flex items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Upload className="h-3.5 w-3.5" />
               Upload
@@ -5339,6 +5959,7 @@ interface StylePropertiesProps {
   canCreateMedia?: boolean;
   mediaViewDisabledReason?: string;
   mediaCreateDisabledReason?: string;
+  disabled?: boolean;
   supportsTextStyles?: boolean;
 }
 
@@ -5352,6 +5973,7 @@ function StyleProperties({
   canCreateMedia = true,
   mediaViewDisabledReason,
   mediaCreateDisabledReason,
+  disabled = false,
   supportsTextStyles = false,
 }: StylePropertiesProps) {
   const media = useStore((state) => state.media);
@@ -5370,6 +5992,23 @@ function StyleProperties({
     () => THEME_TOKEN_TARGETS.filter((target) => supportsTextStyles || !target.textOnly),
     [supportsTextStyles],
   );
+  const fontMediaPickerStatusId = 'editor-font-media-picker-action-status';
+  const fontMediaPickerAction = buildEditorMediaPickerAction({
+    field: 'font',
+    mode: 'upload',
+    disabled,
+    canViewMedia,
+    canCreateMedia,
+    viewDisabledReason: mediaViewDisabledReason,
+    createDisabledReason: mediaCreateDisabledReason,
+  });
+  const openFontMediaLibrary = () => {
+    if (fontMediaPickerAction.disabledReason) {
+      return;
+    }
+
+    setIsFontLibraryOpen(true);
+  };
   const updateThemeTokenRef = useCallback((target: ThemeTokenTarget, tokenPath: string) => {
     const nextTokenRefs = { ...(element.tokenRefs || {}) };
     const nextProps = { ...element.props };
@@ -5489,11 +6128,29 @@ function StyleProperties({
                   )}
                 />
               )}
+              <span
+                id={fontMediaPickerStatusId}
+                className="sr-only"
+                data-testid="editor-font-media-picker-action-status"
+                data-action-state={fontMediaPickerAction.actionState}
+                data-action-status={fontMediaPickerAction.actionStatus}
+                data-disabled-reason={fontMediaPickerAction.disabledReason || undefined}
+              >
+                {fontMediaPickerAction.actionStatus}
+              </span>
               <button
                 type="button"
-                onClick={() => setIsFontLibraryOpen(true)}
+                onClick={openFontMediaLibrary}
+                disabled={Boolean(fontMediaPickerAction.disabledReason)}
+                aria-describedby={fontMediaPickerStatusId}
                 data-testid="editor-font-media-picker"
-                className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                data-action-state={fontMediaPickerAction.actionState}
+                data-action-status={fontMediaPickerAction.actionStatus}
+                data-disabled-reason={fontMediaPickerAction.disabledReason || undefined}
+                data-target-media-field="font"
+                data-target-media-mode="upload"
+                title={fontMediaPickerAction.disabledReason || fontMediaPickerAction.actionLabel}
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Upload className="h-3.5 w-3.5" />
                 Upload or select font
@@ -5548,6 +6205,7 @@ function StyleProperties({
               initialTab="upload"
               initialUploadFilter="font"
               allowScopeSwitcher={false}
+              returnFocusTargetId="editor-font-media-picker"
               canView={canViewMedia}
               canCreate={canCreateMedia}
               viewDisabledReason={mediaViewDisabledReason}

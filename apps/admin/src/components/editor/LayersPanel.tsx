@@ -10,8 +10,49 @@
  * - Selection & multi-select
  */
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, CornerUpLeft, MoveRight, Pencil } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import {
+    ArrowDown,
+    ArrowUp,
+    Box,
+    CheckSquare,
+    ChevronDown,
+    ChevronRight,
+    Code2,
+    Columns3,
+    Component,
+    Copy,
+    CornerUpLeft,
+    Eye,
+    EyeOff,
+    FormInput,
+    GripVertical,
+    Heading1,
+    Image as ImageIcon,
+    Keyboard,
+    Link,
+    List,
+    Lock,
+    Map,
+    MessageSquare,
+    Minus,
+    MousePointerClick,
+    MoveRight,
+    Navigation,
+    PanelTop,
+    Pencil,
+    Pilcrow,
+    Quote,
+    Radio,
+    Rows3,
+    Square,
+    TextCursorInput,
+    Trash2,
+    Type as TypeIcon,
+    Unlock,
+    Video,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { CanvasElement } from '../../types/editor';
 
 // ==========================================================================
@@ -36,6 +77,15 @@ interface LayersPanelProps {
 }
 
 type LayerMoveAction = 'up' | 'down' | 'outdent';
+type LayerScope = 'all' | 'selected' | 'hidden' | 'locked' | 'nested';
+
+interface LayerPanelStats {
+    total: number;
+    hidden: number;
+    locked: number;
+    nested: number;
+    groups: number;
+}
 
 const parseLayerBoolean = (value: unknown, fallback = false): boolean => {
     if (typeof value === 'boolean') {
@@ -98,81 +148,53 @@ interface LayerItemProps {
 }
 
 // ==========================================================================
-// ICONS (inline SVG for simplicity)
-// ==========================================================================
-
-const EyeIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-        <circle cx="12" cy="12" r="3" />
-    </svg>
-);
-
-const EyeOffIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-        <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-);
-
-const LockIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-);
-
-const UnlockIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-    </svg>
-);
-
-const TrashIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <polyline points="3 6 5 6 21 6" />
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    </svg>
-);
-
-const CopyIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-    </svg>
-);
-
-const DragIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <line x1="8" y1="6" x2="8" y2="6" />
-        <line x1="16" y1="6" x2="16" y2="6" />
-        <line x1="8" y1="12" x2="8" y2="12" />
-        <line x1="16" y1="12" x2="16" y2="12" />
-        <line x1="8" y1="18" x2="8" y2="18" />
-        <line x1="16" y1="18" x2="16" y2="18" />
-    </svg>
-);
-
-// ==========================================================================
 // ELEMENT TYPE ICONS
 // ==========================================================================
 
-const ELEMENT_ICONS: Record<string, string> = {
-    text: 'T',
-    heading: 'H',
-    paragraph: '¶',
-    image: '🖼',
-    video: '▶',
-    button: '☐',
-    container: '□',
-    section: '▭',
-    form: '📝',
-    input: '⌨',
-    divider: '—',
-    spacer: '↕',
-    embed: '</>',
+const LAYER_TYPE_ICONS: Record<string, LucideIcon> = {
+    box: Box,
+    button: MousePointerClick,
+    checkbox: CheckSquare,
+    codeComponent: Code2,
+    columns: Columns3,
+    comment: MessageSquare,
+    container: Box,
+    dataBinding: Link,
+    'data-binding': Link,
+    dataRef: Link,
+    divider: Minus,
+    embed: Code2,
+    footer: PanelTop,
+    form: FormInput,
+    header: PanelTop,
+    heading: Heading1,
+    icon: Component,
+    image: ImageIcon,
+    input: TextCursorInput,
+    interactiveFigure: Component,
+    link: Link,
+    list: List,
+    map: Map,
+    nav: Navigation,
+    paragraph: Pilcrow,
+    quote: Quote,
+    radio: Radio,
+    repeater: Rows3,
+    section: PanelTop,
+    select: List,
+    spacer: Rows3,
+    text: TypeIcon,
+    textarea: Keyboard,
+    video: Video,
 };
+
+const LAYER_SCOPE_OPTIONS: Array<{ id: LayerScope; label: string; icon: LucideIcon }> = [
+    { id: 'all', label: 'All', icon: List },
+    { id: 'selected', label: 'Selected', icon: CheckSquare },
+    { id: 'hidden', label: 'Hidden', icon: EyeOff },
+    { id: 'locked', label: 'Locked', icon: Lock },
+    { id: 'nested', label: 'Nested', icon: Rows3 },
+];
 
 const CHILD_ACCEPTING_TYPES = new Set([
     'box',
@@ -195,6 +217,72 @@ const getLayerDisplayName = (element: CanvasElement): string => (
 const getLayerSearchText = (element: CanvasElement): string => (
     `${getLayerDisplayName(element)} ${element.type} ${element.id}`.toLowerCase()
 );
+
+const getLayerScopeCount = (
+    scope: LayerScope,
+    stats: LayerPanelStats,
+    selectedCount: number,
+): number => {
+    switch (scope) {
+        case 'selected':
+            return selectedCount;
+        case 'hidden':
+            return stats.hidden;
+        case 'locked':
+            return stats.locked;
+        case 'nested':
+            return stats.nested;
+        case 'all':
+        default:
+            return stats.total;
+    }
+};
+
+const getLayerScopeLabel = (scope: LayerScope): string => (
+    LAYER_SCOPE_OPTIONS.find((option) => option.id === scope)?.label || 'All'
+);
+
+const LAYER_PANEL_ACTION_STATUS_ID = 'editor-layer-panel-action-status';
+
+const sanitizeLayerDomId = (id: string): string => (
+    id.replace(/[^a-zA-Z0-9_-]/g, '-')
+);
+
+const getLayerRowActionStatusId = (id: string): string => (
+    `editor-layer-row-action-status-${sanitizeLayerDomId(id)}`
+);
+
+const getLayerActionState = (
+    disabledReason?: string,
+    selected = false,
+): 'ready' | 'blocked' | 'selected' => {
+    if (disabledReason) {
+        return 'blocked';
+    }
+    return selected ? 'selected' : 'ready';
+};
+
+const getLayerPanelActionProps = (
+    status: string,
+    disabledReason?: string,
+    selected = false,
+) => ({
+    'aria-describedby': LAYER_PANEL_ACTION_STATUS_ID,
+    'data-action-state': getLayerActionState(disabledReason, selected),
+    'data-action-status': status,
+    'data-disabled-reason': disabledReason || undefined,
+});
+
+const getLayerRowActionProps = (
+    statusId: string,
+    status: string,
+    disabledReason?: string,
+) => ({
+    'aria-describedby': statusId,
+    'data-action-state': getLayerActionState(disabledReason),
+    'data-action-status': status,
+    'data-disabled-reason': disabledReason || undefined,
+});
 
 // ==========================================================================
 // LAYER ITEM COMPONENT
@@ -233,10 +321,28 @@ function LayerItem({
     const [isRenaming, setIsRenaming] = useState(false);
     const layerName = getLayerDisplayName(element);
     const [draftLayerName, setDraftLayerName] = useState(layerName);
+    const renameInputRef = useRef<HTMLInputElement | null>(null);
     const hasExternalSelection = selectedIds.some((id) => id !== element.id);
     const canNestSelectedHere = !disabled && !isLocked && canAcceptChildren && hasExternalSelection;
     const showRowActions = showActions || isSelected;
     const actionButtonTabIndex = showRowActions ? 0 : -1;
+    const LayerTypeIcon = LAYER_TYPE_ICONS[element.type] || Square;
+    const layerActionStatusId = getLayerRowActionStatusId(element.id);
+
+    const disabledPanelReason = disabled ? 'Layer editing is disabled.' : undefined;
+    const lockedReason = isLocked ? `Unlock ${layerName} before using this layer action.` : undefined;
+    const expandDisabledReason = disabledPanelReason || (!hasChildren ? `${layerName} has no child layers.` : undefined);
+    const mutationDisabledReason = disabledPanelReason || lockedReason;
+    const nestDisabledReason = disabledPanelReason
+        || lockedReason
+        || (!canAcceptChildren ? `${layerName} cannot contain child layers.` : undefined)
+        || (!hasExternalSelection ? `Select another layer before nesting into ${layerName}.` : undefined);
+    const layerRowActionStatus = [
+        `${layerName} layer actions.`,
+        isSelected ? 'Layer is selected.' : 'Layer is not selected.',
+        isHidden ? 'Layer is hidden.' : 'Layer is visible.',
+        isLocked ? 'Layer is locked.' : 'Layer is unlocked.',
+    ].join(' ');
 
     useEffect(() => {
         if (!isRenaming) {
@@ -265,14 +371,14 @@ function LayerItem({
         onSelect(element.id, false, false);
     };
 
-    const commitRename = () => {
+    const commitRename = (submittedName?: string) => {
         if (disabled || isLocked) {
             setIsRenaming(false);
             setDraftLayerName(layerName);
             return;
         }
 
-        const nextName = draftLayerName.trim();
+        const nextName = (submittedName ?? renameInputRef.current?.value ?? draftLayerName).trim();
         onRename(element.id, nextName);
         setIsRenaming(false);
     };
@@ -322,9 +428,13 @@ function LayerItem({
             aria-selected={isSelected}
             aria-level={depth + 1}
             aria-expanded={hasChildren ? isExpanded : undefined}
+            aria-describedby={layerActionStatusId}
             data-layer-id={element.id}
             data-layer-depth={depth}
             data-layer-selected={isSelected ? 'true' : 'false'}
+            data-action-status={layerRowActionStatus}
+            data-action-state={getLayerActionState(disabledPanelReason, isSelected)}
+            data-disabled-reason={disabledPanelReason || undefined}
             style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -373,6 +483,13 @@ function LayerItem({
                 disabled={disabled || !hasChildren}
                 data-layer-action="toggle-expand"
                 data-layer-action-id={element.id}
+                {...getLayerRowActionProps(
+                    layerActionStatusId,
+                    hasChildren
+                        ? `${isExpanded ? 'Collapse' : 'Expand'} ${layerName} child layers.`
+                        : `${layerName} has no child layers.`,
+                    expandDisabledReason,
+                )}
                 aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${layerName}`}
                 style={{
                     ...iconButtonStyle(!disabled && hasChildren),
@@ -394,12 +511,21 @@ function LayerItem({
             </button>
 
             {/* Drag handle */}
-            <span style={{ cursor: !disabled && canReorder ? 'grab' : 'default', color: '#9ca3af', opacity: !disabled && canReorder ? 1 : 0.35 }}>
-                <DragIcon />
+            <span
+                style={{ cursor: !disabled && canReorder ? 'grab' : 'default', color: '#9ca3af', opacity: !disabled && canReorder ? 1 : 0.35 }}
+                data-testid="editor-layer-drag-handle"
+                aria-hidden="true"
+            >
+                <GripVertical size={14} strokeWidth={2} />
             </span>
 
             {/* Element type icon */}
             <span
+                role="img"
+                aria-label={`${element.type} layer type`}
+                title={`${element.type} layer`}
+                data-testid="editor-layer-type-icon"
+                data-layer-type={element.type}
                 style={{
                     width: '24px',
                     height: '24px',
@@ -408,10 +534,11 @@ function LayerItem({
                     justifyContent: 'center',
                     backgroundColor: '#f3f4f6',
                     borderRadius: '4px',
-                    fontSize: '12px',
+                    color: '#4b5563',
+                    flex: '0 0 auto',
                 }}
             >
-                {ELEMENT_ICONS[element.type] || '?'}
+                <LayerTypeIcon size={14} strokeWidth={1.8} aria-hidden="true" focusable="false" />
             </span>
 
             {/* Element name */}
@@ -430,17 +557,19 @@ function LayerItem({
             >
                 {isRenaming ? (
                     <input
+                        ref={renameInputRef}
                         type="text"
                         value={draftLayerName}
                         onChange={(e) => setDraftLayerName(e.target.value)}
+                        onInput={(e) => setDraftLayerName(e.currentTarget.value)}
                         onClick={(e) => e.stopPropagation()}
                         onDoubleClick={(e) => e.stopPropagation()}
-                        onBlur={commitRename}
+                        onBlur={(e) => commitRename(e.currentTarget.value)}
                         onKeyDown={(e) => {
                             e.stopPropagation();
                             if (e.key === 'Enter') {
                                 e.preventDefault();
-                                commitRename();
+                                commitRename(e.currentTarget.value);
                             } else if (e.key === 'Escape') {
                                 e.preventDefault();
                                 cancelRename();
@@ -464,6 +593,9 @@ function LayerItem({
             </span>
 
             {/* Action buttons (shown on hover) */}
+            <span id={layerActionStatusId} className="sr-only" data-testid="editor-layer-row-action-status" aria-live="polite">
+                {layerRowActionStatus}
+            </span>
             <div
                 style={{
                     display: 'flex',
@@ -473,6 +605,10 @@ function LayerItem({
                     transition: 'opacity 0.15s',
                 }}
                 data-layer-actions-visible={showRowActions ? 'true' : 'false'}
+                data-action-status={layerRowActionStatus}
+                data-action-state={getLayerActionState(disabledPanelReason)}
+                data-disabled-reason={disabledPanelReason || undefined}
+                aria-describedby={layerActionStatusId}
                 aria-hidden={showRowActions ? undefined : true}
             >
                 <button
@@ -488,6 +624,11 @@ function LayerItem({
                     disabled={disabled || isLocked}
                     data-layer-action="move-up"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `Move ${layerName} up in the layer stack.`,
+                        mutationDisabledReason,
+                    )}
                     aria-label={`Move ${layerName} up`}
                     style={iconButtonStyle(!disabled && !isLocked)}
                     title={isLocked ? 'Unlock to move' : 'Move up'}
@@ -508,6 +649,11 @@ function LayerItem({
                     disabled={disabled || isLocked}
                     data-layer-action="move-down"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `Move ${layerName} down in the layer stack.`,
+                        mutationDisabledReason,
+                    )}
                     aria-label={`Move ${layerName} down`}
                     style={iconButtonStyle(!disabled && !isLocked)}
                     title={isLocked ? 'Unlock to move' : 'Move down'}
@@ -528,6 +674,11 @@ function LayerItem({
                     disabled={disabled || isLocked}
                     data-layer-action="outdent"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `Move ${layerName} out of its parent layer.`,
+                        mutationDisabledReason,
+                    )}
                     aria-label={`Move ${layerName} out`}
                     style={iconButtonStyle(!disabled && !isLocked)}
                     title={isLocked ? 'Unlock to move out' : 'Move out of parent'}
@@ -548,6 +699,11 @@ function LayerItem({
                     disabled={!canNestSelectedHere}
                     data-layer-action="nest-selection"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `Move selected layers into ${layerName}.`,
+                        nestDisabledReason,
+                    )}
                     aria-label={`Move selected layers into ${layerName}`}
                     style={iconButtonStyle(canNestSelectedHere)}
                     title={canAcceptChildren ? 'Move selected layers into this layer' : 'This layer cannot contain children'}
@@ -568,11 +724,16 @@ function LayerItem({
                     disabled={disabled}
                     data-layer-action="visibility"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `${isHidden ? 'Show' : 'Hide'} ${layerName}.`,
+                        disabledPanelReason,
+                    )}
                     aria-label={`${isHidden ? 'Show' : 'Hide'} ${layerName}`}
                     style={iconButtonStyle(!disabled)}
                     title={isHidden ? 'Show' : 'Hide'}
                 >
-                    {isHidden ? <EyeOffIcon /> : <EyeIcon />}
+                    {isHidden ? <EyeOff size={14} strokeWidth={2} /> : <Eye size={14} strokeWidth={2} />}
                 </button>
 
                 <button
@@ -588,11 +749,16 @@ function LayerItem({
                     disabled={disabled}
                     data-layer-action="lock"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `${isLocked ? 'Unlock' : 'Lock'} ${layerName}.`,
+                        disabledPanelReason,
+                    )}
                     aria-label={`${isLocked ? 'Unlock' : 'Lock'} ${layerName}`}
                     style={iconButtonStyle(!disabled)}
                     title={isLocked ? 'Unlock' : 'Lock'}
                 >
-                    {isLocked ? <LockIcon /> : <UnlockIcon />}
+                    {isLocked ? <Lock size={14} strokeWidth={2} /> : <Unlock size={14} strokeWidth={2} />}
                 </button>
 
                 <button
@@ -605,6 +771,11 @@ function LayerItem({
                     disabled={disabled || isLocked}
                     data-layer-action="rename"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `Rename ${layerName}.`,
+                        mutationDisabledReason,
+                    )}
                     aria-label={`Rename ${layerName}`}
                     style={iconButtonStyle(!disabled && !isLocked)}
                     title={isLocked ? 'Unlock to rename' : 'Rename'}
@@ -625,11 +796,16 @@ function LayerItem({
                     disabled={disabled || isLocked}
                     data-layer-action="duplicate"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `Duplicate ${layerName}.`,
+                        mutationDisabledReason,
+                    )}
                     aria-label={`Duplicate ${layerName}`}
                     style={iconButtonStyle(!disabled && !isLocked)}
                     title={isLocked ? 'Unlock to duplicate' : 'Duplicate'}
                 >
-                    <CopyIcon />
+                    <Copy size={14} strokeWidth={2} />
                 </button>
 
                 <button
@@ -645,11 +821,16 @@ function LayerItem({
                     disabled={disabled || isLocked}
                     data-layer-action="delete"
                     data-layer-action-id={element.id}
+                    {...getLayerRowActionProps(
+                        layerActionStatusId,
+                        `Delete ${layerName}.`,
+                        mutationDisabledReason,
+                    )}
                     aria-label={`Delete ${layerName}`}
                     style={iconButtonStyle(!disabled && !isLocked, true)}
                     title={isLocked ? 'Unlock to delete' : 'Delete'}
                 >
-                    <TrashIcon />
+                    <Trash2 size={14} strokeWidth={2} />
                 </button>
             </div>
         </div>
@@ -682,7 +863,40 @@ export function LayersPanel({
     const [focusedLayerId, setFocusedLayerId] = useState<string | null>(null);
     const [collapsedLayerIds, setCollapsedLayerIds] = useState<string[]>([]);
     const [layerSearch, setLayerSearch] = useState('');
+    const [layerScope, setLayerScope] = useState<LayerScope>('all');
     const collapsedLayerIdSet = useMemo(() => new Set(collapsedLayerIds), [collapsedLayerIds]);
+    const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+    const layerStats = useMemo(() => {
+        const stats: LayerPanelStats = {
+            total: 0,
+            hidden: 0,
+            locked: 0,
+            nested: 0,
+            groups: 0,
+        };
+
+        const collect = (items: CanvasElement[], depth = 0) => {
+            items.forEach((element) => {
+                stats.total += 1;
+                if (isLayerHidden(element)) {
+                    stats.hidden += 1;
+                }
+                if (isLayerLocked(element)) {
+                    stats.locked += 1;
+                }
+                if (depth > 0) {
+                    stats.nested += 1;
+                }
+                if (element.children?.length) {
+                    stats.groups += 1;
+                    collect(element.children, depth + 1);
+                }
+            });
+        };
+
+        collect(elements);
+        return stats;
+    }, [elements]);
     const collapsibleLayerIds = useMemo(() => {
         const ids: string[] = [];
         const collect = (items: CanvasElement[]) => {
@@ -697,8 +911,9 @@ export function LayersPanel({
         return ids;
     }, [elements]);
     const normalizedLayerSearch = layerSearch.trim().toLowerCase();
+    const hasActiveLayerFilter = Boolean(normalizedLayerSearch) || layerScope !== 'all';
     const filteredLayerIdSet = useMemo(() => {
-        if (!normalizedLayerSearch) {
+        if (!hasActiveLayerFilter) {
             return null;
         }
 
@@ -709,12 +924,30 @@ export function LayersPanel({
                 addDescendants(child);
             });
         };
-        const walk = (items: CanvasElement[], ancestorIds: string[]): boolean => {
+        const matchesScope = (element: CanvasElement, depth: number) => {
+            switch (layerScope) {
+                case 'selected':
+                    return selectedIdSet.has(element.id);
+                case 'hidden':
+                    return isLayerHidden(element);
+                case 'locked':
+                    return isLayerLocked(element);
+                case 'nested':
+                    return depth > 0;
+                case 'all':
+                default:
+                    return true;
+            }
+        };
+        const walk = (items: CanvasElement[], ancestorIds: string[], depth = 0): boolean => {
             let hasMatch = false;
             items.forEach((element) => {
-                const selfMatches = getLayerSearchText(element).includes(normalizedLayerSearch);
+                const selfMatchesSearch = normalizedLayerSearch
+                    ? getLayerSearchText(element).includes(normalizedLayerSearch)
+                    : true;
+                const selfMatches = selfMatchesSearch && matchesScope(element, depth);
                 const childMatches = element.children?.length
-                    ? walk(element.children, [...ancestorIds, element.id])
+                    ? walk(element.children, [...ancestorIds, element.id], depth + 1)
                     : false;
 
                 if (selfMatches || childMatches) {
@@ -732,7 +965,7 @@ export function LayersPanel({
 
         walk(elements, []);
         return visibleIds;
-    }, [elements, normalizedLayerSearch]);
+    }, [elements, hasActiveLayerFilter, layerScope, normalizedLayerSearch, selectedIdSet]);
     const renderedLayerIds = useMemo(() => {
         const ids: string[] = [];
         const collect = (items: CanvasElement[]) => {
@@ -822,6 +1055,35 @@ export function LayersPanel({
     const handleCollapseAll = useCallback(() => {
         setCollapsedLayerIds(collapsibleLayerIds);
     }, [collapsibleLayerIds]);
+
+    const handleResetLayerFilters = useCallback(() => {
+        setLayerSearch('');
+        setLayerScope('all');
+    }, []);
+
+    const activeLayerScopeLabel = getLayerScopeLabel(layerScope);
+    const emptyLayerFilterMessage = normalizedLayerSearch && layerScope !== 'all'
+        ? `No ${activeLayerScopeLabel.toLowerCase()} layers match "${layerSearch.trim()}".`
+        : normalizedLayerSearch
+            ? `No layers match "${layerSearch.trim()}".`
+            : layerScope === 'selected'
+                ? 'No selected layers.'
+                : `No ${activeLayerScopeLabel.toLowerCase()} layers yet.`;
+    const layerPanelActionStatus = `Layers panel ready. ${renderedLayerIds.length} of ${layerStats.total} layers shown. ${selectedIds.length} selected.`;
+    const clearSearchDisabledReason = layerSearch ? undefined : 'Type a layer search before clearing.';
+    const resetLayerFiltersStatus = hasActiveLayerFilter
+        ? `Reset active layer filters from ${activeLayerScopeLabel}${normalizedLayerSearch ? ` search "${layerSearch.trim()}"` : ''}.`
+        : 'No layer filters are active.';
+    const expandAllDisabledReason = collapsedLayerIds.length > 0
+        ? undefined
+        : collapsibleLayerIds.length === 0
+            ? 'No nested layers are available to expand.'
+            : 'All nested layers are already expanded.';
+    const collapseAllDisabledReason = collapsibleLayerIds.length === 0
+        ? 'No nested layers are available to collapse.'
+        : collapsedLayerIds.length === collapsibleLayerIds.length
+            ? 'All nested layers are already collapsed.'
+            : undefined;
 
     const handleKeyboardNavigate = useCallback(
         (id: string, key: string, multiSelect: boolean, rangeSelect: boolean) => {
@@ -959,6 +1221,10 @@ export function LayersPanel({
     return (
         <div
             className={embedded ? 'layers-panel w-full' : 'layers-panel w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0'}
+            aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
+            data-action-status={layerPanelActionStatus}
+            data-action-state={getLayerActionState(undefined)}
+            data-testid="editor-layers-panel"
             style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -967,6 +1233,10 @@ export function LayersPanel({
                 borderLeft: embedded ? '0' : '1px solid #e5e7eb',
             }}
         >
+            <span id={LAYER_PANEL_ACTION_STATUS_ID} className="sr-only" data-testid="editor-layer-panel-action-status" aria-live="polite">
+                {layerPanelActionStatus}
+            </span>
+
             {/* Header */}
             {!hideHeader && (
                 <div
@@ -1002,6 +1272,10 @@ export function LayersPanel({
                     gap: '8px',
                 }}
                 data-testid="editor-layer-search-controls"
+                role="group"
+                aria-label="Layer search controls"
+                aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
+                data-action-status={layerPanelActionStatus}
             >
                 <input
                     type="search"
@@ -1011,6 +1285,11 @@ export function LayersPanel({
                     aria-label="Search layers"
                     data-testid="editor-layer-search"
                     data-layer-search-results={renderedLayerIds.length}
+                    {...getLayerPanelActionProps(
+                        normalizedLayerSearch
+                            ? `Search layers for "${layerSearch.trim()}"; ${renderedLayerIds.length} matches shown.`
+                            : `Search all ${layerStats.total} layers by name, type, or id.`,
+                    )}
                     style={{
                         minWidth: 0,
                         flex: 1,
@@ -1027,6 +1306,10 @@ export function LayersPanel({
                     disabled={!layerSearch}
                     aria-label="Clear layer search"
                     data-testid="editor-layer-search-clear"
+                    {...getLayerPanelActionProps(
+                        layerSearch ? `Clear layer search "${layerSearch.trim()}".` : 'Layer search is empty.',
+                        clearSearchDisabledReason,
+                    )}
                     style={{
                         border: '1px solid #d1d5db',
                         borderRadius: '6px',
@@ -1044,6 +1327,128 @@ export function LayersPanel({
 
             <div
                 style={{
+                    borderBottom: '1px solid #e5e7eb',
+                    padding: '10px 12px',
+                    background: '#f8fafc',
+                }}
+                    data-testid="editor-layer-summary"
+                data-layer-total-count={layerStats.total}
+                data-layer-visible-count={renderedLayerIds.length}
+                data-layer-selected-count={selectedIds.length}
+                data-layer-hidden-count={layerStats.hidden}
+                data-layer-locked-count={layerStats.locked}
+                data-layer-nested-count={layerStats.nested}
+                    data-layer-scope={layerScope}
+                    aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
+                    data-action-status={layerPanelActionStatus}
+                >
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                    }}
+                >
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ color: '#111827', fontSize: '12px', fontWeight: 700 }}>
+                            Layer map
+                        </div>
+                        <div style={{ color: '#64748b', fontSize: '11px', lineHeight: '16px' }}>
+                            {renderedLayerIds.length} shown from {layerStats.total} total
+                        </div>
+                    </div>
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                            gap: '4px',
+                            minWidth: '116px',
+                            textAlign: 'right',
+                            color: '#475569',
+                            fontSize: '11px',
+                            fontVariantNumeric: 'tabular-nums',
+                        }}
+                        aria-label="Layer counts"
+                        data-testid="editor-layer-counts"
+                    >
+                        <span title="Selected layers">{selectedIds.length} sel</span>
+                        <span title="Hidden layers">{layerStats.hidden} hid</span>
+                        <span title="Locked layers">{layerStats.locked} lock</span>
+                    </div>
+                </div>
+                <div
+                    style={{
+                        display: 'flex',
+                        gap: '6px',
+                        marginTop: '8px',
+                        overflowX: 'auto',
+                        paddingBottom: '1px',
+                    }}
+                    data-testid="editor-layer-scope-controls"
+                    role="group"
+                    aria-label="Filter layers by state"
+                    aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
+                    data-action-status={`Layer scope filters ready. ${renderedLayerIds.length} layers shown.`}
+                >
+                    {LAYER_SCOPE_OPTIONS.map((option) => {
+                        const ScopeIcon = option.icon;
+                        const isActive = option.id === layerScope;
+                        const count = getLayerScopeCount(option.id, layerStats, selectedIds.length);
+                        return (
+                            <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => setLayerScope(option.id)}
+                                aria-pressed={isActive}
+                                data-testid={`editor-layer-scope-${option.id}`}
+                                data-layer-scope-active={isActive ? 'true' : 'false'}
+                                data-target-scope={option.id}
+                                data-matched-layers={count}
+                                {...getLayerPanelActionProps(
+                                    `Show ${option.label.toLowerCase()} layers. ${count} matching layers available.`,
+                                    undefined,
+                                    isActive,
+                                )}
+                                style={{
+                                    alignItems: 'center',
+                                    background: isActive ? '#0f172a' : '#ffffff',
+                                    border: isActive ? '1px solid #0f172a' : '1px solid #dbe3ec',
+                                    borderRadius: '7px',
+                                    color: isActive ? '#ffffff' : '#475569',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    flexShrink: 0,
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    gap: '5px',
+                                    lineHeight: '16px',
+                                    padding: '5px 7px',
+                                    transition: 'background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease',
+                                }}
+                            >
+                                <ScopeIcon size={12} strokeWidth={2} aria-hidden="true" focusable="false" />
+                                <span>{option.label}</span>
+                                <span
+                                    style={{
+                                        borderRadius: '4px',
+                                        background: isActive ? 'rgba(255,255,255,0.16)' : '#f1f5f9',
+                                        color: isActive ? '#e2e8f0' : '#64748b',
+                                        minWidth: '18px',
+                                        padding: '0 4px',
+                                        textAlign: 'center',
+                                    }}
+                                >
+                                    {count}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div
+                style={{
                     padding: '8px 12px',
                     borderBottom: '1px solid #e5e7eb',
                     display: 'flex',
@@ -1056,15 +1461,61 @@ export function LayersPanel({
                 data-testid="editor-layer-tree-controls"
                 data-layer-collapsible-count={collapsibleLayerIds.length}
                 data-layer-collapsed-count={collapsedLayerIds.length}
+                data-layer-filter-active={hasActiveLayerFilter ? 'true' : 'false'}
+                role="group"
+                aria-label="Layer tree controls"
+                aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
+                data-action-status={`Layer tree controls ready. ${collapsibleLayerIds.length} expandable layers, ${collapsedLayerIds.length} collapsed.`}
             >
-                <span>{renderedLayerIds.length} shown</span>
+                <span>
+                    {renderedLayerIds.length} shown
+                    {hasActiveLayerFilter ? (
+                        <span
+                            data-testid="editor-layer-active-filter-summary"
+                            style={{
+                                color: '#475569',
+                                fontWeight: 600,
+                                marginLeft: '6px',
+                            }}
+                        >
+                            {layerScope === 'all' ? 'Search filter' : activeLayerScopeLabel}
+                        </span>
+                    ) : null}
+                </span>
                 <div style={{ display: 'flex', gap: '6px' }}>
+                    {hasActiveLayerFilter ? (
+                        <button
+                            type="button"
+                            onClick={handleResetLayerFilters}
+                            data-testid="editor-layer-reset-filters"
+                            aria-label="Reset layer filters"
+                            {...getLayerPanelActionProps(resetLayerFiltersStatus)}
+                            style={{
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '6px',
+                                background: '#f8fafc',
+                                color: '#0f172a',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                padding: '5px 8px',
+                            }}
+                        >
+                            Reset
+                        </button>
+                    ) : null}
                     <button
                         type="button"
                         onClick={handleExpandAll}
                         disabled={collapsedLayerIds.length === 0}
                         data-testid="editor-layer-expand-all"
                         aria-label="Expand all layers"
+                        {...getLayerPanelActionProps(
+                            collapsedLayerIds.length > 0
+                                ? `Expand ${collapsedLayerIds.length} collapsed layer groups.`
+                                : 'All layer groups are expanded.',
+                            expandAllDisabledReason,
+                        )}
                         style={{
                             border: '1px solid #d1d5db',
                             borderRadius: '6px',
@@ -1084,6 +1535,12 @@ export function LayersPanel({
                         disabled={collapsibleLayerIds.length === 0 || collapsedLayerIds.length === collapsibleLayerIds.length}
                         data-testid="editor-layer-collapse-all"
                         aria-label="Collapse all layers"
+                        {...getLayerPanelActionProps(
+                            collapsibleLayerIds.length > 0
+                                ? `Collapse ${collapsibleLayerIds.length} expandable layer groups.`
+                                : 'No nested layers are available to collapse.',
+                            collapseAllDisabledReason,
+                        )}
                         style={{
                             border: '1px solid #d1d5db',
                             borderRadius: '6px',
@@ -1122,17 +1579,57 @@ export function LayersPanel({
                         <br />
                         Drag components from the library.
                     </div>
-                ) : normalizedLayerSearch && renderedLayerIds.length === 0 ? (
+                ) : hasActiveLayerFilter && renderedLayerIds.length === 0 ? (
                     <div
                         style={{
                             padding: '24px 16px',
                             textAlign: 'center',
-                            color: '#9ca3af',
+                            color: '#64748b',
                             fontSize: '13px',
                         }}
-                        data-testid="editor-layer-search-empty"
+                        data-testid="editor-layer-filter-empty"
+                        data-layer-empty-scope={layerScope}
+                        data-layer-empty-search={layerSearch.trim()}
+                        aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
+                        data-action-status={emptyLayerFilterMessage}
                     >
-                        No matching layers.
+                        <div
+                            style={{
+                                color: '#0f172a',
+                                fontWeight: 700,
+                                marginBottom: '4px',
+                            }}
+                        >
+                            No matching layers
+                        </div>
+                        <div
+                            style={{
+                                lineHeight: '18px',
+                                margin: '0 auto 12px',
+                                maxWidth: '220px',
+                            }}
+                        >
+                            {emptyLayerFilterMessage}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleResetLayerFilters}
+                            data-testid="editor-layer-empty-reset-filters"
+                            aria-label="Reset layer filters"
+                            {...getLayerPanelActionProps(resetLayerFiltersStatus)}
+                            style={{
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '7px',
+                                background: '#ffffff',
+                                color: '#0f172a',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                padding: '7px 10px',
+                            }}
+                        >
+                            Show all layers
+                        </button>
                     </div>
                 ) : (
                     renderLayerItems(elements)

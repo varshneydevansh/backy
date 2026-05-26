@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { useEffect, useMemo, useState, type CSSProperties, type DragEvent } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
 import {
   Type,
   Heading,
@@ -52,11 +52,79 @@ import type { ReusableSection } from '@/lib/adminContentApi';
 // ============================================
 
 const LIBRARY_ITEMS: ComponentLibraryItem[] = CANVAS_COMPONENT_LIBRARY;
+const ESSENTIALS_CATEGORY_ID = 'essentials';
+const RECENT_CATEGORY_ID = 'recent';
 const FAVORITES_CATEGORY_ID = 'favorites';
+const RECENT_STORAGE_KEY = 'backy.editor.componentLibrary.recent';
 const FAVORITES_STORAGE_KEY = 'backy.editor.componentLibrary.favorites';
+const RECENT_ITEM_LIMIT = 6;
+const ESSENTIAL_ITEM_KEYS = new Set([
+  'heading',
+  'text',
+  'button',
+  'image',
+  'box',
+  'columns',
+  'form',
+  'input',
+  'divider',
+  'nav',
+  'repeater',
+  'blog-post-card',
+]);
+const COMPONENT_LIBRARY_CATEGORIES = [
+  { id: ESSENTIALS_CATEGORY_ID, name: 'Essentials', color: 'bg-emerald-500' },
+  { id: RECENT_CATEGORY_ID, name: 'Recent', color: 'bg-cyan-500' },
+  { id: FAVORITES_CATEGORY_ID, name: 'Favorites', color: 'bg-yellow-400' },
+  { id: 'basic', name: 'Basic', color: 'bg-blue-500' },
+  { id: 'content', name: 'Content', color: 'bg-indigo-500' },
+  { id: 'media', name: 'Media', color: 'bg-purple-500' },
+  { id: 'layout', name: 'Layout', color: 'bg-green-500' },
+  { id: 'form', name: 'Form', color: 'bg-orange-500' },
+  { id: 'saved', name: 'Saved', color: 'bg-sky-500' },
+  { id: 'advanced', name: 'Advanced', color: 'bg-red-500' },
+];
 
 const getLibraryCategory = (item: ComponentLibraryItem): string => item.category || 'basic';
 const getLibraryItemKey = (item: ComponentLibraryItem): string => String(item.id ?? item.type);
+const getLibraryItemDomKey = (item: ComponentLibraryItem): string => (
+  getLibraryItemKey(item).replace(/[^a-zA-Z0-9_-]/g, '-')
+);
+const isReusableLibraryItem = (item: ComponentLibraryItem): boolean => (
+  Boolean(item.reusableContent?.sectionId) || getLibraryCategory(item) === 'saved'
+);
+const isEssentialLibraryItem = (item: ComponentLibraryItem): boolean => (
+  ESSENTIAL_ITEM_KEYS.has(getLibraryItemKey(item))
+);
+const itemMatchesSearch = (item: ComponentLibraryItem, normalizedSearchQuery: string): boolean => (
+  normalizedSearchQuery.length === 0 ||
+  item.name.toLowerCase().includes(normalizedSearchQuery) ||
+  Boolean(item.description?.toLowerCase().includes(normalizedSearchQuery))
+);
+const normalizeReusableSectionDedupeValue = (value: string | null | undefined): string => (
+  (value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+);
+const getReusableSectionSortTime = (section: ReusableSection): number => {
+  const timestamp = Date.parse(section.updatedAt || section.createdAt || '');
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+const getReusableSectionDedupeKey = (section: ReusableSection): string => {
+  const root = section.content.elements?.[0];
+  const canvasSize = section.content.canvasSize;
+
+  return [
+    normalizeReusableSectionDedupeValue(section.name),
+    normalizeReusableSectionDedupeValue(section.description),
+    normalizeReusableSectionDedupeValue(section.category),
+    root?.type || 'unknown',
+    Math.round(root?.width || canvasSize?.width || 0),
+    Math.round(root?.height || canvasSize?.height || 0),
+  ].join('|');
+};
+const getReusableSectionDuplicateCount = (item: ComponentLibraryItem): number => {
+  const value = item.reusableContent?.metadata?.libraryDuplicateCount;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+};
 
 // ============================================
 // COMPONENT
@@ -108,8 +176,20 @@ export function ComponentLibrary({
   onDeleteReusableSection,
 }: ComponentLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(ESSENTIALS_CATEGORY_ID);
   const [previewItemKey, setPreviewItemKey] = useState<string | null>(null);
+  const [recentItemKeys, setRecentItemKeys] = useState<string[]>(() => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(RECENT_STORAGE_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
   const [favoriteItemKeys, setFavoriteItemKeys] = useState<string[]>(() => {
     if (typeof window === 'undefined') {
       return [];
@@ -123,38 +203,65 @@ export function ComponentLibrary({
     }
   });
 
-  const reusableItems = useMemo<ComponentLibraryItem[]>(() => (
-    reusableSections
-      .flatMap((section) => {
-        const root = section.content.elements?.[0];
-        if (!root) {
-          return [];
-        }
+  const reusableLibraryState = useMemo(() => {
+    const activeSections = reusableSections
+      .filter((section) => section.status !== 'archived')
+      .filter((section) => Boolean(section.content.elements?.[0]))
+      .sort((left, right) => {
+        const timeDelta = getReusableSectionSortTime(right) - getReusableSectionSortTime(left);
+        return timeDelta !== 0 ? timeDelta : right.id.localeCompare(left.id);
+      });
+    const groups = new Map<string, ReusableSection[]>();
 
-        return [{
-          id: `reusable-section:${section.id}`,
-          type: root.type,
+    for (const section of activeSections) {
+      const key = getReusableSectionDedupeKey(section);
+      groups.set(key, [...(groups.get(key) || []), section]);
+    }
+
+    const items = Array.from(groups.values()).flatMap<ComponentLibraryItem>((group) => {
+      const section = group[0];
+      const root = section.content.elements?.[0];
+      if (!root) {
+        return [];
+      }
+      const duplicateCount = Math.max(0, group.length - 1);
+
+      return [{
+        id: `reusable-section:${section.id}`,
+        type: root.type,
+        name: section.name,
+        icon: 'Sparkles',
+        category: 'saved',
+        description: section.description || `Saved ${section.category || 'section'} template`,
+        defaultProps: root.props,
+        defaultStyles: root.styles,
+        defaultSize: {
+          width: root.width || section.content.canvasSize?.width || 640,
+          height: root.height || section.content.canvasSize?.height || 360,
+        },
+        reusableContent: {
+          ...section.content,
+          metadata: {
+            ...(section.content.metadata || {}),
+            libraryDuplicateCount: duplicateCount,
+            libraryDuplicateIds: group.slice(1).map((duplicate) => duplicate.id),
+          },
+          sectionId: section.id,
+          slug: section.slug,
           name: section.name,
-          icon: 'Sparkles',
-          category: 'saved',
-          description: section.description || `Saved ${section.category || 'section'} template`,
-          defaultProps: root.props,
-          defaultStyles: root.styles,
-          defaultSize: {
-            width: root.width || section.content.canvasSize?.width || 640,
-            height: root.height || section.content.canvasSize?.height || 360,
-          },
-          reusableContent: {
-            ...section.content,
-            sectionId: section.id,
-            slug: section.slug,
-            name: section.name,
-            sourceUpdatedAt: section.updatedAt,
-            syncMode: 'synced',
-          },
-        } satisfies ComponentLibraryItem];
-      })
-  ), [reusableSections]);
+          sourceUpdatedAt: section.updatedAt,
+          syncMode: 'synced',
+        },
+      } satisfies ComponentLibraryItem];
+    });
+
+    return {
+      items,
+      hiddenDuplicateCount: activeSections.length - items.length,
+      totalActiveCount: activeSections.length,
+    };
+  }, [reusableSections]);
+  const reusableItems = reusableLibraryState.items;
 
   const libraryItems = useMemo(
     () => [...LIBRARY_ITEMS, ...reusableItems],
@@ -166,9 +273,26 @@ export function ComponentLibrary({
       return;
     }
 
+    window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentItemKeys));
+  }, [recentItemKeys]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteItemKeys));
   }, [favoriteItemKeys]);
 
+  const libraryItemByKey = useMemo(() => (
+    new Map(libraryItems.map((item) => [getLibraryItemKey(item), item]))
+  ), [libraryItems]);
+  const recentKeySet = useMemo(() => new Set(recentItemKeys), [recentItemKeys]);
+  const recentItems = useMemo(() => (
+    recentItemKeys
+      .map((itemKey) => libraryItemByKey.get(itemKey))
+      .filter((item): item is ComponentLibraryItem => Boolean(item))
+  ), [libraryItemByKey, recentItemKeys]);
   const favoriteKeySet = useMemo(() => new Set(favoriteItemKeys), [favoriteItemKeys]);
   const favoriteItems = useMemo(
     () => libraryItems.filter((item) => favoriteKeySet.has(getLibraryItemKey(item))),
@@ -178,6 +302,9 @@ export function ComponentLibrary({
     () => libraryItems.find((item) => getLibraryItemKey(item) === previewItemKey) || null,
     [libraryItems, previewItemKey],
   );
+  const categories = COMPONENT_LIBRARY_CATEGORIES;
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const isGlobalSearch = normalizedSearchQuery.length > 0 && selectedCategory === ESSENTIALS_CATEGORY_ID;
 
   const toggleFavorite = (item: ComponentLibraryItem) => {
     const itemKey = getLibraryItemKey(item);
@@ -187,31 +314,47 @@ export function ComponentLibrary({
         : [...current, itemKey]
     ));
   };
-
-  const matchesActiveSearch = (item: ComponentLibraryItem) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description?.toLowerCase().includes(searchQuery.toLowerCase());
-
-    return matchesSearch;
+  const rememberRecentItem = (item: ComponentLibraryItem) => {
+    const itemKey = getLibraryItemKey(item);
+    setRecentItemKeys((current) => (
+      [itemKey, ...current.filter((key) => key !== itemKey)].slice(0, RECENT_ITEM_LIMIT)
+    ));
+  };
+  const handleAddItem = (item: ComponentLibraryItem) => {
+    rememberRecentItem(item);
+    onAddItem?.(item);
   };
 
   // Filter items
-  const filteredItems = libraryItems.filter((item) => {
-    if (!matchesActiveSearch(item)) {
-      return false;
+  const filteredItems = useMemo(() => {
+    if (selectedCategory === RECENT_CATEGORY_ID) {
+      return recentItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery));
     }
 
-    if (selectedCategory === FAVORITES_CATEGORY_ID) {
-      return favoriteKeySet.has(getLibraryItemKey(item));
-    }
+    return libraryItems.filter((item) => {
+      if (!itemMatchesSearch(item, normalizedSearchQuery)) return false;
 
-    return !selectedCategory || getLibraryCategory(item) === selectedCategory;
-  });
+      if (selectedCategory === ESSENTIALS_CATEGORY_ID) {
+        return isGlobalSearch ? true : isEssentialLibraryItem(item);
+      }
+
+      if (selectedCategory === FAVORITES_CATEGORY_ID) {
+        return favoriteKeySet.has(getLibraryItemKey(item));
+      }
+
+      return !selectedCategory || getLibraryCategory(item) === selectedCategory;
+    });
+  }, [favoriteKeySet, isGlobalSearch, libraryItems, normalizedSearchQuery, recentItems, selectedCategory]);
 
   // Group by category
-  const groupedItems = filteredItems.reduce((acc, item) => {
-    const category = selectedCategory === FAVORITES_CATEGORY_ID
+  const groupedItems = useMemo(() => filteredItems.reduce((acc, item) => {
+    const category = isGlobalSearch
+      ? getLibraryCategory(item)
+      : selectedCategory === ESSENTIALS_CATEGORY_ID
+      ? ESSENTIALS_CATEGORY_ID
+      : selectedCategory === RECENT_CATEGORY_ID
+      ? RECENT_CATEGORY_ID
+      : selectedCategory === FAVORITES_CATEGORY_ID
       ? FAVORITES_CATEGORY_ID
       : getLibraryCategory(item);
     if (!acc[category]) {
@@ -219,38 +362,114 @@ export function ComponentLibrary({
     }
     acc[category].push(item);
     return acc;
-  }, {} as Record<string, ComponentLibraryItem[]>);
+  }, {} as Record<string, ComponentLibraryItem[]>), [filteredItems, isGlobalSearch, selectedCategory]);
 
-  const categories = [
-    { id: FAVORITES_CATEGORY_ID, name: 'Favorites', color: 'bg-yellow-400' },
-    { id: 'basic', name: 'Basic', color: 'bg-blue-500' },
-    { id: 'content', name: 'Content', color: 'bg-indigo-500' },
-    { id: 'media', name: 'Media', color: 'bg-purple-500' },
-    { id: 'layout', name: 'Layout', color: 'bg-green-500' },
-    { id: 'form', name: 'Form', color: 'bg-orange-500' },
-    { id: 'saved', name: 'Saved', color: 'bg-sky-500' },
-    { id: 'advanced', name: 'Advanced', color: 'bg-red-500' },
-  ];
-
-  const favoriteSearchItems = favoriteItems.filter(matchesActiveSearch);
-  const groupedItemsWithFavorites = selectedCategory === null && favoriteSearchItems.length > 0
-    ? {
-      [FAVORITES_CATEGORY_ID]: favoriteSearchItems,
-      ...Object.entries(groupedItems).reduce<Record<string, ComponentLibraryItem[]>>((acc, [category, items]) => {
-        acc[category] = items.filter((item) => !favoriteKeySet.has(getLibraryItemKey(item)));
-        return acc;
-      }, {}),
+  const totalSearchResultCount = useMemo(() => (
+    libraryItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery)).length
+  ), [libraryItems, normalizedSearchQuery]);
+  const categoryItemCounts = useMemo(() => categories.reduce<Record<string, number>>((acc, category) => {
+    acc[category.id] = libraryItems.filter((item) => (
+      itemMatchesSearch(item, normalizedSearchQuery) &&
+      (
+        category.id === ESSENTIALS_CATEGORY_ID
+          ? isEssentialLibraryItem(item)
+          : category.id === RECENT_CATEGORY_ID
+          ? recentKeySet.has(getLibraryItemKey(item))
+          : category.id === FAVORITES_CATEGORY_ID
+          ? favoriteKeySet.has(getLibraryItemKey(item))
+          : category.id === 'saved'
+          ? isReusableLibraryItem(item)
+          : getLibraryCategory(item) === category.id
+      )
+    )).length;
+    return acc;
+  }, {}), [categories, favoriteKeySet, libraryItems, normalizedSearchQuery, recentKeySet]);
+  const activeCategoryName = useMemo(() => (isGlobalSearch
+    ? 'Search results'
+    : selectedCategory
+      ? categories.find((category) => category.id === selectedCategory)?.name || selectedCategory
+      : 'All components'
+  ), [categories, isGlobalSearch, selectedCategory]);
+  const isComponentFilterActive = normalizedSearchQuery.length > 0 || (
+    selectedCategory !== null && selectedCategory !== ESSENTIALS_CATEGORY_ID
+  );
+  const resetComponentFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory(null);
+  };
+  const componentLibraryActionStatusId = 'editor-component-library-action-status';
+  const saveSelectionDisabledReason = disabled
+    ? disabledReason || 'Editor changes are currently unavailable.'
+    : !canSaveSelection
+    ? 'Select a layer to save it as a reusable section.'
+    : isSavingReusableSection
+    ? 'Reusable section save is already running.'
+    : '';
+  const refreshReusableSectionsDisabledReason = disabled
+    ? disabledReason || 'Editor changes are currently unavailable.'
+    : reusableSectionsLoading
+    ? 'Saved sections are refreshing.'
+    : '';
+  const componentLibrarySearchLabel = normalizedSearchQuery
+    ? ` for "${searchQuery.trim()}"`
+    : '';
+  const componentLibraryActionStatus = [
+    `${activeCategoryName} shows ${filteredItems.length} of ${totalSearchResultCount} components${componentLibrarySearchLabel}.`,
+    'Search components available.',
+    isComponentFilterActive ? 'Reset filters available.' : 'Filter reset hidden until filters are active.',
+    saveSelectionDisabledReason ? `Save selection unavailable: ${saveSelectionDisabledReason}` : 'Save selection available.',
+    refreshReusableSectionsDisabledReason ? `Refresh saved sections unavailable: ${refreshReusableSectionsDisabledReason}` : 'Refresh saved sections available.',
+  ].join(' ');
+  const emptyStateDescription = useMemo(() => {
+    const trimmedSearch = searchQuery.trim();
+    if (trimmedSearch && selectedCategory) {
+      return `No ${activeCategoryName.toLowerCase()} match "${trimmedSearch}". Show all components to keep building.`;
     }
-    : groupedItems;
+    if (trimmedSearch) {
+      return `No components match "${trimmedSearch}". Show all components to keep building.`;
+    }
+    if (selectedCategory === RECENT_CATEGORY_ID) {
+      return 'Recent fills as you add or drag components. Show all components to start from the full catalog.';
+    }
+    if (selectedCategory === FAVORITES_CATEGORY_ID) {
+      return 'Star components you use often to build this list. Show all components to browse the full catalog.';
+    }
+    if (selectedCategory === 'saved') {
+      return 'Saved sections appear here after you save a selected layer or section. Show all components to keep building.';
+    }
+    return 'Show all components or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.';
+  }, [activeCategoryName, searchQuery, selectedCategory]);
+
+  const favoriteSearchItems = useMemo(() => (
+    favoriteItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery))
+  ), [favoriteItems, normalizedSearchQuery]);
+  const groupedItemsWithFavorites = useMemo(() => (
+    selectedCategory === null && favoriteSearchItems.length > 0
+      ? {
+        [FAVORITES_CATEGORY_ID]: favoriteSearchItems,
+        ...Object.entries(groupedItems).reduce<Record<string, ComponentLibraryItem[]>>((acc, [category, items]) => {
+          acc[category] = items.filter((item) => !favoriteKeySet.has(getLibraryItemKey(item)));
+          return acc;
+        }, {}),
+      }
+      : groupedItems
+  ), [favoriteKeySet, favoriteSearchItems, groupedItems, selectedCategory]);
 
   return (
     <div
       className="flex h-full w-[clamp(15rem,16vw,18rem)] min-w-[15rem] max-w-[18rem] flex-col border-r border-slate-200 bg-white"
       data-testid="editor-component-library"
+      data-component-library-density="compact"
+      aria-describedby={componentLibraryActionStatusId}
+      data-action-status={componentLibraryActionStatus}
     >
+      <span id={componentLibraryActionStatusId} className="sr-only" data-testid="editor-component-library-action-status" aria-live="polite">
+        {componentLibraryActionStatus}
+      </span>
+
       {/* Header */}
-      <div className="p-4 border-b border-slate-200">
-        <h2 className="font-semibold mb-3">Components</h2>
+      <div className="border-b border-slate-200 p-3">
+        <h2 className="mb-2 font-semibold">Components</h2>
 
         {/* Search */}
         <div className="relative">
@@ -261,6 +480,9 @@ export function ComponentLibrary({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             data-testid="editor-component-search"
+            aria-describedby={componentLibraryActionStatusId}
+            data-action-state="ready"
+            data-action-status={componentLibraryActionStatus}
             className={cn(
               'w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-slate-200 bg-slate-50',
               'focus:outline-none focus:ring-2 focus:ring-sky-500'
@@ -270,34 +492,110 @@ export function ComponentLibrary({
       </div>
 
       {/* Category Filters */}
-      <div className="p-2 border-b border-slate-200">
-        <div className="flex flex-wrap gap-1">
+      <div className="border-b border-slate-200 p-2">
+        <div
+          className="mb-2 flex items-center justify-between gap-2 px-1 text-[11px] font-medium text-slate-500"
+          data-testid="editor-component-library-summary"
+          data-component-library-shown={filteredItems.length}
+          data-component-library-total={totalSearchResultCount}
+          data-component-library-essentials-count={categoryItemCounts[ESSENTIALS_CATEGORY_ID] || 0}
+          data-component-library-recent-count={recentItems.length}
+          data-component-library-recent-limit={RECENT_ITEM_LIMIT}
+          data-component-library-recent-keys={recentItemKeys.join(',')}
+          data-component-library-saved-count={reusableItems.length}
+          data-component-library-saved-total={reusableLibraryState.totalActiveCount}
+          data-component-library-saved-hidden={reusableLibraryState.hiddenDuplicateCount}
+          data-component-library-category={isGlobalSearch ? 'search' : selectedCategory || 'all'}
+          data-component-library-filter-active={isComponentFilterActive ? 'true' : 'false'}
+        >
+          <span className="truncate">{activeCategoryName}</span>
+          <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+            {isComponentFilterActive && (
+              <button
+                type="button"
+                onClick={resetComponentFilters}
+                data-testid="editor-component-reset-filters"
+                aria-describedby={componentLibraryActionStatusId}
+                data-action-state="ready"
+                data-action-status={componentLibraryActionStatus}
+                className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+              >
+                Reset
+              </button>
+            )}
+            <span>{filteredItems.length} / {totalSearchResultCount}</span>
+          </span>
+        </div>
+
+        <div
+          className="grid grid-cols-2 gap-1"
+          data-testid="editor-component-category-rail"
+          data-category-layout="wrapped-grid"
+        >
           <button
+            type="button"
+            onClick={() => setSelectedCategory(ESSENTIALS_CATEGORY_ID)}
+            data-testid="editor-component-category-essentials"
+            aria-describedby={componentLibraryActionStatusId}
+            aria-pressed={selectedCategory === ESSENTIALS_CATEGORY_ID}
+            data-action-state={selectedCategory === ESSENTIALS_CATEGORY_ID ? 'selected' : 'ready'}
+            data-action-status={componentLibraryActionStatus}
+            className={cn(
+              'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
+              selectedCategory === ESSENTIALS_CATEGORY_ID
+                ? 'border-slate-950 bg-slate-950 text-white'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+            )}
+            aria-label={`Essential components, ${categoryItemCounts[ESSENTIALS_CATEGORY_ID] || 0} available`}
+          >
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="truncate">Essentials</span>
+            </span>
+            <span className="shrink-0 opacity-70">{categoryItemCounts[ESSENTIALS_CATEGORY_ID] || 0}</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setSelectedCategory(null)}
             data-testid="editor-component-category-all"
+            aria-label={`All components, ${totalSearchResultCount} available`}
+            aria-describedby={componentLibraryActionStatusId}
+            aria-pressed={selectedCategory === null}
+            data-action-state={selectedCategory === null ? 'selected' : 'ready'}
+            data-action-status={componentLibraryActionStatus}
             className={cn(
-              'px-2 py-1 text-xs rounded-md transition-colors',
+              'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
               selectedCategory === null
-                ? 'bg-slate-950 text-white'
-                : 'bg-slate-100 hover:bg-slate-200'
+                ? 'border-slate-950 bg-slate-950 text-white'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
             )}
           >
-            All
+            <span className="truncate">All</span>
+            <span className="shrink-0 opacity-70">{totalSearchResultCount}</span>
           </button>
-          {categories.map((cat) => (
+          {categories.filter((cat) => cat.id !== ESSENTIALS_CATEGORY_ID).map((cat) => (
             <button
               key={cat.id}
+              type="button"
               onClick={() => setSelectedCategory(cat.id)}
               data-testid={`editor-component-category-${cat.id}`}
+              aria-describedby={componentLibraryActionStatusId}
+              aria-pressed={selectedCategory === cat.id}
+              data-action-state={selectedCategory === cat.id ? 'selected' : 'ready'}
+              data-action-status={componentLibraryActionStatus}
               className={cn(
-                'px-2 py-1 text-xs rounded-md transition-colors flex items-center gap-1',
+                'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
                 selectedCategory === cat.id
-                  ? 'bg-slate-950 text-white'
-                  : 'bg-slate-100 hover:bg-slate-200'
+                  ? 'border-slate-950 bg-slate-950 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
               )}
+              aria-label={`${cat.name} components, ${categoryItemCounts[cat.id] || 0} available`}
             >
-              <span className={cn('w-2 h-2 rounded-full', cat.color)} />
-              {cat.name}
+              <span className="flex min-w-0 items-center gap-1">
+                <span className={cn('h-2 w-2 rounded-full', cat.color)} />
+                <span className="truncate">{cat.name}</span>
+              </span>
+              <span className="shrink-0 opacity-70">{categoryItemCounts[cat.id] || 0}</span>
             </button>
           ))}
         </div>
@@ -307,6 +605,11 @@ export function ComponentLibrary({
             type="button"
             onClick={onSaveSelectionAsReusableSection}
             disabled={disabled || !canSaveSelection || isSavingReusableSection}
+            aria-describedby={componentLibraryActionStatusId}
+            data-testid="editor-component-save-selection"
+            data-action-state={isSavingReusableSection ? 'busy' : saveSelectionDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={componentLibraryActionStatus}
+            data-disabled-reason={saveSelectionDisabledReason || undefined}
             className={cn(
               'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
               canSaveSelection && !isSavingReusableSection && !disabled
@@ -322,6 +625,12 @@ export function ComponentLibrary({
             type="button"
             onClick={onRefreshReusableSections}
             disabled={disabled || reusableSectionsLoading}
+            aria-label="Refresh saved sections"
+            aria-describedby={componentLibraryActionStatusId}
+            data-testid="editor-component-refresh-saved-sections"
+            data-action-state={reusableSectionsLoading ? 'busy' : refreshReusableSectionsDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={componentLibraryActionStatus}
+            data-disabled-reason={refreshReusableSectionsDisabledReason || undefined}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
             title="Refresh saved sections"
           >
@@ -335,11 +644,15 @@ export function ComponentLibrary({
       </div>
 
       {/* Components List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-4">
+      <div
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2"
+        data-testid="editor-component-list"
+        data-component-list-density="compact"
+      >
         {Object.entries(groupedItemsWithFavorites).map(([category, items]) => (
           items.length > 0 && (
             <div key={category} data-component-category={category}>
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 px-2">
+              <h3 className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 {category}
               </h3>
               <div className="space-y-1">
@@ -352,13 +665,17 @@ export function ComponentLibrary({
                     canDeleteReusableSections={canDeleteReusableSections}
                     deleteDisabledReason={deleteDisabledReason}
                     isFavorite={favoriteKeySet.has(getLibraryItemKey(item))}
-                    onDragStart={() => onDragStart?.(item)}
+                    onDragStart={() => {
+                      rememberRecentItem(item);
+                      onDragStart?.(item);
+                    }}
                     onDragEnd={() => onDragEnd?.()}
-                    onAddItem={() => onAddItem?.(item)}
+                    onAddItem={() => handleAddItem(item)}
                     onToggleFavorite={() => toggleFavorite(item)}
                     onPreviewChange={(nextItem) => setPreviewItemKey(nextItem ? getLibraryItemKey(nextItem) : null)}
                     onRenameReusableSection={onRenameReusableSection}
                     onDeleteReusableSection={onDeleteReusableSection}
+                    actionStatusId={componentLibraryActionStatusId}
                   />
                 ))}
               </div>
@@ -367,11 +684,30 @@ export function ComponentLibrary({
         ))}
 
         {filteredItems.length === 0 && (
-          <EmptyState
-            icon={Search}
-            title="No components match this view"
-            description="Clear the search or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections."
-          />
+          <div
+            data-testid="editor-component-filter-empty"
+            data-component-empty-category={isGlobalSearch ? 'search' : selectedCategory || 'all'}
+            data-component-empty-search={searchQuery.trim()}
+          >
+            <EmptyState
+              icon={Search}
+              title="No components match this view"
+              description={emptyStateDescription}
+              action={(
+                <button
+                  type="button"
+                onClick={resetComponentFilters}
+                data-testid="editor-component-empty-reset-filters"
+                aria-describedby={componentLibraryActionStatusId}
+                data-action-state="ready"
+                data-action-status={componentLibraryActionStatus}
+                className="inline-flex min-h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              >
+                  Show all components
+                </button>
+              )}
+            />
+          </div>
         )}
       </div>
 
@@ -645,6 +981,7 @@ interface LibraryItemProps {
   onPreviewChange?: (item: ComponentLibraryItem | null) => void;
   onRenameReusableSection?: (sectionId: string) => void;
   onDeleteReusableSection?: (sectionId: string) => void;
+  actionStatusId?: string;
 }
 
 function LibraryItem({
@@ -661,6 +998,7 @@ function LibraryItem({
   onPreviewChange,
   onRenameReusableSection,
   onDeleteReusableSection,
+  actionStatusId,
 }: LibraryItemProps) {
   const getIcon = () => {
     switch (item.icon) {
@@ -712,8 +1050,32 @@ function LibraryItem({
   };
 
   const Icon = getIcon();
+  const itemDomKey = getLibraryItemDomKey(item);
   const reusableSectionId = item.reusableContent?.sectionId;
+  const reusableDuplicateCount = getReusableSectionDuplicateCount(item);
   const isReusableDeleteDisabled = disabled || !canDeleteReusableSections;
+  const itemDisabledReason = disabled ? disabledReason || 'Editor changes are currently unavailable.' : '';
+  const reusableDeleteDisabledReason = disabled
+    ? itemDisabledReason
+    : !canDeleteReusableSections
+    ? deleteDisabledReason || 'Saved-section deletion is unavailable.'
+    : '';
+  const itemActionStatusId = `editor-component-item-action-status-${itemDomKey}`;
+  const itemActionStatus = [
+    disabled ? `Add unavailable: ${itemDisabledReason}` : `Add ${item.name} to canvas available.`,
+    disabled
+      ? `Favorite unavailable: ${itemDisabledReason}`
+      : isFavorite
+      ? `Remove ${item.name} from favorites available.`
+      : `Add ${item.name} to favorites available.`,
+    reusableSectionId
+      ? (disabled ? `Rename unavailable: ${itemDisabledReason}` : `Rename ${item.name} available.`)
+      : '',
+    reusableSectionId
+      ? (isReusableDeleteDisabled ? `Delete unavailable: ${reusableDeleteDisabledReason}` : `Delete ${item.name} available.`)
+      : '',
+  ].filter(Boolean).join(' ');
+  const describedBy = [actionStatusId, itemActionStatusId].filter(Boolean).join(' ') || undefined;
 
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     if (disabled) {
@@ -725,12 +1087,26 @@ function LibraryItem({
     e.dataTransfer.effectAllowed = 'copy';
     onDragStart();
   };
+  const handleKeyboardAdd = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled || event.target !== event.currentTarget) {
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onAddItem?.();
+    }
+  };
 
   return (
     <div
       draggable={!disabled}
       onDragStart={handleDragStart}
       onDragEnd={() => onDragEnd?.()}
+      onDoubleClick={() => {
+        if (!disabled) onAddItem?.();
+      }}
+      onKeyDown={handleKeyboardAdd}
       onMouseEnter={() => {
         if (!disabled) onPreviewChange?.(item);
       }}
@@ -745,16 +1121,26 @@ function LibraryItem({
         }
       }}
       aria-disabled={disabled}
+      aria-describedby={describedBy}
       tabIndex={disabled ? -1 : 0}
       data-component-library-item={item.id ?? item.type}
+      data-component-library-item-actions="visible"
+      data-testid={`editor-component-item-${itemDomKey}`}
+      data-action-state={disabled ? 'blocked' : 'ready'}
+      data-action-status={itemActionStatus}
+      data-disabled-reason={itemDisabledReason || undefined}
+      data-reusable-section-duplicate-count={reusableDuplicateCount || undefined}
       className={cn(
-        'group flex items-center gap-3 p-2 rounded-md cursor-grab',
-        'hover:bg-slate-100 transition-colors',
+        'group flex items-center gap-2 rounded-md border border-transparent bg-white/70 p-1.5 cursor-grab',
+        'hover:border-slate-200 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500',
         'active:cursor-grabbing',
         disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent active:cursor-not-allowed'
       )}
       title={item.description}
     >
+      <span id={itemActionStatusId} className="sr-only" data-testid={`editor-component-item-action-status-${itemDomKey}`}>
+        {itemActionStatus}
+      </span>
       <div className="w-8 h-8 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0">
         <Icon className="w-4 h-4 text-slate-500" />
       </div>
@@ -763,6 +1149,11 @@ function LibraryItem({
         {item.description && (
           <p className="text-xs text-muted-foreground truncate">
             {item.description}
+          </p>
+        )}
+        {reusableDuplicateCount > 0 && (
+          <p className="truncate text-[11px] font-medium text-sky-700">
+            {reusableDuplicateCount} older duplicate{reusableDuplicateCount === 1 ? '' : 's'} hidden
           </p>
         )}
       </div>
@@ -780,13 +1171,18 @@ function LibraryItem({
           'inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors',
           isFavorite
             ? 'text-yellow-500 hover:bg-yellow-50'
-            : 'text-slate-400 opacity-0 hover:bg-white hover:text-yellow-500 group-hover:opacity-100 focus:opacity-100',
+            : 'text-slate-400 hover:bg-white hover:text-yellow-500',
           disabled && 'cursor-not-allowed opacity-40'
         )}
         title={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
         aria-label={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+        aria-describedby={describedBy}
         aria-pressed={isFavorite}
         data-component-favorite={item.id ?? item.type}
+        data-testid={`editor-component-favorite-${itemDomKey}`}
+        data-action-state={disabled ? 'blocked' : 'ready'}
+        data-action-status={itemActionStatus}
+        data-disabled-reason={itemDisabledReason || undefined}
       >
         <Star className={cn('h-3.5 w-3.5', isFavorite && 'fill-current')} />
       </button>
@@ -800,15 +1196,20 @@ function LibraryItem({
           onAddItem?.();
         }}
         disabled={disabled}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 opacity-0 transition-opacity hover:bg-white hover:text-slate-900 group-hover:opacity-100 focus:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
         title={disabled ? disabledReason : `Add ${item.name} to canvas`}
         aria-label={`Add ${item.name} to canvas`}
+        aria-describedby={describedBy}
         data-component-add={item.id ?? item.type}
+        data-testid={`editor-component-add-${itemDomKey}`}
+        data-action-state={disabled ? 'blocked' : 'ready'}
+        data-action-status={itemActionStatus}
+        data-disabled-reason={itemDisabledReason || undefined}
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
       {reusableSectionId && (
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex items-center gap-1">
           <button
             type="button"
             onMouseDown={(event) => event.stopPropagation()}
@@ -822,7 +1223,12 @@ function LibraryItem({
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
             title={disabled ? disabledReason : 'Rename saved section'}
             aria-label={`Rename ${item.name}`}
+            aria-describedby={describedBy}
             data-reusable-section-rename={reusableSectionId}
+            data-testid={`editor-component-rename-${itemDomKey}`}
+            data-action-state={disabled ? 'blocked' : 'ready'}
+            data-action-status={itemActionStatus}
+            data-disabled-reason={itemDisabledReason || undefined}
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -839,7 +1245,12 @@ function LibraryItem({
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
             title={isReusableDeleteDisabled ? (deleteDisabledReason || disabledReason) : 'Delete saved section'}
             aria-label={`Delete ${item.name}`}
+            aria-describedby={describedBy}
             data-reusable-section-delete={reusableSectionId}
+            data-testid={`editor-component-delete-${itemDomKey}`}
+            data-action-state={isReusableDeleteDisabled ? 'blocked' : 'ready'}
+            data-action-status={itemActionStatus}
+            data-disabled-reason={reusableDeleteDisabledReason || undefined}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

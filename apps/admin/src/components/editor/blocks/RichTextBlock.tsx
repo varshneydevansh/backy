@@ -58,6 +58,7 @@ export function RichTextBlock({
     const editorRef = useRef<PlateEditor | null>(null);
     const editorHostRef = useRef<HTMLDivElement>(null);
     const unregisterContentSyncRef = useRef<(() => void) | null>(null);
+    const editableBaselineFingerprintRef = useRef<string | null>(null);
     const resolveElementId = useCallback(() => {
         if (elementId) {
             return elementId;
@@ -83,24 +84,67 @@ export function RichTextBlock({
         unregisterContentSyncRef.current = null;
     }, []);
 
+    // Ensure content is valid Slate JSON
+    const initialValue = useMemo(() => {
+        if (Array.isArray(content) && content.length > 0) {
+            return content;
+        }
+        // Fallback for string content or empty
+        return [{ type: defaultType, children: [{ text: typeof content === 'string' ? content : '' }] }];
+    }, [content, defaultType]);
+
+    const initialValueFingerprint = useMemo(() => makeContentFingerprint(initialValue), [initialValue]);
+    const contentFingerprint = useMemo(() => makeContentFingerprint(content), [content]);
+
+    useEffect(() => {
+        if (!isEditable) {
+            editableBaselineFingerprintRef.current = null;
+        }
+    }, [isEditable]);
+
+    const captureEditableBaseline = useCallback((editor: PlateEditor | null) => {
+        const children = (editor as unknown as { children?: unknown } | null)?.children;
+        if (!isEditable || !Array.isArray(children)) {
+            return;
+        }
+
+        editableBaselineFingerprintRef.current = makeContentFingerprint(JSON.parse(JSON.stringify(children)));
+    }, [isEditable]);
+
+    const shouldIgnoreUnchangedEditorContent = useCallback((nextContent: unknown) => {
+        const nextFingerprint = makeContentFingerprint(nextContent);
+        return nextFingerprint === initialValueFingerprint || (
+            editableBaselineFingerprintRef.current !== null &&
+            nextFingerprint === editableBaselineFingerprintRef.current
+        );
+    }, [initialValueFingerprint]);
+
     const syncContentFromEditor = useCallback((editor: PlateEditor) => {
         const children = (editor as unknown as { children?: unknown }).children;
         if (!Array.isArray(children)) {
             return;
         }
 
-        onChange(JSON.parse(JSON.stringify(children)));
-    }, [onChange]);
-
-    const handleContentChange = useCallback((value: any) => {
-        const children = (editorRef.current as unknown as { children?: unknown } | null)?.children;
-        if (isEditable && Array.isArray(children)) {
-            onChange(JSON.parse(JSON.stringify(children)));
+        const nextContent = JSON.parse(JSON.stringify(children));
+        if (shouldIgnoreUnchangedEditorContent(nextContent)) {
             return;
         }
 
-        onChange(value);
-    }, [isEditable, onChange]);
+        onChange(nextContent);
+    }, [onChange, shouldIgnoreUnchangedEditorContent]);
+
+    const handleContentChange = useCallback((value: any) => {
+        const children = (editorRef.current as unknown as { children?: unknown } | null)?.children;
+        const nextContent = isEditable && Array.isArray(children)
+            ? JSON.parse(JSON.stringify(children))
+            : value;
+
+        if (shouldIgnoreUnchangedEditorContent(nextContent)) {
+            return;
+        }
+
+        onChange(nextContent);
+    }, [isEditable, onChange, shouldIgnoreUnchangedEditorContent]);
 
     const registerCurrentContentSync = useCallback((editor: PlateEditor | null) => {
         unregisterContentSync();
@@ -188,16 +232,6 @@ export function RichTextBlock({
         });
     }, [isEditable, onBlur, shouldKeepEditingForTarget, storeSelection]);
 
-    // Ensure content is valid Slate JSON
-    const initialValue = useMemo(() => {
-        if (Array.isArray(content) && content.length > 0) {
-            return content;
-        }
-        // Fallback for string content or empty
-        return [{ type: defaultType, children: [{ text: typeof content === 'string' ? content : '' }] }];
-    }, [content, defaultType]);
-
-    const contentFingerprint = useMemo(() => makeContentFingerprint(content), [content]);
     const editorReadMode = isEditable ? 'editable' : 'readonly';
     const editorRevision = isEditable ? elementId || 'text' : `${contentFingerprint}:${content?.length || 0}`;
 
@@ -207,14 +241,15 @@ export function RichTextBlock({
         const activeElementId = resolveElementId();
 
         if (isEditable) {
-        log('editor-ready editable', {
-          elementId: activeElementId,
-          hasSelection: !!editor.selection,
-          selectionRange: editor.selection && 'anchor' in editor.selection ? {
-            anchor: editor.selection.anchor,
-            focus: editor.selection.focus,
-          } : null,
+            log('editor-ready editable', {
+                elementId: activeElementId,
+                hasSelection: !!editor.selection,
+                selectionRange: editor.selection && 'anchor' in editor.selection ? {
+                    anchor: editor.selection.anchor,
+                    focus: editor.selection.focus,
+                } : null,
             });
+            captureEditableBaseline(editor);
             registerCurrentContentSync(editor);
             setActiveEditor(editor, isEditable ? activeElementId : null);
             return;
@@ -229,6 +264,7 @@ export function RichTextBlock({
         clearActiveEditor,
         resolveElementId,
         registerCurrentContentSync,
+        captureEditableBaseline,
         unregisterContentSync,
     ]);
 
@@ -248,9 +284,12 @@ export function RichTextBlock({
             focus: editor.selection.focus,
           } : null,
         });
+        if (editableBaselineFingerprintRef.current === null) {
+            captureEditableBaseline(editor);
+        }
         registerCurrentContentSync(editor);
         setActiveEditor(editor, activeElementId);
-    }, [isEditable, registerCurrentContentSync, resolveElementId, setActiveEditor]);
+    }, [captureEditableBaseline, isEditable, registerCurrentContentSync, resolveElementId, setActiveEditor]);
 
     const handleMouseUp = useCallback(() => {
         if (!isEditable) {
@@ -289,9 +328,12 @@ export function RichTextBlock({
           elementId: activeElementId,
           hasSelection: !!editor.selection,
         });
+        if (editableBaselineFingerprintRef.current === null) {
+            captureEditableBaseline(editor);
+        }
         registerCurrentContentSync(editor);
         setActiveEditor(editor, activeElementId);
-    }, [isEditable, registerCurrentContentSync, resolveElementId, setActiveEditor]);
+    }, [captureEditableBaseline, isEditable, registerCurrentContentSync, resolveElementId, setActiveEditor]);
 
     useEffect(() => {
         if (isEditable) {

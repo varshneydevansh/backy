@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   X,
   Upload,
@@ -30,6 +30,14 @@ type MediaInsertSizePreset = 'fill-frame' | 'fit-inside' | 'natural' | 'square' 
 type FontDisplayMode = 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
 const MEDIA_PICKER_PAGE_SIZE = 100;
 const FILE_BUCKET_MEDIA_TYPES = new Set<MediaAsset['type']>(['file', 'other']);
+const MEDIA_LIBRARY_FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 const mediaTypeMatchesFilter = (type: MediaAsset['type'], filter: UploadFilter) => {
   if (filter === 'all') return true;
@@ -72,6 +80,7 @@ interface MediaLibraryModalProps {
   initialUploadFilter?: UploadFilter;
   replaceAssetId?: string | null;
   allowPrivateSelection?: boolean;
+  returnFocusTargetId?: string;
   canView?: boolean;
   canCreate?: boolean;
   viewDisabledReason?: string;
@@ -125,6 +134,7 @@ export function MediaLibraryModal({
   initialUploadFilter = 'all',
   replaceAssetId = null,
   allowPrivateSelection = false,
+  returnFocusTargetId = '',
   canView = true,
   canCreate = true,
   viewDisabledReason = 'You do not have permission to view media.',
@@ -165,6 +175,14 @@ export function MediaLibraryModal({
   const [replacementBinaryComparison, setReplacementBinaryComparison] = useState<ReplacementBinaryComparison | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const returnFocusTargetRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const initialFocusAppliedRef = useRef(false);
+  const [returnFocusTarget, setReturnFocusTarget] = useState('');
+  const initialFocusTarget = 'media-library-close';
+  const focusTrapTarget = 'media-library-modal';
+  const defaultLibraryScopeFilter: MediaScopeFilter = mediaContext?.scope || 'all';
 
   useEffect(() => {
     if (!isOpen) {
@@ -180,6 +198,7 @@ export function MediaLibraryModal({
     setLibraryTypeFilter('all');
     setLibraryFolderFilter('all');
     setIncludeNestedFolders(true);
+    setScopeFilter(defaultLibraryScopeFilter);
     setNewFolderName('');
     setNewFolderParentId('root');
     setNewFolderSubmitted(false);
@@ -197,7 +216,89 @@ export function MediaLibraryModal({
     setFocalPreviewAssetId(null);
     setIsDraggingFocal(false);
     setReplacementBinaryComparison(null);
-  }, [canCreate, canView, initialTab, initialUploadFilter, isOpen]);
+  }, [canCreate, canView, defaultLibraryScopeFilter, initialTab, initialUploadFilter, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      returnFocusTargetRef.current = null;
+      setReturnFocusTarget('');
+      return;
+    }
+
+    const preferredFocusTarget = returnFocusTargetId
+      ? Array.from(document.querySelectorAll<HTMLElement>('[data-testid]'))
+        .find((element) => element.getAttribute('data-testid') === returnFocusTargetId) || null
+      : null;
+    const activeElement = document.activeElement;
+    const activeFocusTarget = activeElement instanceof HTMLElement && !activeElement.closest('[data-testid="media-library-modal"]')
+      ? activeElement
+      : null;
+    const focusTarget = preferredFocusTarget || activeFocusTarget;
+
+    returnFocusTargetRef.current = focusTarget;
+    setReturnFocusTarget(
+      returnFocusTargetId ||
+      focusTarget?.getAttribute('data-testid') ||
+      focusTarget?.getAttribute('aria-label') ||
+      focusTarget?.tagName ||
+      '',
+    );
+  }, [isOpen, returnFocusTargetId]);
+
+  const handleClose = useCallback(() => {
+    const focusTarget = returnFocusTargetRef.current;
+    onClose();
+    window.setTimeout(() => {
+      if (focusTarget && document.contains(focusTarget)) {
+        focusTarget.focus({ preventScroll: true });
+      }
+    }, 0);
+  }, [onClose]);
+
+  const getFocusableDialogElements = useCallback(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) {
+      return [];
+    }
+
+    return Array.from(dialog.querySelectorAll<HTMLElement>(MEDIA_LIBRARY_FOCUSABLE_SELECTOR))
+      .filter((element) => {
+        if (element.closest('[hidden],[aria-hidden="true"],[inert]')) {
+          return false;
+        }
+
+        if (element.tabIndex < 0) {
+          return false;
+        }
+
+        const style = window.getComputedStyle(element);
+        return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      initialFocusAppliedRef.current = false;
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      if (initialFocusAppliedRef.current) {
+        return;
+      }
+
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement && activeElement.closest('[data-testid="media-library-modal"]')) {
+        initialFocusAppliedRef.current = true;
+        return;
+      }
+
+      closeButtonRef.current?.focus({ preventScroll: true });
+      initialFocusAppliedRef.current = true;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -205,18 +306,54 @@ export function MediaLibraryModal({
     }
 
     const handleDialogKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleClose();
         return;
       }
 
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const dialog = dialogRef.current;
+      if (!dialog) {
+        return;
+      }
+
+      const focusableElements = getFocusableDialogElements();
+      const firstFocusable = focusableElements[0] || closeButtonRef.current;
+      const lastFocusable = focusableElements[focusableElements.length - 1] || closeButtonRef.current;
+      const activeElement = document.activeElement;
+
+      if (!firstFocusable || !lastFocusable) {
+        event.preventDefault();
+        closeButtonRef.current?.focus({ preventScroll: true });
+        return;
+      }
+
+      if (!(activeElement instanceof HTMLElement) || !dialog.contains(activeElement)) {
+        event.preventDefault();
+        firstFocusable.focus({ preventScroll: true });
+        return;
+      }
+
+      if (event.shiftKey && activeElement === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus({ preventScroll: true });
+        return;
+      }
+
+      if (!event.shiftKey && activeElement === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus({ preventScroll: true });
+      }
     };
 
     document.addEventListener('keydown', handleDialogKeyDown, true);
     return () => document.removeEventListener('keydown', handleDialogKeyDown, true);
-  }, [isOpen, onClose]);
+  }, [getFocusableDialogElements, handleClose, isOpen]);
 
   const allowedTypesSet = useMemo(() => {
     if (allowedTypes === 'any') return new Set(['image', 'video', 'audio', 'file', 'font', 'other']);
@@ -228,6 +365,8 @@ export function MediaLibraryModal({
   const targetScope = mediaContext?.scope || 'global';
   const targetId = mediaContext?.targetId;
   const targetLabel = mediaContext?.targetLabel || mediaContext?.targetId;
+  const mediaLibraryActionStatusId = 'media-library-action-status';
+  const createFolderActionStatusId = 'media-library-create-folder-action-status';
 
   const normalized = useMemo(
     () => media.map((item) => ({
@@ -335,22 +474,57 @@ export function MediaLibraryModal({
     return folderPathById.get(uploadFolderId) || 'Selected folder';
   }, [folderPathById, uploadFolderId]);
 
+  const newFolderTrimmedName = newFolderName.trim();
+  const newFolderParentDatabaseId = newFolderParentId === 'root' ? null : newFolderParentId;
+  const newFolderParentLabel = newFolderParentId === 'root'
+    ? 'Root library'
+    : folderPathById.get(newFolderParentId) || 'Selected folder';
+
+  const newFolderDuplicate = useMemo(() => {
+    if (!newFolderTrimmedName) return false;
+
+    return folderOptions.some((folder) => (
+      (folder.parentId || null) === newFolderParentDatabaseId &&
+      folder.name.trim().toLowerCase() === newFolderTrimmedName.toLowerCase()
+    ));
+  }, [folderOptions, newFolderParentDatabaseId, newFolderTrimmedName]);
+
   const newFolderInlineError = useMemo(() => {
     if (!newFolderSubmitted) return null;
 
-    const name = newFolderName.trim();
-    if (!name) {
+    if (!newFolderTrimmedName) {
       return 'Enter a folder name before creating a media folder.';
     }
 
-    const parentId = newFolderParentId === 'root' ? null : newFolderParentId;
-    const duplicate = folderOptions.some((folder) => (
-      (folder.parentId || null) === parentId &&
-      folder.name.trim().toLowerCase() === name.toLowerCase()
-    ));
+    return newFolderDuplicate ? `A sibling media folder named "${newFolderTrimmedName}" already exists.` : null;
+  }, [newFolderDuplicate, newFolderSubmitted, newFolderTrimmedName]);
 
-    return duplicate ? `A sibling media folder named "${name}" already exists.` : null;
-  }, [folderOptions, newFolderName, newFolderParentId, newFolderSubmitted]);
+  const createFolderDisabledReason = isUploading
+    ? 'Wait for the current upload to finish.'
+    : isCreatingFolder
+      ? 'Folder creation is already running.'
+      : !canCreate
+        ? createDisabledReason
+        : '';
+  const createFolderValidationReason = !newFolderTrimmedName
+    ? 'Enter a folder name before creating.'
+    : newFolderDuplicate
+      ? `A sibling media folder named "${newFolderTrimmedName}" already exists.`
+      : '';
+  const createFolderActionState = createFolderDisabledReason
+    ? 'blocked'
+    : createFolderValidationReason
+      ? 'needs-input'
+      : 'ready';
+  const createFolderActionStatus = createFolderDisabledReason
+    ? `Create folder unavailable: ${createFolderDisabledReason}`
+    : createFolderValidationReason
+      ? createFolderValidationReason
+      : `Create folder "${newFolderTrimmedName}" in ${newFolderParentLabel}.`;
+  const createFolderDescribedBy = [
+    createFolderActionStatusId,
+    newFolderInlineError ? 'media-library-create-folder-name-error' : null,
+  ].filter(Boolean).join(' ');
 
   const libraryFolderIds = useMemo(() => {
     if (libraryFolderFilter === 'all') {
@@ -455,6 +629,173 @@ export function MediaLibraryModal({
     public: filteredMedia.filter((item) => item.visibility !== 'private').length,
     private: filteredMedia.filter((item) => item.visibility === 'private').length,
   }), [filteredMedia]);
+
+  const mediaLibraryOperationBusyReason = isUploading
+    ? `Upload in progress for ${uploadFolderLabel}.`
+    : isReplacing
+      ? `Replacing ${replaceAsset?.name || 'the current media asset'}.`
+      : isCreatingFolder
+        ? `Creating a media folder in ${newFolderParentLabel}.`
+        : selectingMediaId
+          ? 'Inserting the selected media asset into the editor.'
+          : '';
+  const mediaLibraryActionState = mediaLibraryOperationBusyReason
+    ? 'busy'
+    : activeTab === 'library' && !canView
+      ? 'blocked'
+      : activeTab === 'upload' && !canCreate
+        ? 'blocked'
+        : 'ready';
+  const mediaLibraryActionStatus = isUploading
+    ? `Uploading assets to ${uploadFolderLabel}.`
+    : isReplacing
+      ? `Replacing ${replaceAsset?.name || 'the current media asset'} while keeping the existing media id.`
+    : isCreatingFolder
+      ? `Creating a media folder in ${newFolderParentLabel}.`
+      : selectingMediaId
+        ? 'Inserting the selected media asset into the editor.'
+        : activeTab === 'upload'
+          ? `Upload panel ready for ${siteId}; files will upload to ${uploadFolderLabel}.`
+          : `Library panel ready for ${siteId}; ${filteredMedia.length} media item${filteredMedia.length === 1 ? '' : 's'} available.`;
+  const mediaLibraryCloseActionState = mediaLibraryOperationBusyReason ? 'busy' : 'ready';
+  const mediaLibraryCloseActionStatus = mediaLibraryOperationBusyReason
+    ? `Close media library available; ${mediaLibraryOperationBusyReason}`
+    : `Close media library dialog for ${siteId}.`;
+
+  const getTabDisabledReason = (tab: MediaLibraryTab) => (
+    tab === 'library' && !canView
+      ? viewDisabledReason
+      : tab === 'upload' && !canCreate
+        ? createDisabledReason
+        : ''
+  );
+
+  const getTabActionState = (tab: MediaLibraryTab) => (
+    getTabDisabledReason(tab) ? 'blocked' : activeTab === tab ? 'active' : 'ready'
+  );
+
+  const getTabActionStatus = (tab: MediaLibraryTab) => {
+    const disabledReason = getTabDisabledReason(tab);
+    if (disabledReason) {
+      return `${tab === 'library' ? 'Library' : 'Upload'} panel unavailable: ${disabledReason}`;
+    }
+    return activeTab === tab
+      ? `${tab === 'library' ? 'Library' : 'Upload'} panel is active.`
+      : `Switch to the ${tab === 'library' ? 'library' : 'upload'} panel.`;
+  };
+
+  const isLibraryFilterActive = Boolean(searchQuery.trim())
+    || libraryTypeFilter !== 'all'
+    || libraryFolderFilter !== 'all'
+    || includeNestedFolders === false
+    || scopeFilter !== defaultLibraryScopeFilter;
+  const libraryFilterActionStatus = isLibraryFilterActive
+    ? `Media library filters active; ${filteredMedia.length} matching asset${filteredMedia.length === 1 ? '' : 's'} shown.`
+    : `Media library filters ready; ${filteredMedia.length} asset${filteredMedia.length === 1 ? '' : 's'} shown.`;
+  const clearLibraryFiltersDisabledReason = isLibraryFilterActive ? '' : 'No media library filters are active.';
+  const includeNestedFoldersDisabledReason = libraryFolderFilter === 'all' || libraryFolderFilter === 'root'
+    ? 'Choose a parent folder before toggling nested folder inclusion.'
+    : '';
+  const getLibraryFilterActionState = (disabledReason = '', selected = false) => {
+    if (disabledReason) return 'blocked';
+    return selected ? 'selected' : 'ready';
+  };
+  const getLibraryFilterActionProps = (
+    status: string,
+    disabledReason = '',
+    selected = false,
+  ) => ({
+    'aria-describedby': mediaLibraryActionStatusId,
+    'data-action-state': getLibraryFilterActionState(disabledReason, selected),
+    'data-action-status': status,
+    'data-disabled-reason': disabledReason || undefined,
+  });
+  const librarySelectionDisabledReason = !canView ? viewDisabledReason : '';
+  const getLibrarySelectionActionProps = (
+    status: string,
+    options: { disabledReason?: string; selected?: boolean } = {},
+  ) => {
+    const disabledReason = options.disabledReason ?? librarySelectionDisabledReason;
+    return {
+      'aria-describedby': mediaLibraryActionStatusId,
+      'data-action-state': getLibraryFilterActionState(disabledReason, Boolean(options.selected)),
+      'data-action-status': disabledReason ? `Library selection unavailable: ${disabledReason}` : status,
+      'data-disabled-reason': disabledReason || undefined,
+    };
+  };
+  const librarySelectionTargetMetadata = {
+    'data-target-media-scope': scopeFilter,
+    'data-target-media-type-filter': libraryTypeFilter,
+    'data-target-folder-id': libraryFolderFilter,
+  };
+  const uploadControlDisabledReason = !canCreate ? createDisabledReason : '';
+  const uploadBusyDisabledReason = isUploading ? 'Wait for the current upload to finish.' : uploadControlDisabledReason;
+  const replacementUploadDisabledReason = isReplacing
+    ? 'Wait for the current media replacement to finish.'
+    : uploadBusyDisabledReason;
+  const getUploadActionState = (disabledReason = '', selected = false, busy = false) => {
+    if (busy) return 'busy';
+    if (disabledReason) return 'blocked';
+    return selected ? 'selected' : 'ready';
+  };
+  const getUploadControlActionProps = (
+    status: string,
+    options: { disabledReason?: string; selected?: boolean; busy?: boolean } = {},
+  ) => {
+    const disabledReason = options.disabledReason ?? uploadControlDisabledReason;
+    return {
+      'aria-describedby': mediaLibraryActionStatusId,
+      'data-action-state': getUploadActionState(disabledReason, Boolean(options.selected), Boolean(options.busy)),
+      'data-action-status': status,
+      'data-disabled-reason': disabledReason || undefined,
+    };
+  };
+  const formatUploadFilterLabel = (filter: UploadFilter) => {
+    if (filter === 'all') return 'all allowed media';
+    if (filter === 'file') return 'documents and other files';
+    return `${filter} files`;
+  };
+  const getUploadFilterActionStatus = (filter: UploadFilter) => {
+    const label = formatUploadFilterLabel(filter);
+    if (isUploading) return `Uploading ${label} to ${uploadFolderLabel}.`;
+    if (!canCreate) return `Cannot switch upload filter to ${label}: ${createDisabledReason}`;
+    return uploadFilter === filter
+      ? `${label} upload filter selected; new files will upload as ${uploadVisibility} assets in ${uploadFolderLabel}.`
+      : `Switch upload filter to ${label}.`;
+  };
+  const uploadDropzoneActionStatus = isUploading
+    ? `Uploading ${formatUploadFilterLabel(uploadFilter)} to ${uploadFolderLabel}.`
+    : uploadControlDisabledReason
+      ? `Upload unavailable: ${uploadControlDisabledReason}`
+      : `Drop or choose ${formatUploadFilterLabel(uploadFilter)} to upload as ${uploadVisibility} assets in ${uploadFolderLabel}.`;
+  const uploadTagsAtLimit = uploadTagList.length >= 10;
+  const uploadTagsDisabledReason = uploadBusyDisabledReason || (
+    uploadTagsAtLimit ? 'Maximum upload tags reached. Remove a tag before adding another.' : ''
+  );
+  const uploadTagsActionStatus = isUploading
+    ? `Uploading with ${uploadTagList.length} default tag${uploadTagList.length === 1 ? '' : 's'}.`
+    : uploadTagsAtLimit
+      ? `Upload tag limit reached with ${uploadTagList.length} tags; remove a tag before adding another.`
+      : uploadTagList.length > 0
+        ? `Upload defaults include ${uploadTagList.length} tag${uploadTagList.length === 1 ? '' : 's'}: ${uploadTagList.join(', ')}.`
+        : 'Add up to 10 default tags before files enter the media library.';
+  const uploadTagsActionState = getUploadActionState(uploadTagsDisabledReason, uploadTagList.length > 0, isUploading);
+  const uploadDefaultsTargetMetadata = {
+    'data-target-upload-filter': uploadFilter,
+    'data-upload-visibility': uploadVisibility,
+    'data-upload-folder-id': uploadFolderId,
+    'data-upload-folder-label': uploadFolderLabel,
+    'data-target-media-scope': targetScope,
+    'data-target-media-scope-id': targetId || '',
+  };
+
+  const clearLibraryFilters = () => {
+    setSearchQuery('');
+    setLibraryTypeFilter('all');
+    setLibraryFolderFilter('all');
+    setIncludeNestedFolders(true);
+    setScopeFilter(defaultLibraryScopeFilter);
+  };
 
   const formatScopeLabel = (item: MediaAsset & { scope?: 'global' | 'page' | 'post'; scopeTargetId: string | null }) => {
     const scope = item.scope || 'global';
@@ -633,6 +974,16 @@ export function MediaLibraryModal({
       data-focal-y={imageFocalY}
       data-focal-dragging={isDraggingFocal ? 'true' : 'false'}
       data-preview-media-id={previewAsset?.id || ''}
+      {...(testId === 'media-upload-focal-preview'
+        ? getUploadControlActionProps(
+          `Image focal point set to ${imageFocalX}% ${imageFocalY}% with ${imageObjectFit} fit.`,
+          { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+        )
+        : getLibrarySelectionActionProps(`Library image focal point set to ${imageFocalX}% ${imageFocalY}% with ${imageObjectFit} fit.`))}
+      {...(testId === 'media-upload-focal-preview' ? uploadDefaultsTargetMetadata : librarySelectionTargetMetadata)}
+      data-image-object-fit={imageObjectFit}
+      data-image-focal-x={imageFocalX}
+      data-image-focal-y={imageFocalY}
       className="relative mt-3 aspect-[4/3] w-full cursor-crosshair touch-none overflow-hidden rounded-lg border border-border bg-[linear-gradient(45deg,rgba(148,163,184,0.16)_25%,transparent_25%),linear-gradient(-45deg,rgba(148,163,184,0.16)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,rgba(148,163,184,0.16)_75%),linear-gradient(-45deg,transparent_75%,rgba(148,163,184,0.16)_75%)] bg-[length:16px_16px] bg-[position:0_0,0_8px,8px_-8px,-8px_0] text-left focus:outline-none focus:ring-2 focus:ring-primary/30"
       aria-label="Set image focal point"
     >
@@ -720,7 +1071,7 @@ export function MediaLibraryModal({
     }
 
     onSelect(selectedItem, options);
-    onClose();
+    handleClose();
   };
 
   const handleCreateFolder = async () => {
@@ -731,18 +1082,12 @@ export function MediaLibraryModal({
       return;
     }
 
-    const name = newFolderName.trim();
-    if (!name) {
+    if (!newFolderTrimmedName) {
       setError('Fix media folder fields before creating.');
       return;
     }
 
-    const parentId = newFolderParentId === 'root' ? null : newFolderParentId;
-    const duplicate = folderOptions.some((folder) => (
-      (folder.parentId || null) === parentId &&
-      folder.name.trim().toLowerCase() === name.toLowerCase()
-    ));
-    if (duplicate) {
+    if (newFolderDuplicate) {
       setError('Fix media folder fields before creating.');
       return;
     }
@@ -751,7 +1096,7 @@ export function MediaLibraryModal({
     setError(null);
 
     try {
-      const folder = await createMediaFolder(name, siteId, { parentId });
+      const folder = await createMediaFolder(newFolderTrimmedName, siteId, { parentId: newFolderParentDatabaseId });
       setFolders((current) => [...current.filter((item) => item.id !== folder.id), folder]);
       setUploadFolderId(folder.id);
       setLibraryFolderFilter(folder.id);
@@ -771,6 +1116,20 @@ export function MediaLibraryModal({
         <FolderPlus className="h-3.5 w-3.5" />
         Create folder
       </div>
+      <p
+        id={createFolderActionStatusId}
+        role="status"
+        aria-live="polite"
+        data-testid="media-library-create-folder-action-status"
+        data-action-state={createFolderActionState}
+        data-action-status={createFolderActionStatus}
+        data-disabled-reason={createFolderDisabledReason || undefined}
+        data-target-folder-parent-id={newFolderParentId}
+        data-target-folder-name={newFolderTrimmedName}
+        className="sr-only"
+      >
+        {createFolderActionStatus}
+      </p>
       <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto]">
         <select
           value={newFolderParentId}
@@ -781,10 +1140,15 @@ export function MediaLibraryModal({
             }
           }}
           disabled={isUploading || isCreatingFolder || !canCreate}
-          title={canCreate ? undefined : createDisabledReason}
+          title={createFolderDisabledReason || undefined}
           data-testid="media-library-create-folder-parent"
+          data-action-state={createFolderActionState}
+          data-action-status={createFolderActionStatus}
+          data-disabled-reason={createFolderDisabledReason || undefined}
+          data-target-folder-parent-id={newFolderParentId}
           className="h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="New media folder parent"
+          aria-describedby={createFolderDescribedBy}
         >
           <option value="root">Root library</option>
           {folderOptions.map((folder) => (
@@ -807,10 +1171,15 @@ export function MediaLibraryModal({
             }
           }}
           disabled={isUploading || isCreatingFolder || !canCreate}
-          title={canCreate ? undefined : createDisabledReason}
+          title={createFolderDisabledReason || undefined}
           data-testid="media-library-create-folder-name"
+          data-action-state={createFolderActionState}
+          data-action-status={createFolderActionStatus}
+          data-disabled-reason={createFolderDisabledReason || undefined}
+          data-target-folder-parent-id={newFolderParentId}
+          data-target-folder-name={newFolderTrimmedName}
           aria-invalid={Boolean(newFolderInlineError)}
-          aria-describedby={newFolderInlineError ? 'media-library-create-folder-name-error' : undefined}
+          aria-describedby={createFolderDescribedBy}
           className="min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
           placeholder="Campaign assets"
         />
@@ -818,8 +1187,14 @@ export function MediaLibraryModal({
           type="button"
           onClick={() => void handleCreateFolder()}
           disabled={isUploading || isCreatingFolder || !canCreate}
-          title={canCreate ? undefined : createDisabledReason}
+          title={createFolderDisabledReason || undefined}
           data-testid="media-library-create-folder"
+          data-action-state={createFolderActionState}
+          data-action-status={createFolderActionStatus}
+          data-disabled-reason={createFolderDisabledReason || undefined}
+          data-target-folder-parent-id={newFolderParentId}
+          data-target-folder-name={newFolderTrimmedName}
+          aria-describedby={createFolderDescribedBy}
           className="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isCreatingFolder ? 'Creating' : 'Create'}
@@ -972,7 +1347,7 @@ export function MediaLibraryModal({
       setMedia([updated, ...media.filter((item) => item.id !== updated.id)]);
       setUploadProgress({ total: 1, completed: 1, failed: 0, skipped: Math.max(0, files.length - 1), currentName: file.name });
       onSelect(updated, buildSelectionOptions(updated));
-      onClose();
+      handleClose();
     } catch (replaceError) {
       setReplacementBinaryComparison({ ...nextBinaryComparison, status: 'failed' });
       setUploadProgress((current) => current ? { ...current, completed: 1, failed: 1 } : current);
@@ -986,6 +1361,7 @@ export function MediaLibraryModal({
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-foreground/45 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
@@ -994,14 +1370,27 @@ export function MediaLibraryModal({
       data-active-tab={activeTab}
       data-allowed-types={allowedTypes}
       data-upload-filter={uploadFilter}
+      data-library-type-filter={libraryTypeFilter}
+      data-library-search-query={searchQuery.trim()}
+      data-library-filter-active={isLibraryFilterActive ? 'true' : 'false'}
+      data-library-filter-action-status={libraryFilterActionStatus}
       data-scope-filter={scopeFilter}
       data-folder-filter={libraryFolderFilter}
       data-include-nested-folders={includeNestedFolders ? 'true' : 'false'}
       data-insert-preset={insertSizePreset}
       data-replace-asset-id={replaceAssetId || ''}
+      data-return-focus-target={returnFocusTarget}
+      data-initial-focus-target={initialFocusTarget}
+      data-focus-trap="active"
+      data-focus-trap-target={focusTrapTarget}
+      data-close-shortcut="Escape"
       data-upload-progress-total={uploadProgress?.total ?? 0}
       data-upload-progress-completed={uploadProgress?.completed ?? 0}
       data-upload-progress-failed={uploadProgress?.failed ?? 0}
+      aria-describedby={mediaLibraryActionStatusId}
+      aria-keyshortcuts="Escape"
+      data-action-state={mediaLibraryActionState}
+      data-action-status={mediaLibraryActionStatus}
     >
       <div className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
@@ -1022,10 +1411,26 @@ export function MediaLibraryModal({
             ) : null}
           </div>
           <button
-            onClick={onClose}
+            ref={closeButtonRef}
+            onClick={handleClose}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground"
             type="button"
             aria-label="Close media library"
+            aria-describedby={mediaLibraryActionStatusId}
+            aria-keyshortcuts="Escape"
+            data-testid="media-library-close"
+            data-action-state={mediaLibraryCloseActionState}
+            data-action-status={mediaLibraryCloseActionStatus}
+            data-busy-reason={mediaLibraryOperationBusyReason || undefined}
+            data-active-tab={activeTab}
+            data-target-site-id={siteId}
+            data-replace-asset-id={replaceAssetId || ''}
+            data-return-focus-target={returnFocusTarget}
+            data-initial-focus-target={initialFocusTarget}
+            data-close-shortcut="Escape"
+            data-upload-progress-total={uploadProgress?.total ?? 0}
+            data-upload-progress-completed={uploadProgress?.completed ?? 0}
+            data-upload-progress-failed={uploadProgress?.failed ?? 0}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1044,8 +1449,13 @@ export function MediaLibraryModal({
                     setActiveTab(tab);
                   }}
                   disabled={(tab === 'library' && !canView) || (tab === 'upload' && !canCreate)}
-                  title={tab === 'library' && !canView ? viewDisabledReason : tab === 'upload' && !canCreate ? createDisabledReason : undefined}
+                  title={getTabDisabledReason(tab) || undefined}
                   data-testid={`media-library-tab-${tab}`}
+                  data-action-state={getTabActionState(tab)}
+                  data-action-status={getTabActionStatus(tab)}
+                  data-disabled-reason={getTabDisabledReason(tab) || undefined}
+                  aria-describedby={mediaLibraryActionStatusId}
+                  aria-pressed={activeTab === tab}
                   className={cn(
                     'min-h-9 rounded-md px-4 text-sm font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                     activeTab === tab ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -1078,6 +1488,18 @@ export function MediaLibraryModal({
           </div>
         ) : null}
 
+        <span
+          id={mediaLibraryActionStatusId}
+          role="status"
+          aria-live="polite"
+          data-testid="media-library-action-status"
+          data-action-state={mediaLibraryActionState}
+          data-action-status={mediaLibraryActionStatus}
+          className="sr-only"
+        >
+          {mediaLibraryActionStatus}
+        </span>
+
         <div className="min-h-0 flex-1 overflow-y-auto">
           {activeTab === 'library' ? (
             <div className="grid min-h-[560px] gap-0 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -1090,18 +1512,45 @@ export function MediaLibraryModal({
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
                       data-testid="media-library-search"
+                      {...getLibraryFilterActionProps(
+                        searchQuery.trim()
+                          ? `Search media library for "${searchQuery.trim()}"; ${filteredMedia.length} matches shown.`
+                          : `Search ${libraryStats.total} visible media assets by filename, tag, caption, or visibility.`,
+                      )}
+                      data-library-search-query={searchQuery.trim()}
+                      data-library-result-count={filteredMedia.length}
                       className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                       placeholder="Search filename, tag, caption, visibility..."
                       aria-label="Search media"
                     />
                   </label>
                   <div className="flex flex-wrap items-center gap-2">
+                    {isLibraryFilterActive ? (
+                      <button
+                        type="button"
+                        onClick={clearLibraryFilters}
+                        data-testid="media-library-clear-filters"
+                        {...getLibraryFilterActionProps('Clear active media library filters.', clearLibraryFiltersDisabledReason)}
+                        data-library-filter-active="true"
+                        className="min-h-9 rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                      >
+                        Clear filters
+                      </button>
+                    ) : null}
                     {allowedTypeOptions.map((filter) => (
                       <button
                         type="button"
                         key={filter}
                         onClick={() => setLibraryTypeFilter(filter)}
                         data-testid={`media-library-type-filter-${filter}`}
+                        aria-pressed={libraryTypeFilter === filter}
+                        data-target-media-type-filter={filter}
+                        data-library-result-count={filteredMedia.length}
+                        {...getLibraryFilterActionProps(
+                          `Show ${filter === 'all' ? 'all allowed' : filter} media assets; ${filteredMedia.length} assets currently shown.`,
+                          '',
+                          libraryTypeFilter === filter,
+                        )}
                         className={cn(
                           'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors',
                           libraryTypeFilter === filter
@@ -1127,6 +1576,21 @@ export function MediaLibraryModal({
                       const isPrivateAsset = item.visibility === 'private';
                       const privateSelectionDisabled = isPrivateAsset && !allowPrivateSelection;
                       const isSelecting = selectingMediaId === item.id;
+                      const itemSelectDisabledReason = selectingMediaId && !isSelecting
+                        ? 'Another media item is being inserted.'
+                        : privateSelectionDisabled
+                          ? 'Private media requires signed delivery and cannot be inserted directly into public page fields.'
+                          : '';
+                      const itemSelectActionState = isSelecting
+                        ? 'busy'
+                        : itemSelectDisabledReason
+                          ? 'blocked'
+                          : 'ready';
+                      const itemSelectActionStatus = isSelecting
+                        ? `Inserting ${item.name}.`
+                        : itemSelectDisabledReason
+                          ? `${item.name} cannot be inserted: ${itemSelectDisabledReason}`
+                          : `Insert ${item.name} as ${formatTypeLabel(item.type)}.`;
                       const folderPath = item.organization?.folderPath || (item.folderId ? folderPathById.get(item.folderId) || '' : 'Root');
                       const folderSegments = item.organization?.folderSegments || [];
                       const folderAncestorIds = item.organization?.folderAncestors?.map((folder) => folder.id) || [];
@@ -1142,15 +1606,14 @@ export function MediaLibraryModal({
                           if (item.type === 'image') setFocalPreviewAssetId(item.id);
                         }}
                         disabled={Boolean(selectingMediaId) || privateSelectionDisabled}
-                        aria-disabled={privateSelectionDisabled}
-                        title={
-                          privateSelectionDisabled
-                            ? 'Private media requires signed delivery and cannot be inserted directly into public page fields.'
-                            : isPrivateAsset
-                              ? 'Private file will be inserted with signed-delivery metadata.'
-                              : undefined
-                        }
+                        aria-busy={isSelecting ? 'true' : undefined}
+                        aria-describedby={mediaLibraryActionStatusId}
+                        aria-disabled={Boolean(selectingMediaId) || privateSelectionDisabled}
+                        title={itemSelectDisabledReason || (isPrivateAsset ? 'Private file will be inserted with signed-delivery metadata.' : undefined)}
                         data-testid="media-library-item"
+                        data-action-state={itemSelectActionState}
+                        data-action-status={itemSelectActionStatus}
+                        data-disabled-reason={itemSelectDisabledReason || undefined}
                         data-media-id={item.id}
                         data-media-name={item.name}
                         data-media-type={item.type}
@@ -1166,6 +1629,8 @@ export function MediaLibraryModal({
                         data-media-organization-schema={item.organization?.schemaVersion || ''}
                         data-media-organization-root={item.organization?.root ? 'true' : 'false'}
                         data-media-organization-missing-folder={item.organization?.missingFolder ? 'true' : 'false'}
+                        data-media-tags={(item.tags || []).join(',')}
+                        data-media-tag-count={item.tags?.length || 0}
                         data-insert-preset={insertSizePreset}
                         data-image-object-fit={imageObjectFit}
                         data-image-focal-x={imageFocalX}
@@ -1218,15 +1683,34 @@ export function MediaLibraryModal({
                       title="No media matches this view"
                       description="Upload assets to this site or clear filters to attach existing files."
                       action={(
-                        <button
-                          type="button"
-                          onClick={() => canCreate && setActiveTab('upload')}
-                          disabled={!canCreate}
-                          title={canCreate ? undefined : createDisabledReason}
-                          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          Upload assets
-                        </button>
+                        <div className="flex flex-wrap justify-center gap-2">
+                          {isLibraryFilterActive ? (
+                            <button
+                              type="button"
+                              onClick={clearLibraryFilters}
+                              data-testid="media-library-empty-clear-filters"
+                              {...getLibraryFilterActionProps('Clear active media library filters from the empty state.', clearLibraryFiltersDisabledReason)}
+                              data-library-filter-active="true"
+                              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-muted"
+                            >
+                              Clear filters
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => canCreate && setActiveTab('upload')}
+                            disabled={!canCreate}
+                            title={canCreate ? undefined : createDisabledReason}
+                            data-testid="media-library-empty-upload-assets"
+                            data-action-state={canCreate ? 'ready' : 'blocked'}
+                            data-action-status={canCreate ? 'Switch to upload assets.' : `Upload unavailable: ${createDisabledReason}`}
+                            data-disabled-reason={canCreate ? undefined : createDisabledReason}
+                            aria-describedby={mediaLibraryActionStatusId}
+                            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Upload assets
+                          </button>
+                        </div>
                       )}
                     />
                   </div>
@@ -1249,6 +1733,14 @@ export function MediaLibraryModal({
                           type="button"
                           onClick={() => setScopeFilter(scope)}
                           data-testid={`media-library-scope-${scope}`}
+                          aria-pressed={scopeFilter === scope}
+                          data-target-media-scope={scope}
+                          data-library-result-count={filteredMedia.length}
+                          {...getLibraryFilterActionProps(
+                            `Show ${scope} media scope; ${filteredMedia.length} assets currently shown.`,
+                            '',
+                            scopeFilter === scope,
+                          )}
                           className={cn(
                             'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors',
                             scopeFilter === scope
@@ -1269,6 +1761,15 @@ export function MediaLibraryModal({
                     value={libraryFolderFilter}
                     onChange={(event) => setLibraryFolderFilter(event.target.value)}
                     data-testid="media-library-folder-filter"
+                    {...getLibraryFilterActionProps(
+                      libraryFolderFilter === 'all'
+                        ? `Show media from all folders; ${filteredMedia.length} assets currently shown.`
+                        : libraryFolderFilter === 'root'
+                          ? `Show root-library media only; ${filteredMedia.length} assets currently shown.`
+                          : `Show media from ${folderPathById.get(libraryFolderFilter) || 'selected folder'}${includeNestedFolders ? ' including nested folders' : ''}; ${filteredMedia.length} assets currently shown.`,
+                    )}
+                    data-target-folder-id={libraryFolderFilter}
+                    data-include-nested-folders={includeNestedFolders ? 'true' : 'false'}
                     className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                   >
                     <option value="all">All folders</option>
@@ -1284,6 +1785,15 @@ export function MediaLibraryModal({
                       onChange={(event) => setIncludeNestedFolders(event.target.checked)}
                       disabled={libraryFolderFilter === 'all' || libraryFolderFilter === 'root'}
                       data-testid="media-library-include-subfolders"
+                      {...getLibraryFilterActionProps(
+                        includeNestedFolders
+                          ? 'Nested folders are included for the selected folder.'
+                          : 'Nested folders are excluded for the selected folder.',
+                        includeNestedFoldersDisabledReason,
+                        includeNestedFolders,
+                      )}
+                      data-target-folder-id={libraryFolderFilter}
+                      data-include-nested-folders={includeNestedFolders ? 'true' : 'false'}
                       className="mt-0.5 h-4 w-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
                     />
                     <span>Include nested folders when a parent folder is selected.</span>
@@ -1313,6 +1823,9 @@ export function MediaLibraryModal({
                       value={insertSizePreset}
                       onChange={(event) => setInsertSizePreset(event.target.value as MediaInsertSizePreset)}
                       data-testid="media-library-insert-preset"
+                      {...getLibrarySelectionActionProps(`Library image insertion size preset is ${insertSizePreset}.`)}
+                      {...librarySelectionTargetMetadata}
+                      data-image-insert-preset={insertSizePreset}
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                     >
                       <option value="fill-frame">Fill selected frame</option>
@@ -1328,6 +1841,9 @@ export function MediaLibraryModal({
                       value={imageObjectFit}
                       onChange={(event) => setImageObjectFit(event.target.value as 'cover' | 'contain' | 'fill' | 'none')}
                       data-testid="media-library-image-fit"
+                      {...getLibrarySelectionActionProps(`Library image object fit defaults to ${imageObjectFit}.`)}
+                      {...librarySelectionTargetMetadata}
+                      data-image-object-fit={imageObjectFit}
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                     >
                       <option value="cover">Cover crop</option>
@@ -1346,6 +1862,9 @@ export function MediaLibraryModal({
                         value={imageFocalX}
                         onChange={(event) => setImageFocalX(clampPercent(Number(event.target.value)))}
                         data-testid="media-library-focal-x"
+                        {...getLibrarySelectionActionProps(`Library image focal X defaults to ${imageFocalX} percent.`)}
+                        {...librarySelectionTargetMetadata}
+                        data-image-focal-x={imageFocalX}
                         className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                       />
                     </label>
@@ -1358,6 +1877,9 @@ export function MediaLibraryModal({
                         value={imageFocalY}
                         onChange={(event) => setImageFocalY(clampPercent(Number(event.target.value)))}
                         data-testid="media-library-focal-y"
+                        {...getLibrarySelectionActionProps(`Library image focal Y defaults to ${imageFocalY} percent.`)}
+                        {...librarySelectionTargetMetadata}
+                        data-image-focal-y={imageFocalY}
                         className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                       />
                     </label>
@@ -1369,7 +1891,18 @@ export function MediaLibraryModal({
                 </div>
 
                 {(allowedTypes === 'any' || allowedTypes === 'font') ? (
-                  <div className="mt-5 rounded-lg border border-border bg-background p-3" data-testid="media-library-font-controls">
+                  <div
+                    className="mt-5 rounded-lg border border-border bg-background p-3"
+                    data-testid="media-library-font-controls"
+                    {...getLibrarySelectionActionProps(
+                      `Library font registration defaults to ${fontWeight || '400'} ${fontStyle}, ${fontDisplay} display, fallback ${fontFallback || 'system-ui, sans-serif'}.`,
+                    )}
+                    {...librarySelectionTargetMetadata}
+                    data-font-weight={fontWeight}
+                    data-font-style={fontStyle}
+                    data-font-display={fontDisplay}
+                    data-font-fallback={fontFallback}
+                  >
                     <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
                       <TypeIcon className="h-3.5 w-3.5" />
                       Font registration
@@ -1382,6 +1915,9 @@ export function MediaLibraryModal({
                           value={fontWeight}
                           onChange={(event) => setFontWeight(event.target.value)}
                           data-testid="media-library-font-weight"
+                          {...getLibrarySelectionActionProps(`Library font weight defaults to ${fontWeight || '400'}.`)}
+                          {...librarySelectionTargetMetadata}
+                          data-font-weight={fontWeight}
                           className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                           placeholder="400"
                         />
@@ -1392,6 +1928,9 @@ export function MediaLibraryModal({
                           value={fontStyle}
                           onChange={(event) => setFontStyle(event.target.value as 'normal' | 'italic' | 'oblique')}
                           data-testid="media-library-font-style"
+                          {...getLibrarySelectionActionProps(`Library font style defaults to ${fontStyle}.`)}
+                          {...librarySelectionTargetMetadata}
+                          data-font-style={fontStyle}
                           className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                         >
                           <option value="normal">Normal</option>
@@ -1407,6 +1946,9 @@ export function MediaLibraryModal({
                         value={fontFallback}
                         onChange={(event) => setFontFallback(event.target.value)}
                         data-testid="media-library-font-fallback"
+                        {...getLibrarySelectionActionProps(`Library font fallback stack defaults to ${fontFallback || 'system-ui, sans-serif'}.`)}
+                        {...librarySelectionTargetMetadata}
+                        data-font-fallback={fontFallback}
                         className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                         placeholder="system-ui, sans-serif"
                       />
@@ -1417,6 +1959,9 @@ export function MediaLibraryModal({
                         value={fontDisplay}
                         onChange={(event) => setFontDisplay(event.target.value as FontDisplayMode)}
                         data-testid="media-library-font-display"
+                        {...getLibrarySelectionActionProps(`Library font display defaults to ${fontDisplay}.`)}
+                        {...librarySelectionTargetMetadata}
+                        data-font-display={fontDisplay}
                         className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground"
                       >
                         <option value="swap">Swap</option>
@@ -1448,6 +1993,16 @@ export function MediaLibraryModal({
                       disabled={isUploading || !canCreate}
                       title={canCreate ? undefined : createDisabledReason}
                       data-testid={`media-upload-filter-${filter}`}
+                      aria-pressed={uploadFilter === filter}
+                      {...getUploadControlActionProps(getUploadFilterActionStatus(filter), {
+                        disabledReason: uploadBusyDisabledReason,
+                        selected: uploadFilter === filter,
+                        busy: isUploading,
+                      })}
+                      data-target-upload-filter={filter}
+                      data-upload-visibility={uploadVisibility}
+                      data-upload-folder-id={uploadFolderId}
+                      data-upload-folder-label={uploadFolderLabel}
                       className={cn(
                         'min-h-9 rounded-lg border px-3 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                         uploadFilter === filter
@@ -1484,6 +2039,11 @@ export function MediaLibraryModal({
                   }}
                   data-testid="media-upload-dropzone"
                   data-uploading={isUploading ? 'true' : 'false'}
+                  {...getUploadControlActionProps(uploadDropzoneActionStatus, {
+                    disabledReason: uploadBusyDisabledReason,
+                    busy: isUploading,
+                  })}
+                  {...uploadDefaultsTargetMetadata}
                 >
                   <input
                     type="file"
@@ -1493,6 +2053,11 @@ export function MediaLibraryModal({
                     title={canCreate ? undefined : createDisabledReason}
                     accept={getAcceptValue(uploadFilter)}
                     data-testid="media-upload-input"
+                    {...getUploadControlActionProps(uploadDropzoneActionStatus, {
+                      disabledReason: uploadBusyDisabledReason,
+                      busy: isUploading,
+                    })}
+                    {...uploadDefaultsTargetMetadata}
                     onChange={(e) => {
                       void handleFileUpload(e.target.files, uploadFilter);
                       e.currentTarget.value = '';
@@ -1555,6 +2120,11 @@ export function MediaLibraryModal({
                       disabled={isUploading || !canCreate}
                       title={canCreate ? undefined : createDisabledReason}
                       data-testid="media-upload-visibility"
+                      {...getUploadControlActionProps(
+                        `Set uploaded asset delivery to ${uploadVisibility}.`,
+                        { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                      )}
+                      {...uploadDefaultsTargetMetadata}
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="public">Public delivery</option>
@@ -1570,6 +2140,11 @@ export function MediaLibraryModal({
                       disabled={isUploading || !canCreate}
                       title={canCreate ? undefined : createDisabledReason}
                       data-testid="media-upload-folder"
+                      {...getUploadControlActionProps(
+                        `Set upload folder to ${uploadFolderLabel}.`,
+                        { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                      )}
+                      {...uploadDefaultsTargetMetadata}
                       className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <option value="root">Root library</option>
@@ -1659,6 +2234,16 @@ export function MediaLibraryModal({
                           title={canCreate ? undefined : createDisabledReason}
                           accept={getAcceptValue(uploadFilter)}
                           data-testid="media-library-replace-input"
+                          {...getUploadControlActionProps(
+                            replaceAsset
+                              ? `Choose a replacement file for ${replaceAsset.name}; the existing media id will be retained.`
+                              : `Choose a replacement file; the existing media id will be retained.`,
+                            { disabledReason: replacementUploadDisabledReason, busy: isReplacing || isUploading },
+                          )}
+                          data-target-replace-asset-id={replaceAssetId || ''}
+                          data-target-upload-filter={uploadFilter}
+                          data-current-media-id={replaceAsset?.id || replaceAssetId || ''}
+                          data-current-media-name={replaceAsset?.name || ''}
                           onChange={(event) => {
                             void handleReplaceCurrentAsset(event.target.files);
                             event.currentTarget.value = '';
@@ -1680,6 +2265,12 @@ export function MediaLibraryModal({
                       ariaLabel="Media upload tags"
                       maxTags={10}
                       disabled={isUploading || !canCreate}
+                      testId="media-upload-tags"
+                      inputTestId="media-upload-tags-input"
+                      ariaDescribedBy={mediaLibraryActionStatusId}
+                      actionState={uploadTagsActionState}
+                      actionStatus={uploadTagsActionStatus}
+                      disabledReason={uploadTagsDisabledReason}
                     />
                   </div>
 
@@ -1695,6 +2286,12 @@ export function MediaLibraryModal({
                         onChange={(event) => setInsertSizePreset(event.target.value as MediaInsertSizePreset)}
                         disabled={isUploading || !canCreate}
                         data-testid="media-upload-insert-preset"
+                        {...getUploadControlActionProps(
+                          `Image insertion size preset is ${insertSizePreset}.`,
+                          { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                        )}
+                        {...uploadDefaultsTargetMetadata}
+                        data-image-insert-preset={insertSizePreset}
                         className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <option value="fill-frame">Fill selected frame</option>
@@ -1712,6 +2309,12 @@ export function MediaLibraryModal({
                           onChange={(event) => setImageObjectFit(event.target.value as 'cover' | 'contain' | 'fill' | 'none')}
                           disabled={isUploading || !canCreate}
                           data-testid="media-upload-image-fit"
+                          {...getUploadControlActionProps(
+                            `Image object fit defaults to ${imageObjectFit}.`,
+                            { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                          )}
+                          {...uploadDefaultsTargetMetadata}
+                          data-image-object-fit={imageObjectFit}
                           className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <option value="cover">Cover</option>
@@ -1730,6 +2333,12 @@ export function MediaLibraryModal({
                           onChange={(event) => setImageFocalX(clampPercent(Number(event.target.value)))}
                           disabled={isUploading || !canCreate}
                           data-testid="media-upload-focal-x"
+                          {...getUploadControlActionProps(
+                            `Image focal X defaults to ${imageFocalX} percent.`,
+                            { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                          )}
+                          {...uploadDefaultsTargetMetadata}
+                          data-image-focal-x={imageFocalX}
                           className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </label>
@@ -1743,6 +2352,12 @@ export function MediaLibraryModal({
                           onChange={(event) => setImageFocalY(clampPercent(Number(event.target.value)))}
                           disabled={isUploading || !canCreate}
                           data-testid="media-upload-focal-y"
+                          {...getUploadControlActionProps(
+                            `Image focal Y defaults to ${imageFocalY} percent.`,
+                            { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                          )}
+                          {...uploadDefaultsTargetMetadata}
+                          data-image-focal-y={imageFocalY}
                           className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </label>
@@ -1765,6 +2380,12 @@ export function MediaLibraryModal({
                             onChange={(event) => setFontWeight(event.target.value)}
                             disabled={isUploading || !canCreate}
                             data-testid="media-upload-font-weight"
+                            {...getUploadControlActionProps(
+                              `Font upload weight defaults to ${fontWeight || '400'}.`,
+                              { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                            )}
+                            {...uploadDefaultsTargetMetadata}
+                            data-font-weight={fontWeight}
                             className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                           />
                         </label>
@@ -1775,6 +2396,12 @@ export function MediaLibraryModal({
                             onChange={(event) => setFontDisplay(event.target.value as FontDisplayMode)}
                             disabled={isUploading || !canCreate}
                             data-testid="media-upload-font-display"
+                            {...getUploadControlActionProps(
+                              `Font display defaults to ${fontDisplay}.`,
+                              { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                            )}
+                            {...uploadDefaultsTargetMetadata}
+                            data-font-display={fontDisplay}
                             className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             <option value="swap">Swap</option>
@@ -1793,6 +2420,12 @@ export function MediaLibraryModal({
                           onChange={(event) => setFontFallback(event.target.value)}
                           disabled={isUploading || !canCreate}
                           data-testid="media-upload-font-fallback"
+                          {...getUploadControlActionProps(
+                            `Font fallback stack defaults to ${fontFallback || 'system-ui, sans-serif'}.`,
+                            { disabledReason: uploadBusyDisabledReason, busy: isUploading },
+                          )}
+                          {...uploadDefaultsTargetMetadata}
+                          data-font-fallback={fontFallback}
                           className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                         />
                       </label>

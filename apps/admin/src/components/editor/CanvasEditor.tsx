@@ -12,7 +12,7 @@
  */
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import {
   buildBackyThemeCssVariables,
   buildBackyThemeTokens,
@@ -48,9 +48,12 @@ import {
   Monitor,
   PanelLeft,
   PanelRight,
+  PencilLine,
+  Plus,
   Tablet,
   Smartphone,
   RefreshCw,
+  Search,
   SendToBack,
   Trash2,
   ToggleLeft,
@@ -76,6 +79,7 @@ import { ActiveEditorProvider } from '@/components/editor/ActiveEditorContext';
 import type { MediaContext } from '@/components/editor/MediaLibraryModal';
 import {
   BREAKPOINT_CANVAS_SIZE,
+  CANVAS_COMPONENT_LIBRARY,
   DEFAULT_CANVAS_SIZE,
   createCanvasElementFromLibraryItem,
   createCanvasElementsFromReusableContent,
@@ -173,6 +177,33 @@ type EditorCommandRegistryItem = {
   state: EditorCommandState;
   reason: string;
 };
+
+const CANVAS_CONTEXT_QUICK_ADD_KEYS = ['heading', 'text', 'image', 'button', 'section', 'form'] as const;
+
+const getComponentLibraryItemKey = (item: ComponentLibraryItem): string => item.id ?? item.type;
+
+const CANVAS_CONTEXT_QUICK_ADD_ITEMS: Array<{ key: string; item: ComponentLibraryItem }> =
+  CANVAS_CONTEXT_QUICK_ADD_KEYS.flatMap((key) => {
+    const item = CANVAS_COMPONENT_LIBRARY.find((libraryItem) => (
+      getComponentLibraryItemKey(libraryItem) === key || libraryItem.type === key
+    ));
+    return item ? [{ key, item }] : [];
+  });
+
+const CANVAS_CONTEXT_QUICK_ADD_TYPES = CANVAS_CONTEXT_QUICK_ADD_ITEMS
+  .map(({ key }) => key)
+  .join(',');
+const INSPECTOR_EMPTY_QUICK_ADD_KEYS = ['heading', 'text', 'section'] as const;
+const INSPECTOR_EMPTY_QUICK_ADD_ITEMS = CANVAS_CONTEXT_QUICK_ADD_ITEMS.filter(({ key }) => (
+  (INSPECTOR_EMPTY_QUICK_ADD_KEYS as readonly string[]).includes(key)
+));
+const INSPECTOR_EMPTY_QUICK_ADD_TYPES = INSPECTOR_EMPTY_QUICK_ADD_ITEMS
+  .map(({ key }) => key)
+  .join(',');
+
+const CANVAS_TEXT_EDIT_EVENT = 'backy-open-text-editor';
+const CANVAS_TEXT_EDITABLE_TYPES = new Set<CanvasElement['type']>(['text', 'heading', 'paragraph', 'quote', 'list']);
+
 type EditorCommandRegistry = {
   schemaVersion: 'backy.editor-command-registry.v1';
   generatedFrom: 'page-editor';
@@ -192,6 +223,26 @@ type EditorCommandRegistry = {
   };
   commands: EditorCommandRegistryItem[];
 };
+
+const editorCommandActionState = (command?: EditorCommandRegistryItem) => (
+  command?.state === 'ready' ? 'ready' : 'blocked'
+);
+
+const editorCommandDisabledReason = (command?: EditorCommandRegistryItem) => (
+  command && command.state !== 'ready' ? command.reason : undefined
+);
+
+const editorCommandStatusText = (command?: EditorCommandRegistryItem) => {
+  if (!command) return 'Command unavailable: Command registry metadata is missing.';
+  return `${command.label} ${command.state === 'ready' ? 'available' : `unavailable: ${command.reason}`}`.replace(/[.?!]+$/, '');
+};
+
+const formatEditorCommandCategory = (category: EditorCommandCategory) => (
+  category
+    .split('-')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+);
 type EditorSaveStatus = 'saved' | 'dirty' | 'saving' | 'autosaving' | 'error';
 type EditorSaveMode = 'manual' | 'autosave';
 type EditorSavePersistence = 'editor' | 'parent';
@@ -221,6 +272,19 @@ type CloneElementTreeOptions = {
   rootY?: number;
   usedElementIds: Set<string>;
   rootZIndex: number;
+};
+
+type NavigatorWithUserActivation = Navigator & {
+  userActivation?: {
+    hasBeenActive?: boolean;
+  };
+};
+
+const hasBrowserUserActivation = (): boolean => {
+  if (typeof navigator === 'undefined') return true;
+
+  const activation = (navigator as NavigatorWithUserActivation).userActivation;
+  return typeof activation?.hasBeenActive === 'boolean' ? activation.hasBeenActive : true;
 };
 
 const getUniqueDuplicateLayerName = (name: string, siblingNames: string[]): string => {
@@ -712,6 +776,7 @@ const normalizeHistoryElement = (element: CanvasElement): Record<string, unknown
   };
 
   if (element.rotation !== undefined) next.rotation = element.rotation;
+  if (element.name) next.name = element.name;
   if (isLayerHidden(element)) next.visible = false;
   if (isLayerLocked(element)) next.locked = true;
   if (element.parentId) next.parentId = element.parentId;
@@ -1280,9 +1345,33 @@ const CANVAS_SIZE_PRESETS = [
   { id: 'story', label: 'Story', width: 1080, height: 1920 },
 ] as const;
 
+const formatCanvasBreakpointLabel = (value: EditorBreakpoint) => (
+  `${value.charAt(0).toUpperCase()}${value.slice(1)} canvas`
+);
+
 const clampCanvasDimension = (value: number) => (
   Math.min(MAX_CANVAS_DIMENSION, Math.max(MIN_CANVAS_DIMENSION, Math.round(value)))
 );
+
+const clampElementWithinParent = (
+  element: CanvasElement,
+  parent: CanvasElement,
+): CanvasElement => {
+  const maxX = Math.max(0, (Number(parent.width) || 0) - (Number(element.width) || 0));
+  const maxY = Math.max(0, (Number(parent.height) || 0) - (Number(element.height) || 0));
+  const nextX = Math.max(0, Math.min(Number(element.x) || 0, maxX));
+  const nextY = Math.max(0, Math.min(Number(element.y) || 0, maxY));
+
+  if (nextX === element.x && nextY === element.y) {
+    return element;
+  }
+
+  return {
+    ...element,
+    x: nextX,
+    y: nextY,
+  };
+};
 
 const buildRulerTicks = (length: number, scale: number) => {
   const safeLength = Math.max(0, Math.ceil(length));
@@ -1316,6 +1405,7 @@ export interface CanvasEditorProps {
   savePersistence?: EditorSavePersistence;
   saveOwnerLabel?: string;
   saveOwnerVersion?: string | number | null;
+  initialCanvasFocusMode?: boolean;
   initialSize?: CanvasSize;
   initialSelectedElementId?: string;
   theme?: ThemeConfig;
@@ -1556,6 +1646,7 @@ export function CanvasEditor({
   savePersistence = 'editor',
   saveOwnerLabel,
   saveOwnerVersion,
+  initialCanvasFocusMode = false,
   initialSize,
   initialSelectedElementId,
   theme,
@@ -1597,6 +1688,7 @@ export function CanvasEditor({
   const [isSavingReusableSection, setIsSavingReusableSection] = useState(false);
   const [reusableSectionDraftSubmitted, setReusableSectionDraftSubmitted] = useState(false);
   const [pendingDeleteReusableSection, setPendingDeleteReusableSection] = useState<ReusableSection | null>(null);
+  const [deletingReusableSectionId, setDeletingReusableSectionId] = useState<string | null>(null);
   const [reusableSectionDraft, setReusableSectionDraft] = useState<{
     mode: 'save' | 'rename';
     name: string;
@@ -1606,8 +1698,35 @@ export function CanvasEditor({
   const reusableSectionDraftNameInlineError = reusableSectionDraftSubmitted && reusableSectionDraft?.name.trim().length === 0
     ? 'Enter a section name before saving.'
     : null;
+  const reusableSectionDraftActionStatusId = 'editor-reusable-section-action-status';
+  const reusableSectionDraftActionStatus = reusableSectionDraft
+    ? [
+      reusableSectionDraft.mode === 'save'
+        ? 'Save selected layer as reusable section.'
+        : 'Rename reusable section.',
+      reusableSectionDraftNameInlineError
+        ? `Name unavailable: ${reusableSectionDraftNameInlineError}`
+        : 'Name field ready.',
+      isSavingReusableSection ? 'Reusable section save is running.' : 'Submit action available.',
+    ].join(' ')
+    : '';
+  const pendingDeleteReusableSectionStatusId = 'editor-reusable-section-delete-status';
+  const isDeletingReusableSection = Boolean(
+    pendingDeleteReusableSection && deletingReusableSectionId === pendingDeleteReusableSection.id,
+  );
+  const pendingDeleteReusableSectionStatus = pendingDeleteReusableSection
+    ? [
+      `Delete ${pendingDeleteReusableSection.name} from the component library.`,
+      isDeletingReusableSection ? 'Delete is running.' : 'Delete action available.',
+      'Existing canvas layers will stay where they are.',
+    ].join(' ')
+    : '';
   const [editorNotice, setEditorNotice] = useState<string | null>(null);
   const [libraryDragItem, setLibraryDragItem] = useState<ComponentLibraryItem | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
+  const [activeCommandPaletteIndex, setActiveCommandPaletteIndex] = useState(0);
+  const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const siteId = activeSiteId;
@@ -1679,7 +1798,7 @@ export function CanvasEditor({
   const [isPreview, setIsPreview] = useState(false);
   const [showComponentPanel, setShowComponentPanel] = useState(true);
   const [showInspectorPanel, setShowInspectorPanel] = useState(true);
-  const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(false);
+  const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(Boolean(initialCanvasFocusMode));
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('saved');
@@ -1694,9 +1813,13 @@ export function CanvasEditor({
   );
   const editorEntityLabel = mode === 'blog' ? 'Post' : mode === 'section' ? 'Section' : 'Page';
   const saveOwnerVersionRef = useRef<string | number | null | undefined>(saveOwnerVersion);
-  const isCanvasMutationDisabled = isSaving || isPreview || !canEdit;
+  const isCanvasMutationDisabled = isPreview || !canEdit;
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
   const autosaveTimeoutRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef(false);
+  const activeSaveModeRef = useRef<EditorSaveMode | null>(null);
+  const queuedManualSaveRef = useRef(false);
+  const manualSaveRequestedRef = useRef(false);
   const changeSequenceRef = useRef(0);
   const pendingTransformRef = useRef<{
     elements: CanvasElement[];
@@ -1961,6 +2084,10 @@ export function CanvasEditor({
     });
   }, [handleFitCanvas]);
 
+  useEffect(() => {
+    setIsCanvasFocusMode(Boolean(initialCanvasFocusMode));
+  }, [initialCanvasFocusMode]);
+
   const handleToggleComponentPanel = useCallback(() => {
     setIsCanvasFocusMode(false);
     setShowComponentPanel((current) => (isCanvasFocusMode ? true : !current));
@@ -2000,6 +2127,35 @@ export function CanvasEditor({
   const activeCanvasPresetId = useMemo(() => (
     CANVAS_SIZE_PRESETS.find((preset) => preset.width === size.width && preset.height === size.height)?.id || 'custom'
   ), [size.height, size.width]);
+  const activeCanvasPresetLabel = CANVAS_SIZE_PRESETS.find((preset) => preset.id === activeCanvasPresetId)?.label || 'Custom';
+  const activeBreakpointLabel = formatCanvasBreakpointLabel(breakpoint);
+  const canvasViewportActionStatusId = 'editor-viewport-action-status';
+  const canvasViewportDisabledReason = isCanvasMutationDisabled
+    ? isPreview
+      ? 'Exit preview mode before changing the canvas viewport.'
+      : editDisabledReason
+    : '';
+  const canvasViewportActionState = isCanvasMutationDisabled ? 'blocked' : 'ready';
+  const canvasViewportActionStatus = isCanvasMutationDisabled
+    ? `Viewport controls unavailable: ${canvasViewportDisabledReason}`
+    : `${activeBreakpointLabel} active at ${size.width} x ${size.height}px. Canvas preset and dimensions are editable.`;
+  const canvasSizeControlActionStatus = isCanvasMutationDisabled
+    ? `Canvas size controls unavailable: ${canvasViewportDisabledReason}`
+    : `Canvas size editable. Current size ${size.width} x ${size.height}px using ${activeCanvasPresetLabel} preset.`;
+  const breakpointControlActionState = (targetBreakpoint: EditorBreakpoint) => (
+    isCanvasMutationDisabled ? 'blocked' : breakpoint === targetBreakpoint ? 'selected' : 'ready'
+  );
+  const breakpointControlActionStatus = (targetBreakpoint: EditorBreakpoint) => {
+    const targetLabel = formatCanvasBreakpointLabel(targetBreakpoint);
+    if (isCanvasMutationDisabled) {
+      return `Switch to ${targetLabel} unavailable: ${canvasViewportDisabledReason}`;
+    }
+    if (breakpoint === targetBreakpoint) {
+      return `${targetLabel} is active at ${size.width} x ${size.height}px.`;
+    }
+    const preset = CANVAS_SIZE_PRESETS.find((item) => item.id === targetBreakpoint);
+    return `Switch to ${targetLabel}${preset ? ` at ${preset.width} x ${preset.height}px` : ''}.`;
+  };
 
   const handleCanvasPresetChange = useCallback((presetId: string) => {
     const preset = CANVAS_SIZE_PRESETS.find((item) => item.id === presetId);
@@ -2130,6 +2286,14 @@ export function CanvasEditor({
     walk(items);
     return ids;
   }, []);
+  const visibleCanvasElementIds = useMemo(
+    () => collectCyclableElementIds(displayedElements),
+    [collectCyclableElementIds, displayedElements],
+  );
+  const totalCanvasElementCount = useMemo(
+    () => collectCanvasElementIds(displayedElements).size,
+    [displayedElements],
+  );
 
   const getElementAbsoluteOffset = useCallback((
     items: CanvasElement[],
@@ -2522,6 +2686,10 @@ export function CanvasEditor({
     }
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasBrowserUserActivation()) {
+        return;
+      }
+
       event.preventDefault();
       event.returnValue = '';
       return '';
@@ -3278,6 +3446,7 @@ export function CanvasEditor({
         x: candidateOffset.x - parentOffset.x,
         y: candidateOffset.y - parentOffset.y,
       };
+      const boundedNestedElement = clampElementWithinParent(nestedElement, parentEntry.element);
 
       const removed = removeElementById(nextElements, candidateId);
       if (!removed.updated) {
@@ -3285,7 +3454,7 @@ export function CanvasEditor({
       }
 
       nextElements = removed.elements;
-      movedElements.push(nestedElement);
+      movedElements.push(boundedNestedElement);
     });
 
     if (!movedElements.length) {
@@ -3721,10 +3890,61 @@ export function CanvasEditor({
   const selectedReusableSectionSource = selectedReusableSectionMeta
     ? reusableSections.find((section) => section.id === selectedReusableSectionMeta.sectionId)
     : undefined;
+  const reusableInstanceActionStatusId = 'editor-reusable-instance-action-status';
+  const selectedReusableInstanceName = selectedReusableSectionSource?.name
+    || selectedReusableSectionMeta?.name
+    || selectedReusableSectionMeta?.sectionId
+    || 'saved section';
+  const isSelectedReusableInstanceLocked = Boolean(selectedElement && isLayerLocked(selectedElement));
+  const reusableInstanceRefreshDisabledReason = isCanvasMutationDisabled
+    ? editDisabledReason || 'Canvas mutation is disabled.'
+    : !selectedReusableSectionSource
+    ? 'Saved section source is missing.'
+    : isSelectedReusableInstanceLocked
+    ? 'Unlock this layer before refreshing the synced section.'
+    : '';
+  const reusableInstanceDetachDisabledReason = isCanvasMutationDisabled
+    ? editDisabledReason || 'Canvas mutation is disabled.'
+    : isSelectedReusableInstanceLocked
+    ? 'Unlock this layer before detaching the synced section.'
+    : '';
+  const reusableInstanceActionStatus = selectedReusableSectionMeta
+    ? [
+      `Synced section ${selectedReusableInstanceName} is ${selectedReusableSectionSource ? 'linked' : 'missing its saved source'}.`,
+      reusableInstanceRefreshDisabledReason
+        ? `Refresh unavailable: ${reusableInstanceRefreshDisabledReason}`
+        : 'Refresh from saved source available.',
+      reusableInstanceDetachDisabledReason
+        ? `Detach unavailable: ${reusableInstanceDetachDisabledReason}`
+        : 'Detach from saved source available.',
+    ].join(' ')
+    : '';
   const selectedBreakpointOverrideGroups = getResponsiveOverrideGroups(selectedBreakpointOverride, baseSelectedElement);
   const selectedElementHasBreakpointOverride = Boolean(
     selectedBreakpointOverrideGroups.length > 0,
   );
+  const breakpointOverrideActionStatusId = 'editor-breakpoint-override-action-status';
+  const breakpointOverrideLabel = breakpoint.charAt(0).toUpperCase() + breakpoint.slice(1);
+  const breakpointOverrideMutationDisabledReason = isCanvasMutationDisabled
+    ? editDisabledReason || 'Canvas mutation is disabled.'
+    : '';
+  const breakpointOverrideResetAllDisabledReason = breakpointOverrideMutationDisabledReason
+    || (!selectedElementHasBreakpointOverride ? `${breakpointOverrideLabel} inherits desktop settings.` : '');
+  const selectedBreakpointOverrideGroupLabels = BREAKPOINT_OVERRIDE_GROUPS
+    .filter((group) => selectedBreakpointOverrideGroups.includes(group.id))
+    .map((group) => group.label);
+  const breakpointOverrideActionStatus = breakpoint !== 'desktop'
+    ? [
+      `${breakpointOverrideLabel} override ${
+        selectedBreakpointOverrideGroupLabels.length > 0
+          ? `has ${selectedBreakpointOverrideGroupLabels.join(', ')} group${selectedBreakpointOverrideGroupLabels.length === 1 ? '' : 's'} active`
+          : 'inherits desktop settings'
+      }.`,
+      breakpointOverrideResetAllDisabledReason
+        ? `Reset all unavailable: ${breakpointOverrideResetAllDisabledReason}`
+        : `Reset all ${breakpointOverrideLabel.toLowerCase()} overrides available.`,
+    ].join(' ')
+    : '';
   const selectedEntries = useMemo(
     () => selectedIds
       .map((id) => findElementEntry(elements, id))
@@ -3737,6 +3957,21 @@ export function CanvasEditor({
       .filter((element): element is CanvasElement => Boolean(element)),
     [displayedElements, elements, findElementById, selectedIds],
   );
+  const selectedGeometrySummary = useMemo(() => {
+    if (selectedActiveElements.length === 0) return null;
+
+    const minX = Math.min(...selectedActiveElements.map((element) => Number(element.x) || 0));
+    const minY = Math.min(...selectedActiveElements.map((element) => Number(element.y) || 0));
+    const maxX = Math.max(...selectedActiveElements.map((element) => (Number(element.x) || 0) + (Number(element.width) || 0)));
+    const maxY = Math.max(...selectedActiveElements.map((element) => (Number(element.y) || 0) + (Number(element.height) || 0)));
+
+    return {
+      x: Math.round(minX),
+      y: Math.round(minY),
+      width: Math.round(Math.max(1, maxX - minX)),
+      height: Math.round(Math.max(1, maxY - minY)),
+    };
+  }, [selectedActiveElements]);
   const selectedParentId = selectedEntries[0]?.parentId ?? null;
   const selectedEntriesShareParent = selectedEntries.length > 0
     && selectedEntries.every((entry) => entry.parentId === selectedParentId);
@@ -3790,6 +4025,19 @@ export function CanvasEditor({
   const canCutSelected = selectedEntriesShareParent && selectedEntries.some((entry) => !isLayerLocked(entry.element));
   const canDuplicateSelected = canCutSelected;
   const canDeleteSelected = canCutSelected;
+  const selectedTextEditableElement = selectedActiveElements.length === 1 ? selectedActiveElements[0] : null;
+  const selectedTextEditableType = selectedTextEditableElement
+    ? normalizeElementType(selectedTextEditableElement.type)
+    : null;
+  const canEditSelectedText = Boolean(
+    selectedId &&
+      selectedTextEditableElement &&
+      selectedTextEditableType &&
+      CANVAS_TEXT_EDITABLE_TYPES.has(selectedTextEditableType) &&
+      !isCanvasMutationDisabled &&
+      !isLayerLocked(selectedTextEditableElement) &&
+      !isLayerHidden(selectedTextEditableElement),
+  );
   const canToggleSelectedVisibility = selectedActiveElements.length > 0
     && selectedActiveElements.every((element) => !isLayerLocked(element));
   const selectedLayersAreHidden = selectedActiveElements.length > 0
@@ -3808,6 +4056,18 @@ export function CanvasEditor({
       ? `${selectedElementTypeLabel} - ${selectedElement.id}`
       : selectedElement.id
     : null;
+  const handleEditSelectedText = useCallback(() => {
+    if (!canEditSelectedText || !selectedId) {
+      return;
+    }
+
+    window.dispatchEvent(new CustomEvent(CANVAS_TEXT_EDIT_EVENT, {
+      detail: { elementId: selectedId },
+    }));
+    setSelectedId(selectedId);
+    setSelectedIds([selectedId]);
+    setRightPanel('properties');
+  }, [canEditSelectedText, selectedId]);
   const clipboardLayerLabel = clipboardElements.length === 1 ? 'layer' : 'layers';
   const canPasteIntoSelectedContainer = Boolean(
     selectedElement && !isLayerLocked(selectedElement) && canAcceptNestedDrop(selectedElement.type),
@@ -4037,6 +4297,18 @@ export function CanvasEditor({
         enabled: !isCanvasMutationDisabled && selectedActiveElements.length > 0,
         reason: selectedLayersAreLocked ? 'Selected layers can be unlocked.' : 'Selected layers can be locked.',
         disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select at least one layer before toggling lock state.',
+      }),
+      command({
+        id: 'edit-text',
+        label: 'Edit selected text',
+        category: 'selection',
+        targetScope: 'selected-layer',
+        testId: 'editor-context-edit-text',
+        enabled: canEditSelectedText,
+        reason: 'Selected text layer can be edited directly on the canvas.',
+        disabledReason: isCanvasMutationDisabled
+          ? mutationDisabledReason
+          : 'Select one unlocked visible text, heading, quote, or list layer before editing text.',
       }),
       ...([
         ['send-to-back', 'Send to back', 'Shift+Cmd/Ctrl+[', 'Shift+Control+[ Shift+Meta+[', 'editor-send-to-back'],
@@ -4328,6 +4600,7 @@ export function CanvasEditor({
     canDistributeSelected,
     canDuplicateSelected,
     canEdit,
+    canEditSelectedText,
     canGroupSelected,
     canPublish,
     canSelectChildLayer,
@@ -4598,6 +4871,17 @@ export function CanvasEditor({
     setRightPanel(selectableChildLayerIds.length > 1 ? 'layers' : 'properties');
   }, [selectableChildLayerIds]);
 
+  const handleSelectFirstVisibleLayer = useCallback(() => {
+    const nextId = visibleCanvasElementIds[0] || null;
+    if (!nextId) {
+      return;
+    }
+
+    setSelectedId(nextId);
+    setSelectedIds([nextId]);
+    setRightPanel('properties');
+  }, [visibleCanvasElementIds]);
+
   /**
    * Handle element selection
    */
@@ -4641,18 +4925,36 @@ export function CanvasEditor({
     }
   }, [elements, findElementById]);
 
-  const handleRefreshSelectedReusableSection = useCallback(() => {
+  const handleRefreshSelectedReusableSection = useCallback(async () => {
     if (
       isCanvasMutationDisabled ||
       !selectedId ||
       !baseSelectedElement ||
-      !selectedReusableSectionSource ||
-      !selectedReusableSectionSource.content.elements.length
+      !selectedReusableSectionMeta
     ) {
       return;
     }
 
-    const sectionRoots = selectedReusableSectionSource.content.elements;
+    let reusableSectionSource = selectedReusableSectionSource;
+    if (activeSiteId) {
+      try {
+        const sections = await listReusableSections(activeSiteId, { status: 'active' });
+        setReusableSections(sections);
+        reusableSectionSource = sections.find((section) => section.id === selectedReusableSectionMeta.sectionId)
+          || reusableSectionSource;
+      } catch (error) {
+        if (!reusableSectionSource) {
+          setEditorNotice(error instanceof Error ? error.message : 'Unable to refresh saved section source.');
+          return;
+        }
+      }
+    }
+
+    if (!reusableSectionSource || !reusableSectionSource.content.elements.length) {
+      return;
+    }
+
+    const sectionRoots = reusableSectionSource.content.elements;
     const sourceRoot = selectedReusableSectionMeta?.rootIndex !== undefined
       ? sectionRoots[selectedReusableSectionMeta.rootIndex]
       : selectedReusableSectionMeta?.sourceElementId
@@ -4673,7 +4975,7 @@ export function CanvasEditor({
 
     const nextElement = cloneReusableSectionInstanceTree(
       refreshSourceElement,
-      selectedReusableSectionSource,
+      reusableSectionSource,
       {
         rootId: selectedEntry.element.id,
         parentId: selectedEntry.parentId,
@@ -4691,8 +4993,9 @@ export function CanvasEditor({
     }, selectedEntry.element.id, [selectedEntry.element.id]);
     setSelectedId(selectedEntry.element.id);
     setSelectedIds([selectedEntry.element.id]);
-    setEditorNotice(`Synced ${selectedReusableSectionSource.name} from the saved section source.`);
+    setEditorNotice(`Synced ${reusableSectionSource.name} from the saved section source.`);
   }, [
+    activeSiteId,
     baseSelectedElement,
     cloneReusableSectionInstanceTree,
     elements,
@@ -5385,6 +5688,9 @@ export function CanvasEditor({
       setEditorNotice(reusableDeleteDisabledReason || 'You do not have permission to delete reusable sections.');
       return;
     }
+    if (deletingReusableSectionId) {
+      return;
+    }
     if (!activeSiteId) {
       return;
     }
@@ -5395,13 +5701,16 @@ export function CanvasEditor({
     }
 
     try {
+      setDeletingReusableSectionId(sectionId);
       await deleteReusableSection(activeSiteId, sectionId);
       setReusableSections((current) => current.filter((item) => item.id !== sectionId));
       setPendingDeleteReusableSection(null);
     } catch (error) {
       setEditorNotice(error instanceof Error ? error.message : 'Unable to delete reusable section');
+    } finally {
+      setDeletingReusableSectionId(null);
     }
-  }, [activeSiteId, canDeleteReusableSections, reusableDeleteDisabledReason, reusableSections]);
+  }, [activeSiteId, canDeleteReusableSections, deletingReusableSectionId, reusableDeleteDisabledReason, reusableSections]);
 
   const handleDeleteReusableSection = useCallback((sectionId: string) => {
     if (!canDeleteReusableSections) {
@@ -5526,9 +5835,21 @@ export function CanvasEditor({
    * Handle save
    */
   const handleSaveWrapper = useCallback(async (settingsOverride?: PageSettings, silent = false) => {
-    if (isSaving) {
+    const requestedSaveMode: EditorSaveMode = silent ? 'autosave' : 'manual';
+
+    if (requestedSaveMode === 'manual') {
+      manualSaveRequestedRef.current = true;
+    }
+
+    if (saveInFlightRef.current) {
+      if (requestedSaveMode === 'manual' && activeSaveModeRef.current === 'autosave') {
+        queuedManualSaveRef.current = true;
+        setSaveStatus('saving');
+        setAutosaveDueAt(null);
+      }
       return false;
     }
+
     if (isParentPersistence) {
       setAutosaveDueAt(null);
       setSaveStatus(hasUnsavedChanges ? 'dirty' : 'saved');
@@ -5567,15 +5888,25 @@ export function CanvasEditor({
       setAutosaveDueAt(null);
     }
 
+    saveInFlightRef.current = true;
+    activeSaveModeRef.current = requestedSaveMode;
     setIsSaving(true);
-    setSaveStatus(silent ? 'autosaving' : 'saving');
+    setSaveStatus(requestedSaveMode === 'autosave' ? 'autosaving' : 'saving');
+
     try {
       await Promise.resolve(onSave(elementsRef.current, nextSettings, size));
       if (changeSequenceRef.current === saveSequence) {
+        const completedSaveMode =
+          requestedSaveMode === 'autosave' && manualSaveRequestedRef.current
+            ? 'manual'
+            : requestedSaveMode;
         setHasUnsavedChanges(false);
         setSaveStatus('saved');
         setLastSavedAt(new Date());
-        setLastSaveMode(silent ? 'autosave' : 'manual');
+        setLastSaveMode(completedSaveMode);
+        if (completedSaveMode === 'manual') {
+          manualSaveRequestedRef.current = false;
+        }
         setPendingChangeCount(0);
         setAutosaveDueAt(null);
         setLastSaveError(null);
@@ -5593,15 +5924,31 @@ export function CanvasEditor({
       setLastSaveError(message);
       setAutosaveDueAt(null);
       if (!silent) {
+        manualSaveRequestedRef.current = false;
         setEditorNotice(message);
       } else {
         console.error('Auto-save failed');
       }
       return false;
     } finally {
+      const shouldRunQueuedManualSave =
+        requestedSaveMode === 'autosave' && queuedManualSaveRef.current;
+
+      if (shouldRunQueuedManualSave) {
+        queuedManualSaveRef.current = false;
+      }
+
+      saveInFlightRef.current = false;
+      activeSaveModeRef.current = null;
       setIsSaving(false);
+
+      if (shouldRunQueuedManualSave) {
+        window.setTimeout(() => {
+          void handleSaveWrapper(settingsOverride, false);
+        }, 0);
+      }
     }
-  }, [canEdit, editDisabledReason, hasUnsavedChanges, isParentPersistence, isSaving, normalizedSaveOwnerLabel, onSave, pageSettings, size, validateSettings]);
+  }, [canEdit, editDisabledReason, hasUnsavedChanges, isParentPersistence, normalizedSaveOwnerLabel, onSave, pageSettings, size, validateSettings]);
 
   const handleSettingsSave = useCallback(async (newSettings: PageSettings) => {
     if (!canEdit) {
@@ -5740,7 +6087,9 @@ export function CanvasEditor({
         return;
       }
 
-      if (isSaving) {
+      if ((e.ctrlKey || e.metaKey) && key === 'k' && !e.altKey) {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
         return;
       }
 
@@ -6227,6 +6576,563 @@ export function CanvasEditor({
     };
   }, []);
 
+  const editorCommandsByTestId = useMemo(() => {
+    const next = new Map<string, EditorCommandRegistryItem>();
+    editorCommandRegistry.commands.forEach((command) => {
+      if (command.testId) {
+        next.set(command.testId, command);
+      }
+    });
+    return next;
+  }, [editorCommandRegistry]);
+  const editorCommandsById = useMemo(() => {
+    const next = new Map<string, EditorCommandRegistryItem>();
+    editorCommandRegistry.commands.forEach((command) => {
+      next.set(command.id, command);
+    });
+    return next;
+  }, [editorCommandRegistry]);
+  const previewCommand = editorCommandsByTestId.get('editor-preview-toggle');
+  const settingsCommand = editorCommandsByTestId.get('editor-page-settings');
+  const reloadCommand = editorCommandsByTestId.get('editor-reload-page');
+  const publishCommand = editorCommandsByTestId.get('editor-publish-page');
+  const saveCommand = editorCommandsByTestId.get('editor-save-page');
+  const contextEditTextCommand = editorCommandsById.get('edit-text');
+  const contextDuplicateCommand = editorCommandsById.get('duplicate-selection');
+  const contextSendToBackCommand = editorCommandsById.get('send-to-back');
+  const contextBringToFrontCommand = editorCommandsById.get('bring-to-front');
+  const contextDeleteCommand = editorCommandsById.get('delete-selection');
+  const editorContextActionStatusId = 'editor-context-action-status';
+  const contextQuickAddDisabledReason = editDisabledReason || 'Canvas mutation is disabled.';
+  const contextQuickAddActionState = isCanvasMutationDisabled ? 'blocked' : 'ready';
+  const contextQuickAddActionStatus = isCanvasMutationDisabled
+    ? `Add component unavailable: ${contextQuickAddDisabledReason}`
+    : `Add component available. ${CANVAS_CONTEXT_QUICK_ADD_ITEMS.length} quick-add shortcuts ready.`;
+  const editorContextActionStatus = [
+    `${breakpoint} canvas ${size.width} x ${size.height}px at ${zoomPercent}%.`,
+    contextQuickAddActionStatus,
+    editorCommandStatusText(contextEditTextCommand),
+    editorCommandStatusText(contextDuplicateCommand),
+    editorCommandStatusText(contextSendToBackCommand),
+    editorCommandStatusText(contextBringToFrontCommand),
+    editorCommandStatusText(contextDeleteCommand),
+  ].join(' ');
+  const editorInspectorActionStatusId = 'editor-inspector-action-status';
+  const editorInspectorCommandIds = [
+    'select-sibling-layers',
+    'select-parent-layer',
+    'select-child-layer',
+    'select-child-layers',
+    'group-selection',
+    'ungroup-selection',
+    'copy-selection',
+    'duplicate-selection',
+    'cut-selection',
+    'paste-selection',
+    'toggle-selection-visibility',
+    'toggle-selection-lock',
+    'send-to-back',
+    'send-backward',
+    'bring-forward',
+    'bring-to-front',
+    'align-left',
+    'align-center',
+    'align-right',
+    'align-top',
+    'align-middle',
+    'align-bottom',
+    'distribute-horizontal',
+    'distribute-vertical',
+    'delete-selection',
+  ];
+  const editorInspectorCommands = editorInspectorCommandIds
+    .map((commandId) => editorCommandsById.get(commandId))
+    .filter((command): command is EditorCommandRegistryItem => Boolean(command && command.state !== 'hidden'));
+  const editorInspectorReadyCommandCount = editorInspectorCommands
+    .filter((command) => command.state === 'ready')
+    .length;
+  const editorInspectorActionStatus = selectedIds.length > 0
+    ? `Inspector actions for ${selectedIds.length} selected layer${selectedIds.length === 1 ? '' : 's'}. ${editorInspectorReadyCommandCount} of ${editorInspectorCommands.length} actions ready.`
+    : `Inspector empty state ready. ${INSPECTOR_EMPTY_QUICK_ADD_ITEMS.length} quick-add actions available.`;
+  const editorInspectorCommandProps = (commandId: string) => {
+    const command = editorCommandsById.get(commandId);
+    return {
+      'aria-describedby': editorInspectorActionStatusId,
+      'data-command-id': command?.id,
+      'data-action-state': editorCommandActionState(command),
+      'data-action-status': editorCommandStatusText(command),
+      'data-disabled-reason': editorCommandDisabledReason(command),
+    };
+  };
+  const editorPrimaryActionStatusId = 'editor-primary-actions-status';
+  const editorPrimaryActionStatus = [
+    previewCommand,
+    settingsCommand,
+    reloadCommand,
+    publishCommand,
+    saveCommand,
+  ]
+    .filter((command): command is EditorCommandRegistryItem => Boolean(command && command.state !== 'hidden'))
+    .map(editorCommandStatusText)
+    .join('. ');
+  const editorSecondaryToolbarStatusId = 'editor-secondary-toolbar-action-status';
+  const editorSecondaryToolbarCommandIds = [
+    'undo',
+    'redo',
+    'copy-selection',
+    'cut-selection',
+    'paste-selection',
+    'duplicate-selection',
+    'select-sibling-layers',
+    'select-child-layers',
+    'group-selection',
+    'ungroup-selection',
+    'toggle-selection-visibility',
+    'toggle-selection-lock',
+    'send-to-back',
+    'send-backward',
+    'bring-forward',
+    'bring-to-front',
+    'align-left',
+    'align-center',
+    'align-right',
+    'align-top',
+    'align-middle',
+    'align-bottom',
+    'distribute-horizontal',
+    'distribute-vertical',
+    'delete-selection',
+    'toggle-component-panel',
+    'toggle-layers-panel',
+    'toggle-inspector-panel',
+    'toggle-focus-mode',
+  ];
+  const editorSecondaryToolbarCommands = editorSecondaryToolbarCommandIds
+    .map((commandId) => editorCommandsById.get(commandId))
+    .filter((command): command is EditorCommandRegistryItem => Boolean(command && command.state !== 'hidden'));
+  const editorSecondaryToolbarReadyCount = editorSecondaryToolbarCommands
+    .filter((command) => command.state === 'ready')
+    .length;
+  const editorSecondaryToolbarStatus = `Secondary editor toolbar ready. ${editorSecondaryToolbarReadyCount} of ${editorSecondaryToolbarCommands.length} actions ready for the current selection.`;
+  const editorSecondaryToolbarCommandProps = (commandId: string) => {
+    const command = editorCommandsById.get(commandId);
+    return {
+      'aria-describedby': editorSecondaryToolbarStatusId,
+      'data-command-id': command?.id,
+      'data-action-state': editorCommandActionState(command),
+      'data-action-status': editorCommandStatusText(command),
+      'data-disabled-reason': editorCommandDisabledReason(command),
+    };
+  };
+  const visibleEditorCommands = useMemo(() => (
+    editorCommandRegistry.commands.filter((command) => command.state !== 'hidden')
+  ), [editorCommandRegistry.commands]);
+  const filteredEditorCommands = useMemo(() => {
+    const normalizedQuery = commandPaletteQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return visibleEditorCommands;
+    }
+
+    return visibleEditorCommands.filter((command) => [
+      command.label,
+      command.id,
+      formatEditorCommandCategory(command.category),
+      command.targetScope,
+      command.shortcut || '',
+      command.reason,
+    ].some((value) => value.toLowerCase().includes(normalizedQuery)));
+  }, [commandPaletteQuery, visibleEditorCommands]);
+  const activeCommandPaletteCommand = filteredEditorCommands[activeCommandPaletteIndex] ?? filteredEditorCommands[0];
+  const commandPaletteStatusId = 'editor-command-palette-status';
+  const commandPaletteStatus = commandPaletteOpen
+    ? `${filteredEditorCommands.length} of ${visibleEditorCommands.length} visible editor commands shown. ${editorCommandRegistry.summary.readyCommandCount} commands are ready.`
+    : `Command palette closed. ${visibleEditorCommands.length} visible editor commands available.`;
+
+  useEffect(() => {
+    if (!commandPaletteOpen) {
+      return;
+    }
+
+    setActiveCommandPaletteIndex(0);
+  }, [commandPaletteOpen, commandPaletteQuery]);
+
+  useEffect(() => {
+    if (!commandPaletteOpen) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      commandPaletteInputRef.current?.focus();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [commandPaletteOpen]);
+
+  const executeEditorCommand = useCallback((command?: EditorCommandRegistryItem) => {
+    if (!command) {
+      return;
+    }
+
+    if (command.state !== 'ready') {
+      setEditorNotice(editorCommandStatusText(command));
+      return;
+    }
+
+    setCommandPaletteOpen(false);
+    setCommandPaletteQuery('');
+
+    switch (command.id) {
+      case 'undo':
+        handleUndo();
+        return;
+      case 'redo':
+        handleRedo();
+        return;
+      case 'copy-selection':
+        handleCopy();
+        return;
+      case 'cut-selection':
+        handleCut();
+        return;
+      case 'paste-selection':
+        handlePaste();
+        return;
+      case 'duplicate-selection':
+        handleDuplicate();
+        return;
+      case 'select-sibling-layers':
+        handleSelectSiblingScope();
+        return;
+      case 'select-child-layers':
+        handleSelectChildLayerScope();
+        return;
+      case 'select-parent-layer':
+        handleSelectParentLayer();
+        return;
+      case 'select-child-layer':
+        handleSelectFirstChildLayer();
+        return;
+      case 'group-selection':
+        handleGroupSelected();
+        return;
+      case 'ungroup-selection':
+        handleUngroupSelected();
+        return;
+      case 'toggle-selection-visibility':
+        handleSelectedVisibilityToggle();
+        return;
+      case 'toggle-selection-lock':
+        handleSelectedLockToggle();
+        return;
+      case 'edit-text':
+        handleEditSelectedText();
+        return;
+      case 'send-to-back':
+        handleZOrderChange('back');
+        return;
+      case 'send-backward':
+        handleZOrderChange('backward');
+        return;
+      case 'bring-forward':
+        handleZOrderChange('forward');
+        return;
+      case 'bring-to-front':
+        handleZOrderChange('front');
+        return;
+      case 'align-left':
+        alignSelectedElement('left');
+        return;
+      case 'align-center':
+        alignSelectedElement('center');
+        return;
+      case 'align-right':
+        alignSelectedElement('right');
+        return;
+      case 'align-top':
+        alignSelectedElement('top');
+        return;
+      case 'align-middle':
+        alignSelectedElement('middle');
+        return;
+      case 'align-bottom':
+        alignSelectedElement('bottom');
+        return;
+      case 'distribute-horizontal':
+        distributeSelectedElements('horizontal');
+        return;
+      case 'distribute-vertical':
+        distributeSelectedElements('vertical');
+        return;
+      case 'delete-selection':
+        deleteElement();
+        return;
+      case 'toggle-component-panel':
+        handleToggleComponentPanel();
+        return;
+      case 'toggle-layers-panel':
+        handleToggleLayersPanel();
+        return;
+      case 'toggle-inspector-panel':
+        handleToggleInspectorPanel();
+        return;
+      case 'toggle-focus-mode':
+        handleToggleCanvasFocus();
+        return;
+      case 'toggle-preview':
+        setIsPreview((current) => !current);
+        return;
+      case 'toggle-grid':
+        handleToggleGridVisibility();
+        return;
+      case 'toggle-snap':
+        handleToggleSnap();
+        return;
+      case 'toggle-pan':
+        handleToggleCanvasPanMode();
+        return;
+      case 'zoom-out':
+        handleZoomOut();
+        return;
+      case 'zoom-in':
+        handleZoomIn();
+        return;
+      case 'zoom-fit':
+        handleFitCanvas();
+        return;
+      case 'open-page-settings':
+        setIsSettingsOpen(true);
+        return;
+      case 'reload-page':
+        handleReload();
+        return;
+      case 'publish-page':
+        void handleTogglePublish();
+        return;
+      case 'save-page':
+        void handleSaveWrapper();
+        return;
+      default:
+        setEditorNotice(`${command.label} is registered but not wired to the editor surface yet.`);
+    }
+  }, [
+    alignSelectedElement,
+    deleteElement,
+    distributeSelectedElements,
+    handleCopy,
+    handleCut,
+    handleDuplicate,
+    handleEditSelectedText,
+    handleFitCanvas,
+    handleGroupSelected,
+    handlePaste,
+    handleRedo,
+    handleReload,
+    handleSaveWrapper,
+    handleSelectChildLayerScope,
+    handleSelectFirstChildLayer,
+    handleSelectParentLayer,
+    handleSelectSiblingScope,
+    handleSelectedLockToggle,
+    handleSelectedVisibilityToggle,
+    handleToggleCanvasFocus,
+    handleToggleCanvasPanMode,
+    handleToggleComponentPanel,
+    handleToggleGridVisibility,
+    handleToggleInspectorPanel,
+    handleToggleLayersPanel,
+    handleTogglePublish,
+    handleToggleSnap,
+    handleUndo,
+    handleUngroupSelected,
+    handleZOrderChange,
+    handleZoomIn,
+    handleZoomOut,
+  ]);
+
+  const handleCommandPaletteInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setCommandPaletteOpen(false);
+      setCommandPaletteQuery('');
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveCommandPaletteIndex((current) => (
+        filteredEditorCommands.length ? (current + 1) % filteredEditorCommands.length : 0
+      ));
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveCommandPaletteIndex((current) => (
+        filteredEditorCommands.length ? (current - 1 + filteredEditorCommands.length) % filteredEditorCommands.length : 0
+      ));
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      executeEditorCommand(activeCommandPaletteCommand);
+    }
+  }, [activeCommandPaletteCommand, executeEditorCommand, filteredEditorCommands.length]);
+
+  const editorPrimaryActions = (
+    <div
+      className="flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-1 py-1 shadow-sm"
+      role="group"
+      aria-label="Primary editor actions"
+      aria-describedby={editorPrimaryActionStatusId}
+      data-testid="editor-primary-actions"
+      data-action-status={editorPrimaryActionStatus ? `${editorPrimaryActionStatus}.` : 'No primary editor actions are visible.'}
+      data-command-ready-count={editorCommandRegistry.summary.categories.find((category) => category.category === 'workflow')?.ready || 0}
+      data-command-schema={editorCommandRegistry.schemaVersion}
+    >
+      <span
+        id={editorPrimaryActionStatusId}
+        className="sr-only"
+        data-testid="editor-primary-actions-status"
+      >
+        {editorPrimaryActionStatus ? `${editorPrimaryActionStatus}.` : 'No primary editor actions are visible.'}
+      </span>
+      <button
+        type="button"
+        onClick={() => setIsPreview(!isPreview)}
+        disabled={isSaving}
+        aria-describedby={editorPrimaryActionStatusId}
+        data-command-id={previewCommand?.id}
+        data-action-state={editorCommandActionState(previewCommand)}
+        data-action-status={editorCommandStatusText(previewCommand)}
+        data-disabled-reason={editorCommandDisabledReason(previewCommand)}
+        data-testid="editor-preview-toggle"
+        className={cn(
+          'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-60',
+          isPreview
+            ? 'bg-slate-950 text-white'
+            : 'hover:bg-slate-100',
+        )}
+      >
+        <Eye className="h-4 w-4" />
+        {isPreview ? 'Edit' : 'Preview'}
+      </button>
+
+      {!hideSettings && (
+        <button
+          type="button"
+          onClick={() => setIsSettingsOpen(true)}
+          disabled={isSaving}
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          title={editorCommandDisabledReason(settingsCommand) || settingsCommand?.reason || 'Page settings'}
+          aria-label="Page settings"
+          aria-describedby={editorPrimaryActionStatusId}
+          data-command-id={settingsCommand?.id}
+          data-action-state={editorCommandActionState(settingsCommand)}
+          data-action-status={editorCommandStatusText(settingsCommand)}
+          data-disabled-reason={editorCommandDisabledReason(settingsCommand)}
+          data-testid="editor-page-settings"
+        >
+          <Settings className="h-4 w-4" />
+          <span>Settings</span>
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={handleReload}
+        disabled={isSaving}
+        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+        title={editorCommandDisabledReason(reloadCommand) || reloadCommand?.reason || 'Reload page from last saved state'}
+        aria-label="Reload page"
+        aria-describedby={editorPrimaryActionStatusId}
+        data-command-id={reloadCommand?.id}
+        data-action-state={editorCommandActionState(reloadCommand)}
+        data-action-status={editorCommandStatusText(reloadCommand)}
+        data-disabled-reason={editorCommandDisabledReason(reloadCommand)}
+        data-testid="editor-reload-page"
+      >
+        <RefreshCw className="h-4 w-4" />
+        <span>Reload</span>
+      </button>
+
+      <div className="mx-1 h-6 w-px bg-slate-200" aria-hidden="true" />
+
+      {!hideSave && (
+        <>
+          {mode === 'page' && (
+            <button
+              type="button"
+              onClick={handleTogglePublish}
+              disabled={isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && effectivePublishDisabled)}
+              className={cn(
+                'rounded-md px-2 py-1.5 text-sm font-medium',
+                pageSettings.status === 'published'
+                  ? 'bg-amber-500 text-white hover:bg-amber-500/90'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-600/90',
+                isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && effectivePublishDisabled)
+                  ? 'cursor-not-allowed opacity-70'
+                  : '',
+              )}
+              title={
+                !canEdit
+                  ? editDisabledReason
+                  : !canPublish
+                    ? publishDisabledReason || 'You do not have permission to change this page publication status'
+                    : pageSettings.status === 'published'
+                      ? 'Set page back to draft'
+                      : effectivePublishDisabled
+                        ? effectivePublishDisabledReason || 'Resolve page readiness issues before publishing'
+                        : 'Publish page'
+              }
+              aria-label={
+                !canPublish
+                  ? publishDisabledReason || 'Publication status disabled'
+                  : pageSettings.status === 'published'
+                    ? 'Unpublish page'
+                    : effectivePublishDisabled
+                      ? effectivePublishDisabledReason || 'Publish disabled'
+                      : 'Publish page'
+              }
+              aria-describedby={editorPrimaryActionStatusId}
+              data-command-id={publishCommand?.id}
+              data-action-state={editorCommandActionState(publishCommand)}
+              data-action-status={editorCommandStatusText(publishCommand)}
+              data-disabled-reason={editorCommandDisabledReason(publishCommand)}
+              data-testid="editor-publish-page"
+            >
+              {pageSettings.status === 'published' ? 'Unpublish' : 'Publish'}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => void handleSaveWrapper()}
+            disabled={isSaving || !canEdit}
+            className="flex items-center gap-2 rounded-md bg-slate-950 px-3 py-1.5 text-sm text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+            title={editorCommandDisabledReason(saveCommand) || saveCommand?.reason || (canEdit ? `Save ${editorEntityLabel} (Ctrl+S)` : editDisabledReason)}
+            aria-label={`Save ${editorEntityLabel.toLowerCase()}`}
+            aria-describedby={editorPrimaryActionStatusId}
+            data-command-id={saveCommand?.id}
+            data-action-state={editorCommandActionState(saveCommand)}
+            data-action-status={editorCommandStatusText(saveCommand)}
+            data-disabled-reason={editorCommandDisabledReason(saveCommand)}
+            data-testid="editor-save-page"
+          >
+            <Save className="h-4 w-4" />
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <ActiveEditorProvider>
       <div className={cn("flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 text-slate-950", className || "fixed inset-0")}>
@@ -6293,7 +7199,29 @@ export function CanvasEditor({
           )}
 
           {/* Center - Canvas controls */}
-          <div className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1">
+          <div
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-1"
+            role="group"
+            aria-label="Canvas viewport controls"
+            aria-describedby={canvasViewportActionStatusId}
+            data-testid="editor-viewport-controls"
+            data-action-state={canvasViewportActionState}
+            data-action-status={canvasViewportActionStatus}
+            data-active-breakpoint={breakpoint}
+            data-active-breakpoint-label={activeBreakpointLabel}
+            data-active-preset={activeCanvasPresetId}
+            data-canvas-width={size.width}
+            data-canvas-height={size.height}
+            data-disabled-reason={canvasViewportDisabledReason || undefined}
+          >
+            <span
+              id={canvasViewportActionStatusId}
+              className="sr-only"
+              data-testid="editor-viewport-action-status"
+              aria-live="polite"
+            >
+              {canvasViewportActionStatus}
+            </span>
             <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
               <button
                 type="button"
@@ -6305,8 +7233,15 @@ export function CanvasEditor({
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
                 )}
-                title={canEdit ? 'Desktop' : editDisabledReason}
+                title={canvasViewportDisabledReason || 'Desktop'}
                 aria-label="Desktop canvas"
+                aria-pressed={breakpoint === 'desktop'}
+                aria-describedby={canvasViewportActionStatusId}
+                data-testid="editor-breakpoint-desktop"
+                data-breakpoint-option="desktop"
+                data-action-state={breakpointControlActionState('desktop')}
+                data-action-status={breakpointControlActionStatus('desktop')}
+                data-disabled-reason={canvasViewportDisabledReason || undefined}
               >
                 <Monitor className="w-4 h-4" />
               </button>
@@ -6320,8 +7255,15 @@ export function CanvasEditor({
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
                 )}
-                title={canEdit ? 'Tablet' : editDisabledReason}
+                title={canvasViewportDisabledReason || 'Tablet'}
                 aria-label="Tablet canvas"
+                aria-pressed={breakpoint === 'tablet'}
+                aria-describedby={canvasViewportActionStatusId}
+                data-testid="editor-breakpoint-tablet"
+                data-breakpoint-option="tablet"
+                data-action-state={breakpointControlActionState('tablet')}
+                data-action-status={breakpointControlActionStatus('tablet')}
+                data-disabled-reason={canvasViewportDisabledReason || undefined}
               >
                 <Tablet className="w-4 h-4" />
               </button>
@@ -6335,8 +7277,15 @@ export function CanvasEditor({
                     ? 'bg-white text-slate-950 shadow-sm'
                     : 'text-slate-500 hover:bg-white/70'
                 )}
-                title={canEdit ? 'Mobile' : editDisabledReason}
+                title={canvasViewportDisabledReason || 'Mobile'}
                 aria-label="Mobile canvas"
+                aria-pressed={breakpoint === 'mobile'}
+                aria-describedby={canvasViewportActionStatusId}
+                data-testid="editor-breakpoint-mobile"
+                data-breakpoint-option="mobile"
+                data-action-state={breakpointControlActionState('mobile')}
+                data-action-status={breakpointControlActionStatus('mobile')}
+                data-disabled-reason={canvasViewportDisabledReason || undefined}
               >
                 <Smartphone className="w-4 h-4" />
               </button>
@@ -6346,9 +7295,14 @@ export function CanvasEditor({
                 value={activeCanvasPresetId}
                 onChange={(event) => handleCanvasPresetChange(event.target.value)}
                 disabled={isCanvasMutationDisabled}
-                title={canEdit ? undefined : editDisabledReason}
+                title={canvasViewportDisabledReason || undefined}
                 className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas size preset"
+                aria-describedby={canvasViewportActionStatusId}
+                data-testid="editor-canvas-preset-select"
+                data-action-state={canvasViewportActionState}
+                data-action-status={canvasSizeControlActionStatus}
+                data-disabled-reason={canvasViewportDisabledReason || undefined}
               >
                 <option value="custom">Custom</option>
                 {CANVAS_SIZE_PRESETS.map((preset) => (
@@ -6365,9 +7319,14 @@ export function CanvasEditor({
                 value={size.width}
                 onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
                 disabled={isCanvasMutationDisabled}
-                title={canEdit ? undefined : editDisabledReason}
+                title={canvasViewportDisabledReason || undefined}
                 className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas width"
+                aria-describedby={canvasViewportActionStatusId}
+                data-testid="editor-canvas-width-input"
+                data-action-state={canvasViewportActionState}
+                data-action-status={canvasSizeControlActionStatus}
+                data-disabled-reason={canvasViewportDisabledReason || undefined}
               />
               <span className="text-slate-400">x</span>
               <input
@@ -6378,15 +7337,68 @@ export function CanvasEditor({
                 value={size.height}
                 onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
                 disabled={isCanvasMutationDisabled}
-                title={canEdit ? undefined : editDisabledReason}
+                title={canvasViewportDisabledReason || undefined}
                 className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Canvas height"
+                aria-describedby={canvasViewportActionStatusId}
+                data-testid="editor-canvas-height-input"
+                data-action-state={canvasViewportActionState}
+                data-action-status={canvasSizeControlActionStatus}
+                data-disabled-reason={canvasViewportDisabledReason || undefined}
               />
             </div>
           </div>
 
           {/* Right */}
-          <div className="flex min-w-max shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+          <div
+            className="flex min-w-max shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1"
+            role="group"
+            aria-label="Secondary editor toolbar actions"
+            aria-describedby={editorSecondaryToolbarStatusId}
+            data-testid="editor-toolbar-actions"
+            data-primary-actions-first="true"
+            data-action-status={editorSecondaryToolbarStatus}
+            data-command-ready-count={editorSecondaryToolbarReadyCount}
+            data-command-count={editorSecondaryToolbarCommands.length}
+            data-command-schema={editorCommandRegistry.schemaVersion}
+          >
+            <span
+              id={editorSecondaryToolbarStatusId}
+              className="sr-only"
+              data-testid="editor-secondary-toolbar-action-status"
+              aria-live="polite"
+            >
+              {editorSecondaryToolbarStatus}
+            </span>
+            {editorPrimaryActions}
+
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="inline-flex min-h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              title="Open editor commands (Cmd/Ctrl+K)"
+              aria-label="Open editor commands"
+              aria-keyshortcuts="Control+K Meta+K"
+              aria-describedby={commandPaletteStatusId}
+              aria-expanded={commandPaletteOpen}
+              aria-controls={commandPaletteOpen ? 'editor-command-palette-dialog' : undefined}
+              data-testid="editor-command-palette-trigger"
+              data-action-state={commandPaletteOpen ? 'selected' : 'ready'}
+              data-action-status={commandPaletteStatus}
+              data-command-palette-open={commandPaletteOpen ? 'true' : 'false'}
+              data-command-schema={editorCommandRegistry.schemaVersion}
+              data-command-count={visibleEditorCommands.length}
+              data-command-ready-count={editorCommandRegistry.summary.readyCommandCount}
+            >
+              <Search className="h-4 w-4" />
+              <span>Commands</span>
+              <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                Cmd/Ctrl K
+              </span>
+            </button>
+
+            <div className="mx-1 h-6 w-px bg-slate-200" aria-hidden="true" />
+
             {/* Undo/Redo */}
             <button
               type="button"
@@ -6397,6 +7409,7 @@ export function CanvasEditor({
               aria-label="Undo"
               aria-keyshortcuts="Control+Z Meta+Z"
               data-testid="editor-undo"
+              {...editorSecondaryToolbarCommandProps('undo')}
             >
               <Undo className="h-4 w-4" />
             </button>
@@ -6409,6 +7422,7 @@ export function CanvasEditor({
               aria-label="Redo"
               aria-keyshortcuts="Control+Y Meta+Y Shift+Control+Z Shift+Meta+Z"
               data-testid="editor-redo"
+              {...editorSecondaryToolbarCommandProps('redo')}
             >
               <Redo className="h-4 w-4" />
             </button>
@@ -6423,6 +7437,7 @@ export function CanvasEditor({
               aria-label={`Copy ${selectedLayerActionLabel}`}
               aria-keyshortcuts="Control+C Meta+C"
               data-testid="editor-copy-selection"
+              {...editorSecondaryToolbarCommandProps('copy-selection')}
             >
               <Copy className="h-4 w-4" />
             </button>
@@ -6435,6 +7450,7 @@ export function CanvasEditor({
               aria-label={`Cut ${selectedLayerActionLabel}`}
               aria-keyshortcuts="Control+X Meta+X"
               data-testid="editor-cut-selection"
+              {...editorSecondaryToolbarCommandProps('cut-selection')}
             >
               <Scissors className="h-4 w-4" />
             </button>
@@ -6450,6 +7466,7 @@ export function CanvasEditor({
               data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement?.id : undefined}
               data-clipboard-count={clipboardElements.length}
               data-testid="editor-paste-selection"
+              {...editorSecondaryToolbarCommandProps('paste-selection')}
             >
               <ClipboardPaste className="h-4 w-4" />
             </button>
@@ -6462,6 +7479,7 @@ export function CanvasEditor({
               aria-label={`Duplicate ${selectedLayerActionLabel}`}
               aria-keyshortcuts="Control+D Meta+D"
               data-testid="editor-duplicate-selection"
+              {...editorSecondaryToolbarCommandProps('duplicate-selection')}
             >
               <Copy className="h-4 w-4" />
             </button>
@@ -6474,6 +7492,7 @@ export function CanvasEditor({
               aria-label="Select all sibling layers"
               aria-keyshortcuts="Control+A Meta+A"
               data-testid="editor-select-sibling-layers"
+              {...editorSecondaryToolbarCommandProps('select-sibling-layers')}
             >
               <CheckSquare className="h-4 w-4" />
             </button>
@@ -6486,6 +7505,7 @@ export function CanvasEditor({
               aria-label="Select child layers"
               aria-keyshortcuts="Shift+Control+A Shift+Meta+A"
               data-testid="editor-select-child-layers"
+              {...editorSecondaryToolbarCommandProps('select-child-layers')}
             >
               <Layers className="h-4 w-4" />
             </button>
@@ -6498,6 +7518,7 @@ export function CanvasEditor({
               aria-label="Group selected layers"
               aria-keyshortcuts="Control+G Meta+G"
               data-testid="editor-group-selection"
+              {...editorSecondaryToolbarCommandProps('group-selection')}
             >
               <Group className="h-4 w-4" />
               <span className="hidden 2xl:inline">Group</span>
@@ -6511,6 +7532,7 @@ export function CanvasEditor({
               aria-label="Ungroup selected element"
               aria-keyshortcuts="Shift+Control+G Shift+Meta+G"
               data-testid="editor-ungroup-selection"
+              {...editorSecondaryToolbarCommandProps('ungroup-selection')}
             >
               <Ungroup className="h-4 w-4" />
               <span className="hidden 2xl:inline">Ungroup</span>
@@ -6524,6 +7546,7 @@ export function CanvasEditor({
               aria-label={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
               aria-pressed={selectedLayersAreHidden}
               data-testid="editor-toggle-selection-visibility"
+              {...editorSecondaryToolbarCommandProps('toggle-selection-visibility')}
             >
               {selectedLayersAreHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -6536,6 +7559,7 @@ export function CanvasEditor({
               aria-label={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
               aria-pressed={selectedLayersAreLocked}
               data-testid="editor-toggle-selection-lock"
+              {...editorSecondaryToolbarCommandProps('toggle-selection-lock')}
             >
               {selectedLayersAreLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
             </button>
@@ -6552,6 +7576,7 @@ export function CanvasEditor({
                 aria-label="Send to back"
                 aria-keyshortcuts="Shift+Control+[ Shift+Meta+["
                 data-testid="editor-send-to-back"
+                {...editorSecondaryToolbarCommandProps('send-to-back')}
               >
                 <SendToBack className="h-4 w-4" />
               </button>
@@ -6564,6 +7589,7 @@ export function CanvasEditor({
                 aria-label="Send backward"
                 aria-keyshortcuts="Control+[ Meta+["
                 data-testid="editor-send-backward"
+                {...editorSecondaryToolbarCommandProps('send-backward')}
               >
                 <ArrowDownToLine className="h-4 w-4" />
               </button>
@@ -6576,6 +7602,7 @@ export function CanvasEditor({
                 aria-label="Bring forward"
                 aria-keyshortcuts="Control+] Meta+]"
                 data-testid="editor-bring-forward"
+                {...editorSecondaryToolbarCommandProps('bring-forward')}
               >
                 <ArrowUpToLine className="h-4 w-4" />
               </button>
@@ -6588,6 +7615,7 @@ export function CanvasEditor({
                 aria-label="Bring to front"
                 aria-keyshortcuts="Shift+Control+] Shift+Meta+]"
                 data-testid="editor-bring-to-front"
+                {...editorSecondaryToolbarCommandProps('bring-to-front')}
               >
                 <BringToFront className="h-4 w-4" />
               </button>
@@ -6604,6 +7632,7 @@ export function CanvasEditor({
                 title="Align left"
                 aria-label="Align left"
                 data-testid="editor-align-left"
+                {...editorSecondaryToolbarCommandProps('align-left')}
               >
                 <AlignHorizontalJustifyStart className="h-4 w-4" />
               </button>
@@ -6615,6 +7644,7 @@ export function CanvasEditor({
                 title="Align horizontal center"
                 aria-label="Align horizontal center"
                 data-testid="editor-align-center"
+                {...editorSecondaryToolbarCommandProps('align-center')}
               >
                 <AlignHorizontalJustifyCenter className="h-4 w-4" />
               </button>
@@ -6626,6 +7656,7 @@ export function CanvasEditor({
                 title="Align right"
                 aria-label="Align right"
                 data-testid="editor-align-right"
+                {...editorSecondaryToolbarCommandProps('align-right')}
               >
                 <AlignHorizontalJustifyEnd className="h-4 w-4" />
               </button>
@@ -6637,6 +7668,7 @@ export function CanvasEditor({
                 title="Align top"
                 aria-label="Align top"
                 data-testid="editor-align-top"
+                {...editorSecondaryToolbarCommandProps('align-top')}
               >
                 <AlignVerticalJustifyStart className="h-4 w-4" />
               </button>
@@ -6648,6 +7680,7 @@ export function CanvasEditor({
                 title="Align vertical center"
                 aria-label="Align vertical center"
                 data-testid="editor-align-middle"
+                {...editorSecondaryToolbarCommandProps('align-middle')}
               >
                 <AlignVerticalJustifyCenter className="h-4 w-4" />
               </button>
@@ -6659,6 +7692,7 @@ export function CanvasEditor({
                 title="Align bottom"
                 aria-label="Align bottom"
                 data-testid="editor-align-bottom"
+                {...editorSecondaryToolbarCommandProps('align-bottom')}
               >
                 <AlignVerticalJustifyEnd className="h-4 w-4" />
               </button>
@@ -6671,6 +7705,7 @@ export function CanvasEditor({
                 title="Distribute horizontal spacing"
                 aria-label="Distribute horizontal spacing"
                 data-testid="editor-distribute-horizontal"
+                {...editorSecondaryToolbarCommandProps('distribute-horizontal')}
               >
                 <AlignHorizontalDistributeCenter className="h-4 w-4" />
               </button>
@@ -6682,6 +7717,7 @@ export function CanvasEditor({
                 title="Distribute vertical spacing"
                 aria-label="Distribute vertical spacing"
                 data-testid="editor-distribute-vertical"
+                {...editorSecondaryToolbarCommandProps('distribute-vertical')}
               >
                 <AlignVerticalDistributeCenter className="h-4 w-4" />
               </button>
@@ -6696,6 +7732,7 @@ export function CanvasEditor({
               aria-label={`Delete ${selectedLayerActionLabel}`}
               aria-keyshortcuts="Delete Backspace"
               data-testid="editor-delete-selection"
+              {...editorSecondaryToolbarCommandProps('delete-selection')}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -6717,6 +7754,7 @@ export function CanvasEditor({
               aria-keyshortcuts="B"
               data-testid="editor-toggle-component-panel"
               data-panel-visible={showComponentPanel && !isCanvasFocusMode ? 'true' : 'false'}
+              {...editorSecondaryToolbarCommandProps('toggle-component-panel')}
             >
               <PanelLeft className="w-4 h-4" />
               Components
@@ -6738,6 +7776,7 @@ export function CanvasEditor({
               data-testid="editor-toggle-layers-panel"
               data-right-panel={rightPanel}
               data-inspector-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
+              {...editorSecondaryToolbarCommandProps('toggle-layers-panel')}
             >
               <Layers className="w-4 h-4" />
               Layers
@@ -6758,6 +7797,7 @@ export function CanvasEditor({
               aria-keyshortcuts="I"
               data-testid="editor-toggle-inspector-panel"
               data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
+              {...editorSecondaryToolbarCommandProps('toggle-inspector-panel')}
             >
               <PanelRight className="w-4 h-4" />
               Inspector
@@ -6778,121 +7818,162 @@ export function CanvasEditor({
               aria-keyshortcuts="F"
               data-testid="editor-toggle-focus-mode"
               data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+              {...editorSecondaryToolbarCommandProps('toggle-focus-mode')}
             >
               <Maximize2 className="w-4 h-4" />
               Focus
             </button>
 
-            <div className="w-px h-6 bg-slate-200 mx-1" />
-
-            {/* Preview Toggle */}
-            <button
-              type="button"
-              onClick={() => setIsPreview(!isPreview)}
-              disabled={isSaving}
-              data-testid="editor-preview-toggle"
-              className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm disabled:cursor-not-allowed disabled:opacity-60',
-                isPreview
-                  ? 'bg-slate-950 text-white'
-                  : 'hover:bg-slate-100'
-              )}
-            >
-              <Eye className="w-4 h-4" />
-              {isPreview ? 'Edit' : 'Preview'}
-            </button>
-
-            {/* Settings */}
-	            {!hideSettings && (
-	              <button
-	                type="button"
-	                onClick={() => setIsSettingsOpen(true)}
-	                disabled={isSaving}
-	                className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-	                title="Page settings"
-	                aria-label="Page settings"
-	                data-testid="editor-page-settings"
-	              >
-	                <Settings className="w-4 h-4" />
-	                <span className="ml-1">Settings</span>
-	              </button>
-            )}
-
-	            <button
-	              type="button"
-	              onClick={handleReload}
-	              disabled={isSaving}
-	              className="px-2 py-1.5 rounded-md text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-	              title="Reload page from last saved state"
-	              aria-label="Reload page"
-	              data-testid="editor-reload-page"
-	            >
-              <RefreshCw className="w-4 h-4" />
-              <span className="ml-1">Reload</span>
-            </button>
-
-            <div className="w-px h-6 bg-slate-200 mx-1" />
-
-            {/* Save */}
-            {!hideSave && (
-              <>
-                {mode === 'page' && (
-                  <button
-                    type="button"
-                    onClick={handleTogglePublish}
-                    disabled={isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && effectivePublishDisabled)}
-                    className={cn(
-                      'px-2 py-1.5 rounded-md text-sm font-medium',
-                      pageSettings.status === 'published'
-                        ? 'bg-amber-500 text-white hover:bg-amber-500/90'
-                        : 'bg-emerald-600 text-white hover:bg-emerald-600/90',
-                      isSaving || !canEdit || !canPublish || (pageSettings.status !== 'published' && effectivePublishDisabled)
-                        ? 'opacity-70 cursor-not-allowed'
-                        : '',
-                    )}
-                    title={
-                      !canEdit
-                        ? editDisabledReason
-                        : !canPublish
-                          ? publishDisabledReason || 'You do not have permission to change this page publication status'
-                          : pageSettings.status === 'published'
-                            ? 'Set page back to draft'
-                            : effectivePublishDisabled
-                              ? effectivePublishDisabledReason || 'Resolve page readiness issues before publishing'
-                              : 'Publish page'
-                    }
-	                    aria-label={
-	                      !canPublish
-	                        ? publishDisabledReason || 'Publication status disabled'
-	                        : pageSettings.status === 'published'
-	                          ? 'Unpublish page'
-	                          : effectivePublishDisabled
-	                            ? effectivePublishDisabledReason || 'Publish disabled'
-	                            : 'Publish page'
-	                    }
-	                    data-testid="editor-publish-page"
-	                  >
-                    {pageSettings.status === 'published' ? 'Unpublish' : 'Publish'}
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => void handleSaveWrapper()}
-                  disabled={isSaving || !canEdit}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-70 disabled:cursor-not-allowed"
-                  title={canEdit ? `Save ${editorEntityLabel} (Ctrl+S)` : editDisabledReason}
-                  aria-label={`Save ${editorEntityLabel.toLowerCase()}`}
-                  data-testid="editor-save-page"
-                >
-                  <Save className="w-4 h-4" />
-                  {isSaving ? 'Saving...' : 'Save'}
-                </button>
-              </>
-            )}
-
           </div>
         </header>
+
+        <span
+          id={commandPaletteStatusId}
+          className="sr-only"
+          data-testid="editor-command-palette-status"
+        >
+          {commandPaletteStatus}
+        </span>
+
+        {commandPaletteOpen && (
+          <div
+            className="fixed inset-0 z-40 flex items-start justify-center bg-slate-950/35 px-4 py-20 backdrop-blur-sm"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setCommandPaletteOpen(false);
+                setCommandPaletteQuery('');
+              }
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="editor-command-palette-title"
+              aria-describedby={commandPaletteStatusId}
+              className="w-full max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
+              id="editor-command-palette-dialog"
+              data-testid="editor-command-palette"
+              data-command-schema={editorCommandRegistry.schemaVersion}
+              data-command-count={visibleEditorCommands.length}
+              data-filtered-command-count={filteredEditorCommands.length}
+              data-command-ready-count={editorCommandRegistry.summary.readyCommandCount}
+              data-active-command-id={activeCommandPaletteCommand?.id || ''}
+            >
+              <div className="border-b border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 id="editor-command-palette-title" className="text-sm font-semibold text-slate-950">
+                    Editor commands
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCommandPaletteOpen(false);
+                      setCommandPaletteQuery('');
+                    }}
+                    className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                    aria-label="Close editor commands"
+                    data-testid="editor-command-palette-close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-3 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                  <Search className="h-4 w-4 text-slate-400" />
+                  <input
+                    ref={commandPaletteInputRef}
+                    type="search"
+                    value={commandPaletteQuery}
+                    onChange={(event) => setCommandPaletteQuery(event.target.value)}
+                    onKeyDown={handleCommandPaletteInputKeyDown}
+                    placeholder="Search actions, states, or shortcuts"
+                    className="h-8 min-w-0 flex-1 bg-transparent text-sm text-slate-950 outline-none placeholder:text-slate-400"
+                    aria-label="Search editor commands"
+                    aria-describedby={commandPaletteStatusId}
+                    aria-controls="editor-command-palette-results"
+                    aria-activedescendant={activeCommandPaletteCommand ? `editor-command-palette-option-${activeCommandPaletteCommand.id}` : undefined}
+                    data-testid="editor-command-palette-input"
+                  />
+                  <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                    Enter
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-slate-500" data-testid="editor-command-palette-status-text">
+                  {commandPaletteStatus}
+                </p>
+              </div>
+
+              <div
+                id="editor-command-palette-results"
+                role="listbox"
+                aria-label="Editor command results"
+                className="max-h-[min(60vh,34rem)] overflow-y-auto p-2"
+                data-testid="editor-command-palette-results"
+              >
+                {filteredEditorCommands.length > 0 ? (
+                  filteredEditorCommands.map((command, index) => {
+                    const isActive = command.id === activeCommandPaletteCommand?.id;
+                    const disabledReason = editorCommandDisabledReason(command) || '';
+
+                    return (
+                      <button
+                        key={command.id}
+                        id={`editor-command-palette-option-${command.id}`}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onMouseEnter={() => setActiveCommandPaletteIndex(index)}
+                        onClick={() => executeEditorCommand(command)}
+                        className={cn(
+                          'grid w-full grid-cols-[1fr_auto] items-center gap-3 rounded-md px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300',
+                          isActive ? 'bg-slate-100 text-slate-950' : 'text-slate-700 hover:bg-slate-50',
+                          command.state !== 'ready' && 'opacity-70',
+                        )}
+                        data-testid={`editor-command-palette-result-${command.id}`}
+                        data-command-id={command.id}
+                        data-command-category={command.category}
+                        data-command-target-scope={command.targetScope}
+                        data-action-state={editorCommandActionState(command)}
+                        data-command-state={command.state}
+                        data-disabled-reason={disabledReason}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold">{command.label}</span>
+                          <span className="mt-0.5 block truncate text-xs text-slate-500">
+                            {formatEditorCommandCategory(command.category)} · {command.reason}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          {command.shortcut && (
+                            <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                              {command.shortcut}
+                            </span>
+                          )}
+                          <span
+                            className={cn(
+                              'rounded px-1.5 py-0.5 text-[10px] font-semibold',
+                              command.state === 'ready'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : 'bg-amber-50 text-amber-700',
+                            )}
+                          >
+                            {command.state === 'ready' ? 'Ready' : 'Blocked'}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div
+                    className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-8 text-center text-sm text-slate-500"
+                    data-testid="editor-command-palette-empty"
+                  >
+                    No commands match this search.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Content */}
         <div
@@ -6957,6 +8038,378 @@ export function CanvasEditor({
             }}
             onDrop={handleCanvasDrop}
           >
+            {!isPreview && (
+              <div
+                className="absolute left-4 top-4 z-30 flex w-fit max-w-[calc(100%-2rem)] flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-lg backdrop-blur"
+                data-testid="editor-canvas-context-bar"
+                data-breakpoint={breakpoint}
+                data-canvas-width={size.width}
+                data-canvas-height={size.height}
+                data-zoom-percent={zoomPercent}
+                data-selection-count={selectedIds.length}
+                data-selected-id={selectedId || ''}
+                data-selected-ids={selectedIds.join(',')}
+                data-can-duplicate={canDuplicateSelected ? 'true' : 'false'}
+                data-can-delete={canDeleteSelected ? 'true' : 'false'}
+                data-can-z-order={canZOrderSelected ? 'true' : 'false'}
+                data-can-align={canAlignSelected ? 'true' : 'false'}
+                data-can-distribute={canDistributeSelected ? 'true' : 'false'}
+                data-can-edit-text={canEditSelectedText ? 'true' : 'false'}
+                data-selection-x={selectedGeometrySummary?.x ?? ''}
+                data-selection-y={selectedGeometrySummary?.y ?? ''}
+                data-selection-width={selectedGeometrySummary?.width ?? ''}
+                data-selection-height={selectedGeometrySummary?.height ?? ''}
+                data-component-panel-visible={!isCanvasFocusMode && showComponentPanel ? 'true' : 'false'}
+                data-inspector-panel-visible={!isCanvasFocusMode && showInspectorPanel ? 'true' : 'false'}
+                data-right-panel={rightPanel}
+                data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+                data-quick-add-count={CANVAS_CONTEXT_QUICK_ADD_ITEMS.length}
+                data-quick-add-types={CANVAS_CONTEXT_QUICK_ADD_TYPES}
+                data-action-status={editorContextActionStatus}
+                aria-describedby={editorContextActionStatusId}
+              >
+                <span id={editorContextActionStatusId} className="sr-only" data-testid="editor-context-action-status">
+                  {editorContextActionStatus}
+                </span>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-slate-100 px-2 py-1 font-semibold capitalize text-slate-900">
+                    {breakpoint}
+                  </span>
+                  <span className="tabular-nums text-slate-600">
+                    {size.width} x {size.height}px
+                  </span>
+                  <span className="rounded-md border border-slate-200 px-2 py-1 tabular-nums text-slate-600">
+                    {zoomPercent}%
+                  </span>
+                  <span
+                    className="max-w-[18rem] truncate rounded-md bg-slate-50 px-2 py-1 font-medium text-slate-700"
+                    title={selectedElementLabel || 'No layer selected'}
+                  >
+                    {selectedIds.length > 1
+                      ? `${selectedIds.length} layers selected`
+                      : selectedElementLabel || 'No layer selected'}
+                  </span>
+                  {selectedGeometrySummary && (
+                    <span
+                      className="flex max-w-full flex-wrap items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 font-mono text-[11px] tabular-nums text-slate-600"
+                      data-testid="editor-context-geometry"
+                      aria-label={`Selection geometry X ${selectedGeometrySummary.x}, Y ${selectedGeometrySummary.y}, width ${selectedGeometrySummary.width}, height ${selectedGeometrySummary.height}`}
+                    >
+                      <span>X {selectedGeometrySummary.x}</span>
+                      <span>Y {selectedGeometrySummary.y}</span>
+                      <span>W {selectedGeometrySummary.width}</span>
+                      <span>H {selectedGeometrySummary.height}</span>
+                    </span>
+                  )}
+                </div>
+
+                <details
+                  className="group relative"
+                  data-testid="editor-context-quick-add-menu"
+                  data-quick-add-count={CANVAS_CONTEXT_QUICK_ADD_ITEMS.length}
+                  data-quick-add-types={CANVAS_CONTEXT_QUICK_ADD_TYPES}
+                  data-disabled={isCanvasMutationDisabled ? 'true' : 'false'}
+                  data-action-state={contextQuickAddActionState}
+                  data-action-status={contextQuickAddActionStatus}
+                  data-disabled-reason={isCanvasMutationDisabled ? contextQuickAddDisabledReason : undefined}
+                >
+                  <summary
+                    className={cn(
+                      'inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md px-2 font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-ring [&::-webkit-details-marker]:hidden',
+                      isCanvasMutationDisabled && 'cursor-not-allowed opacity-45 hover:bg-transparent hover:text-slate-600',
+                    )}
+                    title="Add a component to the visible canvas"
+                    aria-label="Add a component to the visible canvas"
+                    aria-disabled={isCanvasMutationDisabled}
+                    aria-describedby={editorContextActionStatusId}
+                    data-action-state={contextQuickAddActionState}
+                    data-action-status={contextQuickAddActionStatus}
+                    data-disabled-reason={isCanvasMutationDisabled ? contextQuickAddDisabledReason : undefined}
+                    onClick={(event) => {
+                      if (isCanvasMutationDisabled) {
+                        event.preventDefault();
+                      }
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden sm:inline">Add</span>
+                  </summary>
+                  <div className="absolute left-0 top-9 z-40 grid w-44 gap-1 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl">
+                    {CANVAS_CONTEXT_QUICK_ADD_ITEMS.map(({ key, item }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={(event) => {
+                          event.currentTarget.closest('details')?.removeAttribute('open');
+                          handleAddLibraryItem(item);
+                        }}
+                        disabled={isCanvasMutationDisabled}
+                        className="flex h-8 w-full items-center justify-between gap-2 rounded-md px-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-45"
+                        title={`Add ${item.name} to the canvas`}
+                        aria-label={`Add ${item.name} to the canvas`}
+                        data-testid={`editor-context-quick-add-${key}`}
+                        data-quick-add-key={key}
+                        data-quick-add-type={item.type}
+                        data-quick-add-category={item.category ?? ''}
+                        data-action-state={contextQuickAddActionState}
+                        data-action-status={isCanvasMutationDisabled ? `Add ${item.name} unavailable: ${contextQuickAddDisabledReason}` : `Add ${item.name} available.`}
+                        data-disabled-reason={isCanvasMutationDisabled ? contextQuickAddDisabledReason : undefined}
+                        aria-describedby={editorContextActionStatusId}
+                      >
+                        <span className="truncate">{item.name}</span>
+                        <span className="shrink-0 text-[11px] font-normal capitalize text-slate-400">
+                          {item.category ?? item.type}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </details>
+
+                <div
+                  className="flex items-center gap-1 border-l border-slate-200 pl-2"
+                  aria-label="Selected layer quick actions"
+                  aria-describedby={editorContextActionStatusId}
+                  data-testid="editor-context-selection-actions"
+                  data-has-selection={selectedIds.length > 0 ? 'true' : 'false'}
+                  data-action-status={editorContextActionStatus}
+                >
+                  <button
+                    type="button"
+                    onClick={handleEditSelectedText}
+                    disabled={!canEditSelectedText}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-45"
+                    title={canEditSelectedText ? `Edit text in ${selectedElementLabel || selectedLayerActionLabel}` : 'Select one unlocked visible text layer to edit text'}
+                    aria-label={canEditSelectedText ? `Edit text in ${selectedElementLabel || selectedLayerActionLabel}` : 'Edit selected text'}
+                    aria-describedby={editorContextActionStatusId}
+                    data-testid="editor-context-edit-text"
+                    data-command-id={contextEditTextCommand?.id}
+                    data-action-state={editorCommandActionState(contextEditTextCommand)}
+                    data-action-status={editorCommandStatusText(contextEditTextCommand)}
+                    data-disabled-reason={editorCommandDisabledReason(contextEditTextCommand)}
+                    data-action-enabled={canEditSelectedText ? 'true' : 'false'}
+                    data-selected-text-type={selectedTextEditableType ?? ''}
+                  >
+                    <PencilLine className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDuplicate}
+                    disabled={isCanvasMutationDisabled || !canDuplicateSelected}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-45"
+                    title={`Duplicate ${selectedLayerActionLabel} (Cmd/Ctrl+D)`}
+                    aria-label={`Duplicate ${selectedLayerActionLabel}`}
+                    aria-keyshortcuts="Control+D Meta+D"
+                    aria-describedby={editorContextActionStatusId}
+                    data-testid="editor-context-duplicate"
+                    data-command-id={contextDuplicateCommand?.id}
+                    data-action-state={editorCommandActionState(contextDuplicateCommand)}
+                    data-action-status={editorCommandStatusText(contextDuplicateCommand)}
+                    data-disabled-reason={editorCommandDisabledReason(contextDuplicateCommand)}
+                    data-action-enabled={canDuplicateSelected ? 'true' : 'false'}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleZOrderChange('back')}
+                    disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-45"
+                    title="Send to back (Shift+Cmd/Ctrl+[)"
+                    aria-label="Send to back"
+                    aria-keyshortcuts="Shift+Control+[ Shift+Meta+["
+                    aria-describedby={editorContextActionStatusId}
+                    data-testid="editor-context-send-to-back"
+                    data-command-id={contextSendToBackCommand?.id}
+                    data-action-state={editorCommandActionState(contextSendToBackCommand)}
+                    data-action-status={editorCommandStatusText(contextSendToBackCommand)}
+                    data-disabled-reason={editorCommandDisabledReason(contextSendToBackCommand)}
+                    data-action-enabled={canZOrderSelected ? 'true' : 'false'}
+                  >
+                    <SendToBack className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleZOrderChange('front')}
+                    disabled={isCanvasMutationDisabled || !canZOrderSelected}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-45"
+                    title="Bring to front (Shift+Cmd/Ctrl+])"
+                    aria-label="Bring to front"
+                    aria-keyshortcuts="Shift+Control+] Shift+Meta+]"
+                    aria-describedby={editorContextActionStatusId}
+                    data-testid="editor-context-bring-to-front"
+                    data-command-id={contextBringToFrontCommand?.id}
+                    data-action-state={editorCommandActionState(contextBringToFrontCommand)}
+                    data-action-status={editorCommandStatusText(contextBringToFrontCommand)}
+                    data-disabled-reason={editorCommandDisabledReason(contextBringToFrontCommand)}
+                    data-action-enabled={canZOrderSelected ? 'true' : 'false'}
+                  >
+                    <BringToFront className="h-4 w-4" />
+                  </button>
+                  <details
+                    className="group relative"
+                    data-testid="editor-context-align-menu"
+                    data-action-enabled={canAlignSelected ? 'true' : 'false'}
+                    data-distribute-enabled={canDistributeSelected ? 'true' : 'false'}
+                    data-action-status={editorContextActionStatus}
+                    aria-describedby={editorContextActionStatusId}
+                  >
+                    <summary
+                      className="inline-flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-ring [&::-webkit-details-marker]:hidden"
+                      title="Align or distribute selected layers"
+                      aria-label="Align or distribute selected layers"
+                      aria-describedby={editorContextActionStatusId}
+                    >
+                      <AlignHorizontalJustifyCenter className="h-4 w-4" />
+                    </summary>
+                    <div className="absolute left-0 top-9 z-40 grid w-40 grid-cols-4 gap-1 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl">
+                      {([
+                        ['left', 'Align left', AlignHorizontalJustifyStart, canAlignSelected],
+                        ['center', 'Align horizontal center', AlignHorizontalJustifyCenter, canAlignSelected],
+                        ['right', 'Align right', AlignHorizontalJustifyEnd, canAlignSelected],
+                        ['horizontal', 'Distribute horizontally', AlignHorizontalDistributeCenter, canDistributeSelected],
+                        ['top', 'Align top', AlignVerticalJustifyStart, canAlignSelected],
+                        ['middle', 'Align vertical center', AlignVerticalJustifyCenter, canAlignSelected],
+                        ['bottom', 'Align bottom', AlignVerticalJustifyEnd, canAlignSelected],
+                        ['vertical', 'Distribute vertically', AlignVerticalDistributeCenter, canDistributeSelected],
+                      ] as const).map(([action, label, Icon, enabled]) => {
+                        const commandId = action === 'horizontal' || action === 'vertical'
+                          ? `distribute-${action}`
+                          : `align-${action}`;
+                        const command = editorCommandsById.get(commandId);
+
+                        return (
+                          <button
+                            key={action}
+                            type="button"
+                            onClick={() => {
+                              if (action === 'horizontal' || action === 'vertical') {
+                                distributeSelectedElements(action);
+                                return;
+                              }
+                              alignSelectedElement(action);
+                            }}
+                            disabled={isCanvasMutationDisabled || !enabled}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-45"
+                            title={label}
+                            aria-label={label}
+                            aria-describedby={editorContextActionStatusId}
+                            data-testid={`editor-context-${commandId}`}
+                            data-command-id={command?.id}
+                            data-action-state={editorCommandActionState(command)}
+                            data-action-status={editorCommandStatusText(command)}
+                            data-disabled-reason={editorCommandDisabledReason(command)}
+                            data-action-enabled={enabled ? 'true' : 'false'}
+                          >
+                            <Icon className="h-4 w-4" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </details>
+                  <button
+                    type="button"
+                    onClick={deleteElement}
+                    disabled={isCanvasMutationDisabled || !canDeleteSelected}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-45"
+                    title={`Delete ${selectedLayerActionLabel} (Delete/Backspace)`}
+                    aria-label={`Delete ${selectedLayerActionLabel}`}
+                    aria-keyshortcuts="Delete Backspace"
+                    aria-describedby={editorContextActionStatusId}
+                    data-testid="editor-context-delete"
+                    data-command-id={contextDeleteCommand?.id}
+                    data-action-state={editorCommandActionState(contextDeleteCommand)}
+                    data-action-status={editorCommandStatusText(contextDeleteCommand)}
+                    data-disabled-reason={editorCommandDisabledReason(contextDeleteCommand)}
+                    data-action-enabled={canDeleteSelected ? 'true' : 'false'}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleToggleComponentPanel}
+                    className={cn(
+                      'inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
+                      showComponentPanel && !isCanvasFocusMode
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+                    )}
+                    title={isCanvasFocusMode ? 'Show components and exit focus mode (B)' : 'Toggle components panel (B)'}
+                    aria-label={isCanvasFocusMode ? 'Show components and exit focus mode' : 'Toggle components panel'}
+                    aria-pressed={showComponentPanel && !isCanvasFocusMode}
+                    aria-keyshortcuts="B"
+                    data-testid="editor-context-components"
+                    data-panel-visible={showComponentPanel && !isCanvasFocusMode ? 'true' : 'false'}
+                    data-exits-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+                  >
+                    <PanelLeft className="h-4 w-4" />
+                    <span className="hidden sm:inline">Components</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleLayersPanel}
+                    className={cn(
+                      'inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
+                      rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+                    )}
+                    title={isCanvasFocusMode ? 'Show layers and exit focus mode (L)' : 'Toggle layers panel (L)'}
+                    aria-label={isCanvasFocusMode ? 'Show layers and exit focus mode' : 'Toggle layers panel'}
+                    aria-pressed={rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode}
+                    aria-keyshortcuts="L"
+                    data-testid="editor-context-layers"
+                    data-right-panel={rightPanel}
+                    data-exits-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+                  >
+                    <Layers className="h-4 w-4" />
+                    <span className="hidden sm:inline">Layers</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleInspectorPanel}
+                    className={cn(
+                      'inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
+                      showInspectorPanel && !isCanvasFocusMode
+                        ? 'bg-slate-900 text-white'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+                    )}
+                    title={isCanvasFocusMode ? 'Show inspector and exit focus mode (I)' : 'Toggle inspector panel (I)'}
+                    aria-label={isCanvasFocusMode ? 'Show inspector and exit focus mode' : 'Toggle inspector panel'}
+                    aria-pressed={showInspectorPanel && !isCanvasFocusMode}
+                    aria-keyshortcuts="I"
+                    data-testid="editor-context-inspector"
+                    data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
+                    data-exits-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+                  >
+                    <PanelRight className="h-4 w-4" />
+                    <span className="hidden sm:inline">Inspector</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleCanvasFocus}
+                    className={cn(
+                      'inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
+                      isCanvasFocusMode
+                        ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+                    )}
+                    title={isCanvasFocusMode ? 'Exit wide canvas focus (F)' : 'Enter wide canvas focus (F)'}
+                    aria-label={isCanvasFocusMode ? 'Exit wide canvas focus' : 'Enter wide canvas focus'}
+                    aria-pressed={isCanvasFocusMode}
+                    aria-keyshortcuts="F"
+                    data-testid="editor-context-focus"
+                    data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">{isCanvasFocusMode ? 'Exit focus' : 'Focus'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {libraryDragItem && !isPreview && !isCanvasMutationDisabled && (
               <div
                 className="pointer-events-none absolute left-1/2 top-4 z-20 max-w-[min(360px,calc(100%-2rem))] -translate-x-1/2 rounded-full border border-primary/30 bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-lg"
@@ -7302,9 +8755,10 @@ export function CanvasEditor({
                   </button>
                 </div>
 
-                <div
-                  className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/50 px-3 py-2.5 text-xs"
+                <details
+                  className="group mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs shadow-sm"
 	                  data-testid="editor-composition-readiness"
+	                  data-default-collapsed="true"
 	                  data-composition-schema={editorCompositionReadiness.schemaVersion}
 	                  data-action-plan-schema={editorCompositionReadiness.actionPlan.schemaVersion}
 	                  data-command-registry-schema={editorCompositionReadiness.commandRegistry.schemaVersion}
@@ -7318,70 +8772,85 @@ export function CanvasEditor({
                   data-animated-layers={editorCompositionReadiness.metrics.animatedLayers}
                   data-data-bound-layers={editorCompositionReadiness.metrics.dataBoundLayers}
                   data-asset-bound-layers={editorCompositionReadiness.metrics.assetBoundLayers}
-                  data-interactive-layers={editorCompositionReadiness.metrics.interactiveLayers}
-                  data-design-state-layers={editorCompositionReadiness.metrics.designStateLayerCount}
-                  data-selected-layers={editorCompositionReadiness.selection.selectedLayerCount}
+	                  data-interactive-layers={editorCompositionReadiness.metrics.interactiveLayers}
+	                  data-design-state-layers={editorCompositionReadiness.metrics.designStateLayerCount}
+	                  data-selected-layers={editorCompositionReadiness.selection.selectedLayerCount}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-slate-300 [&::-webkit-details-marker]:hidden">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 font-semibold text-indigo-950">
-                        <Group className="h-3.5 w-3.5" />
-                        Composition
+                      <div className="flex items-center gap-1.5 font-semibold text-slate-950">
+                        <Group className="h-3.5 w-3.5 text-slate-500" />
+                        Composition handoff
                       </div>
-                      <div className="mt-1 text-[11px] leading-4 text-indigo-900/75">
-                        {editorCompositionReadiness.readyCount}/{editorCompositionReadiness.checkCount} ready
+                      <div className="mt-1 text-[11px] leading-4 text-slate-500">
+                        {editorCompositionReadiness.readyCount}/{editorCompositionReadiness.checkCount} ready · {editorCompositionReadiness.commandRegistry.summary.readyCommandCount} commands ready
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void copyEditorCompositionPlan()}
-                      title="Copy editor composition action plan"
-                      aria-label="Copy editor composition action plan"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-100"
-                      data-testid="editor-copy-composition-plan"
-                    >
-                      <Copy className="h-3 w-3" />
-                      Copy plan
-                    </button>
-                  </div>
-                  <div className="mt-2 grid grid-cols-4 gap-1.5" data-testid="editor-composition-metrics">
-                    <div className="rounded-md bg-white px-2 py-1">
-                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.totalLayers}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Layers</div>
+                    <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 group-open:hidden">
+                      Details
+                    </span>
+                    <span className="hidden rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 group-open:inline-flex">
+                      Hide
+                    </span>
+                  </summary>
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold uppercase text-slate-500">Advanced export contract</div>
+                        <div className="mt-1 text-[11px] leading-4 text-slate-500">
+                          Composition metrics and command metadata for custom editor clients.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void copyEditorCompositionPlan()}
+                        title="Copy editor composition action plan"
+                        aria-label="Copy editor composition action plan"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                        data-testid="editor-copy-composition-plan"
+                      >
+                        <Copy className="h-3 w-3" />
+                        Copy plan
+                      </button>
                     </div>
-                    <div className="rounded-md bg-white px-2 py-1">
-                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.groupLayers}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Groups</div>
+                    <div className="mt-2 grid grid-cols-4 gap-1.5" data-testid="editor-composition-metrics">
+                      <div className="rounded-md bg-slate-50 px-2 py-1">
+                        <div className="font-semibold text-slate-950">{editorCompositionReadiness.metrics.totalLayers}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Layers</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 px-2 py-1">
+                        <div className="font-semibold text-slate-950">{editorCompositionReadiness.metrics.groupLayers}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Groups</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 px-2 py-1">
+                        <div className="font-semibold text-slate-950">{editorCompositionReadiness.metrics.nestedLayers}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Nested</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 px-2 py-1">
+                        <div className="font-semibold text-slate-950">{editorCompositionReadiness.metrics.responsiveOverrideLayers}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Breakpoints</div>
+                      </div>
                     </div>
-                    <div className="rounded-md bg-white px-2 py-1">
-                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.nestedLayers}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Nested</div>
-                    </div>
-                    <div className="rounded-md bg-white px-2 py-1">
-                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.responsiveOverrideLayers}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Breakpoints</div>
-                    </div>
-                  </div>
-                  <div className="mt-1.5 grid grid-cols-4 gap-1.5" data-testid="editor-composition-design-state-metrics">
-                    <div className="rounded-md bg-white px-2 py-1">
-                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.animatedLayers}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Motion</div>
-                    </div>
-                    <div className="rounded-md bg-white px-2 py-1">
-                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.dataBoundLayers}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Data</div>
-                    </div>
-                    <div className="rounded-md bg-white px-2 py-1">
-                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.assetBoundLayers}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Assets</div>
-                    </div>
-                    <div className="rounded-md bg-white px-2 py-1">
-                      <div className="font-semibold text-indigo-950">{editorCompositionReadiness.metrics.interactiveLayers}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-indigo-700">Interactive</div>
+                    <div className="mt-1.5 grid grid-cols-4 gap-1.5" data-testid="editor-composition-design-state-metrics">
+                      <div className="rounded-md bg-slate-50 px-2 py-1">
+                        <div className="font-semibold text-slate-950">{editorCompositionReadiness.metrics.animatedLayers}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Motion</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 px-2 py-1">
+                        <div className="font-semibold text-slate-950">{editorCompositionReadiness.metrics.dataBoundLayers}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Data</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 px-2 py-1">
+                        <div className="font-semibold text-slate-950">{editorCompositionReadiness.metrics.assetBoundLayers}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Assets</div>
+                      </div>
+                      <div className="rounded-md bg-slate-50 px-2 py-1">
+                        <div className="font-semibold text-slate-950">{editorCompositionReadiness.metrics.interactiveLayers}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Interactive</div>
 	                    </div>
 	                  </div>
 	                  <div
-	                    className="mt-2 border-t border-indigo-200/80 pt-2"
+	                    className="mt-2 border-t border-slate-200 pt-2"
 	                    data-testid="editor-command-registry"
 	                    data-command-schema={editorCompositionReadiness.commandRegistry.schemaVersion}
 	                    data-command-count={editorCompositionReadiness.commandRegistry.summary.totalCommandCount}
@@ -7392,8 +8861,8 @@ export function CanvasEditor({
 	                  >
 	                    <div className="flex items-start justify-between gap-2">
 	                      <div className="min-w-0">
-	                        <div className="font-semibold text-indigo-950">Command registry</div>
-	                        <div className="mt-0.5 text-[11px] leading-4 text-indigo-900/75">
+	                        <div className="font-semibold text-slate-950">Command registry</div>
+	                        <div className="mt-0.5 text-[11px] leading-4 text-slate-500">
 	                          {editorCompositionReadiness.commandRegistry.summary.readyCommandCount}/{editorCompositionReadiness.commandRegistry.summary.totalCommandCount} ready,
 	                          {' '}
 	                          {editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount} hidden
@@ -7404,7 +8873,7 @@ export function CanvasEditor({
 	                        onClick={() => void copyEditorCommandRegistry()}
 	                        title="Copy editor command registry"
 	                        aria-label="Copy editor command registry"
-	                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-100"
+	                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
 	                        data-testid="editor-copy-command-registry"
 	                      >
 	                        <Copy className="h-3 w-3" />
@@ -7415,7 +8884,7 @@ export function CanvasEditor({
 	                      {editorCompositionReadiness.commandRegistry.summary.categories.map((category) => (
 	                        <span
 	                          key={category.category}
-	                          className="rounded border border-indigo-100 bg-white px-1.5 py-0.5 text-[10px] font-medium text-indigo-800"
+	                          className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
 	                          data-command-category={category.category}
 	                          data-command-category-ready={category.ready}
 	                          data-command-category-total={category.total}
@@ -7425,12 +8894,22 @@ export function CanvasEditor({
 	                      ))}
 	                    </div>
 	                  </div>
-	                </div>
+                  </div>
+                </details>
 
                 <div
                   className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
                   data-testid={selectedIds.length > 1 ? 'editor-inspector-multi-selection' : selectedElement ? 'editor-inspector-selection' : 'editor-inspector-empty'}
+                  data-visible-layer-count={visibleCanvasElementIds.length}
+                  data-total-layer-count={totalCanvasElementCount}
+                  data-selected-layer-count={selectedIds.length}
+                  data-action-status={editorInspectorActionStatus}
+                  aria-describedby={editorInspectorActionStatusId}
+                  data-empty-quick-add-types={!selectedElement && selectedIds.length <= 1 ? INSPECTOR_EMPTY_QUICK_ADD_TYPES : undefined}
                 >
+                  <span id={editorInspectorActionStatusId} className="sr-only" data-testid="editor-inspector-action-status" aria-live="polite">
+                    {editorInspectorActionStatus}
+                  </span>
                   {selectedIds.length > 1 ? (
                     <>
                       <div className="flex items-center justify-between gap-3">
@@ -7452,6 +8931,7 @@ export function CanvasEditor({
                             aria-label="Select all sibling layers"
                             aria-keyshortcuts="Control+A Meta+A"
                             data-testid="editor-inspector-select-sibling-layers"
+                            {...editorInspectorCommandProps('select-sibling-layers')}
                           >
                             <CheckSquare className="h-3.5 w-3.5" />
                             Siblings
@@ -7465,6 +8945,7 @@ export function CanvasEditor({
                             aria-label="Select parent layer"
                             aria-keyshortcuts="Shift+Enter"
                             data-testid="editor-inspector-select-parent-layer"
+                            {...editorInspectorCommandProps('select-parent-layer')}
                           >
                             <ArrowLeft className="h-3.5 w-3.5" />
                             Parent
@@ -7478,6 +8959,7 @@ export function CanvasEditor({
                             aria-label="Group selected layers"
                             aria-keyshortcuts="Control+G Meta+G"
                             data-testid="editor-inspector-group-selection"
+                            {...editorInspectorCommandProps('group-selection')}
                           >
                             <Group className="h-3.5 w-3.5" />
                             Group
@@ -7491,6 +8973,7 @@ export function CanvasEditor({
                             aria-label="Ungroup selected layers"
                             aria-keyshortcuts="Shift+Control+G Shift+Meta+G"
                             data-testid="editor-inspector-ungroup-selection"
+                            {...editorInspectorCommandProps('ungroup-selection')}
                           >
                             <Ungroup className="h-3.5 w-3.5" />
                             Ungroup
@@ -7507,6 +8990,7 @@ export function CanvasEditor({
                           aria-label={`Copy ${selectedLayerActionLabel}`}
                           aria-keyshortcuts="Control+C Meta+C"
                           data-testid="editor-inspector-copy-selection"
+                          {...editorInspectorCommandProps('copy-selection')}
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
@@ -7519,6 +9003,7 @@ export function CanvasEditor({
                           aria-label={`Duplicate ${selectedLayerActionLabel}`}
                           aria-keyshortcuts="Control+D Meta+D"
                           data-testid="editor-inspector-duplicate-selection"
+                          {...editorInspectorCommandProps('duplicate-selection')}
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
@@ -7531,6 +9016,7 @@ export function CanvasEditor({
                           aria-label={`Cut ${selectedLayerActionLabel}`}
                           aria-keyshortcuts="Control+X Meta+X"
                           data-testid="editor-inspector-cut-selection"
+                          {...editorInspectorCommandProps('cut-selection')}
                         >
                           <Scissors className="h-3.5 w-3.5" />
                         </button>
@@ -7546,6 +9032,7 @@ export function CanvasEditor({
                           data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement?.id : undefined}
                           data-clipboard-count={clipboardElements.length}
                           data-testid="editor-inspector-paste-selection"
+                          {...editorInspectorCommandProps('paste-selection')}
                         >
                           <ClipboardPaste className="h-3.5 w-3.5" />
                         </button>
@@ -7558,6 +9045,7 @@ export function CanvasEditor({
                           aria-label={`Delete ${selectedLayerActionLabel}`}
                           aria-keyshortcuts="Delete Backspace"
                           data-testid="editor-inspector-delete-selection"
+                          {...editorInspectorCommandProps('delete-selection')}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -7572,6 +9060,7 @@ export function CanvasEditor({
                           aria-label={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
                           aria-pressed={selectedLayersAreHidden}
                           data-testid="editor-inspector-toggle-selection-visibility"
+                          {...editorInspectorCommandProps('toggle-selection-visibility')}
                         >
                           {selectedLayersAreHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                           {selectedLayersAreHidden ? 'Show' : 'Hide'}
@@ -7585,6 +9074,7 @@ export function CanvasEditor({
                           aria-label={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
                           aria-pressed={selectedLayersAreLocked}
                           data-testid="editor-inspector-toggle-selection-lock"
+                          {...editorInspectorCommandProps('toggle-selection-lock')}
                         >
                           {selectedLayersAreLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                           {selectedLayersAreLocked ? 'Unlock' : 'Lock'}
@@ -7600,6 +9090,7 @@ export function CanvasEditor({
                           aria-label={`Send ${selectedLayerActionLabel} to back`}
                           aria-keyshortcuts="Shift+Control+[ Shift+Meta+["
                           data-testid="editor-inspector-send-to-back"
+                          {...editorInspectorCommandProps('send-to-back')}
                         >
                           <SendToBack className="h-3.5 w-3.5" />
                         </button>
@@ -7612,6 +9103,7 @@ export function CanvasEditor({
                           aria-label={`Send ${selectedLayerActionLabel} backward`}
                           aria-keyshortcuts="Control+[ Meta+["
                           data-testid="editor-inspector-send-backward"
+                          {...editorInspectorCommandProps('send-backward')}
                         >
                           <ArrowDownToLine className="h-3.5 w-3.5" />
                         </button>
@@ -7624,6 +9116,7 @@ export function CanvasEditor({
                           aria-label={`Bring ${selectedLayerActionLabel} forward`}
                           aria-keyshortcuts="Control+] Meta+]"
                           data-testid="editor-inspector-bring-forward"
+                          {...editorInspectorCommandProps('bring-forward')}
                         >
                           <ArrowUpToLine className="h-3.5 w-3.5" />
                         </button>
@@ -7636,6 +9129,7 @@ export function CanvasEditor({
                           aria-label={`Bring ${selectedLayerActionLabel} to front`}
                           aria-keyshortcuts="Shift+Control+] Shift+Meta+]"
                           data-testid="editor-inspector-bring-to-front"
+                          {...editorInspectorCommandProps('bring-to-front')}
                         >
                           <BringToFront className="h-3.5 w-3.5" />
                         </button>
@@ -7649,6 +9143,7 @@ export function CanvasEditor({
                           title="Align selected layers left"
                           aria-label="Align selected layers left"
                           data-testid="editor-inspector-align-left"
+                          {...editorInspectorCommandProps('align-left')}
                         >
                           <AlignHorizontalJustifyStart className="h-3.5 w-3.5" />
                         </button>
@@ -7660,6 +9155,7 @@ export function CanvasEditor({
                           title="Align selected layers center"
                           aria-label="Align selected layers center"
                           data-testid="editor-inspector-align-center"
+                          {...editorInspectorCommandProps('align-center')}
                         >
                           <AlignHorizontalJustifyCenter className="h-3.5 w-3.5" />
                         </button>
@@ -7671,6 +9167,7 @@ export function CanvasEditor({
                           title="Align selected layers right"
                           aria-label="Align selected layers right"
                           data-testid="editor-inspector-align-right"
+                          {...editorInspectorCommandProps('align-right')}
                         >
                           <AlignHorizontalJustifyEnd className="h-3.5 w-3.5" />
                         </button>
@@ -7682,6 +9179,7 @@ export function CanvasEditor({
                           title="Align selected layers top"
                           aria-label="Align selected layers top"
                           data-testid="editor-inspector-align-top"
+                          {...editorInspectorCommandProps('align-top')}
                         >
                           <AlignVerticalJustifyStart className="h-3.5 w-3.5" />
                         </button>
@@ -7693,6 +9191,7 @@ export function CanvasEditor({
                           title="Align selected layers middle"
                           aria-label="Align selected layers middle"
                           data-testid="editor-inspector-align-middle"
+                          {...editorInspectorCommandProps('align-middle')}
                         >
                           <AlignVerticalJustifyCenter className="h-3.5 w-3.5" />
                         </button>
@@ -7704,6 +9203,7 @@ export function CanvasEditor({
                           title="Align selected layers bottom"
                           aria-label="Align selected layers bottom"
                           data-testid="editor-inspector-align-bottom"
+                          {...editorInspectorCommandProps('align-bottom')}
                         >
                           <AlignVerticalJustifyEnd className="h-3.5 w-3.5" />
                         </button>
@@ -7717,6 +9217,7 @@ export function CanvasEditor({
                           title="Distribute selected layers horizontally"
                           aria-label="Distribute selected layers horizontally"
                           data-testid="editor-inspector-distribute-horizontal"
+                          {...editorInspectorCommandProps('distribute-horizontal')}
                         >
                           <AlignHorizontalDistributeCenter className="h-3.5 w-3.5" />
                           Space H
@@ -7729,6 +9230,7 @@ export function CanvasEditor({
                           title="Distribute selected layers vertically"
                           aria-label="Distribute selected layers vertically"
                           data-testid="editor-inspector-distribute-vertical"
+                          {...editorInspectorCommandProps('distribute-vertical')}
                         >
                           <AlignVerticalDistributeCenter className="h-3.5 w-3.5" />
                           Space V
@@ -7785,6 +9287,7 @@ export function CanvasEditor({
                           aria-label={`Copy ${selectedLayerActionLabel}`}
                           aria-keyshortcuts="Control+C Meta+C"
                           data-testid="editor-inspector-single-copy-selection"
+                          {...editorInspectorCommandProps('copy-selection')}
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
@@ -7797,6 +9300,7 @@ export function CanvasEditor({
                           aria-label={`Duplicate ${selectedLayerActionLabel}`}
                           aria-keyshortcuts="Control+D Meta+D"
                           data-testid="editor-inspector-single-duplicate-selection"
+                          {...editorInspectorCommandProps('duplicate-selection')}
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
@@ -7809,6 +9313,7 @@ export function CanvasEditor({
                           aria-label={`Cut ${selectedLayerActionLabel}`}
                           aria-keyshortcuts="Control+X Meta+X"
                           data-testid="editor-inspector-single-cut-selection"
+                          {...editorInspectorCommandProps('cut-selection')}
                         >
                           <Scissors className="h-3.5 w-3.5" />
                         </button>
@@ -7824,6 +9329,7 @@ export function CanvasEditor({
                           data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement.id : undefined}
                           data-clipboard-count={clipboardElements.length}
                           data-testid="editor-inspector-single-paste-selection"
+                          {...editorInspectorCommandProps('paste-selection')}
                         >
                           <ClipboardPaste className="h-3.5 w-3.5" />
                         </button>
@@ -7836,6 +9342,7 @@ export function CanvasEditor({
                           aria-label={`Delete ${selectedLayerActionLabel}`}
                           aria-keyshortcuts="Delete Backspace"
                           data-testid="editor-inspector-single-delete-selection"
+                          {...editorInspectorCommandProps('delete-selection')}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -7850,6 +9357,7 @@ export function CanvasEditor({
                           aria-label={selectedLayersAreHidden ? `Show ${selectedLayerActionLabel}` : `Hide ${selectedLayerActionLabel}`}
                           aria-pressed={selectedLayersAreHidden}
                           data-testid="editor-inspector-single-toggle-selection-visibility"
+                          {...editorInspectorCommandProps('toggle-selection-visibility')}
                         >
                           {selectedLayersAreHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                           {selectedLayersAreHidden ? 'Show' : 'Hide'}
@@ -7863,6 +9371,7 @@ export function CanvasEditor({
                           aria-label={selectedLayersAreLocked ? `Unlock ${selectedLayerActionLabel}` : `Lock ${selectedLayerActionLabel}`}
                           aria-pressed={selectedLayersAreLocked}
                           data-testid="editor-inspector-single-toggle-selection-lock"
+                          {...editorInspectorCommandProps('toggle-selection-lock')}
                         >
                           {selectedLayersAreLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                           {selectedLayersAreLocked ? 'Unlock' : 'Lock'}
@@ -7878,6 +9387,7 @@ export function CanvasEditor({
                           aria-label={`Send ${selectedLayerActionLabel} to back`}
                           aria-keyshortcuts="Shift+Control+[ Shift+Meta+["
                           data-testid="editor-inspector-single-send-to-back"
+                          {...editorInspectorCommandProps('send-to-back')}
                         >
                           <SendToBack className="h-3.5 w-3.5" />
                         </button>
@@ -7890,6 +9400,7 @@ export function CanvasEditor({
                           aria-label={`Send ${selectedLayerActionLabel} backward`}
                           aria-keyshortcuts="Control+[ Meta+["
                           data-testid="editor-inspector-single-send-backward"
+                          {...editorInspectorCommandProps('send-backward')}
                         >
                           <ArrowDownToLine className="h-3.5 w-3.5" />
                         </button>
@@ -7902,6 +9413,7 @@ export function CanvasEditor({
                           aria-label={`Bring ${selectedLayerActionLabel} forward`}
                           aria-keyshortcuts="Control+] Meta+]"
                           data-testid="editor-inspector-single-bring-forward"
+                          {...editorInspectorCommandProps('bring-forward')}
                         >
                           <ArrowUpToLine className="h-3.5 w-3.5" />
                         </button>
@@ -7914,6 +9426,7 @@ export function CanvasEditor({
                           aria-label={`Bring ${selectedLayerActionLabel} to front`}
                           aria-keyshortcuts="Shift+Control+] Shift+Meta+]"
                           data-testid="editor-inspector-single-bring-to-front"
+                          {...editorInspectorCommandProps('bring-to-front')}
                         >
                           <BringToFront className="h-3.5 w-3.5" />
                         </button>
@@ -7927,6 +9440,7 @@ export function CanvasEditor({
                           aria-label="Select parent layer"
                           aria-keyshortcuts="Shift+Enter"
                           data-testid="editor-select-parent-layer"
+                          {...editorInspectorCommandProps('select-parent-layer')}
                         >
                           <ArrowLeft className="h-3.5 w-3.5" />
                           Select parent
@@ -7941,6 +9455,7 @@ export function CanvasEditor({
                         aria-label="Select all sibling layers"
                         aria-keyshortcuts="Control+A Meta+A"
                         data-testid="editor-inspector-single-select-sibling-layers"
+                        {...editorInspectorCommandProps('select-sibling-layers')}
                       >
                         <CheckSquare className="h-3.5 w-3.5" />
                         Select siblings
@@ -7954,6 +9469,7 @@ export function CanvasEditor({
                           aria-label="Select child layer"
                           aria-keyshortcuts="Enter"
                           data-testid="editor-select-child-layer"
+                          {...editorInspectorCommandProps('select-child-layer')}
                         >
                           <ArrowRight className="h-3.5 w-3.5" />
                           Select child
@@ -7968,6 +9484,7 @@ export function CanvasEditor({
                           aria-label="Select child layers"
                           aria-keyshortcuts="Shift+Control+A Shift+Meta+A"
                           data-testid="editor-select-child-layer-scope"
+                          {...editorInspectorCommandProps('select-child-layers')}
                         >
                           <Layers className="h-3.5 w-3.5" />
                           Select children
@@ -7983,6 +9500,7 @@ export function CanvasEditor({
                           aria-label="Ungroup selected layer"
                           aria-keyshortcuts="Shift+Control+G Shift+Meta+G"
                           data-testid="editor-inspector-single-ungroup-selection"
+                          {...editorInspectorCommandProps('ungroup-selection')}
                         >
                           <Ungroup className="h-3.5 w-3.5" />
                           Ungroup
@@ -7992,7 +9510,15 @@ export function CanvasEditor({
                         <div
                           className="mt-2 rounded-md border border-violet-100 bg-violet-50 px-2.5 py-2 text-[11px] leading-4 text-violet-800"
                           data-testid="editor-reusable-instance"
+                          aria-describedby={reusableInstanceActionStatusId}
+                          data-action-state={reusableInstanceRefreshDisabledReason || reusableInstanceDetachDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={reusableInstanceActionStatus}
+                          data-reusable-instance-section-id={selectedReusableSectionMeta.sectionId}
+                          data-reusable-instance-source-state={selectedReusableSectionSource ? 'linked' : 'missing'}
                         >
+                          <span id={reusableInstanceActionStatusId} className="sr-only" data-testid="editor-reusable-instance-action-status" aria-live="polite">
+                            {reusableInstanceActionStatus}
+                          </span>
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <div className="truncate font-semibold">
@@ -8013,6 +9539,10 @@ export function CanvasEditor({
                               disabled={isCanvasMutationDisabled || !selectedReusableSectionSource || isLayerLocked(selectedElement)}
                               className="inline-flex items-center justify-center gap-1 rounded border border-violet-200 bg-white px-2 py-1 font-semibold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
                               data-testid="editor-refresh-reusable-instance"
+                              aria-describedby={reusableInstanceActionStatusId}
+                              data-action-state={reusableInstanceRefreshDisabledReason ? 'blocked' : 'ready'}
+                              data-action-status={reusableInstanceActionStatus}
+                              data-disabled-reason={reusableInstanceRefreshDisabledReason || undefined}
                             >
                               <RefreshCw className="h-3 w-3" />
                               Refresh
@@ -8023,6 +9553,10 @@ export function CanvasEditor({
                               disabled={isCanvasMutationDisabled || isLayerLocked(selectedElement)}
                               className="inline-flex items-center justify-center gap-1 rounded border border-violet-200 bg-white px-2 py-1 font-semibold text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
                               data-testid="editor-detach-reusable-instance"
+                              aria-describedby={reusableInstanceActionStatusId}
+                              data-action-state={reusableInstanceDetachDisabledReason ? 'blocked' : 'ready'}
+                              data-action-status={reusableInstanceActionStatus}
+                              data-disabled-reason={reusableInstanceDetachDisabledReason || undefined}
                             >
                               <X className="h-3 w-3" />
                               Detach
@@ -8040,7 +9574,14 @@ export function CanvasEditor({
                         <div
                           className="mt-2 rounded-md border border-sky-100 bg-sky-50 px-2.5 py-2 text-[11px] leading-4 text-sky-800"
                           data-testid="editor-breakpoint-override"
+                          aria-describedby={breakpointOverrideActionStatusId}
+                          data-action-state={breakpointOverrideResetAllDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={breakpointOverrideActionStatus}
+                          data-breakpoint-override-active-groups={selectedBreakpointOverrideGroups.join(',')}
                         >
+                          <span id={breakpointOverrideActionStatusId} className="sr-only" data-testid="editor-breakpoint-override-action-status" aria-live="polite">
+                            {breakpointOverrideActionStatus}
+                          </span>
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-semibold capitalize">{breakpoint} override</span>
                             <button
@@ -8048,6 +9589,11 @@ export function CanvasEditor({
                               onClick={handleClearSelectedBreakpointOverride}
                               disabled={isCanvasMutationDisabled || !selectedElementHasBreakpointOverride}
                               className="rounded border border-sky-200 bg-white px-2 py-1 font-semibold text-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              data-testid="editor-breakpoint-reset-all"
+                              aria-describedby={breakpointOverrideActionStatusId}
+                              data-action-state={breakpointOverrideResetAllDisabledReason ? 'blocked' : 'ready'}
+                              data-action-status={breakpointOverrideActionStatus}
+                              data-disabled-reason={breakpointOverrideResetAllDisabledReason || undefined}
                             >
                               Reset all
                             </button>
@@ -8055,6 +9601,11 @@ export function CanvasEditor({
                           <div className="mt-2 flex flex-wrap gap-1" data-testid="editor-breakpoint-override-groups">
                             {BREAKPOINT_OVERRIDE_GROUPS.map((group) => {
                               const isActive = selectedBreakpointOverrideGroups.includes(group.id);
+                              const groupDisabledReason = breakpointOverrideMutationDisabledReason
+                                || (!isActive ? `${group.description} inherits desktop.` : '');
+                              const groupActionStatus = groupDisabledReason
+                                ? `Reset ${group.label.toLowerCase()} unavailable: ${groupDisabledReason}`
+                                : `Reset ${group.label.toLowerCase()} override available.`;
                               return (
                                 <button
                                   key={group.id}
@@ -8062,6 +9613,12 @@ export function CanvasEditor({
                                   onClick={() => handleClearSelectedBreakpointOverrideGroup(group.id)}
                                   disabled={isCanvasMutationDisabled || !isActive}
                                   data-testid={`editor-breakpoint-reset-${group.id}`}
+                                  aria-describedby={breakpointOverrideActionStatusId}
+                                  data-breakpoint-override-group={group.id}
+                                  data-breakpoint-override-active={isActive ? 'true' : 'false'}
+                                  data-action-state={groupDisabledReason ? 'blocked' : 'ready'}
+                                  data-action-status={groupActionStatus}
+                                  data-disabled-reason={groupDisabledReason || undefined}
                                   title={isActive ? `Reset ${group.description.toLowerCase()} override` : `${group.description} inherits desktop`}
                                   className={cn(
                                     'rounded border px-2 py-1 font-semibold transition-colors disabled:cursor-not-allowed',
@@ -8082,9 +9639,66 @@ export function CanvasEditor({
                       )}
                     </>
                   ) : (
-                    <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="font-medium text-slate-700">No selection</span>
-                      <span className="text-xs font-medium text-slate-500">{elements.length} elements</span>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-800">No layer selected</div>
+                          <div className="mt-0.5 text-xs leading-4 text-slate-500">
+                            Select a layer, open Layers, or add a starting block from here.
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold tabular-nums text-slate-600">
+                          {visibleCanvasElementIds.length}/{totalCanvasElementCount} visible
+                        </span>
+                      </div>
+                      <div
+                        className="grid grid-cols-2 gap-1.5"
+                        data-testid="editor-inspector-empty-actions"
+                        data-empty-quick-add-count={INSPECTOR_EMPTY_QUICK_ADD_ITEMS.length}
+                        data-empty-quick-add-types={INSPECTOR_EMPTY_QUICK_ADD_TYPES}
+                      >
+                        <button
+                          type="button"
+                          onClick={handleSelectFirstVisibleLayer}
+                          disabled={visibleCanvasElementIds.length === 0}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={visibleCanvasElementIds.length > 0 ? 'Select the first visible layer' : 'Add a layer before selecting'}
+                          aria-label="Select first visible layer"
+                          data-testid="editor-inspector-empty-select-first-layer"
+                          data-visible-layer-count={visibleCanvasElementIds.length}
+                        >
+                          <CheckSquare className="h-3.5 w-3.5" />
+                          Select first
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRightPanel('layers')}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                          title="Open the layer tree"
+                          aria-label="Open Layers panel"
+                          data-testid="editor-inspector-empty-open-layers"
+                        >
+                          <Layers className="h-3.5 w-3.5" />
+                          Layers
+                        </button>
+                        {INSPECTOR_EMPTY_QUICK_ADD_ITEMS.map(({ key, item }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => handleAddLibraryItem(item)}
+                            disabled={isCanvasMutationDisabled}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            title={`Add ${item.name} to the canvas`}
+                            aria-label={`Add ${item.name} to the canvas`}
+                            data-testid={`editor-inspector-empty-add-${key}`}
+                            data-empty-add-key={key}
+                            data-empty-add-type={item.type}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            {item.name}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -8115,7 +9729,7 @@ export function CanvasEditor({
                     onDelete={deleteElement}
                     theme={theme}
                     mediaContext={mediaContext}
-                    disabled={isCanvasMutationDisabled}
+                    disabled={isCanvasMutationDisabled || isLayerLocked(selectedElement)}
                     canViewMedia={canViewMedia}
                     canCreateMedia={canCreateMedia}
                     canViewCollections={canViewCollections}
@@ -8135,7 +9749,10 @@ export function CanvasEditor({
         </div>
 
         {editorNotice && (
-          <div className="fixed left-1/2 top-4 z-[95] w-[min(560px,calc(100%-2rem))] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-xl">
+          <div
+            className="fixed left-1/2 top-4 z-[95] w-[min(560px,calc(100%-2rem))] -translate-x-1/2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-xl"
+            data-testid="editor-notice"
+          >
             <div className="flex items-start justify-between gap-3">
               <span>{editorNotice}</span>
               <button
@@ -8156,7 +9773,15 @@ export function CanvasEditor({
             role="dialog"
             aria-modal="true"
             aria-labelledby="reusable-section-dialog-title"
+            aria-describedby={reusableSectionDraftActionStatusId}
+            data-testid="editor-reusable-section-dialog"
+            data-reusable-section-dialog-mode={reusableSectionDraft.mode}
+            data-action-state={isSavingReusableSection ? 'busy' : reusableSectionDraftNameInlineError ? 'blocked' : 'ready'}
+            data-action-status={reusableSectionDraftActionStatus}
           >
+            <span id={reusableSectionDraftActionStatusId} className="sr-only" data-testid="editor-reusable-section-action-status" aria-live="polite">
+              {reusableSectionDraftActionStatus}
+            </span>
             <form
               className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl"
               onSubmit={(event) => {
@@ -8191,7 +9816,12 @@ export function CanvasEditor({
                     name: event.target.value,
                   } : current)}
                   aria-invalid={Boolean(reusableSectionDraftNameInlineError)}
-                  aria-describedby={reusableSectionDraftNameInlineError ? 'editor-reusable-section-name-error' : undefined}
+                  aria-describedby={[
+                    reusableSectionDraftActionStatusId,
+                    reusableSectionDraftNameInlineError ? 'editor-reusable-section-name-error' : '',
+                  ].filter(Boolean).join(' ')}
+                  data-action-state={reusableSectionDraftNameInlineError ? 'blocked' : 'ready'}
+                  data-action-status={reusableSectionDraftActionStatus}
                   className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-sky-400"
                   autoFocus
                 />
@@ -8204,6 +9834,10 @@ export function CanvasEditor({
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   type="button"
+                  data-testid="editor-reusable-section-cancel"
+                  aria-describedby={reusableSectionDraftActionStatusId}
+                  data-action-state="ready"
+                  data-action-status={reusableSectionDraftActionStatus}
                   onClick={() => {
                     setReusableSectionDraftSubmitted(false);
                     setReusableSectionDraft(null);
@@ -8216,6 +9850,10 @@ export function CanvasEditor({
                   type="submit"
                   data-testid="editor-reusable-section-save"
                   disabled={isSavingReusableSection}
+                  aria-describedby={reusableSectionDraftActionStatusId}
+                  data-action-state={isSavingReusableSection ? 'busy' : reusableSectionDraftNameInlineError ? 'blocked' : 'ready'}
+                  data-action-status={reusableSectionDraftActionStatus}
+                  data-disabled-reason={isSavingReusableSection ? 'Reusable section save is running.' : undefined}
                   className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSavingReusableSection
@@ -8233,7 +9871,15 @@ export function CanvasEditor({
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-reusable-section-dialog-title"
+            aria-describedby={pendingDeleteReusableSectionStatusId}
+            data-testid="editor-reusable-section-delete-dialog"
+            data-reusable-section-delete-id={pendingDeleteReusableSection.id}
+            data-action-state={isDeletingReusableSection ? 'busy' : 'ready'}
+            data-action-status={pendingDeleteReusableSectionStatus}
           >
+            <span id={pendingDeleteReusableSectionStatusId} className="sr-only" data-testid="editor-reusable-section-delete-status" aria-live="polite">
+              {pendingDeleteReusableSectionStatus}
+            </span>
             <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-red-50 p-2 text-red-600">
@@ -8249,6 +9895,10 @@ export function CanvasEditor({
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   type="button"
+                  data-testid="editor-reusable-section-delete-cancel"
+                  aria-describedby={pendingDeleteReusableSectionStatusId}
+                  data-action-state="ready"
+                  data-action-status={pendingDeleteReusableSectionStatus}
                   onClick={() => setPendingDeleteReusableSection(null)}
                   className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
                 >
@@ -8256,10 +9906,16 @@ export function CanvasEditor({
                 </button>
                 <button
                   type="button"
+                  data-testid="editor-reusable-section-delete-confirm"
+                  disabled={isDeletingReusableSection}
+                  aria-describedby={pendingDeleteReusableSectionStatusId}
+                  data-action-state={isDeletingReusableSection ? 'busy' : 'ready'}
+                  data-action-status={pendingDeleteReusableSectionStatus}
+                  data-disabled-reason={isDeletingReusableSection ? 'Reusable section delete is running.' : undefined}
                   onClick={() => void confirmDeleteReusableSection(pendingDeleteReusableSection.id)}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300"
                 >
-                  Delete section
+                  {isDeletingReusableSection ? 'Deleting...' : 'Delete section'}
                 </button>
               </div>
             </div>

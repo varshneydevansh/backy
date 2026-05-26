@@ -426,11 +426,12 @@ const pageEditorPermissionRule = (
 
 const isPageEditorPermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
-  _currentAdmin: User | null,
+  currentAdmin: User | null,
   key: PageEditorPermissionKey,
 ): boolean => {
   const matrixRule = pageEditorPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.allowed;
+  if (!permissionMatrix && currentAdmin) return PAGE_EDITOR_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);
 
   return false;
 };
@@ -655,13 +656,13 @@ function PageEditorRoute() {
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(true);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewPage = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view');
-  const canEditPage = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit');
-  const canPublishPage = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish');
-  const canDeletePage = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete');
-  const canViewMedia = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');
-  const canCreateMedia = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'media.create');
-  const canViewCollections = !isPermissionMatrixPending && isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');
+  const canViewPage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view');
+  const canEditPage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit');
+  const canPublishPage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish');
+  const canDeletePage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete');
+  const canViewMedia = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');
+  const canCreateMedia = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'media.create');
+  const canViewCollections = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');
   const viewPagePermissionTitle = canViewPage ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'pages.view');
   const editPagePermissionTitle = canEditPage ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'pages.edit');
   const publishPagePermissionTitle = canPublishPage ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'pages.publish');
@@ -671,10 +672,10 @@ function PageEditorRoute() {
   const viewCollectionsPermissionTitle = canViewCollections ? undefined : pageEditorPermissionReason(permissionMatrix, currentAdmin, 'collections.view');
   const editPageDeniedMessage = `Your account needs pages.edit to change this page. ${editPagePermissionTitle}`;
   const publishPageDeniedMessage = `Your account needs pages.publish to preview or publish this page. ${publishPagePermissionTitle}`;
-  const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy || isPermissionMatrixPending;
+  const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy;
   const isPageEditorWorkflowBusy = isWorkflowBusy || isPreviewBusy || readinessLoading;
   const isPageEditorSaveBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy;
-  const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy || isPermissionMatrixPending;
+  const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy;
 
   useEffect(() => {
     let cancelled = false;
@@ -720,10 +721,6 @@ function PageEditorRoute() {
     setSiteId(nextSiteId);
 
     const loadPage = async () => {
-      if (isPermissionMatrixPending) {
-        return;
-      }
-
       if (!canViewPage) {
         setIsLoadingPage(false);
         setLoadError(viewPagePermissionTitle || 'Your account cannot view this page.');
@@ -786,7 +783,7 @@ function PageEditorRoute() {
     return () => {
       cancelled = true;
     };
-  }, [canViewPage, fallbackSiteId, isPermissionMatrixPending, pageId, storePageId, storePageSite?.id, storePageSite?.publicSiteId, storePageSiteId, updatePage, viewPagePermissionTitle]);
+  }, [canViewPage, fallbackSiteId, pageId, storePageId, storePageSite?.id, storePageSite?.publicSiteId, storePageSiteId, updatePage, viewPagePermissionTitle]);
 
   useEffect(() => {
     if (!page || !canViewPage) {
@@ -816,7 +813,7 @@ function PageEditorRoute() {
   }, [canViewPage, page, pageId, siteId]);
 
   useEffect(() => {
-    if (!canViewPage || isPermissionMatrixPending) {
+    if (!canViewPage) {
       setRouteCheckPages(null);
       setRouteCheckSiteId(null);
       setRouteCheckError(null);
@@ -853,7 +850,7 @@ function PageEditorRoute() {
     return () => {
       cancelled = true;
     };
-  }, [canViewPage, isPermissionMatrixPending, siteId]);
+  }, [canViewPage, siteId]);
 
   const loadPageReadiness = async () => {
     if (!page) {
@@ -1257,6 +1254,7 @@ function PageEditorRoute() {
   const validatePageSettings = (settings: PageSettings) => {
     const nextSlug = slugify(settings.slug || settings.title || 'page');
     const nextPath = getPublicPathForSettings(settings);
+    const routeSettingsChanged = nextPath !== publicPath;
     const conflict = findRouteConflict(settings);
 
     if (!settings.title.trim()) {
@@ -1271,7 +1269,7 @@ function PageEditorRoute() {
       return 'Use lowercase letters, numbers, and hyphens for the URL slug.';
     }
 
-    if (routeCheckBlockedMessage) {
+    if (routeSettingsChanged && routeCheckBlockedMessage) {
       return routeCheckBlockedMessage;
     }
 
@@ -1867,6 +1865,72 @@ function PageEditorRoute() {
   const pendingRestoreRevisionGraphNode = pendingRestoreRevision
     ? pageRevisionTimelineById.get(pendingRestoreRevision.id) || null
     : null;
+  const pageEditorBackDisabledReason = isPageEditorBusy
+    ? 'Wait for the current page editor workflow before returning to Pages.'
+    : '';
+  const pageEditorBackActionStatus = pageEditorBackDisabledReason
+    ? `Back to Pages unavailable: ${pageEditorBackDisabledReason}`
+    : `Back to Pages available for ${siteId}.`;
+  const pageEditorFocusDisabledReason = workspaceFocusDisabled
+    ? isLoadingPage
+      ? 'Wait for the page to finish loading before changing canvas focus.'
+      : 'Wait for the current page workflow before changing canvas focus.'
+    : '';
+  const pageEditorFocusActionStatus = pageEditorFocusDisabledReason
+    ? `Canvas focus toggle unavailable: ${pageEditorFocusDisabledReason}`
+    : isWorkspaceFocus
+      ? 'Show page panels available.'
+      : 'Focus canvas available.';
+  const pageEditorCommandBusyReason = isPageEditorBusy
+    ? 'Wait for the current page editor workflow to finish.'
+    : '';
+  const pageEditorHandoffActionStatus = pageEditorCommandBusyReason
+    ? `Frontend handoff unavailable: ${pageEditorCommandBusyReason}`
+    : 'Frontend handoff ready for custom frontend sync.';
+  const pageEditorPreviewDisabledReason = isPageEditorBusy
+    ? pageEditorCommandBusyReason
+    : isUsingLocalPageCopy
+      ? localPageCopyDisabledMessage
+      : editorHasUnsavedChanges
+        ? 'Save the canvas before generating a preview.'
+        : !canPublishPage
+          ? publishPagePermissionTitle || 'Your account cannot generate page previews.'
+          : '';
+  const pageEditorPreviewActionStatus = pageEditorPreviewDisabledReason
+    ? `Preview unavailable: ${pageEditorPreviewDisabledReason}`
+    : 'Preview available for this page.';
+  const pageEditorReadinessDisabledReason = isPageEditorBusy
+    ? pageEditorCommandBusyReason
+    : !canViewPage
+      ? viewPagePermissionTitle || 'Your account cannot refresh page readiness.'
+      : '';
+  const pageEditorReadinessActionStatus = pageEditorReadinessDisabledReason
+    ? `Readiness refresh unavailable: ${pageEditorReadinessDisabledReason}`
+    : 'Readiness refresh available.';
+  const pageEditorPublishDisabledReason = isPageEditorBusy
+    ? pageEditorCommandBusyReason
+    : page.status === 'published'
+      ? 'This page is already published.'
+      : externalWorkflowDisabledReason || '';
+  const pageEditorPublishActionStatus = pageEditorPublishDisabledReason
+    ? `Publish unavailable: ${pageEditorPublishDisabledReason}`
+    : 'Publish available for this page.';
+  const pageEditorUnpublishDisabledReason = isPageEditorBusy
+    ? pageEditorCommandBusyReason
+    : page.status !== 'published'
+      ? 'Only published pages can be unpublished.'
+      : unpublishDisabledReason || '';
+  const pageEditorUnpublishActionStatus = pageEditorUnpublishDisabledReason
+    ? `Unpublish unavailable: ${pageEditorUnpublishDisabledReason}`
+    : 'Unpublish available for this page.';
+  const pageEditorCommandActionStatusId = 'page-editor-command-action-status';
+  const pageEditorCommandActionStatus = [
+    pageEditorHandoffActionStatus,
+    pageEditorPreviewActionStatus,
+    pageEditorReadinessActionStatus,
+    pageEditorPublishActionStatus,
+    pageEditorUnpublishActionStatus,
+  ].join(' ');
 
   return (
     <PageShell
@@ -1878,6 +1942,11 @@ function PageEditorRoute() {
             disabled={isPageEditorBusy}
             className="rounded-lg border border-border bg-background p-2 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Back to pages"
+            aria-describedby={pageEditorCommandActionStatusId}
+            data-testid="page-editor-back-to-pages"
+            data-action-state={pageEditorBackDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={pageEditorBackActionStatus}
+            data-disabled-reason={pageEditorBackDisabledReason || undefined}
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -1890,7 +1959,7 @@ function PageEditorRoute() {
           ? 'h-[calc(100vh-1rem)] overflow-hidden pb-0 lg:h-[calc(100vh-1.5rem)]'
           : 'pb-24',
       )}
-      contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : undefined}
+      contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : 'flex flex-col gap-5'}
       hideHeader={isWorkspaceFocus}
       action={
         <Button
@@ -1899,6 +1968,11 @@ function PageEditorRoute() {
           onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
           disabled={workspaceFocusDisabled}
           iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          aria-describedby={pageEditorCommandActionStatusId}
+          data-testid="page-editor-focus-toggle"
+          data-action-state={pageEditorFocusDisabledReason ? 'blocked' : 'ready'}
+          data-action-status={pageEditorFocusActionStatus}
+          data-disabled-reason={pageEditorFocusDisabledReason || undefined}
         >
           {isWorkspaceFocus ? 'Show page panels' : 'Focus canvas'}
         </Button>
@@ -1982,9 +2056,19 @@ function PageEditorRoute() {
       )}
 
       {!isWorkspaceFocus && (
-      <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="page-editor-command-center">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
+      <section
+        className="order-2 rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5"
+        data-testid="page-editor-command-center"
+        data-default-editor-order="after-canvas"
+        aria-describedby={pageEditorCommandActionStatusId}
+        data-action-state={isPageEditorBusy ? 'busy' : 'ready'}
+        data-action-status={pageEditorCommandActionStatus}
+      >
+        <span id={pageEditorCommandActionStatusId} className="sr-only" data-testid="page-editor-command-action-status" aria-live="polite">
+          {pageEditorCommandActionStatus}
+        </span>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold text-foreground">Page editor command center</h2>
               <span className={cn(
@@ -1997,16 +2081,21 @@ function PageEditorRoute() {
               <StatusBadge status={page.status} />
             </div>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              Control the public page canvas, route, publish state, readiness blockers, revisions, preview links, and frontend handoff from one workspace.
+              Publish, preview, readiness, revisions, and frontend handoff stay close without crowding the canvas.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <Button
               type="button"
               variant="outline"
               onClick={() => void copyEditorHandoffText(editorHandoffText, 'Page editor handoff manifest')}
               disabled={isPageEditorBusy}
               iconStart={<Copy className="size-4" />}
+              aria-describedby={pageEditorCommandActionStatusId}
+              data-testid="page-editor-copy-handoff"
+              data-action-state={isPageEditorBusy ? 'busy' : 'ready'}
+              data-action-status={pageEditorHandoffActionStatus}
+              data-disabled-reason={pageEditorCommandBusyReason || undefined}
             >
               Copy handoff
             </Button>
@@ -2016,6 +2105,11 @@ function PageEditorRoute() {
               onClick={downloadEditorHandoff}
               disabled={isPageEditorBusy}
               iconStart={<Download className="size-4" />}
+              aria-describedby={pageEditorCommandActionStatusId}
+              data-testid="page-editor-download-handoff"
+              data-action-state={isPageEditorBusy ? 'busy' : 'ready'}
+              data-action-status={pageEditorHandoffActionStatus}
+              data-disabled-reason={pageEditorCommandBusyReason || undefined}
             >
               Download JSON
             </Button>
@@ -2025,7 +2119,12 @@ function PageEditorRoute() {
               onClick={() => void generatePreview()}
               disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
               iconStart={<Eye className="size-4" />}
-              title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canPublishPage ? publishPagePermissionTitle : editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
+              title={pageEditorPreviewDisabledReason || 'Preview page'}
+              aria-describedby={pageEditorCommandActionStatusId}
+              data-testid="page-editor-preview"
+              data-action-state={pageEditorPreviewDisabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'}
+              data-action-status={pageEditorPreviewActionStatus}
+              data-disabled-reason={pageEditorPreviewDisabledReason || undefined}
             >
               Preview
             </Button>
@@ -2034,8 +2133,13 @@ function PageEditorRoute() {
               variant="outline"
               onClick={() => void loadPageReadiness()}
               disabled={isPageEditorBusy || !canViewPage}
-              title={canViewPage ? 'Refresh readiness' : viewPagePermissionTitle}
+              title={pageEditorReadinessDisabledReason || 'Refresh readiness'}
               iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
+              aria-describedby={pageEditorCommandActionStatusId}
+              data-testid="page-editor-refresh-readiness"
+              data-action-state={pageEditorReadinessDisabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'}
+              data-action-status={pageEditorReadinessActionStatus}
+              data-disabled-reason={pageEditorReadinessDisabledReason || undefined}
             >
               Refresh readiness
             </Button>
@@ -2044,7 +2148,12 @@ function PageEditorRoute() {
               onClick={() => void applyWorkflow('publish')}
               disabled={isPageEditorBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
               iconStart={<CheckCircle2 className="size-4" />}
-              title={externalWorkflowDisabledReason || 'Publish page'}
+              title={pageEditorPublishDisabledReason || 'Publish page'}
+              aria-describedby={pageEditorCommandActionStatusId}
+              data-testid="page-editor-publish"
+              data-action-state={pageEditorPublishDisabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'}
+              data-action-status={pageEditorPublishActionStatus}
+              data-disabled-reason={pageEditorPublishDisabledReason || undefined}
             >
               Publish
             </Button>
@@ -2054,19 +2163,34 @@ function PageEditorRoute() {
               onClick={() => void applyWorkflow('unpublish')}
               disabled={isPageEditorBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
               iconStart={<EyeOff className="size-4" />}
-              title={unpublishDisabledReason || 'Set published page back to draft'}
+              title={pageEditorUnpublishDisabledReason || 'Set published page back to draft'}
+              aria-describedby={pageEditorCommandActionStatusId}
+              data-testid="page-editor-unpublish"
+              data-action-state={pageEditorUnpublishDisabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'}
+              data-action-status={pageEditorUnpublishActionStatus}
+              data-disabled-reason={pageEditorUnpublishDisabledReason || undefined}
             >
               Unpublish
             </Button>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="text-sm font-semibold">Editor readiness</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Checks page identity, route, canvas content, SEO metadata, backend readiness, and restore safety.
-            </p>
+        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <details
+            className="group rounded-lg border border-border bg-background/80 p-4"
+            data-testid="page-editor-readiness-summary"
+          >
+            <summary className="flex cursor-pointer list-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold">Editor readiness</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {editorReadiness.checks.filter((check) => check.ready).length} of {editorReadiness.checks.length} checks passing.
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground group-open:bg-primary/10 group-open:text-primary">
+                Review checks
+              </span>
+            </summary>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
               <div
                 className={cn('h-full rounded-full', editorReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
@@ -2078,44 +2202,65 @@ function PageEditorRoute() {
                 <EditorReadinessCheck key={check.label} {...check} />
               ))}
             </div>
-          </div>
+          </details>
 
-          <div className="rounded-lg border border-border bg-background p-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="size-4 text-primary" />
-              <h3 className="text-sm font-semibold">Editor workflow</h3>
-            </div>
+          <details className="group rounded-lg border border-border bg-background/80 p-4">
+            <summary className="flex cursor-pointer list-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <CheckCircle2 className="size-4 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold">Editor workflow</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Validate, preview, then publish with backend safety checks.
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground group-open:bg-primary/10 group-open:text-primary">
+                {editorReadiness.workflow.length} steps
+              </span>
+            </summary>
             <div className="mt-3 grid gap-2">
               {editorReadiness.workflow.map((step, index) => (
                 <EditorWorkflowStep key={step.label} index={index + 1} {...step} />
               ))}
             </div>
-          </div>
+          </details>
         </div>
 
-        <div id="page-editor-handoff" className="mt-4 rounded-lg border border-border bg-background p-4 scroll-mt-24">
-          <h3 className="text-sm font-semibold">Page editor control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to the canvas, publish controls, readiness checks, revision history, and frontend handoff details.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        <div
+          id="page-editor-handoff"
+          className="mt-4 rounded-lg border border-border bg-background/80 p-4 scroll-mt-24"
+          data-testid="page-editor-control-map"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold">Page editor control map</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Jump directly to the editor area you need.</p>
+            </div>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {PAGE_EDITOR_CONTROL_AREAS.length} areas
+            </span>
+          </div>
+          <nav className="mt-3 flex flex-wrap gap-2" aria-label="Page editor control map">
             {PAGE_EDITOR_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
                 href={area.href}
                 aria-disabled={isPageEditorBusy}
+                aria-label={`${area.title}: ${area.detail}`}
                 onClick={(event) => {
                   if (isPageEditorBusy) event.preventDefault();
                 }}
                 className={cn(
-                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  'inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/40 hover:bg-primary/5',
                   isPageEditorBusy && 'pointer-events-none opacity-60',
                 )}
               >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                {area.title}
               </a>
             ))}
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-5">
+          </nav>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <EditorMetaTile label="Site" value={`${selectedSite?.name || siteId} (${siteId})`} />
             <EditorMetaTile label="Route" value={page.slug ? `/${page.slug}` : 'No slug'} />
             <EditorMetaTile label="Canvas" value={`${currentCanvasSize.width} x ${currentCanvasSize.height}px`} />
@@ -2148,13 +2293,15 @@ function PageEditorRoute() {
 
       <div className={cn(
         'grid gap-5',
+        !isWorkspaceFocus && 'order-1',
         isWorkspaceFocus && 'h-full min-h-0',
         !isWorkspaceFocus && '[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px] [@media(min-width:2200px)]:items-start',
       )}
+        data-default-editor-order={isWorkspaceFocus ? 'focused-canvas' : 'canvas-first'}
       >
         <div id="page-editor-canvas" className={cn('min-w-0 scroll-mt-24', isWorkspaceFocus && 'h-full min-h-0')}>
           <EditorWorkspaceFrame
-            title="Page design canvas"
+            title={isWorkspaceFocus ? 'Page canvas' : 'Page design canvas'}
             description={isWorkspaceFocus
               ? 'Focused page design workspace with the same components, layers, media, grouping, reusable sections, and data bindings.'
               : 'Compose the public page with components, layers, media, grouping, reusable sections, and data bindings.'}
@@ -2166,15 +2313,11 @@ function PageEditorRoute() {
                 <span className="rounded bg-muted px-2 py-1">
                   {totalElementCount} layer{totalElementCount === 1 ? '' : 's'} / {elementCount} root
                 </span>
-                <span className="rounded bg-muted px-2 py-1">
-                  {containerLayerCount} container{containerLayerCount === 1 ? '' : 's'}
-                </span>
-                <span className="rounded bg-muted px-2 py-1">
-                  Cmd/Ctrl+G grouping
-                </span>
-                <span className="rounded bg-muted px-2 py-1">
-                  Cmd/Ctrl+A siblings
-                </span>
+                {!isWorkspaceFocus && (
+                  <span className="rounded bg-muted px-2 py-1">
+                    {containerLayerCount} container{containerLayerCount === 1 ? '' : 's'}
+                  </span>
+                )}
                 {isWorkspaceFocus && (
                   <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
                     Focused
@@ -2190,10 +2333,15 @@ function PageEditorRoute() {
                 onClick={() => setWorkspaceFocusRoute(false)}
                 disabled={workspaceFocusDisabled}
                 iconStart={<Minimize2 className="size-4" />}
+                data-testid="page-editor-focus-banner-show-panels"
+                data-action-state={pageEditorFocusDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={pageEditorFocusActionStatus}
+                data-disabled-reason={pageEditorFocusDisabledReason || undefined}
               >
                 Show panels
               </Button>
             ) : undefined}
+            density={isWorkspaceFocus ? 'compact' : 'default'}
             data-testid={isWorkspaceFocus ? 'page-editor-focus-banner' : undefined}
             className={cn(
               'relative',
@@ -2208,6 +2356,7 @@ function PageEditorRoute() {
               initialElements={editorElements}
               initialSize={initialCanvasSize}
               initialSelectedElementId={routeSearch.elementId}
+              initialCanvasFocusMode={isWorkspaceFocus}
               initialSettings={initialSettings}
               theme={selectedSite?.theme}
               onSave={handleSave}

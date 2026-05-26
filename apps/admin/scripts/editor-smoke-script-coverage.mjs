@@ -416,6 +416,21 @@ const missingPageSettingsValidationSnippets = [
     ? 'PageSettingsModal.tsx must not disable Save with settingsValidation'
     : '',
 ].filter(Boolean);
+const missingPageEditorPermissionFallbackGuards = [
+  ...collectMissingSnippets(pageEditorRouteSource, [
+    'if (!permissionMatrix && currentAdmin) return PAGE_EDITOR_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);',
+    "const canViewPage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view');",
+    "const canEditPage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit');",
+    'const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy;',
+    'const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy;',
+  ]).map((snippet) => `pages.$pageId.edit.tsx missing ${snippet}`),
+  pageEditorRouteSource.includes('const canViewPage = !isPermissionMatrixPending')
+    ? 'pages.$pageId.edit.tsx must not block role-default page access while backend permissions hydrate'
+    : '',
+  pageEditorRouteSource.includes('const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy || isPermissionMatrixPending')
+    ? 'pages.$pageId.edit.tsx must not disable Focus canvas while backend permissions hydrate'
+    : '',
+].filter(Boolean);
 const missingDesignManifestPersistenceSnippets = [
   ...collectMissingSnippets(editorCatalogSource, [
     "customJS?: string;",
@@ -487,6 +502,7 @@ if (
 	  missingInteractiveControlNormalizationSnippets.length ||
 	  missingFormAppearanceControlSnippets.length ||
 	  missingPageSettingsValidationSnippets.length ||
+  missingPageEditorPermissionFallbackGuards.length ||
   missingDesignManifestPersistenceSnippets.length ||
   missingUploadedFontFaceSnippets.length ||
   missingRichTextFontMediaMarkSnippets.length
@@ -513,6 +529,7 @@ if (
 	    missingInteractiveControlNormalizationSnippets,
 	    missingFormAppearanceControlSnippets,
 	    missingPageSettingsValidationSnippets,
+    missingPageEditorPermissionFallbackGuards,
     missingDesignManifestPersistenceSnippets,
     missingUploadedFontFaceSnippets,
     missingRichTextFontMediaMarkSnippets,
@@ -541,6 +558,7 @@ console.log(JSON.stringify({
 	  interactiveControlNormalizationSnippets: 23,
 	  formAppearanceControlSnippets: 18,
 	  pageSettingsValidationSnippets: 12,
+  pageEditorPermissionFallbackGuards: 5,
   designManifestPersistenceSnippets: 19,
   uploadedFontFaceSnippets: 9,
   richTextFontMediaMarkSnippets: 10,

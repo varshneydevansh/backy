@@ -81,6 +81,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Organized by categories (favorites, basic, media, layout, form, saved, advanced)
 - Search/filter components work across categories
 - Favorites section persists locally and supports favorites-only filtering
+- Filtered no-match states show the active search/category and expose Reset plus Show all components recovery back to the full catalog
 - Hover/focus preview shows component metadata and preview artwork
 - Drag-and-drop to canvas works
 - **Issues:** None
@@ -126,6 +127,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 **Current State:** ✅ Working
 - Shows properties for selected element
 - Has Content, Layout, Style, Appearance sections
+- Inspector section search filters dense controls, expands matches, and gives zero-result searches an explicit Show essentials recovery path
 - **Issues:** None currently tracked for this panel
 - **Improvements landed:**
     - Shared element style resolver now maps `fontFamily`, `lineHeight`, `textDecoration`, `fontStyle`, `padding`, `margin`, `border`, and shadow-related props consistently.
@@ -308,6 +310,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Upload opens the modal directly on the upload tab with consumer-appropriate filtering and file acceptance (`image/*`, `video/*`, unrestricted embed assets, and font extensions).
 - Upload defaults include visibility, folder, tags, and the active page/post/global scope context.
 - Uploaded page-scoped images, videos, and embed assets return to the library tab, can be selected, update the source/preview, and persist `src`, `mediaId`, `mediaName`, `mediaType`, `mediaFolderId`, `mediaScope`, `mediaScopeTargetId`, insert/focal presentation props, and element-level `assetIds` into the page canvas payload.
+- Library search/type/scope/folder filters expose active-filter metadata plus header and empty-state Clear filters controls, so no-match media picker states recover back to visible assets before selection.
 - Uploaded fonts can be selected from the font media picker and persist the chosen `fontFamily`, `fontMediaId`, registration metadata, file URL, and element-level `assetIds` into styled text elements.
 - Downloadable file controls can opt into selecting private media while ordinary public image/video/embed/font fields remain blocked; private file selections persist signed-URL-required metadata instead of inserting raw private assets into public fields.
 - Focused smoke coverage: `BACKY_EDITOR_MEDIA_UPLOAD_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
@@ -333,7 +336,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Layer rows expose tree/treeitem semantics and support roving-focus Enter/Space keyboard selection plus Arrow/Home/End navigation with selected/level/expanded state.
 - Nested layer rows can be collapsed or expanded from the layer tree disclosure control, and ArrowLeft/ArrowRight collapse or expand the focused nested row.
 - Bulk layer tree controls can expand or collapse every row that contains child layers.
-- Layer search filters rows by custom name, element type, or id, preserves ancestor context for nested matches, and temporarily reveals matching descendants inside collapsed parents.
+- Layer search filters rows by custom name, element type, or id, preserves ancestor context for nested matches, temporarily reveals matching descendants inside collapsed parents, and gives no-match filter states a visible reset path back to all layers.
 - Layer rows can be renamed inline from the layer action menu; custom names persist on the canvas element `name` field without overwriting content/form props.
 - The inspector selection card displays and edits custom layer names while retaining element type and id detail.
 - Selected layer rows keep their action buttons visible without requiring hover, while unselected rows reveal actions on hover and keep hidden actions out of pointer/keyboard interaction.
@@ -341,7 +344,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Row actions support move up/down, outdent, nest selected layers into container-like parents, hide/show, lock/unlock, duplicate, and delete; duplicate/delete apply to the selected unlocked sibling set when invoked from a selected row in a multi-selection.
 - Duplicating a custom-named layer from the layer tree gives the copied root a unique `Copy`/`Copy 2` name in the sibling scope.
 - Hidden and locked layer state saves into the page canvas payload.
-- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, click/keyboard/bulk collapse-expand, nested layer search/filter behavior, inline rename persistence and inspector edit/display, Ctrl/Cmd multi-select, Shift range-select, roving-focus keyboard row selection/navigation tree semantics, selected-row action visibility, hidden row action interactivity guards, drag reorder, hide with layer visibility undo/redo, lock, single and multi duplicate/delete, manual save, and persisted layer state.
+- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` covers panel opening, nested depth, click/keyboard/bulk collapse-expand, nested layer search/filter behavior, actionable no-match filter reset recovery, inline rename persistence and inspector edit/display, Ctrl/Cmd multi-select, Shift range-select, roving-focus keyboard row selection/navigation tree semantics, selected-row action visibility, hidden row action interactivity guards, drag reorder, hide with layer visibility undo/redo, lock, single and multi duplicate/delete, manual save, and persisted layer state.
 
 ### 20. Copy/Paste
 **Current State:** ✅ Working
@@ -377,6 +380,8 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 - Shortcut handling is guarded so focused form controls and dialogs do not trigger canvas nudge, delete, grouping, selection cycling, or save actions.
 - Shell panel shortcut coverage verifies Components, Inspector, Layers, and Focus commands update live panel visibility and exit focus mode when a requested side panel needs to become visible.
+- The in-canvas context bar mirrors those shell commands: Components, Layers, and Inspector stay clickable during wide canvas focus, advertise `data-exits-focus-mode`, and exit focus mode into the requested panel instead of becoming disabled visible controls.
+- The inspector no-selection state is actionable: it shows visible/total layer counts plus Select first, Layers, and Heading/Text/Section quick-add controls, with rendered coverage proving Text quick-add creates and selects an editable text layer from the empty inspector.
 - The inspector composition handoff exposes `backy.editor-command-registry.v1`, a copyable registry of stable command ids, shortcuts, test ids, target scopes, and enabled/disabled/hidden reasons for the editor toolbar, canvas viewport, grouping, selection, clipboard, layout, save, publish, reload, and shell commands.
 - Public manifest/OpenAPI live-management discovery also exposes `editorComposition.commandRegistry` with the same command ids, static state rules, SDK/API helper mappings, target paths, and privacy flags for custom editor clients.
 - Custom editor clients can call SDK `evaluateBackyEditorCommandRegistry()` to turn that registry plus local page/blog content state into `backy.editor-command-registry-evaluation.v1` ready/disabled/hidden command states for toolbar binding.
@@ -420,6 +425,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added canvas navigation coverage for ruler rendering, hand-toggle panning, drag-to-pan viewport scrolling, and temporary Space-hold pan mode through the zoom smoke path.
 - Added configurable grid size plus grid visibility and snap on/off controls, with focused browser coverage proving grid visibility plus snapped and unsnapped drag behavior via `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added component library favorites and hover/focus previews with local persistence, favorites-only filtering, search/category filtering, preview update/clear coverage, and empty-state coverage via `BACKY_EDITOR_LIBRARY_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Made component library no-match category/search states actionable: empty Favorites/Recent/Saved/search results expose Show all components and header Reset controls, with rendered component-library smoke proving query/category reset and catalog restoration.
 - Added full resize handle coverage for eight handles, single-axis edge resizing, Shift aspect-ratio resize, and Alt center resize via `BACKY_EDITOR_RESIZE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added Property Panel applied-change feedback with focused coverage in the heading component smoke via `BACKY_EDITOR_COMPONENT_SMOKE=heading npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added Property Panel rich-text blockquote and table controls with semantic editor table rendering, persisted table nodes, and focused browser coverage via `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
@@ -444,6 +450,10 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Added selected-range rich-text panel smoke coverage for mark application and clear-formatting, including a local-only active-editor selection bridge for deterministic browser verification.
 - Added explicit keydown passthrough so editor consumers can layer additional shortcuts.
 - Unified canvas `list` rendering with `RichTextBlock` so list editing follows rich-text behavior.
+- Kept canvas focus-mode context controls reachable: Components, Layers, and Inspector buttons now exit focus mode and reveal the requested panel, with source and rendered shortcut smoke coverage.
+- Replaced the passive inspector no-selection copy with actionable Select first, Layers, and common quick-add controls, with source and rendered shortcut smoke coverage for selecting, opening Layers, and creating a selected Text layer.
+- Made the property panel section-search no-match state actionable: zero matching inspector controls show the active query and a Show essentials reset that restores the core content/layout/style sections, with rendered inspector smoke coverage.
+- Made the Layers panel no-match filter state actionable: a search or scope filter with zero visible rows now explains the active filter and exposes Show all layers/reset controls, with rendered Layers smoke coverage proving search/scope state resets and rows return.
 - Synced list textarea/list-type controls with rich-text list content so old and new list models stay compatible.
 - Added richer style coverage in `PropertyPanel` and style props propagation in `Canvas`.
 - Preserved list row/blank-item behavior in list conversion utilities.
@@ -491,6 +501,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Public/admin `type=file` media filters now include both document and arbitrary safe `other` uploads, matching the central Files upload mode and library filter for PDFs, office files, JSON, archives, and custom downloads.
 - The editor media modal now mirrors that broad file bucket: `allowedTypes="file"`, the library File filter, and the upload File mode all include both document assets and safe `other` uploads, while the Other filter can still narrow to generic files only.
 - Public/admin media organization now includes folder path segments plus `folderAncestors` with stable folder ids, parent ids, names, and sort order, so external page builders and the editor picker can rebuild nested folder trees from media responses and persist `mediaOrganization` design state without a separate hierarchy lookup.
+- The editor media picker now makes filtered empty states actionable: search/type/scope/folder misses expose Clear filters controls and filter-active metadata, with rendered media-upload smoke proving an uploaded page-scoped image hidden by search/folder filters is restored before selection.
 - Public media file delivery and image transform redirects now emit stable `ETag` plus `x-backy-cache-revision` headers and honor `If-None-Match` with `304` responses after authorization/quarantine checks, so custom frontends can cheaply revalidate central images, fonts, documents, and optimized variants without losing Backy's delivery analytics boundary.
 - Page/post scoped uploads now require `scopeTargetId`, and admin media updates write the same scope, target, `pageIds`, and `postIds` metadata through both demo-store and DB-backed runtimes.
 - Central media bulk management can now load every asset matching the current search/type/visibility/folder/tag/usage filters and select that full loaded set before applying folder moves, visibility changes, quarantine/release, tag edits, or deletion.
@@ -670,6 +681,9 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
   - Stale editor saves now return `PAGE_VERSION_CONFLICT` instead of overwriting a newer backend copy.
   - The page editor renders a save-conflict banner with editor/backend timestamps and a reload-latest action.
   - Focused coverage: `BACKY_EDITOR_CONFLICT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` verifies the stale save is blocked, newer backend data is preserved, and reload clears the conflict state.
+- ✅ Route-level focused canvas boot
+  - Page edit, blog edit, and blog create routes now pass `initialCanvasFocusMode={isWorkspaceFocus}` into `CanvasEditor`, so `focus=canvas` starts with the inner editor in compact focus mode instead of showing the Components and Inspector columns by default.
+  - Focused coverage: reduced page-create, blog-create, and blog-editor browser smokes verify `data-focus-mode="true"`, hidden component/inspector panels, no outer admin shell, and Show panels recovery on the live local app.
 
 ## Priority Order
 **Phase 1: Critical Fixes (Immediate)**

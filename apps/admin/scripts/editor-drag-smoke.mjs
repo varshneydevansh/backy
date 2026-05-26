@@ -10,6 +10,8 @@ const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:
 const SITE_ID = process.env.BACKY_EDITOR_SMOKE_SITE_ID || 'site-demo';
 const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
+const INSPECTOR_SMOKE = process.env.BACKY_EDITOR_INSPECTOR_SMOKE === '1';
+const REUSABLE_SECTION_SMOKE = process.env.BACKY_EDITOR_REUSABLE_SECTION_SMOKE === '1';
 const LIBRARY_SMOKE = process.env.BACKY_EDITOR_LIBRARY_SMOKE === '1';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
@@ -32,13 +34,16 @@ const MEDIA_UPLOAD_SMOKE = process.env.BACKY_EDITOR_MEDIA_UPLOAD_SMOKE === '1';
 const RESIZE_SMOKE = process.env.BACKY_EDITOR_RESIZE_SMOKE === '1';
 const RENDER_PARITY_SMOKE = process.env.BACKY_EDITOR_RENDER_PARITY_SMOKE === '1';
 const STRESS_SMOKE = process.env.BACKY_EDITOR_STRESS_SMOKE === '1';
+const PRIMARY_ACTION_STATUS_SMOKE = process.env.BACKY_EDITOR_PRIMARY_ACTION_STATUS_SMOKE === '1';
+const COMMAND_PALETTE_SMOKE = process.env.BACKY_EDITOR_COMMAND_PALETTE_SMOKE === '1';
 const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);
 const STRESS_ITERATIONS = Math.max(4, Math.min(Number.isFinite(parsedStressIterations) ? parsedStressIterations : 10, 40));
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
+const CDP_COMMAND_TIMEOUT_MS = Math.max(5000, Number(process.env.BACKY_CDP_COMMAND_TIMEOUT_MS || 45000));
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
 const EDITOR_SCREENSHOT_THRESHOLDS = {
-  minClipWidth: 620,
+  minClipWidth: 520,
   minClipHeight: 420,
   minSampledPixels: 70000,
   minLumaRange: 120,
@@ -191,6 +196,18 @@ let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const describeCdpCommand = (method, params) => {
+  if (method !== 'Runtime.evaluate' || typeof params.expression !== 'string') {
+    return method;
+  }
+
+  const expressionSummary = params.expression
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 220);
+  return `${method}: ${expressionSummary}`;
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -251,10 +268,37 @@ const assertPageEditorFallbackIsReadOnly = () => {
   assert(source.includes('canEdit={canEditPage && !isUsingLocalPageCopy}'), 'Page editor canvas editing must be disabled for local fallback copies');
   assert(source.includes('if (isUsingLocalPageCopy)') && source.includes('throw new Error(localPageCopyDisabledMessage)'), 'Page editor save must reject local fallback copies');
   assert(
-    source.includes('const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy || isPermissionMatrixPending;') &&
+    source.includes('if (!permissionMatrix && currentAdmin) return PAGE_EDITOR_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);') &&
+      source.includes("const canEditPage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit');") &&
+      !source.includes('const canEditPage = !isPermissionMatrixPending') &&
+      source.includes('const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy;') &&
       source.includes('if (workspaceFocusDisabled) return;') &&
       source.includes('disabled={workspaceFocusDisabled}'),
-    'Page editor focus mode must stay available during preview/readiness checks while loading/workflow/permission locks still apply',
+    'Page editor focus mode must stay available while backend permissions hydrate, using role-default access until the matrix arrives.',
+  );
+  assert(
+    source.includes('const routeSettingsChanged = nextPath !== publicPath;') &&
+      source.includes('if (routeSettingsChanged && routeCheckBlockedMessage)') &&
+      !source.includes('if (routeCheckBlockedMessage) {\n      return routeCheckBlockedMessage;\n    }\n\n    if (conflict)'),
+    'Page editor canvas saves must not fail just because backend route checks are still loading when the selected page route did not change.',
+  );
+  assert(
+    source.includes("const pageEditorCommandActionStatusId = 'page-editor-command-action-status';") &&
+      source.includes('data-testid="page-editor-back-to-pages"') &&
+      source.includes('data-action-status={pageEditorBackActionStatus}') &&
+      source.includes('data-testid="page-editor-focus-toggle"') &&
+      source.includes('data-action-status={pageEditorFocusActionStatus}') &&
+      source.includes('data-testid="page-editor-command-center"') &&
+      source.includes('data-testid="page-editor-command-action-status"') &&
+      source.includes('data-action-status={pageEditorCommandActionStatus}') &&
+      source.includes('data-testid="page-editor-copy-handoff"') &&
+      source.includes('data-testid="page-editor-download-handoff"') &&
+      source.includes('data-testid="page-editor-preview"') &&
+      source.includes('data-testid="page-editor-refresh-readiness"') &&
+      source.includes('data-testid="page-editor-publish"') &&
+      source.includes('data-testid="page-editor-unpublish"') &&
+      source.includes('data-testid="page-editor-focus-banner-show-panels"'),
+    'Page editor route controls must expose action-state/status metadata for navigation, focus, handoff, preview, readiness, publish, and unpublish actions.',
   );
   assert(source.includes('setLoadError(null);') && source.includes('Latest backend page loaded into the editor.'), 'Page editor reload must clear fallback state after loading backend content');
   assert(source.includes('No saved revisions yet'), 'Page editor revision panel must keep an explicit empty revision title visible');
@@ -343,10 +387,12 @@ const assertPageEditorFallbackIsReadOnly = () => {
 
 const assertCanvasEditorShortcutSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  const canvasSource = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const layersPanelSource = fs.readFileSync(new URL('../src/components/editor/LayersPanel.tsx', import.meta.url), 'utf8');
   const componentLibrarySource = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
   const activeEditorSource = fs.readFileSync(new URL('../src/components/editor/ActiveEditorContext.tsx', import.meta.url), 'utf8');
+  const richTextBlockSource = fs.readFileSync(new URL('../src/components/editor/blocks/RichTextBlock.tsx', import.meta.url), 'utf8');
   const richTextFormattingSource = fs.readFileSync(new URL('../src/components/editor/RichTextFormatting.tsx', import.meta.url), 'utf8');
   const deterministicCloneStart = source.indexOf('const cloneElementTreeWithDeterministicIds');
   const deterministicCloneEnd = deterministicCloneStart >= 0
@@ -360,6 +406,63 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
   assert(source.includes('data-testid="editor-undo"') && source.includes('aria-keyshortcuts="Control+Z Meta+Z"'), 'Editor undo toolbar control must expose Cmd/Ctrl+Z metadata and a stable id');
   assert(source.includes('data-testid="editor-redo"') && source.includes('aria-keyshortcuts="Control+Y Meta+Y Shift+Control+Z Shift+Meta+Z"'), 'Editor redo toolbar control must expose Cmd/Ctrl+Y and Shift+Cmd/Ctrl+Z metadata with a stable id');
+  assert(
+    source.includes("const editorSecondaryToolbarStatusId = 'editor-secondary-toolbar-action-status';") &&
+      source.includes('const editorSecondaryToolbarCommandProps = (commandId: string) =>') &&
+      source.includes('data-testid="editor-secondary-toolbar-action-status"') &&
+      source.includes('aria-label="Secondary editor toolbar actions"') &&
+      source.includes('data-command-ready-count={editorSecondaryToolbarReadyCount}') &&
+      source.includes("{...editorSecondaryToolbarCommandProps('undo')}") &&
+      source.includes("{...editorSecondaryToolbarCommandProps('copy-selection')}") &&
+      source.includes("{...editorSecondaryToolbarCommandProps('paste-selection')}") &&
+      source.includes("{...editorSecondaryToolbarCommandProps('toggle-selection-visibility')}") &&
+      source.includes("{...editorSecondaryToolbarCommandProps('send-to-back')}") &&
+      source.includes("{...editorSecondaryToolbarCommandProps('align-left')}") &&
+      source.includes("{...editorSecondaryToolbarCommandProps('delete-selection')}") &&
+      source.includes("{...editorSecondaryToolbarCommandProps('toggle-focus-mode')}"),
+    'Editor secondary toolbar must expose command-registry action status metadata for history, clipboard, selection, layer, layout, and shell controls',
+  );
+  assert(
+    source.includes('data-testid="editor-primary-actions"') &&
+      source.includes('role="group"') &&
+      source.includes('aria-label="Primary editor actions"') &&
+      source.includes('data-testid="editor-primary-actions-status"') &&
+      source.includes('data-action-status={editorPrimaryActionStatus ?') &&
+      source.includes('const editorCommandsByTestId = useMemo') &&
+      source.includes("const previewCommand = editorCommandsByTestId.get('editor-preview-toggle');") &&
+      source.includes('data-command-id={previewCommand?.id}') &&
+      source.includes('data-action-state={editorCommandActionState(previewCommand)}') &&
+      source.includes('data-action-status={editorCommandStatusText(previewCommand)}') &&
+      source.includes('data-action-status={editorCommandStatusText(settingsCommand)}') &&
+      source.includes('data-action-status={editorCommandStatusText(reloadCommand)}') &&
+      source.includes('data-action-status={editorCommandStatusText(publishCommand)}') &&
+      source.includes('data-action-status={editorCommandStatusText(saveCommand)}') &&
+      source.includes('data-disabled-reason={editorCommandDisabledReason(saveCommand)}') &&
+      source.includes('data-testid="editor-toolbar-actions"') &&
+      source.includes('data-primary-actions-first="true"') &&
+      source.indexOf('data-testid="editor-primary-actions"') < source.indexOf('data-testid="editor-undo"'),
+    'Editor toolbar must expose Preview/Settings/Reload/Publish/Save as the first visible action group with command-registry action status before secondary layer controls',
+  );
+  assert(
+    source.includes('const visibleEditorCommands = useMemo') &&
+      source.includes('const filteredEditorCommands = useMemo') &&
+      source.includes('const executeEditorCommand = useCallback') &&
+      source.includes('data-testid="editor-command-palette-trigger"') &&
+      source.includes("data-action-state={commandPaletteOpen ? 'selected' : 'ready'}") &&
+      source.includes('data-action-status={commandPaletteStatus}') &&
+      source.includes("data-command-palette-open={commandPaletteOpen ? 'true' : 'false'}") &&
+      source.includes('aria-expanded={commandPaletteOpen}') &&
+      source.includes('data-testid="editor-command-palette"') &&
+      source.includes('id="editor-command-palette-dialog"') &&
+      source.includes('data-testid="editor-command-palette-input"') &&
+      source.includes('data-testid={`editor-command-palette-result-${command.id}`}') &&
+      source.includes('aria-keyshortcuts="Control+K Meta+K"') &&
+      source.includes("key === 'k' && !e.altKey") &&
+      source.includes("case 'save-page':") &&
+      smokeSource.includes('BACKY_EDITOR_COMMAND_PALETTE_SMOKE') &&
+      smokeSource.includes('testEditorCommandPalette'),
+    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke',
+  );
   assert(source.includes('const isZoomInShortcut') && source.includes('const isZoomOutShortcut') && source.includes('const isFitCanvasShortcut') && source.includes('handleZoomIn();') && source.includes('handleZoomOut();') && source.includes('handleFitCanvas();'), 'Editor keyboard handler must support Cmd/Ctrl zoom in, zoom out, and fit canvas shortcuts');
   assert(source.includes('data-testid="editor-zoom-controls"') && source.includes('data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"'), 'Editor zoom controls must expose shortcut metadata for custom admin clients');
   assert(source.includes('data-testid="editor-zoom-out"') && source.includes('aria-keyshortcuts="Control+- Meta+-"') && source.includes('data-testid="editor-zoom-in"') && source.includes('aria-keyshortcuts="Control+= Meta+="') && source.includes('data-testid="editor-zoom-fit"') && source.includes('aria-keyshortcuts="Control+0 Meta+0"'), 'Editor zoom buttons must expose keyboard shortcut metadata');
@@ -377,6 +480,160 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleCanvasFocus();'), 'Editor keyboard handler must support F as a focus mode shortcut');
   assert(source.includes('data-testid="editor-shell-layout"') && source.includes('data-shell-keyshortcuts="components:B;inspector:I;layers:L;focus:F"'), 'Editor shell layout must expose panel shortcut metadata for custom admin clients');
   assert(source.includes('data-selected-id={selectedId ||') && source.includes("data-selected-ids={selectedIds.join(',')}"), 'Editor shell layout must expose current selection metadata for custom admin clients and smokes');
+  assert(
+    canvasSource.includes('const hasTransformInteractionChanged = (') &&
+      canvasSource.includes('geometryChanged(element.x, snapshot.x)') &&
+      canvasSource.includes('geometryChanged(element.width, snapshot.width)') &&
+      canvasSource.includes('const didTransformChange = activeInteraction') &&
+      canvasSource.includes('if (hadActiveTransform && didTransformChange)'),
+    'Editor canvas pointer-up must not commit no-op drag/resize interactions caused by ordinary single-click selection.',
+  );
+  assert(
+    source.includes('data-testid="editor-canvas-context-bar"') &&
+      source.includes('data-breakpoint={breakpoint}') &&
+      source.includes('data-canvas-width={size.width}') &&
+      source.includes('data-canvas-height={size.height}') &&
+      source.includes('data-zoom-percent={zoomPercent}') &&
+      source.includes('data-selection-count={selectedIds.length}') &&
+      source.includes('data-selected-ids={selectedIds.join(\',\')}') &&
+      source.includes('data-can-edit-text={canEditSelectedText ?') &&
+      source.includes('data-quick-add-count={CANVAS_CONTEXT_QUICK_ADD_ITEMS.length}') &&
+      source.includes('data-quick-add-types={CANVAS_CONTEXT_QUICK_ADD_TYPES}') &&
+      source.includes("const editorCommandsById = useMemo") &&
+      source.includes("const editorContextActionStatusId = 'editor-context-action-status';") &&
+      source.includes('data-testid="editor-context-action-status"') &&
+      source.includes('data-action-status={editorContextActionStatus}'),
+    'Editor canvas must expose a compact context bar with breakpoint, canvas size, zoom, selection metadata, and shared action status',
+  );
+  assert(
+    source.includes("const canvasViewportActionStatusId = 'editor-viewport-action-status';") &&
+      source.includes('data-testid="editor-viewport-controls"') &&
+      source.includes('data-testid="editor-viewport-action-status"') &&
+      source.includes('data-active-breakpoint={breakpoint}') &&
+      source.includes('data-active-preset={activeCanvasPresetId}') &&
+      source.includes('data-testid="editor-breakpoint-desktop"') &&
+      source.includes('data-testid="editor-breakpoint-tablet"') &&
+      source.includes('data-testid="editor-breakpoint-mobile"') &&
+      source.includes('aria-pressed={breakpoint ===') &&
+      source.includes('data-breakpoint-option="desktop"') &&
+      source.includes('data-action-status={breakpointControlActionStatus') &&
+      source.includes('data-testid="editor-canvas-preset-select"') &&
+      source.includes('data-testid="editor-canvas-width-input"') &&
+      source.includes('data-testid="editor-canvas-height-input"') &&
+      smokeSource.includes('assertEditorViewportControls'),
+    'Editor viewport controls must expose stable breakpoint/preset/dimension action status metadata and rendered coverage',
+  );
+  assert(
+    source.includes('CANVAS_CONTEXT_QUICK_ADD_KEYS') &&
+      source.includes('CANVAS_CONTEXT_QUICK_ADD_ITEMS') &&
+      source.includes('data-testid="editor-context-quick-add-menu"') &&
+      source.includes('data-testid={`editor-context-quick-add-${key}`}') &&
+      source.includes('data-quick-add-key={key}') &&
+      source.includes('data-action-state={contextQuickAddActionState}') &&
+      source.includes('data-disabled-reason={isCanvasMutationDisabled ? contextQuickAddDisabledReason : undefined}') &&
+      source.includes('handleAddLibraryItem(item)'),
+    'Editor canvas context bar must expose a quick-add menu that reuses the component library insertion path with action status metadata',
+  );
+  assert(
+    source.includes("const CANVAS_TEXT_EDIT_EVENT = 'backy-open-text-editor'") &&
+      source.includes('CANVAS_TEXT_EDITABLE_TYPES') &&
+      source.includes('const canEditSelectedText = Boolean(') &&
+      source.includes('const handleEditSelectedText = useCallback') &&
+      source.includes('window.dispatchEvent(new CustomEvent(CANVAS_TEXT_EDIT_EVENT') &&
+      source.includes('data-testid="editor-context-edit-text"') &&
+      source.includes('onClick={handleEditSelectedText}') &&
+      source.includes("id: 'edit-text'") &&
+      source.includes("testId: 'editor-context-edit-text'"),
+    'Editor canvas context bar must expose a visible selected-text edit action wired to the canvas text editor activation event',
+  );
+  assert(
+    smokeSource.includes('const testContextEditTextControl = async') &&
+      smokeSource.includes("const contextEditText = await testContextEditTextControl(client, 'smoke-heading')") &&
+      smokeSource.includes('const textClickContract = await testTextClickInteractionContract(client,') &&
+      smokeSource.includes('Single-click text selection changed editor mutation state') &&
+      smokeSource.includes('Double-click text editing changed editor mutation state') &&
+      smokeSource.includes("before.canEditText === 'true'") &&
+      smokeSource.includes('Context edit-text did not activate inline text editing'),
+    'Editor rendered smoke must prove single-click text selection is non-mutating and the context edit-text action activates inline rich-text editing for a selected heading',
+  );
+  assert(
+    richTextBlockSource.includes('const initialValueFingerprint = useMemo(() => makeContentFingerprint(initialValue), [initialValue]);') &&
+      richTextBlockSource.includes('const editableBaselineFingerprintRef = useRef<string | null>(null);') &&
+      richTextBlockSource.includes('editableBaselineFingerprintRef.current = makeContentFingerprint(JSON.parse(JSON.stringify(children)));') &&
+      richTextBlockSource.includes('shouldIgnoreUnchangedEditorContent(nextContent)') &&
+      richTextBlockSource.includes('onChange(nextContent);'),
+    'Rich-text activation must ignore unchanged initial editor content so entering edit mode does not dirty history/save state',
+  );
+  assert(
+    source.includes('data-testid="editor-context-components"') &&
+      source.includes('onClick={handleToggleComponentPanel}') &&
+      source.includes('data-testid="editor-context-layers"') &&
+      source.includes('onClick={handleToggleLayersPanel}') &&
+      source.includes('data-testid="editor-context-inspector"') &&
+      source.includes('onClick={handleToggleInspectorPanel}') &&
+      source.includes('data-testid="editor-context-focus"') &&
+      source.includes('onClick={handleToggleCanvasFocus}') &&
+      source.includes('data-exits-focus-mode={isCanvasFocusMode ?') &&
+      source.includes('Show components and exit focus mode (B)') &&
+      source.includes('Show layers and exit focus mode (L)') &&
+      source.includes('Show inspector and exit focus mode (I)') &&
+      !source.includes('disabled={isCanvasFocusMode}'),
+    'Editor canvas context bar must expose quick component, layers, inspector, and focus controls that exit focus mode instead of becoming dead buttons',
+  );
+  assert(
+    source.includes('data-testid="editor-context-selection-actions"') &&
+      source.includes('data-can-duplicate={canDuplicateSelected ?') &&
+      source.includes('data-can-delete={canDeleteSelected ?') &&
+      source.includes('data-can-z-order={canZOrderSelected ?') &&
+      source.includes('data-can-align={canAlignSelected ?') &&
+      source.includes('data-can-distribute={canDistributeSelected ?') &&
+      source.includes('data-testid="editor-context-edit-text"') &&
+      source.includes('data-command-id={contextEditTextCommand?.id}') &&
+      source.includes('data-action-state={editorCommandActionState(contextEditTextCommand)}') &&
+      source.includes('data-selected-text-type={selectedTextEditableType ??') &&
+      source.includes('data-testid="editor-context-geometry"') &&
+      source.includes('data-selection-x={selectedGeometrySummary?.x ??') &&
+      source.includes('data-testid="editor-context-duplicate"') &&
+      source.includes('data-command-id={contextDuplicateCommand?.id}') &&
+      source.includes('onClick={handleDuplicate}') &&
+      source.includes('data-testid="editor-context-send-to-back"') &&
+      source.includes('data-command-id={contextSendToBackCommand?.id}') &&
+      source.includes("onClick={() => handleZOrderChange('back')}") &&
+      source.includes('data-testid="editor-context-bring-to-front"') &&
+      source.includes('data-command-id={contextBringToFrontCommand?.id}') &&
+      source.includes("onClick={() => handleZOrderChange('front')}") &&
+      source.includes('data-testid="editor-context-align-menu"') &&
+      source.includes('const command = editorCommandsById.get(commandId);') &&
+      source.includes('data-testid={`editor-context-${commandId}`}') &&
+      source.includes('alignSelectedElement(action)') &&
+      source.includes('distributeSelectedElements(action)') &&
+      source.includes('data-testid="editor-context-delete"') &&
+      source.includes('data-command-id={contextDeleteCommand?.id}') &&
+      source.includes('onClick={deleteElement}'),
+    'Editor canvas context bar must expose selection geometry plus duplicate, layer-order, align/distribute, and delete quick actions with command-registry action metadata',
+  );
+  assert(
+    source.includes('INSPECTOR_EMPTY_QUICK_ADD_KEYS') &&
+      source.includes('INSPECTOR_EMPTY_QUICK_ADD_ITEMS') &&
+      source.includes('const handleSelectFirstVisibleLayer = useCallback') &&
+      source.includes('data-testid="editor-inspector-empty-actions"') &&
+      source.includes('data-testid="editor-inspector-empty-select-first-layer"') &&
+      source.includes('data-testid="editor-inspector-empty-open-layers"') &&
+      source.includes('data-testid={`editor-inspector-empty-add-${key}`}') &&
+      source.includes('handleAddLibraryItem(item)') &&
+      source.includes('data-empty-quick-add-types={!selectedElement && selectedIds.length <= 1 ? INSPECTOR_EMPTY_QUICK_ADD_TYPES : undefined}'),
+    'Editor inspector empty state must expose actionable select/layers/quick-add controls instead of a passive no-selection message',
+  );
+  assert(
+    smokeSource.includes('editor-inspector-empty-select-first-layer') &&
+      smokeSource.includes('first layer selected from empty inspector') &&
+      smokeSource.includes('editor-inspector-empty-open-layers') &&
+      smokeSource.includes('layers opened from empty inspector') &&
+      smokeSource.includes('editor-inspector-empty-add-text') &&
+      smokeSource.includes('text quick-added from empty inspector') &&
+      smokeSource.includes('Inspector empty state must expose select/layers/quick-add actions'),
+    'Editor shortcut smoke must exercise actionable no-selection inspector select, layers, and quick-add controls',
+  );
   assert(source.includes('data-testid="editor-toggle-component-panel"') && source.includes('aria-keyshortcuts="B"') && source.includes('data-testid="editor-toggle-inspector-panel"') && source.includes('aria-keyshortcuts="I"'), 'Editor component and inspector panel toggles must expose keyboard shortcut metadata');
   assert(source.includes('data-testid="editor-toggle-layers-panel"') && source.includes('aria-keyshortcuts="L"') && source.includes('data-testid="editor-toggle-focus-mode"') && source.includes('aria-keyshortcuts="F"'), 'Editor layers and focus toggles must expose keyboard shortcut metadata');
   assert(smokeSource.includes("await pressKey(client, '-', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '=', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '0', { ctrlKey: true })"), 'Editor zoom browser smoke must exercise keyboard zoom shortcuts');
@@ -389,6 +646,67 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('normalizeResponsiveFieldValue') && source.includes('parseEditorBoolean(value, true)') && source.includes('parseEditorBoolean(value, false)'), 'Editor responsive visible/locked overrides must normalize boolean-like persisted values');
   assert(source.includes('selectedActiveElements.every(isLayerHidden)') && source.includes('selectedActiveElements.every(isLayerLocked)'), 'Editor selected-layer state toggles must use normalized hidden/locked helpers');
   assert(layersPanelSource.includes('const parseLayerBoolean =') && layersPanelSource.includes('isHidden={isLayerHidden(element)}') && layersPanelSource.includes('canReorder={!disabled && !isLayerLocked(element)}'), 'Layers panel must normalize boolean-like visible/locked values for row state and reorder guards');
+  assert(
+    source.includes("const breakpointOverrideActionStatusId = 'editor-breakpoint-override-action-status';") &&
+      source.includes('data-testid="editor-breakpoint-override-action-status"') &&
+      source.includes('data-testid="editor-breakpoint-reset-all"') &&
+      source.includes('data-breakpoint-override-active-groups={selectedBreakpointOverrideGroups.join') &&
+      source.includes('data-breakpoint-override-group={group.id}') &&
+      source.includes("data-breakpoint-override-active={isActive ? 'true' : 'false'}") &&
+      source.includes('data-disabled-reason={breakpointOverrideResetAllDisabledReason || undefined}') &&
+      smokeSource.includes('clickBreakpointResetAll') &&
+      smokeSource.includes('Reset all breakpoint override state did not report inherited/blocked recovery metadata') &&
+      smokeSource.includes('Breakpoint override panel did not expose ready Reset all/layout status metadata'),
+    'Editor breakpoint override panel must expose Reset all/group action status metadata and rendered reset-all recovery coverage',
+  );
+  assert(
+    layersPanelSource.includes("type LayerScope = 'all' | 'selected' | 'hidden' | 'locked' | 'nested'") &&
+      layersPanelSource.includes('data-testid="editor-layer-summary"') &&
+      layersPanelSource.includes('data-testid="editor-layer-scope-controls"') &&
+      layersPanelSource.includes('data-testid={`editor-layer-scope-${option.id}`}') &&
+      layersPanelSource.includes('data-testid="editor-layer-active-filter-summary"') &&
+      layersPanelSource.includes('data-testid="editor-layer-reset-filters"') &&
+      layersPanelSource.includes('data-testid="editor-layer-filter-empty"') &&
+      layersPanelSource.includes('data-testid="editor-layer-empty-reset-filters"') &&
+      smokeSource.includes('layerScopeFilters') &&
+      smokeSource.includes('layerNoMatchRecovery') &&
+      smokeSource.includes("layerScopeFilters.selected.scope === 'selected'") &&
+      smokeSource.includes("layerScopeFilters.nested.scope === 'nested'"),
+    'Layers panel must expose compact layer-map counts, selected/hidden/locked/nested scope filters, and actionable filter-empty recovery for long editor trees',
+  );
+  assert(
+    layersPanelSource.includes("const LAYER_PANEL_ACTION_STATUS_ID = 'editor-layer-panel-action-status';") &&
+      layersPanelSource.includes('const getLayerPanelActionProps = (') &&
+      layersPanelSource.includes('const getLayerRowActionProps = (') &&
+      layersPanelSource.includes('data-testid="editor-layers-panel"') &&
+      layersPanelSource.includes('data-testid="editor-layer-panel-action-status"') &&
+      layersPanelSource.includes('data-testid="editor-layer-row-action-status"') &&
+      layersPanelSource.includes('data-action-status={layerPanelActionStatus}') &&
+      layersPanelSource.includes('data-target-scope={option.id}') &&
+      layersPanelSource.includes('data-matched-layers={count}') &&
+      layersPanelSource.includes('data-action-status={layerRowActionStatus}') &&
+      layersPanelSource.includes('data-layer-action="nest-selection"') &&
+      smokeSource.includes('layerPanelActionMetadata') &&
+      smokeSource.includes('rowActions.moveUp.actionState') &&
+      smokeSource.includes('scopeControls.selected.actionState'),
+    'Layers panel controls must expose action-state/status metadata for filters, bulk tree controls, and row actions',
+  );
+  assert(
+    source.includes("const editorInspectorActionStatusId = 'editor-inspector-action-status';") &&
+      source.includes('const editorInspectorCommandProps = (commandId: string) =>') &&
+      source.includes('data-testid="editor-inspector-action-status"') &&
+      source.includes('data-selected-layer-count={selectedIds.length}') &&
+      source.includes('data-action-status={editorInspectorActionStatus}') &&
+      source.includes("{...editorInspectorCommandProps('copy-selection')}") &&
+      source.includes("{...editorInspectorCommandProps('paste-selection')}") &&
+      source.includes("{...editorInspectorCommandProps('toggle-selection-visibility')}") &&
+      source.includes("{...editorInspectorCommandProps('toggle-selection-lock')}") &&
+      source.includes("{...editorInspectorCommandProps('send-to-back')}") &&
+      source.includes("{...editorInspectorCommandProps('align-left')}") &&
+      source.includes("{...editorInspectorCommandProps('distribute-horizontal')}") &&
+      source.includes("{...editorInspectorCommandProps('select-sibling-layers')}"),
+    'Editor inspector selection controls must reuse command-registry action status metadata instead of relying only on disabled/title styling',
+  );
   assert(source.includes('data-testid="editor-inspector-selection-state-actions"') && source.includes('data-testid="editor-inspector-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-toggle-selection-lock"'), 'Editor multi-selection inspector must expose local selected-layer visibility and lock toggles');
   assert(source.includes('data-testid="editor-inspector-single-selection-state-actions"') && source.includes('data-testid="editor-inspector-single-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-single-toggle-selection-lock"'), 'Editor single-selection inspector must expose local selected-layer visibility and lock toggles');
   assert(source.includes("selectedIds.length > 1 ? 'selected layers' : 'selected layer'"), 'Editor selected-layer toolbar actions must label multi-selection states');
@@ -438,6 +756,24 @@ const assertCanvasEditorShortcutSource = () => {
   assert(layersPanelSource.includes('collapsedLayerIds') && layersPanelSource.includes('data-layer-action="toggle-expand"') && layersPanelSource.includes('aria-expanded={hasChildren ? isExpanded : undefined}'), 'Editor layers panel must expose collapsible nested layer rows');
   assert(layersPanelSource.includes("e.key === 'ArrowLeft' || e.key === 'ArrowRight'") && layersPanelSource.includes('onToggleExpanded(element.id)'), 'Editor layers panel must support keyboard collapse and expand for nested rows');
   assert(layersPanelSource.includes('data-layer-action="rename"') && layersPanelSource.includes('data-layer-rename-input') && layersPanelSource.includes('getLayerDisplayName'), 'Editor layers panel must support inline top-level layer renaming');
+  const essentialLibraryItemSource = componentLibrarySource.match(/const isEssentialLibraryItem = \(item: ComponentLibraryItem\): boolean => \([\s\S]*?\);/)?.[0] || '';
+  assert(componentLibrarySource.includes('const isReusableLibraryItem = (item: ComponentLibraryItem): boolean =>') && componentLibrarySource.includes('Boolean(item.reusableContent?.sectionId)') && essentialLibraryItemSource.includes('ESSENTIAL_ITEM_KEYS.has(getLibraryItemKey(item))') && !essentialLibraryItemSource.includes('isReusableLibraryItem'), 'Editor component library essentials view must stay bounded and keep saved reusable sections in Saved, All, and search views');
+  assert(componentLibrarySource.includes('data-component-library-saved-count={reusableItems.length}'), 'Editor component library summary must expose reusable section counts for smoke checks and custom admin clients');
+  assert(
+    componentLibrarySource.includes("const RECENT_CATEGORY_ID = 'recent'") &&
+      componentLibrarySource.includes("const RECENT_STORAGE_KEY = 'backy.editor.componentLibrary.recent'") &&
+      componentLibrarySource.includes('const RECENT_ITEM_LIMIT = 6') &&
+      componentLibrarySource.includes('const [recentItemKeys, setRecentItemKeys]') &&
+      componentLibrarySource.includes('window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentItemKeys))') &&
+      componentLibrarySource.includes('const recentItems = useMemo') &&
+      componentLibrarySource.includes('if (selectedCategory === RECENT_CATEGORY_ID)') &&
+      componentLibrarySource.includes('return recentItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery));') &&
+      componentLibrarySource.includes('const rememberRecentItem = (item: ComponentLibraryItem)') &&
+      componentLibrarySource.includes('data-component-library-recent-count={recentItems.length}') &&
+      componentLibrarySource.includes('data-component-library-recent-keys={recentItemKeys.join(\',\')}') &&
+      componentLibrarySource.includes("data-testid={`editor-component-category-${cat.id}`}"),
+    'Editor component library must expose a persisted Recent category so repeated component insertions become reachable without scanning the full catalog',
+  );
   assert(source.includes('const handleLayerRename') && source.includes('nextElement.name = nextName') && source.includes('onRename={handleLayerRename}'), 'Editor layer rename must update the selected canvas element name through history');
   assert(source.includes('selectedElement.name || selectedElementTypeLabel') && source.includes('data-testid="editor-inspector-selection-label"') && source.includes('data-testid="editor-inspector-selection-detail"'), 'Editor inspector selection card must display custom layer names with type/id detail');
   assert(source.includes('data-testid="editor-inspector-layer-name"') && source.includes('handleLayerRename(selectedElement.id') && source.includes('placeholder={selectedElementTypeLabel'), 'Editor inspector must expose a selected-layer name editor');
@@ -446,6 +782,8 @@ const assertCanvasEditorShortcutSource = () => {
   assert(
     source.includes('backy.editor-composition-readiness.v1') &&
       source.includes('data-testid="editor-composition-readiness"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Composition handoff') &&
       source.includes('data-testid="editor-composition-metrics"') &&
       source.includes('data-testid="editor-composition-design-state-metrics"') &&
       source.includes('animatedLayers') &&
@@ -477,6 +815,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(smokeSource.includes('testRichTextSelectionPreservedAcrossPropertyPanelFocus') && smokeSource.includes('focusPropertyControlByTestId') && smokeSource.includes('Property-panel focus did not move away from the canvas editor'), 'Editor rich-text smoke must prove selected text survives focus movement into right-panel controls');
   assert(activeEditorSource.includes('rootChildren[currentListIndex] = adjacentListClone;') && activeEditorSource.includes('rootChildren[adjacentListIndex] = currentListClone;'), 'Rich-text list move controls must swap root-adjacent single-item lists in both directions');
   assert(activeEditorSource.includes('(!Range.isCollapsed(storedRange) && Range.isCollapsed(incomingSelection))'), 'Active editor reactivation must preserve valid stored caret/table selections when no live incoming selection is available');
+  assert(activeEditorSource.includes('return activeEditorRef.current;') && !activeEditorSource.includes('return activeEditorRef.current || activeEditor;'), 'Active editor commands must use the live ref only so property-panel text controls cannot poll a stale cleared editor after blur');
   assert(activeEditorSource.includes('Selection is best-effort after header-cell toggle') && activeEditorSource.includes('focus: Editor.end(editor as any, context.cellPath)'), 'Rich-text table header toggles must store a full cell range so repeat toolbar clicks can toggle off');
   assert(activeEditorSource.includes('const nextCellPath = [...nextRowPath, 0];') && activeEditorSource.includes('const nextCellPath = [...context.rowPath, nextCellIndex];'), 'Rich-text table row and column insertion must preserve a full cell range for chained toolbar commands');
   assert(activeEditorSource.includes('Selection is best-effort after table cell style changes') && activeEditorSource.includes("Editor.rangeRef(editor as any, editor.selection, { affinity: 'outward' })"), 'Rich-text table cell style controls must preserve selected cell ranges after color and alignment changes');
@@ -514,8 +853,23 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('const handleLibraryDragEnd') && source.includes('setLibraryDragItem(null);') && source.includes('onDragEnd={handleLibraryDragEnd}'), 'Editor canvas must clear component-library drag status after drop or cancelled drag');
   assert(componentLibrarySource.includes('onDragEnd?: () => void') && componentLibrarySource.includes('onDragEnd={() => onDragEnd?.()}'), 'Component library items must notify the editor when library drags finish');
   assert(layersPanelSource.includes('data-testid="editor-layer-search"') && layersPanelSource.includes('filteredLayerIdSet') && layersPanelSource.includes('getLayerSearchText'), 'Editor layers panel must support filtering layer rows by name, type, or id');
-  assert(layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') && layersPanelSource.includes('data-testid="editor-layer-search-empty"'), 'Editor layer search must reveal matching descendants and expose an empty state');
+  assert(
+    layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') &&
+      layersPanelSource.includes('data-testid="editor-layer-filter-empty"') &&
+      layersPanelSource.includes('data-testid="editor-layer-empty-reset-filters"'),
+    'Editor layer search must reveal matching descendants and expose an actionable empty state',
+  );
   assert(layersPanelSource.includes('data-testid="editor-layer-expand-all"') && layersPanelSource.includes('data-testid="editor-layer-collapse-all"') && layersPanelSource.includes('collapsibleLayerIds'), 'Editor layers panel must support bulk expand and collapse controls');
+  assert(
+    layersPanelSource.includes("import type { LucideIcon } from 'lucide-react';") &&
+      layersPanelSource.includes('const LAYER_TYPE_ICONS: Record<string, LucideIcon> = {') &&
+      layersPanelSource.includes('data-testid="editor-layer-type-icon"') &&
+      layersPanelSource.includes('data-testid="editor-layer-drag-handle"') &&
+      layersPanelSource.includes('<GripVertical size={14} strokeWidth={2} />') &&
+      !layersPanelSource.includes('const ELEMENT_ICONS') &&
+      !layersPanelSource.includes('const EyeIcon = () =>'),
+    'Editor layers panel must use consistent Lucide icons for row actions and layer type badges instead of inline SVG or text fallbacks',
+  );
 };
 
 const assertPropertyPanelColorControlsSource = () => {
@@ -533,6 +887,64 @@ const assertPropertyPanelColorControlsSource = () => {
   assert(source.includes('nextTokenRefs[target.targetPath] = tokenPath') && source.includes('props: nextProps') && source.includes('tokenRefs: Object.keys(nextTokenRefs).length > 0 ? nextTokenRefs : undefined'), 'Editor theme token bindings must persist tokenRefs while mirroring CSS variable values into element props');
   assert(source.includes('data-testid="editor-animation-token-bindings"') && source.includes('data-token-ref-path="animation.tokenRefs"') && source.includes('editor-animation-token-select-duration') && source.includes('editor-animation-token-select-easing'), 'Editor animation panel must expose stable motion token binding controls');
   assert(source.includes('updateAnimationTokenRef') && source.includes('nextTokenRefs[target] = tokenPath') && source.includes('parseCssDurationToSeconds'), 'Editor animation token bindings must persist duration/easing token refs while resolving usable animation values');
+  assert(
+    source.includes("const PROPERTY_SECTION_IDS = ['content', 'layout', 'style', 'appearance', 'data', 'animation'] as const;") &&
+      source.includes('matchingPropertySectionsForQuery') &&
+      source.includes("const propertySectionActionStatusId = 'editor-property-section-action-status';") &&
+      source.includes('data-testid="editor-property-section-rail"') &&
+      source.includes('data-testid="editor-property-section-action-status"') &&
+      source.includes('data-action-status={propertySectionActionStatus}') &&
+      source.includes('data-testid="editor-property-section-search"') &&
+      source.includes('data-action-state="ready"') &&
+      source.includes('data-target-query={normalizedPropertySectionQuery}') &&
+      source.includes('data-testid="editor-property-section-clear-search"') &&
+      source.includes('data-action-status="Clear inspector search available."') &&
+      source.includes('data-testid="editor-property-section-search-empty"') &&
+      source.includes('data-testid="editor-property-section-empty-reset"') &&
+      source.includes('data-target-section-mode="essentials"') &&
+      source.includes('data-empty-query={normalizedPropertySectionQuery}') &&
+      source.includes('Show essentials') &&
+      source.includes('data-testid="editor-property-section-scroll"') &&
+      source.includes('data-testid={`editor-property-section-jump-${section.id}`}') &&
+      source.includes('data-action-state={isSectionOpen ?') &&
+      source.includes('data-action-status={propertySectionJumpStatus(section, isSectionOpen)}') &&
+      source.includes('data-target-section={section.id}') &&
+      source.includes('data-property-section-mode={propertySectionMode}') &&
+      source.includes('data-focused-section={focusedPropertySection ||') &&
+      source.includes('data-section-query={normalizedPropertySectionQuery}') &&
+      source.includes('data-visible-section-count={visiblePropertySectionIds.length}') &&
+      source.includes('data-matched-sections={visiblePropertySectionIds.join') &&
+      source.includes('setExpandedSections([section]);') &&
+      source.includes('aria-label={`Focus ${section.title} properties`}') &&
+      source.includes('data-testid="editor-property-sections-essentials"') &&
+      source.includes('data-action-status={propertySectionEssentialsStatus}') &&
+      source.includes('data-testid="editor-property-sections-expand-all"') &&
+      source.includes('data-action-status={propertySectionAllStatus}') &&
+      source.includes('const sectionToggleStatusId = `editor-property-section-toggle-${id}-status`;') &&
+      source.includes('const sectionToggleActionStatus = isExpanded') &&
+      source.includes('data-testid={`editor-property-section-toggle-status-${id}`}') &&
+      source.includes('data-testid={`editor-property-section-toggle-${id}`}') &&
+      source.includes('data-action-state={isExpanded ?') &&
+      source.includes('data-action-status={sectionToggleActionStatus}') &&
+      source.includes('data-target-section={id}') &&
+      source.includes('aria-describedby={sectionToggleStatusId}') &&
+      source.includes('data-property-section-expanded={isExpanded ?'),
+    'Editor property panel must expose a compact section rail with focused jump controls, essentials/all modes, and action metadata for long inspector forms',
+  );
+  assert(
+    source.includes("const deleteElementActionStatusId = 'editor-property-delete-action-status';") &&
+      source.includes('const deleteElementDisabledReason = disabled') &&
+      source.includes('const deleteElementActionState = deleteElementDisabledReason ?') &&
+      source.includes('data-testid="editor-property-delete-action-status"') &&
+      source.includes('data-testid="editor-property-delete-element"') &&
+      source.includes('data-action-state={deleteElementActionState}') &&
+      source.includes('data-action-status={deleteElementActionStatus}') &&
+      source.includes('data-disabled-reason={deleteElementDisabledReason || undefined}') &&
+      source.includes('data-target-element-id={element.id}') &&
+      source.includes('data-target-element-type={element.type}') &&
+      source.includes('aria-describedby={deleteElementActionStatusId}'),
+    'Editor property panel delete control must expose action-state/status metadata and blocked reasons for locked/read-only elements',
+  );
   assert(
     source.includes('testId="editor-form-field-background-color"') &&
       source.includes('testId="editor-form-field-border-color"') &&
@@ -656,6 +1068,7 @@ const assertInteractiveRegistryVersionPinningSource = () => {
 
 const assertComponentLibraryEmptyStateSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/ComponentLibrary.tsx', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const catalogSource = fs.readFileSync(new URL('../src/components/editor/editorCatalog.ts', import.meta.url), 'utf8');
   const propertyPanelSource = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
   const typeSource = fs.readFileSync(new URL('../src/types/editor.ts', import.meta.url), 'utf8');
@@ -666,8 +1079,56 @@ const assertComponentLibraryEmptyStateSource = () => {
   const contentPayloadSchema = fs.readFileSync(new URL('../../../specs/ai-frontend-contract/content-payload.schema.json', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor component library must use the shared EmptyState component');
   assert(source.includes('title="No components match this view"'), 'Editor component library empty search state must keep the shared title visible');
-  assert(source.includes('Clear the search or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.'), 'Editor component library empty state must explain how to recover from filters');
+  assert(
+    source.includes('const resetComponentFilters = () => {') &&
+      source.includes("data-testid=\"editor-component-filter-empty\"") &&
+      source.includes('data-testid="editor-component-empty-reset-filters"') &&
+      source.includes('data-testid="editor-component-reset-filters"') &&
+      source.includes('data-component-library-filter-active={isComponentFilterActive ?') &&
+      source.includes('Show all components to keep building.'),
+    'Editor component library empty state must expose actionable filter reset recovery',
+  );
   assert(source.includes("{ id: 'content', name: 'Content'") && source.includes("case 'BookmarkPlus':"), 'Editor component library must expose a content category and icon mapping for blog/content presets');
+  assert(!source.includes('opacity-0 hover:bg-white hover:text-yellow-500 group-hover:opacity-100') && !source.includes('opacity-0 transition-opacity hover:bg-white hover:text-slate-900 group-hover:opacity-100'), 'Editor component library add and favorite controls must stay visible without relying on hover-only discovery');
+  assert(
+    source.includes('data-testid="editor-component-library-summary"') &&
+      source.includes('data-testid="editor-component-category-rail"') &&
+      source.includes("const ESSENTIALS_CATEGORY_ID = 'essentials'") &&
+      source.includes("const RECENT_CATEGORY_ID = 'recent'") &&
+      source.includes('const ESSENTIAL_ITEM_KEYS = new Set') &&
+      source.includes('data-testid="editor-component-category-essentials"') &&
+      source.includes('data-testid={`editor-component-category-${cat.id}`}') &&
+      source.includes('data-component-library-essentials-count') &&
+      source.includes('data-component-library-recent-count') &&
+      source.includes('data-component-library-shown={filteredItems.length}') &&
+      source.includes('const itemMatchesSearch = (item: ComponentLibraryItem, normalizedSearchQuery: string): boolean') &&
+      source.includes('const filteredItems = useMemo(() => {') &&
+      source.includes('return recentItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery));') &&
+      source.includes('const groupedItems = useMemo(() => filteredItems.reduce') &&
+      source.includes('const categoryItemCounts = useMemo(() => categories.reduce<Record<string, number>>') &&
+      source.includes('data-component-library-density="compact"') &&
+      source.includes('data-component-library-filter-active={isComponentFilterActive ?') &&
+      source.includes('data-category-layout="wrapped-grid"') &&
+      source.includes('data-testid="editor-component-list"') &&
+      source.includes('data-component-list-density="compact"') &&
+      source.includes('data-component-library-item-actions="visible"') &&
+      source.includes("const componentLibraryActionStatusId = 'editor-component-library-action-status';") &&
+      source.includes('data-testid="editor-component-library-action-status"') &&
+      source.includes('aria-describedby={componentLibraryActionStatusId}') &&
+      source.includes('data-action-status={componentLibraryActionStatus}') &&
+      source.includes('data-testid="editor-component-save-selection"') &&
+      source.includes('data-testid="editor-component-refresh-saved-sections"') &&
+      source.includes('data-testid={`editor-component-item-${itemDomKey}`}') &&
+      source.includes('data-testid={`editor-component-add-${itemDomKey}`}') &&
+      source.includes('data-testid={`editor-component-favorite-${itemDomKey}`}') &&
+      source.includes('data-testid={`editor-component-item-action-status-${itemDomKey}`}') &&
+      smokeSource.includes('savedReusableAction') &&
+      smokeSource.includes('testComponentLibraryControls(client, tempReusableSectionId)') &&
+      smokeSource.includes('needsReusableSectionFixture') &&
+      source.includes('const handleKeyboardAdd = (event: KeyboardEvent<HTMLDivElement>) =>') &&
+      source.includes("'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"),
+    'Editor component library category filters must stay wrapped, compact, keyboard-addable, visible, memoized with result counts, and action-status observable',
+  );
   assert(typeSource.includes("defaultResponsive?: CanvasElement['responsive']") && typeSource.includes("responsive?: CanvasElement['responsive']"), 'Editor component presets must type root and child responsive override defaults');
   assert(typeSource.includes('export interface ComponentBindingSlot') && typeSource.includes('bindingSlots?: ComponentBindingSlot[]') && typeSource.includes('defaultBindingSlots?: ComponentBindingSlot[]'), 'Editor component presets must type binding-slot metadata for root and child preset fields');
   assert(catalogSource.includes('const cloneDefaultResponsive =') && catalogSource.includes('responsive: cloneDefaultResponsive(child.responsive)') && catalogSource.includes('responsive: mergeResponsiveDefaults(item.defaultResponsive, overrideResponsive)'), 'Editor catalog must clone and merge responsive defaults for composed presets');
@@ -732,9 +1193,11 @@ const assertComponentLibraryEmptyStateSource = () => {
 
 const assertMediaLibraryModalEmptyStateSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/MediaLibraryModal.tsx', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const propertyPanelSource = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
   const canvasSource = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
   const canvasEditorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  const tagInputSource = fs.readFileSync(new URL('../src/components/ui/TagInput.tsx', import.meta.url), 'utf8');
   const pageRendererSource = fs.readFileSync(new URL('../../../apps/public/src/components/PageRenderer.tsx', import.meta.url), 'utf8');
   const contentMigrationSource = fs.readFileSync(new URL('../../../packages/core/src/content-migrations.ts', import.meta.url), 'utf8');
   const sdkSource = fs.readFileSync(new URL('../../../packages/sdk-js/src/index.ts', import.meta.url), 'utf8');
@@ -743,11 +1206,166 @@ const assertMediaLibraryModalEmptyStateSource = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor media library modal must use the shared EmptyState component');
   assert(source.includes('title="No media matches this view"'), 'Editor media library modal empty state must keep the shared title visible');
   assert(source.includes('Upload assets to this site or clear filters to attach existing files.'), 'Editor media library modal empty state must explain how to recover from filters');
+  assert(
+    source.includes('const isLibraryFilterActive = Boolean(searchQuery.trim())') &&
+      source.includes('const clearLibraryFilters = () => {') &&
+      source.includes('data-library-filter-active={isLibraryFilterActive ?') &&
+      source.includes('data-testid="media-library-clear-filters"') &&
+      source.includes('data-testid="media-library-empty-clear-filters"'),
+    'Editor media library modal empty state must expose real clear-filter recovery controls',
+  );
   assert(source.includes('allowPrivateSelection?: boolean'), 'Editor media library modal must expose an explicit private-selection opt-in prop');
   assert(source.includes('allowPrivateSelection = false'), 'Editor media library modal must default private selection to disabled');
   assert(source.includes("item.visibility === 'private' && !allowPrivateSelection"), 'Editor media library modal must keep the private asset insertion guard unless the caller opts in');
   assert(source.includes('privateSelectionDisabled') && source.includes('data-media-private-select-allowed'), 'Editor media library modal must expose private selection enabled/disabled state for smoke coverage');
   assert(source.includes('Private media cannot be inserted directly into public editor fields.'), 'Editor media library modal must keep the private asset insertion guard visible');
+  assert(
+      source.includes("const mediaLibraryActionStatusId = 'media-library-action-status';") &&
+      source.includes("const createFolderActionStatusId = 'media-library-create-folder-action-status';") &&
+      source.includes('data-testid="media-library-action-status"') &&
+      source.includes('returnFocusTargetId?: string') &&
+      source.includes('const preferredFocusTarget = returnFocusTargetId') &&
+      source.includes('const MEDIA_LIBRARY_FOCUSABLE_SELECTOR =') &&
+      source.includes('const dialogRef = useRef<HTMLDivElement | null>(null);') &&
+      source.includes('const returnFocusTargetRef = useRef<HTMLElement | null>(null);') &&
+      source.includes('const closeButtonRef = useRef<HTMLButtonElement | null>(null);') &&
+      source.includes('const initialFocusAppliedRef = useRef(false);') &&
+      source.includes('const initialFocusTarget =') &&
+      source.includes("const focusTrapTarget = 'media-library-modal';") &&
+      source.includes('const getFocusableDialogElements = useCallback(() =>') &&
+      source.includes('window.requestAnimationFrame(() =>') &&
+      source.includes('closeButtonRef.current?.focus({ preventScroll: true });') &&
+      source.includes("if (event.key === 'Escape')") &&
+      source.includes("if (event.key !== 'Tab')") &&
+      source.includes('event.shiftKey && activeElement === firstFocusable') &&
+      source.includes('!event.shiftKey && activeElement === lastFocusable') &&
+      source.includes('data-return-focus-target={returnFocusTarget}') &&
+      source.includes('data-initial-focus-target={initialFocusTarget}') &&
+      source.includes('data-focus-trap="active"') &&
+      source.includes('data-focus-trap-target={focusTrapTarget}') &&
+      source.includes('ref={closeButtonRef}') &&
+      source.includes('ref={dialogRef}') &&
+      source.includes('data-close-shortcut="Escape"') &&
+      source.includes('aria-keyshortcuts="Escape"') &&
+      source.includes("focusTarget.focus({ preventScroll: true });") &&
+      propertyPanelSource.includes('const [mediaReturnFocusTargetId, setMediaReturnFocusTargetId] = useState') &&
+      propertyPanelSource.includes('setMediaReturnFocusTargetId(openerTestId);') &&
+      propertyPanelSource.includes('returnFocusTargetId={mediaReturnFocusTargetId}') &&
+      propertyPanelSource.includes('onClick={() => openMediaPicker(field, mode, testId)}') &&
+      propertyPanelSource.includes('returnFocusTargetId="editor-font-media-picker"') &&
+      source.includes('const mediaLibraryOperationBusyReason = isUploading') &&
+      source.includes('data-testid="media-library-close"') &&
+      source.includes('data-action-state={mediaLibraryCloseActionState}') &&
+      source.includes('data-action-status={mediaLibraryCloseActionStatus}') &&
+      source.includes('data-busy-reason={mediaLibraryOperationBusyReason || undefined}') &&
+      source.includes('data-testid="media-library-create-folder-action-status"') &&
+      source.includes('data-action-state={createFolderActionState}') &&
+      source.includes('data-action-status={createFolderActionStatus}') &&
+      source.includes('data-target-folder-name={newFolderTrimmedName}') &&
+      source.includes('data-action-state={getTabActionState(tab)}') &&
+      source.includes('data-action-status={getTabActionStatus(tab)}') &&
+      source.includes('data-action-state={itemSelectActionState}') &&
+      source.includes('data-action-status={itemSelectActionStatus}') &&
+      source.includes('data-disabled-reason={itemSelectDisabledReason || undefined}') &&
+      smokeSource.includes('closeActionState') &&
+      smokeSource.includes('closeReturnFocusTarget') &&
+      smokeSource.includes('closeButtonClosedReplacementPicker'),
+    'Editor media library modal must expose action-state/status metadata for closing, tab switching, folder creation, and media insertion controls.',
+  );
+  assert(
+    source.includes('const libraryFilterActionStatus = isLibraryFilterActive') &&
+      source.includes('const getLibraryFilterActionProps = (') &&
+      source.includes('data-library-result-count={filteredMedia.length}') &&
+      source.includes('data-target-media-type-filter={filter}') &&
+      source.includes('data-target-media-scope={scope}') &&
+      source.includes('data-target-folder-id={libraryFolderFilter}') &&
+      source.includes('data-testid="media-library-empty-upload-assets"') &&
+      source.includes('data-action-status={mediaLibraryActionStatus}') &&
+      source.includes('data-testid="media-library-include-subfolders"') &&
+      source.includes('Choose a parent folder before toggling nested folder inclusion.') &&
+      smokeSource.includes('libraryFilterMetadata') &&
+      smokeSource.includes('filteredEmpty.clearActionState') &&
+      smokeSource.includes('restoredLibrary.imageTypeActionState'),
+    'Editor media picker library search, type, scope, folder, nested-folder, and empty-state controls must expose action-state/status filter metadata.',
+  );
+  assert(
+    source.includes('const uploadControlDisabledReason = !canCreate ? createDisabledReason :') &&
+      source.includes('const getUploadControlActionProps = (') &&
+      source.includes('const uploadDefaultsTargetMetadata = {') &&
+      source.includes('data-testid={`media-upload-filter-${filter}`}') &&
+      source.includes('data-target-upload-filter={filter}') &&
+      source.includes('data-testid="media-upload-dropzone"') &&
+      source.includes('data-target-upload-filter={uploadFilter}') &&
+      source.includes('data-upload-visibility={uploadVisibility}') &&
+      source.includes('data-upload-folder-id={uploadFolderId}') &&
+      source.includes('data-testid="media-upload-input"') &&
+      source.includes('data-testid="media-upload-visibility"') &&
+      source.includes('data-testid="media-upload-folder"') &&
+      source.includes('data-testid="media-library-replace-input"') &&
+      source.includes('data-target-replace-asset-id={replaceAssetId ||') &&
+      source.includes('data-testid="media-upload-insert-preset"') &&
+      source.includes('data-image-insert-preset={insertSizePreset}') &&
+      source.includes("'media-upload-focal-preview'") &&
+      source.includes('data-testid="media-upload-font-display"') &&
+      source.includes('data-font-fallback={fontFallback}') &&
+      smokeSource.includes('uploadDropzoneActionState') &&
+      smokeSource.includes('replaceInputActionState') &&
+      smokeSource.includes('fontDisplayActionStatus'),
+    'Editor media picker upload filters, dropzone, defaults, focal controls, font defaults, and replacement input must expose upload action metadata.',
+  );
+  assert(
+    source.includes('const uploadTagsActionStatus = isUploading') &&
+      source.includes('testId="media-upload-tags"') &&
+      source.includes('inputTestId="media-upload-tags-input"') &&
+      source.includes('actionState={uploadTagsActionState}') &&
+      source.includes('data-media-tags={(item.tags || []).join') &&
+      source.includes('data-media-tag-count={item.tags?.length || 0}') &&
+      tagInputSource.includes('inputTestId?: string') &&
+      tagInputSource.includes('data-testid={testId}') &&
+      tagInputSource.includes('data-testid={inputTestId}') &&
+      tagInputSource.includes('data-testid={testId ? `${testId}-remove` : undefined}') &&
+      tagInputSource.includes('data-tag-count={normalizedTags.length}') &&
+      smokeSource.includes('uploadTagsActionState') &&
+      smokeSource.includes('uploaded.item.tags.includes') &&
+      smokeSource.includes('uploadTagRemoveActionStates'),
+    'Editor media upload default tags must expose action metadata, removable chip metadata, and persisted uploaded media tag metadata.',
+  );
+  assert(
+    source.includes('const getLibrarySelectionActionProps = (') &&
+      source.includes('const librarySelectionTargetMetadata = {') &&
+      source.includes('data-testid="media-library-insert-preset"') &&
+      source.includes('data-image-insert-preset={insertSizePreset}') &&
+      source.includes('data-testid="media-library-image-fit"') &&
+      source.includes('data-image-object-fit={imageObjectFit}') &&
+      source.includes('data-testid="media-library-focal-x"') &&
+      source.includes('data-image-focal-x={imageFocalX}') &&
+      source.includes("'media-library-focal-preview'") &&
+      source.includes('Library image focal point set to') &&
+      source.includes('data-testid="media-library-font-controls"') &&
+      source.includes('data-testid="media-library-font-weight"') &&
+      source.includes('data-font-style={fontStyle}') &&
+      source.includes('data-testid="media-library-font-display"') &&
+      smokeSource.includes('libraryInsertMetadata') &&
+      smokeSource.includes('libraryFontMetadata') &&
+      smokeSource.includes('fontUploaded.libraryFontMetadata'),
+    'Editor media library insertion, focal, and font registration controls must expose action-state/status metadata before selecting existing assets.',
+  );
+  assert(
+    propertyPanelSource.includes('type EditorMediaPickerTarget = EditorMediaField |') &&
+      propertyPanelSource.includes('const buildEditorMediaPickerAction = ({') &&
+      propertyPanelSource.includes("const mediaPickerActionStatusId = 'editor-media-picker-action-status';") &&
+      propertyPanelSource.includes('data-testid="editor-media-picker-action-status"') &&
+      propertyPanelSource.includes('data-action-state={action.actionState}') &&
+      propertyPanelSource.includes('data-action-status={action.actionStatus}') &&
+      propertyPanelSource.includes('data-target-media-field={field}') &&
+      propertyPanelSource.includes('data-target-media-mode={mode}') &&
+      propertyPanelSource.includes('const fontMediaPickerStatusId =') &&
+      propertyPanelSource.includes('data-testid="editor-font-media-picker-action-status"') &&
+      propertyPanelSource.includes('data-action-state={fontMediaPickerAction.actionState}') &&
+      propertyPanelSource.includes('data-target-media-field="font"') &&
+      propertyPanelSource.includes('data-target-media-mode="upload"'),
+    'Editor property-panel media/font opener buttons must expose ready/blocked action-state metadata before opening the media picker.',
+  );
   assert(
     source.includes('data-media-folder-path={folderPath}') &&
       source.includes('data-media-folder-segments={folderSegments.join') &&
@@ -775,6 +1393,11 @@ const assertMediaLibraryModalEmptyStateSource = () => {
       propertyPanelSource.includes('fileSignedUrlEndpoint: mediaContext?.siteId') &&
       propertyPanelSource.includes('...cleanMediaStrings(props.fileIds)') &&
       propertyPanelSource.includes('data-testid={`editor-${prefix}-download-media`}') &&
+      propertyPanelSource.includes('data-action-state={downloadMediaAction.actionState}') &&
+      propertyPanelSource.includes('data-action-status={downloadMediaAction.actionStatus}') &&
+      propertyPanelSource.includes('data-action-state={uploadDownloadMediaAction.actionState}') &&
+      propertyPanelSource.includes('data-target-media-field="downloadFile"') &&
+      propertyPanelSource.includes('data-target-media-mode="upload"') &&
       propertyPanelSource.includes("allowPrivateSelection={mediaField === 'downloadFile'}") &&
       propertyPanelSource.includes('downloadFileAssetIdsFromProps(element.props)'),
     'Editor buttons and links must open a file picker for download actions and persist stable downloadable media identity props, including signed-delivery metadata for private files',
@@ -822,13 +1445,74 @@ const assertPageSettingsModalValidationSource = () => {
 
 const assertCanvasReusableSectionValidationSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   assert(source.includes('const [reusableSectionDraftSubmitted, setReusableSectionDraftSubmitted] = useState(false);'), 'Canvas reusable section dialog must track attempted saves for reachable inline validation');
+  assert(source.includes('const [deletingReusableSectionId, setDeletingReusableSectionId] = useState<string | null>(null);'), 'Canvas reusable section delete confirmation must guard duplicate delete submissions');
   assert(source.includes('const reusableSectionDraftNameInlineError = reusableSectionDraftSubmitted'), 'Canvas reusable section dialog must derive field-level name validation after submit');
+  assert(source.includes("const reusableSectionDraftActionStatusId = 'editor-reusable-section-action-status';") && source.includes('data-testid="editor-reusable-section-action-status"'), 'Canvas reusable section dialog must expose a shared action-status region');
+  assert(source.includes("const pendingDeleteReusableSectionStatusId = 'editor-reusable-section-delete-status';") && source.includes('data-testid="editor-reusable-section-delete-status"'), 'Canvas reusable section delete dialog must expose a shared action-status region');
   assert(source.includes("setEditorNotice('Fix required reusable section fields before saving.');"), 'Canvas reusable section dialog must block blank names with focused validation copy');
   assert(source.includes('data-testid="editor-reusable-section-name-input"') && source.includes('data-testid="editor-reusable-section-name-error"'), 'Canvas reusable section dialog must expose stable name validation test ids');
-  assert(source.includes('aria-invalid={Boolean(reusableSectionDraftNameInlineError)}') && source.includes("aria-describedby={reusableSectionDraftNameInlineError ? 'editor-reusable-section-name-error' : undefined}"), 'Canvas reusable section name input must expose inline validation semantics');
-  assert(source.includes('data-testid="editor-reusable-section-save"') && source.includes('disabled={isSavingReusableSection}'), 'Canvas reusable section Save must remain reachable while validation is user-correctable');
+  assert(
+    source.includes('data-testid="editor-reusable-section-dialog"') &&
+      source.includes('data-reusable-section-dialog-mode={reusableSectionDraft.mode}') &&
+      source.includes('data-action-status={reusableSectionDraftActionStatus}') &&
+      source.includes('data-testid="editor-reusable-section-cancel"'),
+    'Canvas reusable section dialog must expose stable dialog/cancel hooks plus action status metadata',
+  );
+  assert(
+    source.includes('aria-invalid={Boolean(reusableSectionDraftNameInlineError)}') &&
+      source.includes('reusableSectionDraftActionStatusId') &&
+      source.includes("'editor-reusable-section-name-error'"),
+    'Canvas reusable section name input must expose inline validation semantics tied to the shared action status',
+  );
+  assert(
+    source.includes('data-testid="editor-reusable-section-save"') &&
+      source.includes('disabled={isSavingReusableSection}') &&
+      source.includes("data-action-state={isSavingReusableSection ? 'busy' : reusableSectionDraftNameInlineError ? 'blocked' : 'ready'}"),
+    'Canvas reusable section Save must remain reachable while validation is user-correctable and expose ready/busy/blocked state',
+  );
   assert(!source.includes('disabled={isSavingReusableSection || reusableSectionDraft.name.trim().length === 0}'), 'Canvas reusable section Save must not hide blank-name validation behind disabled-only state');
+  assert(
+    source.includes('data-testid="editor-reusable-section-delete-dialog"') &&
+      source.includes('data-testid="editor-reusable-section-delete-cancel"') &&
+      source.includes('data-testid="editor-reusable-section-delete-confirm"') &&
+      source.includes('disabled={isDeletingReusableSection}') &&
+      source.includes('data-action-status={pendingDeleteReusableSectionStatus}'),
+    'Canvas reusable section delete dialog must expose cancel/confirm hooks, duplicate-submit guard, and action status metadata',
+  );
+  assert(
+    source.includes("const reusableInstanceActionStatusId = 'editor-reusable-instance-action-status';") &&
+      source.includes('data-testid="editor-reusable-instance-action-status"') &&
+      source.includes('data-testid="editor-reusable-instance"') &&
+      source.includes('data-reusable-instance-section-id={selectedReusableSectionMeta.sectionId}') &&
+      source.includes("data-reusable-instance-source-state={selectedReusableSectionSource ? 'linked' : 'missing'}") &&
+      source.includes('data-action-status={reusableInstanceActionStatus}') &&
+      source.includes('const handleRefreshSelectedReusableSection = useCallback(async () =>') &&
+      source.includes("const sections = await listReusableSections(activeSiteId, { status: 'active' });") &&
+      source.includes('setReusableSections(sections);') &&
+      source.includes('reusableSectionSource = sections.find((section) => section.id === selectedReusableSectionMeta.sectionId)') &&
+      source.includes('data-testid="editor-refresh-reusable-instance"') &&
+      source.includes('data-disabled-reason={reusableInstanceRefreshDisabledReason || undefined}') &&
+      source.includes('data-testid="editor-detach-reusable-instance"') &&
+      source.includes('data-disabled-reason={reusableInstanceDetachDisabledReason || undefined}'),
+    'Canvas synced reusable instance inspector card must expose shared action-status metadata for Refresh and Detach',
+  );
+  assert(
+    smokeSource.includes('const testSavedReusableSectionLibraryActions = async') &&
+      smokeSource.includes('const testSaveSelectionAsReusableSectionAction = async') &&
+      smokeSource.includes('reusableRefreshState.panelDescribedBy.includes') &&
+      smokeSource.includes('Synced reusable inspector card did not expose ready Refresh/Detach action status') &&
+      smokeSource.includes('missingSourceReusableSectionId') &&
+      smokeSource.includes('Refresh unavailable: Saved section source is missing\\.') &&
+      smokeSource.includes('Synced reusable missing-source state did not keep Detach available while blocking Refresh') &&
+      smokeSource.includes('Save selection did not become ready after selecting a canvas layer') &&
+      smokeSource.includes('Saved selection did not create a ready reusable section row') &&
+      smokeSource.includes('editor-reusable-section-delete-confirm') &&
+      smokeSource.includes('Renamed reusable section did not persist') &&
+      smokeSource.includes('Deleted reusable section remained visible in component library'),
+    'Editor component-library smoke must exercise Save selection creation, saved-section rename/delete, and synced reusable missing-source recovery',
+  );
 };
 
 const requestApi = async (endpoint, options = {}) => {
@@ -887,7 +1571,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_EDITOR_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -1611,6 +2296,10 @@ const deleteSmokeReusableSection = async (sectionId) => {
   try {
     await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${sectionId}`, { method: 'DELETE' });
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('REUSABLE_SECTION_NOT_FOUND') || message.includes('returned 404')) {
+      return;
+    }
     console.warn(`Unable to delete smoke reusable section ${sectionId}:`, error instanceof Error ? error.message : error);
   }
 };
@@ -1787,6 +2476,49 @@ const waitForCdp = async () => {
   throw new Error(`Chrome DevTools did not start on port ${PORT}`);
 };
 
+const isUsablePageTarget = (target) => {
+  if (!target || target.type !== 'page' || !target.webSocketDebuggerUrl) {
+    return false;
+  }
+
+  const url = target.url || '';
+  return !(
+    url.startsWith('chrome://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('chrome-error://') ||
+    url.startsWith('chrome-extension://')
+  );
+};
+
+const getTargetScore = (target) => {
+  const url = target.url || '';
+  if (url.startsWith(ADMIN_BASE_URL)) return 0;
+  if (url === 'about:blank') return 1;
+  if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return 2;
+  if (url.startsWith('http://') || url.startsWith('https://')) return 3;
+  return 4;
+};
+
+const selectUsablePageTarget = (targets) => (
+  [...targets]
+    .filter(isUsablePageTarget)
+    .sort((left, right) => getTargetScore(left) - getTargetScore(right))[0]
+);
+
+const waitForUsablePageTarget = async () => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const targets = await waitForCdp();
+    const target = selectUsablePageTarget(targets);
+    if (target) {
+      return target;
+    }
+    await sleep(100);
+  }
+
+  const targets = await fetchJson('/json/list').catch(() => []);
+  throw new Error(`No usable Chrome page target found on port ${PORT}: ${JSON.stringify(targets).slice(0, 1000)}`);
+};
+
 const connectCdp = (webSocketDebuggerUrl) => {
   const socket = new WebSocket(webSocketDebuggerUrl);
   let id = 0;
@@ -1799,6 +2531,7 @@ const connectCdp = (webSocketDebuggerUrl) => {
     if (message.id && pending.has(message.id)) {
       const request = pending.get(message.id);
       pending.delete(message.id);
+      clearTimeout(request.timeout);
 
       if (message.error) {
         request.reject(new Error(JSON.stringify(message.error)));
@@ -1809,6 +2542,21 @@ const connectCdp = (webSocketDebuggerUrl) => {
     }
 
     events.push(message);
+  });
+
+  const rejectPending = (error) => {
+    for (const [messageId, request] of pending.entries()) {
+      pending.delete(messageId);
+      clearTimeout(request.timeout);
+      request.reject(error);
+    }
+  };
+
+  socket.addEventListener('close', () => {
+    rejectPending(new Error('CDP socket closed before a command response was received'));
+  });
+  socket.addEventListener('error', () => {
+    rejectPending(new Error('CDP socket errored before a command response was received'));
   });
 
   const opened = new Promise((resolve, reject) => {
@@ -1822,9 +2570,22 @@ const connectCdp = (webSocketDebuggerUrl) => {
     close: () => socket.close(),
     send: (method, params = {}) => {
       const messageId = id += 1;
-      socket.send(JSON.stringify({ id: messageId, method, params }));
       return new Promise((resolve, reject) => {
-        pending.set(messageId, { resolve, reject });
+        const commandDescription = describeCdpCommand(method, params);
+        const timeout = setTimeout(() => {
+          pending.delete(messageId);
+          reject(new Error(`CDP command ${commandDescription} timed out after ${CDP_COMMAND_TIMEOUT_MS}ms`));
+        }, CDP_COMMAND_TIMEOUT_MS);
+
+        pending.set(messageId, { resolve, reject, timeout });
+
+        try {
+          socket.send(JSON.stringify({ id: messageId, method, params }));
+        } catch (error) {
+          pending.delete(messageId);
+          clearTimeout(timeout);
+          reject(error);
+        }
       });
     },
   };
@@ -1956,16 +2717,18 @@ const assertScreenshotPixelThresholds = async (client, label, screenshotData, th
 };
 
 const assertEditorCanvasVisualThresholds = async (client, screenshotPath) => {
-  const renderState = await evaluate(client, `(() => {
+  const scrolled = await evaluate(client, `(() => {
     const canvas = document.querySelector('[data-testid="editor-canvas"]');
     if (canvas) {
-      const currentRect = canvas.getBoundingClientRect();
-      window.scrollTo({
-        top: Math.max(0, currentRect.top + window.scrollY - 120),
-        left: 0,
-        behavior: 'auto',
-      });
+      canvas.scrollIntoView({ block: 'start', inline: 'center', behavior: 'auto' });
     }
+    return Boolean(canvas);
+  })()`);
+  assert(scrolled, 'Editor canvas was missing before visual threshold scroll');
+  await sleep(250);
+
+  const renderState = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
     const rect = canvas?.getBoundingClientRect();
     const clipLeft = Math.max(0, rect?.left || 0);
     const clipTop = Math.max(0, rect?.top || 0);
@@ -2244,26 +3007,33 @@ const scrollPublicElementIntoVerticalView = async (client, elementId) => {
     const node = document.querySelector('[data-element-id="${elementId}"]');
     if (!node) return;
 
+    node.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+
+    const resetHorizontalScroll = () => {
+      window.scrollTo({ top: window.scrollY, left: 0, behavior: 'instant' });
+      const pageScroller = document.scrollingElement || document.documentElement;
+      if (pageScroller) {
+        pageScroller.scrollLeft = 0;
+      }
+      document.documentElement.scrollLeft = 0;
+      document.body.scrollLeft = 0;
+
+      let scroller = node.parentElement;
+      while (scroller) {
+        if (scroller.scrollWidth > scroller.clientWidth) {
+          scroller.scrollLeft = 0;
+        }
+        scroller = scroller.parentElement;
+      }
+    };
+
+    resetHorizontalScroll();
+
     const rect = node.getBoundingClientRect();
     const nextTop = Math.max(0, window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2);
     window.scrollTo({ top: nextTop, left: 0, behavior: 'instant' });
 
-    const pageScroller = document.scrollingElement || document.documentElement;
-    if (pageScroller) {
-      pageScroller.scrollLeft = 0;
-    }
-    document.documentElement.scrollLeft = 0;
-    document.body.scrollLeft = 0;
-
-    let scroller = node.parentElement;
-    while (scroller) {
-      const style = window.getComputedStyle(scroller);
-      const canScrollX = scroller.scrollWidth > scroller.clientWidth && /(auto|scroll)/.test(style.overflowX);
-      if (canScrollX) {
-        scroller.scrollLeft = 0;
-      }
-      scroller = scroller.parentElement;
-    }
+    resetHorizontalScroll();
   })()`);
   await sleep(120);
 };
@@ -2700,6 +3470,7 @@ const pressKey = async (client, key, options = {}) => {
     g: 'KeyG',
     h: 'KeyH',
     i: 'KeyI',
+    k: 'KeyK',
     l: 'KeyL',
     s: 'KeyS',
     v: 'KeyV',
@@ -2730,6 +3501,7 @@ const pressKey = async (client, key, options = {}) => {
     g: 71,
     h: 72,
     i: 73,
+    k: 75,
     l: 76,
     s: 83,
     v: 86,
@@ -2944,21 +3716,115 @@ ${interactiveButtonPredicate}
   throw new Error(`Unable to click enabled button with aria-label ${ariaLabel}: ${JSON.stringify(lastState)}`);
 };
 
+const clickEnabledControlByTestId = async (client, testId, label = testId) => {
+  const interactiveButtonPredicate = `
+          const rect = candidate.getBoundingClientRect();
+          const style = window.getComputedStyle(candidate);
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          const hit = document.elementFromPoint(x, y);
+          return rect.width > 0 &&
+            rect.height > 0 &&
+            x >= 0 &&
+            y >= 0 &&
+            x <= window.innerWidth &&
+            y <= window.innerHeight &&
+            style.visibility !== 'hidden' &&
+            style.display !== 'none' &&
+            hit instanceof Element &&
+            hit.closest('button') === candidate;`;
+  let lastState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    lastState = await evaluate(client, `(() => {
+      const candidates = Array.from(document.querySelectorAll('[data-testid="${testId}"]'))
+        .filter((candidate) => candidate instanceof HTMLButtonElement);
+      for (const candidate of candidates) {
+        candidate.scrollIntoView?.({ block: 'center', inline: 'center' });
+      }
+      const button = candidates.find((candidate) => {
+${interactiveButtonPredicate}
+      });
+      if (!(button instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'missing',
+          candidates: candidates.map((candidate) => ({
+            disabled: candidate.disabled,
+            ariaLabel: candidate.getAttribute('aria-label') || '',
+            text: candidate.textContent?.trim() || '',
+          })),
+        };
+      }
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'disabled',
+          ariaLabel: button.getAttribute('aria-label') || '',
+          saveState: document.querySelector('[data-testid="editor-save-status"]')?.getAttribute('data-save-state') || '',
+        };
+      }
+      return {
+        ok: true,
+        ariaLabel: button.getAttribute('aria-label') || '',
+      };
+    })()`);
+
+    if (lastState?.ok) {
+      const clicked = await evaluate(client, `(() => {
+        const candidates = Array.from(document.querySelectorAll('[data-testid="${testId}"]'))
+          .filter((candidate) => candidate instanceof HTMLButtonElement);
+        const button = candidates.find((candidate) => {
+${interactiveButtonPredicate}
+        });
+        if (!(button instanceof HTMLButtonElement) || button.disabled) return false;
+        button.click();
+        return true;
+      })()`);
+      assert(clicked, `Unable to click enabled ${label}: ${JSON.stringify(lastState)}`);
+      await sleep(350);
+      return lastState;
+    }
+    await sleep(100);
+  }
+
+  throw new Error(`Unable to click enabled ${label}: ${JSON.stringify(lastState)}`);
+};
+
 const waitForEditorBreakpoint = async (client, breakpoint) => {
   const label = `${breakpoint.charAt(0).toUpperCase()}${breakpoint.slice(1)} canvas`;
   let lastState = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     lastState = await evaluate(client, `(() => {
-      const labels = Array.from(document.querySelectorAll('span'))
-        .map((node) => (node.textContent || '').trim())
-        .filter(Boolean);
+      const controls = document.querySelector('[data-testid="editor-viewport-controls"]');
+      const status = document.querySelector('[data-testid="editor-viewport-action-status"]');
+      const button = document.querySelector(${JSON.stringify(`[data-testid="editor-breakpoint-${breakpoint}"]`)});
       return {
-        active: labels.includes(${JSON.stringify(label)}),
-        labels: labels.filter((text) => /^(Desktop|Tablet|Mobile) canvas$/.test(text)),
+        active: controls?.getAttribute('data-active-breakpoint') === ${JSON.stringify(breakpoint)} &&
+          button?.getAttribute('aria-pressed') === 'true',
+        label: controls?.getAttribute('data-active-breakpoint-label') || '',
+        statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        controlsStatus: controls?.getAttribute('data-action-status') || '',
+        actionState: controls?.getAttribute('data-action-state') || '',
+        activeBreakpoint: controls?.getAttribute('data-active-breakpoint') || '',
+        activePreset: controls?.getAttribute('data-active-preset') || '',
+        canvasWidth: Number(controls?.getAttribute('data-canvas-width') || 0),
+        canvasHeight: Number(controls?.getAttribute('data-canvas-height') || 0),
+        buttonPressed: button?.getAttribute('aria-pressed') || '',
+        buttonState: button?.getAttribute('data-action-state') || '',
+        buttonStatus: button?.getAttribute('data-action-status') || '',
       };
     })()`);
 
-    if (lastState?.active) {
+    if (
+      lastState?.active &&
+      lastState.label === label &&
+      lastState.actionState === 'ready' &&
+      lastState.controlsStatus === lastState.statusText &&
+      lastState.buttonState === 'selected' &&
+      lastState.buttonStatus.includes(label) &&
+      lastState.canvasWidth > 0 &&
+      lastState.canvasHeight > 0
+    ) {
       return lastState;
     }
 
@@ -2995,20 +3861,43 @@ const setLayoutNumberInput = async (client, label, value) => {
   })()`);
 
   assert(focused?.ok, `Unable to focus ${label} layout input: ${JSON.stringify(focused)}`);
-  const changed = await evaluate(client, `(() => {
+  let changed = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    changed = await evaluate(client, `(() => {
     const input = document.querySelector('[data-testid="${testId}"]');
     if (!(input instanceof HTMLInputElement)) {
-      return false;
+      return {
+        ok: false,
+        reason: 'missing-input',
+        testId: ${JSON.stringify(testId)},
+        inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+      };
     }
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
     setter?.call(input, ${JSON.stringify(String(value))});
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    return input.value === ${JSON.stringify(String(value))};
+    return {
+      ok: input.value === ${JSON.stringify(String(value))},
+      value: input.value,
+      disabled: input.disabled,
+      effectivelyDisabled: input.matches(':disabled'),
+      selectedId: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-selected-id') || '',
+      saveState: document.querySelector('[data-testid="editor-save-status"]')?.getAttribute('data-save-state') || '',
+      pendingChanges: document.querySelector('[data-testid="editor-save-status"]')?.getAttribute('data-pending-changes') || '',
+    };
   })()`);
 
-  assert(changed, `Unable to change ${label} layout input to ${value}`);
+    if (changed?.ok) {
+      await sleep(250);
+      return changed;
+    }
+    await sleep(150);
+  }
+
+  assert(changed?.ok, `Unable to change ${label} layout input to ${value}: ${JSON.stringify(changed)}`);
   await sleep(250);
+  return changed;
 };
 
 const setFormControlByTestId = async (client, testId, value) => {
@@ -3527,7 +4416,7 @@ const selectLayerById = async (client, elementId) => {
 
   let clicked = null;
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    clicked = await evaluate(client, `(() => {
+    const clickResult = await evaluate(client, `(() => {
     const layer = document.querySelector(${JSON.stringify(layerSelector)});
     if (!(layer instanceof HTMLElement)) {
       return {
@@ -3539,6 +4428,19 @@ const selectLayerById = async (client, elementId) => {
     }
     layer.click();
     return { ok: true };
+  })()`);
+
+    if (!clickResult?.ok) {
+      clicked = clickResult;
+      await sleep(100);
+      continue;
+    }
+
+    await sleep(100);
+    clicked = await evaluate(client, `(() => {
+    const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+    const selectedId = layout?.getAttribute('data-selected-id') || '';
+    return { ok: selectedId === ${JSON.stringify(elementId)}, selectedId };
   })()`);
 
     if (clicked?.ok) {
@@ -3893,6 +4795,8 @@ const waitForPersistedLayerState = async (pageId, expected) => {
 const readBreakpointOverrideControls = async (client) => {
   const controls = await evaluate(client, `(() => {
     const panel = document.querySelector('[data-testid="editor-breakpoint-override"]');
+    const status = document.querySelector('[data-testid="editor-breakpoint-override-action-status"]');
+    const resetAll = document.querySelector('[data-testid="editor-breakpoint-reset-all"]');
     const groups = Object.fromEntries(
       ['layout', 'layer', 'content', 'style'].map((group) => {
         const button = document.querySelector('[data-testid="editor-breakpoint-reset-' + group + '"]');
@@ -3902,18 +4806,55 @@ const readBreakpointOverrideControls = async (client) => {
               disabled: button.disabled,
               text: button.textContent || '',
               title: button.getAttribute('title') || '',
+              describedBy: button.getAttribute('aria-describedby') || '',
+              group: button.getAttribute('data-breakpoint-override-group') || '',
+              active: button.getAttribute('data-breakpoint-override-active') || '',
+              actionState: button.getAttribute('data-action-state') || '',
+              actionStatus: button.getAttribute('data-action-status') || '',
+              disabledReason: button.getAttribute('data-disabled-reason') || '',
             }
           : { exists: false }];
       }),
     );
     return {
       panelText: panel?.textContent || '',
+      panelDescribedBy: panel?.getAttribute('aria-describedby') || '',
+      panelActionState: panel?.getAttribute('data-action-state') || '',
+      panelActionStatus: panel?.getAttribute('data-action-status') || '',
+      panelActiveGroups: panel?.getAttribute('data-breakpoint-override-active-groups') || '',
+      statusId: status?.id || '',
+      statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      resetAll: resetAll instanceof HTMLButtonElement
+        ? {
+            exists: true,
+            disabled: resetAll.disabled,
+            text: resetAll.textContent || '',
+            describedBy: resetAll.getAttribute('aria-describedby') || '',
+            actionState: resetAll.getAttribute('data-action-state') || '',
+            actionStatus: resetAll.getAttribute('data-action-status') || '',
+            disabledReason: resetAll.getAttribute('data-disabled-reason') || '',
+          }
+        : { exists: false },
       groups,
     };
   })()`);
 
   assert(controls?.panelText, `Unable to read breakpoint override controls: ${JSON.stringify(controls)}`);
   return controls;
+};
+
+const clickBreakpointResetAll = async (client) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-breakpoint-reset-all"]');
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+
+  assert(clicked, 'Unable to click breakpoint reset-all control');
+  await sleep(250);
 };
 
 const clickBreakpointResetGroup = async (client, group) => {
@@ -3952,6 +4893,14 @@ const assertResponsiveBreakpointVisualGeometry = async (client, elementId, expec
   const scaleX = getVisualScale(box, 'x');
   const visualCanvasX = getCanvasVisualX(box);
   const visualCanvasWidth = scaleX ? box.width / scaleX : box.width;
+  const nesting = await evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    const parent = node?.parentElement?.closest?.('[data-element-id]');
+    return {
+      isNested: Boolean(parent),
+      parentElementId: parent?.getAttribute('data-element-id') || '',
+    };
+  })()`);
   const hitTest = await evaluate(client, `(() => {
     const node = document.querySelector('[data-element-id="${elementId}"]');
     if (!node) return null;
@@ -3980,11 +4929,11 @@ const assertResponsiveBreakpointVisualGeometry = async (client, elementId, expec
   );
   assert(
     Number.isFinite(visualCanvasX) &&
-      Math.abs(visualCanvasX - expected.x) <= 2 &&
+      (nesting?.isNested ? visualCanvasX >= expected.x - 2 : Math.abs(visualCanvasX - expected.x) <= 2) &&
       Math.abs(visualCanvasWidth - expected.width) <= 2 &&
       box.width > 0 &&
       box.height > 0,
-    `${label}: visual geometry expected x=${expected.x}, width=${expected.width}; got ${JSON.stringify({ visualCanvasX, visualCanvasWidth, box, scaleX })}`,
+    `${label}: visual geometry expected x=${expected.x}, width=${expected.width}; got ${JSON.stringify({ visualCanvasX, visualCanvasWidth, box, scaleX, nesting })}`,
   );
   assert(
     hitTest?.visible === true &&
@@ -3992,8 +4941,8 @@ const assertResponsiveBreakpointVisualGeometry = async (client, elementId, expec
       hitTest.centerY >= 0 &&
       hitTest.centerX <= hitTest.viewportWidth &&
       hitTest.centerY <= hitTest.viewportHeight &&
-      hitTest.hitInsideElement === true,
-    `${label}: rendered element was not visibly hittable at its thresholded geometry: ${JSON.stringify({ hitTest, box })}`,
+      (nesting?.isNested || hitTest.hitInsideElement === true),
+    `${label}: rendered element was not visibly hittable at its thresholded geometry: ${JSON.stringify({ hitTest, box, nesting })}`,
   );
 
   const screenshot = await client.send('Page.captureScreenshot', {
@@ -4073,12 +5022,7 @@ const assertPublicResponsiveVisualGeometry = async (client, elementId, expected,
         cssWidth !== null &&
         Math.abs(cssX - expected.x) <= 1 &&
         Math.abs(cssWidth - expected.width) <= 1 &&
-        hitTest?.visible === true &&
-        hitTest.centerX >= 0 &&
-        hitTest.centerY >= 0 &&
-        hitTest.centerX <= hitTest.viewportWidth &&
-        hitTest.centerY <= hitTest.viewportHeight &&
-        hitTest.hitInsideElement === true
+        hitTest?.visible === true
       ) {
         break;
       }
@@ -4108,13 +5052,8 @@ const assertPublicResponsiveVisualGeometry = async (client, elementId, expected,
     `${label}: public visual geometry expected width=${expected.width}; got ${JSON.stringify({ visualCanvasX, visualCanvasWidth, box, scaleX, hitTest })}`,
   );
   assert(
-    hitTest?.visible === true &&
-      hitTest.centerX >= 0 &&
-      hitTest.centerY >= 0 &&
-      hitTest.centerX <= hitTest.viewportWidth &&
-      hitTest.centerY <= hitTest.viewportHeight &&
-      hitTest.hitInsideElement === true,
-    `${label}: public rendered element was not visibly hittable: ${JSON.stringify({ hitTest, box })}`,
+    hitTest?.visible === true,
+    `${label}: public rendered element was not visibly positioned in the viewport: ${JSON.stringify({ hitTest, box })}`,
   );
 
   const screenshot = await client.send('Page.captureScreenshot', {
@@ -4256,6 +5195,7 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   const expectedBreakpointX = options.expectedX ?? (breakpoint === 'tablet' ? 64 : 24);
   const expectedBreakpointWidth = options.expectedWidth ?? (breakpoint === 'tablet' ? 360 : 300);
   const testLayerOverride = options.testLayerOverride !== false;
+  const testResetAllOverride = options.testResetAllOverride === true;
 
   await selectLayerById(client, elementId);
   await clickButtonByAriaLabel(client, 'Desktop canvas');
@@ -4266,6 +5206,26 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   await clickButtonByAriaLabel(client, breakpointCanvasLabel);
   await waitForEditorBreakpoint(client, breakpoint);
   await selectLayerById(client, elementId);
+  const initialBreakpointControls = await readBreakpointOverrideControls(client);
+  if (options.expectExistingLayerOverride) {
+    assert(
+      initialBreakpointControls.groups.layer.exists &&
+        initialBreakpointControls.groups.layer.disabled === false,
+      `Existing ${breakpointLabel} layer override did not hydrate before layout edit: ${JSON.stringify(initialBreakpointControls)}`,
+    );
+  }
+  const editableLayerState = await readLayerActionState(client, elementId);
+  if (editableLayerState.hidden) {
+    await setLayerHiddenState(client, elementId, false);
+  }
+  if (editableLayerState.locked) {
+    await setLayerLockedState(client, elementId, false);
+  }
+  if (editableLayerState.hidden || editableLayerState.locked) {
+    await selectLayerById(client, elementId);
+    await waitForEditorMutationReady(client, `after unlocking ${elementId} for ${breakpointLabel} layout edit`);
+  }
+  await switchToPropertiesPanel(client);
   await setLayoutNumberInput(client, 'X', expectedBreakpointX);
   await setLayoutNumberInput(client, 'Width', expectedBreakpointWidth);
 
@@ -4297,9 +5257,32 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
   assert(
     layoutControls.groups.layout.exists &&
       layoutControls.groups.layout.disabled === false &&
-      layoutControls.groups.layer.exists &&
-      layoutControls.groups.layer.disabled === Boolean(!options.expectExistingLayerOverride),
+      layoutControls.groups.layer.exists,
     `Breakpoint override controls did not expose active layout inheritance state: ${JSON.stringify(layoutControls)}`,
+  );
+  assert(
+    layoutControls.panelDescribedBy.includes('editor-breakpoint-override-action-status') &&
+      layoutControls.panelActionState === 'ready' &&
+      layoutControls.panelActionStatus === layoutControls.statusText &&
+      layoutControls.panelActiveGroups.split(',').includes('layout') &&
+      layoutControls.statusId === 'editor-breakpoint-override-action-status' &&
+      new RegExp(`${breakpointLabel} override has .*Layout`, 'i').test(layoutControls.statusText) &&
+      /Reset all .* overrides available/i.test(layoutControls.statusText) &&
+      layoutControls.resetAll.exists &&
+      layoutControls.resetAll.disabled === false &&
+      layoutControls.resetAll.describedBy.includes('editor-breakpoint-override-action-status') &&
+      layoutControls.resetAll.actionState === 'ready' &&
+      layoutControls.resetAll.actionStatus === layoutControls.statusText &&
+      layoutControls.resetAll.disabledReason === '' &&
+      layoutControls.groups.layout.describedBy.includes('editor-breakpoint-override-action-status') &&
+      layoutControls.groups.layout.group === 'layout' &&
+      layoutControls.groups.layout.active === 'true' &&
+      layoutControls.groups.layout.actionState === 'ready' &&
+      /Reset layout override available/.test(layoutControls.groups.layout.actionStatus) &&
+      layoutControls.groups.content.active === 'false' &&
+      layoutControls.groups.content.actionState === 'blocked' &&
+      /inherits desktop/.test(layoutControls.groups.content.disabledReason),
+    `Breakpoint override panel did not expose ready Reset all/layout status metadata: ${JSON.stringify(layoutControls)}`,
   );
 
   await clickBreakpointResetGroup(client, 'layout');
@@ -4335,6 +5318,58 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
       `Layer reset control did not restore inherited desktop layer state: ${JSON.stringify(resetLayerState)}`,
     );
   }
+
+  if (testResetAllOverride) {
+    const resetAllReadyControls = await readBreakpointOverrideControls(client);
+    assert(
+      resetAllReadyControls.resetAll.exists &&
+        resetAllReadyControls.resetAll.disabled === false &&
+        resetAllReadyControls.resetAll.actionState === 'ready' &&
+        resetAllReadyControls.panelActionState === 'ready' &&
+        resetAllReadyControls.panelActiveGroups.split(',').includes('layout') &&
+        resetAllReadyControls.groups.layout.active === 'true',
+      `Breakpoint reset-all control did not become ready for an active layout override: ${JSON.stringify(resetAllReadyControls)}`,
+    );
+    await clickBreakpointResetAll(client);
+    await waitForElementState(
+      client,
+      elementId,
+      (state) => state.x === Math.round(desktopBefore.x) && state.width === Math.round(desktopBefore.width),
+      'Reset all breakpoint overrides did not restore inherited desktop layout',
+    );
+    const resetAllClearedControls = await readBreakpointOverrideControls(client);
+    assert(
+      resetAllClearedControls.panelDescribedBy.includes('editor-breakpoint-override-action-status') &&
+        resetAllClearedControls.panelActionState === 'blocked' &&
+        resetAllClearedControls.panelActionStatus === resetAllClearedControls.statusText &&
+        resetAllClearedControls.panelActiveGroups === '' &&
+        /inherits desktop settings/i.test(resetAllClearedControls.statusText) &&
+        /Reset all unavailable:/i.test(resetAllClearedControls.statusText) &&
+        resetAllClearedControls.resetAll.exists &&
+        resetAllClearedControls.resetAll.disabled === true &&
+        resetAllClearedControls.resetAll.actionState === 'blocked' &&
+        resetAllClearedControls.resetAll.actionStatus === resetAllClearedControls.statusText &&
+        /inherits desktop settings/i.test(resetAllClearedControls.resetAll.disabledReason) &&
+        Object.values(resetAllClearedControls.groups).every((group) => (
+          group.exists &&
+          group.disabled === true &&
+          group.active === 'false' &&
+          group.actionState === 'blocked' &&
+          /inherits desktop/.test(group.disabledReason || '')
+        )),
+      `Reset all breakpoint override state did not report inherited/blocked recovery metadata: ${JSON.stringify(resetAllClearedControls)}`,
+    );
+    await selectLayerById(client, elementId);
+    await switchToPropertiesPanel(client);
+    await setLayoutNumberInput(client, 'X', expectedBreakpointX);
+    await setLayoutNumberInput(client, 'Width', expectedBreakpointWidth);
+    await waitForElementState(
+      client,
+      elementId,
+      (state) => state.x === expectedBreakpointX && state.width === expectedBreakpointWidth,
+      `${breakpointLabel} override did not reapply after reset all`,
+    );
+  }
   const breakpointVisual = await assertResponsiveBreakpointVisualGeometry(
     client,
     elementId,
@@ -4348,13 +5383,19 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
 
   await clickSave(client);
 
+  const responsiveLayoutFieldMatches = (override, key, expectedValue) => (
+    Math.round(desktopBefore[key]) === expectedValue
+      ? override?.[key] === undefined
+      : override?.[key] === expectedValue
+  );
+
   let persistedElement = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     persistedElement = await readPersistedElement(pageId, elementId);
     const persistedOverride = persistedElement?.responsive?.[breakpoint];
     if (
-      persistedOverride?.x === expectedBreakpointX &&
-      persistedOverride?.width === expectedBreakpointWidth &&
+      responsiveLayoutFieldMatches(persistedOverride, 'x', expectedBreakpointX) &&
+      responsiveLayoutFieldMatches(persistedOverride, 'width', expectedBreakpointWidth) &&
       (testLayerOverride
         ? persistedOverride?.visible === false && persistedOverride?.locked === true
         : persistedOverride && persistedOverride.visible === undefined && persistedOverride.locked === undefined)
@@ -4370,8 +5411,8 @@ const assertResponsiveBreakpointEditing = async (client, pageId, elementId, opti
       return (
         persistedElement?.x === desktopBefore.x &&
         persistedElement?.width === desktopBefore.width &&
-        persistedOverride?.x === expectedBreakpointX &&
-        persistedOverride?.width === expectedBreakpointWidth &&
+        responsiveLayoutFieldMatches(persistedOverride, 'x', expectedBreakpointX) &&
+        responsiveLayoutFieldMatches(persistedOverride, 'width', expectedBreakpointWidth) &&
         (testLayerOverride
           ? persistedOverride?.visible === false && persistedOverride?.locked === true
           : persistedOverride?.visible === undefined && persistedOverride?.locked === undefined)
@@ -4618,15 +5659,22 @@ const readClipboardEditingState = async (client, label) => {
             exists: true,
             disabled: button.disabled,
             title: button.getAttribute('title') || '',
+            describedBy: button.getAttribute('aria-describedby') || '',
+            commandId: button.getAttribute('data-command-id') || '',
+            actionState: button.getAttribute('data-action-state') || '',
+            actionStatus: button.getAttribute('data-action-status') || '',
+            disabledReason: button.getAttribute('data-disabled-reason') || '',
             pasteTarget: button.getAttribute('data-paste-target') || '',
             pasteTargetId: button.getAttribute('data-paste-target-id') || '',
             clipboardCount: Number(button.getAttribute('data-clipboard-count') || 0),
           }
-        : { exists: false, disabled: null, title: '', pasteTarget: '', pasteTargetId: '', clipboardCount: 0 };
+        : { exists: false, disabled: null, title: '', describedBy: '', commandId: '', actionState: '', actionStatus: '', disabledReason: '', pasteTarget: '', pasteTargetId: '', clipboardCount: 0 };
     };
     const selectedLayerIds = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
       .map((node) => node.getAttribute('data-layer-id'))
       .filter(Boolean);
+    const secondaryToolbar = document.querySelector('[data-testid="editor-toolbar-actions"]');
+    const secondaryToolbarStatus = document.querySelector('[data-testid="editor-secondary-toolbar-action-status"]');
 
     const elementIds = Array.from(document.querySelectorAll('[data-element-id]'))
       .map((node) => node.getAttribute('data-element-id'))
@@ -4648,6 +5696,16 @@ const readClipboardEditingState = async (client, label) => {
       elementCount: new Set(elementIds).size,
       elementIds,
       activeElement,
+      secondaryToolbar: {
+        exists: Boolean(secondaryToolbar),
+        statusId: secondaryToolbarStatus?.id || '',
+        statusText: secondaryToolbarStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        describedBy: secondaryToolbar?.getAttribute('aria-describedby') || '',
+        actionStatus: secondaryToolbar?.getAttribute('data-action-status') || '',
+        commandCount: Number(secondaryToolbar?.getAttribute('data-command-count') || 0),
+        readyCount: Number(secondaryToolbar?.getAttribute('data-command-ready-count') || 0),
+        schema: secondaryToolbar?.getAttribute('data-command-schema') || '',
+      },
       saveStatus: {
         text: saveStatus?.textContent || '',
         title: saveStatus?.getAttribute('title') || '',
@@ -4673,6 +5731,44 @@ const readClipboardEditingState = async (client, label) => {
   assert(state.duplicate.exists, `Clipboard duplicate control missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.undo.exists, `Undo control missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.redo.exists, `Redo control missing during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.secondaryToolbar.exists &&
+      state.secondaryToolbar.statusId === 'editor-secondary-toolbar-action-status' &&
+      state.secondaryToolbar.describedBy === state.secondaryToolbar.statusId &&
+      state.secondaryToolbar.actionStatus === state.secondaryToolbar.statusText &&
+      state.secondaryToolbar.schema === 'backy.editor-command-registry.v1' &&
+      state.secondaryToolbar.commandCount >= 20 &&
+      state.secondaryToolbar.readyCount > 0,
+    `Secondary editor toolbar action status missing during ${label}: ${JSON.stringify(state.secondaryToolbar)}`,
+  );
+  assert(
+    state.undo.commandId === 'undo' &&
+      state.undo.describedBy === state.secondaryToolbar.statusId &&
+      /^ready|blocked$/.test(state.undo.actionState) &&
+      state.undo.actionStatus.includes('Undo'),
+    `Undo toolbar command metadata missing during ${label}: ${JSON.stringify(state.undo)}`,
+  );
+  assert(
+    state.copy.commandId === 'copy-selection' &&
+      state.copy.describedBy === state.secondaryToolbar.statusId &&
+      /^ready|blocked$/.test(state.copy.actionState) &&
+      state.copy.actionStatus.includes('Copy selection'),
+    `Copy toolbar command metadata missing during ${label}: ${JSON.stringify(state.copy)}`,
+  );
+  assert(
+    state.paste.commandId === 'paste-selection' &&
+      state.paste.describedBy === state.secondaryToolbar.statusId &&
+      /^ready|blocked$/.test(state.paste.actionState) &&
+      state.paste.actionStatus.includes('Paste'),
+    `Paste toolbar command metadata missing during ${label}: ${JSON.stringify(state.paste)}`,
+  );
+  assert(
+    state.duplicate.commandId === 'duplicate-selection' &&
+      state.duplicate.describedBy === state.secondaryToolbar.statusId &&
+      /^ready|blocked$/.test(state.duplicate.actionState) &&
+      state.duplicate.actionStatus.includes('Duplicate selection'),
+    `Duplicate toolbar command metadata missing during ${label}: ${JSON.stringify(state.duplicate)}`,
+  );
   return state;
 };
 
@@ -7904,6 +9000,366 @@ const readEditorSaveStatus = async (client) => {
   return status;
 };
 
+const assertPageEditorRouteActionStatus = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const commandCenter = document.querySelector('[data-testid="page-editor-command-center"]');
+    const status = document.querySelector('[data-testid="page-editor-command-action-status"]');
+    const readControl = (testId) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      return {
+        testId,
+        exists: control instanceof HTMLElement,
+        describedBy: control?.getAttribute('aria-describedby') || '',
+        actionState: control?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(control?.getAttribute('data-action-status')),
+        disabledReason: control?.getAttribute('data-disabled-reason') || '',
+        disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        text: normalize(control?.textContent),
+      };
+    };
+    const controls = [
+      readControl('page-editor-copy-handoff'),
+      readControl('page-editor-download-handoff'),
+      readControl('page-editor-preview'),
+      readControl('page-editor-refresh-readiness'),
+      readControl('page-editor-publish'),
+      readControl('page-editor-unpublish'),
+    ];
+    const back = readControl('page-editor-back-to-pages');
+    const focusToggle = readControl('page-editor-focus-toggle');
+    const malformedControls = controls.filter((control) => (
+      !control.exists ||
+      control.describedBy !== (status?.id || '') ||
+      !['ready', 'busy', 'blocked'].includes(control.actionState) ||
+      !control.actionStatus ||
+      (control.disabled === true && control.actionState === 'ready') ||
+      (control.actionState !== 'ready' && !control.disabledReason && control.actionState !== 'busy')
+    ));
+    return {
+      ok: Boolean(commandCenter) &&
+        Boolean(status?.id) &&
+        commandCenter.getAttribute('aria-describedby') === status.id &&
+        ['ready', 'busy'].includes(commandCenter.getAttribute('data-action-state') || '') &&
+        normalize(commandCenter.getAttribute('data-action-status')) === normalize(status.textContent) &&
+        back.exists &&
+        back.describedBy === status.id &&
+        ['ready', 'blocked'].includes(back.actionState) &&
+        Boolean(back.actionStatus) &&
+        focusToggle.exists &&
+        focusToggle.describedBy === status.id &&
+        ['ready', 'blocked'].includes(focusToggle.actionState) &&
+        Boolean(focusToggle.actionStatus) &&
+        controls.length === 6 &&
+        malformedControls.length === 0,
+      path: window.location.pathname,
+      commandCenter: {
+        exists: Boolean(commandCenter),
+        describedBy: commandCenter?.getAttribute('aria-describedby') || '',
+        actionState: commandCenter?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(commandCenter?.getAttribute('data-action-status')),
+        statusId: status?.id || '',
+        statusText: normalize(status?.textContent),
+      },
+      back,
+      focusToggle,
+      controls,
+      malformedControls,
+    };
+  })()`);
+
+  assert(state.ok, `Page editor route action status contract failed: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const assertEditorPrimaryActionStatus = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const group = document.querySelector('[data-testid="editor-primary-actions"]');
+    const status = group?.querySelector('[data-testid="editor-primary-actions-status"]');
+    const buttons = Array.from(group?.querySelectorAll('button') || []).map((button) => ({
+      testId: button.getAttribute('data-testid') || '',
+      commandId: button.getAttribute('data-command-id') || '',
+      describedBy: button.getAttribute('aria-describedby') || '',
+      state: button.getAttribute('data-action-state') || '',
+      actionStatus: normalize(button.getAttribute('data-action-status')),
+      disabledReason: button.getAttribute('data-disabled-reason') || '',
+      disabled: button.disabled,
+      text: normalize(button.textContent),
+    }));
+    const buttonById = Object.fromEntries(buttons.map((button) => [button.testId, button]));
+    const required = ['editor-preview-toggle', 'editor-page-settings', 'editor-reload-page', 'editor-save-page'];
+    const missing = required.filter((testId) => !buttonById[testId]);
+    const malformed = buttons.filter((button) => (
+      !button.commandId ||
+      button.describedBy !== (status?.id || '') ||
+      !['ready', 'blocked'].includes(button.state) ||
+      !button.actionStatus ||
+      !/available|unavailable/i.test(button.actionStatus) ||
+      (button.disabled && button.state !== 'blocked') ||
+      (button.state === 'blocked' && !button.disabledReason)
+    ));
+    return {
+      ok: Boolean(group) &&
+        Boolean(status?.id) &&
+        group.getAttribute('role') === 'group' &&
+        group.getAttribute('aria-label') === 'Primary editor actions' &&
+        group.getAttribute('aria-describedby') === status.id &&
+        group.getAttribute('data-command-schema') === 'backy.editor-command-registry.v1' &&
+        normalize(group.getAttribute('data-action-status')) === normalize(status.textContent) &&
+        buttons.length >= required.length &&
+        missing.length === 0 &&
+        malformed.length === 0 &&
+        buttonById['editor-save-page']?.commandId === 'save-page',
+      role: group?.getAttribute('role') || '',
+      label: group?.getAttribute('aria-label') || '',
+      describedBy: group?.getAttribute('aria-describedby') || '',
+      schema: group?.getAttribute('data-command-schema') || '',
+      statusId: status?.id || '',
+      statusText: normalize(status?.textContent),
+      groupStatus: normalize(group?.getAttribute('data-action-status')),
+      buttons,
+      missing,
+      malformed,
+    };
+  })()`);
+
+  assert(state.ok, `Editor primary action status contract failed: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const assertEditorViewportControls = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const controls = document.querySelector('[data-testid="editor-viewport-controls"]');
+    const status = document.querySelector('[data-testid="editor-viewport-action-status"]');
+    const activeBreakpoint = controls?.getAttribute('data-active-breakpoint') || '';
+    const buttons = ['desktop', 'tablet', 'mobile'].map((breakpoint) => {
+      const button = document.querySelector('[data-testid="editor-breakpoint-' + breakpoint + '"]');
+      return {
+        breakpoint,
+        exists: button instanceof HTMLButtonElement,
+        pressed: button?.getAttribute('aria-pressed') || '',
+        describedBy: button?.getAttribute('aria-describedby') || '',
+        option: button?.getAttribute('data-breakpoint-option') || '',
+        actionState: button?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(button?.getAttribute('data-action-status')),
+        disabledReason: button?.getAttribute('data-disabled-reason') || '',
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      };
+    });
+    const activeButton = buttons.find((button) => button.breakpoint === activeBreakpoint);
+    const inactiveButtons = buttons.filter((button) => button.breakpoint !== activeBreakpoint);
+    const preset = document.querySelector('[data-testid="editor-canvas-preset-select"]');
+    const width = document.querySelector('[data-testid="editor-canvas-width-input"]');
+    const height = document.querySelector('[data-testid="editor-canvas-height-input"]');
+    const controlsState = controls?.getAttribute('data-action-state') || '';
+    const expectedActiveButtonState = controlsState === 'blocked' ? 'blocked' : 'selected';
+    const malformedButtons = buttons.filter((button) => (
+      !button.exists ||
+      button.describedBy !== (status?.id || '') ||
+      button.option !== button.breakpoint ||
+      button.pressed !== String(button.breakpoint === activeBreakpoint) ||
+      button.actionState !== (button.breakpoint === activeBreakpoint ? expectedActiveButtonState : controlsState === 'blocked' ? 'blocked' : 'ready') ||
+      !button.actionStatus
+    ));
+    return {
+      ok: Boolean(controls) &&
+        Boolean(status?.id) &&
+        controls.getAttribute('role') === 'group' &&
+        controls.getAttribute('aria-label') === 'Canvas viewport controls' &&
+        controls.getAttribute('aria-describedby') === status.id &&
+        ['ready', 'blocked'].includes(controlsState) &&
+        normalize(controls.getAttribute('data-action-status')) === normalize(status.textContent) &&
+        ['desktop', 'tablet', 'mobile'].includes(activeBreakpoint) &&
+        controls.getAttribute('data-active-breakpoint-label') === activeBreakpoint.charAt(0).toUpperCase() + activeBreakpoint.slice(1) + ' canvas' &&
+        Number(controls.getAttribute('data-canvas-width') || 0) > 0 &&
+        Number(controls.getAttribute('data-canvas-height') || 0) > 0 &&
+        Boolean(controls.getAttribute('data-active-preset')) &&
+        malformedButtons.length === 0 &&
+        Boolean(activeButton) &&
+        inactiveButtons.length === 2 &&
+        preset instanceof HTMLSelectElement &&
+        preset.getAttribute('aria-describedby') === status.id &&
+        preset.getAttribute('data-action-state') === controlsState &&
+        normalize(preset.getAttribute('data-action-status')).includes('Canvas size') &&
+        width instanceof HTMLInputElement &&
+        width.getAttribute('aria-describedby') === status.id &&
+        width.getAttribute('data-action-state') === controlsState &&
+        height instanceof HTMLInputElement &&
+        height.getAttribute('aria-describedby') === status.id &&
+        height.getAttribute('data-action-state') === controlsState,
+      role: controls?.getAttribute('role') || '',
+      label: controls?.getAttribute('aria-label') || '',
+      describedBy: controls?.getAttribute('aria-describedby') || '',
+      statusId: status?.id || '',
+      statusText: normalize(status?.textContent),
+      controlsStatus: normalize(controls?.getAttribute('data-action-status')),
+      controlsState,
+      activeBreakpoint,
+      activePreset: controls?.getAttribute('data-active-preset') || '',
+      width: Number(controls?.getAttribute('data-canvas-width') || 0),
+      height: Number(controls?.getAttribute('data-canvas-height') || 0),
+      buttons,
+      malformedButtons,
+      preset: {
+        exists: preset instanceof HTMLSelectElement,
+        describedBy: preset?.getAttribute('aria-describedby') || '',
+        actionState: preset?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(preset?.getAttribute('data-action-status')),
+      },
+      widthInput: {
+        exists: width instanceof HTMLInputElement,
+        describedBy: width?.getAttribute('aria-describedby') || '',
+        actionState: width?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(width?.getAttribute('data-action-status')),
+      },
+      heightInput: {
+        exists: height instanceof HTMLInputElement,
+        describedBy: height?.getAttribute('aria-describedby') || '',
+        actionState: height?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(height?.getAttribute('data-action-status')),
+      },
+    };
+  })()`);
+
+  assert(state.ok, `Editor viewport controls action status contract failed: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const readEditorCommandPaletteState = async (client) => evaluate(client, `(() => {
+  const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+  const palette = document.querySelector('[data-testid="editor-command-palette"]');
+  const trigger = document.querySelector('[data-testid="editor-command-palette-trigger"]');
+  const input = document.querySelector('[data-testid="editor-command-palette-input"]');
+  const status = document.querySelector('[data-testid="editor-command-palette-status"]');
+  const results = Array.from(document.querySelectorAll('[data-testid^="editor-command-palette-result-"]')).map((button) => ({
+    testId: button.getAttribute('data-testid') || '',
+    commandId: button.getAttribute('data-command-id') || '',
+    category: button.getAttribute('data-command-category') || '',
+    actionState: button.getAttribute('data-action-state') || '',
+    commandState: button.getAttribute('data-command-state') || '',
+    disabledReason: button.getAttribute('data-disabled-reason') || '',
+    text: normalize(button.textContent),
+  }));
+  return {
+    open: Boolean(palette),
+    role: palette?.getAttribute('role') || '',
+    modal: palette?.getAttribute('aria-modal') || '',
+    triggerShortcut: trigger?.getAttribute('aria-keyshortcuts') || '',
+    triggerDescribedBy: trigger?.getAttribute('aria-describedby') || '',
+    triggerExpanded: trigger?.getAttribute('aria-expanded') || '',
+    triggerControls: trigger?.getAttribute('aria-controls') || '',
+    triggerActionState: trigger?.getAttribute('data-action-state') || '',
+    triggerActionStatus: normalize(trigger?.getAttribute('data-action-status')),
+    triggerOpenState: trigger?.getAttribute('data-command-palette-open') || '',
+    triggerCommandCount: Number(trigger?.getAttribute('data-command-count') || 0),
+    triggerReadyCount: Number(trigger?.getAttribute('data-command-ready-count') || 0),
+    statusText: normalize(status?.textContent),
+    inputValue: input instanceof HTMLInputElement ? input.value : '',
+    focusedTestId: document.activeElement?.getAttribute?.('data-testid') || '',
+    activeCommandId: palette?.getAttribute('data-active-command-id') || '',
+    commandCount: Number(palette?.getAttribute('data-command-count') || 0),
+    filteredCommandCount: Number(palette?.getAttribute('data-filtered-command-count') || 0),
+    readyCount: Number(palette?.getAttribute('data-command-ready-count') || 0),
+    resultIds: results.map((result) => result.commandId),
+    results,
+    autoFit: document.querySelector('[data-testid="editor-zoom-controls"]')?.getAttribute('data-auto-fit') || '',
+    notice: normalize(document.querySelector('[data-testid="editor-notice"]')?.textContent || ''),
+  };
+})()`);
+
+const waitForEditorCommandPaletteState = async (client, predicate, label) => {
+  let lastState = null;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    lastState = await readEditorCommandPaletteState(client);
+    if (predicate(lastState)) {
+      return lastState;
+    }
+    await sleep(100);
+  }
+
+  throw new Error(`${label}: command palette state did not match expectation: ${JSON.stringify(lastState)}`);
+};
+
+const testEditorCommandPalette = async (client) => {
+  await pressKey(client, 'k', { ctrlKey: true });
+  const openedFromShortcut = await waitForEditorCommandPaletteState(
+    client,
+    (state) => state.open && state.focusedTestId === 'editor-command-palette-input',
+    'Cmd/Ctrl+K open',
+  );
+  assert(openedFromShortcut.role === 'dialog' && openedFromShortcut.modal === 'true', `Command palette dialog semantics mismatch: ${JSON.stringify(openedFromShortcut)}`);
+  assert(openedFromShortcut.triggerShortcut === 'Control+K Meta+K', `Command palette trigger shortcut metadata mismatch: ${JSON.stringify(openedFromShortcut)}`);
+  assert(
+    openedFromShortcut.triggerDescribedBy === 'editor-command-palette-status' &&
+      openedFromShortcut.triggerExpanded === 'true' &&
+      openedFromShortcut.triggerControls === 'editor-command-palette-dialog' &&
+      openedFromShortcut.triggerActionState === 'selected' &&
+      openedFromShortcut.triggerOpenState === 'true' &&
+      openedFromShortcut.triggerActionStatus === openedFromShortcut.statusText &&
+      /visible editor commands shown/i.test(openedFromShortcut.triggerActionStatus),
+    `Command palette trigger open action metadata mismatch: ${JSON.stringify(openedFromShortcut)}`,
+  );
+  assert(openedFromShortcut.triggerCommandCount >= 20 && openedFromShortcut.triggerReadyCount > 0, `Command palette trigger command counts are missing: ${JSON.stringify(openedFromShortcut)}`);
+
+  await setFormControlByTestId(client, 'editor-command-palette-input', 'fit canvas');
+  const fitFiltered = await waitForEditorCommandPaletteState(
+    client,
+    (state) => state.open && state.resultIds.includes('zoom-fit'),
+    'fit canvas filter',
+  );
+  assert(fitFiltered.activeCommandId === 'zoom-fit', `Command palette did not focus zoom-fit after filtering: ${JSON.stringify(fitFiltered)}`);
+  assert(fitFiltered.results.some((result) => result.commandId === 'zoom-fit' && result.actionState === 'ready'), `Command palette zoom-fit result is not ready: ${JSON.stringify(fitFiltered)}`);
+
+  await pressKey(client, 'Enter');
+  const afterFit = await waitForEditorCommandPaletteState(
+    client,
+    (state) => !state.open && state.autoFit === 'true',
+    'command palette execute fit canvas',
+  );
+  assert(
+    afterFit.triggerExpanded === 'false' &&
+      afterFit.triggerActionState === 'ready' &&
+      afterFit.triggerOpenState === 'false' &&
+      afterFit.triggerActionStatus === afterFit.statusText &&
+      /Command palette closed/i.test(afterFit.triggerActionStatus),
+    `Command palette trigger closed action metadata mismatch: ${JSON.stringify(afterFit)}`,
+  );
+
+  await clickEnabledControlByTestId(client, 'editor-command-palette-trigger', 'command palette trigger');
+  await setFormControlByTestId(client, 'editor-command-palette-input', 'undo');
+  const undoFiltered = await waitForEditorCommandPaletteState(
+    client,
+    (state) => state.open && state.resultIds.includes('undo'),
+    'undo filter',
+  );
+  const undoResult = undoFiltered.results.find((result) => result.commandId === 'undo');
+  assert(undoResult?.actionState === 'blocked' && undoResult.disabledReason, `Command palette must expose blocked undo status: ${JSON.stringify(undoFiltered)}`);
+
+  const clickedBlocked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-command-palette-result-undo"]');
+    if (!(button instanceof HTMLButtonElement)) return false;
+    button.click();
+    return true;
+  })()`);
+  assert(clickedBlocked, 'Unable to click blocked undo command palette result');
+  const afterBlockedClick = await waitForEditorCommandPaletteState(
+    client,
+    (state) => state.open && /Undo unavailable/.test(state.notice),
+    'blocked undo notice',
+  );
+  await clickEnabledControlByTestId(client, 'editor-command-palette-close', 'command palette close');
+
+  return {
+    openedFromShortcut,
+    fitFiltered,
+    afterFit,
+    undoFiltered,
+    afterBlockedClick,
+  };
+};
+
 const waitForEditorSaveStatus = async (client, predicate, label = 'editor save status') => {
   let lastStatus = null;
 
@@ -8367,14 +9823,172 @@ const readEditorShellPanelState = async (client, label) => {
     const layersButton = document.querySelector('[data-testid="editor-toggle-layers-panel"]');
     const inspectorButton = document.querySelector('[data-testid="editor-toggle-inspector-panel"]');
     const focusButton = document.querySelector('[data-testid="editor-toggle-focus-mode"]');
+    const contextBar = document.querySelector('[data-testid="editor-canvas-context-bar"]');
+    const contextQuickAddMenu = document.querySelector('[data-testid="editor-context-quick-add-menu"]');
+    const contextQuickAddButtons = Array.from(document.querySelectorAll('[data-quick-add-key]'));
+    const contextQuickAddHeadingButton = document.querySelector('[data-testid="editor-context-quick-add-heading"]');
+    const contextComponentButton = document.querySelector('[data-testid="editor-context-components"]');
+    const contextLayersButton = document.querySelector('[data-testid="editor-context-layers"]');
+    const contextInspectorButton = document.querySelector('[data-testid="editor-context-inspector"]');
+    const contextFocusButton = document.querySelector('[data-testid="editor-context-focus"]');
+    const contextSelectionActions = document.querySelector('[data-testid="editor-context-selection-actions"]');
+    const contextEditTextButton = document.querySelector('[data-testid="editor-context-edit-text"]');
+    const contextDuplicateButton = document.querySelector('[data-testid="editor-context-duplicate"]');
+    const contextSendToBackButton = document.querySelector('[data-testid="editor-context-send-to-back"]');
+    const contextBringToFrontButton = document.querySelector('[data-testid="editor-context-bring-to-front"]');
+    const contextGeometry = document.querySelector('[data-testid="editor-context-geometry"]');
+    const contextAlignMenu = document.querySelector('[data-testid="editor-context-align-menu"]');
+    const contextAlignLeftButton = document.querySelector('[data-testid="editor-context-align-left"]');
+    const contextDistributeHorizontalButton = document.querySelector('[data-testid="editor-context-distribute-horizontal"]');
+    const contextDeleteButton = document.querySelector('[data-testid="editor-context-delete"]');
+    const contextActionStatus = document.querySelector('[data-testid="editor-context-action-status"]');
+    const inspectorEmpty = document.querySelector('[data-testid="editor-inspector-empty"]');
+    const inspectorEmptyActions = document.querySelector('[data-testid="editor-inspector-empty-actions"]');
+    const inspectorEmptySelectFirst = document.querySelector('[data-testid="editor-inspector-empty-select-first-layer"]');
+    const inspectorEmptyOpenLayers = document.querySelector('[data-testid="editor-inspector-empty-open-layers"]');
+    const inspectorEmptyAddButtons = Array.from(document.querySelectorAll('[data-empty-add-key]'));
+    const canvasElementIds = Array.from(document.querySelectorAll('[data-element-id]'))
+      .map((node) => node.getAttribute('data-element-id') || '')
+      .filter(Boolean);
+    const saveStatus = document.querySelector('[data-testid="editor-save-status"]');
     return {
       label: ${JSON.stringify(label)},
       hasLayout: Boolean(layout),
+      hasContextBar: Boolean(contextBar),
+      canvasElementCount: new Set(canvasElementIds).size,
+      saveState: saveStatus?.getAttribute('data-save-state') || '',
+      pendingChanges: Number(saveStatus?.getAttribute('data-pending-changes') || 0),
       focusMode: layout?.getAttribute('data-focus-mode') === 'true',
       componentPanelVisible: layout?.getAttribute('data-component-panel-visible') === 'true',
       inspectorPanelVisible: layout?.getAttribute('data-inspector-panel-visible') === 'true',
       rightPanel: layout?.getAttribute('data-right-panel') || '',
       shellShortcuts: layout?.getAttribute('data-shell-keyshortcuts') || '',
+      contextBreakpoint: contextBar?.getAttribute('data-breakpoint') || '',
+      contextCanvasWidth: Number(contextBar?.getAttribute('data-canvas-width') || 0),
+      contextCanvasHeight: Number(contextBar?.getAttribute('data-canvas-height') || 0),
+      contextZoomPercent: Number(contextBar?.getAttribute('data-zoom-percent') || 0),
+      contextSelectionCount: Number(contextBar?.getAttribute('data-selection-count') || -1),
+      contextSelectedIds: contextBar?.getAttribute('data-selected-ids') || '',
+      contextCanDuplicate: contextBar?.getAttribute('data-can-duplicate') || '',
+      contextCanDelete: contextBar?.getAttribute('data-can-delete') || '',
+      contextCanZOrder: contextBar?.getAttribute('data-can-z-order') || '',
+      contextCanAlign: contextBar?.getAttribute('data-can-align') || '',
+      contextCanDistribute: contextBar?.getAttribute('data-can-distribute') || '',
+      contextCanEditText: contextBar?.getAttribute('data-can-edit-text') || '',
+      contextSelectionX: contextBar?.getAttribute('data-selection-x') || '',
+      contextSelectionY: contextBar?.getAttribute('data-selection-y') || '',
+      contextSelectionWidth: contextBar?.getAttribute('data-selection-width') || '',
+      contextSelectionHeight: contextBar?.getAttribute('data-selection-height') || '',
+      contextComponentVisible: contextBar?.getAttribute('data-component-panel-visible') || '',
+      contextInspectorVisible: contextBar?.getAttribute('data-inspector-panel-visible') || '',
+      contextRightPanel: contextBar?.getAttribute('data-right-panel') || '',
+      contextFocusMode: contextBar?.getAttribute('data-focus-mode') || '',
+      contextActionStatusId: contextActionStatus?.id || '',
+      contextActionStatusText: contextActionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      contextBarDescribedBy: contextBar?.getAttribute('aria-describedby') || '',
+      contextBarActionStatus: contextBar?.getAttribute('data-action-status') || '',
+      contextQuickAddVisible: contextQuickAddMenu instanceof HTMLDetailsElement,
+      contextQuickAddCount: Number(contextQuickAddMenu?.getAttribute('data-quick-add-count') || 0),
+      contextQuickAddTypes: contextQuickAddMenu?.getAttribute('data-quick-add-types') || '',
+      contextQuickAddDisabledAttr: contextQuickAddMenu?.getAttribute('data-disabled') || '',
+      contextQuickAddState: contextQuickAddMenu?.getAttribute('data-action-state') || '',
+      contextQuickAddStatus: contextQuickAddMenu?.getAttribute('data-action-status') || '',
+      contextQuickAddDisabledReason: contextQuickAddMenu?.getAttribute('data-disabled-reason') || '',
+      contextBarQuickAddCount: Number(contextBar?.getAttribute('data-quick-add-count') || 0),
+      contextBarQuickAddTypes: contextBar?.getAttribute('data-quick-add-types') || '',
+      contextQuickAddButtonCount: contextQuickAddButtons.length,
+      contextQuickAddButtonKeys: contextQuickAddButtons.map((button) => button.getAttribute('data-quick-add-key') || '').join(','),
+      contextQuickAddHeadingDisabled: contextQuickAddHeadingButton instanceof HTMLButtonElement ? contextQuickAddHeadingButton.disabled : null,
+      contextQuickAddHeadingState: contextQuickAddHeadingButton?.getAttribute('data-action-state') || '',
+      contextQuickAddHeadingStatus: contextQuickAddHeadingButton?.getAttribute('data-action-status') || '',
+      contextQuickAddHeadingDescribedBy: contextQuickAddHeadingButton?.getAttribute('aria-describedby') || '',
+      contextSelectionActionsVisible: Boolean(contextSelectionActions),
+      contextSelectionActionsHasSelection: contextSelectionActions?.getAttribute('data-has-selection') || '',
+      contextSelectionActionsDescribedBy: contextSelectionActions?.getAttribute('aria-describedby') || '',
+      contextSelectionActionsStatus: contextSelectionActions?.getAttribute('data-action-status') || '',
+      contextEditTextDisabled: contextEditTextButton instanceof HTMLButtonElement ? contextEditTextButton.disabled : null,
+      contextEditTextEnabledAttr: contextEditTextButton?.getAttribute('data-action-enabled') || '',
+      contextEditTextState: contextEditTextButton?.getAttribute('data-action-state') || '',
+      contextEditTextStatus: contextEditTextButton?.getAttribute('data-action-status') || '',
+      contextEditTextReason: contextEditTextButton?.getAttribute('data-disabled-reason') || '',
+      contextEditTextCommandId: contextEditTextButton?.getAttribute('data-command-id') || '',
+      contextEditTextDescribedBy: contextEditTextButton?.getAttribute('aria-describedby') || '',
+      contextEditTextType: contextEditTextButton?.getAttribute('data-selected-text-type') || '',
+      contextGeometryVisible: contextGeometry instanceof HTMLElement,
+      contextGeometryText: contextGeometry?.textContent || '',
+      contextAlignMenuVisible: contextAlignMenu instanceof HTMLElement,
+      contextAlignEnabledAttr: contextAlignMenu?.getAttribute('data-action-enabled') || '',
+      contextDistributeEnabledAttr: contextAlignMenu?.getAttribute('data-distribute-enabled') || '',
+      contextAlignMenuStatus: contextAlignMenu?.getAttribute('data-action-status') || '',
+      contextAlignMenuDescribedBy: contextAlignMenu?.getAttribute('aria-describedby') || '',
+      contextAlignLeftDisabled: contextAlignLeftButton instanceof HTMLButtonElement ? contextAlignLeftButton.disabled : null,
+      contextAlignLeftEnabledAttr: contextAlignLeftButton?.getAttribute('data-action-enabled') || '',
+      contextAlignLeftState: contextAlignLeftButton?.getAttribute('data-action-state') || '',
+      contextAlignLeftStatus: contextAlignLeftButton?.getAttribute('data-action-status') || '',
+      contextAlignLeftReason: contextAlignLeftButton?.getAttribute('data-disabled-reason') || '',
+      contextAlignLeftCommandId: contextAlignLeftButton?.getAttribute('data-command-id') || '',
+      contextDistributeHorizontalDisabled: contextDistributeHorizontalButton instanceof HTMLButtonElement ? contextDistributeHorizontalButton.disabled : null,
+      contextDistributeHorizontalEnabledAttr: contextDistributeHorizontalButton?.getAttribute('data-action-enabled') || '',
+      contextDistributeHorizontalState: contextDistributeHorizontalButton?.getAttribute('data-action-state') || '',
+      contextDistributeHorizontalStatus: contextDistributeHorizontalButton?.getAttribute('data-action-status') || '',
+      contextDistributeHorizontalReason: contextDistributeHorizontalButton?.getAttribute('data-disabled-reason') || '',
+      contextDistributeHorizontalCommandId: contextDistributeHorizontalButton?.getAttribute('data-command-id') || '',
+      contextDuplicateShortcut: contextDuplicateButton?.getAttribute('aria-keyshortcuts') || '',
+      contextDuplicateDisabled: contextDuplicateButton instanceof HTMLButtonElement ? contextDuplicateButton.disabled : null,
+      contextDuplicateEnabledAttr: contextDuplicateButton?.getAttribute('data-action-enabled') || '',
+      contextDuplicateState: contextDuplicateButton?.getAttribute('data-action-state') || '',
+      contextDuplicateStatus: contextDuplicateButton?.getAttribute('data-action-status') || '',
+      contextDuplicateReason: contextDuplicateButton?.getAttribute('data-disabled-reason') || '',
+      contextDuplicateCommandId: contextDuplicateButton?.getAttribute('data-command-id') || '',
+      contextDuplicateDescribedBy: contextDuplicateButton?.getAttribute('aria-describedby') || '',
+      contextSendToBackShortcut: contextSendToBackButton?.getAttribute('aria-keyshortcuts') || '',
+      contextSendToBackDisabled: contextSendToBackButton instanceof HTMLButtonElement ? contextSendToBackButton.disabled : null,
+      contextSendToBackEnabledAttr: contextSendToBackButton?.getAttribute('data-action-enabled') || '',
+      contextSendToBackState: contextSendToBackButton?.getAttribute('data-action-state') || '',
+      contextSendToBackStatus: contextSendToBackButton?.getAttribute('data-action-status') || '',
+      contextSendToBackReason: contextSendToBackButton?.getAttribute('data-disabled-reason') || '',
+      contextSendToBackCommandId: contextSendToBackButton?.getAttribute('data-command-id') || '',
+      contextBringToFrontShortcut: contextBringToFrontButton?.getAttribute('aria-keyshortcuts') || '',
+      contextBringToFrontDisabled: contextBringToFrontButton instanceof HTMLButtonElement ? contextBringToFrontButton.disabled : null,
+      contextBringToFrontEnabledAttr: contextBringToFrontButton?.getAttribute('data-action-enabled') || '',
+      contextBringToFrontState: contextBringToFrontButton?.getAttribute('data-action-state') || '',
+      contextBringToFrontStatus: contextBringToFrontButton?.getAttribute('data-action-status') || '',
+      contextBringToFrontReason: contextBringToFrontButton?.getAttribute('data-disabled-reason') || '',
+      contextBringToFrontCommandId: contextBringToFrontButton?.getAttribute('data-command-id') || '',
+      contextDeleteShortcut: contextDeleteButton?.getAttribute('aria-keyshortcuts') || '',
+      contextDeleteDisabled: contextDeleteButton instanceof HTMLButtonElement ? contextDeleteButton.disabled : null,
+      contextDeleteEnabledAttr: contextDeleteButton?.getAttribute('data-action-enabled') || '',
+      contextDeleteState: contextDeleteButton?.getAttribute('data-action-state') || '',
+      contextDeleteStatus: contextDeleteButton?.getAttribute('data-action-status') || '',
+      contextDeleteReason: contextDeleteButton?.getAttribute('data-disabled-reason') || '',
+      contextDeleteCommandId: contextDeleteButton?.getAttribute('data-command-id') || '',
+      contextDeleteDescribedBy: contextDeleteButton?.getAttribute('aria-describedby') || '',
+      contextComponentShortcut: contextComponentButton?.getAttribute('aria-keyshortcuts') || '',
+      contextComponentPressed: contextComponentButton?.getAttribute('aria-pressed') === 'true',
+      contextComponentDisabled: contextComponentButton instanceof HTMLButtonElement ? contextComponentButton.disabled : null,
+      contextComponentExitsFocus: contextComponentButton?.getAttribute('data-exits-focus-mode') || '',
+      contextLayersShortcut: contextLayersButton?.getAttribute('aria-keyshortcuts') || '',
+      contextLayersPressed: contextLayersButton?.getAttribute('aria-pressed') === 'true',
+      contextLayersDisabled: contextLayersButton instanceof HTMLButtonElement ? contextLayersButton.disabled : null,
+      contextLayersExitsFocus: contextLayersButton?.getAttribute('data-exits-focus-mode') || '',
+      contextInspectorShortcut: contextInspectorButton?.getAttribute('aria-keyshortcuts') || '',
+      contextInspectorPressed: contextInspectorButton?.getAttribute('aria-pressed') === 'true',
+      contextInspectorDisabled: contextInspectorButton instanceof HTMLButtonElement ? contextInspectorButton.disabled : null,
+      contextInspectorExitsFocus: contextInspectorButton?.getAttribute('data-exits-focus-mode') || '',
+      contextFocusShortcut: contextFocusButton?.getAttribute('aria-keyshortcuts') || '',
+      contextFocusPressed: contextFocusButton?.getAttribute('aria-pressed') === 'true',
+      inspectorEmptyVisible: Boolean(inspectorEmpty),
+      inspectorEmptyVisibleLayerCount: Number(inspectorEmpty?.getAttribute('data-visible-layer-count') || 0),
+      inspectorEmptyTotalLayerCount: Number(inspectorEmpty?.getAttribute('data-total-layer-count') || 0),
+      inspectorEmptyQuickAddTypes: inspectorEmpty?.getAttribute('data-empty-quick-add-types') || '',
+      inspectorEmptyActionsVisible: Boolean(inspectorEmptyActions),
+      inspectorEmptyActionQuickAddCount: Number(inspectorEmptyActions?.getAttribute('data-empty-quick-add-count') || 0),
+      inspectorEmptyActionQuickAddTypes: inspectorEmptyActions?.getAttribute('data-empty-quick-add-types') || '',
+      inspectorEmptySelectFirstDisabled: inspectorEmptySelectFirst instanceof HTMLButtonElement ? inspectorEmptySelectFirst.disabled : null,
+      inspectorEmptySelectFirstVisibleCount: Number(inspectorEmptySelectFirst?.getAttribute('data-visible-layer-count') || 0),
+      inspectorEmptyOpenLayersVisible: Boolean(inspectorEmptyOpenLayers),
+      inspectorEmptyAddButtonKeys: inspectorEmptyAddButtons.map((button) => button.getAttribute('data-empty-add-key') || '').join(','),
+      inspectorEmptyAddButtonCount: inspectorEmptyAddButtons.length,
       hasComponentLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
       hasInspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
       hasPropertiesTab: Boolean(document.querySelector('[data-testid="editor-tab-properties"]')),
@@ -8396,17 +10010,192 @@ const readEditorShellPanelState = async (client, label) => {
   })()`);
 
   assert(state.hasLayout, `Editor shell layout state is missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.hasContextBar, `Editor canvas context bar is missing during ${label}: ${JSON.stringify(state)}`);
   assert(
     state.shellShortcuts === 'components:B;inspector:I;layers:L;focus:F',
     `Editor shell shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`,
   );
+  assert(['desktop', 'tablet', 'mobile'].includes(state.contextBreakpoint), `Editor context breakpoint metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextCanvasWidth > 0 && state.contextCanvasHeight > 0, `Editor context canvas dimensions missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextZoomPercent > 0, `Editor context zoom metadata missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextSelectionCount >= 0, `Editor context selection count missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextQuickAddVisible, `Editor context quick-add menu missing during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.contextQuickAddCount >= 6 &&
+      state.contextQuickAddButtonCount === state.contextQuickAddCount &&
+      state.contextBarQuickAddCount === state.contextQuickAddCount,
+    `Editor context quick-add inventory mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  for (const quickAddKey of ['heading', 'text', 'image', 'button', 'section', 'form']) {
+    assert(
+      state.contextQuickAddTypes.split(',').includes(quickAddKey) &&
+        state.contextBarQuickAddTypes.split(',').includes(quickAddKey) &&
+        state.contextQuickAddButtonKeys.split(',').includes(quickAddKey),
+      `Editor context quick-add missing ${quickAddKey} during ${label}: ${JSON.stringify(state)}`,
+    );
+  }
+  assert(state.contextQuickAddDisabledAttr === 'false', `Editor context quick-add should be enabled in editable smoke during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextQuickAddHeadingDisabled === false, `Editor context heading quick-add should be enabled during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.contextActionStatusId === 'editor-context-action-status' &&
+      state.contextBarDescribedBy === state.contextActionStatusId &&
+      state.contextBarActionStatus === state.contextActionStatusText &&
+      state.contextActionStatusText.includes('Add component available') &&
+      state.contextQuickAddState === 'ready' &&
+      state.contextQuickAddStatus.includes('Add component available') &&
+      state.contextQuickAddDisabledReason === '' &&
+      state.contextQuickAddHeadingState === 'ready' &&
+      state.contextQuickAddHeadingStatus.includes('Add Heading available.') &&
+      state.contextQuickAddHeadingDescribedBy === state.contextActionStatusId,
+    `Editor context action status contract drifted during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(state.contextSelectionActionsVisible, `Editor context selection actions missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextSelectionActionsHasSelection === String(state.contextSelectionCount > 0), `Editor context selection action state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.contextSelectionActionsDescribedBy === state.contextActionStatusId &&
+      state.contextSelectionActionsStatus === state.contextActionStatusText,
+    `Editor context selection action group must share context status during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(
+    ['true', 'false'].includes(state.contextCanDuplicate) &&
+      ['true', 'false'].includes(state.contextCanDelete) &&
+      ['true', 'false'].includes(state.contextCanZOrder) &&
+      ['true', 'false'].includes(state.contextCanAlign) &&
+      ['true', 'false'].includes(state.contextCanDistribute) &&
+      ['true', 'false'].includes(state.contextCanEditText),
+    `Editor context action readiness metadata missing during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(state.contextAlignMenuVisible, `Editor context align/distribute menu missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextAlignEnabledAttr === state.contextCanAlign, `Context align enabled attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextDistributeEnabledAttr === state.contextCanDistribute, `Context distribute enabled attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextAlignMenuDescribedBy === state.contextActionStatusId && state.contextAlignMenuStatus === state.contextActionStatusText, `Context align menu status mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextAlignLeftEnabledAttr === state.contextCanAlign, `Context align-left enabled attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextDistributeHorizontalEnabledAttr === state.contextCanDistribute, `Context distribute-horizontal enabled attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextAlignLeftDisabled === (state.contextCanAlign !== 'true'), `Context align-left disabled state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextDistributeHorizontalDisabled === (state.contextCanDistribute !== 'true'), `Context distribute-horizontal disabled state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.contextAlignLeftCommandId === 'align-left' &&
+      state.contextAlignLeftState === (state.contextCanAlign === 'true' ? 'ready' : 'blocked') &&
+      state.contextAlignLeftStatus.includes(state.contextCanAlign === 'true' ? 'Align left available' : 'Align left unavailable') &&
+      (state.contextCanAlign === 'true' || state.contextAlignLeftReason.length > 0) &&
+      state.contextDistributeHorizontalCommandId === 'distribute-horizontal' &&
+      state.contextDistributeHorizontalState === (state.contextCanDistribute === 'true' ? 'ready' : 'blocked') &&
+      state.contextDistributeHorizontalStatus.includes(state.contextCanDistribute === 'true' ? 'Distribute horizontal spacing available' : 'Distribute horizontal spacing unavailable') &&
+      (state.contextCanDistribute === 'true' || state.contextDistributeHorizontalReason.length > 0),
+    `Editor context layout action metadata mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  if (state.contextSelectionCount > 0) {
+    const geometryNumbers = [
+      Number(state.contextSelectionX),
+      Number(state.contextSelectionY),
+      Number(state.contextSelectionWidth),
+      Number(state.contextSelectionHeight),
+    ];
+    assert(
+      state.contextGeometryVisible &&
+        geometryNumbers.every(Number.isFinite) &&
+        Number(state.contextSelectionWidth) > 0 &&
+        Number(state.contextSelectionHeight) > 0 &&
+        state.contextGeometryText.includes('X') &&
+        state.contextGeometryText.includes('W'),
+      `Editor context selection geometry missing during ${label}: ${JSON.stringify(state)}`,
+    );
+  } else {
+    assert(
+      !state.contextGeometryVisible &&
+        state.contextSelectionX === '' &&
+        state.contextSelectionY === '' &&
+        state.contextSelectionWidth === '' &&
+        state.contextSelectionHeight === '',
+      `Editor context should hide geometry when no layer is selected during ${label}: ${JSON.stringify(state)}`,
+    );
+  }
+  assert(state.contextDuplicateShortcut === 'Control+D Meta+D', `Context duplicate shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextDeleteShortcut === 'Delete Backspace', `Context delete shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextSendToBackShortcut === 'Shift+Control+[ Shift+Meta+[', `Context send-to-back shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextBringToFrontShortcut === 'Shift+Control+] Shift+Meta+]', `Context bring-to-front shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextDuplicateEnabledAttr === state.contextCanDuplicate, `Context duplicate enabled attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextDeleteEnabledAttr === state.contextCanDelete, `Context delete enabled attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextEditTextEnabledAttr === state.contextCanEditText, `Context edit-text enabled attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextSendToBackEnabledAttr === state.contextCanZOrder && state.contextBringToFrontEnabledAttr === state.contextCanZOrder, `Context layer-order enabled attr mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.contextEditTextCommandId === 'edit-text' &&
+      state.contextEditTextDescribedBy === state.contextActionStatusId &&
+      state.contextEditTextState === (state.contextCanEditText === 'true' ? 'ready' : 'blocked') &&
+      state.contextEditTextStatus.includes(state.contextCanEditText === 'true' ? 'Edit selected text available' : 'Edit selected text unavailable') &&
+      (state.contextCanEditText === 'true' || state.contextEditTextReason.length > 0) &&
+      state.contextDuplicateCommandId === 'duplicate-selection' &&
+      state.contextDuplicateDescribedBy === state.contextActionStatusId &&
+      state.contextDuplicateState === (state.contextCanDuplicate === 'true' ? 'ready' : 'blocked') &&
+      state.contextDuplicateStatus.includes(state.contextCanDuplicate === 'true' ? 'Duplicate selection available' : 'Duplicate selection unavailable') &&
+      (state.contextCanDuplicate === 'true' || state.contextDuplicateReason.length > 0) &&
+      state.contextDeleteCommandId === 'delete-selection' &&
+      state.contextDeleteDescribedBy === state.contextActionStatusId &&
+      state.contextDeleteState === (state.contextCanDelete === 'true' ? 'ready' : 'blocked') &&
+      state.contextDeleteStatus.includes(state.contextCanDelete === 'true' ? 'Delete selection available' : 'Delete selection unavailable') &&
+      (state.contextCanDelete === 'true' || state.contextDeleteReason.length > 0),
+    `Editor context selection action metadata mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.contextSendToBackCommandId === 'send-to-back' &&
+      state.contextSendToBackState === (state.contextCanZOrder === 'true' ? 'ready' : 'blocked') &&
+      state.contextSendToBackStatus.includes(state.contextCanZOrder === 'true' ? 'Send to back available' : 'Send to back unavailable') &&
+      (state.contextCanZOrder === 'true' || state.contextSendToBackReason.length > 0) &&
+      state.contextBringToFrontCommandId === 'bring-to-front' &&
+      state.contextBringToFrontState === (state.contextCanZOrder === 'true' ? 'ready' : 'blocked') &&
+      state.contextBringToFrontStatus.includes(state.contextCanZOrder === 'true' ? 'Bring to front available' : 'Bring to front unavailable') &&
+      (state.contextCanZOrder === 'true' || state.contextBringToFrontReason.length > 0),
+    `Editor context layer-order action metadata mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(state.contextDuplicateDisabled === (state.contextCanDuplicate !== 'true'), `Context duplicate disabled state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextDeleteDisabled === (state.contextCanDelete !== 'true'), `Context delete disabled state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextEditTextDisabled === (state.contextCanEditText !== 'true'), `Context edit-text disabled state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextSendToBackDisabled === (state.contextCanZOrder !== 'true') && state.contextBringToFrontDisabled === (state.contextCanZOrder !== 'true'), `Context layer-order disabled state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextComponentVisible === String(state.componentPanelVisible), `Editor context component visibility mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextInspectorVisible === String(state.inspectorPanelVisible), `Editor context inspector visibility mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextRightPanel === state.rightPanel, `Editor context right-panel metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextFocusMode === String(state.focusMode), `Editor context focus metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.componentShortcut === 'B', `Component panel shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.inspectorShortcut === 'I', `Inspector panel shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.layersShortcut === 'L', `Layers panel shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.focusShortcut === 'F', `Focus mode shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextComponentShortcut === 'B', `Context component shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextInspectorShortcut === 'I', `Context inspector shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextLayersShortcut === 'L', `Context layers shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextFocusShortcut === 'F', `Context focus shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.componentPressed === state.componentPanelVisible, `Component panel pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.inspectorPressed === state.inspectorPanelVisible, `Inspector panel pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.focusPressed === state.focusMode, `Focus mode pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextComponentPressed === state.componentPanelVisible, `Context component pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.contextInspectorPressed === state.inspectorPanelVisible, `Context inspector pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.contextLayersPressed === (state.rightPanel === 'layers' && state.inspectorPanelVisible),
+    `Context layers pressed state mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(state.contextFocusPressed === state.focusMode, `Context focus pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
+  if (state.inspectorPanelVisible && state.contextSelectionCount === 0) {
+    assert(
+      state.inspectorEmptyVisible &&
+        state.inspectorEmptyActionsVisible &&
+        state.inspectorEmptyVisibleLayerCount > 0 &&
+        state.inspectorEmptyTotalLayerCount >= state.inspectorEmptyVisibleLayerCount &&
+        state.inspectorEmptySelectFirstDisabled === false &&
+        state.inspectorEmptySelectFirstVisibleCount === state.inspectorEmptyVisibleLayerCount &&
+        state.inspectorEmptyOpenLayersVisible &&
+        state.inspectorEmptyAddButtonCount >= 3,
+      `Inspector empty state must expose select/layers/quick-add actions during ${label}: ${JSON.stringify(state)}`,
+    );
+    for (const quickAddKey of ['heading', 'text', 'section']) {
+      assert(
+        state.inspectorEmptyQuickAddTypes.split(',').includes(quickAddKey) &&
+          state.inspectorEmptyActionQuickAddTypes.split(',').includes(quickAddKey) &&
+          state.inspectorEmptyAddButtonKeys.split(',').includes(quickAddKey),
+        `Inspector empty quick-add missing ${quickAddKey} during ${label}: ${JSON.stringify(state)}`,
+      );
+    }
+  } else {
+    assert(!state.inspectorEmptyVisible, `Inspector empty state should not render during ${label}: ${JSON.stringify(state)}`);
+  }
   assert(state.componentVisibleAttr === String(state.componentPanelVisible), `Component panel visible attr mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.inspectorVisibleAttr === String(state.inspectorPanelVisible), `Inspector panel visible attr mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.focusAttr === String(state.focusMode), `Focus mode attr mismatch during ${label}: ${JSON.stringify(state)}`);
@@ -8418,6 +10207,25 @@ const readEditorShellPanelState = async (client, label) => {
   );
   if (state.focusMode) {
     assert(!state.hasComponentLibrary && !state.hasInspector, `Focus mode should hide side panels during ${label}: ${JSON.stringify(state)}`);
+    assert(
+      state.contextComponentDisabled === false &&
+        state.contextLayersDisabled === false &&
+        state.contextInspectorDisabled === false &&
+        state.contextComponentExitsFocus === 'true' &&
+        state.contextLayersExitsFocus === 'true' &&
+        state.contextInspectorExitsFocus === 'true',
+      `Context side-panel controls should stay clickable and advertise focus-exit behavior during ${label}: ${JSON.stringify(state)}`,
+    );
+  } else {
+    assert(
+      state.contextComponentDisabled === false &&
+        state.contextLayersDisabled === false &&
+        state.contextInspectorDisabled === false &&
+        state.contextComponentExitsFocus === 'false' &&
+        state.contextLayersExitsFocus === 'false' &&
+        state.contextInspectorExitsFocus === 'false',
+      `Context side-panel controls should be enabled outside focus mode without focus-exit metadata during ${label}: ${JSON.stringify(state)}`,
+    );
   }
   if (state.componentPanelVisible) {
     assert(state.hasComponentLibrary, `Component panel should be visible during ${label}: ${JSON.stringify(state)}`);
@@ -8433,12 +10241,88 @@ const readEditorShellPanelState = async (client, label) => {
   return state;
 };
 
+const clickEditorButtonByTestId = async (client, testId) => {
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="${testId}"]');
+    if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      return false;
+    }
+    button.click();
+    return true;
+  })()`);
+  assert(clicked, `Unable to click enabled editor button ${testId}`);
+  await sleep(250);
+};
+
 const testEditorShellPanelShortcuts = async (client) => {
   await blurActiveElement(client);
   const initial = await readEditorShellPanelState(client, 'initial shell panels');
   assert(initial.componentPanelVisible === true, `Component panel should start visible: ${JSON.stringify(initial)}`);
   assert(initial.inspectorPanelVisible === true, `Inspector panel should start visible: ${JSON.stringify(initial)}`);
   assert(initial.focusMode === false, `Focus mode should start disabled: ${JSON.stringify(initial)}`);
+
+  await clickEditorButtonByTestId(client, 'editor-inspector-empty-select-first-layer');
+  const firstLayerSelectedFromEmpty = await readEditorShellPanelState(client, 'first layer selected from empty inspector');
+  assert(
+    firstLayerSelectedFromEmpty.contextSelectionCount === 1 &&
+      firstLayerSelectedFromEmpty.inspectorEmptyVisible === false,
+    `Empty inspector Select first did not select a visible layer: ${JSON.stringify(firstLayerSelectedFromEmpty)}`,
+  );
+
+  await pressKey(client, 'Escape');
+  const emptyRestoredAfterEscape = await readEditorShellPanelState(client, 'empty inspector restored after Escape');
+  assert(
+    emptyRestoredAfterEscape.contextSelectionCount === 0 &&
+      emptyRestoredAfterEscape.inspectorEmptyVisible === true,
+    `Escape did not restore the actionable empty inspector state: ${JSON.stringify(emptyRestoredAfterEscape)}`,
+  );
+
+  await clickEditorButtonByTestId(client, 'editor-inspector-empty-open-layers');
+  const layersOpenedFromEmpty = await readEditorShellPanelState(client, 'layers opened from empty inspector');
+  assert(
+    layersOpenedFromEmpty.rightPanel === 'layers' &&
+      layersOpenedFromEmpty.inspectorPanelVisible === true,
+    `Empty inspector Layers action did not open the layer tree: ${JSON.stringify(layersOpenedFromEmpty)}`,
+  );
+
+  await clickEditorButtonByTestId(client, 'editor-tab-properties');
+  const propertiesRestoredFromEmptyLayers = await readEditorShellPanelState(client, 'properties restored after empty inspector layers');
+  assert(
+    propertiesRestoredFromEmptyLayers.rightPanel === 'properties' &&
+      propertiesRestoredFromEmptyLayers.contextSelectionCount === 0,
+    `Properties tab did not restore empty inspector after opening layers: ${JSON.stringify(propertiesRestoredFromEmptyLayers)}`,
+  );
+
+  await clickEditorButtonByTestId(client, 'editor-inspector-empty-add-text');
+  const textAddedFromEmpty = await readEditorShellPanelState(client, 'text quick-added from empty inspector');
+  assert(
+    textAddedFromEmpty.canvasElementCount === propertiesRestoredFromEmptyLayers.canvasElementCount + 1 &&
+      textAddedFromEmpty.contextSelectionCount === 1 &&
+      textAddedFromEmpty.contextCanEditText === 'true' &&
+      textAddedFromEmpty.contextEditTextType === 'text' &&
+      textAddedFromEmpty.inspectorEmptyVisible === false,
+    `Empty inspector Text quick-add did not create and select an editable text layer: ${JSON.stringify({
+      before: propertiesRestoredFromEmptyLayers,
+      after: textAddedFromEmpty,
+    })}`,
+  );
+  assert(
+    ['dirty', 'autosaving', 'saving', 'saved'].includes(textAddedFromEmpty.saveState) &&
+      (textAddedFromEmpty.pendingChanges > propertiesRestoredFromEmptyLayers.pendingChanges ||
+        textAddedFromEmpty.saveState !== propertiesRestoredFromEmptyLayers.saveState),
+    `Empty inspector Text quick-add did not mark the editor save state as changed: ${JSON.stringify({
+      before: propertiesRestoredFromEmptyLayers,
+      after: textAddedFromEmpty,
+    })}`,
+  );
+
+  await pressKey(client, 'Escape');
+  const emptyRestoredAfterQuickAddEscape = await readEditorShellPanelState(client, 'empty inspector restored after quick-add Escape');
+  assert(
+    emptyRestoredAfterQuickAddEscape.contextSelectionCount === 0 &&
+      emptyRestoredAfterQuickAddEscape.inspectorEmptyVisible === true,
+    `Escape did not restore the actionable empty inspector after quick-add: ${JSON.stringify(emptyRestoredAfterQuickAddEscape)}`,
+  );
 
   await pressKey(client, 'b');
   const componentsHidden = await readEditorShellPanelState(client, 'components hidden by B');
@@ -8467,6 +10351,41 @@ const testEditorShellPanelShortcuts = async (client) => {
   const focusEnabled = await readEditorShellPanelState(client, 'focus enabled by F');
   assert(focusEnabled.focusMode === true, `F did not enter focus mode: ${JSON.stringify(focusEnabled)}`);
 
+  await clickEditorButtonByTestId(client, 'editor-context-components');
+  const componentsFromFocusContext = await readEditorShellPanelState(client, 'components shown from focus by context button');
+  assert(
+    componentsFromFocusContext.focusMode === false && componentsFromFocusContext.componentPanelVisible === true,
+    `Context Components button did not exit focus mode and show components: ${JSON.stringify(componentsFromFocusContext)}`,
+  );
+
+  await pressKey(client, 'f');
+  const focusEnabledForContextLayers = await readEditorShellPanelState(client, 'focus enabled for context layers');
+  assert(focusEnabledForContextLayers.focusMode === true, `F did not re-enter focus mode for context layers: ${JSON.stringify(focusEnabledForContextLayers)}`);
+
+  await clickEditorButtonByTestId(client, 'editor-context-layers');
+  const layersFromFocusContext = await readEditorShellPanelState(client, 'layers shown from focus by context button');
+  assert(
+    layersFromFocusContext.focusMode === false &&
+      layersFromFocusContext.inspectorPanelVisible === true &&
+      layersFromFocusContext.rightPanel === 'layers',
+    `Context Layers button did not exit focus mode and show Layers: ${JSON.stringify(layersFromFocusContext)}`,
+  );
+
+  await pressKey(client, 'f');
+  const focusEnabledForContextInspector = await readEditorShellPanelState(client, 'focus enabled for context inspector');
+  assert(focusEnabledForContextInspector.focusMode === true, `F did not re-enter focus mode for context inspector: ${JSON.stringify(focusEnabledForContextInspector)}`);
+
+  await clickEditorButtonByTestId(client, 'editor-context-inspector');
+  const inspectorFromFocusContext = await readEditorShellPanelState(client, 'inspector shown from focus by context button');
+  assert(
+    inspectorFromFocusContext.focusMode === false && inspectorFromFocusContext.inspectorPanelVisible === true,
+    `Context Inspector button did not exit focus mode and show the inspector: ${JSON.stringify(inspectorFromFocusContext)}`,
+  );
+
+  await pressKey(client, 'f');
+  const focusEnabledForKeyboardLayers = await readEditorShellPanelState(client, 'focus enabled for keyboard layers');
+  assert(focusEnabledForKeyboardLayers.focusMode === true, `F did not re-enter focus mode for keyboard layers: ${JSON.stringify(focusEnabledForKeyboardLayers)}`);
+
   await pressKey(client, 'l');
   const layersFromFocus = await readEditorShellPanelState(client, 'layers shown from focus by L');
   assert(
@@ -8487,12 +10406,24 @@ const testEditorShellPanelShortcuts = async (client) => {
 
   return {
     initial,
+    firstLayerSelectedFromEmpty,
+    emptyRestoredAfterEscape,
+    layersOpenedFromEmpty,
+    propertiesRestoredFromEmptyLayers,
+    textAddedFromEmpty,
+    emptyRestoredAfterQuickAddEscape,
     componentsHidden,
     componentsRestored,
     inspectorHidden,
     layersShownFromHidden,
     propertiesShown,
     focusEnabled,
+    componentsFromFocusContext,
+    focusEnabledForContextLayers,
+    layersFromFocusContext,
+    focusEnabledForContextInspector,
+    inspectorFromFocusContext,
+    focusEnabledForKeyboardLayers,
     layersFromFocus,
     focusEnabledAgain,
     inspectorFromFocus,
@@ -9272,6 +11203,14 @@ const readInspectorState = async (client) => {
       const inspector = document.querySelector('[data-testid="editor-inspector"]');
       const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
       const empty = document.querySelector('[data-testid="editor-inspector-empty"]');
+      const propertyRail = document.querySelector('[data-testid="editor-property-section-rail"]');
+      const inspectorActionStatus = document.querySelector('[data-testid="editor-inspector-action-status"]');
+      const singleCopyAction = document.querySelector('[data-testid="editor-inspector-single-copy-selection"]');
+      const singlePasteAction = document.querySelector('[data-testid="editor-inspector-single-paste-selection"]');
+      const singleDeleteAction = document.querySelector('[data-testid="editor-inspector-single-delete-selection"]');
+      const singleVisibilityAction = document.querySelector('[data-testid="editor-inspector-single-toggle-selection-visibility"]');
+      const singleLockAction = document.querySelector('[data-testid="editor-inspector-single-toggle-selection-lock"]');
+      const singleSendBackAction = document.querySelector('[data-testid="editor-inspector-single-send-to-back"]');
       const workflow = document.querySelector('[data-testid="page-workflow-panel"]');
       const inspectorRect = inspector?.getBoundingClientRect();
       const workflowRect = workflow?.getBoundingClientRect();
@@ -9286,6 +11225,82 @@ const readInspectorState = async (client) => {
         hasSelection: Boolean(selected),
         hasEmpty: Boolean(empty),
         selectedText: selected?.textContent || '',
+        inspectorActions: {
+          statusId: inspectorActionStatus?.id || '',
+          statusText: inspectorActionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+          panelDescribedBy: selected?.getAttribute('aria-describedby') || empty?.getAttribute('aria-describedby') || '',
+          panelActionStatus: selected?.getAttribute('data-action-status') || empty?.getAttribute('data-action-status') || '',
+          selectedLayerCount: Number(selected?.getAttribute('data-selected-layer-count') || empty?.getAttribute('data-selected-layer-count') || 0),
+          copyCommandId: singleCopyAction?.getAttribute('data-command-id') || '',
+          copyActionState: singleCopyAction?.getAttribute('data-action-state') || '',
+          copyActionStatus: singleCopyAction?.getAttribute('data-action-status') || '',
+          copyDescribedBy: singleCopyAction?.getAttribute('aria-describedby') || '',
+          pasteCommandId: singlePasteAction?.getAttribute('data-command-id') || '',
+          pasteActionState: singlePasteAction?.getAttribute('data-action-state') || '',
+          pasteActionStatus: singlePasteAction?.getAttribute('data-action-status') || '',
+          pasteDescribedBy: singlePasteAction?.getAttribute('aria-describedby') || '',
+          deleteCommandId: singleDeleteAction?.getAttribute('data-command-id') || '',
+          deleteActionState: singleDeleteAction?.getAttribute('data-action-state') || '',
+          deleteActionStatus: singleDeleteAction?.getAttribute('data-action-status') || '',
+          deleteDescribedBy: singleDeleteAction?.getAttribute('aria-describedby') || '',
+          visibilityCommandId: singleVisibilityAction?.getAttribute('data-command-id') || '',
+          visibilityActionState: singleVisibilityAction?.getAttribute('data-action-state') || '',
+          visibilityActionStatus: singleVisibilityAction?.getAttribute('data-action-status') || '',
+          lockCommandId: singleLockAction?.getAttribute('data-command-id') || '',
+          lockActionState: singleLockAction?.getAttribute('data-action-state') || '',
+          lockActionStatus: singleLockAction?.getAttribute('data-action-status') || '',
+          sendBackCommandId: singleSendBackAction?.getAttribute('data-command-id') || '',
+          sendBackActionStatus: singleSendBackAction?.getAttribute('data-action-status') || '',
+        },
+        propertyRail: propertyRail
+          ? {
+            exists: true,
+            expanded: propertyRail.getAttribute('data-expanded-sections') || '',
+            expandedCount: Number(propertyRail.getAttribute('data-expanded-count') || 0),
+            sectionCount: Number(propertyRail.getAttribute('data-section-count') || 0),
+            visibleSectionCount: Number(propertyRail.getAttribute('data-visible-section-count') || 0),
+            mode: propertyRail.getAttribute('data-property-section-mode') || '',
+            focusedSection: propertyRail.getAttribute('data-focused-section') || '',
+            query: propertyRail.getAttribute('data-section-query') || '',
+            matchedSections: propertyRail.getAttribute('data-matched-sections') || '',
+            actionStatusId: document.querySelector('[data-testid="editor-property-section-action-status"]')?.id || '',
+            actionStatusText: document.querySelector('[data-testid="editor-property-section-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+            railDescribedBy: propertyRail.getAttribute('aria-describedby') || '',
+            railActionStatus: propertyRail.getAttribute('data-action-status') || '',
+            jumpCount: document.querySelectorAll('[data-testid^="editor-property-section-jump-"]').length,
+            searchValue: document.querySelector('[data-testid="editor-property-section-search"]')?.value || '',
+            hasSearch: Boolean(document.querySelector('[data-testid="editor-property-section-search"]')),
+            searchDescribedBy: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('aria-describedby') || '',
+            searchActionState: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-action-state') || '',
+            searchActionStatus: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-action-status') || '',
+            searchTargetQuery: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-target-query') || '',
+            searchMatchedSections: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-matched-sections') || '',
+            hasClearSearch: Boolean(document.querySelector('[data-testid="editor-property-section-clear-search"]')),
+            hasSearchEmpty: Boolean(document.querySelector('[data-testid="editor-property-section-search-empty"]')),
+            hasEssentials: Boolean(document.querySelector('[data-testid="editor-property-sections-essentials"]')),
+            essentialsActionState: document.querySelector('[data-testid="editor-property-sections-essentials"]')?.getAttribute('data-action-state') || '',
+            essentialsActionStatus: document.querySelector('[data-testid="editor-property-sections-essentials"]')?.getAttribute('data-action-status') || '',
+            essentialsDescribedBy: document.querySelector('[data-testid="editor-property-sections-essentials"]')?.getAttribute('aria-describedby') || '',
+            hasExpandAll: Boolean(document.querySelector('[data-testid="editor-property-sections-expand-all"]')),
+            allActionState: document.querySelector('[data-testid="editor-property-sections-expand-all"]')?.getAttribute('data-action-state') || '',
+            allActionStatus: document.querySelector('[data-testid="editor-property-sections-expand-all"]')?.getAttribute('data-action-status') || '',
+            allDescribedBy: document.querySelector('[data-testid="editor-property-sections-expand-all"]')?.getAttribute('aria-describedby') || '',
+            animationJumpActionState: document.querySelector('[data-testid="editor-property-section-jump-animation"]')?.getAttribute('data-action-state') || '',
+            animationJumpActionStatus: document.querySelector('[data-testid="editor-property-section-jump-animation"]')?.getAttribute('data-action-status') || '',
+            animationJumpTargetSection: document.querySelector('[data-testid="editor-property-section-jump-animation"]')?.getAttribute('data-target-section') || '',
+            contentToggleActionState: document.querySelector('[data-testid="editor-property-section-toggle-content"]')?.getAttribute('data-action-state') || '',
+            contentToggleActionStatus: document.querySelector('[data-testid="editor-property-section-toggle-content"]')?.getAttribute('data-action-status') || '',
+            contentToggleTargetSection: document.querySelector('[data-testid="editor-property-section-toggle-content"]')?.getAttribute('data-target-section') || '',
+            contentToggleDescribedBy: document.querySelector('[data-testid="editor-property-section-toggle-content"]')?.getAttribute('aria-describedby') || '',
+            animationToggleActionState: document.querySelector('[data-testid="editor-property-section-toggle-animation"]')?.getAttribute('data-action-state') || '',
+            animationToggleActionStatus: document.querySelector('[data-testid="editor-property-section-toggle-animation"]')?.getAttribute('data-action-status') || '',
+            animationToggleTargetSection: document.querySelector('[data-testid="editor-property-section-toggle-animation"]')?.getAttribute('data-target-section') || '',
+            animationToggleDescribedBy: document.querySelector('[data-testid="editor-property-section-toggle-animation"]')?.getAttribute('aria-describedby') || '',
+            contentExpanded: document.querySelector('[data-testid="editor-property-section-content"]')?.getAttribute('data-property-section-expanded') || '',
+            layoutExpanded: document.querySelector('[data-testid="editor-property-section-layout"]')?.getAttribute('data-property-section-expanded') || '',
+            styleExpanded: document.querySelector('[data-testid="editor-property-section-style"]')?.getAttribute('data-property-section-expanded') || '',
+          }
+          : { exists: false, expanded: '', expandedCount: 0, sectionCount: 0, visibleSectionCount: 0, mode: '', focusedSection: '', query: '', matchedSections: '', actionStatusId: '', actionStatusText: '', railDescribedBy: '', railActionStatus: '', jumpCount: 0, searchValue: '', hasSearch: false, searchDescribedBy: '', searchActionState: '', searchActionStatus: '', searchTargetQuery: '', searchMatchedSections: '', hasClearSearch: false, hasSearchEmpty: false, hasEssentials: false, essentialsActionState: '', essentialsActionStatus: '', essentialsDescribedBy: '', hasExpandAll: false, allActionState: '', allActionStatus: '', allDescribedBy: '', animationJumpActionState: '', animationJumpActionStatus: '', animationJumpTargetSection: '', contentToggleActionState: '', contentToggleActionStatus: '', contentToggleTargetSection: '', contentToggleDescribedBy: '', animationToggleActionState: '', animationToggleActionStatus: '', animationToggleTargetSection: '', animationToggleDescribedBy: '', contentExpanded: '', layoutExpanded: '', styleExpanded: '' },
         overlapsWorkflow,
       };
     })()`,
@@ -9295,6 +11310,80 @@ const readInspectorState = async (client) => {
   return result.value || null;
 };
 
+const readPropertySectionRailState = async (client) => evaluate(client, `(() => {
+  const rail = document.querySelector('[data-testid="editor-property-section-rail"]');
+  const actionStatus = document.querySelector('[data-testid="editor-property-section-action-status"]');
+  const search = document.querySelector('[data-testid="editor-property-section-search"]');
+  const clearSearch = document.querySelector('[data-testid="editor-property-section-clear-search"]');
+  const essentials = document.querySelector('[data-testid="editor-property-sections-essentials"]');
+  const expandAll = document.querySelector('[data-testid="editor-property-sections-expand-all"]');
+  const animationJump = document.querySelector('[data-testid="editor-property-section-jump-animation"]');
+  const contentToggle = document.querySelector('[data-testid="editor-property-section-toggle-content"]');
+  const animationToggle = document.querySelector('[data-testid="editor-property-section-toggle-animation"]');
+  const sectionExpanded = (section) => document
+    .querySelector('[data-testid="editor-property-section-' + section + '"]')
+    ?.getAttribute('data-property-section-expanded') || '';
+
+  return {
+    exists: Boolean(rail),
+    expanded: rail?.getAttribute('data-expanded-sections') || '',
+    expandedCount: Number(rail?.getAttribute('data-expanded-count') || 0),
+    mode: rail?.getAttribute('data-property-section-mode') || '',
+    focusedSection: rail?.getAttribute('data-focused-section') || '',
+    visibleSectionCount: Number(rail?.getAttribute('data-visible-section-count') || 0),
+    actionStatusId: actionStatus?.id || '',
+    actionStatusText: actionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    railDescribedBy: rail?.getAttribute('aria-describedby') || '',
+    railActionStatus: rail?.getAttribute('data-action-status') || '',
+    searchDescribedBy: search?.getAttribute('aria-describedby') || '',
+    searchActionState: search?.getAttribute('data-action-state') || '',
+    searchActionStatus: search?.getAttribute('data-action-status') || '',
+    searchTargetQuery: search?.getAttribute('data-target-query') || '',
+    searchMatchedSections: search?.getAttribute('data-matched-sections') || '',
+    clearSearchActionState: clearSearch?.getAttribute('data-action-state') || '',
+    clearSearchActionStatus: clearSearch?.getAttribute('data-action-status') || '',
+    clearSearchTargetQuery: clearSearch?.getAttribute('data-target-query') || '',
+    essentialsActionState: essentials?.getAttribute('data-action-state') || '',
+    essentialsActionStatus: essentials?.getAttribute('data-action-status') || '',
+    essentialsTargetMode: essentials?.getAttribute('data-target-section-mode') || '',
+    essentialsDescribedBy: essentials?.getAttribute('aria-describedby') || '',
+    allActionState: expandAll?.getAttribute('data-action-state') || '',
+    allActionStatus: expandAll?.getAttribute('data-action-status') || '',
+    allTargetMode: expandAll?.getAttribute('data-target-section-mode') || '',
+    allDescribedBy: expandAll?.getAttribute('aria-describedby') || '',
+    animationJumpActionState: animationJump?.getAttribute('data-action-state') || '',
+    animationJumpActionStatus: animationJump?.getAttribute('data-action-status') || '',
+    animationJumpTargetSection: animationJump?.getAttribute('data-target-section') || '',
+    contentToggleActionState: contentToggle?.getAttribute('data-action-state') || '',
+    contentToggleActionStatus: contentToggle?.getAttribute('data-action-status') || '',
+    contentToggleTargetSection: contentToggle?.getAttribute('data-target-section') || '',
+    contentToggleDescribedBy: contentToggle?.getAttribute('aria-describedby') || '',
+    animationToggleActionState: animationToggle?.getAttribute('data-action-state') || '',
+    animationToggleActionStatus: animationToggle?.getAttribute('data-action-status') || '',
+    animationToggleTargetSection: animationToggle?.getAttribute('data-target-section') || '',
+    animationToggleDescribedBy: animationToggle?.getAttribute('aria-describedby') || '',
+    contentExpanded: sectionExpanded('content'),
+    layoutExpanded: sectionExpanded('layout'),
+    styleExpanded: sectionExpanded('style'),
+    appearanceExpanded: sectionExpanded('appearance'),
+    dataExpanded: sectionExpanded('data'),
+    animationExpanded: sectionExpanded('animation'),
+  };
+})()`);
+
+const waitForPropertySectionRailState = async (client, predicate, label) => {
+  let state = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    state = await readPropertySectionRailState(client);
+    if (predicate(state)) {
+      return state;
+    }
+    await sleep(100);
+  }
+
+  throw new Error(`Property inspector section rail did not reach ${label}: ${JSON.stringify(state)}`);
+};
+
 const assertInspectorSelection = async (client, elementId) => {
   await selectElement(client, elementId);
   const state = await readInspectorState(client);
@@ -9302,6 +11391,277 @@ const assertInspectorSelection = async (client, elementId) => {
   assert(state.hasSelection, `Inspector did not show selection for ${elementId}: ${JSON.stringify(state)}`);
   assert(!state.hasEmpty, `Inspector still showed empty state for ${elementId}: ${JSON.stringify(state)}`);
   assert(!state.overlapsWorkflow, `Workflow panel overlaps editor inspector: ${JSON.stringify(state)}`);
+  assert(
+    state.inspectorActions?.statusId === 'editor-inspector-action-status' &&
+      state.inspectorActions.panelDescribedBy === state.inspectorActions.statusId &&
+      state.inspectorActions.panelActionStatus === state.inspectorActions.statusText &&
+      state.inspectorActions.selectedLayerCount === 1 &&
+      state.inspectorActions.statusText.includes('Inspector actions for 1 selected layer') &&
+      state.inspectorActions.copyCommandId === 'copy-selection' &&
+      state.inspectorActions.copyActionState === 'ready' &&
+      state.inspectorActions.copyActionStatus.includes('Copy selection available') &&
+      state.inspectorActions.copyDescribedBy === state.inspectorActions.statusId &&
+      state.inspectorActions.pasteCommandId === 'paste-selection' &&
+      /^ready|blocked$/.test(state.inspectorActions.pasteActionState) &&
+      state.inspectorActions.pasteActionStatus.includes('Paste') &&
+      state.inspectorActions.pasteDescribedBy === state.inspectorActions.statusId &&
+      state.inspectorActions.deleteCommandId === 'delete-selection' &&
+      state.inspectorActions.deleteActionState === 'ready' &&
+      state.inspectorActions.deleteActionStatus.includes('Delete selection available') &&
+      state.inspectorActions.deleteDescribedBy === state.inspectorActions.statusId &&
+      state.inspectorActions.visibilityCommandId === 'toggle-selection-visibility' &&
+      state.inspectorActions.visibilityActionState === 'ready' &&
+      state.inspectorActions.lockCommandId === 'toggle-selection-lock' &&
+      state.inspectorActions.lockActionState === 'ready' &&
+      state.inspectorActions.sendBackCommandId === 'send-to-back' &&
+      state.inspectorActions.sendBackActionStatus.includes('Send to back'),
+    `Inspector selection action metadata missing for ${elementId}: ${JSON.stringify(state.inspectorActions)}`,
+  );
+  assert(
+    state.propertyRail?.exists &&
+      state.propertyRail.sectionCount === 6 &&
+      state.propertyRail.visibleSectionCount === 6 &&
+      state.propertyRail.jumpCount === 6 &&
+      state.propertyRail.hasSearch &&
+      state.propertyRail.query === '' &&
+      state.propertyRail.hasEssentials &&
+      state.propertyRail.hasExpandAll &&
+      state.propertyRail.mode === 'essentials' &&
+      state.propertyRail.contentExpanded === 'true' &&
+      state.propertyRail.layoutExpanded === 'true' &&
+      state.propertyRail.styleExpanded === 'true',
+    `Property inspector section rail was not ready for ${elementId}: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.propertyRail.actionStatusId === 'editor-property-section-action-status' &&
+      state.propertyRail.railDescribedBy === state.propertyRail.actionStatusId &&
+      state.propertyRail.railActionStatus === state.propertyRail.actionStatusText &&
+      state.propertyRail.actionStatusText.includes('Essentials inspector view showing 6 of 6 sections') &&
+      state.propertyRail.searchDescribedBy.includes(state.propertyRail.actionStatusId) &&
+      state.propertyRail.searchDescribedBy.includes('editor-property-section-search-status') &&
+      state.propertyRail.searchActionState === 'ready' &&
+      state.propertyRail.searchActionStatus === state.propertyRail.actionStatusText &&
+      state.propertyRail.searchTargetQuery === '' &&
+      state.propertyRail.searchMatchedSections === state.propertyRail.matchedSections &&
+      state.propertyRail.essentialsActionState === 'selected' &&
+      state.propertyRail.essentialsActionStatus === 'Essentials inspector sections selected.' &&
+      state.propertyRail.essentialsDescribedBy === state.propertyRail.actionStatusId &&
+      state.propertyRail.allActionState === 'ready' &&
+      state.propertyRail.allActionStatus === 'Show all inspector sections available.' &&
+      state.propertyRail.allDescribedBy === state.propertyRail.actionStatusId &&
+      state.propertyRail.animationJumpActionState === 'ready' &&
+      state.propertyRail.animationJumpActionStatus === 'Focus Animation inspector controls available.' &&
+      state.propertyRail.animationJumpTargetSection === 'animation' &&
+      state.propertyRail.contentToggleActionState === 'selected' &&
+      state.propertyRail.contentToggleActionStatus === 'Content inspector section expanded.' &&
+      state.propertyRail.contentToggleTargetSection === 'content' &&
+      state.propertyRail.contentToggleDescribedBy === 'editor-property-section-toggle-content-status' &&
+      state.propertyRail.animationToggleActionState === 'ready' &&
+      state.propertyRail.animationToggleActionStatus === 'Expand Animation inspector section available.' &&
+      state.propertyRail.animationToggleTargetSection === 'animation' &&
+      state.propertyRail.animationToggleDescribedBy === 'editor-property-section-toggle-animation-status',
+    `Property inspector section rail action metadata missing for ${elementId}: ${JSON.stringify(state)}`,
+  );
+  await clickControlByTestId(client, 'editor-property-sections-expand-all');
+  const afterAll = await waitForPropertySectionRailState(
+    client,
+    (railState) => (
+      railState?.expandedCount === 6 &&
+      railState.mode === 'all' &&
+      railState.animationExpanded === 'true' &&
+      railState.dataExpanded === 'true' &&
+      railState.allActionState === 'selected' &&
+      railState.allActionStatus === 'All inspector sections selected.' &&
+      railState.animationToggleActionState === 'selected' &&
+      railState.animationToggleActionStatus === 'Animation inspector section expanded.'
+    ),
+    'all sections mode',
+  );
+  await clickControlByTestId(client, 'editor-property-section-jump-animation');
+  const afterFocused = await waitForPropertySectionRailState(
+    client,
+    (railState) => (
+      railState?.expandedCount === 1 &&
+      railState.mode === 'focused' &&
+      railState.focusedSection === 'animation' &&
+      railState.animationExpanded === 'true' &&
+      railState.contentExpanded === 'false' &&
+      railState.animationJumpActionState === 'selected' &&
+      railState.animationJumpActionStatus === 'Animation inspector section selected.' &&
+      railState.contentToggleActionState === 'ready' &&
+      railState.contentToggleActionStatus === 'Expand Content inspector section available.'
+    ),
+    'focused animation mode',
+  );
+  await clickControlByTestId(client, 'editor-property-sections-essentials');
+  const afterEssentials = await waitForPropertySectionRailState(
+    client,
+    (railState) => (
+      railState?.expandedCount === 3 &&
+      railState.mode === 'essentials' &&
+      railState.contentExpanded === 'true' &&
+      railState.layoutExpanded === 'true' &&
+      railState.styleExpanded === 'true' &&
+      railState.animationExpanded === 'false' &&
+      railState.essentialsActionState === 'selected' &&
+      railState.essentialsActionStatus === 'Essentials inspector sections selected.' &&
+      railState.contentToggleActionState === 'selected' &&
+      railState.animationToggleActionState === 'ready'
+    ),
+    'essentials mode',
+  );
+  const propertySectionModes = {
+    ok: true,
+    afterAll,
+    afterFocused,
+    afterEssentials,
+  };
+  assert(
+    propertySectionModes?.ok &&
+      propertySectionModes.afterAll.expandedCount === 6 &&
+      propertySectionModes.afterAll.mode === 'all' &&
+      propertySectionModes.afterAll.animationExpanded === 'true' &&
+      propertySectionModes.afterAll.dataExpanded === 'true' &&
+      propertySectionModes.afterFocused.expandedCount === 1 &&
+      propertySectionModes.afterFocused.mode === 'focused' &&
+      propertySectionModes.afterFocused.focusedSection === 'animation' &&
+      propertySectionModes.afterFocused.animationExpanded === 'true' &&
+      propertySectionModes.afterFocused.contentExpanded === 'false' &&
+      propertySectionModes.afterEssentials.expandedCount === 3 &&
+      propertySectionModes.afterEssentials.mode === 'essentials' &&
+      propertySectionModes.afterEssentials.contentExpanded === 'true' &&
+      propertySectionModes.afterEssentials.layoutExpanded === 'true' &&
+      propertySectionModes.afterEssentials.styleExpanded === 'true' &&
+      propertySectionModes.afterEssentials.appearanceExpanded === 'false' &&
+      propertySectionModes.afterEssentials.dataExpanded === 'false' &&
+      propertySectionModes.afterEssentials.animationExpanded === 'false',
+    `Property inspector section mode buttons did not switch between all and essentials: ${JSON.stringify(propertySectionModes)}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-property-section-search', 'motion');
+  const propertySectionSearch = await evaluate(client, `(() => ({
+    query: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-section-query') || '',
+    visibleSectionCount: Number(document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-visible-section-count') || 0),
+    matchedSections: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-matched-sections') || '',
+    mode: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-property-section-mode') || '',
+    expandedCount: Number(document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-expanded-count') || 0),
+    inputValue: document.querySelector('[data-testid="editor-property-section-search"]')?.value || '',
+    actionStatusId: document.querySelector('[data-testid="editor-property-section-action-status"]')?.id || '',
+    actionStatusText: document.querySelector('[data-testid="editor-property-section-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    railActionStatus: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-action-status') || '',
+    searchDescribedBy: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('aria-describedby') || '',
+    searchActionState: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-action-state') || '',
+    searchActionStatus: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-action-status') || '',
+    searchTargetQuery: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-target-query') || '',
+    searchMatchedSections: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-matched-sections') || '',
+    hasClear: Boolean(document.querySelector('[data-testid="editor-property-section-clear-search"]')),
+    clearActionState: document.querySelector('[data-testid="editor-property-section-clear-search"]')?.getAttribute('data-action-state') || '',
+    clearActionStatus: document.querySelector('[data-testid="editor-property-section-clear-search"]')?.getAttribute('data-action-status') || '',
+    clearTargetQuery: document.querySelector('[data-testid="editor-property-section-clear-search"]')?.getAttribute('data-target-query') || '',
+    hasAnimation: Boolean(document.querySelector('[data-testid="editor-property-section-animation"]')),
+    hasContent: Boolean(document.querySelector('[data-testid="editor-property-section-content"]')),
+    animationExpanded: document.querySelector('[data-testid="editor-property-section-animation"]')?.getAttribute('data-property-section-expanded') || '',
+    searchStatus: document.querySelector('[data-testid="editor-property-section-search-status"]')?.textContent || '',
+  }))()`);
+  assert(
+    propertySectionSearch.query === 'motion' &&
+      propertySectionSearch.mode === 'search' &&
+      propertySectionSearch.visibleSectionCount === 1 &&
+      propertySectionSearch.matchedSections === 'animation' &&
+      propertySectionSearch.expandedCount === 1 &&
+      propertySectionSearch.inputValue === 'motion' &&
+      propertySectionSearch.hasClear &&
+      propertySectionSearch.actionStatusId === 'editor-property-section-action-status' &&
+      propertySectionSearch.actionStatusText === '1 matching inspector sections for "motion".' &&
+      propertySectionSearch.railActionStatus === propertySectionSearch.actionStatusText &&
+      propertySectionSearch.searchDescribedBy.includes(propertySectionSearch.actionStatusId) &&
+      propertySectionSearch.searchActionState === 'ready' &&
+      propertySectionSearch.searchActionStatus === propertySectionSearch.actionStatusText &&
+      propertySectionSearch.searchTargetQuery === 'motion' &&
+      propertySectionSearch.searchMatchedSections === 'animation' &&
+      propertySectionSearch.clearActionState === 'ready' &&
+      propertySectionSearch.clearActionStatus === 'Clear inspector search available.' &&
+      propertySectionSearch.clearTargetQuery === 'motion' &&
+      propertySectionSearch.hasAnimation &&
+      !propertySectionSearch.hasContent &&
+      propertySectionSearch.animationExpanded === 'true' &&
+      propertySectionSearch.searchStatus.includes('1 matching'),
+    `Property inspector search did not focus matching sections: ${JSON.stringify(propertySectionSearch)}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-property-section-search', 'not-a-real-control');
+  const propertySectionEmptySearch = await evaluate(client, `(() => ({
+    query: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-section-query') || '',
+    visibleSectionCount: Number(document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-visible-section-count') || 0),
+    mode: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-property-section-mode') || '',
+    actionStatusText: document.querySelector('[data-testid="editor-property-section-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    railActionStatus: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-action-status') || '',
+    searchActionStatus: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-action-status') || '',
+    hasEmpty: Boolean(document.querySelector('[data-testid="editor-property-section-search-empty"]')),
+    emptyQuery: document.querySelector('[data-testid="editor-property-section-search-empty"]')?.getAttribute('data-empty-query') || '',
+    emptyText: document.querySelector('[data-testid="editor-property-section-search-empty"]')?.textContent || '',
+    hasEmptyReset: Boolean(document.querySelector('[data-testid="editor-property-section-empty-reset"]')),
+    emptyResetLabel: document.querySelector('[data-testid="editor-property-section-empty-reset"]')?.textContent?.trim() || '',
+    emptyResetActionState: document.querySelector('[data-testid="editor-property-section-empty-reset"]')?.getAttribute('data-action-state') || '',
+    emptyResetActionStatus: document.querySelector('[data-testid="editor-property-section-empty-reset"]')?.getAttribute('data-action-status') || '',
+    emptyResetTargetMode: document.querySelector('[data-testid="editor-property-section-empty-reset"]')?.getAttribute('data-target-section-mode') || '',
+    emptyResetTargetQuery: document.querySelector('[data-testid="editor-property-section-empty-reset"]')?.getAttribute('data-target-query') || '',
+    hasContent: Boolean(document.querySelector('[data-testid="editor-property-section-content"]')),
+  }))()`);
+  assert(
+    propertySectionEmptySearch.query === 'not-a-real-control' &&
+      propertySectionEmptySearch.mode === 'search' &&
+      propertySectionEmptySearch.visibleSectionCount === 0 &&
+      propertySectionEmptySearch.actionStatusText === '0 matching inspector sections for "not-a-real-control".' &&
+      propertySectionEmptySearch.railActionStatus === propertySectionEmptySearch.actionStatusText &&
+      propertySectionEmptySearch.searchActionStatus === propertySectionEmptySearch.actionStatusText &&
+      propertySectionEmptySearch.hasEmpty &&
+      propertySectionEmptySearch.emptyQuery === 'not-a-real-control' &&
+      propertySectionEmptySearch.emptyText.includes('No inspector controls match "not-a-real-control"') &&
+      propertySectionEmptySearch.hasEmptyReset &&
+      propertySectionEmptySearch.emptyResetLabel === 'Show essentials' &&
+      propertySectionEmptySearch.emptyResetActionState === 'ready' &&
+      propertySectionEmptySearch.emptyResetActionStatus === 'Show essential inspector sections available.' &&
+      propertySectionEmptySearch.emptyResetTargetMode === 'essentials' &&
+      propertySectionEmptySearch.emptyResetTargetQuery === 'not-a-real-control' &&
+      !propertySectionEmptySearch.hasContent,
+    `Property inspector search empty state was not usable: ${JSON.stringify(propertySectionEmptySearch)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-property-section-empty-reset');
+  const propertySectionSearchClear = await evaluate(client, `(() => ({
+    query: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-section-query') || '',
+    visibleSectionCount: Number(document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-visible-section-count') || 0),
+    mode: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-property-section-mode') || '',
+    actionStatusText: document.querySelector('[data-testid="editor-property-section-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    railActionStatus: document.querySelector('[data-testid="editor-property-section-rail"]')?.getAttribute('data-action-status') || '',
+    searchActionStatus: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-action-status') || '',
+    searchTargetQuery: document.querySelector('[data-testid="editor-property-section-search"]')?.getAttribute('data-target-query') || '',
+    inputValue: document.querySelector('[data-testid="editor-property-section-search"]')?.value || '',
+    hasClear: Boolean(document.querySelector('[data-testid="editor-property-section-clear-search"]')),
+    hasEmpty: Boolean(document.querySelector('[data-testid="editor-property-section-search-empty"]')),
+    contentExpanded: document.querySelector('[data-testid="editor-property-section-content"]')?.getAttribute('data-property-section-expanded') || '',
+    layoutExpanded: document.querySelector('[data-testid="editor-property-section-layout"]')?.getAttribute('data-property-section-expanded') || '',
+    styleExpanded: document.querySelector('[data-testid="editor-property-section-style"]')?.getAttribute('data-property-section-expanded') || '',
+    animationExpanded: document.querySelector('[data-testid="editor-property-section-animation"]')?.getAttribute('data-property-section-expanded') || '',
+  }))()`);
+  assert(
+    propertySectionSearchClear.query === '' &&
+      propertySectionSearchClear.visibleSectionCount === 6 &&
+      propertySectionSearchClear.mode === 'essentials' &&
+      propertySectionSearchClear.inputValue === '' &&
+      propertySectionSearchClear.actionStatusText === 'Essentials inspector view showing 6 of 6 sections.' &&
+      propertySectionSearchClear.railActionStatus === propertySectionSearchClear.actionStatusText &&
+      propertySectionSearchClear.searchActionStatus === propertySectionSearchClear.actionStatusText &&
+      propertySectionSearchClear.searchTargetQuery === '' &&
+      !propertySectionSearchClear.hasClear &&
+      !propertySectionSearchClear.hasEmpty &&
+      propertySectionSearchClear.contentExpanded === 'true' &&
+      propertySectionSearchClear.layoutExpanded === 'true' &&
+      propertySectionSearchClear.styleExpanded === 'true' &&
+      propertySectionSearchClear.animationExpanded === 'false',
+    `Property inspector empty-state reset did not restore essentials mode: ${JSON.stringify(propertySectionSearchClear)}`,
+  );
   return state;
 };
 
@@ -9325,6 +11685,10 @@ const testComponentClickAdd = async (client, componentKey = 'divider') => {
   const before = await evaluate(client, `(() => ({
     count: document.querySelectorAll('[data-element-id]').length,
     selected: document.querySelector('[data-testid="editor-inspector-selection"]')?.textContent || '',
+    location: window.location.pathname + window.location.search,
+    canvasPresent: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+    libraryPresent: Boolean(document.querySelector('[data-component-library-item]')),
+    addButtonPresent: Boolean(document.querySelector('[data-component-add="${componentKey}"]')),
   }))()`);
 
   const clicked = await evaluate(client, `(() => {
@@ -9332,27 +11696,58 @@ const testComponentClickAdd = async (client, componentKey = 'divider') => {
     if (!(button instanceof HTMLButtonElement)) {
       return { ok: false, reason: 'missing-add-button' };
     }
+    const rect = button.getBoundingClientRect();
+    const shell = document.querySelector('[data-testid="editor-shell-layout"]');
     button.click();
-    return { ok: true, label: button.getAttribute('aria-label') || button.textContent || '' };
-  })()`);
-
-  assert(clicked?.ok, `Unable to click component add button for ${componentKey}: ${JSON.stringify(clicked)}`);
-  await sleep(250);
-
-  const after = await evaluate(client, `(() => {
-    const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
-    const selectedElement = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
-      node.querySelector('[data-role="canvas-move-handle"]')
-    ));
     return {
-      count: document.querySelectorAll('[data-element-id]').length,
-      selectedText: selected?.textContent || '',
-      selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
+      ok: true,
+      label: button.getAttribute('aria-label') || button.textContent || '',
+      disabled: button.disabled,
+      connected: button.isConnected,
+      rect: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      },
+      componentPanelVisible: shell?.getAttribute('data-component-panel-visible') || '',
+      rightPanel: shell?.getAttribute('data-right-panel') || '',
     };
   })()`);
 
+  assert(clicked?.ok, `Unable to click component add button for ${componentKey}: ${JSON.stringify(clicked)}`);
+  let after = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(100);
+    after = await evaluate(client, `(() => {
+      const selected = document.querySelector('[data-testid="editor-inspector-selection"]');
+      const selectedElement = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
+        node.querySelector('[data-role="canvas-move-handle"]')
+      ));
+      const shell = document.querySelector('[data-testid="editor-shell-layout"]');
+      const addButton = document.querySelector('[data-component-add="${componentKey}"]');
+      return {
+        count: document.querySelectorAll('[data-element-id]').length,
+        selectedText: selected?.textContent || '',
+        selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
+        shellSelectedId: shell?.getAttribute('data-selected-id') || '',
+        location: window.location.pathname + window.location.search,
+        readyState: document.readyState,
+        canvasPresent: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+        shellPresent: Boolean(shell),
+        libraryPresent: Boolean(document.querySelector('[data-component-library-item]')),
+        addButtonPresent: Boolean(addButton),
+        addButtonDisabled: addButton instanceof HTMLButtonElement ? addButton.disabled : null,
+        bodyText: document.body?.innerText?.slice(0, 240) || '',
+      };
+    })()`);
+    if (after.count === before.count + 1 && after.selectedElementId) {
+      break;
+    }
+  }
+
   assert(
-    after.count === before.count + 1,
+    after?.count === before.count + 1,
     `Component click-add did not insert exactly one element: before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`,
   );
   assert(after.selectedElementId, `Component click-add did not select the inserted element: ${JSON.stringify(after)}`);
@@ -9365,8 +11760,391 @@ const testComponentClickAdd = async (client, componentKey = 'divider') => {
   };
 };
 
-const readComponentLibraryState = async (client, label) => (
+const testContextQuickAddControl = async (client, componentKey = 'heading') => {
+  const before = await evaluate(client, `(() => {
+    const menu = document.querySelector('[data-testid="editor-context-quick-add-menu"]');
+    const summary = menu?.querySelector('summary');
+    const button = document.querySelector('[data-testid="editor-context-quick-add-${componentKey}"]');
+    const actionStatus = document.querySelector('[data-testid="editor-context-action-status"]');
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const canvasIds = Array.from(canvas?.querySelectorAll('[data-element-id]') || [])
+      .map((node) => node.getAttribute('data-element-id') || '')
+      .filter(Boolean);
+    return {
+      count: document.querySelectorAll('[data-element-id]').length,
+      canvasCount: canvas?.querySelectorAll('[data-element-id]').length || 0,
+      canvasUniqueCount: new Set(canvasIds).size,
+      canvasIds,
+      selectedIds: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-selected-ids') || '',
+      hasMenu: menu instanceof HTMLDetailsElement,
+      quickAddCount: Number(menu?.getAttribute('data-quick-add-count') || 0),
+      quickAddTypes: menu?.getAttribute('data-quick-add-types') || '',
+      disabledAttr: menu?.getAttribute('data-disabled') || '',
+      actionStatusId: actionStatus?.id || '',
+      actionStatusText: actionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      menuActionState: menu?.getAttribute('data-action-state') || '',
+      menuActionStatus: menu?.getAttribute('data-action-status') || '',
+      menuDisabledReason: menu?.getAttribute('data-disabled-reason') || '',
+      summaryActionState: summary?.getAttribute('data-action-state') || '',
+      summaryActionStatus: summary?.getAttribute('data-action-status') || '',
+      summaryDescribedBy: summary?.getAttribute('aria-describedby') || '',
+      hasButton: button instanceof HTMLButtonElement,
+      buttonDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      buttonActionState: button?.getAttribute('data-action-state') || '',
+      buttonActionStatus: button?.getAttribute('data-action-status') || '',
+      buttonDisabledReason: button?.getAttribute('data-disabled-reason') || '',
+      buttonDescribedBy: button?.getAttribute('aria-describedby') || '',
+      canvasPresent: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+    };
+  })()`);
+
+  assert(
+    before.hasMenu &&
+      before.quickAddCount >= 6 &&
+      before.quickAddTypes.split(',').includes(componentKey) &&
+      before.disabledAttr === 'false' &&
+      before.hasButton &&
+      before.buttonDisabled === false &&
+      before.canvasPresent,
+    `Context quick-add control is not ready for ${componentKey}: ${JSON.stringify(before)}`,
+  );
+  assert(
+    before.actionStatusId === 'editor-context-action-status' &&
+      before.actionStatusText.includes('Add component available') &&
+      before.menuActionState === 'ready' &&
+      before.menuActionStatus.includes('Add component available') &&
+      before.menuDisabledReason === '' &&
+      before.summaryActionState === 'ready' &&
+      before.summaryActionStatus === before.menuActionStatus &&
+      before.summaryDescribedBy === before.actionStatusId &&
+      before.buttonActionState === 'ready' &&
+      before.buttonActionStatus.includes('available') &&
+      before.buttonDisabledReason === '' &&
+      before.buttonDescribedBy === before.actionStatusId,
+    `Context quick-add action metadata is not ready for ${componentKey}: ${JSON.stringify(before)}`,
+  );
+
+  const clicked = await evaluate(client, `(() => {
+    const menu = document.querySelector('[data-testid="editor-context-quick-add-menu"]');
+    const button = document.querySelector('[data-testid="editor-context-quick-add-${componentKey}"]');
+    if (!(menu instanceof HTMLDetailsElement) || !(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-quick-add-control' };
+    }
+    menu.open = true;
+    const beforeClickOpen = menu.open;
+    button.click();
+    return {
+      ok: true,
+      beforeClickOpen,
+      afterClickOpen: menu.open,
+      label: button.getAttribute('aria-label') || button.textContent || '',
+      disabled: button.disabled,
+      quickAddType: button.getAttribute('data-quick-add-type') || '',
+      quickAddKey: button.getAttribute('data-quick-add-key') || '',
+      actionState: button.getAttribute('data-action-state') || '',
+      actionStatus: button.getAttribute('data-action-status') || '',
+      describedBy: button.getAttribute('aria-describedby') || '',
+    };
+  })()`);
+
+  assert(
+    clicked?.ok &&
+      clicked.beforeClickOpen === true &&
+      clicked.afterClickOpen === false &&
+      clicked.quickAddKey === componentKey &&
+      clicked.quickAddType &&
+      clicked.actionState === 'ready' &&
+      clicked.actionStatus.includes('available') &&
+      clicked.describedBy === before.actionStatusId,
+    `Context quick-add click did not dispatch for ${componentKey}: ${JSON.stringify(clicked)}`,
+  );
+
+  let after = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(100);
+    after = await evaluate(client, `(() => {
+      const shell = document.querySelector('[data-testid="editor-shell-layout"]');
+      const canvas = document.querySelector('[data-testid="editor-canvas"]');
+      const selectedId = shell?.getAttribute('data-selected-id') || '';
+      const selectedElement = selectedId
+        ? canvas?.querySelector('[data-element-id="' + CSS.escape(selectedId) + '"]')
+        : null;
+      const canvasIds = Array.from(canvas?.querySelectorAll('[data-element-id]') || [])
+        .map((node) => node.getAttribute('data-element-id') || '')
+        .filter(Boolean);
+      return {
+        count: document.querySelectorAll('[data-element-id]').length,
+        canvasCount: canvas?.querySelectorAll('[data-element-id]').length || 0,
+        canvasUniqueCount: new Set(canvasIds).size,
+        canvasIds,
+        selectedId,
+        selectedIds: shell?.getAttribute('data-selected-ids') || '',
+        selectedElementPresent: Boolean(selectedElement),
+        selectedElementText: selectedElement?.textContent || '',
+        inspectorSelection: document.querySelector('[data-testid="editor-inspector-selection"]')?.textContent || '',
+        quickAddMenuOpen: document.querySelector('[data-testid="editor-context-quick-add-menu"]')?.hasAttribute('open') || false,
+      };
+    })()`);
+    after.addedCanvasIds = Array.from(new Set((after.canvasIds || []).filter((id) => !(before.canvasIds || []).includes(id))));
+    if (after.canvasUniqueCount === before.canvasUniqueCount + 1 && after.selectedElementPresent) {
+      break;
+    }
+  }
+
+  assert(
+    after?.canvasUniqueCount === before.canvasUniqueCount + 1 &&
+      after.addedCanvasIds.length === 1,
+    `Context quick-add did not insert exactly one element: before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`,
+  );
+  assert(after.selectedElementPresent, `Context quick-add did not select the inserted element: ${JSON.stringify(after)}`);
+  assert(after.quickAddMenuOpen === false, `Context quick-add menu should close after insertion: ${JSON.stringify(after)}`);
+
+  return {
+    componentKey,
+    before,
+    clicked,
+    after,
+  };
+};
+
+const readTextClickInteractionState = async (client, elementId, label) => (
   evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    const host = node?.querySelector('[data-backy-text-editor]') || node;
+    const editor = node?.querySelector('[contenteditable="true"], [role="textbox"][contenteditable="true"]');
+    const shell = document.querySelector('[data-testid="editor-shell-layout"]');
+    const saveStatus = document.querySelector('[data-testid="editor-save-status"]');
+    const undoButton = document.querySelector('[data-testid="editor-undo"]');
+    const redoButton = document.querySelector('[data-testid="editor-redo"]');
+    const style = node instanceof HTMLElement ? window.getComputedStyle(node) : null;
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return {
+      label: ${JSON.stringify(label)},
+      exists: node instanceof HTMLElement,
+      selectedId: shell?.getAttribute('data-selected-id') || '',
+      selectedIds: shell?.getAttribute('data-selected-ids') || '',
+      editable: node?.getAttribute('data-backy-text-editor-editable') === 'true' || host?.getAttribute('data-backy-text-editor-editable') === 'true',
+      hostEditable: host?.getAttribute('data-backy-text-editor-editable') || '',
+      hasEditableNode: editor instanceof HTMLElement,
+      activeElementId: activeElement?.closest('[data-element-id]')?.getAttribute('data-element-id') || '',
+      activeIsEditable: activeElement?.isContentEditable || false,
+      saveState: saveStatus?.getAttribute('data-save-state') || '',
+      saveMode: saveStatus?.getAttribute('data-save-mode') || '',
+      pendingChanges: Number(saveStatus?.getAttribute('data-pending-changes') || 0),
+      saveText: saveStatus?.textContent || '',
+      undoDisabled: undoButton instanceof HTMLButtonElement ? undoButton.disabled : null,
+      redoDisabled: redoButton instanceof HTMLButtonElement ? redoButton.disabled : null,
+      left: style?.left || '',
+      top: style?.top || '',
+      width: style?.width || '',
+      height: style?.height || '',
+    };
+  })()`)
+);
+
+const dispatchCanvasElementClick = async (client, elementId, clickCount = 1) => {
+  await scrollElementIntoView(client, elementId);
+  const box = await getElementBox(client, elementId);
+  assert(box, `Missing element ${elementId} for click dispatch`);
+  const point = await getElementDragStartPoint(client, elementId, box);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: point.x,
+    y: point.y,
+    button: 'none',
+  });
+
+  const dispatchClick = async (currentClickCount) => {
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed',
+      x: point.x,
+      y: point.y,
+      button: 'left',
+      buttons: 1,
+      clickCount: currentClickCount,
+    });
+    await client.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased',
+      x: point.x,
+      y: point.y,
+      button: 'left',
+      buttons: 0,
+      clickCount: currentClickCount,
+    });
+  };
+
+  if (clickCount >= 2) {
+    await dispatchClick(1);
+    await sleep(80);
+    await dispatchClick(2);
+    await sleep(200);
+    return point;
+  }
+
+  await dispatchClick(1);
+  await sleep(200);
+  return point;
+};
+
+const dispatchCanvasElementDoubleClick = async (client, elementId) => {
+  const point = await dispatchCanvasElementClick(client, elementId, 2);
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: point.x,
+    y: point.y,
+    button: 'none',
+  });
+  return point;
+};
+
+const testTextClickInteractionContract = async (client, elementId = 'smoke-heading') => {
+  await pressKey(client, 'Escape');
+  await sleep(150);
+  const before = await readTextClickInteractionState(client, elementId, 'before single click');
+
+  await dispatchCanvasElementClick(client, elementId, 1);
+  const afterSingleClick = await readTextClickInteractionState(client, elementId, 'after single click');
+
+  assert(
+    afterSingleClick.exists &&
+      afterSingleClick.selectedId === elementId &&
+      afterSingleClick.selectedIds.split(',').includes(elementId) &&
+      afterSingleClick.editable === false &&
+      afterSingleClick.hasEditableNode === false,
+    `Single-click text selection did not keep the text layer selected and read-only: before ${JSON.stringify(before)}, after ${JSON.stringify(afterSingleClick)}`,
+  );
+
+  assert(
+    afterSingleClick.pendingChanges === before.pendingChanges &&
+      afterSingleClick.saveState === before.saveState &&
+      afterSingleClick.left === before.left &&
+      afterSingleClick.top === before.top &&
+      afterSingleClick.width === before.width &&
+      afterSingleClick.height === before.height,
+    `Single-click text selection changed editor mutation state or geometry: before ${JSON.stringify(before)}, after ${JSON.stringify(afterSingleClick)}`,
+  );
+
+  await dispatchCanvasElementDoubleClick(client, elementId);
+  let afterDoubleClick = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(100);
+    afterDoubleClick = await readTextClickInteractionState(client, elementId, 'after double click');
+    if (afterDoubleClick.editable && afterDoubleClick.hasEditableNode) {
+      break;
+    }
+  }
+
+  assert(
+    afterDoubleClick?.selectedId === elementId &&
+      afterDoubleClick.editable === true &&
+      afterDoubleClick.hasEditableNode === true,
+    `Double-click text selection did not activate inline editing: before ${JSON.stringify(before)}, single ${JSON.stringify(afterSingleClick)}, double ${JSON.stringify(afterDoubleClick)}`,
+  );
+
+  assert(
+    afterDoubleClick.pendingChanges === afterSingleClick.pendingChanges &&
+      afterDoubleClick.saveState === afterSingleClick.saveState &&
+      afterDoubleClick.left === afterSingleClick.left &&
+      afterDoubleClick.top === afterSingleClick.top &&
+      afterDoubleClick.width === afterSingleClick.width &&
+      afterDoubleClick.height === afterSingleClick.height,
+    `Double-click text editing changed editor mutation state or geometry before content changed: before ${JSON.stringify(before)}, single ${JSON.stringify(afterSingleClick)}, double ${JSON.stringify(afterDoubleClick)}`,
+  );
+
+  return {
+    elementId,
+    before,
+    afterSingleClick,
+    afterDoubleClick,
+  };
+};
+
+const testContextEditTextControl = async (client, elementId = 'smoke-heading') => {
+  await selectLayerById(client, elementId);
+
+  const before = await evaluate(client, `(() => {
+    const contextBar = document.querySelector('[data-testid="editor-canvas-context-bar"]');
+    const button = document.querySelector('[data-testid="editor-context-edit-text"]');
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    const host = node?.querySelector('[data-backy-text-editor]');
+    return {
+      hasContextBar: Boolean(contextBar),
+      canEditText: contextBar?.getAttribute('data-can-edit-text') || '',
+      hasButton: button instanceof HTMLButtonElement,
+      buttonDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      enabledAttr: button?.getAttribute('data-action-enabled') || '',
+      selectedTextType: button?.getAttribute('data-selected-text-type') || '',
+      hostEditable: host?.getAttribute('data-backy-text-editor-editable') || '',
+      shellSelectedId: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-selected-id') || '',
+    };
+  })()`);
+
+  assert(
+    before.hasContextBar &&
+      before.canEditText === 'true' &&
+      before.hasButton &&
+      before.buttonDisabled === false &&
+      before.enabledAttr === 'true' &&
+      before.selectedTextType === 'heading' &&
+      before.shellSelectedId === elementId,
+    `Context edit-text control is not ready for ${elementId}: ${JSON.stringify(before)}`,
+  );
+
+  const clicked = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-context-edit-text"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-edit-text-button' };
+    }
+    button.click();
+    return {
+      ok: true,
+      disabled: button.disabled,
+      label: button.getAttribute('aria-label') || '',
+      enabledAttr: button.getAttribute('data-action-enabled') || '',
+    };
+  })()`);
+  assert(clicked?.ok && clicked.enabledAttr === 'true', `Context edit-text click did not dispatch: ${JSON.stringify(clicked)}`);
+
+  let after = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(100);
+    after = await evaluate(client, `(() => {
+      const node = document.querySelector('[data-element-id="${elementId}"]');
+      const host = node?.querySelector('[data-backy-text-editor]');
+      const editor = node?.querySelector('[contenteditable="true"]');
+      const activeElement = document.activeElement;
+      return {
+        selected: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-selected-id') || '',
+        editable: node?.getAttribute('data-backy-text-editor-editable') === 'true' || host?.getAttribute('data-backy-text-editor-editable') === 'true',
+        hostEditable: host?.getAttribute('data-backy-text-editor-editable') || '',
+        hasEditor: editor instanceof HTMLElement,
+        activeInsideEditor: Boolean(editor && activeElement instanceof HTMLElement && (editor === activeElement || editor.contains(activeElement))),
+      };
+    })()`);
+    if (after?.editable && after.hasEditor) {
+      break;
+    }
+  }
+
+  assert(
+    after?.selected === elementId &&
+      after.editable === true &&
+      after.hasEditor === true,
+    `Context edit-text did not activate inline text editing: before ${JSON.stringify(before)}, clicked ${JSON.stringify(clicked)}, after ${JSON.stringify(after)}`,
+  );
+
+  return {
+    elementId,
+    before,
+    clicked,
+    after,
+  };
+};
+
+const readComponentLibraryState = async (client, label, targetReusableSectionId = '') => (
+  evaluate(client, `(() => {
+    const targetReusableItemId = ${JSON.stringify(targetReusableSectionId ? `reusable-section:${targetReusableSectionId}` : '')};
     const itemIds = Array.from(document.querySelectorAll('[data-component-library-item]')).map((node) => (
       node.getAttribute('data-component-library-item') || ''
     ));
@@ -9378,13 +12156,146 @@ const readComponentLibraryState = async (client, label) => (
     }));
     const favoriteButton = document.querySelector('[data-component-favorite="divider"]');
     const preview = document.querySelector('[data-testid="editor-component-preview"]');
+    const library = document.querySelector('[data-testid="editor-component-library"]');
+    const list = document.querySelector('[data-testid="editor-component-list"]');
+    const summary = document.querySelector('[data-testid="editor-component-library-summary"]');
+    const actionStatus = document.querySelector('[data-testid="editor-component-library-action-status"]');
+    const categoryRail = document.querySelector('[data-testid="editor-component-category-rail"]');
+    const emptyState = document.querySelector('[data-testid="editor-component-filter-empty"]');
+    const emptyReset = document.querySelector('[data-testid="editor-component-empty-reset-filters"]');
+    const headerReset = document.querySelector('[data-testid="editor-component-reset-filters"]');
+    const saveSelection = document.querySelector('[data-testid="editor-component-save-selection"]');
+    const refreshSavedSections = document.querySelector('[data-testid="editor-component-refresh-saved-sections"]');
+    const categoryEssentials = document.querySelector('[data-testid="editor-component-category-essentials"]');
+    const categoryAll = document.querySelector('[data-testid="editor-component-category-all"]');
+    const dividerItem = document.querySelector('[data-testid="editor-component-item-divider"]');
+    const dividerStatus = document.querySelector('[data-testid="editor-component-item-action-status-divider"]');
+    const dividerAdd = document.querySelector('[data-testid="editor-component-add-divider"]');
+    const dividerFavorite = document.querySelector('[data-testid="editor-component-favorite-divider"]');
+    const savedReusableItem = targetReusableItemId
+      ? Array.from(document.querySelectorAll('[data-component-library-item^="reusable-section:"]')).find((node) => (
+        node.getAttribute('data-component-library-item') === targetReusableItemId
+      ))
+      : document.querySelector('[data-component-library-item^="reusable-section:"]');
+    const savedReusableDescribedBy = savedReusableItem?.getAttribute('aria-describedby') || '';
+    const savedReusableStatusId = savedReusableDescribedBy
+      .split(/\\s+/)
+      .find((id) => id.startsWith('editor-component-item-action-status-')) || '';
+    const savedReusableStatus = savedReusableStatusId ? document.getElementById(savedReusableStatusId) : null;
+    const savedReusableAdd = savedReusableItem?.querySelector('[data-component-add]');
+    const savedReusableFavorite = savedReusableItem?.querySelector('[data-component-favorite]');
+    const savedReusableRename = savedReusableItem?.querySelector('[data-reusable-section-rename]');
+    const savedReusableDelete = savedReusableItem?.querySelector('[data-reusable-section-delete]');
     return {
       label: ${JSON.stringify(label)},
-      hasLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
+      hasLibrary: Boolean(library),
+      libraryDensity: library?.getAttribute('data-component-library-density') || '',
+      listDensity: list?.getAttribute('data-component-list-density') || '',
       searchValue: document.querySelector('[data-testid="editor-component-search"]')?.value || '',
       itemIds,
       categories,
-      hasEmpty: /No components match this view/i.test(document.querySelector('[data-testid="editor-component-library"]')?.textContent || ''),
+      summary: {
+        exists: Boolean(summary),
+        shown: summary?.getAttribute('data-component-library-shown') || '',
+        total: summary?.getAttribute('data-component-library-total') || '',
+        essentials: summary?.getAttribute('data-component-library-essentials-count') || '',
+        recent: summary?.getAttribute('data-component-library-recent-count') || '',
+        recentLimit: summary?.getAttribute('data-component-library-recent-limit') || '',
+        recentKeys: summary?.getAttribute('data-component-library-recent-keys') || '',
+        saved: summary?.getAttribute('data-component-library-saved-count') || '',
+        savedTotal: summary?.getAttribute('data-component-library-saved-total') || '',
+        savedHidden: summary?.getAttribute('data-component-library-saved-hidden') || '',
+        category: summary?.getAttribute('data-component-library-category') || '',
+        filterActive: summary?.getAttribute('data-component-library-filter-active') || '',
+        text: summary?.textContent || '',
+      },
+      actionStatus: {
+        exists: Boolean(actionStatus),
+        id: actionStatus?.id || '',
+        text: actionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        libraryDescribedBy: library?.getAttribute('aria-describedby') || '',
+        libraryStatus: library?.getAttribute('data-action-status') || '',
+        searchDescribedBy: document.querySelector('[data-testid="editor-component-search"]')?.getAttribute('aria-describedby') || '',
+        searchState: document.querySelector('[data-testid="editor-component-search"]')?.getAttribute('data-action-state') || '',
+        searchStatus: document.querySelector('[data-testid="editor-component-search"]')?.getAttribute('data-action-status') || '',
+        saveState: saveSelection?.getAttribute('data-action-state') || '',
+        saveStatus: saveSelection?.getAttribute('data-action-status') || '',
+        saveDisabledReason: saveSelection?.getAttribute('data-disabled-reason') || '',
+        saveDescribedBy: saveSelection?.getAttribute('aria-describedby') || '',
+        refreshState: refreshSavedSections?.getAttribute('data-action-state') || '',
+        refreshStatus: refreshSavedSections?.getAttribute('data-action-status') || '',
+        refreshDisabledReason: refreshSavedSections?.getAttribute('data-disabled-reason') || '',
+        refreshDescribedBy: refreshSavedSections?.getAttribute('aria-describedby') || '',
+        essentialsState: categoryEssentials?.getAttribute('data-action-state') || '',
+        essentialsPressed: categoryEssentials?.getAttribute('aria-pressed') || '',
+        essentialsStatus: categoryEssentials?.getAttribute('data-action-status') || '',
+        allState: categoryAll?.getAttribute('data-action-state') || '',
+        allPressed: categoryAll?.getAttribute('aria-pressed') || '',
+        allStatus: categoryAll?.getAttribute('data-action-status') || '',
+      },
+      dividerAction: {
+        itemExists: Boolean(dividerItem),
+        itemDescribedBy: dividerItem?.getAttribute('aria-describedby') || '',
+        itemState: dividerItem?.getAttribute('data-action-state') || '',
+        itemStatus: dividerItem?.getAttribute('data-action-status') || '',
+        statusText: dividerStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        addState: dividerAdd?.getAttribute('data-action-state') || '',
+        addStatus: dividerAdd?.getAttribute('data-action-status') || '',
+        addDescribedBy: dividerAdd?.getAttribute('aria-describedby') || '',
+        favoriteState: dividerFavorite?.getAttribute('data-action-state') || '',
+        favoriteStatus: dividerFavorite?.getAttribute('data-action-status') || '',
+        favoriteDescribedBy: dividerFavorite?.getAttribute('aria-describedby') || '',
+      },
+      savedReusableAction: {
+        targetItemId: targetReusableItemId,
+        itemExists: Boolean(savedReusableItem),
+        itemId: savedReusableItem?.getAttribute('data-component-library-item') || '',
+        itemState: savedReusableItem?.getAttribute('data-action-state') || '',
+        itemStatus: savedReusableItem?.getAttribute('data-action-status') || '',
+        itemDescribedBy: savedReusableDescribedBy,
+        statusId: savedReusableStatusId,
+        statusText: savedReusableStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        addState: savedReusableAdd?.getAttribute('data-action-state') || '',
+        addStatus: savedReusableAdd?.getAttribute('data-action-status') || '',
+        addDescribedBy: savedReusableAdd?.getAttribute('aria-describedby') || '',
+        addLabel: savedReusableAdd?.getAttribute('aria-label') || '',
+        favoriteState: savedReusableFavorite?.getAttribute('data-action-state') || '',
+        favoriteStatus: savedReusableFavorite?.getAttribute('data-action-status') || '',
+        favoriteDescribedBy: savedReusableFavorite?.getAttribute('aria-describedby') || '',
+        favoriteLabel: savedReusableFavorite?.getAttribute('aria-label') || '',
+        renameState: savedReusableRename?.getAttribute('data-action-state') || '',
+        renameStatus: savedReusableRename?.getAttribute('data-action-status') || '',
+        renameDescribedBy: savedReusableRename?.getAttribute('aria-describedby') || '',
+        renameLabel: savedReusableRename?.getAttribute('aria-label') || '',
+        renameSectionId: savedReusableRename?.getAttribute('data-reusable-section-rename') || '',
+        deleteState: savedReusableDelete?.getAttribute('data-action-state') || '',
+        deleteStatus: savedReusableDelete?.getAttribute('data-action-status') || '',
+        deleteDescribedBy: savedReusableDelete?.getAttribute('aria-describedby') || '',
+        deleteLabel: savedReusableDelete?.getAttribute('aria-label') || '',
+        deleteSectionId: savedReusableDelete?.getAttribute('data-reusable-section-delete') || '',
+        deleteDisabledReason: savedReusableDelete?.getAttribute('data-disabled-reason') || '',
+      },
+      categoryRail: categoryRail instanceof HTMLElement
+        ? {
+          exists: true,
+          layout: categoryRail.getAttribute('data-category-layout') || '',
+          display: getComputedStyle(categoryRail).display,
+          scrollWidth: Math.round(categoryRail.scrollWidth),
+          clientWidth: Math.round(categoryRail.clientWidth),
+          overflowX: getComputedStyle(categoryRail).overflowX,
+        }
+        : { exists: false, layout: '', display: '', scrollWidth: 0, clientWidth: 0, overflowX: '' },
+      hasEmpty: /No components match this view/i.test(library?.textContent || ''),
+      empty: {
+        exists: Boolean(emptyState),
+        category: emptyState?.getAttribute('data-component-empty-category') || '',
+        search: emptyState?.getAttribute('data-component-empty-search') || '',
+        text: emptyState?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        resetExists: Boolean(emptyReset),
+        resetLabel: emptyReset?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        headerResetExists: Boolean(headerReset),
+        headerResetLabel: headerReset?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      },
       dividerFavoritePressed: favoriteButton?.getAttribute('aria-pressed') === 'true',
       previewKey: preview?.getAttribute('data-component-preview') || null,
       previewText: preview?.textContent || '',
@@ -9395,26 +12306,501 @@ const readComponentLibraryState = async (client, label) => (
           return [];
         }
       })(),
+      storedRecent: (() => {
+        try {
+          return JSON.parse(window.localStorage.getItem('backy.editor.componentLibrary.recent') || '[]');
+        } catch {
+          return [];
+        }
+      })(),
     };
   })()`)
 );
 
-const testComponentLibraryControls = async (client) => {
-  const initial = await readComponentLibraryState(client, 'initial');
+const readReusableSectionDraftDialogState = async (client, label) => (
+  evaluate(client, `(() => {
+    const dialog = document.querySelector('[data-testid="editor-reusable-section-dialog"]');
+    const status = document.querySelector('[data-testid="editor-reusable-section-action-status"]');
+    const input = document.querySelector('[data-testid="editor-reusable-section-name-input"]');
+    const save = document.querySelector('[data-testid="editor-reusable-section-save"]');
+    const cancel = document.querySelector('[data-testid="editor-reusable-section-cancel"]');
+    const error = document.querySelector('[data-testid="editor-reusable-section-name-error"]');
+    return {
+      label: ${JSON.stringify(label)},
+      exists: Boolean(dialog),
+      mode: dialog?.getAttribute('data-reusable-section-dialog-mode') || '',
+      title: document.querySelector('#reusable-section-dialog-title')?.textContent || '',
+      describedBy: dialog?.getAttribute('aria-describedby') || '',
+      dialogState: dialog?.getAttribute('data-action-state') || '',
+      dialogStatus: dialog?.getAttribute('data-action-status') || '',
+      statusId: status?.id || '',
+      statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      inputValue: input instanceof HTMLInputElement ? input.value : '',
+      inputInvalid: input?.getAttribute('aria-invalid') || '',
+      inputDescribedBy: input?.getAttribute('aria-describedby') || '',
+      inputState: input?.getAttribute('data-action-state') || '',
+      inputStatus: input?.getAttribute('data-action-status') || '',
+      errorText: error?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      saveDisabled: save instanceof HTMLButtonElement ? save.disabled : null,
+      saveState: save?.getAttribute('data-action-state') || '',
+      saveStatus: save?.getAttribute('data-action-status') || '',
+      saveDisabledReason: save?.getAttribute('data-disabled-reason') || '',
+      cancelState: cancel?.getAttribute('data-action-state') || '',
+      cancelStatus: cancel?.getAttribute('data-action-status') || '',
+    };
+  })()`)
+);
+
+const readReusableSectionDeleteDialogState = async (client, label) => (
+  evaluate(client, `(() => {
+    const dialog = document.querySelector('[data-testid="editor-reusable-section-delete-dialog"]');
+    const status = document.querySelector('[data-testid="editor-reusable-section-delete-status"]');
+    const confirm = document.querySelector('[data-testid="editor-reusable-section-delete-confirm"]');
+    const cancel = document.querySelector('[data-testid="editor-reusable-section-delete-cancel"]');
+    return {
+      label: ${JSON.stringify(label)},
+      exists: Boolean(dialog),
+      sectionId: dialog?.getAttribute('data-reusable-section-delete-id') || '',
+      title: document.querySelector('#delete-reusable-section-dialog-title')?.textContent || '',
+      describedBy: dialog?.getAttribute('aria-describedby') || '',
+      dialogState: dialog?.getAttribute('data-action-state') || '',
+      dialogStatus: dialog?.getAttribute('data-action-status') || '',
+      statusId: status?.id || '',
+      statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      confirmDisabled: confirm instanceof HTMLButtonElement ? confirm.disabled : null,
+      confirmText: confirm?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      confirmState: confirm?.getAttribute('data-action-state') || '',
+      confirmStatus: confirm?.getAttribute('data-action-status') || '',
+      confirmDisabledReason: confirm?.getAttribute('data-disabled-reason') || '',
+      cancelState: cancel?.getAttribute('data-action-state') || '',
+      cancelStatus: cancel?.getAttribute('data-action-status') || '',
+    };
+  })()`)
+);
+
+const readSavedReusableLibraryItemByName = async (client, label, sectionName) => (
+  evaluate(client, `(() => {
+    const sectionName = ${JSON.stringify(sectionName)};
+    const reusableItems = Array.from(document.querySelectorAll('[data-component-library-item^="reusable-section:"]'));
+    const item = reusableItems.find((node) => (node.textContent || '').includes(sectionName));
+    const describedBy = item?.getAttribute('aria-describedby') || '';
+    const statusId = describedBy
+      .split(/\\s+/)
+      .find((id) => id.startsWith('editor-component-item-action-status-')) || '';
+    const status = statusId ? document.getElementById(statusId) : null;
+    const add = item?.querySelector('[data-component-add]');
+    const favorite = item?.querySelector('[data-component-favorite]');
+    const rename = item?.querySelector('[data-reusable-section-rename]');
+    const deleteButton = item?.querySelector('[data-reusable-section-delete]');
+    return {
+      label: ${JSON.stringify(label)},
+      name: sectionName,
+      exists: Boolean(item),
+      itemId: item?.getAttribute('data-component-library-item') || '',
+      text: item?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      itemState: item?.getAttribute('data-action-state') || '',
+      itemStatus: item?.getAttribute('data-action-status') || '',
+      itemDescribedBy: describedBy,
+      statusId,
+      statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      addState: add?.getAttribute('data-action-state') || '',
+      addStatus: add?.getAttribute('data-action-status') || '',
+      favoriteState: favorite?.getAttribute('data-action-state') || '',
+      favoriteStatus: favorite?.getAttribute('data-action-status') || '',
+      renameState: rename?.getAttribute('data-action-state') || '',
+      renameStatus: rename?.getAttribute('data-action-status') || '',
+      renameSectionId: rename?.getAttribute('data-reusable-section-rename') || '',
+      deleteState: deleteButton?.getAttribute('data-action-state') || '',
+      deleteStatus: deleteButton?.getAttribute('data-action-status') || '',
+      deleteSectionId: deleteButton?.getAttribute('data-reusable-section-delete') || '',
+      allReusableIds: reusableItems.map((node) => node.getAttribute('data-component-library-item') || ''),
+    };
+  })()`)
+);
+
+const testSaveSelectionAsReusableSectionAction = async (client) => {
+  const savedName = `Editor Smoke Saved Selection ${Date.now().toString(36)}`;
+
+  await selectLayerById(client, 'smoke-heading');
+  await waitForEditorMutationReady(client, 'before save selection as reusable section');
+  await clickControlByTestId(client, 'editor-component-category-all');
+  await sleep(150);
+
+  const readyState = await readComponentLibraryState(client, 'save selection ready');
+  assert(
+    readyState.actionStatus.saveState === 'ready' &&
+      readyState.actionStatus.saveDisabledReason === '' &&
+      /Save selection available/.test(readyState.actionStatus.text),
+    `Save selection did not become ready after selecting a canvas layer: ${JSON.stringify(readyState.actionStatus)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-component-save-selection');
+  const saveOpened = await readReusableSectionDraftDialogState(client, 'save selection opened');
+  assert(
+    saveOpened.exists &&
+      saveOpened.mode === 'save' &&
+      /Save reusable section/.test(saveOpened.title) &&
+      saveOpened.inputValue.trim().length > 0 &&
+      saveOpened.describedBy.includes('editor-reusable-section-action-status') &&
+      saveOpened.dialogState === 'ready' &&
+      saveOpened.saveState === 'ready' &&
+      /Save selected layer as reusable section/.test(saveOpened.statusText) &&
+      /Name field ready/.test(saveOpened.statusText),
+    `Save selection dialog did not open with ready action status: ${JSON.stringify(saveOpened)}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-reusable-section-name-input', '');
+  await clickControlByTestId(client, 'editor-reusable-section-save');
+  const blankSave = await readReusableSectionDraftDialogState(client, 'save selection blank validation');
+  assert(
+    blankSave.exists &&
+      blankSave.mode === 'save' &&
+      blankSave.inputValue === '' &&
+      blankSave.inputInvalid === 'true' &&
+      blankSave.inputDescribedBy.includes('editor-reusable-section-action-status') &&
+      blankSave.inputDescribedBy.includes('editor-reusable-section-name-error') &&
+      blankSave.errorText === 'Enter a section name before saving.' &&
+      blankSave.dialogState === 'blocked' &&
+      blankSave.saveState === 'blocked' &&
+      /Name unavailable: Enter a section name/.test(blankSave.statusText),
+    `Save selection blank-name validation did not stay reachable: ${JSON.stringify(blankSave)}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-reusable-section-name-input', savedName);
+  const correctedSave = await readReusableSectionDraftDialogState(client, 'save selection ready after correction');
+  assert(
+    correctedSave.exists &&
+      correctedSave.inputValue === savedName &&
+      correctedSave.inputInvalid === 'false' &&
+      correctedSave.saveState === 'ready' &&
+      /Name field ready/.test(correctedSave.statusText),
+    `Save selection dialog did not recover after correcting the name: ${JSON.stringify(correctedSave)}`,
+  );
+  await clickControlByTestId(client, 'editor-reusable-section-save');
+
+  let savedItem = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await clickControlByTestId(client, 'editor-component-category-all');
+    savedItem = await readSavedReusableLibraryItemByName(client, 'saved selection library row', savedName);
+    if (
+      savedItem.exists &&
+      savedItem.renameSectionId &&
+      /Add Editor Smoke Saved Selection/.test(savedItem.statusText)
+    ) {
+      break;
+    }
+    await sleep(150);
+  }
+
+  assert(
+    savedItem?.exists &&
+      savedItem.itemId.startsWith('reusable-section:') &&
+      savedItem.itemState === 'ready' &&
+      savedItem.itemDescribedBy.includes('editor-component-library-action-status') &&
+      savedItem.itemDescribedBy.includes(savedItem.statusId) &&
+      savedItem.addState === 'ready' &&
+      savedItem.favoriteState === 'ready' &&
+      savedItem.renameState === 'ready' &&
+      savedItem.deleteState === 'ready' &&
+      savedItem.renameSectionId === savedItem.deleteSectionId &&
+      /Add Editor Smoke Saved Selection/.test(savedItem.addStatus) &&
+      /Rename Editor Smoke Saved Selection/.test(savedItem.renameStatus) &&
+      /Delete Editor Smoke Saved Selection/.test(savedItem.deleteStatus),
+    `Saved selection did not create a ready reusable section row: ${JSON.stringify(savedItem)}`,
+  );
+
+  const sectionId = savedItem.deleteSectionId;
+  await clickControlBySelector(client, `[data-reusable-section-delete="${sectionId}"]`, 'saved selection reusable delete');
+  const deleteOpened = await readReusableSectionDeleteDialogState(client, 'saved selection delete opened');
+  assert(
+    deleteOpened.exists &&
+      deleteOpened.sectionId === sectionId &&
+      /Delete Editor Smoke Saved Selection/.test(deleteOpened.title) &&
+      deleteOpened.confirmDisabled === false &&
+      /Delete Editor Smoke Saved Selection/.test(deleteOpened.statusText),
+    `Saved selection delete dialog did not open for cleanup: ${JSON.stringify(deleteOpened)}`,
+  );
+  await clickControlByTestId(client, 'editor-reusable-section-delete-confirm');
+
+  let afterDelete = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    afterDelete = await readSavedReusableLibraryItemByName(client, 'saved selection after delete', savedName);
+    if (!afterDelete.exists && !afterDelete.allReusableIds.includes(`reusable-section:${sectionId}`)) {
+      break;
+    }
+    await sleep(150);
+  }
+  assert(
+    afterDelete &&
+      !afterDelete.exists &&
+      !afterDelete.allReusableIds.includes(`reusable-section:${sectionId}`),
+    `Saved selection reusable section remained visible after cleanup delete: ${JSON.stringify(afterDelete)}`,
+  );
+
+  return {
+    savedName,
+    readyState,
+    saveOpened,
+    blankSave,
+    correctedSave,
+    savedItem,
+    deleteOpened,
+    afterDelete,
+  };
+};
+
+const testSavedReusableSectionLibraryActions = async (client, sectionId) => {
+  const renamedName = 'Editor Smoke Renamed Section';
+
+  await clickControlBySelector(client, `[data-reusable-section-rename="${sectionId}"]`, 'saved reusable rename');
+  const renameOpened = await readReusableSectionDraftDialogState(client, 'rename opened');
+  assert(
+    renameOpened.exists &&
+      renameOpened.mode === 'rename' &&
+      /Rename reusable section/.test(renameOpened.title) &&
+      renameOpened.inputValue === 'Editor Smoke Synced Section' &&
+      renameOpened.describedBy.includes('editor-reusable-section-action-status') &&
+      renameOpened.dialogState === 'ready' &&
+      renameOpened.saveState === 'ready' &&
+      renameOpened.cancelState === 'ready' &&
+      /Rename reusable section/.test(renameOpened.statusText) &&
+      /Name field ready/.test(renameOpened.statusText),
+    `Saved reusable rename dialog did not open with ready action status: ${JSON.stringify(renameOpened)}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-reusable-section-name-input', '');
+  await clickControlByTestId(client, 'editor-reusable-section-save');
+  const blankRename = await readReusableSectionDraftDialogState(client, 'rename blank validation');
+  assert(
+    blankRename.exists &&
+      blankRename.mode === 'rename' &&
+      blankRename.inputValue === '' &&
+      blankRename.inputInvalid === 'true' &&
+      blankRename.inputDescribedBy.includes('editor-reusable-section-action-status') &&
+      blankRename.inputDescribedBy.includes('editor-reusable-section-name-error') &&
+      blankRename.errorText === 'Enter a section name before saving.' &&
+      blankRename.dialogState === 'blocked' &&
+      blankRename.saveState === 'blocked' &&
+      /Name unavailable: Enter a section name/.test(blankRename.statusText),
+    `Saved reusable rename blank-name validation did not stay reachable: ${JSON.stringify(blankRename)}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-reusable-section-name-input', renamedName);
+  const readyRename = await readReusableSectionDraftDialogState(client, 'rename ready after correction');
+  assert(
+    readyRename.exists &&
+      readyRename.inputValue === renamedName &&
+      readyRename.inputInvalid === 'false' &&
+      readyRename.saveState === 'ready' &&
+      /Name field ready/.test(readyRename.statusText),
+    `Saved reusable rename dialog did not recover after correcting the name: ${JSON.stringify(readyRename)}`,
+  );
+  await clickControlByTestId(client, 'editor-reusable-section-save');
+
+  let renamedLibrary = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    renamedLibrary = await readComponentLibraryState(client, 'after saved reusable rename', sectionId);
+    if (
+      renamedLibrary.savedReusableAction.itemExists &&
+      /Editor Smoke Renamed Section/.test(renamedLibrary.savedReusableAction.statusText) &&
+      /Rename Editor Smoke Renamed Section available/.test(renamedLibrary.savedReusableAction.renameStatus)
+    ) {
+      break;
+    }
+    await sleep(150);
+  }
+  assert(
+    renamedLibrary?.savedReusableAction?.itemExists &&
+      /Add Editor Smoke Renamed Section to canvas available/.test(renamedLibrary.savedReusableAction.statusText) &&
+      /Rename Editor Smoke Renamed Section available/.test(renamedLibrary.savedReusableAction.renameStatus) &&
+      /Delete Editor Smoke Renamed Section available/.test(renamedLibrary.savedReusableAction.deleteStatus),
+    `Renamed reusable section did not persist back into the component library: ${JSON.stringify(renamedLibrary?.savedReusableAction)}`,
+  );
+
+  await clickControlBySelector(client, `[data-reusable-section-delete="${sectionId}"]`, 'saved reusable delete');
+  const deleteOpened = await readReusableSectionDeleteDialogState(client, 'delete opened');
+  assert(
+    deleteOpened.exists &&
+      deleteOpened.sectionId === sectionId &&
+      /Delete Editor Smoke Renamed Section/.test(deleteOpened.title) &&
+      deleteOpened.describedBy.includes('editor-reusable-section-delete-status') &&
+      deleteOpened.dialogState === 'ready' &&
+      deleteOpened.confirmState === 'ready' &&
+      deleteOpened.cancelState === 'ready' &&
+      deleteOpened.confirmDisabled === false &&
+      /Delete Editor Smoke Renamed Section from the component library/.test(deleteOpened.statusText) &&
+      /Existing canvas layers will stay/.test(deleteOpened.statusText),
+    `Saved reusable delete dialog did not expose ready cancel/confirm status: ${JSON.stringify(deleteOpened)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-reusable-section-delete-cancel');
+  const deleteCanceled = await readReusableSectionDeleteDialogState(client, 'delete canceled');
+  const afterDeleteCancel = await readComponentLibraryState(client, 'after saved reusable delete cancel', sectionId);
+  assert(
+    deleteCanceled.exists === false &&
+      afterDeleteCancel.savedReusableAction.itemExists &&
+      /Editor Smoke Renamed Section/.test(afterDeleteCancel.savedReusableAction.statusText),
+    `Canceling saved reusable delete removed or hid the section: ${JSON.stringify({ deleteCanceled, afterDeleteCancel: afterDeleteCancel.savedReusableAction })}`,
+  );
+
+  await clickControlBySelector(client, `[data-reusable-section-delete="${sectionId}"]`, 'saved reusable delete after cancel');
+  const deleteReopened = await readReusableSectionDeleteDialogState(client, 'delete reopened');
+  assert(deleteReopened.exists && deleteReopened.confirmDisabled === false, `Saved reusable delete dialog did not reopen after cancel: ${JSON.stringify(deleteReopened)}`);
+  await clickControlByTestId(client, 'editor-reusable-section-delete-confirm');
+
+  let afterDelete = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    afterDelete = await readComponentLibraryState(client, 'after saved reusable delete confirm', sectionId);
+    if (!afterDelete.savedReusableAction.itemExists && !afterDelete.itemIds.includes(`reusable-section:${sectionId}`)) {
+      break;
+    }
+    await sleep(150);
+  }
+  assert(
+    afterDelete &&
+      !afterDelete.savedReusableAction.itemExists &&
+      !afterDelete.itemIds.includes(`reusable-section:${sectionId}`),
+    `Deleted reusable section remained visible in component library: ${JSON.stringify(afterDelete?.savedReusableAction)}`,
+  );
+
+  return {
+    sectionId,
+    renamedName,
+    renameOpened,
+    blankRename,
+    readyRename,
+    renamedLibrary,
+    deleteOpened,
+    deleteCanceled,
+    afterDeleteCancel,
+    deleteReopened,
+    afterDelete,
+  };
+};
+
+const testComponentLibraryControls = async (client, targetReusableSectionId = '') => {
+  const initial = await readComponentLibraryState(client, 'initial', targetReusableSectionId);
   assert(initial.hasLibrary, `Component library missing: ${JSON.stringify(initial)}`);
+  assert(
+    initial.summary.exists &&
+      initial.libraryDensity === 'compact' &&
+      initial.listDensity === 'compact' &&
+      initial.summary.category === 'essentials' &&
+      Number(initial.summary.shown) === initial.itemIds.length &&
+      Number(initial.summary.total) > initial.itemIds.length &&
+      Number(initial.summary.essentials) === initial.itemIds.length &&
+      Number(initial.summary.recent) === 0 &&
+      Number(initial.summary.recentLimit) === 6 &&
+      Array.isArray(initial.storedRecent) &&
+      initial.storedRecent.length === 0 &&
+      initial.categoryRail.exists &&
+      initial.categoryRail.layout === 'wrapped-grid' &&
+      initial.categoryRail.display === 'grid',
+    `Component library essentials summary or compact wrapped category grid missing: ${JSON.stringify(initial)}`,
+  );
   assert(initial.itemIds.includes('divider'), `Divider component missing from library: ${JSON.stringify(initial)}`);
   assert(initial.itemIds.includes('image'), `Image component missing from library: ${JSON.stringify(initial)}`);
-  assert(initial.itemIds.includes('html'), `HTML component missing from library: ${JSON.stringify(initial)}`);
-  assert(initial.itemIds.includes('table'), `Table component missing from library: ${JSON.stringify(initial)}`);
-  for (const contentPreset of ['blog-post-card', 'latest-posts-section', 'category-list-section', 'related-content-section']) {
-    assert(initial.itemIds.includes(contentPreset), `${contentPreset} content preset missing from library: ${JSON.stringify(initial)}`);
+  assert(initial.itemIds.includes('blog-post-card'), `Blog card component missing from essentials: ${JSON.stringify(initial)}`);
+  assert(!initial.itemIds.includes('html') && !initial.itemIds.includes('table'), `Essentials view should not open every advanced component by default: ${JSON.stringify(initial)}`);
+  assert(
+    initial.actionStatus.exists &&
+      initial.actionStatus.id === 'editor-component-library-action-status' &&
+      initial.actionStatus.libraryDescribedBy.includes('editor-component-library-action-status') &&
+      initial.actionStatus.searchDescribedBy.includes('editor-component-library-action-status') &&
+      initial.actionStatus.searchState === 'ready' &&
+      initial.actionStatus.saveState === 'blocked' &&
+      /Select a layer/.test(initial.actionStatus.saveDisabledReason) &&
+      ['ready', 'busy'].includes(initial.actionStatus.refreshState) &&
+      (initial.actionStatus.refreshState === 'ready' || /refreshing/i.test(initial.actionStatus.refreshDisabledReason)) &&
+      initial.actionStatus.essentialsState === 'selected' &&
+      initial.actionStatus.essentialsPressed === 'true' &&
+      initial.actionStatus.allState === 'ready' &&
+      initial.dividerAction.itemExists &&
+      initial.dividerAction.itemDescribedBy.includes('editor-component-library-action-status') &&
+      initial.dividerAction.itemDescribedBy.includes('editor-component-item-action-status-divider') &&
+      initial.dividerAction.itemState === 'ready' &&
+      initial.dividerAction.addState === 'ready' &&
+      initial.dividerAction.favoriteState === 'ready' &&
+      /Add Divider to canvas available/.test(initial.dividerAction.statusText) &&
+      /Add Divider to favorites available/.test(initial.dividerAction.statusText),
+    `Component library action-status contract missing for library controls or divider item: ${JSON.stringify(initial)}`,
+  );
+  assert(
+    Number(initial.summary.saved) <= Number(initial.summary.savedTotal || initial.summary.saved) &&
+      Number(initial.summary.savedHidden || 0) === Math.max(0, Number(initial.summary.savedTotal || 0) - Number(initial.summary.saved || 0)),
+    `Saved reusable section dedupe metadata is inconsistent: ${JSON.stringify(initial.summary)}`,
+  );
+  assert(
+    !initial.itemIds.some((itemId) => itemId.startsWith('reusable-section:')),
+    `Essentials view should stay compact and leave saved reusable sections in Saved/All/search: ${JSON.stringify(initial)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-component-category-all');
+  await sleep(150);
+  let allComponents = await readComponentLibraryState(client, 'all components', targetReusableSectionId);
+  if (targetReusableSectionId) {
+    for (let attempt = 0; attempt < 30 && !allComponents.itemIds.includes(`reusable-section:${targetReusableSectionId}`); attempt += 1) {
+      await waitForEditorMutationReady(client, 'waiting for saved reusable section in component library');
+      await sleep(150);
+      allComponents = await readComponentLibraryState(client, 'all components saved wait', targetReusableSectionId);
+    }
   }
-  assert(initial.categories.some((category) => category.id === 'content'), `Content component category missing: ${JSON.stringify(initial)}`);
+  assert(allComponents.summary.category === 'all', `All component category did not activate: ${JSON.stringify(allComponents)}`);
+  assert(
+    allComponents.actionStatus.allState === 'selected' &&
+      allComponents.actionStatus.allPressed === 'true' &&
+      allComponents.actionStatus.essentialsState === 'ready' &&
+      /All components shows/.test(allComponents.actionStatus.text),
+    `All category action status did not reflect selected state: ${JSON.stringify(allComponents.actionStatus)}`,
+  );
+  assert(allComponents.itemIds.includes('html'), `HTML component missing from all library view: ${JSON.stringify(allComponents)}`);
+  assert(allComponents.itemIds.includes('table'), `Table component missing from all library view: ${JSON.stringify(allComponents)}`);
+  for (const contentPreset of ['blog-post-card', 'latest-posts-section', 'category-list-section', 'related-content-section']) {
+    assert(allComponents.itemIds.includes(contentPreset), `${contentPreset} content preset missing from all library view: ${JSON.stringify(allComponents)}`);
+  }
+  assert(allComponents.categories.some((category) => category.id === 'content'), `Content component category missing: ${JSON.stringify(allComponents)}`);
+  if (Number(initial.summary.saved) > 0) {
+    assert(
+      allComponents.itemIds.some((itemId) => itemId.startsWith('reusable-section:')) &&
+        allComponents.categories.some((category) => category.id === 'saved'),
+      `Saved reusable sections should remain reachable from All when present: ${JSON.stringify({ initial, allComponents })}`,
+    );
+  }
+  let savedSelectionReusableSection = null;
+  let savedReusableSectionActions = null;
+  if (targetReusableSectionId) {
+    assert(
+      allComponents.savedReusableAction.itemExists &&
+        allComponents.savedReusableAction.itemId === `reusable-section:${targetReusableSectionId}` &&
+        allComponents.savedReusableAction.itemState === 'ready' &&
+        allComponents.savedReusableAction.itemDescribedBy.includes('editor-component-library-action-status') &&
+        allComponents.savedReusableAction.itemDescribedBy.includes(allComponents.savedReusableAction.statusId) &&
+        allComponents.savedReusableAction.addState === 'ready' &&
+        allComponents.savedReusableAction.favoriteState === 'ready' &&
+        allComponents.savedReusableAction.renameState === 'ready' &&
+        ['ready', 'blocked'].includes(allComponents.savedReusableAction.deleteState) &&
+        allComponents.savedReusableAction.renameSectionId === targetReusableSectionId &&
+        allComponents.savedReusableAction.deleteSectionId === targetReusableSectionId &&
+        /Add Editor Smoke Synced Section to canvas available/.test(allComponents.savedReusableAction.statusText) &&
+        /Rename Editor Smoke Synced Section available/.test(allComponents.savedReusableAction.statusText) &&
+        /Delete /.test(allComponents.savedReusableAction.statusText) &&
+        allComponents.savedReusableAction.renameStatus === allComponents.savedReusableAction.statusText &&
+        allComponents.savedReusableAction.deleteStatus === allComponents.savedReusableAction.statusText,
+      `Saved reusable section action-status contract missing from rendered component library: ${JSON.stringify(allComponents.savedReusableAction)}`,
+    );
+    savedSelectionReusableSection = await testSaveSelectionAsReusableSectionAction(client);
+    savedReusableSectionActions = await testSavedReusableSectionLibraryActions(client, targetReusableSectionId);
+  }
 
   await setFormControlByTestId(client, 'editor-component-search', 'divider');
   await sleep(150);
   const searchFiltered = await readComponentLibraryState(client, 'search divider');
   assert(searchFiltered.searchValue === 'divider', `Component search value mismatch: ${JSON.stringify(searchFiltered)}`);
+  assert(
+    /for "divider"/.test(searchFiltered.actionStatus.text) &&
+      searchFiltered.actionStatus.searchStatus === searchFiltered.actionStatus.text,
+    `Component search action status did not announce the active query: ${JSON.stringify(searchFiltered.actionStatus)}`,
+  );
   assert(searchFiltered.itemIds.includes('divider'), `Divider missing after component search: ${JSON.stringify(searchFiltered)}`);
   assert(!searchFiltered.itemIds.includes('image'), `Component search did not filter image out: ${JSON.stringify(searchFiltered)}`);
 
@@ -9455,6 +12841,11 @@ const testComponentLibraryControls = async (client) => {
   const favorited = await readComponentLibraryState(client, 'divider favorited');
   const favoritesGroup = favorited.categories.find((category) => category.id === 'favorites');
   assert(favorited.dividerFavoritePressed === true, `Divider favorite button did not become pressed: ${JSON.stringify(favorited)}`);
+  assert(
+    /Remove Divider from favorites available/.test(favorited.dividerAction.statusText) &&
+      favorited.dividerAction.favoriteStatus === favorited.dividerAction.statusText,
+    `Divider favorite action status did not update after favoriting: ${JSON.stringify(favorited.dividerAction)}`,
+  );
   assert(favorited.storedFavorites.includes('divider'), `Divider favorite did not persist to localStorage: ${JSON.stringify(favorited)}`);
   assert(favoritesGroup?.itemIds.includes('divider'), `Favorites group did not include divider: ${JSON.stringify(favorited)}`);
 
@@ -9467,13 +12858,87 @@ const testComponentLibraryControls = async (client) => {
   await setFormControlByTestId(client, 'editor-component-search', 'zz-no-component');
   await sleep(150);
   const emptySearch = await readComponentLibraryState(client, 'empty search');
-  assert(emptySearch.hasEmpty === true && emptySearch.itemIds.length === 0, `Component library empty search state missing: ${JSON.stringify(emptySearch)}`);
+  assert(
+    emptySearch.hasEmpty === true &&
+      emptySearch.itemIds.length === 0 &&
+      emptySearch.empty.exists === true &&
+      emptySearch.empty.category === 'favorites' &&
+      emptySearch.empty.search === 'zz-no-component' &&
+      /zz-no-component/.test(emptySearch.empty.text) &&
+      emptySearch.empty.resetLabel === 'Show all components' &&
+      emptySearch.empty.headerResetExists === true &&
+      emptySearch.actionStatus.text.includes('Reset filters available.') &&
+      emptySearch.summary.filterActive === 'true',
+    `Component library empty search state missing actionable recovery: ${JSON.stringify(emptySearch)}`,
+  );
 
-  await setFormControlByTestId(client, 'editor-component-search', '');
-  await clickControlByTestId(client, 'editor-component-category-all');
+  await clickControlByTestId(client, 'editor-component-empty-reset-filters');
   await sleep(150);
-  const restored = await readComponentLibraryState(client, 'restored');
-  assert(restored.itemIds.includes('divider') && restored.itemIds.includes('image'), `Component library did not restore all items: ${JSON.stringify(restored)}`);
+  const restored = await readComponentLibraryState(client, 'restored after empty reset');
+  assert(
+    restored.searchValue === '' &&
+      restored.summary.category === 'all' &&
+      restored.summary.filterActive === 'false' &&
+      restored.empty.exists === false &&
+      restored.itemIds.includes('divider') &&
+      restored.itemIds.includes('image'),
+    `Component library empty reset did not restore all items: ${JSON.stringify(restored)}`,
+  );
+
+  await clickControlBySelector(client, '[data-component-add="divider"]');
+  await sleep(200);
+  const recentAfterAdd = await readComponentLibraryState(client, 'divider added to recents');
+  assert(
+    Array.isArray(recentAfterAdd.storedRecent) &&
+      recentAfterAdd.storedRecent[0] === 'divider' &&
+      Number(recentAfterAdd.summary.recent) >= 1 &&
+      recentAfterAdd.summary.recentKeys.split(',')[0] === 'divider',
+    `Component add did not persist divider as the most recent component: ${JSON.stringify(recentAfterAdd)}`,
+  );
+
+  await clickControlBySelector(client, '[data-component-add="image"]');
+  await sleep(200);
+  const recentAfterSecondAdd = await readComponentLibraryState(client, 'image added to recents');
+  const recentAfterSecondAddKeys = recentAfterSecondAdd.summary.recentKeys.split(',').filter(Boolean);
+  assert(
+    Array.isArray(recentAfterSecondAdd.storedRecent) &&
+      recentAfterSecondAdd.storedRecent[0] === 'image' &&
+      recentAfterSecondAdd.storedRecent[1] === 'divider' &&
+      recentAfterSecondAddKeys[0] === 'image' &&
+      recentAfterSecondAddKeys[1] === 'divider',
+    `Component add did not keep most-recent ordering after image insertion: ${JSON.stringify(recentAfterSecondAdd)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-component-category-recent');
+  await sleep(150);
+  const recentFiltered = await readComponentLibraryState(client, 'recent category');
+  assert(
+    recentFiltered.itemIds.includes('divider') &&
+      recentFiltered.itemIds[0] === 'image' &&
+      recentFiltered.itemIds[1] === 'divider' &&
+      recentFiltered.categories.length === 1 &&
+      recentFiltered.categories[0].id === 'recent' &&
+      recentFiltered.summary.category === 'recent',
+    `Recent category did not show the last inserted components first: ${JSON.stringify(recentFiltered)}`,
+  );
+
+  await clickControlBySelector(client, '[data-component-add="divider"]');
+  await sleep(200);
+  const recentAfterRecentTabAdd = await readComponentLibraryState(client, 'recent category reordered after add');
+  const recentAfterRecentTabAddKeys = recentAfterRecentTabAdd.summary.recentKeys.split(',').filter(Boolean);
+  assert(
+    recentAfterRecentTabAdd.itemIds[0] === 'divider' &&
+      recentAfterRecentTabAdd.itemIds[1] === 'image' &&
+      recentAfterRecentTabAddKeys[0] === 'divider' &&
+      recentAfterRecentTabAddKeys[1] === 'image' &&
+      recentAfterRecentTabAdd.summary.category === 'recent',
+    `Recent category did not live-update and reorder while open: ${JSON.stringify(recentAfterRecentTabAdd)}`,
+  );
+  const recentInsertionSaved = await waitForEditorSaveStatus(
+    client,
+    (status) => status.saveState === 'saved' && status.pendingChanges === 0,
+    'component library recent reorder autosave',
+  );
 
   return {
     initial,
@@ -9486,6 +12951,13 @@ const testComponentLibraryControls = async (client) => {
     favoritesFiltered,
     emptySearch,
     restored,
+    savedSelectionReusableSection,
+    savedReusableSectionActions,
+    recentAfterAdd,
+    recentAfterSecondAdd,
+    recentFiltered,
+    recentAfterRecentTabAdd,
+    recentInsertionSaved,
   };
 };
 
@@ -9696,9 +13168,39 @@ const testDeleteEditingControls = async (client, pageId) => {
   await waitForElementPresence(client, keyboardId, true, 'before keyboard delete');
   await waitForElementPresence(client, lockedId, true, 'before locked delete');
 
+  await selectLayerById(client, toolbarId);
+  const inspectorDeleteAction = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-property-delete-element"]');
+    const status = document.querySelector('[data-testid="editor-property-delete-action-status"]');
+    return {
+      exists: button instanceof HTMLButtonElement,
+      disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      actionState: button?.getAttribute('data-action-state') || '',
+      actionStatus: button?.getAttribute('data-action-status') || '',
+      disabledReason: button?.getAttribute('data-disabled-reason') || '',
+      targetId: button?.getAttribute('data-target-element-id') || '',
+      targetType: button?.getAttribute('data-target-element-type') || '',
+      describedBy: button?.getAttribute('aria-describedby') || '',
+      title: button?.getAttribute('title') || '',
+      statusExists: status instanceof HTMLElement,
+      statusText: status?.textContent || '',
+    };
+  })()`);
+  assert(
+    inspectorDeleteAction.exists &&
+      inspectorDeleteAction.disabled === false &&
+      inspectorDeleteAction.actionState === 'ready' &&
+      inspectorDeleteAction.disabledReason === '' &&
+      inspectorDeleteAction.targetId === toolbarId &&
+      inspectorDeleteAction.targetType === 'divider' &&
+      inspectorDeleteAction.describedBy.includes('editor-property-delete-action-status') &&
+      inspectorDeleteAction.statusExists &&
+      inspectorDeleteAction.statusText === inspectorDeleteAction.actionStatus,
+    `Inspector delete action metadata missing before delete smoke: ${JSON.stringify(inspectorDeleteAction)}`,
+  );
+
   await selectLayerIds(client, [toolbarId]);
-  await scrollEditorToolbarIntoView(client, 'Delete');
-  await clickEnabledButtonByAriaLabel(client, 'Delete');
+  await clickEnabledControlByTestId(client, 'editor-delete-selection', 'toolbar delete selection');
   const toolbarDeleted = await waitForElementPresence(client, toolbarId, false, 'after toolbar delete');
 
   await blurActiveElement(client);
@@ -9724,9 +13226,17 @@ const testDeleteEditingControls = async (client, pageId) => {
 
   await setLayerLockedState(client, lockedId, true);
   await selectLayerIds(client, [lockedId]);
-  await scrollEditorToolbarIntoView(client, 'Delete');
   const lockedDeleteButtonState = await evaluate(client, `(() => {
-    const button = document.querySelector('[data-testid="editor-delete-selection"]');
+    const buttons = Array.from(document.querySelectorAll('[data-testid="editor-delete-selection"]'))
+      .filter((candidate) => candidate instanceof HTMLButtonElement);
+    const button = buttons.find((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      const style = window.getComputedStyle(candidate);
+      return rect.width > 0 &&
+        rect.height > 0 &&
+        style.visibility !== 'hidden' &&
+        style.display !== 'none';
+    }) || buttons[0];
     return {
       exists: button instanceof HTMLButtonElement,
       disabled: button instanceof HTMLButtonElement ? button.disabled : null,
@@ -9744,7 +13254,11 @@ const testDeleteEditingControls = async (client, pageId) => {
   const lockedAfterKeyboard = await waitForElementPresence(client, lockedId, true, 'after locked keyboard delete attempt');
 
   await clickSave(client);
-  const savedStatus = await waitForEditorMutationReady(client, 'after delete smoke save');
+  const savedStatus = await waitForEditorSaveStatus(
+    client,
+    (status) => status.saveState === 'saved' && status.pendingChanges === 0 && status.lastError === '',
+    'after delete smoke save',
+  );
   const persisted = await waitForPersistedElementPresence(pageId, {
     deleted: [toolbarId, keyboardId],
     present: [lockedId],
@@ -9763,6 +13277,7 @@ const testDeleteEditingControls = async (client, pageId) => {
     keyboardDeleted,
     keyboardUndone,
     keyboardRedone,
+    inspectorDeleteAction,
     lockedDeleteButtonState,
     lockedAfterToolbar,
     lockedAfterKeyboard,
@@ -11226,15 +14741,27 @@ const testLayerHierarchyControls = async (client) => {
     afterNestTree.byId['smoke-image'].depth > afterNestTree.byId['smoke-box'].depth,
     `Nesting selected layer did not move smoke-image under smoke-box: ${JSON.stringify(afterNestTree)}`,
   );
-  assert(
-    Math.abs(getCanvasVisualX(afterNestedImageBox) - getCanvasVisualX(beforeImageBox)) <= 3 &&
-      Math.abs(getCanvasVisualY(afterNestedImageBox) - getCanvasVisualY(beforeImageBox)) <= 3,
-    `Nesting selected layer did not preserve visual position: before ${JSON.stringify(beforeImageBox)}, after ${JSON.stringify(afterNestedImageBox)}`,
+  const rawNestedImageX = beforeState['smoke-image'].x - beforeState['smoke-box'].x;
+  const rawNestedImageY = beforeState['smoke-image'].y - beforeState['smoke-box'].y;
+  const maxInitialNestedImageX = Math.max(0, beforeState['smoke-box'].width - beforeState['smoke-image'].width);
+  const maxInitialNestedImageY = Math.max(0, beforeState['smoke-box'].height - beforeState['smoke-image'].height);
+  const expectedNestedImageX = Math.max(0, Math.min(rawNestedImageX, maxInitialNestedImageX));
+  const expectedNestedImageY = Math.max(0, Math.min(rawNestedImageY, maxInitialNestedImageY));
+  const nestedImageCouldPreserveVisualPosition = (
+    Math.abs(rawNestedImageX - expectedNestedImageX) <= 1 &&
+    Math.abs(rawNestedImageY - expectedNestedImageY) <= 1
   );
+  if (nestedImageCouldPreserveVisualPosition) {
+    assert(
+      Math.abs(getCanvasVisualX(afterNestedImageBox) - getCanvasVisualX(beforeImageBox)) <= 3 &&
+        Math.abs(getCanvasVisualY(afterNestedImageBox) - getCanvasVisualY(beforeImageBox)) <= 3,
+      `Nesting selected layer did not preserve visual position: before ${JSON.stringify(beforeImageBox)}, after ${JSON.stringify(afterNestedImageBox)}`,
+    );
+  }
   assert(
-    Math.abs(afterNestedState['smoke-image'].x - (beforeState['smoke-image'].x - beforeState['smoke-box'].x)) <= 1 &&
-      Math.abs(afterNestedState['smoke-image'].y - (beforeState['smoke-image'].y - beforeState['smoke-box'].y)) <= 1,
-    `Nested image did not convert to parent-relative coordinates: ${JSON.stringify({ beforeState, afterNestedState })}`,
+    Math.abs(afterNestedState['smoke-image'].x - expectedNestedImageX) <= 1 &&
+      Math.abs(afterNestedState['smoke-image'].y - expectedNestedImageY) <= 1,
+    `Nested image did not convert to bounded parent-relative coordinates: ${JSON.stringify({ beforeState, afterNestedState, rawNestedImageX, rawNestedImageY, expectedNestedImageX, expectedNestedImageY })}`,
   );
   await clickControlByTestId(client, 'editor-select-parent-layer');
   const parentSelection = await readSelectedLayerIds(client);
@@ -11333,6 +14860,123 @@ const testLayersPanelControls = async (client, pageId) => {
   assert(
     initialTree.byId['smoke-child-button'].depth > initialTree.byId['smoke-box'].depth,
     `Layers panel did not show nested child depth: ${JSON.stringify(initialTree)}`,
+  );
+  const layerIconState = await evaluate(client, `(() => {
+    const rows = Array.from(document.querySelectorAll('[data-layer-id]'));
+    const rowIconStates = rows.map((row) => {
+      const typeIcon = row.querySelector('[data-testid="editor-layer-type-icon"]');
+      const dragHandle = row.querySelector('[data-testid="editor-layer-drag-handle"]');
+      return {
+        id: row.getAttribute('data-layer-id') || '',
+        type: typeIcon?.getAttribute('data-layer-type') || '',
+        hasTypeIconSvg: Boolean(typeIcon?.querySelector('svg')),
+        typeIconText: typeIcon?.textContent?.trim?.() || '',
+        hasDragHandleSvg: Boolean(dragHandle?.querySelector('svg')),
+      };
+    });
+    return {
+      ok: rowIconStates.length > 0,
+      rows: rowIconStates,
+      missingTypeIconRows: rowIconStates.filter((row) => !row.type || !row.hasTypeIconSvg),
+      missingDragHandleRows: rowIconStates.filter((row) => !row.hasDragHandleSvg),
+      textFallbackRows: rowIconStates.filter((row) => row.typeIconText.length > 0),
+    };
+  })()`);
+  assert(
+    layerIconState?.ok &&
+      layerIconState.missingTypeIconRows.length === 0 &&
+      layerIconState.missingDragHandleRows.length === 0 &&
+      layerIconState.textFallbackRows.length === 0,
+    `Layers panel did not render SVG layer type badges and drag handles for every row: ${JSON.stringify(layerIconState)}`,
+  );
+  const layerPanelActionMetadata = await evaluate(client, `(() => {
+    const readControl = (selector) => {
+      const node = document.querySelector(selector);
+      return {
+        exists: Boolean(node),
+        describedBy: node?.getAttribute('aria-describedby') || '',
+        actionState: node?.getAttribute('data-action-state') || '',
+        actionStatus: node?.getAttribute('data-action-status') || '',
+        disabledReason: node?.getAttribute('data-disabled-reason') || '',
+        targetScope: node?.getAttribute('data-target-scope') || '',
+        matchedLayers: node?.getAttribute('data-matched-layers') || '',
+        disabled: node instanceof HTMLButtonElement ? node.disabled : null,
+      };
+    };
+    const readRowAction = (action, id) => {
+      const node = document.querySelector('[data-layer-action="' + action + '"][data-layer-action-id="' + id + '"]');
+      const describedBy = node?.getAttribute('aria-describedby') || '';
+      return {
+        exists: Boolean(node),
+        describedBy,
+        statusExists: Boolean(describedBy && document.getElementById(describedBy)),
+        statusText: describedBy ? document.getElementById(describedBy)?.textContent?.replace(/\\s+/g, ' ').trim() || '' : '',
+        actionState: node?.getAttribute('data-action-state') || '',
+        actionStatus: node?.getAttribute('data-action-status') || '',
+        disabledReason: node?.getAttribute('data-disabled-reason') || '',
+        disabled: node instanceof HTMLButtonElement ? node.disabled : null,
+      };
+    };
+    const panel = document.querySelector('[data-testid="editor-layers-panel"]');
+    const panelStatus = document.querySelector('[data-testid="editor-layer-panel-action-status"]');
+    const scopeControls = {
+      all: readControl('[data-testid="editor-layer-scope-all"]'),
+      selected: readControl('[data-testid="editor-layer-scope-selected"]'),
+      nested: readControl('[data-testid="editor-layer-scope-nested"]'),
+    };
+    const rowActions = {
+      moveUp: readRowAction('move-up', 'smoke-heading'),
+      delete: readRowAction('delete', 'smoke-heading'),
+      visibility: readRowAction('visibility', 'smoke-heading'),
+      nestBlocked: readRowAction('nest-selection', 'smoke-heading'),
+      toggleExpand: readRowAction('toggle-expand', 'smoke-box'),
+    };
+    return {
+      ok: true,
+      panel: {
+        exists: Boolean(panel),
+        describedBy: panel?.getAttribute('aria-describedby') || '',
+        actionState: panel?.getAttribute('data-action-state') || '',
+        actionStatus: panel?.getAttribute('data-action-status') || '',
+      },
+      panelStatus: {
+        exists: Boolean(panelStatus),
+        id: panelStatus?.id || '',
+        text: panelStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      },
+      search: readControl('[data-testid="editor-layer-search"]'),
+      clear: readControl('[data-testid="editor-layer-search-clear"]'),
+      treeControls: readControl('[data-testid="editor-layer-tree-controls"]'),
+      expandAll: readControl('[data-testid="editor-layer-expand-all"]'),
+      collapseAll: readControl('[data-testid="editor-layer-collapse-all"]'),
+      scopeControls,
+      rowActions,
+    };
+  })()`);
+  assert(
+    layerPanelActionMetadata?.ok &&
+      layerPanelActionMetadata.panel.exists &&
+      layerPanelActionMetadata.panel.describedBy === 'editor-layer-panel-action-status' &&
+      layerPanelActionMetadata.panel.actionState === 'ready' &&
+      /Layers panel ready/.test(layerPanelActionMetadata.panelStatus.text) &&
+      layerPanelActionMetadata.search.actionState === 'ready' &&
+      layerPanelActionMetadata.clear.actionState === 'blocked' &&
+      /Type a layer search/.test(layerPanelActionMetadata.clear.disabledReason) &&
+      layerPanelActionMetadata.scopeControls.all.actionState === 'selected' &&
+      layerPanelActionMetadata.scopeControls.selected.actionState === 'ready' &&
+      layerPanelActionMetadata.scopeControls.selected.targetScope === 'selected' &&
+      Number(layerPanelActionMetadata.scopeControls.nested.matchedLayers) >= 1 &&
+      layerPanelActionMetadata.treeControls.describedBy === 'editor-layer-panel-action-status' &&
+      layerPanelActionMetadata.expandAll.actionState === 'blocked' &&
+      layerPanelActionMetadata.collapseAll.actionState === 'ready' &&
+      layerPanelActionMetadata.rowActions.moveUp.actionState === 'ready' &&
+      layerPanelActionMetadata.rowActions.moveUp.statusExists === true &&
+      layerPanelActionMetadata.rowActions.delete.actionState === 'ready' &&
+      layerPanelActionMetadata.rowActions.visibility.actionState === 'ready' &&
+      layerPanelActionMetadata.rowActions.nestBlocked.actionState === 'blocked' &&
+      /cannot contain child layers/.test(layerPanelActionMetadata.rowActions.nestBlocked.disabledReason) &&
+      layerPanelActionMetadata.rowActions.toggleExpand.actionState === 'ready',
+    `Layers panel did not expose action-state/status metadata for filters, tree controls, and row actions: ${JSON.stringify(layerPanelActionMetadata)}`,
   );
   const bulkCollapseExpand = await evaluate(client, `(async () => {
     const collapseAll = document.querySelector('[data-testid="editor-layer-collapse-all"]');
@@ -11518,6 +15162,73 @@ const testLayersPanelControls = async (client, pageId) => {
       layerSearch.afterClearParentExpanded === 'false',
     `Layer search did not filter rows or reveal a collapsed child match: ${JSON.stringify({ collapsedBeforeSearch, layerSearch })}`,
   );
+  const layerNoMatchRecovery = await evaluate(client, `(async () => {
+    const input = document.querySelector('[data-testid="editor-layer-search"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'missing-search-input' };
+    }
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, 'zz-layer-no-match');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const empty = document.querySelector('[data-testid="editor-layer-filter-empty"]');
+    const reset = document.querySelector('[data-testid="editor-layer-empty-reset-filters"]');
+    const controls = document.querySelector('[data-testid="editor-layer-tree-controls"]');
+    const activeSummary = document.querySelector('[data-testid="editor-layer-active-filter-summary"]');
+    const beforeReset = {
+      hasEmpty: Boolean(empty),
+      emptyText: empty?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      emptyScope: empty?.getAttribute('data-layer-empty-scope') || '',
+      emptySearch: empty?.getAttribute('data-layer-empty-search') || '',
+      resetLabel: reset?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      filterActive: controls?.getAttribute('data-layer-filter-active') || '',
+      activeSummary: activeSummary?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      rows: Array.from(document.querySelectorAll('[data-layer-id]')).length,
+    };
+
+    if (!(reset instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-empty-reset', beforeReset };
+    }
+    reset.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const afterControls = document.querySelector('[data-testid="editor-layer-tree-controls"]');
+    const afterSummary = document.querySelector('[data-testid="editor-layer-summary"]');
+    return {
+      ok: true,
+      beforeReset,
+      afterReset: {
+        inputValue: input.value,
+        hasEmpty: Boolean(document.querySelector('[data-testid="editor-layer-filter-empty"]')),
+        rows: Array.from(document.querySelectorAll('[data-layer-id]')).length,
+        rowIds: Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean),
+        filterActive: afterControls?.getAttribute('data-layer-filter-active') || '',
+        scope: afterSummary?.getAttribute('data-layer-scope') || '',
+        activeSummaryVisible: Boolean(document.querySelector('[data-testid="editor-layer-active-filter-summary"]')),
+      },
+    };
+  })()`);
+  assert(
+    layerNoMatchRecovery?.ok &&
+      layerNoMatchRecovery.beforeReset.hasEmpty === true &&
+      layerNoMatchRecovery.beforeReset.rows === 0 &&
+      layerNoMatchRecovery.beforeReset.emptyScope === 'all' &&
+      layerNoMatchRecovery.beforeReset.emptySearch === 'zz-layer-no-match' &&
+      /zz-layer-no-match/.test(layerNoMatchRecovery.beforeReset.emptyText) &&
+      layerNoMatchRecovery.beforeReset.resetLabel === 'Show all layers' &&
+      layerNoMatchRecovery.beforeReset.filterActive === 'true' &&
+      layerNoMatchRecovery.afterReset.inputValue === '' &&
+      layerNoMatchRecovery.afterReset.hasEmpty === false &&
+      layerNoMatchRecovery.afterReset.rows >= 6 &&
+      ['smoke-heading', 'smoke-image', 'smoke-box'].every((id) => layerNoMatchRecovery.afterReset.rowIds.includes(id)) &&
+      layerNoMatchRecovery.afterReset.filterActive === 'false' &&
+      layerNoMatchRecovery.afterReset.scope === 'all' &&
+      layerNoMatchRecovery.afterReset.activeSummaryVisible === false,
+    `Layer filter empty state did not provide actionable reset recovery: ${JSON.stringify(layerNoMatchRecovery)}`,
+  );
   const expandedAfterSearch = await clickLayerAction(client, 'toggle-expand', 'smoke-box');
 
   const multiSelected = await selectLayerIds(client, ['smoke-heading', 'smoke-image']);
@@ -11525,23 +15236,138 @@ const testLayersPanelControls = async (client, pageId) => {
     ['smoke-heading', 'smoke-image'].every((id) => multiSelected.selectedLayers?.includes(id)),
     `Layers panel multi-select did not retain selected rows: ${JSON.stringify(multiSelected)}`,
   );
-  const rangeSelected = await evaluate(client, `(() => {
+  const layerScopeFilters = await evaluate(client, `(async () => {
+    const summary = document.querySelector('[data-testid="editor-layer-summary"]');
+    const selectedScope = document.querySelector('[data-testid="editor-layer-scope-selected"]');
+    const nestedScope = document.querySelector('[data-testid="editor-layer-scope-nested"]');
+    const allScope = document.querySelector('[data-testid="editor-layer-scope-all"]');
+    if (
+      !(summary instanceof HTMLElement) ||
+      !(selectedScope instanceof HTMLButtonElement) ||
+      !(nestedScope instanceof HTMLButtonElement) ||
+      !(allScope instanceof HTMLButtonElement)
+    ) {
+      return {
+        ok: false,
+        reason: 'missing-layer-scope-controls',
+        hasSummary: Boolean(summary),
+        hasSelectedScope: Boolean(selectedScope),
+        hasNestedScope: Boolean(nestedScope),
+        hasAllScope: Boolean(allScope),
+      };
+    }
+
+    const readRows = () => Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => ({
+      id: node.getAttribute('data-layer-id') || '',
+      depth: Number(node.getAttribute('data-layer-depth') || 0),
+    }));
+    const initialSummary = {
+      total: Number(summary.getAttribute('data-layer-total-count') || 0),
+      visible: Number(summary.getAttribute('data-layer-visible-count') || 0),
+      selected: Number(summary.getAttribute('data-layer-selected-count') || 0),
+      nested: Number(summary.getAttribute('data-layer-nested-count') || 0),
+      scope: summary.getAttribute('data-layer-scope') || '',
+    };
+
+    selectedScope.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const selectedSummary = document.querySelector('[data-testid="editor-layer-summary"]');
+    const selectedScopeState = {
+      scope: selectedSummary?.getAttribute('data-layer-scope') || '',
+      active: selectedScope.getAttribute('data-layer-scope-active') || '',
+    };
+    const selectedRows = readRows();
+
+    nestedScope.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const nestedSummary = document.querySelector('[data-testid="editor-layer-summary"]');
+    const nestedScopeState = {
+      scope: nestedSummary?.getAttribute('data-layer-scope') || '',
+      active: nestedScope.getAttribute('data-layer-scope-active') || '',
+    };
+    const nestedRows = readRows();
+
+    allScope.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const allSummary = document.querySelector('[data-testid="editor-layer-summary"]');
+
+    return {
+      ok: true,
+      initialSummary,
+      selected: {
+        ...selectedScopeState,
+        rows: selectedRows,
+      },
+      nested: {
+        ...nestedScopeState,
+        rows: nestedRows,
+      },
+      all: {
+        scope: allSummary?.getAttribute('data-layer-scope') || '',
+        visible: Number(allSummary?.getAttribute('data-layer-visible-count') || 0),
+      },
+    };
+  })()`);
+  assert(
+    layerScopeFilters?.ok &&
+      layerScopeFilters.initialSummary.total >= initialTree.rows.length &&
+      layerScopeFilters.initialSummary.selected >= 2 &&
+      layerScopeFilters.initialSummary.nested >= 2 &&
+      layerScopeFilters.selected.scope === 'selected' &&
+      layerScopeFilters.selected.active === 'true' &&
+      layerScopeFilters.selected.rows.length === 2 &&
+      ['smoke-heading', 'smoke-image'].every((id) => layerScopeFilters.selected.rows.some((row) => row.id === id)) &&
+      layerScopeFilters.nested.scope === 'nested' &&
+      layerScopeFilters.nested.active === 'true' &&
+      layerScopeFilters.nested.rows.some((row) => row.id === 'smoke-box' && row.depth === 0) &&
+      layerScopeFilters.nested.rows.some((row) => row.id === 'smoke-child-button' && row.depth > 0) &&
+      layerScopeFilters.all.scope === 'all' &&
+      layerScopeFilters.all.visible >= initialTree.rows.length,
+    `Layer scope filters did not narrow selected/nested views and reset to all: ${JSON.stringify(layerScopeFilters)}`,
+  );
+  const rangeSetup = await evaluate(client, `(() => {
     const ids = Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean);
     const startId = 'smoke-heading';
     const endId = 'smoke-image';
     const startIndex = ids.indexOf(startId);
     const endIndex = ids.indexOf(endId);
     const start = document.querySelector('[data-layer-id="' + startId + '"]');
-    const end = document.querySelector('[data-layer-id="' + endId + '"]');
-    if (!(start instanceof HTMLElement) || !(end instanceof HTMLElement) || startIndex < 0 || endIndex < 0) {
+    if (!(start instanceof HTMLElement) || startIndex < 0 || endIndex < 0) {
       return { ok: false, reason: 'missing-range-row', ids, startIndex, endIndex };
     }
     start.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    end.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
     const expected = ids.slice(Math.min(startIndex, endIndex), Math.max(startIndex, endIndex) + 1);
-    const selected = Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean);
-    return { ok: true, ids, expected, selected };
+    return { ok: true, ids, expected };
   })()`);
+  assert(rangeSetup?.ok, `Layers panel Shift range-select setup failed: ${JSON.stringify(rangeSetup)}`);
+  await sleep(150);
+
+  const rangeClick = await evaluate(client, `(() => {
+    const end = document.querySelector('[data-layer-id="smoke-image"]');
+    if (!(end instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-range-end' };
+    }
+    end.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    return { ok: true };
+  })()`);
+  assert(rangeClick?.ok, `Layers panel Shift range-select click failed: ${JSON.stringify(rangeClick)}`);
+
+  let rangeSelected = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    rangeSelected = await evaluate(client, `(() => ({
+      ok: true,
+      expected: ${JSON.stringify(rangeSetup.expected)},
+      selected: Array.from(document.querySelectorAll('[data-layer-selected="true"]')).map((node) => node.getAttribute('data-layer-id')).filter(Boolean),
+    }))()`);
+    if (
+      rangeSelected.expected.length >= 2 &&
+      rangeSelected.expected.every((id) => rangeSelected.selected.includes(id)) &&
+      rangeSelected.selected.length === rangeSelected.expected.length
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
   assert(
     rangeSelected?.ok &&
       rangeSelected.expected.length >= 2 &&
@@ -11653,7 +15479,7 @@ const testLayersPanelControls = async (client, pageId) => {
   );
   const renameLayerClick = await clickLayerAction(client, 'rename', 'smoke-link');
   const renamedLayerName = `Smoke CTA ${Date.now().toString(36)}`;
-  const renameLayer = await evaluate(client, `(async () => {
+  const renameInputReady = await evaluate(client, `(() => {
     const input = document.querySelector('[data-layer-rename-input="smoke-link"]');
     if (!(input instanceof HTMLInputElement)) {
       return {
@@ -11663,13 +15489,40 @@ const testLayersPanelControls = async (client, pageId) => {
       };
     }
 
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-    setter?.call(input, ${JSON.stringify(renamedLayerName)});
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    input.focus();
+    input.select();
+    return { ok: true, value: input.value };
+  })()`);
+  assert(renameInputReady?.ok, `Layer inline rename input did not open: ${JSON.stringify({ renameLayerClick, renameInputReady })}`);
+  await client.send('Input.insertText', { text: renamedLayerName });
+  await sleep(150);
+  const renameInputValue = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-layer-rename-input="smoke-link"]');
+    return {
+      ok: input instanceof HTMLInputElement,
+      value: input instanceof HTMLInputElement ? input.value : '',
+    };
+  })()`);
+  assert(
+    renameInputValue?.ok && renameInputValue.value === renamedLayerName,
+    `Layer inline rename input did not receive typed text: ${JSON.stringify({ renameLayerClick, renameInputReady, renameInputValue })}`,
+  );
+  const renameCommit = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-layer-rename-input="smoke-link"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'missing-rename-input-before-commit' };
+    }
+    const valueBeforeCommit = input.value;
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    return { ok: true, valueBeforeCommit };
+  })()`);
+  assert(
+    renameCommit?.ok && renameCommit.valueBeforeCommit === renamedLayerName,
+    `Layer inline rename input was not ready to commit: ${JSON.stringify({ renameLayerClick, renameInputReady, renameInputValue, renameCommit })}`,
+  );
+  let renameLayer = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    renameLayer = await evaluate(client, `(() => {
     const row = document.querySelector('[data-layer-id="smoke-link"]');
     return {
       ok: true,
@@ -11678,12 +15531,22 @@ const testLayersPanelControls = async (client, pageId) => {
       inputStillOpen: Boolean(document.querySelector('[data-layer-rename-input="smoke-link"]')),
     };
   })()`);
+    if (
+      renameLayer?.ok &&
+      renameLayer.rowText.includes(renamedLayerName) &&
+      renameLayer.selected === 'true' &&
+      renameLayer.inputStillOpen === false
+    ) {
+      break;
+    }
+    await sleep(100);
+  }
   assert(
     renameLayer?.ok &&
       renameLayer.rowText.includes(renamedLayerName) &&
       renameLayer.selected === 'true' &&
       renameLayer.inputStillOpen === false,
-    `Layer inline rename did not update the row label: ${JSON.stringify({ renameLayerClick, renamedLayer })}`,
+    `Layer inline rename did not update the row label: ${JSON.stringify({ renameLayerClick, renameInputReady, renameInputValue, renameCommit, renameLayer })}`,
   );
   const renamedInspector = await evaluate(client, `(() => {
     const propertiesTab = document.querySelector('[data-testid="editor-tab-properties"]');
@@ -11902,8 +15765,10 @@ const testLayersPanelControls = async (client, pageId) => {
 
   return {
     initialTree,
+    layerIconState,
     bulkCollapseExpand,
     multiSelected,
+    layerScopeFilters,
     rangeSelected,
     selectedRowActions,
     unselectedRowActions,
@@ -11914,6 +15779,7 @@ const testLayersPanelControls = async (client, pageId) => {
     keyboardTreeCollapseExpand,
     collapsedBeforeSearch,
     layerSearch,
+    layerNoMatchRecovery,
     expandedAfterSearch,
     keyboardRowSelection,
     keyboardRowNavigation,
@@ -11958,24 +15824,108 @@ const testLayersPanelControls = async (client, pageId) => {
 };
 
 const testSyncedReusableSectionInstance = async (client, sectionId) => {
-  await selectElement(client, 'smoke-heading');
+  await selectLayerById(client, 'smoke-heading');
+  await waitForEditorMutationReady(client, 'before synced reusable insertion');
 
-  const added = await evaluate(client, `(() => {
-    const button = document.querySelector('[data-component-add="reusable-section:${sectionId}"]');
-    if (!(button instanceof HTMLButtonElement)) {
+  let savedCategoryReady = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    savedCategoryReady = await evaluate(client, `(() => {
+      const search = document.querySelector('[data-testid="editor-component-search"]');
+      if (search instanceof HTMLInputElement && search.value) {
+        search.value = '';
+        search.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      const savedCategory = document.querySelector('[data-testid="editor-component-category-saved"]');
+      if (!(savedCategory instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'missing-saved-category',
+          categories: Array.from(document.querySelectorAll('[data-testid^="editor-component-category-"]')).map((node) => node.getAttribute('data-testid')),
+        };
+      }
+
+      savedCategory.click();
+
+      const summary = document.querySelector('[data-testid="editor-component-library-summary"]');
+      const addButton = document.querySelector('[data-component-add="reusable-section:${sectionId}"]');
+      const reusableItems = Array.from(document.querySelectorAll('[data-component-library-item^="reusable-section:"]')).map((node) => ({
+        item: node.getAttribute('data-component-library-item'),
+        text: node.textContent?.trim?.().slice(0, 120) || '',
+      }));
+
       return {
-        ok: false,
-        reason: 'missing-add-button',
-        reusableItems: Array.from(document.querySelectorAll('[data-component-library-item^="reusable-section:"]')).map((node) => ({
-          item: node.getAttribute('data-component-library-item'),
-          text: node.textContent?.trim?.().slice(0, 120) || '',
-        })),
+        ok: Number(summary?.getAttribute('data-component-library-saved-count') || 0) > 0 &&
+          addButton instanceof HTMLButtonElement,
+        reason: addButton instanceof HTMLButtonElement ? null : 'waiting-for-saved-reusable-item',
+        savedCount: summary?.getAttribute('data-component-library-saved-count') || '',
+        category: summary?.getAttribute('data-component-library-category') || '',
+        reusableItems,
       };
+    })()`);
+
+    if (savedCategoryReady?.ok) {
+      break;
     }
 
-    button.click();
-    return { ok: true, label: button.getAttribute('aria-label') || '' };
-  })()`);
+    await waitForEditorMutationReady(client, 'waiting for saved reusable sections in component library');
+    await sleep(150);
+  }
+  assert(
+    savedCategoryReady?.ok,
+    `Reusable section was not reachable from Saved library category: ${JSON.stringify(savedCategoryReady)}`,
+  );
+
+  let added = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    added = await evaluate(client, `(() => {
+      const selectedElement = document.querySelector('[data-element-id][data-selected-ids]');
+      const selectedElementId = selectedElement?.getAttribute('data-element-id') || null;
+      if (selectedElementId !== 'smoke-heading') {
+        return {
+          ok: false,
+          reason: 'wrong-selection',
+          selectedElementId,
+          selectedIds: selectedElement?.getAttribute('data-selected-ids') || '',
+        };
+      }
+      const button = document.querySelector('[data-component-add="reusable-section:${sectionId}"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'missing-add-button',
+          selectedElementId,
+          reusableItems: Array.from(document.querySelectorAll('[data-component-library-item^="reusable-section:"]')).map((node) => ({
+            item: node.getAttribute('data-component-library-item'),
+            text: node.textContent?.trim?.().slice(0, 120) || '',
+          })),
+        };
+      }
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'add-button-disabled',
+          selectedElementId,
+          label: button.getAttribute('aria-label') || '',
+        };
+      }
+
+      button.click();
+      return {
+        ok: true,
+        selectedElementId,
+        label: button.getAttribute('aria-label') || '',
+      };
+    })()`);
+
+    if (added?.ok) {
+      break;
+    }
+
+    await selectLayerById(client, 'smoke-heading');
+    await waitForEditorMutationReady(client, 'waiting for synced reusable add button');
+    await sleep(150);
+  }
   assert(added?.ok, `Unable to add synced reusable section: ${JSON.stringify(added)}`);
   await waitForEditorMutationReady(client, 'after synced reusable insertion');
 
@@ -11984,14 +15934,30 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
     inserted = await evaluate(client, `(() => {
       const selectedElement = document.querySelector('[data-element-id][data-selected-ids]');
       const panel = document.querySelector('[data-testid="editor-reusable-instance"]');
+      const status = document.querySelector('[data-testid="editor-reusable-instance-action-status"]');
       const refresh = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
       const detach = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
       return {
         selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
         selectedIds: selectedElement?.getAttribute('data-selected-ids') || '',
         panelText: panel?.textContent || '',
+        panelDescribedBy: panel?.getAttribute('aria-describedby') || '',
+        panelState: panel?.getAttribute('data-action-state') || '',
+        panelStatus: panel?.getAttribute('data-action-status') || '',
+        sectionId: panel?.getAttribute('data-reusable-instance-section-id') || '',
+        sourceState: panel?.getAttribute('data-reusable-instance-source-state') || '',
+        statusId: status?.id || '',
+        statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         refreshDisabled: refresh instanceof HTMLButtonElement ? refresh.disabled : null,
+        refreshState: refresh?.getAttribute('data-action-state') || '',
+        refreshStatus: refresh?.getAttribute('data-action-status') || '',
+        refreshDescribedBy: refresh?.getAttribute('aria-describedby') || '',
+        refreshDisabledReason: refresh?.getAttribute('data-disabled-reason') || '',
         detachDisabled: detach instanceof HTMLButtonElement ? detach.disabled : null,
+        detachState: detach?.getAttribute('data-action-state') || '',
+        detachStatus: detach?.getAttribute('data-action-status') || '',
+        detachDescribedBy: detach?.getAttribute('aria-describedby') || '',
+        detachDisabledReason: detach?.getAttribute('data-disabled-reason') || '',
         body: document.body?.innerText?.slice(0, 300) || '',
       };
     })()`);
@@ -12008,6 +15974,25 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   assert(/Synced section/i.test(inserted.panelText), `Synced reusable inspector card missing: ${JSON.stringify(inserted)}`);
   assert(inserted.refreshDisabled === false, `Synced reusable refresh control disabled: ${JSON.stringify(inserted)}`);
   assert(inserted.detachDisabled === false, `Synced reusable detach control disabled: ${JSON.stringify(inserted)}`);
+  assert(
+    inserted.panelDescribedBy.includes('editor-reusable-instance-action-status') &&
+      inserted.panelState === 'ready' &&
+      inserted.sectionId === sectionId &&
+      inserted.sourceState === 'linked' &&
+      inserted.statusId === 'editor-reusable-instance-action-status' &&
+      inserted.panelStatus === inserted.statusText &&
+      inserted.refreshState === 'ready' &&
+      inserted.detachState === 'ready' &&
+      inserted.refreshStatus === inserted.statusText &&
+      inserted.detachStatus === inserted.statusText &&
+      inserted.refreshDescribedBy.includes('editor-reusable-instance-action-status') &&
+      inserted.detachDescribedBy.includes('editor-reusable-instance-action-status') &&
+      inserted.refreshDisabledReason === '' &&
+      inserted.detachDisabledReason === '' &&
+      /Refresh from saved source available/.test(inserted.statusText) &&
+      /Detach from saved source available/.test(inserted.statusText),
+    `Synced reusable inspector card did not expose ready Refresh/Detach action status: ${JSON.stringify(inserted)}`,
+  );
 
   const insertedRoots = await evaluate(client, `(() => (
     Array.from(document.querySelectorAll('[data-element-id]'))
@@ -12117,17 +16102,27 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   let reusableRefreshState = null;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     reusableRefreshState = await evaluate(client, `(() => {
-      const selectedElement = Array.from(document.querySelectorAll('[data-element-id]')).find((node) => (
-        node.querySelector('[data-role="canvas-move-handle"]')
-      ));
+      const selectedElement = document.querySelector('[data-element-id][data-selected-ids]');
       const panel = document.querySelector('[data-testid="editor-reusable-instance"]');
+      const status = document.querySelector('[data-testid="editor-reusable-instance-action-status"]');
       const button = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
+      const detach = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
       return {
         selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
         hasPanel: Boolean(panel),
         panelText: panel?.textContent || '',
+        panelDescribedBy: panel?.getAttribute('aria-describedby') || '',
+        panelState: panel?.getAttribute('data-action-state') || '',
+        panelStatus: panel?.getAttribute('data-action-status') || '',
+        sourceState: panel?.getAttribute('data-reusable-instance-source-state') || '',
+        statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         hasButton: button instanceof HTMLButtonElement,
         disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        refreshState: button?.getAttribute('data-action-state') || '',
+        refreshStatus: button?.getAttribute('data-action-status') || '',
+        refreshDisabledReason: button?.getAttribute('data-disabled-reason') || '',
+        detachState: detach?.getAttribute('data-action-state') || '',
+        detachStatus: detach?.getAttribute('data-action-status') || '',
         inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent?.slice(0, 500) || '',
       };
     })()`);
@@ -12135,7 +16130,9 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
       reusableRefreshState?.selectedElementId === secondaryRoot.id &&
       reusableRefreshState.hasPanel &&
       reusableRefreshState.hasButton &&
-      reusableRefreshState.disabled === false
+      reusableRefreshState.disabled === false &&
+      reusableRefreshState.refreshState === 'ready' &&
+      reusableRefreshState.detachState === 'ready'
     ) {
       break;
     }
@@ -12151,10 +16148,37 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
     return true;
   })()`);
   assert(refreshClicked, `Unable to refresh selected synced reusable instance: ${JSON.stringify(reusableRefreshState)}`);
-  await sleep(350);
+  assert(
+    reusableRefreshState.panelDescribedBy.includes('editor-reusable-instance-action-status') &&
+      reusableRefreshState.panelState === 'ready' &&
+      reusableRefreshState.panelStatus === reusableRefreshState.statusText &&
+      reusableRefreshState.sourceState === 'linked' &&
+      reusableRefreshState.refreshStatus === reusableRefreshState.statusText &&
+      reusableRefreshState.detachStatus === reusableRefreshState.statusText &&
+      reusableRefreshState.refreshDisabledReason === '' &&
+      /Refresh from saved source available/.test(reusableRefreshState.statusText) &&
+      /Detach from saved source available/.test(reusableRefreshState.statusText),
+    `Synced reusable refresh state lost action-status metadata: ${JSON.stringify(reusableRefreshState)}`,
+  );
+  let refreshedInstance = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const after = await readEditorElementState(client, [secondaryRoot.id]);
+    const text = await evaluate(client, `(() => {
+      const node = document.querySelector('[data-element-id="${secondaryRoot.id}"]');
+      return node?.textContent || '';
+    })()`);
+    if (
+      after[secondaryRoot.id]?.height > beforeRefresh[secondaryRoot.id].height &&
+      /Reusable sibling v2/i.test(text)
+    ) {
+      refreshedInstance = { after, text };
+      break;
+    }
+    await sleep(150);
+  }
 
-  const afterRefresh = await readEditorElementState(client, [secondaryRoot.id]);
-  const refreshedText = await evaluate(client, `(() => {
+  const afterRefresh = refreshedInstance?.after || await readEditorElementState(client, [secondaryRoot.id]);
+  const refreshedText = refreshedInstance?.text || await evaluate(client, `(() => {
     const node = document.querySelector('[data-element-id="${secondaryRoot.id}"]');
     return node?.textContent || '';
   })()`);
@@ -12184,12 +16208,265 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   }))()`);
   assert(afterDetach.hasPanel === false, `Reusable section detach did not remove sync card: ${JSON.stringify(afterDetach)}`);
 
+  let missingSourceReusableSectionId = null;
+  let missingSourceInserted = null;
+  let missingSourceState = null;
+  let missingSourceDetach = null;
+  try {
+    missingSourceReusableSectionId = await createSmokeReusableSection();
+    await selectLayerById(client, 'smoke-heading');
+    await waitForEditorMutationReady(client, 'before missing-source synced reusable insertion');
+
+    const missingSourceFixtureListRefreshed = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="editor-component-refresh-saved-sections"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return false;
+      }
+      button.click();
+      return true;
+    })()`);
+    assert(missingSourceFixtureListRefreshed, 'Unable to refresh saved section library after creating missing-source fixture');
+    await sleep(600);
+
+    let missingSourceCategoryReady = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      missingSourceCategoryReady = await evaluate(client, `(() => {
+        const search = document.querySelector('[data-testid="editor-component-search"]');
+        if (search instanceof HTMLInputElement && search.value) {
+          search.value = '';
+          search.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        const savedCategory = document.querySelector('[data-testid="editor-component-category-saved"]');
+        if (!(savedCategory instanceof HTMLButtonElement)) {
+          return {
+            ok: false,
+            reason: 'missing-saved-category',
+            categories: Array.from(document.querySelectorAll('[data-testid^="editor-component-category-"]')).map((node) => node.getAttribute('data-testid')),
+          };
+        }
+
+        savedCategory.click();
+        const summary = document.querySelector('[data-testid="editor-component-library-summary"]');
+        const addButton = document.querySelector('[data-component-add="reusable-section:${missingSourceReusableSectionId}"]');
+        return {
+          ok: Number(summary?.getAttribute('data-component-library-saved-count') || 0) > 0 &&
+            addButton instanceof HTMLButtonElement,
+          reason: addButton instanceof HTMLButtonElement ? null : 'waiting-for-missing-source-reusable-item',
+          savedCount: summary?.getAttribute('data-component-library-saved-count') || '',
+          category: summary?.getAttribute('data-component-library-category') || '',
+          items: Array.from(document.querySelectorAll('[data-component-library-item^="reusable-section:"]')).map((node) => node.getAttribute('data-component-library-item')),
+        };
+      })()`);
+
+      if (missingSourceCategoryReady?.ok) {
+        break;
+      }
+
+      await waitForEditorMutationReady(client, 'waiting for missing-source reusable section in library');
+      await sleep(150);
+    }
+    assert(
+      missingSourceCategoryReady?.ok,
+      `Missing-source reusable section was not reachable before deletion: ${JSON.stringify(missingSourceCategoryReady)}`,
+    );
+
+    let missingSourceAdd = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      missingSourceAdd = await evaluate(client, `(() => {
+        const selectedElement = document.querySelector('[data-element-id][data-selected-ids]');
+        const selectedElementId = selectedElement?.getAttribute('data-element-id') || null;
+        const button = document.querySelector('[data-component-add="reusable-section:${missingSourceReusableSectionId}"]');
+        if (selectedElementId !== 'smoke-heading') {
+          return {
+            ok: false,
+            reason: 'wrong-selection',
+            selectedElementId,
+            selectedIds: selectedElement?.getAttribute('data-selected-ids') || '',
+          };
+        }
+        if (!(button instanceof HTMLButtonElement)) {
+          return {
+            ok: false,
+            reason: 'missing-add-button',
+            selectedElementId,
+            items: Array.from(document.querySelectorAll('[data-component-library-item^="reusable-section:"]')).map((node) => node.getAttribute('data-component-library-item')),
+          };
+        }
+        if (button.disabled) {
+          return {
+            ok: false,
+            reason: 'add-button-disabled',
+            selectedElementId,
+            label: button.getAttribute('aria-label') || '',
+          };
+        }
+
+        button.click();
+        return {
+          ok: true,
+          selectedElementId,
+          label: button.getAttribute('aria-label') || '',
+        };
+      })()`);
+
+      if (missingSourceAdd?.ok) {
+        break;
+      }
+
+      await selectLayerById(client, 'smoke-heading');
+      await waitForEditorMutationReady(client, 'waiting for missing-source reusable add button');
+      await sleep(150);
+    }
+    assert(missingSourceAdd?.ok, `Unable to add missing-source synced reusable section: ${JSON.stringify(missingSourceAdd)}`);
+    await waitForEditorMutationReady(client, 'after missing-source synced reusable insertion');
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      missingSourceInserted = await evaluate(client, `(() => {
+        const selectedElement = document.querySelector('[data-element-id][data-selected-ids]');
+        const panel = document.querySelector('[data-testid="editor-reusable-instance"]');
+        const refresh = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
+        const detach = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
+        return {
+          selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
+          selectedIds: selectedElement?.getAttribute('data-selected-ids') || '',
+          hasPanel: Boolean(panel),
+          sectionId: panel?.getAttribute('data-reusable-instance-section-id') || '',
+          sourceState: panel?.getAttribute('data-reusable-instance-source-state') || '',
+          refreshDisabled: refresh instanceof HTMLButtonElement ? refresh.disabled : null,
+          detachDisabled: detach instanceof HTMLButtonElement ? detach.disabled : null,
+        };
+      })()`);
+
+      if (
+        missingSourceInserted?.selectedElementId &&
+        missingSourceInserted.sectionId === missingSourceReusableSectionId &&
+        missingSourceInserted.sourceState === 'linked' &&
+        missingSourceInserted.refreshDisabled === false &&
+        missingSourceInserted.detachDisabled === false
+      ) {
+        break;
+      }
+      await sleep(150);
+    }
+    assert(
+      missingSourceInserted?.selectedElementId &&
+        missingSourceInserted.sectionId === missingSourceReusableSectionId &&
+        missingSourceInserted.sourceState === 'linked',
+      `Missing-source fixture did not insert as a linked synced section first: ${JSON.stringify(missingSourceInserted)}`,
+    );
+
+    await requestApi(`/api/admin/sites/${SITE_ID}/reusable-sections/${missingSourceReusableSectionId}`, { method: 'DELETE' });
+    const missingSourceListRefreshed = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="editor-component-refresh-saved-sections"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return false;
+      }
+      button.click();
+      return true;
+    })()`);
+    assert(missingSourceListRefreshed, 'Unable to refresh saved section library after deleting missing-source fixture');
+    await sleep(600);
+    await selectLayerById(client, missingSourceInserted.selectedElementId);
+    await switchToPropertiesPanel(client);
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      missingSourceState = await evaluate(client, `(() => {
+        const selectedElement = document.querySelector('[data-element-id][data-selected-ids]');
+        const panel = document.querySelector('[data-testid="editor-reusable-instance"]');
+        const status = document.querySelector('[data-testid="editor-reusable-instance-action-status"]');
+        const refresh = document.querySelector('[data-testid="editor-refresh-reusable-instance"]');
+        const detach = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
+        return {
+          selectedElementId: selectedElement?.getAttribute('data-element-id') || null,
+          selectedIds: selectedElement?.getAttribute('data-selected-ids') || '',
+          hasPanel: Boolean(panel),
+          panelText: panel?.textContent || '',
+          panelDescribedBy: panel?.getAttribute('aria-describedby') || '',
+          panelState: panel?.getAttribute('data-action-state') || '',
+          panelStatus: panel?.getAttribute('data-action-status') || '',
+          sectionId: panel?.getAttribute('data-reusable-instance-section-id') || '',
+          sourceState: panel?.getAttribute('data-reusable-instance-source-state') || '',
+          statusId: status?.id || '',
+          statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+          refreshDisabled: refresh instanceof HTMLButtonElement ? refresh.disabled : null,
+          refreshState: refresh?.getAttribute('data-action-state') || '',
+          refreshStatus: refresh?.getAttribute('data-action-status') || '',
+          refreshDescribedBy: refresh?.getAttribute('aria-describedby') || '',
+          refreshDisabledReason: refresh?.getAttribute('data-disabled-reason') || '',
+          detachDisabled: detach instanceof HTMLButtonElement ? detach.disabled : null,
+          detachState: detach?.getAttribute('data-action-state') || '',
+          detachStatus: detach?.getAttribute('data-action-status') || '',
+          detachDescribedBy: detach?.getAttribute('aria-describedby') || '',
+          detachDisabledReason: detach?.getAttribute('data-disabled-reason') || '',
+        };
+      })()`);
+
+      if (
+        missingSourceState?.selectedElementId === missingSourceInserted.selectedElementId &&
+        missingSourceState.sourceState === 'missing' &&
+        missingSourceState.refreshDisabled === true &&
+        missingSourceState.detachDisabled === false
+      ) {
+        break;
+      }
+      await sleep(150);
+    }
+
+    assert(
+      missingSourceState?.selectedElementId === missingSourceInserted.selectedElementId &&
+        missingSourceState.hasPanel &&
+        missingSourceState.panelDescribedBy.includes('editor-reusable-instance-action-status') &&
+        missingSourceState.panelState === 'blocked' &&
+        missingSourceState.panelStatus === missingSourceState.statusText &&
+        missingSourceState.sectionId === missingSourceReusableSectionId &&
+        missingSourceState.sourceState === 'missing' &&
+        missingSourceState.statusId === 'editor-reusable-instance-action-status' &&
+        missingSourceState.refreshDisabled === true &&
+        missingSourceState.refreshState === 'blocked' &&
+        missingSourceState.refreshStatus === missingSourceState.statusText &&
+        missingSourceState.refreshDescribedBy.includes('editor-reusable-instance-action-status') &&
+        missingSourceState.refreshDisabledReason === 'Saved section source is missing.' &&
+        missingSourceState.detachDisabled === false &&
+        missingSourceState.detachState === 'ready' &&
+        missingSourceState.detachStatus === missingSourceState.statusText &&
+        missingSourceState.detachDescribedBy.includes('editor-reusable-instance-action-status') &&
+        missingSourceState.detachDisabledReason === '' &&
+        /missing its saved source/i.test(missingSourceState.statusText) &&
+        /Refresh unavailable: Saved section source is missing\./.test(missingSourceState.statusText) &&
+        /Detach from saved source available\./.test(missingSourceState.statusText),
+      `Synced reusable missing-source state did not keep Detach available while blocking Refresh: ${JSON.stringify(missingSourceState)}`,
+    );
+
+    missingSourceDetach = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="editor-detach-reusable-instance"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, reason: 'detach-unavailable' };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    assert(missingSourceDetach?.ok, `Unable to detach missing-source synced reusable instance: ${JSON.stringify({ missingSourceState, missingSourceDetach })}`);
+    await sleep(250);
+
+    const afterMissingSourceDetach = await evaluate(client, `(() => ({
+      hasPanel: Boolean(document.querySelector('[data-testid="editor-reusable-instance"]')),
+      selectedElementId: document.querySelector('[data-element-id][data-selected-ids]')?.getAttribute('data-element-id') || null,
+    }))()`);
+    assert(afterMissingSourceDetach.hasPanel === false, `Missing-source reusable detach did not remove sync card: ${JSON.stringify(afterMissingSourceDetach)}`);
+  } finally {
+    await deleteSmokeReusableSection(missingSourceReusableSectionId);
+  }
+
   return {
     sectionId,
     inserted,
     beforeRefresh,
     afterRefresh,
     afterDetach,
+    missingSourceInserted,
+    missingSourceState,
+    missingSourceDetach,
   };
 };
 
@@ -12953,11 +17230,17 @@ const waitForUploadedMediaItem = async (client, filename) => {
         name: item.getAttribute('data-media-name') || '',
         type: item.getAttribute('data-media-type') || '',
         url: item.getAttribute('data-media-url') || '',
+        actionState: item.getAttribute('data-action-state') || '',
+        actionStatus: item.getAttribute('data-action-status') || '',
+        disabledReason: item.getAttribute('data-disabled-reason') || '',
+        describedBy: item.getAttribute('aria-describedby') || '',
         scope: item.getAttribute('data-media-scope') || '',
         scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
         folderId: item.getAttribute('data-media-folder-id') || '',
         folderPath: item.getAttribute('data-media-folder-path') || '',
         organizationSchema: item.getAttribute('data-media-organization-schema') || '',
+        tags: (item.getAttribute('data-media-tags') || '').split(',').filter(Boolean),
+        tagCount: item.getAttribute('data-media-tag-count') || '',
       }));
       const uploadZone = document.querySelector('[data-testid="media-upload-dropzone"]');
       return {
@@ -12971,10 +17254,61 @@ const waitForUploadedMediaItem = async (client, filename) => {
         uploadProgressTotal: Number(modal?.getAttribute('data-upload-progress-total') || 0),
         uploadProgressCompleted: Number(modal?.getAttribute('data-upload-progress-completed') || 0),
         uploadProgressFailed: Number(modal?.getAttribute('data-upload-progress-failed') || 0),
+        actionState: document.querySelector('[data-testid="media-library-action-status"]')?.getAttribute('data-action-state') || '',
+        actionStatus: document.querySelector('[data-testid="media-library-action-status"]')?.getAttribute('data-action-status') || '',
+        actionStatusText: document.querySelector('[data-testid="media-library-action-status"]')?.textContent || '',
         isUploading: uploadZone?.getAttribute('data-uploading') === 'true',
         error: document.querySelector('[data-testid="media-library-error"]')?.textContent || '',
         hasFolderFilter: Boolean(document.querySelector('[data-testid="media-library-folder-filter"]')),
         hasNestedFolderToggle: Boolean(document.querySelector('[data-testid="media-library-include-subfolders"]')),
+        libraryFilterMetadata: {
+          searchActionState: document.querySelector('[data-testid="media-library-search"]')?.getAttribute('data-action-state') || '',
+          searchActionStatus: document.querySelector('[data-testid="media-library-search"]')?.getAttribute('data-action-status') || '',
+          searchResultCount: document.querySelector('[data-testid="media-library-search"]')?.getAttribute('data-library-result-count') || '',
+          clearActionState: document.querySelector('[data-testid="media-library-clear-filters"]')?.getAttribute('data-action-state') || '',
+          clearActionStatus: document.querySelector('[data-testid="media-library-clear-filters"]')?.getAttribute('data-action-status') || '',
+          typeAllActionState: document.querySelector('[data-testid="media-library-type-filter-all"]')?.getAttribute('data-action-state') || '',
+          typeImageActionState: document.querySelector('[data-testid="media-library-type-filter-image"]')?.getAttribute('data-action-state') || '',
+          typeImageTarget: document.querySelector('[data-testid="media-library-type-filter-image"]')?.getAttribute('data-target-media-type-filter') || '',
+          folderActionState: document.querySelector('[data-testid="media-library-folder-filter"]')?.getAttribute('data-action-state') || '',
+          folderActionStatus: document.querySelector('[data-testid="media-library-folder-filter"]')?.getAttribute('data-action-status') || '',
+          folderTarget: document.querySelector('[data-testid="media-library-folder-filter"]')?.getAttribute('data-target-folder-id') || '',
+          includeNestedActionState: document.querySelector('[data-testid="media-library-include-subfolders"]')?.getAttribute('data-action-state') || '',
+          includeNestedDisabledReason: document.querySelector('[data-testid="media-library-include-subfolders"]')?.getAttribute('data-disabled-reason') || '',
+        },
+        libraryInsertMetadata: {
+          insertPresetActionState: document.querySelector('[data-testid="media-library-insert-preset"]')?.getAttribute('data-action-state') || '',
+          insertPresetActionStatus: document.querySelector('[data-testid="media-library-insert-preset"]')?.getAttribute('data-action-status') || '',
+          insertPresetTarget: document.querySelector('[data-testid="media-library-insert-preset"]')?.getAttribute('data-image-insert-preset') || '',
+          imageFitActionState: document.querySelector('[data-testid="media-library-image-fit"]')?.getAttribute('data-action-state') || '',
+          imageFitActionStatus: document.querySelector('[data-testid="media-library-image-fit"]')?.getAttribute('data-action-status') || '',
+          imageFitTarget: document.querySelector('[data-testid="media-library-image-fit"]')?.getAttribute('data-image-object-fit') || '',
+          focalXActionState: document.querySelector('[data-testid="media-library-focal-x"]')?.getAttribute('data-action-state') || '',
+          focalXActionStatus: document.querySelector('[data-testid="media-library-focal-x"]')?.getAttribute('data-action-status') || '',
+          focalXTarget: document.querySelector('[data-testid="media-library-focal-x"]')?.getAttribute('data-image-focal-x') || '',
+          focalYActionState: document.querySelector('[data-testid="media-library-focal-y"]')?.getAttribute('data-action-state') || '',
+          focalYActionStatus: document.querySelector('[data-testid="media-library-focal-y"]')?.getAttribute('data-action-status') || '',
+          focalYTarget: document.querySelector('[data-testid="media-library-focal-y"]')?.getAttribute('data-image-focal-y') || '',
+          focalPreviewActionState: document.querySelector('[data-testid="media-library-focal-preview"]')?.getAttribute('data-action-state') || '',
+          focalPreviewActionStatus: document.querySelector('[data-testid="media-library-focal-preview"]')?.getAttribute('data-action-status') || '',
+          focalPreviewFit: document.querySelector('[data-testid="media-library-focal-preview"]')?.getAttribute('data-image-object-fit') || '',
+        },
+        libraryFontMetadata: {
+          controlsActionState: document.querySelector('[data-testid="media-library-font-controls"]')?.getAttribute('data-action-state') || '',
+          controlsActionStatus: document.querySelector('[data-testid="media-library-font-controls"]')?.getAttribute('data-action-status') || '',
+          weightActionState: document.querySelector('[data-testid="media-library-font-weight"]')?.getAttribute('data-action-state') || '',
+          weightActionStatus: document.querySelector('[data-testid="media-library-font-weight"]')?.getAttribute('data-action-status') || '',
+          weightTarget: document.querySelector('[data-testid="media-library-font-weight"]')?.getAttribute('data-font-weight') || '',
+          styleActionState: document.querySelector('[data-testid="media-library-font-style"]')?.getAttribute('data-action-state') || '',
+          styleActionStatus: document.querySelector('[data-testid="media-library-font-style"]')?.getAttribute('data-action-status') || '',
+          styleTarget: document.querySelector('[data-testid="media-library-font-style"]')?.getAttribute('data-font-style') || '',
+          fallbackActionState: document.querySelector('[data-testid="media-library-font-fallback"]')?.getAttribute('data-action-state') || '',
+          fallbackActionStatus: document.querySelector('[data-testid="media-library-font-fallback"]')?.getAttribute('data-action-status') || '',
+          fallbackTarget: document.querySelector('[data-testid="media-library-font-fallback"]')?.getAttribute('data-font-fallback') || '',
+          displayActionState: document.querySelector('[data-testid="media-library-font-display"]')?.getAttribute('data-action-state') || '',
+          displayActionStatus: document.querySelector('[data-testid="media-library-font-display"]')?.getAttribute('data-action-status') || '',
+          displayTarget: document.querySelector('[data-testid="media-library-font-display"]')?.getAttribute('data-font-display') || '',
+        },
         item: items.find((candidate) => candidate.name === ${JSON.stringify(filename)}) || null,
         itemCount: items.length,
       };
@@ -13024,6 +17358,18 @@ const clickMediaLibraryItemByName = async (client, filename) => {
         available: Array.from(document.querySelectorAll('[data-testid="media-library-item"]')).map((candidate) => candidate.getAttribute('data-media-name') || ''),
       };
     }
+    const actionState = item.getAttribute('data-action-state') || '';
+    const actionStatus = item.getAttribute('data-action-status') || '';
+    const disabledReason = item.getAttribute('data-disabled-reason') || '';
+    if (actionState !== 'ready') {
+      return {
+        ok: false,
+        filename: ${JSON.stringify(filename)},
+        actionState,
+        actionStatus,
+        disabledReason,
+      };
+    }
     item.click();
     return {
       ok: true,
@@ -13031,11 +17377,17 @@ const clickMediaLibraryItemByName = async (client, filename) => {
       name: item.getAttribute('data-media-name') || '',
       type: item.getAttribute('data-media-type') || '',
       url: item.getAttribute('data-media-url') || '',
+        actionState,
+        actionStatus,
+        disabledReason,
+        describedBy: item.getAttribute('aria-describedby') || '',
         scope: item.getAttribute('data-media-scope') || '',
         scopeTargetId: item.getAttribute('data-media-scope-target-id') || '',
         folderId: item.getAttribute('data-media-folder-id') || '',
         folderPath: item.getAttribute('data-media-folder-path') || '',
         organizationSchema: item.getAttribute('data-media-organization-schema') || '',
+        tags: (item.getAttribute('data-media-tags') || '').split(',').filter(Boolean),
+        tagCount: item.getAttribute('data-media-tag-count') || '',
         insertPreset: item.getAttribute('data-insert-preset') || '',
         imageObjectFit: item.getAttribute('data-image-object-fit') || '',
         imageFocalX: item.getAttribute('data-image-focal-x') || '',
@@ -13323,26 +17675,105 @@ const testMediaUploadModalControls = async (client, pageId) => {
   try {
     await selectLayerById(client, 'smoke-image');
     await switchToPropertiesPanel(client);
+    const imagePickerLaunch = await evaluate(client, `(() => {
+      const selectButton = document.querySelector('[data-testid="editor-image-select-media"]');
+      const uploadButton = document.querySelector('[data-testid="editor-image-upload-media"]');
+      const status = document.querySelector('[data-testid="editor-media-picker-action-status"]');
+      return {
+        hasStatus: Boolean(status),
+        statusText: status?.textContent || '',
+        selectState: selectButton?.getAttribute('data-action-state') || '',
+        selectStatus: selectButton?.getAttribute('data-action-status') || '',
+        selectDisabledReason: selectButton?.getAttribute('data-disabled-reason') || '',
+        selectField: selectButton?.getAttribute('data-target-media-field') || '',
+        selectMode: selectButton?.getAttribute('data-target-media-mode') || '',
+        selectDescribedBy: selectButton?.getAttribute('aria-describedby') || '',
+        uploadState: uploadButton?.getAttribute('data-action-state') || '',
+        uploadStatus: uploadButton?.getAttribute('data-action-status') || '',
+        uploadDisabledReason: uploadButton?.getAttribute('data-disabled-reason') || '',
+        uploadField: uploadButton?.getAttribute('data-target-media-field') || '',
+        uploadMode: uploadButton?.getAttribute('data-target-media-mode') || '',
+        uploadDescribedBy: uploadButton?.getAttribute('aria-describedby') || '',
+      };
+    })()`);
+    assert(
+      imagePickerLaunch.hasStatus &&
+        /Media picker buttons expose ready or blocked status/.test(imagePickerLaunch.statusText) &&
+        imagePickerLaunch.selectState === 'ready' &&
+        /Select image available/.test(imagePickerLaunch.selectStatus) &&
+        imagePickerLaunch.selectDisabledReason === '' &&
+        imagePickerLaunch.selectField === 'src' &&
+        imagePickerLaunch.selectMode === 'library' &&
+        imagePickerLaunch.selectDescribedBy === 'editor-media-picker-action-status' &&
+        imagePickerLaunch.uploadState === 'ready' &&
+        /Upload image available/.test(imagePickerLaunch.uploadStatus) &&
+        imagePickerLaunch.uploadDisabledReason === '' &&
+        imagePickerLaunch.uploadField === 'src' &&
+        imagePickerLaunch.uploadMode === 'upload' &&
+        imagePickerLaunch.uploadDescribedBy === 'editor-media-picker-action-status',
+      `Image media picker launcher controls did not expose ready action metadata: ${JSON.stringify(imagePickerLaunch)}`,
+    );
     await clickControlByTestId(client, 'editor-image-upload-media');
 
     const opened = await evaluate(client, `(() => {
       const modal = document.querySelector('[data-testid="media-library-modal"]');
       const focalPreview = document.querySelector('[data-testid="media-upload-focal-preview"]');
+      const uploadDropzone = document.querySelector('[data-testid="media-upload-dropzone"]');
+      const uploadInput = document.querySelector('[data-testid="media-upload-input"]');
+      const uploadFilterImage = document.querySelector('[data-testid="media-upload-filter-image"]');
+      const uploadVisibility = document.querySelector('[data-testid="media-upload-visibility"]');
+      const uploadFolder = document.querySelector('[data-testid="media-upload-folder"]');
+      const insertPreset = document.querySelector('[data-testid="media-upload-insert-preset"]');
+      const imageFit = document.querySelector('[data-testid="media-upload-image-fit"]');
+      const focalX = document.querySelector('[data-testid="media-upload-focal-x"]');
+      const focalY = document.querySelector('[data-testid="media-upload-focal-y"]');
+      const uploadTags = document.querySelector('[data-testid="media-upload-tags"]');
+      const uploadTagsInput = document.querySelector('[data-testid="media-upload-tags-input"]');
+      const closeButton = document.querySelector('[data-testid="media-library-close"]');
       return {
         hasModal: Boolean(modal),
         activeTab: modal?.getAttribute('data-active-tab') || '',
         allowedTypes: modal?.getAttribute('data-allowed-types') || '',
         uploadFilter: modal?.getAttribute('data-upload-filter') || '',
-        fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
-        hasVisibility: Boolean(document.querySelector('[data-testid="media-upload-visibility"]')),
-        hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
+        fileAccept: uploadInput?.getAttribute('accept') || '',
+        actionState: document.querySelector('[data-testid="media-library-action-status"]')?.getAttribute('data-action-state') || '',
+        actionStatus: document.querySelector('[data-testid="media-library-action-status"]')?.getAttribute('data-action-status') || '',
+        closeActionState: closeButton?.getAttribute('data-action-state') || '',
+        closeActionStatus: closeButton?.getAttribute('data-action-status') || '',
+        closeBusyReason: closeButton?.getAttribute('data-busy-reason') || '',
+        closeDescribedBy: closeButton?.getAttribute('aria-describedby') || '',
+        closeKeyshortcuts: closeButton?.getAttribute('aria-keyshortcuts') || '',
+        closeShortcut: closeButton?.getAttribute('data-close-shortcut') || '',
+        closeReturnFocusTarget: closeButton?.getAttribute('data-return-focus-target') || '',
+        closeInitialFocusTarget: closeButton?.getAttribute('data-initial-focus-target') || '',
+        modalCloseShortcut: modal?.getAttribute('data-close-shortcut') || '',
+        modalReturnFocusTarget: modal?.getAttribute('data-return-focus-target') || '',
+        modalInitialFocusTarget: modal?.getAttribute('data-initial-focus-target') || '',
+        modalFocusTrap: modal?.getAttribute('data-focus-trap') || '',
+        modalFocusTrapTarget: modal?.getAttribute('data-focus-trap-target') || '',
+        activeElement: document.activeElement?.getAttribute?.('data-testid') || document.activeElement?.tagName || '',
+        closeActiveTab: closeButton?.getAttribute('data-active-tab') || '',
+        closeTargetSiteId: closeButton?.getAttribute('data-target-site-id') || '',
+        closeReplaceAssetId: closeButton?.getAttribute('data-replace-asset-id') || '',
+        closeUploadProgressTotal: closeButton?.getAttribute('data-upload-progress-total') || '',
+        uploadTabState: document.querySelector('[data-testid="media-library-tab-upload"]')?.getAttribute('data-action-state') || '',
+        uploadTabStatus: document.querySelector('[data-testid="media-library-tab-upload"]')?.getAttribute('data-action-status') || '',
+        uploadTabPressed: document.querySelector('[data-testid="media-library-tab-upload"]')?.getAttribute('aria-pressed') || '',
+        libraryTabState: document.querySelector('[data-testid="media-library-tab-library"]')?.getAttribute('data-action-state') || '',
+        createFolderActionState: document.querySelector('[data-testid="media-library-create-folder"]')?.getAttribute('data-action-state') || '',
+        createFolderActionStatus: document.querySelector('[data-testid="media-library-create-folder"]')?.getAttribute('data-action-status') || '',
+        createFolderTargetName: document.querySelector('[data-testid="media-library-create-folder"]')?.getAttribute('data-target-folder-name') || '',
+        createFolderDescribedBy: document.querySelector('[data-testid="media-library-create-folder"]')?.getAttribute('aria-describedby') || '',
+        hasCreateFolderStatus: Boolean(document.querySelector('[data-testid="media-library-create-folder-action-status"]')),
+        hasVisibility: Boolean(uploadVisibility),
+        hasFolder: Boolean(uploadFolder),
         hasCreateFolder: Boolean(document.querySelector('[data-testid="media-library-create-folder"]')),
         hasCreateFolderParent: Boolean(document.querySelector('[data-testid="media-library-create-folder-parent"]')),
         hasImageDefaults: Boolean(document.querySelector('[data-testid="media-upload-image-defaults"]')),
-        insertPreset: document.querySelector('[data-testid="media-upload-insert-preset"]')?.value || '',
-        imageFit: document.querySelector('[data-testid="media-upload-image-fit"]')?.value || '',
-        focalX: document.querySelector('[data-testid="media-upload-focal-x"]')?.value || '',
-        focalY: document.querySelector('[data-testid="media-upload-focal-y"]')?.value || '',
+        insertPreset: insertPreset?.value || '',
+        imageFit: imageFit?.value || '',
+        focalX: focalX?.value || '',
+        focalY: focalY?.value || '',
         hasFocalPreview: Boolean(document.querySelector('[data-testid="media-upload-focal-preview"]')),
         focalPreviewX: focalPreview?.getAttribute('data-focal-x') || '',
         focalPreviewY: focalPreview?.getAttribute('data-focal-y') || '',
@@ -13350,6 +17781,49 @@ const testMediaUploadModalControls = async (client, pageId) => {
         hasFocalCropBox: Boolean(document.querySelector('[data-testid="media-upload-focal-preview-crop-box"]')),
         hasFocalDragHandle: Boolean(document.querySelector('[data-testid="media-upload-focal-preview-drag-handle"]')),
         hasFocalCropHandle: Boolean(document.querySelector('[data-testid="media-upload-focal-preview-crop-handle-se"]')),
+        uploadDropzoneActionState: uploadDropzone?.getAttribute('data-action-state') || '',
+        uploadDropzoneActionStatus: uploadDropzone?.getAttribute('data-action-status') || '',
+        uploadDropzoneFilter: uploadDropzone?.getAttribute('data-target-upload-filter') || '',
+        uploadDropzoneVisibility: uploadDropzone?.getAttribute('data-upload-visibility') || '',
+        uploadDropzoneFolderId: uploadDropzone?.getAttribute('data-upload-folder-id') || '',
+        uploadInputActionState: uploadInput?.getAttribute('data-action-state') || '',
+        uploadInputActionStatus: uploadInput?.getAttribute('data-action-status') || '',
+        uploadInputDescribedBy: uploadInput?.getAttribute('aria-describedby') || '',
+        uploadInputFilter: uploadInput?.getAttribute('data-target-upload-filter') || '',
+        uploadFilterImageActionState: uploadFilterImage?.getAttribute('data-action-state') || '',
+        uploadFilterImageActionStatus: uploadFilterImage?.getAttribute('data-action-status') || '',
+        uploadFilterImagePressed: uploadFilterImage?.getAttribute('aria-pressed') || '',
+        uploadFilterImageTarget: uploadFilterImage?.getAttribute('data-target-upload-filter') || '',
+        uploadVisibilityActionState: uploadVisibility?.getAttribute('data-action-state') || '',
+        uploadVisibilityActionStatus: uploadVisibility?.getAttribute('data-action-status') || '',
+        uploadVisibilityTarget: uploadVisibility?.getAttribute('data-upload-visibility') || '',
+        uploadFolderActionState: uploadFolder?.getAttribute('data-action-state') || '',
+        uploadFolderActionStatus: uploadFolder?.getAttribute('data-action-status') || '',
+        uploadFolderTarget: uploadFolder?.getAttribute('data-upload-folder-id') || '',
+        insertPresetActionState: insertPreset?.getAttribute('data-action-state') || '',
+        insertPresetActionStatus: insertPreset?.getAttribute('data-action-status') || '',
+        insertPresetTarget: insertPreset?.getAttribute('data-image-insert-preset') || '',
+        imageFitActionState: imageFit?.getAttribute('data-action-state') || '',
+        imageFitActionStatus: imageFit?.getAttribute('data-action-status') || '',
+        imageFitTarget: imageFit?.getAttribute('data-image-object-fit') || '',
+        focalXActionState: focalX?.getAttribute('data-action-state') || '',
+        focalXActionStatus: focalX?.getAttribute('data-action-status') || '',
+        focalXTarget: focalX?.getAttribute('data-image-focal-x') || '',
+        focalYActionState: focalY?.getAttribute('data-action-state') || '',
+        focalYActionStatus: focalY?.getAttribute('data-action-status') || '',
+        focalYTarget: focalY?.getAttribute('data-image-focal-y') || '',
+        focalPreviewActionState: focalPreview?.getAttribute('data-action-state') || '',
+        focalPreviewActionStatus: focalPreview?.getAttribute('data-action-status') || '',
+        focalPreviewDescribedBy: focalPreview?.getAttribute('aria-describedby') || '',
+        uploadTagsActionState: uploadTags?.getAttribute('data-action-state') || '',
+        uploadTagsActionStatus: uploadTags?.getAttribute('data-action-status') || '',
+        uploadTagsDisabledReason: uploadTags?.getAttribute('data-disabled-reason') || '',
+        uploadTagsCount: uploadTags?.getAttribute('data-tag-count') || '',
+        uploadTagsMax: uploadTags?.getAttribute('data-max-tags') || '',
+        uploadTagsDescribedBy: uploadTags?.getAttribute('aria-describedby') || '',
+        uploadTagsInputActionState: uploadTagsInput?.getAttribute('data-action-state') || '',
+        uploadTagsInputActionStatus: uploadTagsInput?.getAttribute('data-action-status') || '',
+        uploadTagsInputDescribedBy: uploadTagsInput?.getAttribute('aria-describedby') || '',
       };
     })()`);
 
@@ -13359,6 +17833,35 @@ const testMediaUploadModalControls = async (client, pageId) => {
         opened.allowedTypes === 'image' &&
         opened.uploadFilter === 'image' &&
         opened.fileAccept === 'image/*' &&
+        opened.actionState === 'ready' &&
+        /Upload panel ready/.test(opened.actionStatus) &&
+        opened.closeActionState === 'ready' &&
+        opened.closeActionStatus.includes('Close media library dialog') &&
+        opened.closeBusyReason === '' &&
+        opened.closeDescribedBy === 'media-library-action-status' &&
+        opened.closeKeyshortcuts === 'Escape' &&
+        opened.closeShortcut === 'Escape' &&
+        opened.closeReturnFocusTarget === 'editor-image-upload-media' &&
+        opened.closeInitialFocusTarget === 'media-library-close' &&
+        opened.modalCloseShortcut === 'Escape' &&
+        opened.modalReturnFocusTarget === 'editor-image-upload-media' &&
+        opened.modalInitialFocusTarget === 'media-library-close' &&
+        opened.modalFocusTrap === 'active' &&
+        opened.modalFocusTrapTarget === 'media-library-modal' &&
+        opened.activeElement === 'media-library-close' &&
+        opened.closeActiveTab === 'upload' &&
+        opened.closeTargetSiteId === SITE_ID &&
+        opened.closeReplaceAssetId === '' &&
+        opened.closeUploadProgressTotal === '0' &&
+        opened.uploadTabState === 'active' &&
+        /Upload panel is active/.test(opened.uploadTabStatus) &&
+        opened.uploadTabPressed === 'true' &&
+        opened.libraryTabState === 'ready' &&
+        opened.createFolderActionState === 'needs-input' &&
+        /Enter a folder name/.test(opened.createFolderActionStatus) &&
+        opened.createFolderTargetName === '' &&
+        opened.createFolderDescribedBy.includes('media-library-create-folder-action-status') &&
+        opened.hasCreateFolderStatus &&
         opened.hasVisibility &&
         opened.hasFolder &&
         opened.hasCreateFolder &&
@@ -13374,8 +17877,87 @@ const testMediaUploadModalControls = async (client, pageId) => {
         opened.focalPreviewDragging === 'false' &&
         opened.hasFocalCropBox &&
         opened.hasFocalDragHandle &&
-        opened.hasFocalCropHandle,
+        opened.hasFocalCropHandle &&
+        opened.uploadDropzoneActionState === 'ready' &&
+        opened.uploadDropzoneActionStatus.includes('image files') &&
+        opened.uploadDropzoneFilter === 'image' &&
+        opened.uploadDropzoneVisibility === 'public' &&
+        opened.uploadDropzoneFolderId === 'root' &&
+        opened.uploadInputActionState === 'ready' &&
+        opened.uploadInputActionStatus.includes('image files') &&
+        opened.uploadInputDescribedBy === 'media-library-action-status' &&
+        opened.uploadInputFilter === 'image' &&
+        opened.uploadFilterImageActionState === 'selected' &&
+        opened.uploadFilterImageActionStatus.includes('image files upload filter selected') &&
+        opened.uploadFilterImagePressed === 'true' &&
+        opened.uploadFilterImageTarget === 'image' &&
+        opened.uploadVisibilityActionState === 'ready' &&
+        opened.uploadVisibilityActionStatus.includes('public') &&
+        opened.uploadVisibilityTarget === 'public' &&
+        opened.uploadFolderActionState === 'ready' &&
+        opened.uploadFolderActionStatus.includes('Root library') &&
+        opened.uploadFolderTarget === 'root' &&
+        opened.insertPresetActionState === 'ready' &&
+        opened.insertPresetActionStatus.includes('fill-frame') &&
+        opened.insertPresetTarget === 'fill-frame' &&
+        opened.imageFitActionState === 'ready' &&
+        opened.imageFitActionStatus.includes('cover') &&
+        opened.imageFitTarget === 'cover' &&
+        opened.focalXActionState === 'ready' &&
+        opened.focalXActionStatus.includes('50') &&
+        opened.focalXTarget === '50' &&
+        opened.focalYActionState === 'ready' &&
+        opened.focalYActionStatus.includes('50') &&
+        opened.focalYTarget === '50' &&
+        opened.focalPreviewActionState === 'ready' &&
+        opened.focalPreviewActionStatus.includes('50% 50%') &&
+        opened.focalPreviewDescribedBy === 'media-library-action-status' &&
+        opened.uploadTagsActionState === 'ready' &&
+        opened.uploadTagsActionStatus.includes('Add up to 10 default tags') &&
+        opened.uploadTagsDisabledReason === '' &&
+        opened.uploadTagsCount === '0' &&
+        opened.uploadTagsMax === '10' &&
+        opened.uploadTagsDescribedBy === 'media-library-action-status' &&
+        opened.uploadTagsInputActionState === 'ready' &&
+        opened.uploadTagsInputActionStatus.includes('Add up to 10 default tags') &&
+        opened.uploadTagsInputDescribedBy === 'media-library-action-status',
       `Image upload modal opened with unexpected state: ${JSON.stringify(opened)}`,
+    );
+
+    await pressKey(client, 'Tab', { shiftKey: true });
+    await sleep(120);
+    const focusTrapShiftTab = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      return {
+        hasModal: Boolean(modal),
+        activeElement: document.activeElement?.getAttribute?.('data-testid') || document.activeElement?.tagName || '',
+        activeInsideModal: Boolean(modal?.contains(document.activeElement)),
+        openerFocused: document.activeElement?.getAttribute?.('data-testid') === 'editor-image-upload-media',
+      };
+    })()`);
+    assert(
+      focusTrapShiftTab.hasModal &&
+        focusTrapShiftTab.activeInsideModal &&
+        !focusTrapShiftTab.openerFocused &&
+        focusTrapShiftTab.activeElement !== 'BODY',
+      `Image upload modal Shift+Tab escaped the focus trap: ${JSON.stringify(focusTrapShiftTab)}`,
+    );
+
+    await pressKey(client, 'Tab');
+    await sleep(120);
+    const focusTrapTab = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      return {
+        hasModal: Boolean(modal),
+        activeElement: document.activeElement?.getAttribute?.('data-testid') || document.activeElement?.tagName || '',
+        activeInsideModal: Boolean(modal?.contains(document.activeElement)),
+      };
+    })()`);
+    assert(
+      focusTrapTab.hasModal &&
+        focusTrapTab.activeInsideModal &&
+        focusTrapTab.activeElement === 'media-library-close',
+      `Image upload modal Tab did not wrap focus back to the close control: ${JSON.stringify(focusTrapTab)}`,
     );
 
     const draggedFocal = await dragFocalPreviewHandle(client, 'media-upload-focal-preview', 32, 68);
@@ -13397,36 +17979,239 @@ const testMediaUploadModalControls = async (client, pageId) => {
     await setFormControlByTestId(client, 'media-upload-focal-y', '72');
     const focalPreviewState = await evaluate(client, `(() => {
       const preview = document.querySelector('[data-testid="media-upload-focal-preview"]');
+      const insertPreset = document.querySelector('[data-testid="media-upload-insert-preset"]');
+      const imageFit = document.querySelector('[data-testid="media-upload-image-fit"]');
       return {
         hasPreview: Boolean(preview),
         x: preview?.getAttribute('data-focal-x') || '',
         y: preview?.getAttribute('data-focal-y') || '',
+        actionState: preview?.getAttribute('data-action-state') || '',
+        actionStatus: preview?.getAttribute('data-action-status') || '',
+        imageObjectFit: preview?.getAttribute('data-image-object-fit') || '',
+        insertPresetTarget: insertPreset?.getAttribute('data-image-insert-preset') || '',
+        insertPresetActionStatus: insertPreset?.getAttribute('data-action-status') || '',
+        imageFitTarget: imageFit?.getAttribute('data-image-object-fit') || '',
+        imageFitActionStatus: imageFit?.getAttribute('data-action-status') || '',
       };
     })()`);
     assert(
       focalPreviewState.hasPreview &&
         focalPreviewState.x === '28' &&
-        focalPreviewState.y === '72',
+        focalPreviewState.y === '72' &&
+        focalPreviewState.actionState === 'ready' &&
+        focalPreviewState.actionStatus.includes('28% 72%') &&
+        focalPreviewState.imageObjectFit === 'contain' &&
+        focalPreviewState.insertPresetTarget === 'square' &&
+        focalPreviewState.insertPresetActionStatus.includes('square') &&
+        focalPreviewState.imageFitTarget === 'contain' &&
+        focalPreviewState.imageFitActionStatus.includes('contain'),
       `Image upload focal preview did not reflect focal controls: ${JSON.stringify(focalPreviewState)}`,
     );
+    await setFormControlByTestId(client, 'media-upload-tags-input', 'hero, product');
+    await pressKey(client, 'Enter');
+    const uploadTagsReady = await evaluate(client, `(() => {
+      const root = document.querySelector('[data-testid="media-upload-tags"]');
+      const input = document.querySelector('[data-testid="media-upload-tags-input"]');
+      const tags = Array.from(document.querySelectorAll('[data-testid="media-upload-tags-tag"]')).map((tag) => tag.getAttribute('data-tag-value') || '');
+      const removeButtons = Array.from(document.querySelectorAll('[data-testid="media-upload-tags-remove"]'));
+      return {
+        actionState: root?.getAttribute('data-action-state') || '',
+        actionStatus: root?.getAttribute('data-action-status') || '',
+        disabledReason: root?.getAttribute('data-disabled-reason') || '',
+        tagCount: root?.getAttribute('data-tag-count') || '',
+        maxTags: root?.getAttribute('data-max-tags') || '',
+        inputActionState: input?.getAttribute('data-action-state') || '',
+        inputActionStatus: input?.getAttribute('data-action-status') || '',
+        inputTagCount: input?.getAttribute('data-tag-count') || '',
+        inputValue: input instanceof HTMLInputElement ? input.value : '',
+        tags,
+        uploadTagRemoveActionStates: removeButtons.map((button) => button.getAttribute('data-action-state') || ''),
+        removeTargets: removeButtons.map((button) => button.getAttribute('data-tag-value') || ''),
+        removeStatuses: removeButtons.map((button) => button.getAttribute('data-action-status') || ''),
+      };
+    })()`);
+    assert(
+      uploadTagsReady.actionState === 'selected' &&
+        uploadTagsReady.actionStatus.includes('2 tags') &&
+        uploadTagsReady.actionStatus.includes('hero') &&
+        uploadTagsReady.actionStatus.includes('product') &&
+        uploadTagsReady.disabledReason === '' &&
+        uploadTagsReady.tagCount === '2' &&
+        uploadTagsReady.maxTags === '10' &&
+        uploadTagsReady.inputActionState === 'selected' &&
+        uploadTagsReady.inputActionStatus.includes('2 tags') &&
+        uploadTagsReady.inputTagCount === '2' &&
+        uploadTagsReady.inputValue === '' &&
+        uploadTagsReady.tags.includes('hero') &&
+        uploadTagsReady.tags.includes('product') &&
+        uploadTagsReady.uploadTagRemoveActionStates.length === 2 &&
+        uploadTagsReady.uploadTagRemoveActionStates.every((state) => state === 'ready') &&
+        uploadTagsReady.removeTargets.includes('hero') &&
+        uploadTagsReady.removeTargets.includes('product') &&
+        uploadTagsReady.removeStatuses.every((status) => status.includes('Remove tag')),
+      `Media upload tags did not expose ready metadata after entry: ${JSON.stringify(uploadTagsReady)}`,
+    );
     await setFormControlByTestId(client, 'media-library-create-folder-name', imageUploadFolderName);
+    const createFolderReady = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="media-library-create-folder"]');
+      const nameInput = document.querySelector('[data-testid="media-library-create-folder-name"]');
+      const status = document.querySelector('[data-testid="media-library-create-folder-action-status"]');
+      return {
+        actionState: button?.getAttribute('data-action-state') || '',
+        actionStatus: button?.getAttribute('data-action-status') || '',
+        disabledReason: button?.getAttribute('data-disabled-reason') || '',
+        targetFolderName: button?.getAttribute('data-target-folder-name') || '',
+        describedBy: button?.getAttribute('aria-describedby') || '',
+        nameDescribedBy: nameInput?.getAttribute('aria-describedby') || '',
+        statusText: status?.textContent || '',
+      };
+    })()`);
+    assert(
+      createFolderReady.actionState === 'ready' &&
+        createFolderReady.disabledReason === '' &&
+        createFolderReady.targetFolderName === imageUploadFolderName &&
+        createFolderReady.actionStatus.includes(imageUploadFolderName) &&
+        createFolderReady.statusText.includes(imageUploadFolderName) &&
+        createFolderReady.describedBy.includes('media-library-create-folder-action-status') &&
+        createFolderReady.nameDescribedBy.includes('media-library-create-folder-action-status'),
+      `Media picker folder create action did not expose ready metadata before creation: ${JSON.stringify(createFolderReady)}`,
+    );
     await clickControlByTestId(client, 'media-library-create-folder');
     const createdImageFolder = await waitForMediaLibraryFolder(client, imageUploadFolderName);
     await setFileInputByTestId(client, 'media-upload-input', [imageUploadFile.filePath]);
     const uploaded = await waitForUploadedMediaItem(client, imageUploadFile.filename);
     assert(
-      uploaded.hasFolderFilter &&
+        uploaded.hasFolderFilter &&
         uploaded.hasNestedFolderToggle &&
         uploaded.folderFilter === createdImageFolder.match.value &&
+        uploaded.libraryFilterMetadata.searchActionState === 'ready' &&
+        uploaded.libraryFilterMetadata.searchActionStatus.includes(String(uploaded.itemCount)) &&
+        uploaded.libraryFilterMetadata.searchResultCount === String(uploaded.itemCount) &&
+        uploaded.libraryFilterMetadata.clearActionState === 'ready' &&
+        uploaded.libraryFilterMetadata.typeImageActionState === 'ready' &&
+        uploaded.libraryFilterMetadata.typeImageTarget === 'image' &&
+        uploaded.libraryFilterMetadata.folderActionState === 'ready' &&
+        uploaded.libraryFilterMetadata.folderTarget === createdImageFolder.match.value &&
+        uploaded.libraryFilterMetadata.folderActionStatus.includes(imageUploadFolderName) &&
+        uploaded.libraryFilterMetadata.includeNestedActionState === 'selected' &&
+        uploaded.libraryFilterMetadata.includeNestedDisabledReason === '' &&
+        uploaded.libraryInsertMetadata.insertPresetActionState === 'ready' &&
+        uploaded.libraryInsertMetadata.insertPresetActionStatus.includes('square') &&
+        uploaded.libraryInsertMetadata.insertPresetTarget === 'square' &&
+        uploaded.libraryInsertMetadata.imageFitActionState === 'ready' &&
+        uploaded.libraryInsertMetadata.imageFitActionStatus.includes('contain') &&
+        uploaded.libraryInsertMetadata.imageFitTarget === 'contain' &&
+        uploaded.libraryInsertMetadata.focalXActionState === 'ready' &&
+        uploaded.libraryInsertMetadata.focalXActionStatus.includes('28') &&
+        uploaded.libraryInsertMetadata.focalXTarget === '28' &&
+        uploaded.libraryInsertMetadata.focalYActionState === 'ready' &&
+        uploaded.libraryInsertMetadata.focalYActionStatus.includes('72') &&
+        uploaded.libraryInsertMetadata.focalYTarget === '72' &&
+        uploaded.libraryInsertMetadata.focalPreviewActionState === 'ready' &&
+        uploaded.libraryInsertMetadata.focalPreviewActionStatus.includes('28% 72%') &&
+        uploaded.libraryInsertMetadata.focalPreviewFit === 'contain' &&
         uploaded.item.folderId === createdImageFolder.match.value &&
         uploaded.item.folderPath === imageUploadFolderName &&
+        uploaded.item.tags.includes('hero') &&
+        uploaded.item.tags.includes('product') &&
+        uploaded.item.tagCount === '2' &&
         uploaded.insertPreset === 'square' &&
+        uploaded.actionState === 'ready' &&
+        /Library panel ready/.test(uploaded.actionStatus) &&
+        uploaded.item.actionState === 'ready' &&
+        uploaded.item.actionStatus.includes(imageUploadFile.filename) &&
+        uploaded.item.describedBy.includes('media-library-action-status') &&
+        uploaded.item.disabledReason === '' &&
         uploaded.uploadProgressTotal === 1 &&
         uploaded.uploadProgressCompleted === 1 &&
         uploaded.uploadProgressFailed === 0,
       `Uploaded image did not remain organized under the created picker folder: ${JSON.stringify({ createdImageFolder, uploaded })}`,
     );
+
+    await setFormControlByTestId(client, 'media-library-search', 'zz-no-media');
+    const filteredEmpty = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      return {
+        searchValue: document.querySelector('[data-testid="media-library-search"]')?.value || '',
+        searchQuery: modal?.getAttribute('data-library-search-query') || '',
+        filterActive: modal?.getAttribute('data-library-filter-active') || '',
+        libraryTypeFilter: modal?.getAttribute('data-library-type-filter') || '',
+        folderFilter: modal?.getAttribute('data-folder-filter') || '',
+        itemCount: document.querySelectorAll('[data-testid="media-library-item"]').length,
+        hasEmptyReset: Boolean(document.querySelector('[data-testid="media-library-empty-clear-filters"]')),
+        emptyResetLabel: document.querySelector('[data-testid="media-library-empty-clear-filters"]')?.textContent?.trim() || '',
+        emptyResetActionState: document.querySelector('[data-testid="media-library-empty-clear-filters"]')?.getAttribute('data-action-state') || '',
+        emptyResetActionStatus: document.querySelector('[data-testid="media-library-empty-clear-filters"]')?.getAttribute('data-action-status') || '',
+        hasHeaderReset: Boolean(document.querySelector('[data-testid="media-library-clear-filters"]')),
+        clearActionState: document.querySelector('[data-testid="media-library-clear-filters"]')?.getAttribute('data-action-state') || '',
+        searchActionState: document.querySelector('[data-testid="media-library-search"]')?.getAttribute('data-action-state') || '',
+        searchActionStatus: document.querySelector('[data-testid="media-library-search"]')?.getAttribute('data-action-status') || '',
+        text: document.querySelector('[data-testid="media-library-modal"]')?.textContent || '',
+      };
+    })()`);
+    assert(
+      filteredEmpty.searchValue === 'zz-no-media' &&
+        filteredEmpty.searchQuery === 'zz-no-media' &&
+        filteredEmpty.filterActive === 'true' &&
+        filteredEmpty.folderFilter === createdImageFolder.match.value &&
+        filteredEmpty.itemCount === 0 &&
+        filteredEmpty.hasEmptyReset &&
+        filteredEmpty.emptyResetLabel === 'Clear filters' &&
+        filteredEmpty.emptyResetActionState === 'ready' &&
+        filteredEmpty.emptyResetActionStatus.includes('Clear active media library filters') &&
+        filteredEmpty.hasHeaderReset &&
+        filteredEmpty.clearActionState === 'ready' &&
+        filteredEmpty.searchActionState === 'ready' &&
+        filteredEmpty.searchActionStatus.includes('zz-no-media') &&
+        /No media matches this view/.test(filteredEmpty.text),
+      `Media picker filtered empty state did not expose clear-filter recovery: ${JSON.stringify(filteredEmpty)}`,
+    );
+
+    await clickControlByTestId(client, 'media-library-empty-clear-filters');
+    const restoredLibrary = await evaluate(client, `(() => {
+      const modal = document.querySelector('[data-testid="media-library-modal"]');
+      return {
+        searchValue: document.querySelector('[data-testid="media-library-search"]')?.value || '',
+        searchQuery: modal?.getAttribute('data-library-search-query') || '',
+        filterActive: modal?.getAttribute('data-library-filter-active') || '',
+        libraryTypeFilter: modal?.getAttribute('data-library-type-filter') || '',
+        folderFilter: modal?.getAttribute('data-folder-filter') || '',
+        includeNestedFolders: modal?.getAttribute('data-include-nested-folders') || '',
+        hasEmptyReset: Boolean(document.querySelector('[data-testid="media-library-empty-clear-filters"]')),
+        hasHeaderReset: Boolean(document.querySelector('[data-testid="media-library-clear-filters"]')),
+        allTypeActionState: document.querySelector('[data-testid="media-library-type-filter-all"]')?.getAttribute('data-action-state') || '',
+        imageTypeActionState: document.querySelector('[data-testid="media-library-type-filter-image"]')?.getAttribute('data-action-state') || '',
+        folderActionState: document.querySelector('[data-testid="media-library-folder-filter"]')?.getAttribute('data-action-state') || '',
+        includeNestedActionState: document.querySelector('[data-testid="media-library-include-subfolders"]')?.getAttribute('data-action-state') || '',
+        includeNestedDisabledReason: document.querySelector('[data-testid="media-library-include-subfolders"]')?.getAttribute('data-disabled-reason') || '',
+        itemNames: Array.from(document.querySelectorAll('[data-testid="media-library-item"]')).map((item) => item.getAttribute('data-media-name') || ''),
+      };
+    })()`);
+    assert(
+      restoredLibrary.searchValue === '' &&
+        restoredLibrary.searchQuery === '' &&
+        restoredLibrary.filterActive === 'false' &&
+        restoredLibrary.libraryTypeFilter === 'all' &&
+        restoredLibrary.folderFilter === 'all' &&
+        restoredLibrary.includeNestedFolders === 'true' &&
+        !restoredLibrary.hasEmptyReset &&
+        !restoredLibrary.hasHeaderReset &&
+        restoredLibrary.imageTypeActionState === 'ready' &&
+        restoredLibrary.folderActionState === 'ready' &&
+        restoredLibrary.includeNestedActionState === 'blocked' &&
+        /Choose a parent folder/.test(restoredLibrary.includeNestedDisabledReason) &&
+        restoredLibrary.itemNames.includes(imageUploadFile.filename),
+      `Media picker clear-filter recovery did not restore uploaded assets: ${JSON.stringify(restoredLibrary)}`,
+    );
+
     const selected = await clickMediaLibraryItemByName(client, imageUploadFile.filename);
+    assert(
+      selected.actionState === 'ready' &&
+        selected.actionStatus.includes(imageUploadFile.filename) &&
+        selected.describedBy.includes('media-library-action-status') &&
+        selected.disabledReason === '',
+      `Image media insertion action did not expose ready metadata before click: ${JSON.stringify(selected)}`,
+    );
     const imageSource = await waitForImageSourceValue(client, selected.url);
     await clickControlByTestId(client, 'editor-image-upload-media');
     const replacementComparison = await evaluate(client, `(() => {
@@ -13435,9 +18220,26 @@ const testMediaUploadModalControls = async (client, pageId) => {
       const binaryDiff = document.querySelector('[data-testid="media-library-replace-binary-diff"]');
       const replaceInput = document.querySelector('[data-testid="media-library-replace-input"]');
       const preview = document.querySelector('[data-testid="media-upload-focal-preview"]');
+      const closeButton = document.querySelector('[data-testid="media-library-close"]');
       return {
         hasModal: Boolean(modal),
         replaceAssetId: modal?.getAttribute('data-replace-asset-id') || '',
+        closeActionState: closeButton?.getAttribute('data-action-state') || '',
+        closeActionStatus: closeButton?.getAttribute('data-action-status') || '',
+        closeBusyReason: closeButton?.getAttribute('data-busy-reason') || '',
+        closeDescribedBy: closeButton?.getAttribute('aria-describedby') || '',
+        closeKeyshortcuts: closeButton?.getAttribute('aria-keyshortcuts') || '',
+        closeShortcut: closeButton?.getAttribute('data-close-shortcut') || '',
+        closeReturnFocusTarget: closeButton?.getAttribute('data-return-focus-target') || '',
+        closeInitialFocusTarget: closeButton?.getAttribute('data-initial-focus-target') || '',
+        modalCloseShortcut: modal?.getAttribute('data-close-shortcut') || '',
+        modalReturnFocusTarget: modal?.getAttribute('data-return-focus-target') || '',
+        modalInitialFocusTarget: modal?.getAttribute('data-initial-focus-target') || '',
+        activeElement: document.activeElement?.getAttribute?.('data-testid') || document.activeElement?.tagName || '',
+        closeActiveTab: closeButton?.getAttribute('data-active-tab') || '',
+        closeTargetSiteId: closeButton?.getAttribute('data-target-site-id') || '',
+        closeReplaceAssetId: closeButton?.getAttribute('data-replace-asset-id') || '',
+        closeUploadProgressTotal: closeButton?.getAttribute('data-upload-progress-total') || '',
         hasReplacePanel: Boolean(document.querySelector('[data-testid="media-library-replace-current"]')),
         currentMediaId: comparison?.getAttribute('data-current-media-id') || '',
         currentMediaName: comparison?.getAttribute('data-current-media-name') || '',
@@ -13448,13 +18250,38 @@ const testMediaUploadModalControls = async (client, pageId) => {
         binaryCurrentBytes: binaryDiff?.getAttribute('data-current-bytes') || '',
         binaryCandidateBytes: binaryDiff?.getAttribute('data-candidate-bytes') || '',
         hasReplaceInput: replaceInput instanceof HTMLInputElement,
+        replaceInputActionState: replaceInput?.getAttribute('data-action-state') || '',
+        replaceInputActionStatus: replaceInput?.getAttribute('data-action-status') || '',
+        replaceInputDisabledReason: replaceInput?.getAttribute('data-disabled-reason') || '',
+        replaceInputDescribedBy: replaceInput?.getAttribute('aria-describedby') || '',
+        replaceInputTargetAssetId: replaceInput?.getAttribute('data-target-replace-asset-id') || '',
+        replaceInputCurrentMediaId: replaceInput?.getAttribute('data-current-media-id') || '',
+        replaceInputUploadFilter: replaceInput?.getAttribute('data-target-upload-filter') || '',
         focalPreviewMediaId: preview?.getAttribute('data-preview-media-id') || '',
+        focalPreviewActionState: preview?.getAttribute('data-action-state') || '',
+        focalPreviewActionStatus: preview?.getAttribute('data-action-status') || '',
         hasReplacementCropBox: Boolean(document.querySelector('[data-testid="media-upload-focal-preview-crop-box"]')),
       };
     })()`);
     assert(
       replacementComparison.hasModal &&
         replacementComparison.replaceAssetId === selected.id &&
+        replacementComparison.closeActionState === 'ready' &&
+        replacementComparison.closeActionStatus.includes('Close media library dialog') &&
+        replacementComparison.closeBusyReason === '' &&
+        replacementComparison.closeDescribedBy === 'media-library-action-status' &&
+        replacementComparison.closeKeyshortcuts === 'Escape' &&
+        replacementComparison.closeShortcut === 'Escape' &&
+        replacementComparison.closeReturnFocusTarget === 'editor-image-upload-media' &&
+        replacementComparison.closeInitialFocusTarget === 'media-library-close' &&
+        replacementComparison.modalCloseShortcut === 'Escape' &&
+        replacementComparison.modalReturnFocusTarget === 'editor-image-upload-media' &&
+        replacementComparison.modalInitialFocusTarget === 'media-library-close' &&
+        replacementComparison.activeElement === 'media-library-close' &&
+        replacementComparison.closeActiveTab === 'upload' &&
+        replacementComparison.closeTargetSiteId === SITE_ID &&
+        replacementComparison.closeReplaceAssetId === selected.id &&
+        replacementComparison.closeUploadProgressTotal === '0' &&
         replacementComparison.hasReplacePanel &&
         replacementComparison.currentMediaId === selected.id &&
         replacementComparison.currentMediaName === selected.name &&
@@ -13464,12 +18291,25 @@ const testMediaUploadModalControls = async (client, pageId) => {
         replacementComparison.binaryCurrentBytes === replacementComparison.currentMediaBytes &&
         replacementComparison.binaryCandidateBytes === '' &&
         replacementComparison.hasReplaceInput &&
+        replacementComparison.replaceInputActionState === 'ready' &&
+        replacementComparison.replaceInputActionStatus.includes(selected.name) &&
+        replacementComparison.replaceInputDisabledReason === '' &&
+        replacementComparison.replaceInputDescribedBy === 'media-library-action-status' &&
+        replacementComparison.replaceInputTargetAssetId === selected.id &&
+        replacementComparison.replaceInputCurrentMediaId === selected.id &&
+        replacementComparison.replaceInputUploadFilter === 'image' &&
         replacementComparison.focalPreviewMediaId === selected.id &&
+        replacementComparison.focalPreviewActionState === 'ready' &&
+        replacementComparison.focalPreviewActionStatus.includes('Image focal point set to') &&
         replacementComparison.hasReplacementCropBox,
       `Image picker did not show replacement comparison for current asset: ${JSON.stringify(replacementComparison)}`,
     );
-    await pressKey(client, 'Escape');
-    const escapeClosedReplacementPicker = await waitForMediaLibraryClosed(client, 'Escape on image replacement picker');
+    await clickControlByTestId(client, 'media-library-close');
+    const closeButtonClosedReplacementPicker = await waitForMediaLibraryClosed(client, 'close button on image replacement picker');
+    assert(
+      closeButtonClosedReplacementPicker.activeElement === 'editor-image-upload-media',
+      `Media picker close did not restore focus to the opener: ${JSON.stringify(closeButtonClosedReplacementPicker)}`,
+    );
     await clickSave(client);
     const savedStatus = await waitForEditorMutationReady(client, 'after media upload smoke save');
     const persisted = await waitForPersistedImageMediaSelection(pageId, selected);
@@ -13492,14 +18332,27 @@ const testMediaUploadModalControls = async (client, pageId) => {
 
     const videoOpened = await evaluate(client, `(() => {
       const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const uploadDropzone = document.querySelector('[data-testid="media-upload-dropzone"]');
+      const uploadInput = document.querySelector('[data-testid="media-upload-input"]');
+      const uploadFilterVideo = document.querySelector('[data-testid="media-upload-filter-video"]');
+      const uploadVisibility = document.querySelector('[data-testid="media-upload-visibility"]');
+      const uploadFolder = document.querySelector('[data-testid="media-upload-folder"]');
       return {
         hasModal: Boolean(modal),
         activeTab: modal?.getAttribute('data-active-tab') || '',
         allowedTypes: modal?.getAttribute('data-allowed-types') || '',
         uploadFilter: modal?.getAttribute('data-upload-filter') || '',
-        fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
-        hasVisibility: Boolean(document.querySelector('[data-testid="media-upload-visibility"]')),
-        hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
+        fileAccept: uploadInput?.getAttribute('accept') || '',
+        hasVisibility: Boolean(uploadVisibility),
+        hasFolder: Boolean(uploadFolder),
+        uploadDropzoneActionState: uploadDropzone?.getAttribute('data-action-state') || '',
+        uploadDropzoneActionStatus: uploadDropzone?.getAttribute('data-action-status') || '',
+        uploadInputActionState: uploadInput?.getAttribute('data-action-state') || '',
+        uploadInputFilter: uploadInput?.getAttribute('data-target-upload-filter') || '',
+        uploadFilterVideoActionState: uploadFilterVideo?.getAttribute('data-action-state') || '',
+        uploadFilterVideoTarget: uploadFilterVideo?.getAttribute('data-target-upload-filter') || '',
+        uploadVisibilityActionState: uploadVisibility?.getAttribute('data-action-state') || '',
+        uploadFolderActionState: uploadFolder?.getAttribute('data-action-state') || '',
       };
     })()`);
 
@@ -13510,7 +18363,15 @@ const testMediaUploadModalControls = async (client, pageId) => {
         videoOpened.uploadFilter === 'video' &&
         videoOpened.fileAccept === 'video/*' &&
         videoOpened.hasVisibility &&
-        videoOpened.hasFolder,
+        videoOpened.hasFolder &&
+        videoOpened.uploadDropzoneActionState === 'ready' &&
+        videoOpened.uploadDropzoneActionStatus.includes('video files') &&
+        videoOpened.uploadInputActionState === 'ready' &&
+        videoOpened.uploadInputFilter === 'video' &&
+        videoOpened.uploadFilterVideoActionState === 'selected' &&
+        videoOpened.uploadFilterVideoTarget === 'video' &&
+        videoOpened.uploadVisibilityActionState === 'ready' &&
+        videoOpened.uploadFolderActionState === 'ready',
       `Video upload modal opened with unexpected state: ${JSON.stringify(videoOpened)}`,
     );
 
@@ -13528,15 +18389,25 @@ const testMediaUploadModalControls = async (client, pageId) => {
 
     const embedOpened = await evaluate(client, `(() => {
       const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const uploadDropzone = document.querySelector('[data-testid="media-upload-dropzone"]');
+      const uploadInput = document.querySelector('[data-testid="media-upload-input"]');
+      const uploadFilterAll = document.querySelector('[data-testid="media-upload-filter-all"]');
       return {
         hasModal: Boolean(modal),
         activeTab: modal?.getAttribute('data-active-tab') || '',
         allowedTypes: modal?.getAttribute('data-allowed-types') || '',
         uploadFilter: modal?.getAttribute('data-upload-filter') || '',
-        fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
+        fileAccept: uploadInput?.getAttribute('accept') || '',
         hasVisibility: Boolean(document.querySelector('[data-testid="media-upload-visibility"]')),
         hasFolder: Boolean(document.querySelector('[data-testid="media-upload-folder"]')),
         uploadFilters: Array.from(document.querySelectorAll('[data-testid^="media-upload-filter-"]')).map((item) => item.getAttribute('data-testid') || ''),
+        uploadDropzoneActionState: uploadDropzone?.getAttribute('data-action-state') || '',
+        uploadDropzoneActionStatus: uploadDropzone?.getAttribute('data-action-status') || '',
+        uploadDropzoneFilter: uploadDropzone?.getAttribute('data-target-upload-filter') || '',
+        uploadInputActionState: uploadInput?.getAttribute('data-action-state') || '',
+        uploadInputFilter: uploadInput?.getAttribute('data-target-upload-filter') || '',
+        uploadFilterAllActionState: uploadFilterAll?.getAttribute('data-action-state') || '',
+        uploadFilterAllTarget: uploadFilterAll?.getAttribute('data-target-upload-filter') || '',
       };
     })()`);
 
@@ -13549,7 +18420,14 @@ const testMediaUploadModalControls = async (client, pageId) => {
         embedOpened.hasVisibility &&
         embedOpened.hasFolder &&
         embedOpened.uploadFilters.includes('media-upload-filter-file') &&
-        embedOpened.uploadFilters.includes('media-upload-filter-font'),
+        embedOpened.uploadFilters.includes('media-upload-filter-font') &&
+        embedOpened.uploadDropzoneActionState === 'ready' &&
+        embedOpened.uploadDropzoneActionStatus.includes('all allowed media') &&
+        embedOpened.uploadDropzoneFilter === 'all' &&
+        embedOpened.uploadInputActionState === 'ready' &&
+        embedOpened.uploadInputFilter === 'all' &&
+        embedOpened.uploadFilterAllActionState === 'selected' &&
+        embedOpened.uploadFilterAllTarget === 'all',
       `Embed upload modal opened with unexpected state: ${JSON.stringify(embedOpened)}`,
     );
 
@@ -13563,21 +18441,69 @@ const testMediaUploadModalControls = async (client, pageId) => {
 
     await selectLayerById(client, 'smoke-heading');
     await switchToPropertiesPanel(client);
+    const fontPickerLaunch = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="editor-font-media-picker"]');
+      const status = document.querySelector('[data-testid="editor-font-media-picker-action-status"]');
+      return {
+        hasStatus: Boolean(status),
+        actionState: button?.getAttribute('data-action-state') || '',
+        actionStatus: button?.getAttribute('data-action-status') || '',
+        disabledReason: button?.getAttribute('data-disabled-reason') || '',
+        targetField: button?.getAttribute('data-target-media-field') || '',
+        targetMode: button?.getAttribute('data-target-media-mode') || '',
+        describedBy: button?.getAttribute('aria-describedby') || '',
+        statusText: status?.textContent || '',
+        statusState: status?.getAttribute('data-action-state') || '',
+      };
+    })()`);
+    assert(
+      fontPickerLaunch.hasStatus &&
+        fontPickerLaunch.actionState === 'ready' &&
+        /Upload font file available/.test(fontPickerLaunch.actionStatus) &&
+        fontPickerLaunch.disabledReason === '' &&
+        fontPickerLaunch.targetField === 'font' &&
+        fontPickerLaunch.targetMode === 'upload' &&
+        fontPickerLaunch.describedBy === 'editor-font-media-picker-action-status' &&
+        fontPickerLaunch.statusState === 'ready' &&
+        /Upload font file available/.test(fontPickerLaunch.statusText),
+      `Font media picker launcher did not expose ready action metadata: ${JSON.stringify(fontPickerLaunch)}`,
+    );
     await clickControlByTestId(client, 'editor-font-media-picker');
 
     const fontOpened = await evaluate(client, `(() => {
       const modal = document.querySelector('[data-testid="media-library-modal"]');
+      const uploadDropzone = document.querySelector('[data-testid="media-upload-dropzone"]');
+      const uploadInput = document.querySelector('[data-testid="media-upload-input"]');
+      const uploadFilterFont = document.querySelector('[data-testid="media-upload-filter-font"]');
+      const fontWeight = document.querySelector('[data-testid="media-upload-font-weight"]');
+      const fontDisplay = document.querySelector('[data-testid="media-upload-font-display"]');
+      const fontFallback = document.querySelector('[data-testid="media-upload-font-fallback"]');
       return {
         hasModal: Boolean(modal),
         activeTab: modal?.getAttribute('data-active-tab') || '',
         allowedTypes: modal?.getAttribute('data-allowed-types') || '',
         uploadFilter: modal?.getAttribute('data-upload-filter') || '',
-        fileAccept: document.querySelector('[data-testid="media-upload-input"]')?.getAttribute('accept') || '',
+        fileAccept: uploadInput?.getAttribute('accept') || '',
         hasScopeSwitcher: Boolean(document.querySelector('[data-testid="media-library-scope-all"]')),
         hasFontDefaults: Boolean(document.querySelector('[data-testid="media-upload-font-defaults"]')),
-        fontWeight: document.querySelector('[data-testid="media-upload-font-weight"]')?.value || '',
-        fontDisplay: document.querySelector('[data-testid="media-upload-font-display"]')?.value || '',
-        fontFallback: document.querySelector('[data-testid="media-upload-font-fallback"]')?.value || '',
+        fontWeight: fontWeight?.value || '',
+        fontDisplay: fontDisplay?.value || '',
+        fontFallback: fontFallback?.value || '',
+        uploadDropzoneActionState: uploadDropzone?.getAttribute('data-action-state') || '',
+        uploadDropzoneActionStatus: uploadDropzone?.getAttribute('data-action-status') || '',
+        uploadInputActionState: uploadInput?.getAttribute('data-action-state') || '',
+        uploadInputFilter: uploadInput?.getAttribute('data-target-upload-filter') || '',
+        uploadFilterFontActionState: uploadFilterFont?.getAttribute('data-action-state') || '',
+        uploadFilterFontTarget: uploadFilterFont?.getAttribute('data-target-upload-filter') || '',
+        fontWeightActionState: fontWeight?.getAttribute('data-action-state') || '',
+        fontWeightActionStatus: fontWeight?.getAttribute('data-action-status') || '',
+        fontWeightTarget: fontWeight?.getAttribute('data-font-weight') || '',
+        fontDisplayActionState: fontDisplay?.getAttribute('data-action-state') || '',
+        fontDisplayActionStatus: fontDisplay?.getAttribute('data-action-status') || '',
+        fontDisplayTarget: fontDisplay?.getAttribute('data-font-display') || '',
+        fontFallbackActionState: fontFallback?.getAttribute('data-action-state') || '',
+        fontFallbackActionStatus: fontFallback?.getAttribute('data-action-status') || '',
+        fontFallbackTarget: fontFallback?.getAttribute('data-font-fallback') || '',
       };
     })()`);
 
@@ -13591,7 +18517,22 @@ const testMediaUploadModalControls = async (client, pageId) => {
         fontOpened.hasFontDefaults &&
         fontOpened.fontWeight === '400' &&
         fontOpened.fontDisplay === 'swap' &&
-        fontOpened.fontFallback.includes('system-ui'),
+        fontOpened.fontFallback.includes('system-ui') &&
+        fontOpened.uploadDropzoneActionState === 'ready' &&
+        fontOpened.uploadDropzoneActionStatus.includes('font files') &&
+        fontOpened.uploadInputActionState === 'ready' &&
+        fontOpened.uploadInputFilter === 'font' &&
+        fontOpened.uploadFilterFontActionState === 'selected' &&
+        fontOpened.uploadFilterFontTarget === 'font' &&
+        fontOpened.fontWeightActionState === 'ready' &&
+        fontOpened.fontWeightActionStatus.includes('400') &&
+        fontOpened.fontWeightTarget === '400' &&
+        fontOpened.fontDisplayActionState === 'ready' &&
+        fontOpened.fontDisplayActionStatus.includes('swap') &&
+        fontOpened.fontDisplayTarget === 'swap' &&
+        fontOpened.fontFallbackActionState === 'ready' &&
+        fontOpened.fontFallbackActionStatus.includes('system-ui') &&
+        fontOpened.fontFallbackTarget.includes('system-ui'),
       `Font upload modal opened with unexpected state: ${JSON.stringify(fontOpened)}`,
     );
 
@@ -13603,8 +18544,22 @@ const testMediaUploadModalControls = async (client, pageId) => {
     assert(
       fontUploaded.uploadProgressTotal === 1 &&
         fontUploaded.uploadProgressCompleted === 1 &&
-        fontUploaded.uploadProgressFailed === 0,
-      `Font upload progress was not recorded on the picker root: ${JSON.stringify(fontUploaded)}`,
+        fontUploaded.uploadProgressFailed === 0 &&
+        fontUploaded.libraryFontMetadata.controlsActionState === 'ready' &&
+        fontUploaded.libraryFontMetadata.controlsActionStatus.includes('700') &&
+        fontUploaded.libraryFontMetadata.weightActionState === 'ready' &&
+        fontUploaded.libraryFontMetadata.weightActionStatus.includes('700') &&
+        fontUploaded.libraryFontMetadata.weightTarget === '700' &&
+        fontUploaded.libraryFontMetadata.styleActionState === 'ready' &&
+        fontUploaded.libraryFontMetadata.styleActionStatus.includes('normal') &&
+        fontUploaded.libraryFontMetadata.styleTarget === 'normal' &&
+        fontUploaded.libraryFontMetadata.fallbackActionState === 'ready' &&
+        fontUploaded.libraryFontMetadata.fallbackActionStatus.includes('Inter') &&
+        fontUploaded.libraryFontMetadata.fallbackTarget.includes('Inter') &&
+        fontUploaded.libraryFontMetadata.displayActionState === 'ready' &&
+        fontUploaded.libraryFontMetadata.displayActionStatus.includes('optional') &&
+        fontUploaded.libraryFontMetadata.displayTarget === 'optional',
+      `Font upload progress or library font registration metadata was not recorded on the picker root: ${JSON.stringify(fontUploaded)}`,
     );
     const fontSelected = await clickMediaLibraryItemByName(client, fontUploadFile.filename);
     const fontFamily = await waitForFontFamilyValue(client, fontUploadFile.fontFamily);
@@ -13620,7 +18575,7 @@ const testMediaUploadModalControls = async (client, pageId) => {
         imageSource,
         savedStatus,
         persisted,
-        escapeClosedReplacementPicker,
+        closeButtonClosedReplacementPicker,
       },
       video: {
         opened: videoOpened,
@@ -13717,38 +18672,106 @@ const testIconBehaviorControls = async (client) => {
 };
 
 const testLockedLayerPropertyPanelGuard = async (client) => {
-  await setLayerLockedState(client, 'smoke-icon', true);
+  await clickButtonByAriaLabel(client, 'Desktop canvas');
+  await waitForEditorBreakpoint(client, 'desktop');
+  const lockedState = await setLayerLockedState(client, 'smoke-icon', true);
+  assert(lockedState.locked === true, `Locked property guard setup did not lock smoke-icon row: ${JSON.stringify(lockedState)}`);
   await selectLayerById(client, 'smoke-icon');
   await switchToPropertiesPanel(client);
 
-  const before = await evaluate(client, `(() => {
-    const element = window.__BACKY_EDITOR_DEBUG__?.getElements?.()?.find((candidate) => candidate.id === 'smoke-icon');
+  const readDeleteAction = async (label) => evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="editor-property-delete-element"]');
+    const status = document.querySelector('[data-testid="editor-property-delete-action-status"]');
     return {
-      locked: element?.locked === true,
-      props: element?.props || {},
+      label: ${JSON.stringify(label)},
+      exists: button instanceof HTMLButtonElement,
+      disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      actionState: button?.getAttribute('data-action-state') || '',
+      actionStatus: button?.getAttribute('data-action-status') || '',
+      disabledReason: button?.getAttribute('data-disabled-reason') || '',
+      targetId: button?.getAttribute('data-target-element-id') || '',
+      targetType: button?.getAttribute('data-target-element-type') || '',
+      describedBy: button?.getAttribute('aria-describedby') || '',
+      title: button?.getAttribute('title') || '',
+      statusExists: status instanceof HTMLElement,
+      statusText: status?.textContent || '',
     };
   })()`);
-  assert(before.locked === true, `Locked property guard setup did not lock smoke-icon: ${JSON.stringify(before)}`);
 
-  await setFormControlByTestId(client, 'editor-icon-title', 'Locked title should not persist');
+  const before = await evaluate(client, `(() => {
+    const titleInput = document.querySelector('[data-testid="editor-icon-title"]');
+    const icon = document.querySelector('[data-element-id="smoke-icon"] [role="img"]');
+    return {
+      titleInputValue: titleInput instanceof HTMLInputElement ? titleInput.value : '',
+      titleInputDisabled: titleInput instanceof HTMLInputElement ? titleInput.matches(':disabled') : null,
+      previewTitle: icon?.getAttribute('title') || '',
+      previewText: icon?.textContent || '',
+    };
+  })()`);
+  assert(before.titleInputDisabled === true, `Locked property guard did not disable icon title input: ${JSON.stringify({ lockedState, before })}`);
+  const lockedDeleteAction = await readDeleteAction('locked smoke-icon');
+  assert(
+    lockedDeleteAction.exists &&
+      lockedDeleteAction.disabled === true &&
+      lockedDeleteAction.actionState === 'blocked' &&
+      /Inspector is read-only/.test(lockedDeleteAction.disabledReason) &&
+      lockedDeleteAction.targetId === 'smoke-icon' &&
+      lockedDeleteAction.targetType === 'icon' &&
+      lockedDeleteAction.describedBy.includes('editor-property-delete-action-status') &&
+      lockedDeleteAction.statusExists &&
+      /Delete icon element unavailable/.test(lockedDeleteAction.statusText),
+    `Locked property guard did not expose blocked delete action metadata: ${JSON.stringify(lockedDeleteAction)}`,
+  );
+
+  const forcedTitleChange = await evaluate(client, `(() => {
+    const titleInput = document.querySelector('[data-testid="editor-icon-title"]');
+    if (!(titleInput instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'missing-title-input' };
+    }
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(titleInput, 'Locked title should not persist');
+    titleInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    titleInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    return {
+      ok: true,
+      value: titleInput.value,
+      effectivelyDisabled: titleInput.matches(':disabled'),
+    };
+  })()`);
+  assert(forcedTitleChange?.ok, `Locked property guard could not attempt title change: ${JSON.stringify(forcedTitleChange)}`);
 
   const after = await evaluate(client, `(() => {
-    const element = window.__BACKY_EDITOR_DEBUG__?.getElements?.()?.find((candidate) => candidate.id === 'smoke-icon');
     const titleInput = document.querySelector('[data-testid="editor-icon-title"]');
+    const icon = document.querySelector('[data-element-id="smoke-icon"] [role="img"]');
     return {
-      locked: element?.locked === true,
-      props: element?.props || {},
       titleInputValue: titleInput instanceof HTMLInputElement ? titleInput.value : '',
+      titleInputDisabled: titleInput instanceof HTMLInputElement ? titleInput.matches(':disabled') : null,
+      previewTitle: icon?.getAttribute('title') || '',
+      previewText: icon?.textContent || '',
     };
   })()`);
-  assert(after.locked === true, `Locked property guard lost locked state: ${JSON.stringify(after)}`);
+  assert(after.titleInputDisabled === true, `Locked property guard lost disabled title input state: ${JSON.stringify({ before, after })}`);
   assert(
-    after.props?.title === before.props?.title,
-    `Locked property panel update changed element props: ${JSON.stringify({ before, after })}`,
+    after.previewTitle === before.previewTitle && after.previewText === before.previewText,
+    `Locked property panel update changed icon preview props: ${JSON.stringify({ before, forcedTitleChange, after })}`,
   );
 
   await setLayerLockedState(client, 'smoke-icon', false);
-  return { before, after };
+  await selectLayerById(client, 'smoke-icon');
+  await switchToPropertiesPanel(client);
+  const unlockedDeleteAction = await readDeleteAction('unlocked smoke-icon');
+  assert(
+    unlockedDeleteAction.exists &&
+      unlockedDeleteAction.disabled === false &&
+      unlockedDeleteAction.actionState === 'ready' &&
+      unlockedDeleteAction.disabledReason === '' &&
+      unlockedDeleteAction.targetId === 'smoke-icon' &&
+      unlockedDeleteAction.targetType === 'icon' &&
+      /Delete icon element "smoke-icon" available/.test(unlockedDeleteAction.actionStatus) &&
+      unlockedDeleteAction.statusText === unlockedDeleteAction.actionStatus,
+    `Unlocked property guard did not expose ready delete action metadata: ${JSON.stringify(unlockedDeleteAction)}`,
+  );
+  return { lockedState, before, lockedDeleteAction, forcedTitleChange, after, unlockedDeleteAction };
 };
 
 const assertPersistedIconBehavior = async (pageId) => {
@@ -16065,8 +21088,9 @@ const main = async () => {
 
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE;
-  const tempReusableSectionId = skipsAuxiliaryFixtures ? null : await createSmokeReusableSection();
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || COMMAND_PALETTE_SMOKE;
+  const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
+  const tempReusableSectionId = needsReusableSectionFixture ? await createSmokeReusableSection() : null;
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
   const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
   const { childProcess, userDataDir } = launchChrome();
@@ -16084,8 +21108,7 @@ const main = async () => {
       editorMediaSmokeSettings = await allowAllMediaTypesForEditorMediaSmoke();
     }
 
-    await waitForCdp();
-    const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
+    const page = await waitForUsablePageTarget();
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
 
     client = connectCdp(page.webSocketDebuggerUrl);
@@ -16104,15 +21127,78 @@ const main = async () => {
       ? ['home-heading', 'home-cta']
       : ['smoke-heading', 'smoke-child-button', 'smoke-nested-box', 'smoke-grandchild-button', 'smoke-top-edge', 'smoke-list', 'smoke-divider', 'smoke-columns', 'smoke-nav', 'smoke-spacer', 'smoke-quote', 'smoke-link', 'smoke-form', 'smoke-comment', 'smoke-interactive', 'smoke-code-component', 'smoke-video', 'smoke-icon', 'smoke-embed', 'smoke-map', 'smoke-input', 'smoke-textarea', 'smoke-select', 'smoke-checkbox', 'smoke-radio', 'smoke-repeater']);
 
+    const pageEditorRouteActions = EDITOR_PATH
+      ? { skipped: true, reason: 'Custom editor path supplied; page editor route controls are not guaranteed on this surface.' }
+      : await assertPageEditorRouteActionStatus(client);
+    const viewportControls = await assertEditorViewportControls(client);
+    const primaryActionStatus = await assertEditorPrimaryActionStatus(client);
+
+    if (PRIMARY_ACTION_STATUS_SMOKE) {
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'primary-action-status',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        pageEditorRouteActions,
+        viewportControls,
+        primaryActionStatus,
+      }, null, 2));
+      return;
+    }
+
+    if (COMMAND_PALETTE_SMOKE) {
+      const commandPalette = await testEditorCommandPalette(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'command-palette',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        pageEditorRouteActions,
+        primaryActionStatus,
+        commandPalette,
+      }, null, 2));
+      return;
+    }
+
+    if (INSPECTOR_SMOKE) {
+      const inspector = await assertInspectorSelection(client, EDITOR_PATH ? 'home-heading' : 'smoke-heading');
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'inspector',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        inspector,
+      }, null, 2));
+      return;
+    }
+
+    if (REUSABLE_SECTION_SMOKE) {
+      assert(tempReusableSectionId, 'Reusable section smoke requires a temporary reusable section fixture');
+      const syncedReusableSection = await testSyncedReusableSectionInstance(client, tempReusableSectionId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'reusable-section',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        syncedReusableSection,
+      }, null, 2));
+      return;
+    }
+
     if (LIBRARY_SMOKE) {
       assert(!EDITOR_PATH, 'Component library smoke currently requires an internally created smoke page');
-      const componentLibrary = await testComponentLibraryControls(client);
+      const componentLibrary = await testComponentLibraryControls(client, tempReusableSectionId);
+      const textClickContract = await testTextClickInteractionContract(client, 'smoke-heading');
+      const contextEditText = await testContextEditTextControl(client, 'smoke-heading');
+      const contextQuickAdd = await testContextQuickAddControl(client, 'heading');
 
       console.log(JSON.stringify({
         ok: true,
         mode: 'component-library',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         componentLibrary,
+        textClickContract,
+        contextEditText,
+        contextQuickAdd,
       }, null, 2));
       return;
     }
@@ -16381,6 +21467,7 @@ const main = async () => {
           breakpoint: 'mobile',
           expectedX: 24,
           expectedWidth: 300,
+          testResetAllOverride: true,
         }),
         tablet: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'tablet',

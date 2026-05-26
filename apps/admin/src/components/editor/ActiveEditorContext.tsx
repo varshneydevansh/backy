@@ -221,8 +221,8 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const getActiveEditor = useCallback(() => {
-    return activeEditorRef.current || activeEditor;
-  }, [activeEditor]);
+    return activeEditorRef.current;
+  }, []);
 
   const getActiveEditorElementId = useCallback(() => {
     return activeEditorElementIdRef.current;
