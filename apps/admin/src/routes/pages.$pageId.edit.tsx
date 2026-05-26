@@ -1939,6 +1939,14 @@ function PageEditorRoute() {
     ? `Preview unavailable: ${pageEditorPreviewDisabledReason}`
     : 'Preview available for this page.';
   const pageEditorPreviewActionState = pageEditorWorkflowActionState(pageEditorPreviewDisabledReason);
+  const generatedPreviewExpiresLabel = previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon';
+  const pageEditorGeneratedPreviewDisabledReason = pageEditorCommandBusyReason;
+  const pageEditorGeneratedPreviewActionStatus = pageEditorGeneratedPreviewDisabledReason
+    ? `Generated preview link unavailable: ${pageEditorGeneratedPreviewDisabledReason}`
+    : previewUrl
+      ? `Generated preview link available until ${generatedPreviewExpiresLabel}.`
+      : 'No generated preview link yet.';
+  const pageEditorGeneratedPreviewActionState = pageEditorGeneratedPreviewDisabledReason ? 'busy' : 'ready';
   const pageEditorReadinessDisabledReason = isPageEditorBusy
     ? pageEditorCommandBusyReason
     : !canViewPage
@@ -1986,6 +1994,7 @@ function PageEditorRoute() {
     pageEditorApiUrlActionStatus,
     pageEditorPublishImpactActionStatus,
     pageEditorPreviewActionStatus,
+    pageEditorGeneratedPreviewActionStatus,
     pageEditorReadinessActionStatus,
     pageEditorPublishActionStatus,
     pageEditorUnpublishActionStatus,
@@ -2732,21 +2741,28 @@ function PageEditorRoute() {
 
                 {previewUrl && (
                   <a
-                    href={previewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-disabled={isPageEditorBusy}
-                    onClick={(event) => {
-                      if (isPageEditorBusy) event.preventDefault();
-                    }}
+	                    href={previewUrl}
+	                    target="_blank"
+	                    rel="noreferrer"
+	                    aria-disabled={isPageEditorBusy}
+                      aria-describedby={pageEditorCommandActionStatusId}
+	                    onClick={(event) => {
+	                      if (isPageEditorBusy) event.preventDefault();
+	                    }}
                     className={cn(
                       'flex max-w-full items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground',
-                      isPageEditorBusy && 'pointer-events-none opacity-60',
-                    )}
-                  >
-                    <span className="truncate">
-                      Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
-                    </span>
+	                      isPageEditorBusy && 'pointer-events-none opacity-60',
+	                    )}
+                      data-testid="page-editor-generated-preview-link"
+                      data-action-state={pageEditorGeneratedPreviewActionState}
+                      data-action-status={pageEditorGeneratedPreviewActionStatus}
+                      data-disabled-reason={pageEditorGeneratedPreviewDisabledReason || undefined}
+                      data-preview-url={previewUrl}
+                      data-preview-expires-at={previewExpiresAt || undefined}
+	                  >
+	                    <span className="truncate">
+	                      Preview expires {generatedPreviewExpiresLabel}
+	                    </span>
                     <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                   </a>
                 )}

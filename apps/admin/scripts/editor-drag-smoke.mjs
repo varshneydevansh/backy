@@ -35,6 +35,7 @@ const RESIZE_SMOKE = process.env.BACKY_EDITOR_RESIZE_SMOKE === '1';
 const RENDER_PARITY_SMOKE = process.env.BACKY_EDITOR_RENDER_PARITY_SMOKE === '1';
 const STRESS_SMOKE = process.env.BACKY_EDITOR_STRESS_SMOKE === '1';
 const PRIMARY_ACTION_STATUS_SMOKE = process.env.BACKY_EDITOR_PRIMARY_ACTION_STATUS_SMOKE === '1';
+const PREVIEW_LINK_SMOKE = process.env.BACKY_EDITOR_PREVIEW_LINK_SMOKE === '1';
 const COMMAND_PALETTE_SMOKE = process.env.BACKY_EDITOR_COMMAND_PALETTE_SMOKE === '1';
 const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);
 const STRESS_ITERATIONS = Math.max(4, Math.min(Number.isFinite(parsedStressIterations) ? parsedStressIterations : 10, 40));
@@ -300,7 +301,11 @@ const assertPageEditorFallbackIsReadOnly = () => {
 	      source.includes('data-control-target={area.href}') &&
 	      source.includes('data-action-status={pageEditorControlMapActionStatus}') &&
 	      source.includes('data-testid="page-editor-preview"') &&
-      source.includes('data-testid="page-editor-refresh-readiness"') &&
+	      source.includes('const pageEditorGeneratedPreviewActionStatus = pageEditorGeneratedPreviewDisabledReason') &&
+	      source.includes('data-testid="page-editor-generated-preview-link"') &&
+	      source.includes('data-preview-url={previewUrl}') &&
+	      source.includes('data-preview-expires-at={previewExpiresAt || undefined}') &&
+	      source.includes('data-testid="page-editor-refresh-readiness"') &&
       source.includes('data-testid="page-editor-publish"') &&
       source.includes('data-testid="page-editor-unpublish"') &&
       source.includes('const pageEditorArchiveActionStatus = pageEditorArchiveDisabledReason') &&
@@ -9600,6 +9605,87 @@ const assertPageEditorRouteActionStatus = async (client) => {
 
   assert(state.ok, `Page editor route action status contract failed: ${JSON.stringify(state)}`);
   return state;
+};
+
+const testPageEditorGeneratedPreviewLink = async (client) => {
+  await evaluate(client, `(() => {
+    window.__backyPreviewOpenCalls = [];
+    window.open = (...args) => {
+      window.__backyPreviewOpenCalls.push(args.map((arg) => String(arg)));
+      return null;
+    };
+    return true;
+  })()`);
+
+  let previewButtonReady = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    previewButtonReady = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="page-editor-preview"]');
+      return {
+        exists: button instanceof HTMLButtonElement,
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        actionState: button?.getAttribute('data-action-state') || '',
+        actionStatus: button?.getAttribute('data-action-status') || '',
+        disabledReason: button?.getAttribute('data-disabled-reason') || '',
+      };
+    })()`);
+    if (previewButtonReady.exists && previewButtonReady.disabled === false) {
+      break;
+    }
+    await sleep(200);
+  }
+  assert(
+    previewButtonReady?.exists && previewButtonReady.disabled === false,
+    `Page editor preview action did not become available: ${JSON.stringify(previewButtonReady)}`,
+  );
+
+  await clickEnabledControlByTestId(client, 'page-editor-preview', 'page editor preview');
+
+  let state = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const status = document.querySelector('[data-testid="page-editor-command-action-status"]');
+      const link = document.querySelector('[data-testid="page-editor-generated-preview-link"]');
+      const openCalls = Array.isArray(window.__backyPreviewOpenCalls) ? window.__backyPreviewOpenCalls : [];
+      return {
+        exists: link instanceof HTMLAnchorElement,
+        href: link instanceof HTMLAnchorElement ? link.getAttribute('href') || '' : '',
+        dataPreviewUrl: link?.getAttribute('data-preview-url') || '',
+        dataPreviewExpiresAt: link?.getAttribute('data-preview-expires-at') || '',
+        target: link?.getAttribute('target') || '',
+        rel: link?.getAttribute('rel') || '',
+        ariaDisabled: link?.getAttribute('aria-disabled') || '',
+        describedBy: link?.getAttribute('aria-describedby') || '',
+        actionState: link?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(link?.getAttribute('data-action-status')),
+        disabledReason: link?.getAttribute('data-disabled-reason') || '',
+        text: normalize(link?.textContent),
+        statusId: status?.id || '',
+        statusText: normalize(status?.textContent),
+        openCalls,
+      };
+    })()`);
+
+    if (
+      state.exists &&
+      state.href &&
+      state.href === state.dataPreviewUrl &&
+      state.target === '_blank' &&
+      /noreferrer/.test(state.rel) &&
+      state.describedBy === state.statusId &&
+      state.actionState === 'ready' &&
+      /Generated preview link available/.test(state.actionStatus) &&
+      /Generated preview link available/.test(state.statusText) &&
+      state.openCalls.some((call) => call[0] === state.href)
+    ) {
+      return state;
+    }
+
+    await sleep(200);
+  }
+
+  throw new Error(`Generated preview link action contract failed: ${JSON.stringify(state)}`);
 };
 
 const assertEditorPrimaryActionStatus = async (client) => {
@@ -22019,7 +22105,7 @@ const main = async () => {
 
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || COMMAND_PALETTE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   const tempReusableSectionId = needsReusableSectionFixture ? await createSmokeReusableSection() : null;
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
@@ -22064,19 +22150,33 @@ const main = async () => {
     const viewportControls = await assertEditorViewportControls(client);
     const primaryActionStatus = await assertEditorPrimaryActionStatus(client);
 
-    if (PRIMARY_ACTION_STATUS_SMOKE) {
-      console.log(JSON.stringify({
-        ok: true,
+	    if (PRIMARY_ACTION_STATUS_SMOKE) {
+	      console.log(JSON.stringify({
+	        ok: true,
         mode: 'primary-action-status',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         pageEditorRouteActions,
         viewportControls,
         primaryActionStatus,
       }, null, 2));
-      return;
-    }
+	      return;
+	    }
 
-    if (COMMAND_PALETTE_SMOKE) {
+	    if (PREVIEW_LINK_SMOKE) {
+	      const generatedPreviewLink = await testPageEditorGeneratedPreviewLink(client);
+
+	      console.log(JSON.stringify({
+	        ok: true,
+	        mode: 'preview-link',
+	        url: `${ADMIN_BASE_URL}${editorPath}`,
+	        pageEditorRouteActions,
+	        primaryActionStatus,
+	        generatedPreviewLink,
+	      }, null, 2));
+	      return;
+	    }
+
+	    if (COMMAND_PALETTE_SMOKE) {
       const commandPalette = await testEditorCommandPalette(client);
 
       console.log(JSON.stringify({
