@@ -217,6 +217,7 @@ const assertAuthRecoverySource = () => {
   const rootRouteSource = fs.readFileSync(new URL('../src/routes/__root.tsx', import.meta.url), 'utf8');
   const mainLayoutSource = fs.readFileSync(new URL('../src/components/layout/MainLayout.tsx', import.meta.url), 'utf8');
   const sidebarSource = fs.readFileSync(new URL('../src/components/layout/Sidebar.tsx', import.meta.url), 'utf8');
+  const sidebarModelSource = fs.readFileSync(new URL('../src/components/layout/sidebarModel.ts', import.meta.url), 'utf8');
   const headerSource = fs.readFileSync(new URL('../src/components/layout/Header.tsx', import.meta.url), 'utf8');
   const permissionSource = fs.readFileSync(new URL('../src/lib/adminPermissionUi.ts', import.meta.url), 'utf8');
   const navigationAccessSource = fs.readFileSync(new URL('../src/lib/adminNavigationAccess.ts', import.meta.url), 'utf8');
@@ -421,7 +422,7 @@ const assertAuthRecoverySource = () => {
 
   assert(
     sidebarSource.includes('collapseLocked?: boolean') &&
-      sidebarSource.includes('id: string;') &&
+      sidebarModelSource.includes('id: string;') &&
       sidebarSource.includes("import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';") &&
       sidebarSource.includes("import { useStore } from '@/stores/mockStore';") &&
       sidebarSource.includes('const selectedSiteId = getSiteSelectionFromSearch(sites)') &&
@@ -431,21 +432,26 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site`}') &&
       sidebarSource.includes("navigationId = 'admin-sidebar-navigation'") &&
       sidebarSource.includes("testIdPrefix = 'admin-sidebar'") &&
-      sidebarSource.includes("const SIDEBAR_SECTION_STORAGE_KEY = 'backy:admin-sidebar-section-state';") &&
-      sidebarSource.includes('const SIDEBAR_SECTION_STORAGE_VERSION = 2;') &&
-      sidebarSource.includes("const DEFAULT_OPEN_SECTION_IDS = ['workspace'];") &&
-      sidebarSource.includes("type SidebarSectionStateSource = 'default' | 'stored' | 'legacy-migrated';") &&
-      sidebarSource.includes('const normalizeSidebarSectionIds = (sectionIds: unknown) =>') &&
-      sidebarSource.includes('const createDefaultSidebarSectionState =') &&
-      sidebarSource.includes('if (Array.isArray(parsed))') &&
-      sidebarSource.includes('legacySectionIds.size > 1') &&
-      sidebarSource.includes('writeSidebarSectionState(migratedSectionIds, legacySectionIds.size);') &&
-      sidebarSource.includes('const migratedFromLegacyCount = typeof parsed.migratedFromLegacyCount') &&
-      sidebarSource.includes("source: migratedFromLegacyCount > 0 ? 'legacy-migrated' : 'stored'") &&
-      sidebarSource.includes('version: SIDEBAR_SECTION_STORAGE_VERSION') &&
-      sidebarSource.includes('migratedFromLegacyCount') &&
-      sidebarSource.includes('readSidebarSectionState') &&
-      sidebarSource.includes('writeSidebarSectionState') &&
+      sidebarModelSource.includes("const SIDEBAR_SECTION_STORAGE_KEY = 'backy:admin-sidebar-section-state';") &&
+      sidebarModelSource.includes('const SIDEBAR_SECTION_STORAGE_VERSION = 2;') &&
+      sidebarModelSource.includes("const DEFAULT_OPEN_SECTION_IDS = ['workspace'];") &&
+      sidebarModelSource.includes("type SidebarSectionStateSource = 'default' | 'stored' | 'legacy-migrated';") &&
+      sidebarModelSource.includes('const normalizeSidebarSectionIds = (sectionIds: unknown) =>') &&
+      sidebarModelSource.includes('const createDefaultSidebarSectionState =') &&
+      sidebarModelSource.includes('if (Array.isArray(parsed))') &&
+      sidebarModelSource.includes('legacySectionIds.size > 1') &&
+      sidebarModelSource.includes('writeSidebarSectionState(migratedSectionIds, legacySectionIds.size);') &&
+      sidebarModelSource.includes('const migratedFromLegacyCount = typeof parsed.migratedFromLegacyCount') &&
+      sidebarModelSource.includes("source: migratedFromLegacyCount > 0 ? 'legacy-migrated' : 'stored'") &&
+      sidebarModelSource.includes('version: SIDEBAR_SECTION_STORAGE_VERSION') &&
+      sidebarModelSource.includes('migratedFromLegacyCount') &&
+      sidebarSource.includes('createDefaultSidebarSectionState(), []') &&
+      sidebarSource.includes('const sectionStateHydratedRef = useRef(false);') &&
+      sidebarSource.includes('const [sectionStateHydrated, setSectionStateHydrated] = useState(false);') &&
+      sidebarSource.includes('const storedSectionState = readSidebarSectionState();') &&
+      sidebarSource.includes('setSectionStateHydrated(true);') &&
+      sidebarSource.includes('if (!sectionStateHydrated || collapsed || !activeSectionId) return;') &&
+      !sidebarSource.includes('useState(() => readSidebarSectionState())') &&
       sidebarSource.includes('const [sectionStateSource, setSectionStateSource]') &&
       sidebarSource.includes('const [legacySectionStateCount, setLegacySectionStateCount]') &&
       sidebarSource.includes('aria-controls={navigationId}') &&
@@ -462,10 +468,10 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('const sidebarActionStatus = `${permissionSyncStatus} ${sidebarFilterSummary}') &&
       sidebarSource.includes('data-action-status={sidebarActionStatus}') &&
       sidebarSource.includes('data-action-state={collapseLocked ?') &&
-      sidebarSource.includes("type SidebarQuickCreatePermission = 'pages.edit';") &&
-      sidebarSource.includes('const SIDEBAR_QUICK_CREATE_ACTIONS') &&
-      sidebarSource.includes("to: '/pages/new'") &&
-      sidebarSource.includes("to: '/blog/new'") &&
+      sidebarModelSource.includes("type SidebarQuickCreatePermission = 'pages.edit';") &&
+      sidebarModelSource.includes('const SIDEBAR_QUICK_CREATE_ACTIONS') &&
+      sidebarModelSource.includes("to: '/pages/new'") &&
+      sidebarModelSource.includes("to: '/blog/new'") &&
       sidebarSource.includes('const quickCreateActions = useMemo(() => (') &&
       sidebarSource.includes('const quickCreateStatusId = `${navigationId}-quick-create-status`;') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-quick-create`}') &&
@@ -502,6 +508,10 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('interface SidebarRailTooltip') &&
       sidebarSource.includes('const [railTooltip, setRailTooltip]') &&
       sidebarSource.includes("const showRailTooltip = (item: Pick<NavItem, 'label' | 'to' | 'area'>, target: HTMLElement)") &&
+      sidebarSource.includes('const railTooltipId = `${navigationId}-rail-tooltip`;') &&
+      sidebarSource.includes('const getRailDescribedBy = (baseId: string) => (') &&
+      sidebarSource.includes('role="tooltip"') &&
+      sidebarSource.includes('aria-describedby={getRailDescribedBy(sidebarActionStatusId)}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-rail-tooltip`}') &&
       sidebarSource.includes('data-tooltip-item={railTooltip.label.toLowerCase()}') &&
       sidebarSource.includes('data-nav-area={item.area}') &&
@@ -527,7 +537,9 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-testid={`${testIdPrefix}-permission-sync-retry`}') &&
       sidebarSource.includes('Permission sync failed. Role defaults stay active.') &&
       sidebarSource.includes('onClick={refreshPermissions}') &&
-      sidebarSource.includes('data-nav-ready={String(navigationUsable)}') &&
+      sidebarSource.includes('const sidebarReady = navigationUsable && sectionStateHydrated;') &&
+      sidebarSource.includes('data-nav-ready={String(sidebarReady)}') &&
+      sidebarSource.includes('data-section-state-hydrated={String(sectionStateHydrated)}') &&
       sidebarSource.includes('data-nav-item-count={visibleItemCount}') &&
       sidebarSource.includes("'flex h-full min-h-0 flex-col border-r border-border bg-card transition-[width] duration-200 ease-out'") &&
       sidebarSource.includes('className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [scrollbar-gutter:stable]"') &&
@@ -1785,6 +1797,7 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const permissionSyncState = sidebar?.getAttribute('data-permission-sync-state') || '';
       const permissionSyncStatusAttr = sidebar?.getAttribute('data-permission-sync-status') || '';
       const permissionSyncError = sidebar?.getAttribute('data-permission-sync-error') || '';
+      const sectionStateHydrated = sidebar?.getAttribute('data-section-state-hydrated') || '';
       const ariaBusy = sidebar?.getAttribute('aria-busy') || '';
       const renderedItems = Number(sidebar?.getAttribute('data-rendered-nav-item-count') || 0);
       const quickCreateCount = Number(sidebar?.getAttribute('data-quick-create-count') || 0);
@@ -1812,6 +1825,7 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           Boolean(main) &&
           Boolean(header) &&
           navReady === 'true' &&
+          sectionStateHydrated === 'true' &&
           renderedItems >= 8 &&
           status instanceof HTMLElement &&
           permissionSyncStatus instanceof HTMLElement &&
@@ -1864,18 +1878,25 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
         mainExists: Boolean(main),
         headerExists: Boolean(header),
         shellHeight: Math.round(shellRect?.height || 0),
+        shellWidth: Math.round(shellRect?.width || 0),
+        shellRight: Math.round(shellRect?.right || 0),
         sidebarHeight: Math.round(sidebarRect?.height || 0),
+        sidebarWidth: Math.round(sidebarRect?.width || 0),
+        sidebarRight: Math.round(sidebarRect?.right || 0),
         navHeight: Math.round(navRect?.height || 0),
         navScrollHeight: nav?.scrollHeight || 0,
         navClientHeight: nav?.clientHeight || 0,
         navOverflowY,
         mainHeight: Math.round(mainRect?.height || 0),
+        mainWidth: Math.round(mainRect?.width || 0),
         mainScrollHeight: main?.scrollHeight || 0,
         mainClientHeight: main?.clientHeight || 0,
         mainOverflowY,
         headerHeight: Math.round(headerRect?.height || 0),
+        mainLeft: Math.round(mainRect?.left || 0),
         mainTop: Math.round(mainRect?.top || 0),
         navReady,
+        sectionStateHydrated,
         permissionSource,
         permissionSyncState,
         permissionSyncStatusAttr,
@@ -1958,6 +1979,15 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       state.mainClientHeight <= state.viewportHeight &&
       state.mainClientHeight + state.headerHeight <= state.viewportHeight + 8,
     `Admin main content must scroll separately beneath the header: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.sectionStateHydrated === 'true' &&
+      state.sidebarWidth >= 56 &&
+      state.sidebarWidth <= 280 &&
+      Math.abs(state.shellWidth - state.sidebarWidth) <= 4 &&
+      Math.abs(state.mainLeft - state.sidebarRight) <= 4 &&
+      state.mainWidth > state.sidebarWidth,
+    `Admin sidebar should hydrate after first paint without shifting shell/main geometry: ${JSON.stringify(state)}`,
   );
   assert(
     state.navReady === 'true' &&

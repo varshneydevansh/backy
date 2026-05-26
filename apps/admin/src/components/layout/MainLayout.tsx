@@ -47,9 +47,14 @@ const SIDEBAR_DEFAULT_COLLAPSED_ROUTES = [
 const getStoredBoolean = (key: string) => {
   if (typeof window === 'undefined') return null;
 
-  const storedValue = window.localStorage.getItem(key);
-  if (storedValue === 'true') return true;
-  if (storedValue === 'false') return false;
+  try {
+    const storedValue = window.localStorage.getItem(key);
+    if (storedValue === 'true') return true;
+    if (storedValue === 'false') return false;
+  } catch {
+    return null;
+  }
+
   return null;
 };
 
@@ -109,13 +114,21 @@ export function MainLayout({ children }: MainLayoutProps) {
   useEffect(() => {
     if (!hasStoredSidebarPreference || typeof window === 'undefined') return;
 
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(standardSidebarCollapsed));
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(standardSidebarCollapsed));
+    } catch {
+      // Ignore private-mode or quota failures; the in-memory preference still works.
+    }
   }, [hasStoredSidebarPreference, standardSidebarCollapsed]);
 
   useEffect(() => {
     if (!hasStoredDenseSidebarPreference || typeof window === 'undefined') return;
 
-    window.localStorage.setItem(SIDEBAR_DENSE_COLLAPSED_STORAGE_KEY, String(denseSidebarCollapsed));
+    try {
+      window.localStorage.setItem(SIDEBAR_DENSE_COLLAPSED_STORAGE_KEY, String(denseSidebarCollapsed));
+    } catch {
+      // Ignore private-mode or quota failures; the in-memory preference still works.
+    }
   }, [denseSidebarCollapsed, hasStoredDenseSidebarPreference]);
 
   const handleSidebarToggle = () => {

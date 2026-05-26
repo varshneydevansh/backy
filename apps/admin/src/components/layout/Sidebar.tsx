@@ -12,23 +12,8 @@
  */
 
 import { Link, useLocation } from '@tanstack/react-router';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  LayoutDashboard,
-  FileText,
-  Image,
-  Settings,
-  Users,
-  Globe,
-  Newspaper,
-  Database,
-  ClipboardList,
-  ShoppingBag,
-  Receipt,
-  MessageSquare,
-  Contact,
-  Layers3,
-  Building2,
   AlertTriangle,
   ChevronDown,
   ChevronLeft,
@@ -39,7 +24,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
-import { useAuthStore, type User } from '@/stores/authStore';
+import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import {
   canAccessAdminNavigationArea,
@@ -47,6 +32,20 @@ import {
   type AdminNavigationArea,
 } from '@/lib/adminNavigationAccess';
 import { isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
+import {
+  createDefaultSidebarSectionState,
+  DEFAULT_OPEN_SECTION_IDS,
+  isNavRouteActive,
+  NAV_SECTIONS,
+  readSidebarSectionState,
+  SIDEBAR_QUICK_CREATE_ACTIONS,
+  SIDEBAR_QUICK_CREATE_PERMISSION_ROLE_DEFAULTS,
+  SIDEBAR_SECTION_STORAGE_VERSION,
+  SITE_SCOPED_NAV_ROUTES,
+  writeSidebarSectionState,
+  type NavItem,
+  type SidebarSectionStateSource,
+} from './sidebarModel';
 
 // ============================================
 // TYPES
@@ -67,227 +66,12 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
-interface NavItem {
-  /** Stable navigation identifier */
-  id: string;
-  /** Display label */
-  label: string;
-  /** Route path */
-  to: string;
-  /** Icon component */
-  icon: React.ElementType;
-  /** Badge text (optional) */
-  badge?: string;
-  /** Permission area required to show this item */
-  area: AdminNavigationArea;
-}
-
-interface NavSection {
-  /** Stable section identifier for persisted expansion state */
-  id: string;
-  /** Display label */
-  label: string;
-  /** Navigation items in the section */
-  items: NavItem[];
-}
-
-type SidebarQuickCreatePermission = 'pages.edit';
-
-interface SidebarQuickCreateAction {
-  /** Stable quick-create identifier */
-  id: string;
-  /** Display label */
-  label: string;
-  /** Route path */
-  to: string;
-  /** Icon component */
-  icon: React.ElementType;
-  /** Navigation area required to expose the action */
-  area: AdminNavigationArea;
-  /** Permission required to start the create flow */
-  permissionKey: SidebarQuickCreatePermission;
-}
-
 interface SidebarRailTooltip {
   label: string;
   route: string;
   area: AdminNavigationArea;
   top: number;
 }
-
-// ============================================
-// NAVIGATION ITEMS
-// ============================================
-
-/**
- * Main navigation items for the sidebar
- */
-const NAV_SECTIONS: NavSection[] = [
-  {
-    id: 'workspace',
-    label: 'Workspace',
-    items: [
-      { id: 'dashboard', label: 'Dashboard', to: '/', icon: LayoutDashboard, area: 'dashboard' },
-      { id: 'sites', label: 'Sites', to: '/sites', icon: Globe, area: 'sites' },
-    ],
-  },
-  {
-    id: 'content',
-    label: 'Content',
-    items: [
-      { id: 'pages', label: 'Pages', to: '/pages', icon: FileText, area: 'pages' },
-      { id: 'blog', label: 'Blog', to: '/blog', icon: Newspaper, area: 'blog' },
-      { id: 'media', label: 'Media', to: '/media', icon: Image, area: 'media' },
-      { id: 'collections', label: 'Collections', to: '/collections', icon: Database, area: 'collections' },
-      { id: 'sections', label: 'Sections', to: '/reusable-sections', icon: Layers3, area: 'sections' },
-    ],
-  },
-  {
-    id: 'commerce',
-    label: 'Commerce',
-    items: [
-      { id: 'products', label: 'Products', to: '/products', icon: ShoppingBag, area: 'commerce' },
-      { id: 'orders', label: 'Orders', to: '/orders', icon: Receipt, area: 'commerce' },
-    ],
-  },
-  {
-    id: 'audience',
-    label: 'Audience',
-    items: [
-      { id: 'forms', label: 'Forms', to: '/forms', icon: ClipboardList, area: 'forms' },
-      { id: 'contacts', label: 'Contacts', to: '/contacts', icon: Contact, area: 'contacts' },
-      { id: 'comments', label: 'Comments', to: '/comments', icon: MessageSquare, area: 'comments' },
-    ],
-  },
-  {
-    id: 'platform',
-    label: 'Platform',
-    items: [
-      { id: 'teams', label: 'Teams', to: '/teams', icon: Building2, area: 'teams' },
-      { id: 'users', label: 'Users', to: '/users', icon: Users, area: 'users' },
-      { id: 'settings', label: 'Settings', to: '/settings', icon: Settings, area: 'settings' },
-    ],
-  },
-];
-
-const SIDEBAR_QUICK_CREATE_ACTIONS: SidebarQuickCreateAction[] = [
-  { id: 'new-page', label: 'New page', to: '/pages/new', icon: FileText, area: 'pages', permissionKey: 'pages.edit' },
-  { id: 'new-post', label: 'New post', to: '/blog/new', icon: Newspaper, area: 'blog', permissionKey: 'pages.edit' },
-];
-
-const SIDEBAR_QUICK_CREATE_PERMISSION_ROLE_DEFAULTS: Record<SidebarQuickCreatePermission, User['role'][]> = {
-  'pages.edit': ['owner', 'admin', 'editor'],
-};
-
-const SIDEBAR_SECTION_STORAGE_KEY = 'backy:admin-sidebar-section-state';
-const SIDEBAR_SECTION_STORAGE_VERSION = 2;
-const DEFAULT_OPEN_SECTION_IDS = ['workspace'];
-type SidebarSectionStateSource = 'default' | 'stored' | 'legacy-migrated';
-
-interface SidebarSectionStateSnapshot {
-  sectionIds: Set<string>;
-  source: SidebarSectionStateSource;
-  legacySectionCount: number;
-}
-
-const SITE_SCOPED_NAV_ROUTES = new Set([
-  '/',
-  '/pages',
-  '/pages/new',
-  '/blog',
-  '/blog/new',
-  '/media',
-  '/collections',
-  '/reusable-sections',
-  '/products',
-  '/orders',
-  '/forms',
-  '/contacts',
-  '/comments',
-  '/teams',
-  '/users',
-]);
-
-const isNavRouteActive = (pathname: string, route: string) => (
-  pathname === route || (route !== '/' && pathname.startsWith(`${route}/`))
-);
-
-const validSidebarSectionIds = new Set(NAV_SECTIONS.map((section) => section.id));
-
-const normalizeSidebarSectionIds = (sectionIds: unknown) => {
-  if (!Array.isArray(sectionIds)) {
-    return new Set<string>();
-  }
-
-  return new Set(
-    sectionIds.filter((sectionId): sectionId is string => (
-      typeof sectionId === 'string' && validSidebarSectionIds.has(sectionId)
-    )),
-  );
-};
-
-const createDefaultSidebarSectionState = (source: SidebarSectionStateSource = 'default'): SidebarSectionStateSnapshot => ({
-  sectionIds: new Set(DEFAULT_OPEN_SECTION_IDS),
-  source,
-  legacySectionCount: 0,
-});
-
-const readSidebarSectionState = (): SidebarSectionStateSnapshot => {
-  if (typeof window === 'undefined') {
-    return createDefaultSidebarSectionState();
-  }
-
-  try {
-    const stored = window.localStorage.getItem(SIDEBAR_SECTION_STORAGE_KEY);
-    if (!stored) {
-      return createDefaultSidebarSectionState();
-    }
-    const parsed = JSON.parse(stored);
-    if (Array.isArray(parsed)) {
-      const legacySectionIds = normalizeSidebarSectionIds(parsed);
-      const migratedSectionIds = legacySectionIds.size > 1
-        ? new Set(DEFAULT_OPEN_SECTION_IDS)
-        : legacySectionIds.size > 0
-          ? legacySectionIds
-          : new Set(DEFAULT_OPEN_SECTION_IDS);
-      writeSidebarSectionState(migratedSectionIds, legacySectionIds.size);
-      return {
-        sectionIds: migratedSectionIds,
-        source: 'legacy-migrated',
-        legacySectionCount: legacySectionIds.size,
-      };
-    }
-    if (!parsed || typeof parsed !== 'object' || parsed.version !== SIDEBAR_SECTION_STORAGE_VERSION) {
-      return createDefaultSidebarSectionState();
-    }
-    const storedSectionIds = normalizeSidebarSectionIds(parsed.sectionIds);
-    const migratedFromLegacyCount = typeof parsed.migratedFromLegacyCount === 'number'
-      ? Math.max(0, parsed.migratedFromLegacyCount)
-      : 0;
-    return {
-      sectionIds: storedSectionIds.size > 0 ? storedSectionIds : new Set(DEFAULT_OPEN_SECTION_IDS),
-      source: migratedFromLegacyCount > 0 ? 'legacy-migrated' : 'stored',
-      legacySectionCount: migratedFromLegacyCount,
-    };
-  } catch {
-    return createDefaultSidebarSectionState();
-  }
-};
-
-const writeSidebarSectionState = (sectionIds: Set<string>, migratedFromLegacyCount = 0) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(SIDEBAR_SECTION_STORAGE_KEY, JSON.stringify({
-      version: SIDEBAR_SECTION_STORAGE_VERSION,
-      sectionIds: Array.from(sectionIds).filter((sectionId) => validSidebarSectionIds.has(sectionId)),
-      migratedFromLegacyCount,
-      updatedAt: new Date().toISOString(),
-    }));
-  } catch {
-    // Ignore private-mode or quota failures; navigation remains usable in memory.
-  }
-};
 
 // ============================================
 // COMPONENT
@@ -319,10 +103,12 @@ export function Sidebar({
     refreshPermissions,
   } = useCurrentAdminPermissionMatrix(currentUser);
   const selectedSiteId = getSiteSelectionFromSearch(sites);
-  const [initialSidebarSectionState] = useState(() => readSidebarSectionState());
+  const initialSidebarSectionState = useMemo(() => createDefaultSidebarSectionState(), []);
+  const sectionStateHydratedRef = useRef(false);
   const [expandedSectionIds, setExpandedSectionIds] = useState(initialSidebarSectionState.sectionIds);
   const [sectionStateSource, setSectionStateSource] = useState<SidebarSectionStateSource>(initialSidebarSectionState.source);
   const [legacySectionStateCount, setLegacySectionStateCount] = useState(initialSidebarSectionState.legacySectionCount);
+  const [sectionStateHydrated, setSectionStateHydrated] = useState(false);
   const [navFilter, setNavFilter] = useState('');
   const [railTooltip, setRailTooltip] = useState<SidebarRailTooltip | null>(null);
   const deferredNavFilter = useDeferredValue(navFilter);
@@ -385,6 +171,7 @@ export function Sidebar({
     renderedSections.reduce((count, section) => count + section.items.length, 0)
   ), [renderedSections]);
   const navigationUsable = Boolean(currentUser) && visibleItemCount > 0;
+  const sidebarReady = navigationUsable && sectionStateHydrated;
   const permissionSource = permissionMatrix ? 'matrix' : currentUser ? 'role-defaults' : 'anonymous';
   const permissionSyncState = !currentUser
     ? 'anonymous'
@@ -451,7 +238,11 @@ export function Sidebar({
       : 'Collapse sidebar available.';
   const sidebarActionStatus = `${permissionSyncStatus} ${sidebarFilterSummary} ${sidebarControlStatus} ${sidebarCollapseStatus}`;
   const quickCreateStatusId = `${navigationId}-quick-create-status`;
+  const railTooltipId = `${navigationId}-rail-tooltip`;
   const quickCreateActionStatus = `${quickCreateActions.length} create shortcut${quickCreateActions.length === 1 ? '' : 's'} available for ${activeSiteName}.`;
+  const getRailDescribedBy = (baseId: string) => (
+    collapsed ? `${baseId} ${railTooltipId}` : baseId
+  );
   const collapseInactiveSections = () => {
     const next = new Set<string>();
     if (activeSectionId) {
@@ -507,7 +298,18 @@ export function Sidebar({
   const hideRailTooltip = () => setRailTooltip(null);
 
   useEffect(() => {
-    if (collapsed || !activeSectionId) return;
+    if (sectionStateHydratedRef.current) return;
+
+    sectionStateHydratedRef.current = true;
+    const storedSectionState = readSidebarSectionState();
+    setExpandedSectionIds(storedSectionState.sectionIds);
+    setSectionStateSource(storedSectionState.source);
+    setLegacySectionStateCount(storedSectionState.legacySectionCount);
+    setSectionStateHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sectionStateHydrated || collapsed || !activeSectionId) return;
 
     setExpandedSectionIds((current) => {
       if (current.has(activeSectionId)) return current;
@@ -518,7 +320,7 @@ export function Sidebar({
       setLegacySectionStateCount(0);
       return next;
     });
-  }, [activeSectionId, collapsed]);
+  }, [activeSectionId, collapsed, sectionStateHydrated]);
 
   return (
     <aside
@@ -530,7 +332,8 @@ export function Sidebar({
       data-permission-sync-state={permissionSyncState}
       data-permission-sync-status={permissionSyncStatus}
       data-permission-sync-error={permissionSyncError || undefined}
-      data-nav-ready={String(navigationUsable)}
+      data-nav-ready={String(sidebarReady)}
+      data-section-state-hydrated={String(sectionStateHydrated)}
       data-nav-section-count={visibleSections.length}
       data-rendered-nav-section-count={renderedSections.length}
       data-expanded-section-count={expandedSectionCount}
@@ -544,7 +347,7 @@ export function Sidebar({
       data-section-state-version={SIDEBAR_SECTION_STORAGE_VERSION}
       data-section-state-source={sectionStateSource}
       data-legacy-section-state-count={legacySectionStateCount}
-      aria-busy={permissionsLoading && !navigationUsable}
+      aria-busy={(permissionsLoading && !navigationUsable) || !sectionStateHydrated}
       aria-describedby={sidebarActionStatusId}
       className={cn(
         'flex h-full min-h-0 flex-col border-r border-border bg-card transition-[width] duration-200 ease-out',
@@ -642,7 +445,7 @@ export function Sidebar({
                   onFocus={(event) => showRailTooltip(action, event.currentTarget)}
                   onBlur={hideRailTooltip}
                   aria-current={isActive ? 'page' : undefined}
-                  aria-describedby={quickCreateStatusId}
+                  aria-describedby={getRailDescribedBy(quickCreateStatusId)}
                   aria-label={action.label}
                   title={collapsed ? action.label : undefined}
                   className={cn(
@@ -845,7 +648,7 @@ export function Sidebar({
                           onFocus={(event) => showRailTooltip(item, event.currentTarget)}
                           onBlur={hideRailTooltip}
                           aria-current={isActive ? 'page' : undefined}
-                          aria-describedby={sidebarActionStatusId}
+                          aria-describedby={getRailDescribedBy(sidebarActionStatusId)}
                           className={cn(
                             'group relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors lg:min-h-9 lg:py-1.5',
                             'hover:bg-accent hover:text-accent-foreground focus-ring active:translate-y-px',
@@ -915,9 +718,10 @@ export function Sidebar({
 
       {collapsed && railTooltip && (
         <div
+          id={railTooltipId}
+          role="tooltip"
           className="pointer-events-none fixed left-[4.75rem] z-50 max-w-56 -translate-y-1/2 rounded-md border border-border bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-lg"
           style={{ top: railTooltip.top }}
-          aria-hidden="true"
           data-testid={`${testIdPrefix}-rail-tooltip`}
           data-tooltip-item={railTooltip.label.toLowerCase()}
           data-tooltip-area={railTooltip.area}
