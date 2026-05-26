@@ -345,7 +345,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
   );
 	  assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="page-editor-restore-impact"') && source.includes('data-testid="page-editor-confirm-restore"') && source.includes('Current </span>'), 'Page editor restore confirmation must preview restore impact before rollback');
 	  assert(source.includes('data-testid={`page-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('operation') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Page editor revisions must expose persisted operation plus actor/action metadata in cards and handoff summaries');
-	  assert(
+  assert(
 	    source.includes("schemaVersion: 'backy.page-publish-impact.v1'") &&
 	      source.includes('const getPageRelationParentId') &&
 	      source.includes('directChildPages') &&
@@ -357,7 +357,7 @@ const assertPageEditorFallbackIsReadOnly = () => {
 	      source.includes('data-testid="page-editor-publish-impact-children"') &&
 	      source.includes('includesCanvasContent: false'),
 	    'Page editor publish panel must expose a copyable relation/navigation publish-impact handoff before status changes',
-	  );
+  );
 	  assert(
 	    source.includes('canvasElementsToBackyContentDocument') &&
       source.includes('const [currentCanvasElements, setCurrentCanvasElements] = useState<CanvasElement[]>(editorElements);') &&
@@ -394,6 +394,7 @@ const assertCanvasEditorShortcutSource = () => {
   const activeEditorSource = fs.readFileSync(new URL('../src/components/editor/ActiveEditorContext.tsx', import.meta.url), 'utf8');
   const richTextBlockSource = fs.readFileSync(new URL('../src/components/editor/blocks/RichTextBlock.tsx', import.meta.url), 'utf8');
   const richTextFormattingSource = fs.readFileSync(new URL('../src/components/editor/RichTextFormatting.tsx', import.meta.url), 'utf8');
+  const emojiPickerSource = fs.readFileSync(new URL('../src/components/editor/EmojiPickerModal.tsx', import.meta.url), 'utf8');
   const deterministicCloneStart = source.indexOf('const cloneElementTreeWithDeterministicIds');
   const deterministicCloneEnd = deterministicCloneStart >= 0
     ? source.indexOf('/**\n   * Paste', deterministicCloneStart)
@@ -406,7 +407,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
   assert(source.includes('data-testid="editor-undo"') && source.includes('aria-keyshortcuts="Control+Z Meta+Z"'), 'Editor undo toolbar control must expose Cmd/Ctrl+Z metadata and a stable id');
   assert(source.includes('data-testid="editor-redo"') && source.includes('aria-keyshortcuts="Control+Y Meta+Y Shift+Control+Z Shift+Meta+Z"'), 'Editor redo toolbar control must expose Cmd/Ctrl+Y and Shift+Cmd/Ctrl+Z metadata with a stable id');
-  assert(
+	  assert(
     richTextFormattingSource.includes("const RICH_TEXT_TOOLBAR_ACTION_STATUS_ID = 'rich-text-toolbar-action-status';") &&
       richTextFormattingSource.includes('data-testid="rich-text-formatting-toolbar"') &&
       richTextFormattingSource.includes('data-testid="rich-text-toolbar-action-status"') &&
@@ -418,6 +419,25 @@ const assertCanvasEditorShortcutSource = () => {
       richTextFormattingSource.includes('SmilePlus') &&
       !/\p{Emoji_Presentation}/u.test(richTextFormattingSource),
     'Rich-text formatting toolbar must expose action-status metadata, stable insert hooks, and icon-system insert controls',
+	  );
+  assert(
+    emojiPickerSource.includes("const EMOJI_PICKER_ACTION_STATUS_ID = 'editor-emoji-picker-action-status';") &&
+      emojiPickerSource.includes("const EMOJI_PICKER_TITLE_ID = 'editor-emoji-picker-title';") &&
+      emojiPickerSource.includes('data-testid="editor-emoji-picker-modal"') &&
+      emojiPickerSource.includes('aria-labelledby={EMOJI_PICKER_TITLE_ID}') &&
+      emojiPickerSource.includes('aria-describedby={EMOJI_PICKER_ACTION_STATUS_ID}') &&
+      emojiPickerSource.includes('data-testid="editor-emoji-picker-close"') &&
+      emojiPickerSource.includes('aria-keyshortcuts="Escape"') &&
+      emojiPickerSource.includes('data-testid="editor-emoji-picker-action-status"') &&
+      emojiPickerSource.includes('data-testid="editor-emoji-common-options"') &&
+      emojiPickerSource.includes('data-option-count={COMMON_EMOJIS.length}') &&
+      emojiPickerSource.includes('data-action-status={`Insert ${option.label} emoji into rich text.`}') &&
+      emojiPickerSource.includes('data-testid="editor-emoji-library"') &&
+      emojiPickerSource.includes('handleDialogKeyDown') &&
+      emojiPickerSource.includes('handleSelectEmoji') &&
+      emojiPickerSource.includes('X className="h-4 w-4"') &&
+      !/\p{Emoji_Presentation}/u.test(emojiPickerSource),
+    'Editor emoji picker modal must expose a labeled dialog, close/Escape control, action-status metadata, and stable quick-option/library hooks without raw emoji glyph controls',
   );
   assert(
     source.includes("const editorSecondaryToolbarStatusId = 'editor-secondary-toolbar-action-status';") &&
@@ -6554,6 +6574,62 @@ const testRichTextSelectionPreservedAcrossPropertyPanelFocus = async (client, el
     },
     'Right-panel bold did not preserve the selected canvas text after focus moved into font size',
   );
+
+  await mouseDownControlByTestId(client, 'rich-text-insert-emoji');
+  const emojiModalMetadata = await evaluate(client, `(() => {
+    const modal = document.querySelector('[data-testid="editor-emoji-picker-modal"]');
+    const title = document.querySelector('[id="editor-emoji-picker-title"]');
+    const status = document.querySelector('[data-testid="editor-emoji-picker-action-status"]');
+    const close = document.querySelector('[data-testid="editor-emoji-picker-close"]');
+    const quickOptions = document.querySelector('[data-testid="editor-emoji-common-options"]');
+    const firstOption = document.querySelector('[data-testid="editor-emoji-option-0"]');
+    const library = document.querySelector('[data-testid="editor-emoji-library"]');
+    return {
+      role: modal?.getAttribute('role') || '',
+      modalLabelledBy: modal?.getAttribute('aria-labelledby') || '',
+      modalDescribedBy: modal?.getAttribute('aria-describedby') || '',
+      modalActionState: modal?.getAttribute('data-action-state') || '',
+      modalActionStatus: modal?.getAttribute('data-action-status') || '',
+      titleText: title?.textContent?.trim() || '',
+      statusId: status?.id || '',
+      statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      closeLabel: close?.getAttribute('aria-label') || '',
+      closeDescribedBy: close?.getAttribute('aria-describedby') || '',
+      closeShortcut: close?.getAttribute('aria-keyshortcuts') || '',
+      closeActionStatus: close?.getAttribute('data-action-status') || '',
+      quickRole: quickOptions?.getAttribute('role') || '',
+      quickLabel: quickOptions?.getAttribute('aria-label') || '',
+      quickOptionCount: quickOptions?.getAttribute('data-option-count') || '',
+      firstOptionActionStatus: firstOption?.getAttribute('data-action-status') || '',
+      firstOptionDescribedBy: firstOption?.getAttribute('aria-describedby') || '',
+      libraryLabel: library?.getAttribute('aria-label') || '',
+      libraryActionStatus: library?.getAttribute('data-action-status') || '',
+    };
+  })()`);
+  assert(
+    emojiModalMetadata.role === 'dialog' &&
+      emojiModalMetadata.modalLabelledBy === 'editor-emoji-picker-title' &&
+      emojiModalMetadata.modalDescribedBy === 'editor-emoji-picker-action-status' &&
+      emojiModalMetadata.modalActionState === 'ready' &&
+      emojiModalMetadata.statusId === 'editor-emoji-picker-action-status' &&
+      emojiModalMetadata.statusText === emojiModalMetadata.modalActionStatus &&
+      emojiModalMetadata.titleText === 'Emoji' &&
+      emojiModalMetadata.closeLabel === 'Close emoji picker' &&
+      emojiModalMetadata.closeDescribedBy === 'editor-emoji-picker-action-status' &&
+      emojiModalMetadata.closeShortcut === 'Escape' &&
+      emojiModalMetadata.closeActionStatus === 'Close emoji picker and keep the current rich-text selection.' &&
+      emojiModalMetadata.quickRole === 'group' &&
+      emojiModalMetadata.quickLabel === 'Quick emoji options' &&
+      emojiModalMetadata.quickOptionCount === '8' &&
+      emojiModalMetadata.firstOptionActionStatus === 'Insert star emoji into rich text.' &&
+      emojiModalMetadata.firstOptionDescribedBy === 'editor-emoji-picker-action-status' &&
+      emojiModalMetadata.libraryLabel === 'Full emoji library' &&
+      emojiModalMetadata.libraryActionStatus === 'Full emoji library ready.',
+    `Rich-text emoji picker action metadata missing: ${JSON.stringify(emojiModalMetadata)}`,
+  );
+  await mouseDownControlByTestId(client, 'editor-emoji-picker-close');
+  const emojiPickerClosed = await evaluate(client, `(() => !document.querySelector('[data-testid="editor-emoji-picker-modal"]'))()`);
+  assert(emojiPickerClosed, 'Rich-text emoji picker close control did not dismiss the dialog');
 
   await activateTextEditing(client, elementId);
   const selectedForInput = await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
