@@ -284,6 +284,9 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       detailSource.includes('{...userDetailActionMetadata(userDetailMfaActionStatusId, userDetailMfaActionStatus, mfaManageActionDisabledReason)}') &&
       detailSource.includes('{...userDetailActionMetadata(userDetailOwnershipActionStatusId, userDetailOwnershipActionStatus, ownershipTransferDisabledReason)}') &&
       detailSource.includes('{...userDetailActionMetadata(userDetailDangerActionStatusId, userDetailDangerActionStatus, userDetailDangerActionDisabledReason)}') &&
+      detailSource.includes('data-testid="user-detail-primary-actions"') &&
+      detailSource.includes('data-testid="user-detail-secondary-actions"') &&
+      detailSource.includes('data-testid="user-detail-more-actions"') &&
       detailSource.includes('data-testid="user-detail-command-copy-manifest"') &&
       detailSource.includes('data-testid="user-detail-command-download-json"') &&
       detailSource.includes('data-testid="user-detail-command-save"') &&
@@ -296,6 +299,24 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       detailSource.includes('data-testid="user-detail-remove-user"'),
     'User detail recovery, MFA, ownership, and destructive controls must expose shared ready/blocked action status metadata.',
   );
+  {
+    const commandCenterBlockStart = detailSource.indexOf('data-testid="user-detail-command-center"');
+    const commandCenterBlockEnd = detailSource.indexOf('<div className="mt-5 grid gap-3', commandCenterBlockStart);
+    const commandCenterBlock = commandCenterBlockStart >= 0
+      ? detailSource.slice(commandCenterBlockStart, commandCenterBlockEnd >= 0 ? commandCenterBlockEnd : commandCenterBlockStart + 3800)
+      : '';
+    const saveIndex = commandCenterBlock.indexOf('data-testid="user-detail-command-save"');
+    const moreActionsIndex = commandCenterBlock.indexOf('data-testid="user-detail-more-actions"');
+    const copyIndex = commandCenterBlock.indexOf('data-testid="user-detail-command-copy-manifest"');
+    const downloadIndex = commandCenterBlock.indexOf('data-testid="user-detail-command-download-json"');
+    assert(
+      saveIndex >= 0 &&
+        moreActionsIndex > saveIndex &&
+        copyIndex > moreActionsIndex &&
+        downloadIndex > moreActionsIndex,
+      'User detail command center must keep Save changes first and move manifest/JSON handoff behind More actions.',
+    );
+  }
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -1500,6 +1521,21 @@ const assertUserDetailActionStatusContracts = async (client) => {
         };
       };
       const command = readGroup('[data-testid="user-detail-command-center"]', '[data-testid="user-detail-command-action-status"]');
+      const commandCenterActionNodes = Array.from(document.querySelector('[data-testid="user-detail-command-center"]')?.querySelectorAll('button, summary, details') || []);
+      const commandCenterActionNames = commandCenterActionNodes.map((node, index) => ({
+        index,
+        tagName: node.tagName.toLowerCase(),
+        text: (node.textContent || '').replace(/\\s+/g, ' ').trim(),
+        testId: node.getAttribute('data-testid') || '',
+      })).filter((node) => node.text);
+      const saveNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-command-save');
+      const moreActionsNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-more-actions');
+      const copyNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-command-copy-manifest');
+      const downloadNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-command-download-json');
+      const commandHierarchyReady = saveNodeIndex >= 0 &&
+        moreActionsNodeIndex > saveNodeIndex &&
+        copyNodeIndex > moreActionsNodeIndex &&
+        downloadNodeIndex > moreActionsNodeIndex;
       const api = readGroup('[data-testid="user-detail-api"]', '[data-testid="user-detail-api-action-status"]');
       const activity = readGroup('[data-testid="user-detail-activity"]', '[data-testid="user-detail-activity-action-status"]');
       const sessions = readGroup('[data-testid="user-detail-sessions"]', '[data-testid="user-detail-sessions-action-status"]');
@@ -1517,6 +1553,8 @@ const assertUserDetailActionStatusContracts = async (client) => {
       }));
       return {
         command,
+        commandCenterActionNames,
+        commandHierarchyReady,
         back: readControl('[data-testid="user-detail-back-to-users"]'),
         commandCopy: readControl('[data-testid="user-detail-command-copy-manifest"]'),
         commandDownload: readControl('[data-testid="user-detail-command-download-json"]'),
@@ -1584,6 +1622,7 @@ const assertUserDetailActionStatusContracts = async (client) => {
       state.command.statusText.includes('Copy manifest available.') &&
       state.command.statusText.includes('Download JSON available.') &&
       state.command.statusText.includes('Save changes unavailable: No account changes to save.') &&
+      state.commandHierarchyReady === true &&
       state.back.describedBy === state.command.statusId &&
       state.back.state === 'ready' &&
       state.commandCopy.describedBy === state.command.statusId &&

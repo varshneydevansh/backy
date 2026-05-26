@@ -19,6 +19,7 @@ import {
   LogOut,
   Mail,
   Monitor,
+  MoreHorizontal,
   RefreshCw,
   Save,
   Shield,
@@ -1384,55 +1385,73 @@ function EditUserPage() {
                 Control this collaborator as a full access object: identity, permissions, lifecycle, recovery, API payload, and destructive guardrails.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
-                disabled={isUserDetailBusy}
-                title={userDetailHandoffActionDisabledReason || undefined}
-                {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailHandoffActionDisabledReason)}
-                iconStart={<Copy className="size-4" />}
-                data-testid="user-detail-command-copy-manifest"
-              >
-                Copy manifest
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={downloadUserDetailHandoff}
-                disabled={isUserDetailBusy}
-                title={userDetailHandoffActionDisabledReason || undefined}
-                {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailHandoffActionDisabledReason)}
-                iconStart={<Download className="size-4" />}
-                data-testid="user-detail-command-download-json"
-              >
-                Download JSON
-              </Button>
-              {hasUnsavedChanges && (
+            <div className="flex flex-col gap-2 xl:items-end">
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end" data-testid="user-detail-primary-actions">
                 <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetForm}
-                  disabled={isUserDetailBusy || !canManageUsers}
-                  title={userDetailResetActionDisabledReason || undefined}
-                  {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailResetActionDisabledReason)}
-                  data-testid="user-detail-command-reset"
+                  type="submit"
+                  variant="primary"
+                  disabled={isUserDetailBusy || !canSaveUserDetail}
+                  title={userDetailSaveActionDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailSaveActionDisabledReason)}
+                  iconStart={<Save className="size-4" />}
+                  data-testid="user-detail-command-save"
                 >
-                  Reset changes
+                  {isLoading ? 'Saving...' : isLoadingUser ? 'Loading user...' : 'Save changes'}
                 </Button>
-              )}
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={isUserDetailBusy || !canSaveUserDetail}
-                title={userDetailSaveActionDisabledReason || undefined}
-                {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailSaveActionDisabledReason)}
-                iconStart={<Save className="size-4" />}
-                data-testid="user-detail-command-save"
-              >
-                {isLoading ? 'Saving...' : isLoadingUser ? 'Loading user...' : 'Save changes'}
-              </Button>
+                {hasUnsavedChanges && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetForm}
+                    disabled={isUserDetailBusy || !canManageUsers}
+                    title={userDetailResetActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailResetActionDisabledReason)}
+                    data-testid="user-detail-command-reset"
+                  >
+                    Reset changes
+                  </Button>
+                )}
+              </div>
+              <details className="group relative self-start xl:self-end" data-testid="user-detail-secondary-actions">
+                <summary
+                  className="inline-flex min-h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring group-open:bg-accent [&::-webkit-details-marker]:hidden"
+                  aria-describedby={userDetailCommandActionStatusId}
+                  data-testid="user-detail-more-actions"
+                >
+                  <MoreHorizontal className="size-4" />
+                  More actions
+                </summary>
+                <div className="mt-2 flex flex-col gap-2 rounded-lg border border-border bg-popover p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:w-72" data-testid="user-detail-secondary-action-menu">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
+                    disabled={isUserDetailBusy}
+                    title={userDetailHandoffActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailHandoffActionDisabledReason)}
+                    className="w-full justify-start"
+                    iconStart={<Copy className="size-4" />}
+                    data-testid="user-detail-command-copy-manifest"
+                  >
+                    Copy manifest
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={downloadUserDetailHandoff}
+                    disabled={isUserDetailBusy}
+                    title={userDetailHandoffActionDisabledReason || undefined}
+                    {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailHandoffActionDisabledReason)}
+                    className="w-full justify-start"
+                    iconStart={<Download className="size-4" />}
+                    data-testid="user-detail-command-download-json"
+                  >
+                    Download JSON
+                  </Button>
+                </div>
+              </details>
             </div>
           </div>
 
