@@ -52,6 +52,7 @@ import {
   type EditorMediaPickerMode,
   type EditorMediaPickerTarget,
 } from './editorMediaPickerActions';
+import { buildEditorDataBindingAction } from './editorDataBindingActions';
 import type { CanvasElement, ComponentBindingSlot, ElementProps } from '@/types/editor';
 import {
   listCollectionBindingPresets,
@@ -7415,9 +7416,55 @@ function PresetBindingSlotsPanel({
       window.setTimeout(() => setCoverageCopyState('idle'), 2200);
     }
   };
+  const dataBindingSlotActionStatusId = 'editor-data-binding-slot-action-status';
+  const applyAllBindingSlotsAction = buildEditorDataBindingAction({
+    label: 'Apply all binding slots',
+    disabledReason: !selectedCollection
+      ? 'Choose a collection first.'
+      : allApplicableCount === 0
+        ? 'No preset binding slots match the selected collection.'
+        : '',
+    readyStatus: `${allApplicableCount} binding slot${allApplicableCount === 1 ? '' : 's'} can be applied.`,
+  });
+  const clearAllBindingSlotsAction = buildEditorDataBindingAction({
+    label: 'Clear all collection bindings',
+    disabledReason: clearableBindingCount === 0 ? 'No collection bindings are currently applied.' : '',
+    readyStatus: `${clearableBindingCount} collection binding target${clearableBindingCount === 1 ? '' : 's'} can be cleared.`,
+  });
+  const copyCoverageBriefStatus = coverageCopyState === 'copied'
+    ? 'Binding-slot coverage brief copied.'
+    : coverageCopyState === 'failed'
+      ? 'Binding-slot coverage brief copy failed.'
+      : 'Copy binding-slot coverage brief available.';
+  const copyCoverageBriefAction = buildEditorDataBindingAction({
+    label: 'Copy binding-slot coverage brief',
+    readyStatus: copyCoverageBriefStatus,
+  });
+  const applyChildBindingSlotsAction = buildEditorDataBindingAction({
+    label: 'Apply child binding slots',
+    disabledReason: !selectedCollection
+      ? 'Choose a collection first.'
+      : childSummary.applicable === 0
+        ? 'No child binding slots match the selected collection.'
+        : '',
+    readyStatus: `${childSummary.applicable} child binding slot${childSummary.applicable === 1 ? '' : 's'} can be applied.`,
+  });
 
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-binding-slots">
+      <span
+        id={dataBindingSlotActionStatusId}
+        className="sr-only"
+        data-testid="editor-data-binding-slot-action-status"
+        aria-live="polite"
+      >
+        {[
+          applyAllBindingSlotsAction.actionStatus,
+          clearAllBindingSlotsAction.actionStatus,
+          copyCoverageBriefAction.actionStatus,
+          applyChildBindingSlotsAction.actionStatus,
+        ].join(' ')}
+      </span>
       <div className="mb-2 flex items-center justify-between gap-2 text-xs">
         <span className="font-medium text-foreground">Preset binding slots</span>
         <span className="text-muted-foreground">
@@ -7447,6 +7494,11 @@ function PresetBindingSlotsPanel({
             type="button"
             onClick={onApplyAllSlots}
             disabled={!selectedCollection || allApplicableCount === 0}
+            title={applyAllBindingSlotsAction.actionStatus}
+            aria-describedby={dataBindingSlotActionStatusId}
+            data-action-state={applyAllBindingSlotsAction.actionState}
+            data-action-status={applyAllBindingSlotsAction.actionStatus}
+            data-disabled-reason={applyAllBindingSlotsAction.disabledReason || undefined}
             data-testid="editor-data-apply-all-binding-slots"
             className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -7456,6 +7508,11 @@ function PresetBindingSlotsPanel({
             type="button"
             onClick={onClearAllSlots}
             disabled={clearableBindingCount === 0}
+            title={clearAllBindingSlotsAction.actionStatus}
+            aria-describedby={dataBindingSlotActionStatusId}
+            data-action-state={clearAllBindingSlotsAction.actionState}
+            data-action-status={clearAllBindingSlotsAction.actionStatus}
+            data-disabled-reason={clearAllBindingSlotsAction.disabledReason || undefined}
             data-testid="editor-data-clear-all-binding-slots"
             className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -7488,6 +7545,10 @@ function PresetBindingSlotsPanel({
             <button
               type="button"
               onClick={() => void copyCoverageBrief()}
+              title={copyCoverageBriefAction.actionStatus}
+              aria-describedby={dataBindingSlotActionStatusId}
+              data-action-state={copyCoverageBriefAction.actionState}
+              data-action-status={copyCoverageBriefAction.actionStatus}
               data-testid="editor-data-copy-binding-slot-coverage"
               className="mt-2 w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
             >
@@ -7543,6 +7604,13 @@ function PresetBindingSlotsPanel({
             : canApplyWithoutFieldPath && selectedCollection
               ? `${selectedCollection.name} -> ${targetLabel}`
               : slot.description || disabledReason;
+          const applySlotAction = buildEditorDataBindingAction({
+            label: `Apply ${slot.label}`,
+            disabledReason,
+            selected: isApplied,
+            readyStatus: `Apply ${slot.label} to ${slotTargetSummary}.`,
+            selectedStatus: `${slot.label} is already applied.`,
+          });
 
           return (
             <div
@@ -7567,7 +7635,11 @@ function PresetBindingSlotsPanel({
                   type="button"
                   onClick={() => canApplySlot && onApplySlot(slot, fieldPath)}
                   disabled={!canApplySlot}
-                  title={disabledReason || `Apply ${slot.label}`}
+                  title={applySlotAction.actionStatus}
+                  aria-describedby={dataBindingSlotActionStatusId}
+                  data-action-state={applySlotAction.actionState}
+                  data-action-status={applySlotAction.actionStatus}
+                  data-disabled-reason={applySlotAction.disabledReason || undefined}
                   data-testid={`editor-data-binding-slot-apply-${slot.id}`}
                   className="shrink-0 rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -7599,6 +7671,11 @@ function PresetBindingSlotsPanel({
                 type="button"
                 onClick={onApplyChildSlots}
                 disabled={!selectedCollection || childSummary.applicable === 0}
+                title={applyChildBindingSlotsAction.actionStatus}
+                aria-describedby={dataBindingSlotActionStatusId}
+                data-action-state={applyChildBindingSlotsAction.actionState}
+                data-action-status={applyChildBindingSlotsAction.actionStatus}
+                data-disabled-reason={applyChildBindingSlotsAction.disabledReason || undefined}
                 data-testid="editor-data-apply-child-binding-slots"
                 className="shrink-0 rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -8926,6 +9003,11 @@ function DataBindingProperties({
       : `${datasetBindingActionPlanActions.length - datasetBindingActionPlanReadyCount} dataset binding step${datasetBindingActionPlanActions.length - datasetBindingActionPlanReadyCount === 1 ? '' : 's'} need attention before publish handoff.`,
     actions: datasetBindingActionPlanActions,
   };
+  const datasetBindingActionStatusId = 'editor-data-binding-action-status';
+  const datasetBindingActionStatus = [
+    datasetBindingActionPlan.summary,
+    ...datasetBindingActionPlan.actions.map((action) => `${action.label}: ${action.reason}`),
+  ].join(' ');
   const datasetBindingBrief = {
     schema: 'backy.editor.dataset-binding.v1',
     element: {
@@ -9012,6 +9094,64 @@ function DataBindingProperties({
       window.setTimeout(() => setDatasetRecordsUrlCopyState('idle'), 2200);
     }
   };
+  const dataBindingControlActionStatusId = 'editor-data-binding-control-action-status';
+  const presetSyncBusyReason = savedPresetBusy
+    ? 'Saved preset sync is currently busy.'
+    : '';
+  const savePresetAction = buildEditorDataBindingAction({
+    label: 'Save binding preset',
+    busy: savedPresetBusy === 'saving',
+    disabledReason: !selectedFieldKey
+      ? 'Choose a field before saving a preset.'
+      : presetSyncBusyReason,
+    readyStatus: savedPresetName.trim()
+      ? `Save ${savedPresetName.trim()} as a shared binding preset.`
+      : 'Save the current binding as a shared preset.',
+    busyStatus: 'Saving shared binding preset.',
+  });
+  const applySavedPresetAction = buildEditorDataBindingAction({
+    label: 'Apply saved binding preset',
+    disabledReason: !selectedSavedPreset
+      ? 'Choose a saved preset first.'
+      : presetSyncBusyReason,
+    readyStatus: selectedSavedPreset
+      ? `Apply ${selectedSavedPreset.name} to this element.`
+      : 'Apply saved binding preset available.',
+  });
+  const deleteSavedPresetAction = buildEditorDataBindingAction({
+    label: 'Delete saved binding preset',
+    busy: savedPresetBusy === 'deleting',
+    disabledReason: !selectedSavedPreset
+      ? 'Choose a saved preset first.'
+      : presetSyncBusyReason,
+    readyStatus: selectedSavedPreset
+      ? `Delete ${selectedSavedPreset.name} from saved presets.`
+      : 'Delete saved binding preset available.',
+    busyStatus: 'Deleting shared binding preset.',
+  });
+  const copyDatasetBindingBriefStatus = datasetBriefCopyState === 'copied'
+    ? 'Dataset binding brief copied.'
+    : datasetBriefCopyState === 'failed'
+      ? 'Dataset binding brief copy failed.'
+      : 'Copy dataset binding brief available.';
+  const copyDatasetBindingBriefAction = buildEditorDataBindingAction({
+    label: 'Copy dataset binding brief',
+    readyStatus: copyDatasetBindingBriefStatus,
+  });
+  const copyDatasetRecordsUrlStatus = datasetRecordsUrlCopyState === 'copied'
+    ? 'Collection records URL copied.'
+    : datasetRecordsUrlCopyState === 'failed'
+      ? 'Collection records URL copy failed.'
+      : 'Copy collection records URL available.';
+  const copyDatasetRecordsUrlAction = buildEditorDataBindingAction({
+    label: 'Copy collection records URL',
+    disabledReason: !selectedBindingRecordsUrl ? 'Select a collection before copying the records URL.' : '',
+    readyStatus: copyDatasetRecordsUrlStatus,
+  });
+  const clearBindingAction = buildEditorDataBindingAction({
+    label: 'Clear dataset binding',
+    readyStatus: 'Clear the selected element dataset binding.',
+  });
 
   const updateBinding = (updates: {
     collectionId?: string;
@@ -9343,6 +9483,21 @@ function DataBindingProperties({
 
   return (
     <div className="space-y-3">
+      <span
+        id={dataBindingControlActionStatusId}
+        className="sr-only"
+        data-testid="editor-data-binding-control-action-status"
+        aria-live="polite"
+      >
+        {[
+          savePresetAction.actionStatus,
+          applySavedPresetAction.actionStatus,
+          deleteSavedPresetAction.actionStatus,
+          copyDatasetBindingBriefAction.actionStatus,
+          copyDatasetRecordsUrlAction.actionStatus,
+          clearBindingAction.actionStatus,
+        ].join(' ')}
+      </span>
       <div>
         <label className="text-xs text-muted-foreground mb-1 block">
           Collection
@@ -9387,6 +9542,14 @@ function DataBindingProperties({
         className="rounded-md border border-border bg-muted/30 p-3"
         data-testid="editor-data-binding-action-plan"
       >
+        <span
+          id={datasetBindingActionStatusId}
+          className="sr-only"
+          data-testid="editor-data-binding-action-status"
+          aria-live="polite"
+        >
+          {datasetBindingActionStatus}
+        </span>
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="text-xs font-medium text-foreground">Dataset action plan</div>
@@ -9406,22 +9569,29 @@ function DataBindingProperties({
           {datasetBindingActionPlan.schema}
         </div>
         <div className="mt-2 grid gap-1.5">
-          {datasetBindingActionPlan.actions.map((action) => (
-            <div
-              key={action.key}
-              className={cn(
-                'rounded-md border bg-background px-2 py-1.5 text-[11px]',
-                action.ready ? 'border-emerald-200' : 'border-amber-200',
-              )}
-              data-testid={`editor-data-binding-action-${action.key}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-foreground">{action.label}</span>
-                <span className="font-mono text-muted-foreground">{action.mode}</span>
+          {datasetBindingActionPlan.actions.map((action) => {
+            const actionStatus = `${action.label}: ${action.reason}`;
+            return (
+              <div
+                key={action.key}
+                className={cn(
+                  'rounded-md border bg-background px-2 py-1.5 text-[11px]',
+                  action.ready ? 'border-emerald-200' : 'border-amber-200',
+                )}
+                aria-describedby={datasetBindingActionStatusId}
+                data-action-state={action.ready ? 'ready' : 'blocked'}
+                data-action-status={actionStatus}
+                data-disabled-reason={action.ready ? undefined : action.reason}
+                data-testid={`editor-data-binding-action-${action.key}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">{action.label}</span>
+                  <span className="font-mono text-muted-foreground">{action.mode}</span>
+                </div>
+                <div className="mt-1 leading-4 text-muted-foreground">{action.reason}</div>
               </div>
-              <div className="mt-1 leading-4 text-muted-foreground">{action.reason}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -9431,21 +9601,35 @@ function DataBindingProperties({
             <div className="rounded-md border border-border bg-muted/30 p-3" data-testid="editor-data-binding-presets">
               <div className="mb-2 text-xs font-medium text-foreground">Binding presets</div>
               <div className="grid grid-cols-2 gap-2">
-                {bindingPresets.map((preset) => (
-                  <button
-                    key={`${preset.id}-${preset.fieldKey}-${preset.targetPath}`}
-                    type="button"
-                    onClick={() => updateBinding({ fieldKey: preset.fieldKey, targetPath: preset.targetPath })}
-                    data-testid={`editor-data-preset-${preset.id}`}
-                    className={cn(
-                      'rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted',
-                      selectedFieldKey === preset.fieldKey && selectedTargetPath === preset.targetPath && 'border-primary text-primary'
-                    )}
-                  >
-                    <span className="block font-medium">{preset.label}</span>
-                    <span className="block truncate text-muted-foreground">{preset.fieldKey}</span>
-                  </button>
-                ))}
+                {bindingPresets.map((preset) => {
+                  const presetSelected = selectedFieldKey === preset.fieldKey && selectedTargetPath === preset.targetPath;
+                  const presetAction = buildEditorDataBindingAction({
+                    label: `Apply ${preset.label} binding preset`,
+                    selected: presetSelected,
+                    readyStatus: `Apply ${preset.label} binding preset to ${preset.targetPath}.`,
+                    selectedStatus: `${preset.label} binding preset is selected.`,
+                  });
+
+                  return (
+                    <button
+                      key={`${preset.id}-${preset.fieldKey}-${preset.targetPath}`}
+                      type="button"
+                      onClick={() => updateBinding({ fieldKey: preset.fieldKey, targetPath: preset.targetPath })}
+                      title={presetAction.actionStatus}
+                      aria-describedby={dataBindingControlActionStatusId}
+                      data-action-state={presetAction.actionState}
+                      data-action-status={presetAction.actionStatus}
+                      data-testid={`editor-data-preset-${preset.id}`}
+                      className={cn(
+                        'rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted',
+                        presetSelected && 'border-primary text-primary'
+                      )}
+                    >
+                      <span className="block font-medium">{preset.label}</span>
+                      <span className="block truncate text-muted-foreground">{preset.fieldKey}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -9483,6 +9667,11 @@ function DataBindingProperties({
                   type="button"
                   onClick={saveCurrentBindingPreset}
                   disabled={!selectedFieldKey || Boolean(savedPresetBusy)}
+                  title={savePresetAction.actionStatus}
+                  aria-describedby={dataBindingControlActionStatusId}
+                  data-action-state={savePresetAction.actionState}
+                  data-action-status={savePresetAction.actionStatus}
+                  data-disabled-reason={savePresetAction.disabledReason || undefined}
                   data-testid="editor-data-save-preset"
                   className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -9511,6 +9700,11 @@ function DataBindingProperties({
                   type="button"
                   onClick={applySavedBindingPreset}
                   disabled={!selectedSavedPreset || Boolean(savedPresetBusy)}
+                  title={applySavedPresetAction.actionStatus}
+                  aria-describedby={dataBindingControlActionStatusId}
+                  data-action-state={applySavedPresetAction.actionState}
+                  data-action-status={applySavedPresetAction.actionStatus}
+                  data-disabled-reason={applySavedPresetAction.disabledReason || undefined}
                   data-testid="editor-data-apply-saved-preset"
                   className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -9520,6 +9714,11 @@ function DataBindingProperties({
                   type="button"
                   onClick={deleteSavedBindingPreset}
                   disabled={!selectedSavedPreset || Boolean(savedPresetBusy)}
+                  title={deleteSavedPresetAction.actionStatus}
+                  aria-describedby={dataBindingControlActionStatusId}
+                  data-action-state={deleteSavedPresetAction.actionState}
+                  data-action-status={deleteSavedPresetAction.actionStatus}
+                  data-disabled-reason={deleteSavedPresetAction.disabledReason || undefined}
                   data-testid="editor-data-delete-saved-preset"
                   className="rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -9870,6 +10069,10 @@ function DataBindingProperties({
               <button
                 type="button"
                 onClick={() => void copyDatasetBindingBrief()}
+                title={copyDatasetBindingBriefAction.actionStatus}
+                aria-describedby={dataBindingControlActionStatusId}
+                data-action-state={copyDatasetBindingBriefAction.actionState}
+                data-action-status={copyDatasetBindingBriefAction.actionStatus}
                 data-testid="editor-data-copy-binding-brief"
                 className="rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted"
               >
@@ -9879,6 +10082,11 @@ function DataBindingProperties({
                 type="button"
                 onClick={() => void copyDatasetRecordsUrl()}
                 disabled={!selectedBindingRecordsUrl}
+                title={copyDatasetRecordsUrlAction.actionStatus}
+                aria-describedby={dataBindingControlActionStatusId}
+                data-action-state={copyDatasetRecordsUrlAction.actionState}
+                data-action-status={copyDatasetRecordsUrlAction.actionStatus}
+                data-disabled-reason={copyDatasetRecordsUrlAction.disabledReason || undefined}
                 data-testid="editor-data-copy-records-url"
                 className="rounded-md border border-border bg-background px-2 py-1 text-[11px] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -9890,6 +10098,11 @@ function DataBindingProperties({
           <button
             type="button"
             onClick={clearBinding}
+            title={clearBindingAction.actionStatus}
+            aria-describedby={dataBindingControlActionStatusId}
+            data-action-state={clearBindingAction.actionState}
+            data-action-status={clearBindingAction.actionStatus}
+            data-testid="editor-data-clear-binding"
             className="w-full rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
           >
             Clear binding

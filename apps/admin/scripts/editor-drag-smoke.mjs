@@ -1158,6 +1158,7 @@ const assertComponentLibraryEmptyStateSource = () => {
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const catalogSource = fs.readFileSync(new URL('../src/components/editor/editorCatalog.ts', import.meta.url), 'utf8');
   const propertyPanelSource = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
+  const dataBindingActionSource = fs.readFileSync(new URL('../src/components/editor/editorDataBindingActions.ts', import.meta.url), 'utf8');
   const typeSource = fs.readFileSync(new URL('../src/types/editor.ts', import.meta.url), 'utf8');
   const coreContractSource = fs.readFileSync(new URL('../../../packages/core/src/content-contract.ts', import.meta.url), 'utf8');
   const contentMigrationSource = fs.readFileSync(new URL('../../../packages/core/src/content-migrations.ts', import.meta.url), 'utf8');
@@ -1247,6 +1248,41 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(propertyPanelSource.includes("schema: 'backy.editor.binding-slot-coverage.v1'") && propertyPanelSource.includes('navigator.clipboard.writeText(JSON.stringify(coverageBrief, null, 2))') && propertyPanelSource.includes('data-testid="editor-data-copy-binding-slot-coverage"'), 'Editor Data panel must expose a copyable binding-slot coverage brief for custom frontend and AI handoff');
   assert(propertyPanelSource.includes("schema: 'backy.editor.dataset-binding.v1'") && propertyPanelSource.includes('navigator.clipboard.writeText(JSON.stringify(datasetBindingBrief, null, 2))') && propertyPanelSource.includes('data-testid="editor-data-copy-binding-brief"'), 'Editor Data panel must expose a copyable selected-element dataset binding brief for custom frontend and AI handoff');
   assert(propertyPanelSource.includes("schema: 'backy.editor.dataset-binding-action-plan.v1'") && propertyPanelSource.includes('data-testid="editor-data-binding-action-plan"') && propertyPanelSource.includes('actionPlan: datasetBindingActionPlan'), 'Editor Data panel must render and export selected-element dataset binding action plans');
+  assert(
+    dataBindingActionSource.includes("export type EditorDataBindingActionState = 'ready' | 'selected' | 'blocked' | 'busy';") &&
+      dataBindingActionSource.includes('export const buildEditorDataBindingAction =') &&
+      propertyPanelSource.includes("import { buildEditorDataBindingAction } from './editorDataBindingActions';") &&
+      propertyPanelSource.includes("const dataBindingSlotActionStatusId = 'editor-data-binding-slot-action-status';") &&
+      propertyPanelSource.includes('data-testid="editor-data-binding-slot-action-status"') &&
+      propertyPanelSource.includes('data-action-state={applyAllBindingSlotsAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={clearAllBindingSlotsAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={copyCoverageBriefAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={applySlotAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={applyChildBindingSlotsAction.actionState}'),
+    'Editor Data preset binding-slot controls must expose shared action-state/status metadata and blocked reasons',
+  );
+  assert(
+    propertyPanelSource.includes("const datasetBindingActionStatusId = 'editor-data-binding-action-status';") &&
+      propertyPanelSource.includes('data-testid="editor-data-binding-action-status"') &&
+      propertyPanelSource.includes("data-action-state={action.ready ? 'ready' : 'blocked'}") &&
+      propertyPanelSource.includes('data-action-status={actionStatus}') &&
+      propertyPanelSource.includes('data-disabled-reason={action.ready ? undefined : action.reason}') &&
+      propertyPanelSource.includes('aria-describedby={datasetBindingActionStatusId}'),
+    'Editor Data dataset action-plan rows must expose machine-readable action-state/status metadata',
+  );
+  assert(
+    propertyPanelSource.includes("const dataBindingControlActionStatusId = 'editor-data-binding-control-action-status';") &&
+      propertyPanelSource.includes('data-testid="editor-data-binding-control-action-status"') &&
+      propertyPanelSource.includes('data-action-state={presetAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={savePresetAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={applySavedPresetAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={deleteSavedPresetAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={copyDatasetBindingBriefAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={copyDatasetRecordsUrlAction.actionState}') &&
+      propertyPanelSource.includes('data-action-state={clearBindingAction.actionState}') &&
+      propertyPanelSource.includes('data-testid="editor-data-clear-binding"'),
+    'Editor Data saved preset, copy, and clear controls must expose shared action-state/status metadata',
+  );
   assert(propertyPanelSource.includes('const buildCollectionRecordsApiUrl = (') && propertyPanelSource.includes('data-testid="editor-data-copy-records-url"') && propertyPanelSource.includes('data-testid="editor-repeater-copy-records-url"'), 'Editor Data panel must expose copyable public collection records URLs for selected element and repeater bindings');
   assert(propertyPanelSource.includes('REPEATER_BINDING_SLOT_TARGETS') && propertyPanelSource.includes('repeaterBindingPropsForSlot') && propertyPanelSource.includes("slot.targetPath === 'props.collectionId'") && propertyPanelSource.includes('collectionId: activeSlotCollection.id'), 'Editor Data panel must apply repeater preset slots as collection and field props from the selected slot collection');
   assert(propertyPanelSource.includes("schema: 'backy.editor.repeater-dataset.v1'") && propertyPanelSource.includes('navigator.clipboard.writeText(JSON.stringify(repeaterDatasetBrief, null, 2))') && propertyPanelSource.includes('data-testid="editor-repeater-copy-dataset-brief"'), 'Editor Data panel must expose a copyable repeater dataset brief for dynamic list custom frontend and AI handoff');
@@ -16884,6 +16920,23 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
 
 const testCollectionDataBindingControls = async (client, collectionId) => {
   await selectLayerById(client, 'smoke-heading');
+  const readDataBindingActions = async (testIds) => evaluate(client, `(() => {
+    const ids = ${JSON.stringify(testIds)};
+    return Object.fromEntries(ids.map((testId) => {
+      const node = document.querySelector('[data-testid="' + testId + '"]');
+      return [testId, {
+        exists: node instanceof HTMLElement,
+        disabled: node instanceof HTMLButtonElement || node instanceof HTMLInputElement || node instanceof HTMLSelectElement
+          ? node.disabled
+          : false,
+        actionState: node instanceof HTMLElement ? node.getAttribute('data-action-state') || '' : '',
+        actionStatus: node instanceof HTMLElement ? node.getAttribute('data-action-status') || '' : '',
+        disabledReason: node instanceof HTMLElement ? node.getAttribute('data-disabled-reason') || '' : '',
+        describedBy: node instanceof HTMLElement ? node.getAttribute('aria-describedby') || '' : '',
+        text: node instanceof HTMLElement ? node.textContent || '' : '',
+      }];
+    }));
+  })()`);
 
   let dataPanel = null;
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -16915,6 +16968,18 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   }
 
   assert(dataPanel?.hasCollectionSelect && dataPanel?.hasTargetCollection, `Collection binding controls did not load target collection: ${JSON.stringify(dataPanel)}`);
+
+  const initialDataBindingActions = await readDataBindingActions([
+    'editor-data-binding-action-choose-collection',
+    'editor-data-binding-action-target-property',
+  ]);
+  assert(
+    initialDataBindingActions['editor-data-binding-action-choose-collection']?.actionState === 'blocked' &&
+      /Choose a collection/i.test(initialDataBindingActions['editor-data-binding-action-choose-collection']?.disabledReason || '') &&
+      initialDataBindingActions['editor-data-binding-action-choose-collection']?.describedBy.includes('editor-data-binding-action-status') &&
+      initialDataBindingActions['editor-data-binding-action-target-property']?.actionState === 'ready',
+    `Initial data-binding action metadata did not expose blocked/ready states: ${JSON.stringify(initialDataBindingActions)}`,
+  );
 
   await setFormControlByTestId(client, 'editor-data-collection', collectionId);
   let queryControlsReady = null;
@@ -16969,6 +17034,30 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       queryControlsReady?.recordLabels?.some((label) => /Beta featured item/i.test(label)),
     `Collection binding field/query options did not render: ${JSON.stringify(queryControlsReady)}`,
   );
+  const selectedDataBindingActions = await readDataBindingActions([
+    'editor-data-binding-action-choose-collection',
+    'editor-data-binding-action-map-field',
+    'editor-data-binding-action-target-property',
+    'editor-data-binding-action-query-handoff',
+    'editor-data-preset-summary',
+    'editor-data-save-preset',
+    'editor-data-copy-binding-brief',
+    'editor-data-copy-records-url',
+    'editor-data-clear-binding',
+  ]);
+  assert(
+    selectedDataBindingActions['editor-data-binding-action-choose-collection']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-binding-action-map-field']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-binding-action-target-property']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-binding-action-query-handoff']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-preset-summary']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-save-preset']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-copy-binding-brief']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-copy-records-url']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-clear-binding']?.actionState === 'ready' &&
+      selectedDataBindingActions['editor-data-copy-records-url']?.describedBy.includes('editor-data-binding-control-action-status'),
+    `Selected data-binding action metadata did not expose ready states: ${JSON.stringify(selectedDataBindingActions)}`,
+  );
   const targetRecordId = await evaluate(client, `(() => {
     const select = document.querySelector('[data-testid="editor-data-record-picker"]');
     if (!(select instanceof HTMLSelectElement)) return '';
@@ -16977,6 +17066,12 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
   })()`);
   assert(targetRecordId, `Collection record picker did not expose the created records: ${JSON.stringify(queryControlsReady)}`);
   await clickControlByTestId(client, 'editor-data-preset-summary');
+  const summaryPresetAction = await readDataBindingActions(['editor-data-preset-summary']);
+  assert(
+    summaryPresetAction['editor-data-preset-summary']?.actionState === 'selected' &&
+      /Summary binding preset is selected/i.test(summaryPresetAction['editor-data-preset-summary']?.actionStatus || ''),
+    `Summary binding preset action metadata did not switch to selected: ${JSON.stringify(summaryPresetAction)}`,
+  );
   const summaryPresetState = await evaluate(client, `(() => ({
     field: document.querySelector('[data-testid="editor-data-field"]')?.value || '',
     target: document.querySelector('[data-testid="editor-data-target"]')?.value || '',
@@ -17052,6 +17147,17 @@ const testCollectionDataBindingControls = async (client, collectionId) => {
       sharedPreset?.sourcePath === 'author.company.name' &&
       sharedPreset?.sortBy === 'author.company.domain',
     `Shared collection binding preset did not persist to the backend: ${JSON.stringify(sharedPresetPayload)}`,
+  );
+  const savedPresetActionMetadata = await readDataBindingActions([
+    'editor-data-apply-saved-preset',
+    'editor-data-delete-saved-preset',
+    'editor-data-save-preset',
+  ]);
+  assert(
+    savedPresetActionMetadata['editor-data-apply-saved-preset']?.actionState === 'ready' &&
+      savedPresetActionMetadata['editor-data-delete-saved-preset']?.actionState === 'ready' &&
+      savedPresetActionMetadata['editor-data-save-preset']?.describedBy.includes('editor-data-binding-control-action-status'),
+    `Saved data-binding preset controls did not expose action metadata: ${JSON.stringify(savedPresetActionMetadata)}`,
   );
   await clickControlByTestId(client, 'editor-data-preset-summary');
   await clickControlByTestId(client, 'editor-data-apply-saved-preset');
