@@ -2734,6 +2734,38 @@ function SettingsPage() {
   const nextSettingsTab = TABS[(activeTabIndex + 1) % TABS.length];
   const saveButtonDisabled = isSaving || !canSaveActiveSettingsTab || !hasUnsavedChanges || activeBlockingValidationIssues.length > 0;
   const saveButtonLabel = saved ? 'Saved' : isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes' : 'No changes';
+  const settingsWorkbarActionStatusId = 'settings-workbar-action-status';
+  const settingsBusyReason = isSaving ? 'Settings are saving.' : null;
+  const settingsConfigureDisabledReason = settingsBusyReason || (!canConfigureSettings ? configurePermissionTitle || 'Your account cannot configure settings.' : null);
+  const settingsDiscardDisabledReason = settingsBusyReason
+    || (!canSaveActiveSettingsTab ? activeSavePermissionTitle || 'Your account cannot configure this Settings section.' : null)
+    || (!hasUnsavedChanges ? 'No unsaved settings changes to discard.' : null);
+  const settingsSaveDisabledReason = settingsBusyReason
+    || (!canSaveActiveSettingsTab ? activeSavePermissionTitle || 'Your account cannot configure this Settings section.' : null)
+    || (activeBlockingValidationIssues.length > 0 ? 'Fix highlighted validation issues before saving.' : null)
+    || (!hasUnsavedChanges ? 'Make a settings change before saving.' : null);
+  const settingsCopyHandoffActionStatus = settingsConfigureDisabledReason
+    ? `Copy handoff unavailable: ${settingsConfigureDisabledReason}`
+    : 'Copy handoff available.';
+  const settingsDownloadJsonActionStatus = settingsConfigureDisabledReason
+    ? `Download JSON unavailable: ${settingsConfigureDisabledReason}`
+    : 'Download JSON available.';
+  const settingsDiscardActionStatus = settingsDiscardDisabledReason
+    ? `Discard changes unavailable: ${settingsDiscardDisabledReason}`
+    : 'Discard changes available.';
+  const settingsSaveActionStatus = settingsSaveDisabledReason
+    ? `${saveButtonLabel} unavailable: ${settingsSaveDisabledReason}`
+    : `${saveButtonLabel} available.`;
+  const settingsPreviousTabActionStatus = `Previous section available: ${previousSettingsTab.name}.`;
+  const settingsNextTabActionStatus = `Next section available: ${nextSettingsTab.name}.`;
+  const settingsWorkbarActionStatus = [
+    settingsPreviousTabActionStatus,
+    settingsNextTabActionStatus,
+    settingsCopyHandoffActionStatus,
+    settingsDownloadJsonActionStatus,
+    hasUnsavedChanges ? settingsDiscardActionStatus : null,
+    settingsSaveActionStatus,
+  ].filter(Boolean).join(' ');
   const activeSettingsStatusLabel = activeBlockingValidationIssues.length > 0
     ? `${activeBlockingValidationIssues.length} blocked`
     : hasUnsavedChanges
@@ -3986,13 +4018,32 @@ function SettingsPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Settings header actions"
+          aria-describedby={settingsWorkbarActionStatusId}
+          data-testid="settings-header-action-group"
+          data-action-state={settingsSaveDisabledReason ? 'blocked' : 'ready'}
+          data-action-status={settingsWorkbarActionStatus}
+        >
+          <span
+            id={settingsWorkbarActionStatusId}
+            className="sr-only"
+            data-testid="settings-workbar-action-status"
+          >
+            {settingsWorkbarActionStatus}
+          </span>
           {hasUnsavedChanges && (
             <Button
               variant="ghost"
-              disabled={isSaving || !canSaveActiveSettingsTab}
-              title={activeSavePermissionTitle}
+              disabled={Boolean(settingsDiscardDisabledReason)}
+              title={settingsDiscardDisabledReason || undefined}
               onClick={discardUnsavedChanges}
+              aria-describedby={settingsWorkbarActionStatusId}
+              data-action-state={settingsDiscardDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={settingsDiscardActionStatus}
+              data-disabled-reason={settingsDiscardDisabledReason || undefined}
               data-testid="settings-header-discard"
             >
               Discard changes
@@ -4010,9 +4061,13 @@ function SettingsPage() {
             <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-52">
               <button
                 type="button"
-                disabled={isSaving || !canConfigureSettings}
-                title={configurePermissionTitle}
+                disabled={Boolean(settingsConfigureDisabledReason)}
+                title={settingsConfigureDisabledReason || undefined}
                 onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
+                aria-describedby={settingsWorkbarActionStatusId}
+                data-action-state={settingsConfigureDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={settingsCopyHandoffActionStatus}
+                data-disabled-reason={settingsConfigureDisabledReason || undefined}
                 className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="settings-header-copy-handoff"
               >
@@ -4021,9 +4076,13 @@ function SettingsPage() {
               </button>
               <button
                 type="button"
-                disabled={isSaving || !canConfigureSettings}
-                title={configurePermissionTitle}
+                disabled={Boolean(settingsConfigureDisabledReason)}
+                title={settingsConfigureDisabledReason || undefined}
                 onClick={downloadSettingsHandoff}
+                aria-describedby={settingsWorkbarActionStatusId}
+                data-action-state={settingsConfigureDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={settingsDownloadJsonActionStatus}
+                data-disabled-reason={settingsConfigureDisabledReason || undefined}
                 className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="settings-header-download-json"
               >
@@ -4036,7 +4095,11 @@ function SettingsPage() {
             variant="primary"
             onClick={() => void handleSave()}
             disabled={saveButtonDisabled}
-            title={activeSavePermissionTitle}
+            title={settingsSaveDisabledReason || undefined}
+            aria-describedby={settingsWorkbarActionStatusId}
+            data-action-state={settingsSaveDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={settingsSaveActionStatus}
+            data-disabled-reason={settingsSaveDisabledReason || undefined}
             iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
             data-testid="settings-header-save"
           >
@@ -4095,6 +4158,10 @@ function SettingsPage() {
 
       <div
         className="sticky top-2 z-20 -mx-4 rounded-none border-y border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border"
+        aria-describedby={settingsWorkbarActionStatusId}
+        aria-label="Settings sticky workbar"
+        data-action-state={settingsSaveDisabledReason ? 'blocked' : 'ready'}
+        data-action-status={settingsWorkbarActionStatus}
         data-testid="settings-sticky-workbar"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4119,6 +4186,9 @@ function SettingsPage() {
               variant="outline"
               onClick={() => openSettingsTab(previousSettingsTab.id)}
               aria-label={`Open previous Settings section: ${previousSettingsTab.name}`}
+              aria-describedby={settingsWorkbarActionStatusId}
+              data-action-state="ready"
+              data-action-status={settingsPreviousTabActionStatus}
               data-testid="settings-sticky-previous-tab"
             >
               Previous
@@ -4129,6 +4199,9 @@ function SettingsPage() {
               variant="outline"
               onClick={() => openSettingsTab(nextSettingsTab.id)}
               aria-label={`Open next Settings section: ${nextSettingsTab.name}`}
+              aria-describedby={settingsWorkbarActionStatusId}
+              data-action-state="ready"
+              data-action-status={settingsNextTabActionStatus}
               data-testid="settings-sticky-next-tab"
             >
               Next
@@ -4138,9 +4211,13 @@ function SettingsPage() {
                 type="button"
                 size="sm"
                 variant="ghost"
-                disabled={isSaving || !canSaveActiveSettingsTab}
-                title={activeSavePermissionTitle}
+                disabled={Boolean(settingsDiscardDisabledReason)}
+                title={settingsDiscardDisabledReason || undefined}
                 onClick={discardUnsavedChanges}
+                aria-describedby={settingsWorkbarActionStatusId}
+                data-action-state={settingsDiscardDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={settingsDiscardActionStatus}
+                data-disabled-reason={settingsDiscardDisabledReason || undefined}
                 data-testid="settings-sticky-discard"
               >
                 Discard
@@ -4152,7 +4229,11 @@ function SettingsPage() {
               variant="primary"
               onClick={() => void handleSave()}
               disabled={saveButtonDisabled}
-              title={activeSavePermissionTitle}
+              title={settingsSaveDisabledReason || undefined}
+              aria-describedby={settingsWorkbarActionStatusId}
+              data-action-state={settingsSaveDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={settingsSaveActionStatus}
+              data-disabled-reason={settingsSaveDisabledReason || undefined}
               iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
               data-testid="settings-sticky-save"
             >

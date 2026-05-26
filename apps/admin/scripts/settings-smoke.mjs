@@ -143,6 +143,16 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-header-download-json"',
     'data-testid="settings-header-discard"',
     'data-testid="settings-header-save"',
+    "const settingsWorkbarActionStatusId = 'settings-workbar-action-status';",
+    'const settingsWorkbarActionStatus = [',
+    'data-testid="settings-header-action-group"',
+    'data-testid="settings-workbar-action-status"',
+    'data-action-status={settingsWorkbarActionStatus}',
+    'data-action-status={settingsCopyHandoffActionStatus}',
+    'data-action-status={settingsDownloadJsonActionStatus}',
+    'data-action-status={settingsDiscardActionStatus}',
+    'data-action-status={settingsSaveActionStatus}',
+    'data-disabled-reason={settingsSaveDisabledReason || undefined}',
     'const SETTINGS_WORKBAR_SECTIONS = [',
     'data-testid="settings-sticky-workbar"',
     'data-testid="settings-sticky-active-tab"',
@@ -431,6 +441,20 @@ const assertSettingsSourceContracts = () => {
     /data-testid="settings-sticky-workbar"[\s\S]{0,7000}data-testid="settings-sticky-save"/.test(settingsRoute) &&
       /data-testid="settings-sticky-workbar"[\s\S]{0,7000}data-testid="settings-sticky-section-nav"/.test(settingsRoute),
     'Settings workbar must keep tab navigation and save controls reachable while the page scrolls',
+  );
+  assert(
+    settingsRoute.includes("const settingsWorkbarActionStatusId = 'settings-workbar-action-status';") &&
+      settingsRoute.includes('const settingsWorkbarActionStatus = [') &&
+      settingsRoute.includes('data-testid="settings-header-action-group"') &&
+      settingsRoute.includes('data-testid="settings-workbar-action-status"') &&
+      settingsRoute.includes('aria-describedby={settingsWorkbarActionStatusId}') &&
+      settingsRoute.includes('data-action-status={settingsWorkbarActionStatus}') &&
+      settingsRoute.includes('data-action-status={settingsCopyHandoffActionStatus}') &&
+      settingsRoute.includes('data-action-status={settingsDownloadJsonActionStatus}') &&
+      settingsRoute.includes('data-action-status={settingsDiscardActionStatus}') &&
+      settingsRoute.includes('data-action-status={settingsSaveActionStatus}') &&
+      settingsRoute.includes('data-disabled-reason={settingsSaveDisabledReason || undefined}'),
+    'Settings header and sticky workbar actions must expose a shared action-status contract with ready/blocked reasons.',
   );
   assert(
     settingsRoute.includes('data-testid="settings-command-maps"') &&
@@ -1138,13 +1162,43 @@ const navigateToSettings = async (client) => {
         document.querySelector('[data-testid="settings-launch-readiness-details"]')?.hasAttribute('open') === false,
       launchReadinessCopy: Boolean(document.querySelector('[data-testid="settings-launch-readiness-copy-button"]')),
       launchReadinessActionPlan: Boolean(document.querySelector('[data-testid="settings-launch-readiness-action-plan"]')),
-      launchReadinessText: document.querySelector('[data-testid="settings-launch-readiness"]')?.textContent || '',
-      workbar: Boolean(document.querySelector('[data-testid="settings-sticky-workbar"]')),
-      workbarActiveTab: document.querySelector('[data-testid="settings-sticky-active-tab"]')?.textContent || '',
-      workbarSectionNav: Boolean(document.querySelector('[data-testid="settings-sticky-section-nav"]')),
-      workbarSave: Boolean(document.querySelector('[data-testid="settings-sticky-save"]')),
-      workbarNext: Boolean(document.querySelector('[data-testid="settings-sticky-next-tab"]')),
-      hasBackyOwner: document.querySelector('[data-testid="settings-platform-ownership-map"]')?.textContent?.includes('Backy in-house') || false,
+	      launchReadinessText: document.querySelector('[data-testid="settings-launch-readiness"]')?.textContent || '',
+	      workbarActionStatusId: document.querySelector('[data-testid="settings-workbar-action-status"]')?.id || '',
+	      workbarActionStatusText: document.querySelector('[data-testid="settings-workbar-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+	      headerActionGroupRole: document.querySelector('[data-testid="settings-header-action-group"]')?.getAttribute('role') || '',
+	      headerActionGroupLabel: document.querySelector('[data-testid="settings-header-action-group"]')?.getAttribute('aria-label') || '',
+	      headerActionGroupDescribedBy: document.querySelector('[data-testid="settings-header-action-group"]')?.getAttribute('aria-describedby') || '',
+	      headerActionGroupStatus: document.querySelector('[data-testid="settings-header-action-group"]')?.getAttribute('data-action-status') || '',
+	      headerActionGroupState: document.querySelector('[data-testid="settings-header-action-group"]')?.getAttribute('data-action-state') || '',
+	      headerSaveState: document.querySelector('[data-testid="settings-header-save"]')?.getAttribute('data-action-state') || '',
+	      headerSaveStatus: document.querySelector('[data-testid="settings-header-save"]')?.getAttribute('data-action-status') || '',
+	      headerSaveReason: document.querySelector('[data-testid="settings-header-save"]')?.getAttribute('data-disabled-reason') || '',
+	      headerSaveDescribedBy: document.querySelector('[data-testid="settings-header-save"]')?.getAttribute('aria-describedby') || '',
+	      headerCopyState: document.querySelector('[data-testid="settings-header-copy-handoff"]')?.getAttribute('data-action-state') || '',
+	      headerCopyStatus: document.querySelector('[data-testid="settings-header-copy-handoff"]')?.getAttribute('data-action-status') || '',
+	      headerCopyDescribedBy: document.querySelector('[data-testid="settings-header-copy-handoff"]')?.getAttribute('aria-describedby') || '',
+	      headerDownloadState: document.querySelector('[data-testid="settings-header-download-json"]')?.getAttribute('data-action-state') || '',
+	      headerDownloadStatus: document.querySelector('[data-testid="settings-header-download-json"]')?.getAttribute('data-action-status') || '',
+	      headerDownloadDescribedBy: document.querySelector('[data-testid="settings-header-download-json"]')?.getAttribute('aria-describedby') || '',
+	      workbar: Boolean(document.querySelector('[data-testid="settings-sticky-workbar"]')),
+	      workbarDescribedBy: document.querySelector('[data-testid="settings-sticky-workbar"]')?.getAttribute('aria-describedby') || '',
+	      workbarActionStatusData: document.querySelector('[data-testid="settings-sticky-workbar"]')?.getAttribute('data-action-status') || '',
+	      workbarActionState: document.querySelector('[data-testid="settings-sticky-workbar"]')?.getAttribute('data-action-state') || '',
+	      workbarActiveTab: document.querySelector('[data-testid="settings-sticky-active-tab"]')?.textContent || '',
+	      workbarSectionNav: Boolean(document.querySelector('[data-testid="settings-sticky-section-nav"]')),
+	      workbarSave: Boolean(document.querySelector('[data-testid="settings-sticky-save"]')),
+	      workbarSaveState: document.querySelector('[data-testid="settings-sticky-save"]')?.getAttribute('data-action-state') || '',
+	      workbarSaveStatus: document.querySelector('[data-testid="settings-sticky-save"]')?.getAttribute('data-action-status') || '',
+	      workbarSaveReason: document.querySelector('[data-testid="settings-sticky-save"]')?.getAttribute('data-disabled-reason') || '',
+	      workbarSaveDescribedBy: document.querySelector('[data-testid="settings-sticky-save"]')?.getAttribute('aria-describedby') || '',
+	      workbarNext: Boolean(document.querySelector('[data-testid="settings-sticky-next-tab"]')),
+	      workbarPreviousState: document.querySelector('[data-testid="settings-sticky-previous-tab"]')?.getAttribute('data-action-state') || '',
+	      workbarPreviousStatus: document.querySelector('[data-testid="settings-sticky-previous-tab"]')?.getAttribute('data-action-status') || '',
+	      workbarPreviousDescribedBy: document.querySelector('[data-testid="settings-sticky-previous-tab"]')?.getAttribute('aria-describedby') || '',
+	      workbarNextState: document.querySelector('[data-testid="settings-sticky-next-tab"]')?.getAttribute('data-action-state') || '',
+	      workbarNextStatus: document.querySelector('[data-testid="settings-sticky-next-tab"]')?.getAttribute('data-action-status') || '',
+	      workbarNextDescribedBy: document.querySelector('[data-testid="settings-sticky-next-tab"]')?.getAttribute('aria-describedby') || '',
+	      hasBackyOwner: document.querySelector('[data-testid="settings-platform-ownership-map"]')?.textContent?.includes('Backy in-house') || false,
       hasSupabaseOwner: document.querySelector('[data-testid="settings-platform-ownership-map"]')?.textContent?.includes('Supabase connection') || false,
       hasVercelOwner: document.querySelector('[data-testid="settings-platform-ownership-map"]')?.textContent?.includes('Vercel connection') || false,
       tabs: Boolean(document.querySelector('#settings-tabs')),
@@ -1173,12 +1227,46 @@ const navigateToSettings = async (client) => {
       state.launchReadinessText.includes('backy.settings-launch-action-plan.v1') &&
       state.launchReadinessText.includes('Copy launch JSON') &&
       state.launchReadinessText.includes('Database gate') &&
-      state.launchReadinessText.includes('Provider gate') &&
-      state.workbar &&
-      state.workbarActiveTab.includes('General') &&
-      state.workbarSectionNav &&
-      state.workbarSave &&
-      state.workbarNext &&
+	      state.launchReadinessText.includes('Provider gate') &&
+	      state.workbarActionStatusId === 'settings-workbar-action-status' &&
+	      state.workbarActionStatusText.includes('Previous section available') &&
+	      state.workbarActionStatusText.includes('Next section available') &&
+	      state.workbarActionStatusText.includes('Copy handoff available.') &&
+	      state.workbarActionStatusText.includes('Download JSON available.') &&
+	      state.workbarActionStatusText.includes('No changes unavailable: Make a settings change before saving.') &&
+	      state.headerActionGroupRole === 'group' &&
+	      state.headerActionGroupLabel === 'Settings header actions' &&
+	      state.headerActionGroupDescribedBy === state.workbarActionStatusId &&
+	      state.headerActionGroupStatus === state.workbarActionStatusText &&
+	      state.headerActionGroupState === 'blocked' &&
+	      state.headerSaveState === 'blocked' &&
+	      state.headerSaveStatus.includes('No changes unavailable') &&
+	      state.headerSaveReason === 'Make a settings change before saving.' &&
+	      state.headerSaveDescribedBy === state.workbarActionStatusId &&
+	      state.headerCopyState === 'ready' &&
+	      state.headerCopyStatus === 'Copy handoff available.' &&
+	      state.headerCopyDescribedBy === state.workbarActionStatusId &&
+	      state.headerDownloadState === 'ready' &&
+	      state.headerDownloadStatus === 'Download JSON available.' &&
+	      state.headerDownloadDescribedBy === state.workbarActionStatusId &&
+	      state.workbar &&
+	      state.workbarDescribedBy === state.workbarActionStatusId &&
+	      state.workbarActionStatusData === state.workbarActionStatusText &&
+	      state.workbarActionState === 'blocked' &&
+	      state.workbarActiveTab.includes('General') &&
+	      state.workbarSectionNav &&
+	      state.workbarSave &&
+	      state.workbarSaveState === 'blocked' &&
+	      state.workbarSaveStatus.includes('No changes unavailable') &&
+	      state.workbarSaveReason === 'Make a settings change before saving.' &&
+	      state.workbarSaveDescribedBy === state.workbarActionStatusId &&
+	      state.workbarNext &&
+	      state.workbarPreviousState === 'ready' &&
+	      state.workbarPreviousStatus.includes('Previous section available') &&
+	      state.workbarPreviousDescribedBy === state.workbarActionStatusId &&
+	      state.workbarNextState === 'ready' &&
+	      state.workbarNextStatus.includes('Next section available') &&
+	      state.workbarNextDescribedBy === state.workbarActionStatusId &&
       state.hasBackyOwner &&
       state.hasSupabaseOwner &&
       state.hasVercelOwner &&
@@ -1523,12 +1611,41 @@ const setDeliveryMode = async (client, mode) => {
 
 const saveSettings = async (client) => {
   const clicked = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => {
+    const status = document.querySelector('[data-testid="settings-workbar-action-status"]');
+    const statusId = status?.id || '';
+    const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+    const stickySave = document.querySelector('[data-testid="settings-sticky-save"]');
+    const button = document.querySelector('[data-testid="settings-header-save"]') || Array.from(document.querySelectorAll('button')).find((candidate) => {
       const text = candidate.textContent || '';
       return text.includes('Save changes') || text.includes('Saving...');
     });
     if (!(button instanceof HTMLButtonElement)) {
       return { ok: false, reason: 'button-not-found', body: document.body?.innerText?.slice(0, 300) || '' };
+    }
+    if (
+      statusId !== 'settings-workbar-action-status' ||
+      !statusText.includes('Save changes available.') ||
+      button.getAttribute('aria-describedby') !== statusId ||
+      button.getAttribute('data-action-state') !== 'ready' ||
+      button.getAttribute('data-action-status') !== 'Save changes available.' ||
+      (button.getAttribute('data-disabled-reason') || '') !== '' ||
+      !(stickySave instanceof HTMLButtonElement) ||
+      stickySave.getAttribute('aria-describedby') !== statusId ||
+      stickySave.getAttribute('data-action-state') !== 'ready' ||
+      stickySave.getAttribute('data-action-status') !== 'Save changes available.'
+    ) {
+      return {
+        ok: false,
+        reason: 'save-action-status-drifted',
+        statusId,
+        statusText,
+        headerDescribedBy: button.getAttribute('aria-describedby') || '',
+        headerState: button.getAttribute('data-action-state') || '',
+        headerStatus: button.getAttribute('data-action-status') || '',
+        headerReason: button.getAttribute('data-disabled-reason') || '',
+        stickyState: stickySave instanceof HTMLElement ? stickySave.getAttribute('data-action-state') || '' : '',
+        stickyStatus: stickySave instanceof HTMLElement ? stickySave.getAttribute('data-action-status') || '' : '',
+      };
     }
     if (button.disabled) {
       return { ok: false, reason: 'button-disabled', text: button.textContent || '' };
