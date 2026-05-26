@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AdminContentApiError, getUserPermissions, type AdminUserPermissionMatrix } from '@/lib/adminContentApi';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  AdminContentApiError,
+  clearUserPermissionsCache,
+  getCachedUserPermissions,
+  getUserPermissions,
+  type AdminUserPermissionMatrix,
+} from '@/lib/adminContentApi';
 import { isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { useAuthStore, type User } from '@/stores/authStore';
 
@@ -47,6 +53,13 @@ const NAVIGATION_PERMISSION_ROLE_DEFAULTS: Record<string, User['role'][]> = {
   'settings.view': ['owner', 'admin'],
 };
 
+const PERMISSION_SYNC_FALLBACK_MESSAGE = 'Detailed admin permissions could not be verified. Role-default navigation remains active.';
+
+const isRecoverableSessionPermissionError = (error: unknown) => (
+  error instanceof AdminContentApiError &&
+  (error.code === 'UNAUTHORIZED' || error.message.toLowerCase().includes('valid admin session'))
+);
+
 export const canAccessAdminNavigationArea = (
   permissionMatrix: AdminUserPermissionMatrix | null,
   currentAdmin: Pick<User, 'role'> | null | undefined,
@@ -64,52 +77,112 @@ export const canAccessAdminNavigationArea = (
 };
 
 export function useCurrentAdminPermissionMatrix(currentAdmin: Pick<User, 'id'> | null | undefined) {
-  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(currentAdmin?.id));
-  const signOut = useAuthStore((state) => state.signOut);
+  const currentAdminId = currentAdmin?.id;
+  const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(() => (
+    currentAdminId ? getCachedUserPermissions(currentAdminId) : null
+  ));
+  const [permissionMatrixUserId, setPermissionMatrixUserId] = useState(() => (
+    currentAdminId && getCachedUserPermissions(currentAdminId) ? currentAdminId : ''
+  ));
+  const [isLoading, setIsLoading] = useState(() => Boolean(currentAdminId && !getCachedUserPermissions(currentAdminId)));
+  const [permissionSyncError, setPermissionSyncError] = useState<string | null>(null);
+  const [permissionRefreshIndex, setPermissionRefreshIndex] = useState(0);
+  const refreshSession = useAuthStore((state) => state.refreshSession);
+
+  const refreshPermissions = useCallback(() => {
+    if (currentAdminId) {
+      clearUserPermissionsCache(currentAdminId);
+    }
+    setPermissionRefreshIndex((index) => index + 1);
+  }, [currentAdminId]);
 
   useEffect(() => {
     let cancelled = false;
 
-    if (!currentAdmin?.id) {
+    if (!currentAdminId) {
       setPermissionMatrix(null);
+      setPermissionMatrixUserId('');
       setIsLoading(false);
+      setPermissionSyncError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const cached = getCachedUserPermissions(currentAdminId);
+    if (cached) {
+      setPermissionMatrix(cached);
+      setPermissionMatrixUserId(currentAdminId);
+      setIsLoading(false);
+      setPermissionSyncError(null);
       return () => {
         cancelled = true;
       };
     }
 
     setIsLoading(true);
-    getUserPermissions(currentAdmin.id)
-      .then((matrix) => {
+    setPermissionSyncError(null);
+
+    const loadPermissionMatrix = async () => {
+      try {
+        const matrix = await getUserPermissions(currentAdminId);
         if (!cancelled) {
           setPermissionMatrix(matrix);
+          setPermissionMatrixUserId(currentAdminId);
+          setPermissionSyncError(null);
         }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setPermissionMatrix(null);
-          if (
-            error instanceof AdminContentApiError &&
-            (error.code === 'UNAUTHORIZED' || error.message.toLowerCase().includes('valid admin session'))
-          ) {
-            signOut();
+      } catch (error) {
+        if (cancelled) return;
+
+        if (isRecoverableSessionPermissionError(error)) {
+          try {
+            await refreshSession();
+            const matrix = await getUserPermissions(currentAdminId);
+            if (!cancelled) {
+              setPermissionMatrix(matrix);
+              setPermissionMatrixUserId(currentAdminId);
+              setPermissionSyncError(null);
+            }
+            return;
+          } catch {
+            if (cancelled) return;
+            const currentAuth = useAuthStore.getState();
+            setPermissionMatrix(null);
+            setPermissionMatrixUserId('');
+            if (currentAuth.user && currentAuth.session) {
+              setPermissionSyncError(PERMISSION_SYNC_FALLBACK_MESSAGE);
+              return;
+            }
           }
         }
-      })
-      .finally(() => {
+
+        if (!cancelled) {
+          setPermissionMatrix(null);
+          setPermissionMatrixUserId('');
+          setPermissionSyncError(PERMISSION_SYNC_FALLBACK_MESSAGE);
+        }
+      } finally {
         if (!cancelled) {
           setIsLoading(false);
         }
-      });
+      }
+    };
+
+    void loadPermissionMatrix();
 
     return () => {
       cancelled = true;
     };
-  }, [currentAdmin?.id, signOut]);
+  }, [currentAdminId, permissionRefreshIndex, refreshSession]);
+
+  const scopedPermissionMatrix = currentAdminId && permissionMatrixUserId === currentAdminId
+    ? permissionMatrix
+    : null;
 
   return useMemo(() => ({
-    permissionMatrix,
+    permissionMatrix: scopedPermissionMatrix,
     isLoading,
-  }), [isLoading, permissionMatrix]);
+    permissionSyncError,
+    refreshPermissions,
+  }), [isLoading, permissionSyncError, refreshPermissions, scopedPermissionMatrix]);
 }

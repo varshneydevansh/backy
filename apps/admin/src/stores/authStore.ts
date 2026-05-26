@@ -13,7 +13,9 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { acceptAdminInvite, fetchAdminSession, loginAdmin, logoutAdmin, resetAdminPassword, rotateAdminSession, type AdminSession } from '@/lib/adminAuthApi';
+import { acceptAdminInvite, AdminAuthNetworkError, fetchAdminSession, loginAdmin, logoutAdmin, resetAdminPassword, rotateAdminSession, type AdminSession } from '@/lib/adminAuthApi';
+import { clearUserPermissionsCache } from '@/lib/adminContentApi';
+import { clearActiveAdminSessionToken, setActiveAdminSessionToken } from '@/lib/adminSessionToken';
 
 // ============================================
 // TYPES
@@ -46,6 +48,12 @@ interface AuthActions {
 
 type AuthStore = AuthState & AuthActions;
 
+const isUnexpiredSession = (session: AdminSession | null): session is AdminSession => {
+  if (!session?.expiresAt) return false;
+  const expiresAt = Date.parse(session.expiresAt);
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
+};
+
 // ============================================
 // STORE
 // ============================================
@@ -70,6 +78,8 @@ export const useAuthStore = create<AuthStore>()(
 
         try {
           const data = await loginAdmin(email, password, twoFactorCode);
+          clearUserPermissionsCache();
+          setActiveAdminSessionToken(data.session.token);
           set({
             user: data.user,
             session: data.session,
@@ -84,6 +94,8 @@ export const useAuthStore = create<AuthStore>()(
             user: null,
             session: null,
           });
+          clearActiveAdminSessionToken();
+          clearUserPermissionsCache();
           throw error;
         }
       },
@@ -93,6 +105,8 @@ export const useAuthStore = create<AuthStore>()(
 
         try {
           const data = await acceptAdminInvite(token);
+          clearUserPermissionsCache();
+          setActiveAdminSessionToken(data.session.token);
           set({
             user: data.user,
             session: data.session,
@@ -107,6 +121,8 @@ export const useAuthStore = create<AuthStore>()(
             user: null,
             session: null,
           });
+          clearActiveAdminSessionToken();
+          clearUserPermissionsCache();
           throw error;
         }
       },
@@ -116,6 +132,8 @@ export const useAuthStore = create<AuthStore>()(
 
         try {
           const data = await resetAdminPassword(token, password);
+          clearUserPermissionsCache();
+          setActiveAdminSessionToken(data.session.token);
           set({
             user: data.user,
             session: data.session,
@@ -130,6 +148,8 @@ export const useAuthStore = create<AuthStore>()(
             user: null,
             session: null,
           });
+          clearActiveAdminSessionToken();
+          clearUserPermissionsCache();
           throw error;
         }
       },
@@ -137,6 +157,8 @@ export const useAuthStore = create<AuthStore>()(
       signOut: () => {
         const token = useAuthStore.getState().session?.token;
         void logoutAdmin(token);
+        clearUserPermissionsCache();
+        clearActiveAdminSessionToken();
         set({
           user: null,
           session: null,
@@ -152,6 +174,7 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
         try {
           const data = await fetchAdminSession(token);
+          setActiveAdminSessionToken(data.session.token);
           set({
             user: data.user,
             session: data.session,
@@ -160,12 +183,26 @@ export const useAuthStore = create<AuthStore>()(
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Admin session expired';
+          const current = useAuthStore.getState();
+          if (error instanceof AdminAuthNetworkError && current.user && isUnexpiredSession(current.session)) {
+            setActiveAdminSessionToken(current.session.token);
+            set({
+              user: current.user,
+              session: current.session,
+              isLoading: false,
+              error: message,
+            });
+            return;
+          }
+
           set({
             user: null,
             session: null,
             isLoading: false,
             error: message,
           });
+          clearActiveAdminSessionToken();
+          clearUserPermissionsCache();
         }
       },
 
@@ -175,6 +212,8 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
         try {
           const data = await rotateAdminSession(token);
+          clearUserPermissionsCache();
+          setActiveAdminSessionToken(data.session.token);
           set({
             user: data.user,
             session: data.session,
@@ -202,11 +241,13 @@ export const useAuthStore = create<AuthStore>()(
         const persisted = persistedState as Partial<AuthStore>;
         const persistedSession = persisted.session && persisted.session.issuedAt && persisted.session.expiresAt && persisted.session.authMode
           ? {
+              token: persisted.session.authMode === 'local-demo' ? persisted.session.token : undefined,
               issuedAt: persisted.session.issuedAt,
               expiresAt: persisted.session.expiresAt,
               authMode: persisted.session.authMode,
             }
           : null;
+        setActiveAdminSessionToken(persistedSession?.token);
         return {
           ...currentState,
           ...persisted,
@@ -217,6 +258,7 @@ export const useAuthStore = create<AuthStore>()(
         user: state.user,
         session: state.session
           ? {
+              token: state.session.authMode === 'local-demo' ? state.session.token : undefined,
               issuedAt: state.session.issuedAt,
               expiresAt: state.session.expiresAt,
               authMode: state.session.authMode,

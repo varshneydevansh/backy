@@ -12,6 +12,7 @@
  */
 
 import { Link, useLocation } from '@tanstack/react-router';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -28,16 +29,24 @@ import {
   Contact,
   Layers3,
   Building2,
+  AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
+  Search,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/authStore';
+import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { useAuthStore, type User } from '@/stores/authStore';
+import { useStore } from '@/stores/mockStore';
 import {
   canAccessAdminNavigationArea,
   useCurrentAdminPermissionMatrix,
   type AdminNavigationArea,
 } from '@/lib/adminNavigationAccess';
+import { isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 
 // ============================================
 // TYPES
@@ -46,6 +55,12 @@ import {
 interface SidebarProps {
   /** Whether the sidebar is in collapsed state */
   collapsed: boolean;
+  /** Whether the current workspace forces compact navigation */
+  collapseLocked?: boolean;
+  /** Unique navigation landmark id for aria-controls */
+  navigationId?: string;
+  /** Prefix for stable test hooks when multiple sidebars are mounted */
+  testIdPrefix?: string;
   /** Callback when toggle button is clicked */
   onToggle: () => void;
   /** Optional callback after a navigation item is selected */
@@ -53,6 +68,8 @@ interface SidebarProps {
 }
 
 interface NavItem {
+  /** Stable navigation identifier */
+  id: string;
   /** Display label */
   label: string;
   /** Route path */
@@ -66,8 +83,36 @@ interface NavItem {
 }
 
 interface NavSection {
+  /** Stable section identifier for persisted expansion state */
+  id: string;
+  /** Display label */
   label: string;
+  /** Navigation items in the section */
   items: NavItem[];
+}
+
+type SidebarQuickCreatePermission = 'pages.edit';
+
+interface SidebarQuickCreateAction {
+  /** Stable quick-create identifier */
+  id: string;
+  /** Display label */
+  label: string;
+  /** Route path */
+  to: string;
+  /** Icon component */
+  icon: React.ElementType;
+  /** Navigation area required to expose the action */
+  area: AdminNavigationArea;
+  /** Permission required to start the create flow */
+  permissionKey: SidebarQuickCreatePermission;
+}
+
+interface SidebarRailTooltip {
+  label: string;
+  route: string;
+  area: AdminNavigationArea;
+  top: number;
 }
 
 // ============================================
@@ -79,51 +124,78 @@ interface NavSection {
  */
 const NAV_SECTIONS: NavSection[] = [
   {
+    id: 'workspace',
     label: 'Workspace',
     items: [
-      { label: 'Dashboard', to: '/', icon: LayoutDashboard, area: 'dashboard' },
-      { label: 'Sites', to: '/sites', icon: Globe, area: 'sites' },
+      { id: 'dashboard', label: 'Dashboard', to: '/', icon: LayoutDashboard, area: 'dashboard' },
+      { id: 'sites', label: 'Sites', to: '/sites', icon: Globe, area: 'sites' },
     ],
   },
   {
+    id: 'content',
     label: 'Content',
     items: [
-      { label: 'Pages', to: '/pages', icon: FileText, area: 'pages' },
-      { label: 'Blog', to: '/blog', icon: Newspaper, area: 'blog' },
-      { label: 'Media', to: '/media', icon: Image, area: 'media' },
-      { label: 'Collections', to: '/collections', icon: Database, area: 'collections' },
-      { label: 'Sections', to: '/reusable-sections', icon: Layers3, area: 'sections' },
+      { id: 'pages', label: 'Pages', to: '/pages', icon: FileText, area: 'pages' },
+      { id: 'blog', label: 'Blog', to: '/blog', icon: Newspaper, area: 'blog' },
+      { id: 'media', label: 'Media', to: '/media', icon: Image, area: 'media' },
+      { id: 'collections', label: 'Collections', to: '/collections', icon: Database, area: 'collections' },
+      { id: 'sections', label: 'Sections', to: '/reusable-sections', icon: Layers3, area: 'sections' },
     ],
   },
   {
+    id: 'commerce',
     label: 'Commerce',
     items: [
-      { label: 'Products', to: '/products', icon: ShoppingBag, area: 'commerce' },
-      { label: 'Orders', to: '/orders', icon: Receipt, area: 'commerce' },
+      { id: 'products', label: 'Products', to: '/products', icon: ShoppingBag, area: 'commerce' },
+      { id: 'orders', label: 'Orders', to: '/orders', icon: Receipt, area: 'commerce' },
     ],
   },
   {
+    id: 'audience',
     label: 'Audience',
     items: [
-      { label: 'Forms', to: '/forms', icon: ClipboardList, area: 'forms' },
-      { label: 'Contacts', to: '/contacts', icon: Contact, area: 'contacts' },
-      { label: 'Comments', to: '/comments', icon: MessageSquare, area: 'comments' },
+      { id: 'forms', label: 'Forms', to: '/forms', icon: ClipboardList, area: 'forms' },
+      { id: 'contacts', label: 'Contacts', to: '/contacts', icon: Contact, area: 'contacts' },
+      { id: 'comments', label: 'Comments', to: '/comments', icon: MessageSquare, area: 'comments' },
     ],
   },
   {
+    id: 'platform',
     label: 'Platform',
     items: [
-      { label: 'Teams', to: '/teams', icon: Building2, area: 'teams' },
-      { label: 'Users', to: '/users', icon: Users, area: 'users' },
-      { label: 'Settings', to: '/settings', icon: Settings, area: 'settings' },
+      { id: 'teams', label: 'Teams', to: '/teams', icon: Building2, area: 'teams' },
+      { id: 'users', label: 'Users', to: '/users', icon: Users, area: 'users' },
+      { id: 'settings', label: 'Settings', to: '/settings', icon: Settings, area: 'settings' },
     ],
   },
 ];
 
+const SIDEBAR_QUICK_CREATE_ACTIONS: SidebarQuickCreateAction[] = [
+  { id: 'new-page', label: 'New page', to: '/pages/new', icon: FileText, area: 'pages', permissionKey: 'pages.edit' },
+  { id: 'new-post', label: 'New post', to: '/blog/new', icon: Newspaper, area: 'blog', permissionKey: 'pages.edit' },
+];
+
+const SIDEBAR_QUICK_CREATE_PERMISSION_ROLE_DEFAULTS: Record<SidebarQuickCreatePermission, User['role'][]> = {
+  'pages.edit': ['owner', 'admin', 'editor'],
+};
+
+const SIDEBAR_SECTION_STORAGE_KEY = 'backy:admin-sidebar-section-state';
+const SIDEBAR_SECTION_STORAGE_VERSION = 2;
+const DEFAULT_OPEN_SECTION_IDS = ['workspace'];
+type SidebarSectionStateSource = 'default' | 'stored' | 'legacy-migrated';
+
+interface SidebarSectionStateSnapshot {
+  sectionIds: Set<string>;
+  source: SidebarSectionStateSource;
+  legacySectionCount: number;
+}
+
 const SITE_SCOPED_NAV_ROUTES = new Set([
   '/',
   '/pages',
+  '/pages/new',
   '/blog',
+  '/blog/new',
   '/media',
   '/collections',
   '/reusable-sections',
@@ -135,6 +207,87 @@ const SITE_SCOPED_NAV_ROUTES = new Set([
   '/teams',
   '/users',
 ]);
+
+const isNavRouteActive = (pathname: string, route: string) => (
+  pathname === route || (route !== '/' && pathname.startsWith(`${route}/`))
+);
+
+const validSidebarSectionIds = new Set(NAV_SECTIONS.map((section) => section.id));
+
+const normalizeSidebarSectionIds = (sectionIds: unknown) => {
+  if (!Array.isArray(sectionIds)) {
+    return new Set<string>();
+  }
+
+  return new Set(
+    sectionIds.filter((sectionId): sectionId is string => (
+      typeof sectionId === 'string' && validSidebarSectionIds.has(sectionId)
+    )),
+  );
+};
+
+const createDefaultSidebarSectionState = (source: SidebarSectionStateSource = 'default'): SidebarSectionStateSnapshot => ({
+  sectionIds: new Set(DEFAULT_OPEN_SECTION_IDS),
+  source,
+  legacySectionCount: 0,
+});
+
+const readSidebarSectionState = (): SidebarSectionStateSnapshot => {
+  if (typeof window === 'undefined') {
+    return createDefaultSidebarSectionState();
+  }
+
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_SECTION_STORAGE_KEY);
+    if (!stored) {
+      return createDefaultSidebarSectionState();
+    }
+    const parsed = JSON.parse(stored);
+    if (Array.isArray(parsed)) {
+      const legacySectionIds = normalizeSidebarSectionIds(parsed);
+      const migratedSectionIds = legacySectionIds.size > 1
+        ? new Set(DEFAULT_OPEN_SECTION_IDS)
+        : legacySectionIds.size > 0
+          ? legacySectionIds
+          : new Set(DEFAULT_OPEN_SECTION_IDS);
+      writeSidebarSectionState(migratedSectionIds, legacySectionIds.size);
+      return {
+        sectionIds: migratedSectionIds,
+        source: 'legacy-migrated',
+        legacySectionCount: legacySectionIds.size,
+      };
+    }
+    if (!parsed || typeof parsed !== 'object' || parsed.version !== SIDEBAR_SECTION_STORAGE_VERSION) {
+      return createDefaultSidebarSectionState();
+    }
+    const storedSectionIds = normalizeSidebarSectionIds(parsed.sectionIds);
+    const migratedFromLegacyCount = typeof parsed.migratedFromLegacyCount === 'number'
+      ? Math.max(0, parsed.migratedFromLegacyCount)
+      : 0;
+    return {
+      sectionIds: storedSectionIds.size > 0 ? storedSectionIds : new Set(DEFAULT_OPEN_SECTION_IDS),
+      source: migratedFromLegacyCount > 0 ? 'legacy-migrated' : 'stored',
+      legacySectionCount: migratedFromLegacyCount,
+    };
+  } catch {
+    return createDefaultSidebarSectionState();
+  }
+};
+
+const writeSidebarSectionState = (sectionIds: Set<string>, migratedFromLegacyCount = 0) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(SIDEBAR_SECTION_STORAGE_KEY, JSON.stringify({
+      version: SIDEBAR_SECTION_STORAGE_VERSION,
+      sectionIds: Array.from(sectionIds).filter((sectionId) => validSidebarSectionIds.has(sectionId)),
+      migratedFromLegacyCount,
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // Ignore private-mode or quota failures; navigation remains usable in memory.
+  }
+};
 
 // ============================================
 // COMPONENT
@@ -148,109 +301,707 @@ const SITE_SCOPED_NAV_ROUTES = new Set([
  * @param props - Component props
  * @returns Sidebar component
  */
-export function Sidebar({ collapsed, onToggle, onNavigate }: SidebarProps) {
+export function Sidebar({
+  collapsed,
+  collapseLocked = false,
+  navigationId = 'admin-sidebar-navigation',
+  testIdPrefix = 'admin-sidebar',
+  onToggle,
+  onNavigate,
+}: SidebarProps) {
   const location = useLocation();
   const currentUser = useAuthStore((state) => state.user);
-  const { permissionMatrix } = useCurrentAdminPermissionMatrix(currentUser);
-  const currentSearch = typeof window === 'undefined' ? '' : window.location.search;
-  const activeSiteId = new URLSearchParams(currentSearch).get('siteId')?.trim();
-  const activeSiteSearch = activeSiteId ? { siteId: activeSiteId } : undefined;
-  const getNavSearch = (to: string) => (
-    activeSiteSearch && SITE_SCOPED_NAV_ROUTES.has(to) ? activeSiteSearch : undefined
+  const sites = useStore((state) => state.sites);
+  const {
+    permissionMatrix,
+    isLoading: permissionsLoading,
+    permissionSyncError,
+    refreshPermissions,
+  } = useCurrentAdminPermissionMatrix(currentUser);
+  const selectedSiteId = getSiteSelectionFromSearch(sites);
+  const [initialSidebarSectionState] = useState(() => readSidebarSectionState());
+  const [expandedSectionIds, setExpandedSectionIds] = useState(initialSidebarSectionState.sectionIds);
+  const [sectionStateSource, setSectionStateSource] = useState<SidebarSectionStateSource>(initialSidebarSectionState.source);
+  const [legacySectionStateCount, setLegacySectionStateCount] = useState(initialSidebarSectionState.legacySectionCount);
+  const [navFilter, setNavFilter] = useState('');
+  const [railTooltip, setRailTooltip] = useState<SidebarRailTooltip | null>(null);
+  const deferredNavFilter = useDeferredValue(navFilter);
+  const normalizedNavFilter = deferredNavFilter.trim().toLowerCase();
+  const activeSite = useMemo(
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
+    [selectedSiteId, sites],
   );
-  const visibleSections = NAV_SECTIONS
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => canAccessAdminNavigationArea(permissionMatrix, currentUser, item.area)),
-    }))
-    .filter((section) => section.items.length > 0);
+  const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const activeSiteName = activeSite?.name || activeSiteId;
+  const activeSiteMeta = activeSite?.customDomain || activeSite?.slug || activeSiteId;
+  const activeSiteStatus = activeSite?.status || 'draft';
+  const activeSiteSearch = useMemo(() => (
+    { siteId: activeSiteId }
+  ), [activeSiteId]);
+  const getNavSearch = useMemo(() => (
+    (to: string) => (
+      activeSiteSearch && SITE_SCOPED_NAV_ROUTES.has(to) ? activeSiteSearch : undefined
+    )
+  ), [activeSiteSearch]);
+  const visibleSections = useMemo(() => (
+    NAV_SECTIONS
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => canAccessAdminNavigationArea(permissionMatrix, currentUser, item.area)),
+      }))
+      .filter((section) => section.items.length > 0)
+  ), [currentUser, permissionMatrix]);
+  const quickCreateActions = useMemo(() => (
+    SIDEBAR_QUICK_CREATE_ACTIONS.filter((action) => (
+      canAccessAdminNavigationArea(permissionMatrix, currentUser, action.area) &&
+      isAdminPermissionAllowed(
+        permissionMatrix,
+        currentUser,
+        action.permissionKey,
+        SIDEBAR_QUICK_CREATE_PERMISSION_ROLE_DEFAULTS,
+      )
+    ))
+  ), [currentUser, permissionMatrix]);
+  const renderedSections = useMemo(() => {
+    if (!normalizedNavFilter) return visibleSections;
+
+    return visibleSections
+      .map((section) => {
+        const sectionMatches = section.label.toLowerCase().includes(normalizedNavFilter);
+        const items = sectionMatches
+          ? section.items
+          : section.items.filter((item) => (
+            item.label.toLowerCase().includes(normalizedNavFilter) ||
+            item.to.toLowerCase().includes(normalizedNavFilter)
+          ));
+        return { ...section, items };
+      })
+      .filter((section) => section.items.length > 0);
+  }, [normalizedNavFilter, visibleSections]);
+  const visibleItemCount = useMemo(() => (
+    visibleSections.reduce((count, section) => count + section.items.length, 0)
+  ), [visibleSections]);
+  const renderedItemCount = useMemo(() => (
+    renderedSections.reduce((count, section) => count + section.items.length, 0)
+  ), [renderedSections]);
+  const navigationUsable = Boolean(currentUser) && visibleItemCount > 0;
+  const permissionSource = permissionMatrix ? 'matrix' : currentUser ? 'role-defaults' : 'anonymous';
+  const permissionSyncState = !currentUser
+    ? 'anonymous'
+    : permissionMatrix
+      ? 'synced'
+      : permissionsLoading
+        ? 'syncing-role-defaults'
+        : permissionSyncError
+          ? 'role-defaults-error'
+          : 'role-defaults';
+  const activeSectionId = useMemo(() => (
+    visibleSections.find((section) => (
+      section.items.some((item) => isNavRouteActive(location.pathname, item.to))
+    ))?.id
+  ), [location.pathname, visibleSections]);
+  const visibleExpandedSectionIds = useMemo(() => {
+    const next = new Set(expandedSectionIds);
+    if (normalizedNavFilter) {
+      renderedSections.forEach((section) => next.add(section.id));
+      return next;
+    }
+    if (!collapsed && activeSectionId) {
+      next.add(activeSectionId);
+    }
+    return next;
+  }, [activeSectionId, collapsed, expandedSectionIds, normalizedNavFilter, renderedSections]);
+  const expandedSectionCount = useMemo(() => (
+    collapsed
+      ? renderedSections.length
+      : renderedSections.filter((section) => visibleExpandedSectionIds.has(section.id)).length
+  ), [collapsed, renderedSections, visibleExpandedSectionIds]);
+  const collapsedSectionCount = collapsed ? 0 : Math.max(renderedSections.length - expandedSectionCount, 0);
+  const toggleLabel = collapseLocked
+    ? 'Sidebar stays compact while editing'
+    : collapsed
+      ? 'Expand sidebar'
+      : 'Collapse sidebar';
+  const sidebarActionStatusId = `${navigationId}-action-status`;
+  const permissionSyncStatusId = `${navigationId}-permission-sync-status`;
+  const sidebarNavigationMode = collapsed ? 'compact-rail' : 'expanded-panel';
+  const permissionSyncStatus = !currentUser
+    ? 'Sign in to load admin navigation.'
+    : permissionMatrix
+      ? `Detailed backend permissions synced for ${currentUser.email}.`
+      : permissionsLoading
+        ? 'Syncing detailed admin permissions; role-default navigation is active.'
+        : permissionSyncError
+          ? `${permissionSyncError} Retry permission sync available.`
+          : 'Role-default navigation active until detailed admin permissions sync.';
+  const sidebarFilterSummary = normalizedNavFilter
+    ? collapsed
+      ? `${renderedItemCount} of ${visibleItemCount} navigation tools shown in compact rail for "${normalizedNavFilter}".`
+      : `${renderedItemCount} of ${visibleItemCount} navigation tools shown for "${normalizedNavFilter}".`
+    : collapsed
+      ? `${visibleItemCount} navigation tools across ${visibleSections.length} groups in compact rail. Labels show on hover or focus.`
+      : `${visibleItemCount} navigation tools across ${visibleSections.length} groups. ${expandedSectionCount} groups expanded.`;
+  const sidebarControlStatus = collapsed
+    ? 'Filter navigation and group density controls are available when expanded.'
+    : 'Filter navigation available. Show active group available. Show all groups available.';
+  const sidebarCollapseStatus = collapseLocked
+    ? 'Sidebar collapse unavailable: Sidebar stays compact while editing.'
+    : collapsed
+      ? 'Expand sidebar available.'
+      : 'Collapse sidebar available.';
+  const sidebarActionStatus = `${permissionSyncStatus} ${sidebarFilterSummary} ${sidebarControlStatus} ${sidebarCollapseStatus}`;
+  const quickCreateStatusId = `${navigationId}-quick-create-status`;
+  const quickCreateActionStatus = `${quickCreateActions.length} create shortcut${quickCreateActions.length === 1 ? '' : 's'} available for ${activeSiteName}.`;
+  const collapseInactiveSections = () => {
+    const next = new Set<string>();
+    if (activeSectionId) {
+      next.add(activeSectionId);
+    } else {
+      DEFAULT_OPEN_SECTION_IDS.forEach((sectionId) => {
+        if (visibleSections.some((section) => section.id === sectionId)) {
+          next.add(sectionId);
+        }
+      });
+      if (next.size === 0 && visibleSections[0]) {
+        next.add(visibleSections[0].id);
+      }
+    }
+    writeSidebarSectionState(next);
+    setSectionStateSource('stored');
+    setLegacySectionStateCount(0);
+    setExpandedSectionIds(next);
+  };
+  const expandAllSections = () => {
+    const next = new Set(visibleSections.map((section) => section.id));
+    writeSidebarSectionState(next);
+    setSectionStateSource('stored');
+    setLegacySectionStateCount(0);
+    setExpandedSectionIds(next);
+  };
+  const toggleSection = (sectionId: string) => {
+    setExpandedSectionIds((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) {
+        if (sectionId === activeSectionId) return current;
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      writeSidebarSectionState(next);
+      setSectionStateSource('stored');
+      setLegacySectionStateCount(0);
+      return next;
+    });
+  };
+  const showRailTooltip = (item: Pick<NavItem, 'label' | 'to' | 'area'>, target: HTMLElement) => {
+    if (!collapsed) return;
+
+    const rect = target.getBoundingClientRect();
+    setRailTooltip({
+      label: item.label,
+      route: item.to,
+      area: item.area,
+      top: Math.round(rect.top + rect.height / 2),
+    });
+  };
+  const hideRailTooltip = () => setRailTooltip(null);
+
+  useEffect(() => {
+    if (collapsed || !activeSectionId) return;
+
+    setExpandedSectionIds((current) => {
+      if (current.has(activeSectionId)) return current;
+      const next = new Set(current);
+      next.add(activeSectionId);
+      writeSidebarSectionState(next);
+      setSectionStateSource('stored');
+      setLegacySectionStateCount(0);
+      return next;
+    });
+  }, [activeSectionId, collapsed]);
 
   return (
     <aside
+      id={navigationId}
+      data-testid={testIdPrefix}
+      data-collapsed={String(collapsed)}
+      data-permissions-loading={String(permissionsLoading)}
+      data-permission-source={permissionSource}
+      data-permission-sync-state={permissionSyncState}
+      data-permission-sync-status={permissionSyncStatus}
+      data-permission-sync-error={permissionSyncError || undefined}
+      data-nav-ready={String(navigationUsable)}
+      data-nav-section-count={visibleSections.length}
+      data-rendered-nav-section-count={renderedSections.length}
+      data-expanded-section-count={expandedSectionCount}
+      data-collapsed-section-count={collapsedSectionCount}
+      data-active-nav-section={activeSectionId || ''}
+      data-nav-item-count={visibleItemCount}
+      data-rendered-nav-item-count={renderedItemCount}
+      data-nav-filtered={String(Boolean(normalizedNavFilter))}
+      data-nav-mode={sidebarNavigationMode}
+      data-quick-create-count={quickCreateActions.length}
+      data-section-state-version={SIDEBAR_SECTION_STORAGE_VERSION}
+      data-section-state-source={sectionStateSource}
+      data-legacy-section-state-count={legacySectionStateCount}
+      aria-busy={permissionsLoading && !navigationUsable}
+      aria-describedby={sidebarActionStatusId}
       className={cn(
-        'bg-card border-r border-border flex flex-col transition-all duration-300',
+        'flex h-full min-h-0 flex-col border-r border-border bg-card transition-[width] duration-200 ease-out',
         collapsed ? 'w-16' : 'w-64'
       )}
     >
+      <span id={sidebarActionStatusId} className="sr-only" data-testid={`${testIdPrefix}-action-status`}>
+        {sidebarActionStatus}
+      </span>
+      <span
+        id={permissionSyncStatusId}
+        className="sr-only"
+        role={permissionsLoading || permissionSyncError ? 'status' : undefined}
+        data-testid={`${testIdPrefix}-permission-sync-status`}
+      >
+        {permissionSyncStatus}
+      </span>
       {/* Logo Area */}
-      <div className="h-16 flex items-center justify-center border-b border-border px-4">
-        <Link to="/" search={getNavSearch('/')} className="flex items-center gap-3">
+      <div className={cn(
+        'flex h-16 shrink-0 items-center border-b border-border px-3',
+        collapsed ? 'justify-center' : 'justify-start',
+      )}>
+        <Link
+          to="/"
+          search={getNavSearch('/')}
+          className={cn(
+            'flex min-w-0 items-center gap-3 rounded-md focus-ring',
+            collapsed ? 'justify-center' : 'w-full',
+          )}
+          title={collapsed ? `Backy - ${activeSiteName}` : undefined}
+        >
           {/* Logo Icon */}
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center flex-shrink-0">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary">
             <span className="text-white font-bold text-sm">B</span>
           </div>
 
           {/* Logo Text (hidden when collapsed) */}
           {!collapsed && (
-            <span className="font-bold text-lg truncate">
-              Backy
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-semibold leading-5 text-foreground">Backy</span>
+              <span
+                className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground"
+                data-testid={`${testIdPrefix}-active-site`}
+              >
+                <span
+                  className={cn(
+                    'size-1.5 shrink-0 rounded-full',
+                    activeSiteStatus === 'published' ? 'bg-success' : 'bg-muted-foreground/50',
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="truncate">{activeSiteName}</span>
+                <span className="shrink-0 text-muted-foreground/60">/</span>
+                <span className="truncate">{activeSiteMeta}</span>
+              </span>
             </span>
           )}
         </Link>
       </div>
 
+      {quickCreateActions.length > 0 && (
+        <div
+          className={cn(
+            'shrink-0 border-b border-border px-2 py-2',
+            collapsed ? 'space-y-1' : 'bg-card/95',
+          )}
+          role="group"
+          aria-label="Create content"
+          aria-describedby={quickCreateStatusId}
+          data-testid={`${testIdPrefix}-quick-create`}
+          data-collapsed={String(collapsed)}
+          data-action-status={quickCreateActionStatus}
+          data-target-site-id={activeSiteId}
+          data-quick-create-count={quickCreateActions.length}
+        >
+          <span id={quickCreateStatusId} className="sr-only" data-testid={`${testIdPrefix}-quick-create-status`}>
+            {quickCreateActionStatus}
+          </span>
+          <div className={cn(collapsed ? 'space-y-1' : 'grid grid-cols-2 gap-1')}>
+            {quickCreateActions.map((action) => {
+              const Icon = action.icon;
+              const isActive = isNavRouteActive(location.pathname, action.to);
+              const actionStatus = `${action.label} available for ${activeSiteName}.`;
+
+              return (
+                <Link
+                  key={action.id}
+                  to={action.to}
+                  search={activeSiteSearch}
+                  onClick={onNavigate}
+                  onMouseOver={(event) => showRailTooltip(action, event.currentTarget)}
+                  onMouseEnter={(event) => showRailTooltip(action, event.currentTarget)}
+                  onMouseMove={(event) => showRailTooltip(action, event.currentTarget)}
+                  onMouseLeave={hideRailTooltip}
+                  onFocus={(event) => showRailTooltip(action, event.currentTarget)}
+                  onBlur={hideRailTooltip}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-describedby={quickCreateStatusId}
+                  aria-label={action.label}
+                  title={collapsed ? action.label : undefined}
+                  className={cn(
+                    'group relative flex min-h-10 items-center gap-2 rounded-lg text-sm font-semibold transition-colors',
+                    'hover:bg-accent hover:text-accent-foreground focus-ring active:translate-y-px',
+                    isActive
+                      ? 'bg-primary/10 text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]'
+                      : 'text-muted-foreground',
+                    collapsed
+                      ? 'justify-center px-2'
+                      : cn(
+                        'justify-center border px-2 text-xs',
+                        isActive ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background text-foreground',
+                      ),
+                  )}
+                  data-testid={`${testIdPrefix}-quick-create-${action.id}`}
+                  data-quick-create-action={action.id}
+                  data-nav-area={action.area}
+                  data-nav-route={action.to}
+                  data-nav-active={String(isActive)}
+                  data-target-site-id={activeSiteId}
+                  data-required-permission={action.permissionKey}
+                  data-action-state="ready"
+                  data-action-status={actionStatus}
+                >
+                  {isActive && collapsed && (
+                    <span
+                      className="absolute left-1 top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-primary"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <Icon className={cn('shrink-0', collapsed ? 'h-5 w-5' : 'h-3.5 w-3.5')} aria-hidden="true" />
+                  {!collapsed && <span className="truncate">{action.label}</span>}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!collapsed && visibleSections.length > 1 && (
+        <div
+          className="shrink-0 border-b border-border px-2 py-2"
+          data-testid={`${testIdPrefix}-density-controls`}
+          data-expanded-section-count={expandedSectionCount}
+          data-section-count={visibleSections.length}
+          data-rendered-section-count={renderedSections.length}
+          data-rendered-item-count={renderedItemCount}
+          data-filtered={String(Boolean(normalizedNavFilter))}
+          data-active-section={activeSectionId || ''}
+          data-action-status={sidebarActionStatus}
+          aria-describedby={sidebarActionStatusId}
+        >
+          <div className="mb-2 flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1.5 focus-within:ring-2 focus-within:ring-ring">
+            <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <label htmlFor={`${navigationId}-filter`} className="sr-only">Filter admin navigation</label>
+            <input
+              id={`${navigationId}-filter`}
+              type="search"
+              value={navFilter}
+              onChange={(event) => setNavFilter(event.target.value)}
+              placeholder="Filter navigation"
+              className="min-h-7 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              data-testid={`${testIdPrefix}-filter-input`}
+              aria-controls={navigationId}
+              aria-describedby={sidebarActionStatusId}
+              data-action-state="ready"
+              data-action-status={sidebarActionStatus}
+            />
+            {navFilter && (
+              <button
+                type="button"
+                onClick={() => setNavFilter('')}
+                className="flex min-h-7 min-w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-ring"
+                data-testid={`${testIdPrefix}-filter-clear`}
+                aria-label="Clear navigation filter"
+                aria-describedby={sidebarActionStatusId}
+                data-action-state="ready"
+                data-action-status={sidebarActionStatus}
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-[1fr_auto_auto] items-center gap-1 rounded-lg bg-muted/60 p-1 text-xs">
+            <span className="min-w-0 truncate px-2 font-medium text-muted-foreground">
+              {normalizedNavFilter
+                ? `${renderedItemCount}/${visibleItemCount} tools`
+                : `${expandedSectionCount}/${visibleSections.length} groups`}
+            </span>
+            <button
+              type="button"
+              onClick={collapseInactiveSections}
+              className="min-h-8 rounded-md px-2.5 font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-ring"
+              data-testid={`${testIdPrefix}-collapse-inactive-sections`}
+              aria-describedby={sidebarActionStatusId}
+              data-action-state="ready"
+              data-action-status={sidebarActionStatus}
+              title="Show active group"
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={expandAllSections}
+              className="min-h-8 rounded-md px-2.5 font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-ring"
+              data-testid={`${testIdPrefix}-expand-all-sections`}
+              aria-describedby={sidebarActionStatusId}
+              data-action-state="ready"
+              data-action-status={sidebarActionStatus}
+              title="Show all groups"
+            >
+              All
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-2 py-4" aria-label="Primary">
-        <div className="space-y-5">
-          {visibleSections.map((section) => (
-            <div key={section.label} className="space-y-1">
-              {!collapsed && (
-                <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-                  {section.label}
-                </div>
-              )}
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.to ||
-                  (item.to !== '/' && location.pathname.startsWith(`${item.to}/`));
+      <nav
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [scrollbar-gutter:stable]"
+        aria-label="Primary admin navigation"
+        data-testid={`${testIdPrefix}-nav`}
+        onScroll={hideRailTooltip}
+      >
+        <div className="space-y-2 pb-2">
+          {renderedSections.map((section, sectionIndex) => {
+            const sectionHasActiveItem = section.items.some((item) => isNavRouteActive(location.pathname, item.to));
+            const sectionExpanded = collapsed || visibleExpandedSectionIds.has(section.id);
+            const itemGroupId = `${navigationId}-${section.id}-items`;
+            const sectionActionStatus = `${section.label} group ${sectionExpanded ? 'expanded' : 'collapsed'} with ${section.items.length} navigation item${section.items.length === 1 ? '' : 's'}.`;
 
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    search={getNavSearch(item.to)}
-                    onClick={onNavigate}
+            return (
+              <div
+                key={section.id}
+                aria-label={collapsed ? section.label : undefined}
+                className={cn(
+                  'space-y-1',
+                  collapsed && sectionIndex > 0 && 'mt-2 border-t border-border/70 pt-2'
+                )}
+                data-nav-section={section.id}
+                data-nav-section-expanded={String(sectionExpanded)}
+                data-nav-section-active={String(sectionHasActiveItem)}
+                data-nav-section-item-count={section.items.length}
+              >
+                {!collapsed && (
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.id)}
+                    aria-controls={itemGroupId}
+                    aria-expanded={sectionExpanded}
+                    aria-describedby={sidebarActionStatusId}
                     className={cn(
-                      'flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                      'hover:bg-accent hover:text-accent-foreground',
-                      isActive
-                        ? 'bg-primary/10 font-medium text-primary'
-                        : 'text-muted-foreground',
-                      collapsed && 'justify-center px-2'
+                      'group flex min-h-8 w-full items-center gap-2 rounded-md px-3 py-1 text-left',
+                      'text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors focus-ring',
+                      sectionHasActiveItem
+                        ? 'bg-primary/5 text-primary'
+                        : 'text-muted-foreground/80 hover:bg-accent hover:text-accent-foreground',
                     )}
-                    title={collapsed ? item.label : undefined}
-                    aria-label={item.label}
+                    data-testid={`${testIdPrefix}-section-toggle-${section.id}`}
+                    data-action-state="ready"
+                    data-action-status={sectionActionStatus}
+                    data-section-status={sectionActionStatus}
                   >
-                    <Icon className="h-5 w-5 flex-shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{section.label}</span>
+                    <span
+                      className={cn(
+                        'rounded-full px-1.5 py-0.5 text-[10px] leading-none',
+                        sectionHasActiveItem ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+                      )}
+                      aria-label={`${section.items.length} navigation items`}
+                    >
+                      {section.items.length}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        'h-3.5 w-3.5 shrink-0 transition-transform',
+                        !sectionExpanded && '-rotate-90',
+                      )}
+                      aria-hidden="true"
+                    />
+                  </button>
+                )}
+                {(sectionExpanded || collapsed) && (
+                  <div id={itemGroupId} className="space-y-1" role={collapsed ? undefined : 'group'}>
+                    {section.items.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = isNavRouteActive(location.pathname, item.to);
 
-                    {!collapsed && (
-                      <>
-                        <span className="flex-1 truncate">{item.label}</span>
-                        {item.badge && (
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                            {item.badge}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </Link>
-                );
-              })}
+                      return (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          search={getNavSearch(item.to)}
+                          onClick={onNavigate}
+                          onMouseOver={(event) => showRailTooltip(item, event.currentTarget)}
+                          onMouseEnter={(event) => showRailTooltip(item, event.currentTarget)}
+                          onMouseMove={(event) => showRailTooltip(item, event.currentTarget)}
+                          onMouseLeave={hideRailTooltip}
+                          onFocus={(event) => showRailTooltip(item, event.currentTarget)}
+                          onBlur={hideRailTooltip}
+                          aria-current={isActive ? 'page' : undefined}
+                          aria-describedby={sidebarActionStatusId}
+                          className={cn(
+                            'group relative flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors lg:min-h-9 lg:py-1.5',
+                            'hover:bg-accent hover:text-accent-foreground focus-ring active:translate-y-px',
+                            isActive
+                              ? 'bg-primary/10 font-semibold text-primary shadow-[inset_3px_0_0_hsl(var(--primary))]'
+                              : 'text-muted-foreground',
+                            collapsed && 'justify-center px-2'
+                          )}
+                          title={collapsed ? item.label : undefined}
+                          aria-label={item.label}
+                          data-nav-active={String(isActive)}
+                          data-testid={`${testIdPrefix}-link-${item.id}`}
+                          data-nav-area={item.area}
+                          data-nav-route={item.to}
+                          data-action-state="ready"
+                          data-action-status={`${item.label} navigation available.`}
+                        >
+                          {isActive && collapsed && (
+                            <span
+                              className="absolute left-1 top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-primary"
+                              aria-hidden="true"
+                            />
+                          )}
+                          <Icon className={cn('flex-shrink-0', collapsed ? 'h-5 w-5' : 'h-4 w-4')} />
+
+                          {!collapsed && (
+                            <>
+                              <span className="flex-1 truncate">{item.label}</span>
+                              {item.badge && (
+                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!collapsed && normalizedNavFilter && renderedSections.length === 0 && (
+            <div
+              className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground"
+              role="status"
+              data-testid={`${testIdPrefix}-filter-empty`}
+              data-empty-filter={normalizedNavFilter}
+            >
+              <div className="font-medium text-foreground">No navigation matches "{normalizedNavFilter}"</div>
+              <button
+                type="button"
+                onClick={() => setNavFilter('')}
+                className="mt-3 inline-flex min-h-8 items-center rounded-md border border-border bg-background px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-ring"
+                data-testid={`${testIdPrefix}-filter-empty-clear`}
+                aria-describedby={sidebarActionStatusId}
+                data-action-state="ready"
+                data-action-status={sidebarActionStatus}
+              >
+                Clear filter
+              </button>
             </div>
-          ))}
+          )}
         </div>
       </nav>
 
-      {/* Collapse Toggle */}
-      <div className="p-2 border-t border-border">
-        <button
-          onClick={onToggle}
+      {collapsed && railTooltip && (
+        <div
+          className="pointer-events-none fixed left-[4.75rem] z-50 max-w-56 -translate-y-1/2 rounded-md border border-border bg-popover px-2.5 py-2 text-xs text-popover-foreground shadow-lg"
+          style={{ top: railTooltip.top }}
+          aria-hidden="true"
+          data-testid={`${testIdPrefix}-rail-tooltip`}
+          data-tooltip-item={railTooltip.label.toLowerCase()}
+          data-tooltip-area={railTooltip.area}
+          data-tooltip-route={railTooltip.route}
+        >
+          <span className="block font-semibold leading-4">{railTooltip.label}</span>
+          <span className="mt-0.5 block text-[10px] leading-3 text-muted-foreground">
+            {railTooltip.route}
+          </span>
+        </div>
+      )}
+
+      {permissionSyncError && navigationUsable && (
+        <div
           className={cn(
-            'w-full flex items-center justify-center p-2 rounded-lg',
-            'hover:bg-accent hover:text-accent-foreground transition-colors',
-            'text-muted-foreground'
+            'shrink-0 border-t border-border px-2 py-2',
+            collapsed ? 'flex justify-center' : 'bg-card',
           )}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          role="status"
+          data-testid={`${testIdPrefix}-permission-sync-recovery`}
+          data-permission-sync-state={permissionSyncState}
+          data-action-status={permissionSyncStatus}
+        >
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={refreshPermissions}
+              disabled={permissionsLoading}
+              aria-label="Retry permission sync"
+              aria-describedby={permissionSyncStatusId}
+              title="Retry permission sync"
+              className="flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+              data-testid={`${testIdPrefix}-permission-sync-retry`}
+              data-action-state={permissionsLoading ? 'loading' : 'ready'}
+              data-action-status={permissionSyncStatus}
+            >
+              <RefreshCw className={cn('size-4', permissionsLoading && 'animate-spin')} aria-hidden="true" />
+            </button>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-900">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <p className="min-w-0 flex-1">
+                  Permission sync failed. Role defaults stay active.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={refreshPermissions}
+                disabled={permissionsLoading}
+                aria-describedby={permissionSyncStatusId}
+                className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 font-semibold text-amber-950 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid={`${testIdPrefix}-permission-sync-retry`}
+                data-action-state={permissionsLoading ? 'loading' : 'ready'}
+                data-action-status={permissionSyncStatus}
+              >
+                <RefreshCw className={cn('size-3.5', permissionsLoading && 'animate-spin')} aria-hidden="true" />
+                Retry
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Collapse Toggle */}
+      <div className="shrink-0 border-t border-border p-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={collapseLocked}
+          aria-controls={navigationId}
+          aria-expanded={!collapsed}
+          aria-describedby={sidebarActionStatusId}
+          aria-label={toggleLabel}
+          data-testid={`${testIdPrefix}-toggle`}
+          data-action-state={collapseLocked ? 'blocked' : 'ready'}
+          data-action-status={sidebarActionStatus}
+          data-disabled-reason={collapseLocked ? 'Sidebar stays compact while editing.' : undefined}
+          className={cn(
+            'flex min-h-11 w-full items-center justify-center rounded-lg p-2',
+            'hover:bg-accent hover:text-accent-foreground transition-colors',
+            'text-muted-foreground focus-ring disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-muted-foreground'
+          )}
+          title={toggleLabel}
         >
           {collapsed ? (
             <ChevronRight className="w-5 h-5" />

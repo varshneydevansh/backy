@@ -26,6 +26,40 @@ interface MainLayoutProps {
   children: React.ReactNode;
 }
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'backy:admin-sidebar-collapsed';
+const SIDEBAR_DENSE_COLLAPSED_STORAGE_KEY = 'backy:admin-sidebar-dense-collapsed';
+const SIDEBAR_DEFAULT_COLLAPSED_ROUTES = [
+  /^\/pages(?:\/|$)/,
+  /^\/blog(?:\/|$)/,
+  /^\/media(?:\/|$)/,
+  /^\/collections(?:\/|$)/,
+  /^\/reusable-sections(?:\/|$)/,
+  /^\/products(?:\/|$)/,
+  /^\/orders(?:\/|$)/,
+  /^\/forms(?:\/|$)/,
+  /^\/contacts(?:\/|$)/,
+  /^\/comments(?:\/|$)/,
+  /^\/teams(?:\/|$)/,
+  /^\/users(?:\/|$)/,
+  /^\/settings(?:\/|$)/,
+];
+
+const getStoredBoolean = (key: string) => {
+  if (typeof window === 'undefined') return null;
+
+  const storedValue = window.localStorage.getItem(key);
+  if (storedValue === 'true') return true;
+  if (storedValue === 'false') return false;
+  return null;
+};
+
+const getStoredSidebarCollapsed = () => getStoredBoolean(SIDEBAR_COLLAPSED_STORAGE_KEY);
+const getStoredDenseSidebarCollapsed = () => getStoredBoolean(SIDEBAR_DENSE_COLLAPSED_STORAGE_KEY);
+
+const getDefaultSidebarCollapsed = (pathname: string) => (
+  SIDEBAR_DEFAULT_COLLAPSED_ROUTES.some((pattern) => pattern.test(pathname))
+);
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -51,40 +85,103 @@ export function MainLayout({ children }: MainLayoutProps) {
     /^\/pages\/[^/]+\/edit$/.test(pathname)
   ), [pathname]);
   const isFocusedEditorWorkspace = isEditorWorkspace && routeSearch.focus === 'canvas';
+  const isDenseAdminSurface = getDefaultSidebarCollapsed(pathname);
 
-  /** Whether the sidebar is collapsed */
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(isEditorWorkspace);
+  /** Whether the user prefers the standard admin sidebar collapsed */
+  const [standardSidebarCollapsed, setStandardSidebarCollapsed] = useState(() => getStoredSidebarCollapsed() ?? false);
+  const [hasStoredSidebarPreference, setHasStoredSidebarPreference] = useState(() => getStoredSidebarCollapsed() !== null);
+  /** Dense management screens default compact so the shell does not dominate the work surface. */
+  const [denseSidebarCollapsed, setDenseSidebarCollapsed] = useState(() => getStoredDenseSidebarCollapsed() ?? true);
+  const [hasStoredDenseSidebarPreference, setHasStoredDenseSidebarPreference] = useState(() => getStoredDenseSidebarCollapsed() !== null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const sidebarCollapsed = isDenseAdminSurface ? denseSidebarCollapsed : standardSidebarCollapsed;
+  const effectiveSidebarCollapsed = isEditorWorkspace || sidebarCollapsed;
 
   useEffect(() => {
-    if (isEditorWorkspace) {
-      setSidebarCollapsed(true);
+    if (!hasStoredSidebarPreference && !isDenseAdminSurface) {
+      setStandardSidebarCollapsed(false);
     }
-  }, [isEditorWorkspace]);
+    if (!hasStoredDenseSidebarPreference && isDenseAdminSurface) {
+      setDenseSidebarCollapsed(true);
+    }
+  }, [hasStoredDenseSidebarPreference, hasStoredSidebarPreference, isDenseAdminSurface]);
+
+  useEffect(() => {
+    if (!hasStoredSidebarPreference || typeof window === 'undefined') return;
+
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(standardSidebarCollapsed));
+  }, [hasStoredSidebarPreference, standardSidebarCollapsed]);
+
+  useEffect(() => {
+    if (!hasStoredDenseSidebarPreference || typeof window === 'undefined') return;
+
+    window.localStorage.setItem(SIDEBAR_DENSE_COLLAPSED_STORAGE_KEY, String(denseSidebarCollapsed));
+  }, [denseSidebarCollapsed, hasStoredDenseSidebarPreference]);
+
+  const handleSidebarToggle = () => {
+    if (isEditorWorkspace) return;
+
+    if (isDenseAdminSurface) {
+      setHasStoredDenseSidebarPreference(true);
+      setDenseSidebarCollapsed((current) => !current);
+      return;
+    }
+
+    setHasStoredSidebarPreference(true);
+    setStandardSidebarCollapsed((current) => !current);
+  };
 
   return (
-    <div className="min-h-screen bg-background flex min-w-0">
+    <div className="flex h-dvh min-h-0 min-w-0 overflow-hidden bg-background">
+      <a
+        href="#admin-main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-lg focus:ring-2 focus:ring-ring"
+      >
+        Skip to content
+      </a>
+
       {/* Sidebar Navigation */}
       {!isFocusedEditorWorkspace && (
-        <div className="hidden shrink-0 lg:flex" data-testid="admin-sidebar-shell">
+        <div
+          className="hidden h-dvh shrink-0 lg:flex"
+          data-testid="admin-sidebar-shell"
+          data-collapsed={String(effectiveSidebarCollapsed)}
+          data-dense-surface={String(isDenseAdminSurface)}
+        >
           <Sidebar
-            collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+            collapsed={effectiveSidebarCollapsed}
+            collapseLocked={isEditorWorkspace}
+            onToggle={handleSidebarToggle}
           />
         </div>
       )}
 
       {mobileSidebarOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden" role="dialog" aria-modal="true" aria-label="Admin navigation">
+        <div
+          className="fixed inset-0 z-50 flex lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="admin-mobile-sidebar-title"
+          aria-describedby="admin-mobile-sidebar-description"
+          data-testid="admin-mobile-sidebar-dialog"
+          data-mobile-navigation-open="true"
+        >
+          <h2 id="admin-mobile-sidebar-title" className="sr-only">Admin navigation</h2>
+          <p id="admin-mobile-sidebar-description" className="sr-only">
+            Mobile admin navigation for switching Backy workspaces, content, commerce, audience, and platform tools.
+          </p>
           <button
             type="button"
             className="absolute inset-0 bg-background/80 backdrop-blur-sm"
             aria-label="Close navigation"
+            data-testid="admin-mobile-sidebar-backdrop"
             onClick={() => setMobileSidebarOpen(false)}
           />
-          <div className="relative flex h-full shadow-xl">
+          <div className="relative flex h-dvh shadow-xl">
             <Sidebar
               collapsed={false}
+              navigationId="admin-mobile-sidebar-navigation"
+              testIdPrefix="admin-mobile-sidebar"
               onToggle={() => setMobileSidebarOpen(false)}
               onNavigate={() => setMobileSidebarOpen(false)}
             />
@@ -93,12 +190,13 @@ export function MainLayout({ children }: MainLayoutProps) {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top Header */}
         {!isFocusedEditorWorkspace && (
-          <div data-testid="admin-header-shell">
+          <div className="shrink-0" data-testid="admin-header-shell">
             <Header
               sidebarCollapsed={sidebarCollapsed}
+              mobileSidebarOpen={mobileSidebarOpen}
               onSidebarToggle={() => setMobileSidebarOpen(true)}
             />
           </div>
@@ -106,13 +204,16 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         {/* Page Content */}
         <main className={cn(
-          'flex-1 overflow-auto',
+          'min-h-0 flex-1 overflow-y-auto overflow-x-hidden',
           isFocusedEditorWorkspace
             ? 'bg-muted/40 p-2 lg:p-3'
             : isEditorWorkspace
               ? 'bg-muted/40 p-3 lg:p-4'
               : 'p-5 lg:p-6',
         )}
+          id="admin-main-content"
+          tabIndex={-1}
+          data-testid="admin-main-content"
         >
           <div className={cn(isEditorWorkspace ? 'w-full min-w-0' : 'mx-auto w-full max-w-[1680px]')}>
             {children}

@@ -22,6 +22,8 @@ const DEMO_ACCOUNTS = [
   { email: 'admin@backy.io', password: 'admin123', label: 'Admin' },
   { email: 'jane@backy.io', password: 'editor123', label: 'Editor' },
 ];
+const DEMO_MFA_CODE = 'backy-dev-mfa';
+const env = (import.meta as unknown as { env?: { DEV?: boolean } }).env ?? {};
 
 const AUTH_WORKSPACE_ITEMS = [
   {
@@ -87,6 +89,26 @@ function LoginPage() {
   const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordIsValid = password.length >= 6;
   const authReadinessScore = Math.round(([emailIsValid, passwordIsValid, !isLoginBusy].filter(Boolean).length / 3) * 100);
+  const loginActionStatusId = 'login-action-status';
+  const emailErrorId = 'login-email-error';
+  const passwordErrorId = 'login-password-error';
+  const mfaErrorId = 'login-mfa-error';
+  const emailDescription = formErrors.email ? `${emailErrorId} ${loginActionStatusId}` : loginActionStatusId;
+  const passwordDescription = formErrors.password ? `${passwordErrorId} ${loginActionStatusId}` : loginActionStatusId;
+  const mfaDescription = formErrors.twoFactorCode ? `${mfaErrorId} ${loginActionStatusId}` : loginActionStatusId;
+  const loginSubmitDisabledReason = isLoginBusy ? 'Sign-in request is running.' : '';
+  const loginNeedsMfa = requiresMfa && !twoFactorCode.trim();
+  const loginReady = emailIsValid && passwordIsValid && !loginNeedsMfa;
+  const loginActionState = isLoginBusy ? 'blocked' : loginReady ? 'ready' : 'needs-input';
+  const loginActionStatus = isLoginBusy
+    ? 'Signing in. Login controls are temporarily unavailable.'
+    : requiresMfa
+      ? loginNeedsMfa
+        ? 'Enter your workspace MFA code or phrase to finish signing in.'
+        : 'Sign in available with MFA code.'
+      : loginReady
+        ? 'Sign in available.'
+        : 'Enter a valid email and password to sign in.';
 
   /**
    * Validate form inputs
@@ -107,7 +129,7 @@ function LoginPage() {
     }
 
     if (requiresMfa && !twoFactorCode.trim()) {
-      errors.twoFactorCode = 'Two-factor code is required';
+      errors.twoFactorCode = 'Two-factor code or workspace MFA phrase is required';
     }
 
     setFormErrors(errors);
@@ -242,7 +264,18 @@ function LoginPage() {
               </span>
             </div>
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <form
+              onSubmit={handleSubmit}
+              noValidate
+              className="mt-6 space-y-4"
+              aria-describedby={loginActionStatusId}
+              data-testid="login-form"
+              data-action-state={loginActionState}
+              data-action-status={loginActionStatus}
+            >
+              <span id={loginActionStatusId} className="sr-only" data-testid="login-action-status">
+                {loginActionStatus}
+              </span>
               <div>
                 <label htmlFor="email" className="block text-sm font-medium">
                   Email
@@ -251,7 +284,11 @@ function LoginPage() {
                   <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="email"
+                    name="email"
                     type="email"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     value={email}
                     onChange={(e) => {
                       setEmail(e.target.value);
@@ -261,6 +298,9 @@ function LoginPage() {
                       }
                     }}
                     placeholder="admin@backy.io"
+                    aria-invalid={Boolean(formErrors.email)}
+                    aria-describedby={emailDescription}
+                    data-testid="login-email-input"
                     className={cn(
                       'w-full rounded-lg border bg-background py-2.5 pl-9 pr-10 text-sm outline-none transition focus:ring-2 focus:ring-ring',
                       formErrors.email && 'border-red-500 focus:ring-red-500',
@@ -272,7 +312,7 @@ function LoginPage() {
                   )}
                 </div>
                 {formErrors.email && (
-                  <p className="mt-1 text-sm text-red-600">{formErrors.email}</p>
+                  <p id={emailErrorId} className="mt-1 text-sm text-red-600" data-testid="login-email-error">{formErrors.email}</p>
                 )}
               </div>
 
@@ -286,6 +326,9 @@ function LoginPage() {
                     className="text-sm font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={handlePasswordRecovery}
                     disabled={isLoginBusy}
+                    aria-describedby={loginActionStatusId}
+                    data-action-state={isLoginBusy ? 'blocked' : 'ready'}
+                    data-disabled-reason={loginSubmitDisabledReason || undefined}
                     data-testid="login-password-recovery"
                   >
                     Forgot password?
@@ -295,7 +338,9 @@ function LoginPage() {
                   <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     id="password"
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
@@ -305,6 +350,9 @@ function LoginPage() {
                       }
                     }}
                     placeholder="Enter password"
+                    aria-invalid={Boolean(formErrors.password)}
+                    aria-describedby={passwordDescription}
+                    data-testid="login-password-input"
                     className={cn(
                       'w-full rounded-lg border bg-background py-2.5 pl-9 pr-12 text-sm outline-none transition focus:ring-2 focus:ring-ring',
                       formErrors.password && 'border-red-500 focus:ring-red-500',
@@ -319,6 +367,10 @@ function LoginPage() {
                     disabled={isLoginBusy}
                     className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md text-muted-foreground transition hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-describedby={loginActionStatusId}
+                    data-action-state={isLoginBusy ? 'blocked' : 'ready'}
+                    data-disabled-reason={loginSubmitDisabledReason || undefined}
+                    data-testid="login-password-visibility-toggle"
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -328,7 +380,7 @@ function LoginPage() {
                   </button>
                 </div>
                 {formErrors.password && (
-                  <p className="mt-1 text-sm text-red-600">
+                  <p id={passwordErrorId} className="mt-1 text-sm text-red-600" data-testid="login-password-error">
                     {formErrors.password}
                   </p>
                 )}
@@ -343,12 +395,18 @@ function LoginPage() {
                     <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <input
                       id="twoFactorCode"
+                      name="one-time-code"
                       type="text"
-                      inputMode="numeric"
+                      inputMode="text"
                       autoComplete="one-time-code"
+                      autoCapitalize="none"
+                      spellCheck={false}
                       value={twoFactorCode}
                       onChange={(e) => setTwoFactorCode(e.target.value)}
-                      placeholder="123456"
+                      placeholder="Authenticator code or MFA phrase"
+                      aria-invalid={Boolean(formErrors.twoFactorCode)}
+                      aria-describedby={mfaDescription}
+                      data-testid="login-mfa-input"
                       className={cn(
                         'w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-ring',
                         formErrors.twoFactorCode && 'border-red-500 focus:ring-red-500',
@@ -357,10 +415,15 @@ function LoginPage() {
                     />
                   </div>
                   {formErrors.twoFactorCode && (
-                    <p className="mt-1 text-sm text-red-600">
+                    <p id={mfaErrorId} className="mt-1 text-sm text-red-600" data-testid="login-mfa-error">
                       {formErrors.twoFactorCode}
                     </p>
                   )}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {env.DEV
+                      ? `Seeded demo MFA: ${DEMO_MFA_CODE}`
+                      : 'Use the MFA code configured for this workspace.'}
+                  </p>
                 </div>
               )}
 
@@ -373,6 +436,11 @@ function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoginBusy}
+                aria-describedby={loginActionStatusId}
+                data-testid="login-submit"
+                data-action-state={loginActionState}
+                data-action-status={loginActionStatus}
+                data-disabled-reason={loginSubmitDisabledReason || undefined}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoginBusy ? (
@@ -402,6 +470,10 @@ function LoginPage() {
                     key={account.email}
                     type="button"
                     disabled={isLoginBusy}
+                    aria-describedby={loginActionStatusId}
+                    data-testid={`login-demo-${account.label.toLowerCase()}`}
+                    data-action-state={isLoginBusy ? 'blocked' : 'ready'}
+                    data-disabled-reason={loginSubmitDisabledReason || undefined}
                     className="rounded-lg border border-border bg-background px-3 py-2 text-left text-sm transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => {
                       if (isLoginBusy) return;

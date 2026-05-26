@@ -1,5 +1,7 @@
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
+import { getLocalBackendOrigin, isLocalAdminDevHost, normalizeLocalBackendBase } from '@/lib/localBackendOrigin';
+import { getActiveAdminSessionToken } from '@/lib/adminSessionToken';
 import type {
   Comment,
   CommentStatus,
@@ -720,6 +722,45 @@ interface ApiUserPermissionsResponse {
     message?: string;
   };
 }
+
+const userPermissionMatrixCache = new Map<string, AdminUserPermissionMatrix>();
+const userPermissionMatrixRequests = new Map<string, Promise<AdminUserPermissionMatrix>>();
+let userPermissionMatrixCacheRevision = 0;
+
+const getUserPermissionCacheKey = (userId: string): string => {
+  const sessionScope = getActiveAdminSessionToken() || 'cookie-session';
+  return `${sessionScope}::${userId}`;
+};
+
+const userPermissionCacheKeyMatchesUser = (cacheKey: string, userId: string): boolean => (
+  cacheKey.endsWith(`::${userId}`)
+);
+
+export const clearUserPermissionsCache = (userId?: string): void => {
+  userPermissionMatrixCacheRevision += 1;
+
+  if (!userId) {
+    userPermissionMatrixCache.clear();
+    userPermissionMatrixRequests.clear();
+    return;
+  }
+
+  Array.from(userPermissionMatrixCache.keys()).forEach((cacheKey) => {
+    if (userPermissionCacheKeyMatchesUser(cacheKey, userId)) {
+      userPermissionMatrixCache.delete(cacheKey);
+    }
+  });
+
+  Array.from(userPermissionMatrixRequests.keys()).forEach((cacheKey) => {
+    if (userPermissionCacheKeyMatchesUser(cacheKey, userId)) {
+      userPermissionMatrixRequests.delete(cacheKey);
+    }
+  });
+};
+
+export const getCachedUserPermissions = (userId: string): AdminUserPermissionMatrix | null => (
+  userPermissionMatrixCache.get(getUserPermissionCacheKey(userId)) ?? null
+);
 
 interface ApiBlogPost {
   id: string;
@@ -1944,6 +1985,17 @@ export interface ProviderCertificationEvidencePacket {
   selectedSiteId?: string;
   selectedProductId?: string;
   status: 'no-family-selected' | 'needs-credentials' | 'needs-runtime-inputs' | 'needs-scenario-evidence' | 'evidence-complete' | string;
+  operatorNextAction?: {
+    status?: string;
+    label?: string;
+    detail?: string;
+    command?: string;
+    missingFamilies?: string[];
+    missingScenarios?: string[];
+    artifactEnv?: string;
+    artifactPath?: string;
+    [key: string]: unknown;
+  };
   selectedFamilies: string[];
   selectedProviderAliases?: Record<string, string>;
   runtimeReadiness?: {
@@ -4395,15 +4447,6 @@ const getEnvValue = (key: string): string => {
   return env[key]?.trim() ?? '';
 };
 
-const isLocalAdminDevHost = (): boolean => {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
-    && window.location.port !== '3001';
-};
-
 export const getAdminApiBase = (): string => {
   const envBase = (
     getEnvValue('VITE_BACKY_ADMIN_API_BASE_URL') ||
@@ -4415,10 +4458,10 @@ export const getAdminApiBase = (): string => {
   ).trim();
 
   if (!envBase && isLocalAdminDevHost()) {
-    return 'http://localhost:3001/api/admin';
+    return `${getLocalBackendOrigin()}/api/admin`;
   }
 
-  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+  const base = normalizeLocalBackendBase(envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()));
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
 };
 
@@ -4438,9 +4481,12 @@ const getAdminApiKey = (): string => {
 
 export const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
   const apiKey = getAdminApiKey();
+  const sessionToken = getActiveAdminSessionToken();
   const headers = new Headers(init.headers);
 
-  if (apiKey && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
+  if (sessionToken && !headers.has('authorization') && !headers.has('x-backy-admin-session')) {
+    headers.set('authorization', `Bearer ${sessionToken}`);
+  } else if (apiKey && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
     headers.set('x-backy-admin-key', apiKey);
   }
 
@@ -4760,10 +4806,24 @@ const stringArrayRecordValue = (record: Record<string, unknown>, key: string): s
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 };
 
-const toContentRevision = (revision: ApiRevision): ContentRevision => {
-  const snapshot = revision.snapshot;
-  const snapshotRecord = snapshot as unknown as Record<string, unknown>;
+const emptyContentRevisionCanvasSummary = (): ContentRevisionCanvasSummary => ({
+  rootLayerCount: 0,
+  totalLayerCount: 0,
+  containerLayerCount: 0,
+  maxDepth: 0,
+  canvasWidth: null,
+  canvasHeight: null,
+  serializedBytes: 0,
+});
+
+const fallbackContentRevision = (revision: ApiRevision): ContentRevision => {
+  const snapshot: Record<string, unknown> = isApiRecord(revision.snapshot) ? revision.snapshot : {};
   const snapshotMeta = isApiRecord(snapshot.meta) ? snapshot.meta : {};
+  const snapshotStatus = typeof snapshot.status === 'string'
+    && ['draft', 'published', 'scheduled', 'archived'].includes(snapshot.status)
+    ? snapshot.status as AdminSiteStatus
+    : undefined;
+
   return {
     id: revision.id,
     targetType: revision.targetType,
@@ -4775,20 +4835,55 @@ const toContentRevision = (revision: ApiRevision): ContentRevision => {
     createdBy: revision.createdBy,
     createdAt: revision.createdAt,
     branchMetadata: revision.branchMetadata || null,
-    snapshotTitle: snapshot.title,
-    snapshotSlug: typeof snapshot.slug === 'string' ? snapshot.slug : '',
-    snapshotStatus: toContentStatus(snapshot.status, snapshot.status === 'published'),
-    snapshotUpdatedAt: snapshot.updatedAt || snapshot.createdAt || null,
-    snapshotExcerpt: stringRecordValue(snapshotRecord, 'excerpt'),
-    snapshotAuthorId: stringRecordValue(snapshotRecord, 'authorId'),
-    snapshotFeaturedImageId: stringRecordValue(snapshotRecord, 'featuredImageId'),
-    snapshotCategoryIds: stringArrayRecordValue(snapshotRecord, 'categoryIds'),
-    snapshotTagIds: stringArrayRecordValue(snapshotRecord, 'tagIds'),
+    snapshotTitle: stringRecordValue(snapshot, 'title') || 'Revision snapshot',
+    snapshotSlug: stringRecordValue(snapshot, 'slug') || '',
+    snapshotStatus: toContentStatus(snapshotStatus, snapshotStatus === 'published'),
+    snapshotUpdatedAt: stringRecordValue(snapshot, 'updatedAt') || stringRecordValue(snapshot, 'createdAt'),
+    snapshotExcerpt: stringRecordValue(snapshot, 'excerpt'),
+    snapshotAuthorId: stringRecordValue(snapshot, 'authorId'),
+    snapshotFeaturedImageId: stringRecordValue(snapshot, 'featuredImageId'),
+    snapshotCategoryIds: stringArrayRecordValue(snapshot, 'categoryIds'),
+    snapshotTagIds: stringArrayRecordValue(snapshot, 'tagIds'),
     snapshotMetaTitle: stringRecordValue(snapshotMeta, 'title'),
     snapshotMetaDescription: stringRecordValue(snapshotMeta, 'description'),
-    snapshotCanvas: getRevisionCanvasSummary(snapshot.content),
-    snapshotElements: getRevisionCanvasElements(snapshot.content),
+    snapshotCanvas: emptyContentRevisionCanvasSummary(),
+    snapshotElements: [],
   };
+};
+
+const toContentRevision = (revision: ApiRevision): ContentRevision => {
+  try {
+    const snapshot = revision.snapshot;
+    const snapshotRecord = snapshot as unknown as Record<string, unknown>;
+    const snapshotMeta = isApiRecord(snapshot.meta) ? snapshot.meta : {};
+    return {
+      id: revision.id,
+      targetType: revision.targetType,
+      note: revision.note,
+      parentRevisionId: revision.parentRevisionId || null,
+      operation: revision.operation || null,
+      restoreTargetRevisionId: revision.restoreTargetRevisionId || null,
+      metadata: revision.metadata || {},
+      createdBy: revision.createdBy,
+      createdAt: revision.createdAt,
+      branchMetadata: revision.branchMetadata || null,
+      snapshotTitle: snapshot.title,
+      snapshotSlug: typeof snapshot.slug === 'string' ? snapshot.slug : '',
+      snapshotStatus: toContentStatus(snapshot.status, snapshot.status === 'published'),
+      snapshotUpdatedAt: snapshot.updatedAt || snapshot.createdAt || null,
+      snapshotExcerpt: stringRecordValue(snapshotRecord, 'excerpt'),
+      snapshotAuthorId: stringRecordValue(snapshotRecord, 'authorId'),
+      snapshotFeaturedImageId: stringRecordValue(snapshotRecord, 'featuredImageId'),
+      snapshotCategoryIds: stringArrayRecordValue(snapshotRecord, 'categoryIds'),
+      snapshotTagIds: stringArrayRecordValue(snapshotRecord, 'tagIds'),
+      snapshotMetaTitle: stringRecordValue(snapshotMeta, 'title'),
+      snapshotMetaDescription: stringRecordValue(snapshotMeta, 'description'),
+      snapshotCanvas: getRevisionCanvasSummary(snapshot.content),
+      snapshotElements: getRevisionCanvasElements(snapshot.content),
+    };
+  } catch {
+    return fallbackContentRevision(revision);
+  }
 };
 
 const toCollectionField = (field: ApiCollectionField, index: number): CollectionField => ({
@@ -5249,8 +5344,14 @@ export async function updateSiteSeoSettings(
   };
 }
 
-export async function getPageReadiness(siteId: string, pageId: string): Promise<PageReadiness> {
-  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/readiness`);
+export async function getPageReadiness(
+  siteId: string,
+  pageId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<PageReadiness> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/readiness`, {
+    signal: options.signal,
+  });
   const payload = await readJson<ApiPageReadinessResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
@@ -5329,14 +5430,35 @@ export async function getUser(userId: string): Promise<User> {
 }
 
 export async function getUserPermissions(userId: string): Promise<AdminUserPermissionMatrix> {
-  const response = await adminFetch(`${getAdminApiBase()}/users/${userId}/permissions`);
-  const payload = await readJson<ApiUserPermissionsResponse>(response);
+  const cacheKey = getUserPermissionCacheKey(userId);
+  const cached = userPermissionMatrixCache.get(cacheKey);
+  if (cached) return Promise.resolve(cached);
 
-  if (!response.ok || !payload.success || !payload.data) {
-    throw adminContentApiError(payload, 'Unable to load user permissions');
-  }
+  const inFlight = userPermissionMatrixRequests.get(cacheKey);
+  if (inFlight) return inFlight;
 
-  return payload.data.permissions;
+  const cacheRevision = userPermissionMatrixCacheRevision;
+  const request = (async () => {
+    const response = await adminFetch(`${getAdminApiBase()}/users/${userId}/permissions`);
+    const payload = await readJson<ApiUserPermissionsResponse>(response);
+
+    if (!response.ok || !payload.success || !payload.data) {
+      throw adminContentApiError(payload, 'Unable to load user permissions');
+    }
+
+    const matrix = payload.data.permissions;
+    if (cacheRevision === userPermissionMatrixCacheRevision) {
+      userPermissionMatrixCache.set(cacheKey, matrix);
+    }
+    return matrix;
+  })().finally(() => {
+    if (userPermissionMatrixRequests.get(cacheKey) === request) {
+      userPermissionMatrixRequests.delete(cacheKey);
+    }
+  });
+
+  userPermissionMatrixRequests.set(cacheKey, request);
+  return request;
 }
 
 export async function updateUserPermissions(
@@ -5356,7 +5478,10 @@ export async function updateUserPermissions(
     throw new Error(payload.error?.message || 'Unable to update user permissions');
   }
 
-  return payload.data.permissions;
+  const matrix = payload.data.permissions;
+  clearUserPermissionsCache(userId);
+  userPermissionMatrixCache.set(getUserPermissionCacheKey(userId), matrix);
+  return matrix;
 }
 
 export async function createUser(input: UserInput): Promise<UserCreateResult> {
@@ -5963,8 +6088,14 @@ export async function listPageRevisions(siteId: string, pageId: string): Promise
   return payload.data.revisions.map(toContentRevision);
 }
 
-export async function getPageRevisionSummary(siteId: string, pageId: string): Promise<ContentRevisionSummary> {
-  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/revisions?limit=1`);
+export async function getPageRevisionSummary(
+  siteId: string,
+  pageId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<ContentRevisionSummary> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}/revisions?limit=1`, {
+    signal: options.signal,
+  });
   const payload = await readJson<ApiRevisionListResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {

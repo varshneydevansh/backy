@@ -64,5 +64,7 @@ uploads/
 data/
 tmp/
 .tmp/
+.codex/
+.codex-tmp/
 *.sqlite
 *.sqlite3

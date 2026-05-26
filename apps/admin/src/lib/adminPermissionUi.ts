@@ -10,12 +10,13 @@ export const adminPermissionRule = (
 
 export const isAdminPermissionAllowed = <PermissionKey extends string>(
   permissionMatrix: AdminUserPermissionMatrix | null,
-  _currentAdmin: Pick<User, 'role'> | null | undefined,
+  currentAdmin: Pick<User, 'role'> | null | undefined,
   key: PermissionKey,
-  _roleDefaults: Record<PermissionKey, Array<User['role']>>,
+  roleDefaults: Record<PermissionKey, Array<User['role']>>,
 ) => {
   const matrixRule = adminPermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.allowed;
+  if (!permissionMatrix && currentAdmin) return roleDefaults[key]?.includes(currentAdmin.role) ?? false;
 
   return false;
 };

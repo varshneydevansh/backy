@@ -1,4 +1,6 @@
 import { formatBytes } from '@/lib/utils';
+import { getActiveAdminSessionToken } from '@/lib/adminSessionToken';
+import { getLocalBackendOrigin, normalizeLocalBackendBase } from '@/lib/localBackendOrigin';
 import type { MediaAsset } from '@/stores/mockStore';
 
 type MediaScope = 'global' | 'page' | 'post';
@@ -420,10 +422,10 @@ const getAdminApiBase = (): string => {
   ).trim();
 
   if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
-    return 'http://localhost:3001/api/admin';
+    return `${getLocalBackendOrigin()}/api/admin`;
   }
 
-  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+  const base = normalizeLocalBackendBase(envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()));
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
 };
 
@@ -438,10 +440,10 @@ const getPublicApiBase = (): string => {
   ).trim();
 
   if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
 
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+  return normalizeLocalBackendBase(envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()))
     .replace(/\/api\/admin$/, '')
     .replace(/\/api$/, '')
     .replace(/\/$/, '');
@@ -458,9 +460,12 @@ const getAdminApiKey = (): string => {
 
 const adminFetch: typeof globalThis.fetch = (input, init = {}) => {
   const apiKey = getAdminApiKey();
+  const sessionToken = getActiveAdminSessionToken();
   const headers = new Headers(init.headers);
 
-  if (apiKey && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
+  if (sessionToken && !headers.has('authorization') && !headers.has('x-backy-admin-session')) {
+    headers.set('authorization', `Bearer ${sessionToken}`);
+  } else if (apiKey && !headers.has('x-backy-admin-key') && !headers.has('authorization')) {
     headers.set('x-backy-admin-key', apiKey);
   }
 

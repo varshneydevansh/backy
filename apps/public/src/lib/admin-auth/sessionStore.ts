@@ -1,6 +1,6 @@
 import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { BackyJsonObject } from '@backy-cms/core';
-import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminUser } from '@/lib/backyStore';
+import { getAdminSettings, getAdminUserByEmail, getAdminUserById, updateAdminSettings, updateAdminUser } from '@/lib/backyStore';
 import { validateAdminInviteOnlyActivationPolicy } from '@/lib/admin-auth/emailPolicy';
 import { listAuthSettingsPermissionOverrides, type AdminUserPermissionOverride } from '@/lib/adminPermissionOverrides';
 import { assertProductionAdminLocalAuthAllowed } from '@/lib/admin-auth/productionPolicy';
@@ -98,6 +98,15 @@ type StoredSession = AdminSession & {
   permissionOverrides?: AdminUserPermissionOverride[];
 };
 
+type PersistedAdminSessionRecord = {
+  tokenHash: string;
+  userId: string;
+  issuedAt: string;
+  expiresAt: string;
+  authMode: AdminAuthMode;
+  lastSeenAt: string;
+};
+
 type AdminAuthUserLike = {
   id: string;
   email: string;
@@ -157,6 +166,9 @@ globalAdminSessionStore.__BACKY_ADMIN_LOCAL_CREDENTIALS__ = LOCAL_CREDENTIALS;
 const AUTH_RATE_LIMITS = globalAdminSessionStore.__BACKY_ADMIN_AUTH_RATE_LIMITS__ ?? new Map<string, { count: number; resetAt: number }>();
 globalAdminSessionStore.__BACKY_ADMIN_AUTH_RATE_LIMITS__ = AUTH_RATE_LIMITS;
 
+const PERSISTED_ADMIN_SESSIONS_KEY = 'adminSessions';
+const MAX_PERSISTED_ADMIN_SESSIONS = 80;
+
 const DEMO_CREDENTIALS: Record<string, { password: string; userEmail: string; label: string }> = {
   'admin@backy.io': {
     password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
@@ -211,6 +223,163 @@ const authRateLimitConfig = (scope: AdminAuthRateLimitScope) => {
 const hashRateLimitKey = (value: string) => (
   createHash('sha256').update(value).digest('hex').slice(0, 32)
 );
+
+const hashSessionToken = (value: string) => (
+  createHash('sha256').update(value).digest('hex')
+);
+
+const isUsableDateString = (value: unknown): value is string => (
+  typeof value === 'string' && Number.isFinite(Date.parse(value))
+);
+
+const normalizePersistedAdminSessionRecords = (
+  value: unknown,
+  now = Date.now(),
+): PersistedAdminSessionRecord[] => {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const records: PersistedAdminSessionRecord[] = [];
+
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const record = entry as Record<string, unknown>;
+    const tokenHash = typeof record.tokenHash === 'string' ? record.tokenHash.trim() : '';
+    const userId = typeof record.userId === 'string' ? record.userId.trim() : '';
+    const issuedAt = record.issuedAt;
+    const expiresAt = record.expiresAt;
+    const lastSeenAt = record.lastSeenAt;
+    const authMode = record.authMode === 'supabase' ? 'supabase' : record.authMode === 'local-demo' ? 'local-demo' : null;
+
+    if (
+      tokenHash.length < 32 ||
+      seen.has(tokenHash) ||
+      !userId ||
+      !authMode ||
+      !isUsableDateString(issuedAt) ||
+      !isUsableDateString(expiresAt) ||
+      Date.parse(expiresAt) <= now
+    ) {
+      continue;
+    }
+
+    records.push({
+      tokenHash,
+      userId,
+      issuedAt,
+      expiresAt,
+      authMode,
+      lastSeenAt: isUsableDateString(lastSeenAt) ? lastSeenAt : issuedAt,
+    });
+    seen.add(tokenHash);
+  }
+
+  return records
+    .sort((first, second) => Date.parse(second.lastSeenAt) - Date.parse(first.lastSeenAt))
+    .slice(0, MAX_PERSISTED_ADMIN_SESSIONS);
+};
+
+const getAuthSettingsObject = (): BackyJsonObject => {
+  const auth = getAdminSettings().auth;
+  return auth && typeof auth === 'object' && !Array.isArray(auth)
+    ? auth
+    : {};
+};
+
+const readPersistedAdminSessionRecords = (now = Date.now()): PersistedAdminSessionRecord[] => (
+  normalizePersistedAdminSessionRecords(getAuthSettingsObject()[PERSISTED_ADMIN_SESSIONS_KEY], now)
+);
+
+const writePersistedAdminSessionRecords = (records: PersistedAdminSessionRecord[]): void => {
+  const auth = getAuthSettingsObject();
+  updateAdminSettings({
+    auth: {
+      ...auth,
+      [PERSISTED_ADMIN_SESSIONS_KEY]: records.slice(0, MAX_PERSISTED_ADMIN_SESSIONS) as unknown as BackyJsonObject[],
+    },
+  });
+};
+
+const upsertPersistedAdminSession = (session: StoredSession): void => {
+  const tokenHash = hashSessionToken(session.token);
+  const records = readPersistedAdminSessionRecords()
+    .filter((record) => record.tokenHash !== tokenHash);
+
+  writePersistedAdminSessionRecords([
+    {
+      tokenHash,
+      userId: session.user.id,
+      issuedAt: session.issuedAt,
+      expiresAt: session.expiresAt,
+      authMode: session.authMode,
+      lastSeenAt: session.lastSeenAt,
+    },
+    ...records,
+  ]);
+};
+
+const removePersistedAdminSession = (token: string | null | undefined): boolean => {
+  const normalizedToken = token?.trim();
+  if (!normalizedToken) return false;
+
+  const tokenHash = hashSessionToken(normalizedToken);
+  const records = readPersistedAdminSessionRecords();
+  const nextRecords = records.filter((record) => record.tokenHash !== tokenHash);
+  if (nextRecords.length === records.length) return false;
+
+  writePersistedAdminSessionRecords(nextRecords);
+  return true;
+};
+
+const pruneExpiredPersistedAdminSessions = (now = Date.now()): void => {
+  const auth = getAuthSettingsObject();
+  const rawRecords = Array.isArray(auth[PERSISTED_ADMIN_SESSIONS_KEY])
+    ? auth[PERSISTED_ADMIN_SESSIONS_KEY] as unknown[]
+    : [];
+  if (!rawRecords.length) return;
+
+  const nextRecords = normalizePersistedAdminSessionRecords(rawRecords, now);
+  if (nextRecords.length !== rawRecords.length) {
+    writePersistedAdminSessionRecords(nextRecords);
+  }
+};
+
+const storedSessionFromPersistedRecord = (
+  token: string,
+  record: PersistedAdminSessionRecord,
+  user: AdminAuthUser,
+  authSettings?: AdminAuthSessionSettings,
+): StoredSession => ({
+  token,
+  user,
+  issuedAt: record.issuedAt,
+  expiresAt: record.expiresAt,
+  authMode: record.authMode,
+  lastSeenAt: record.lastSeenAt,
+  permissionOverrides: listAuthSettingsPermissionOverrides(authSettings || getAuthSettingsObject(), user.id),
+});
+
+const restorePersistedAdminSession = (
+  token: string | null | undefined,
+  authSettings?: AdminAuthSessionSettings,
+): StoredSession | null => {
+  const normalizedToken = token?.trim();
+  if (!normalizedToken) return null;
+
+  const tokenHash = hashSessionToken(normalizedToken);
+  const record = readPersistedAdminSessionRecords().find((candidate) => candidate.tokenHash === tokenHash);
+  if (!record) return null;
+
+  const user = toAuthUser(getAdminUserById(record.userId));
+  if (!user || user.status !== 'active') {
+    removePersistedAdminSession(normalizedToken);
+    return null;
+  }
+
+  const session = storedSessionFromPersistedRecord(normalizedToken, record, user, authSettings);
+  ADMIN_SESSIONS.set(normalizedToken, session);
+  return session;
+};
 
 const hashPassword = (password: string, salt: string) => (
   scryptSync(password, salt, 64).toString('hex')
@@ -289,6 +458,7 @@ const createAdminSessionForUser = (
   };
 
   ADMIN_SESSIONS.set(session.token, session);
+  upsertPersistedAdminSession(session);
   return {
     token: session.token,
     user: session.user,
@@ -331,6 +501,7 @@ const pruneExpiredSessions = () => {
       ADMIN_SESSIONS.delete(token);
     }
   }
+  pruneExpiredPersistedAdminSessions(now);
 };
 
 const adminAuthRateLimitKey = (input: {
@@ -633,7 +804,8 @@ export function getAdminSession(token: string | null | undefined): AdminSession 
   pruneExpiredSessions();
   if (!token) return null;
 
-  const session = ADMIN_SESSIONS.get(token.trim());
+  const normalizedToken = token.trim();
+  const session = ADMIN_SESSIONS.get(normalizedToken) || restorePersistedAdminSession(normalizedToken);
   if (!session) return null;
 
   const user = toAuthUser(getAdminUserById(session.user.id)) || session.user;
@@ -663,7 +835,25 @@ export async function getAdminSessionWithPersistence(
   pruneExpiredSessions();
   if (!token) return null;
 
-  const session = ADMIN_SESSIONS.get(token.trim());
+  const normalizedToken = token.trim();
+  let session = ADMIN_SESSIONS.get(normalizedToken);
+  if (!session) {
+    const tokenHash = hashSessionToken(normalizedToken);
+    const record = readPersistedAdminSessionRecords().find((candidate) => candidate.tokenHash === tokenHash);
+    const restoredUser = record
+      ? toAuthUser(
+        persistence.getUserById
+          ? await persistence.getUserById(record.userId)
+          : getAdminUserById(record.userId),
+      )
+      : null;
+    if (record && restoredUser?.status === 'active') {
+      session = storedSessionFromPersistedRecord(normalizedToken, record, restoredUser);
+      ADMIN_SESSIONS.set(normalizedToken, session);
+    } else if (record) {
+      removePersistedAdminSession(normalizedToken);
+    }
+  }
   if (!session) return null;
 
   const user = toAuthUser(
@@ -693,7 +883,10 @@ export async function getAdminSessionWithPersistence(
 
 export function revokeAdminSession(token: string | null | undefined): boolean {
   if (!token) return false;
-  return ADMIN_SESSIONS.delete(token.trim());
+  const normalizedToken = token.trim();
+  const removedMemorySession = ADMIN_SESSIONS.delete(normalizedToken);
+  const removedPersistedSession = removePersistedAdminSession(normalizedToken);
+  return removedMemorySession || removedPersistedSession;
 }
 
 export function rotateAdminSession(token: string | null | undefined, authSettings?: AdminAuthSessionSettings): {
@@ -705,7 +898,7 @@ export function rotateAdminSession(token: string | null | undefined, authSetting
   if (!token) return null;
 
   const normalizedToken = token.trim();
-  const current = ADMIN_SESSIONS.get(normalizedToken);
+  const current = ADMIN_SESSIONS.get(normalizedToken) || restorePersistedAdminSession(normalizedToken, authSettings);
   if (!current) return null;
 
   const user = toAuthUser(getAdminUserById(current.user.id)) || current.user;
@@ -717,6 +910,7 @@ export function rotateAdminSession(token: string | null | undefined, authSetting
   const previousSessionId = current.token.slice(-12);
   const next = createAdminSessionForUser(user, authSettings, { authMode: current.authMode });
   ADMIN_SESSIONS.delete(normalizedToken);
+  removePersistedAdminSession(normalizedToken);
 
   return {
     session: next,
@@ -733,10 +927,16 @@ export function listAdminSessions(options: {
   pruneExpiredSessions();
 
   const currentToken = options.currentToken?.trim() || '';
+  const currentTokenHash = currentToken ? hashSessionToken(currentToken) : '';
   const userId = options.userId?.trim() || '';
   const email = normalizeEmail(options.email);
+  if (currentToken && !ADMIN_SESSIONS.has(currentToken)) {
+    restorePersistedAdminSession(currentToken);
+  }
 
-  return Array.from(ADMIN_SESSIONS.values())
+  const memoryTokenHashes = new Set<string>();
+
+  const memorySummaries = Array.from(ADMIN_SESSIONS.values())
     .filter((session) => {
       const user = toAuthUser(getAdminUserById(session.user.id)) || session.user;
       if (!user || user.status !== 'active') {
@@ -750,7 +950,6 @@ export function listAdminSessions(options: {
       if (email && user.email.toLowerCase() !== email) return false;
       return true;
     })
-    .sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt))
     .map((session) => ({
       id: session.token.slice(-12),
       user: session.user,
@@ -760,6 +959,35 @@ export function listAdminSessions(options: {
       authMode: session.authMode,
       current: Boolean(currentToken && session.token === currentToken),
     }));
+
+  for (const session of ADMIN_SESSIONS.values()) {
+    memoryTokenHashes.add(hashSessionToken(session.token));
+  }
+
+  const persistedSummaries = readPersistedAdminSessionRecords()
+    .filter((record) => !memoryTokenHashes.has(record.tokenHash))
+    .map((record) => {
+      const user = toAuthUser(getAdminUserById(record.userId));
+      if (!user || user.status !== 'active') return null;
+      if (userId && user.id !== userId) return null;
+      if (email && user.email.toLowerCase() !== email) return null;
+
+      return {
+        id: currentTokenHash && record.tokenHash === currentTokenHash
+          ? currentToken.slice(-12)
+          : record.tokenHash.slice(0, 12),
+        user,
+        issuedAt: record.issuedAt,
+        expiresAt: record.expiresAt,
+        lastSeenAt: record.lastSeenAt,
+        authMode: record.authMode,
+        current: Boolean(currentTokenHash && record.tokenHash === currentTokenHash),
+      };
+    })
+    .filter((session): session is AdminSessionSummary => Boolean(session));
+
+  return [...memorySummaries, ...persistedSummaries]
+    .sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt));
 }
 
 export function revokeAdminSessionById(sessionId: string, currentToken?: string | null): {

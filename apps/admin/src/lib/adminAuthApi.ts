@@ -80,6 +80,13 @@ export class AdminAuthApiError extends Error {
   }
 }
 
+export class AdminAuthNetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AdminAuthNetworkError';
+  }
+}
+
 interface AdminInviteAcceptResponse {
   success: boolean;
   data?: {
@@ -213,6 +220,34 @@ const readJson = async <T>(response: Response): Promise<T> => {
   return payload as T;
 };
 
+const AUTH_REQUEST_TIMEOUT_MS = 8000;
+
+const adminAuthFetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS)
+    : null;
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: init.signal || controller?.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new AdminAuthNetworkError('Backy admin API did not respond. Check that the local backend is running on port 3001.');
+    }
+    if (error instanceof TypeError) {
+      throw new AdminAuthNetworkError('Backy admin API could not be reached. Check that the local backend is running on port 3001.');
+    }
+    throw error;
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+};
+
 const sessionHeaders = (token?: string | null, extra?: HeadersInit): Headers => {
   const headers = new Headers(extra);
   if (token && !headers.has('authorization')) {
@@ -235,7 +270,7 @@ export async function fetchAdminPasswordPolicy() {
 }
 
 export async function loginAdmin(email: string, password: string, twoFactorCode?: string) {
-  const response = await fetch(`${getAdminApiBase()}/auth/login`, {
+  const response = await adminAuthFetch(`${getAdminApiBase()}/auth/login`, {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -260,7 +295,7 @@ export async function loginAdmin(email: string, password: string, twoFactorCode?
 }
 
 export async function fetchAdminSession(token?: string | null) {
-  const response = await fetch(`${getAdminApiBase()}/auth/session`, {
+  const response = await adminAuthFetch(`${getAdminApiBase()}/auth/session`, {
     credentials: 'include',
     headers: sessionHeaders(token),
   });
@@ -274,7 +309,7 @@ export async function fetchAdminSession(token?: string | null) {
 }
 
 export async function rotateAdminSession(token?: string | null) {
-  const response = await fetch(`${getAdminApiBase()}/auth/session`, {
+  const response = await adminAuthFetch(`${getAdminApiBase()}/auth/session`, {
     method: 'POST',
     credentials: 'include',
     headers: sessionHeaders(token),
@@ -289,7 +324,7 @@ export async function rotateAdminSession(token?: string | null) {
 }
 
 export async function logoutAdmin(token?: string | null) {
-  await fetch(`${getAdminApiBase()}/auth/logout`, {
+  await adminAuthFetch(`${getAdminApiBase()}/auth/logout`, {
     method: 'POST',
     credentials: 'include',
     headers: sessionHeaders(token),

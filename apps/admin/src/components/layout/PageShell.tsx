@@ -28,7 +28,7 @@ export function PageShell({
     hideHeader = false,
 }: PageShellProps) {
     return (
-        <div className={cn("animate-fade-in", hideHeader ? "space-y-0" : "space-y-6", className)}>
+        <div className={cn(hideHeader ? "space-y-0" : "space-y-6", className)}>
             {/* Page Header */}
             {!hideHeader && (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

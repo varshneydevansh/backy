@@ -71,6 +71,7 @@ import { listMedia } from '@/lib/mediaApi';
 
 interface HeaderProps {
   sidebarCollapsed: boolean;
+  mobileSidebarOpen: boolean;
   onSidebarToggle: () => void;
 }
 
@@ -201,7 +202,7 @@ const auditNotificationDetail = (log: AdminAuditLog): string => {
 // COMPONENT
 // ============================================
 
-export function Header({ onSidebarToggle }: HeaderProps) {
+export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
   const navigate = useNavigate();
   const routerState = useRouterState();
   const { user, signOut } = useAuthStore();
@@ -215,6 +216,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [notificationsNotice, setNotificationsNotice] = useState<string | null>(null);
+  const [notificationsLoadedForSiteId, setNotificationsLoadedForSiteId] = useState<string | null>(null);
   const [commentsAlertsDisabled, setCommentsAlertsDisabled] = useState(false);
   const [updatingCommentIds, setUpdatingCommentIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -224,6 +226,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchLoadedForSiteId, setSearchLoadedForSiteId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchInFlightRef = useRef<string | null>(null);
+  const latestSearchLoadKeyRef = useRef<string>('');
   const isGlobalSearchBusy = searchLoading;
 
   const selectedSiteId = getSiteSelectionFromSearch(sites);
@@ -238,22 +242,34 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   );
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const profileUser = useMemo(
-    () => (
-      user
-        ? storeUsers.find((member) => member.id === user.id || member.email.toLowerCase() === user.email.toLowerCase())
-        : undefined
-    ),
+    () => {
+      if (!user) return undefined;
+
+      return (
+        storeUsers.find((member) => member.id === user.id) ||
+        storeUsers.find((member) => member.email.toLowerCase() === user.email.toLowerCase())
+      );
+    },
     [storeUsers, user],
   );
+  const profileRouteUserId = user?.id || profileUser?.id || '';
   const notificationCount = pendingComments.length + workflowNotifications.length;
   const isNotificationMutationBusy = updatingCommentIds.length > 0;
   const isNotificationCenterBusy = notificationsLoading || isNotificationMutationBusy;
+  const notificationsLoadedForActiveSite = notificationsLoadedForSiteId === activeSiteId;
   const canAccessArea = useCallback((area: AdminNavigationArea) => (
     canAccessAdminNavigationArea(permissionMatrix, user, area)
   ), [permissionMatrix, user]);
   const searchLoadKey = useMemo(() => (
     `${activeSiteId}:${permissionMatrix ? `${permissionMatrix.summary.allowed}/${permissionMatrix.summary.total}` : user?.role || 'anonymous'}`
   ), [activeSiteId, permissionMatrix, user?.role]);
+  const searchHydrationStatus = searchLoading
+    ? 'loading'
+    : searchError
+      ? 'error'
+      : searchLoadedForSiteId === searchLoadKey
+        ? 'ready'
+        : 'idle';
   const workflowShortcuts = useMemo<WorkflowShortcut[]>(() => {
     const routeCount = (route: WorkflowNotification['action']['route']) => (
       workflowNotifications.filter((notification) => notification.action.route === route).length
@@ -332,6 +348,28 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       ].some((value) => value.toLowerCase().includes(normalizedQuery)))
       .slice(0, 8);
   }, [searchIndex, searchQuery]);
+  const searchActionStatusId = 'header-global-search-action-status';
+  const searchDisabledReason = searchLoading
+    ? 'Search results are loading.'
+    : searchError
+      ? 'Search results could not load.'
+      : '';
+  const searchActionState = searchDisabledReason ? 'blocked' : 'ready';
+  const searchQueryLabel = searchQuery.trim()
+    ? `for "${searchQuery.trim()}"`
+    : 'from suggested tools and content';
+  const searchActionStatus = searchDisabledReason
+    ? `Search unavailable: ${searchDisabledReason} Result actions unavailable: ${searchDisabledReason}`
+    : `${searchResults.length} search result${searchResults.length === 1 ? '' : 's'} available ${searchQueryLabel}. Result actions available.`;
+  const mobileNavigationStatusId = 'header-mobile-navigation-status';
+  const mobileNavigationStatus = mobileSidebarOpen
+    ? 'Admin navigation is open. Close navigation available from the mobile navigation panel.'
+    : 'Admin navigation is closed. Open admin navigation available.';
+  const clearGlobalSearch = useCallback(() => {
+    setSearchQuery('');
+    setSearchOpen(true);
+    window.setTimeout(() => searchInputRef.current?.focus(), 0);
+  }, []);
 
   // Get page title from route
   const getPageTitle = () => {
@@ -442,6 +480,13 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     navigateToTool(shortcut.to);
   };
 
+  const openNotificationSettings = () => {
+    if (isNotificationCenterBusy) return;
+
+    setNotificationsOpen(false);
+    navigate({ to: '/settings', search: { tab: 'notifications' } });
+  };
+
   const loadNotifications = async () => {
     if (isNotificationCenterBusy) return;
 
@@ -549,6 +594,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
       setPendingComments(commentResult.comments);
       setWorkflowNotifications(nextWorkflowNotifications);
+      setNotificationsLoadedForSiteId(activeSiteId);
     } catch (error) {
       setNotificationsError(error instanceof Error ? error.message : 'Unable to load notifications');
     } finally {
@@ -612,7 +658,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       navigate({ to: '/', search: activeSiteSearch });
       return;
     }
-    navigate({ to: '/settings', search: { tab: 'notifications' } });
+    openNotificationSettings();
   };
 
   const openNotificationSummaryTarget = () => {
@@ -631,7 +677,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     }
 
     if (commentsAlertsDisabled) {
-      navigate({ to: '/settings', search: { tab: 'notifications' } });
+      openNotificationSettings();
       return;
     }
 
@@ -640,14 +686,43 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
   const notificationSummaryLabel = pendingComments.length > 0
     ? 'Open moderation queue'
-    : workflowNotifications[0]
-      ? workflowNotifications[0].actionLabel
+      : workflowNotifications[0]
+        ? workflowNotifications[0].actionLabel
       : commentsAlertsDisabled
         ? 'Open notification settings'
       : 'Open dashboard';
+  const notificationPanelState = notificationsLoading
+    ? 'loading'
+    : notificationsError
+      ? 'error'
+      : pendingComments.length === 0 && workflowNotifications.length === 0
+        ? 'empty'
+        : 'ready';
+  const notificationActionStatusId = 'header-notification-action-status';
+  const notificationDisabledReason = notificationsLoading
+    ? 'Notifications are loading.'
+    : isNotificationMutationBusy
+      ? 'A notification action is running.'
+      : '';
+  const notificationActionState = notificationDisabledReason ? 'blocked' : 'ready';
+  const notificationActionStatus = notificationDisabledReason
+    ? `Refresh unavailable: ${notificationDisabledReason} Workflow shortcuts unavailable: ${notificationDisabledReason} Summary action unavailable: ${notificationDisabledReason}`
+    : `${notificationCount} active notification${notificationCount === 1 ? '' : 's'}. Refresh available. Workflow shortcuts available. ${notificationSummaryLabel} available.`;
+  const accountMenuId = 'header-account-menu';
+  const accountActionStatusId = 'header-account-action-status';
+  const accountDisplayName = user?.fullName || user?.email || 'Guest';
+  const accountActionStatus = user
+    ? `Profile available. Settings available. Sign out available for ${accountDisplayName}.`
+    : 'Profile available. Settings available. Sign out unavailable: No signed-in admin session.';
 
   const loadGlobalSearch = useCallback(async () => {
-    if (searchLoading || searchLoadedForSiteId === searchLoadKey) return;
+    const loadKey = searchLoadKey;
+    if (searchInFlightRef.current === loadKey || searchLoadedForSiteId === loadKey) return;
+
+    if (!latestSearchLoadKeyRef.current) {
+      latestSearchLoadKeyRef.current = loadKey;
+    }
+    searchInFlightRef.current = loadKey;
     setSearchLoading(true);
     setSearchError(null);
 
@@ -702,7 +777,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         })) : [],
       );
 
-      setSearchIndex([
+      const nextSearchIndex: SearchResult[] = [
         ...loadedSites.map((site) => ({
           id: `site:${site.id}`,
           type: 'Site' as const,
@@ -848,14 +923,25 @@ export function Header({ onSidebarToggle }: HeaderProps) {
           { id: 'tool:users', type: 'Tool' as const, title: 'Users', detail: 'Admins, roles, invites, membership handoff', action: { route: 'static' as const, to: '/users' as const } },
           { id: 'tool:settings', type: 'Tool' as const, title: 'Settings', detail: 'API keys, infrastructure, delivery mode', action: { route: 'static' as const, to: '/settings' as const } },
         ].filter((tool) => canAccessArea(STATIC_ROUTE_AREA[tool.action.to]))),
-      ]);
-      setSearchLoadedForSiteId(searchLoadKey);
+      ];
+
+      if (latestSearchLoadKeyRef.current !== loadKey) return;
+
+      setSearchIndex(nextSearchIndex);
+      setSearchLoadedForSiteId(loadKey);
     } catch (error) {
-      setSearchError(error instanceof Error ? error.message : 'Unable to load search');
+      if (latestSearchLoadKeyRef.current === loadKey) {
+        setSearchError(error instanceof Error ? error.message : 'Unable to load search');
+      }
     } finally {
-      setSearchLoading(false);
+      if (searchInFlightRef.current === loadKey) {
+        searchInFlightRef.current = null;
+      }
+      if (latestSearchLoadKeyRef.current === loadKey) {
+        setSearchLoading(false);
+      }
     }
-  }, [activeSiteId, canAccessArea, searchLoadKey, searchLoadedForSiteId, searchLoading, storeUsers]);
+  }, [activeSiteId, canAccessArea, searchLoadKey, searchLoadedForSiteId, storeUsers]);
 
   const openGlobalSearch = useCallback(() => {
     setSearchOpen(true);
@@ -934,13 +1020,37 @@ export function Header({ onSidebarToggle }: HeaderProps) {
   };
 
   useEffect(() => {
-    void loadNotifications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setNotificationsOpen(false);
+    setPendingComments([]);
+    setWorkflowNotifications([]);
+    setNotificationsError(null);
+    setNotificationsNotice(null);
+    setCommentsAlertsDisabled(false);
+    setNotificationsLoadedForSiteId(null);
   }, [activeSiteId]);
 
   useEffect(() => {
+    latestSearchLoadKeyRef.current = searchLoadKey;
+    searchInFlightRef.current = null;
+    setSearchIndex([]);
+    setSearchError(null);
+    setSearchLoadedForSiteId(null);
+    setSearchLoading(false);
+  }, [searchLoadKey]);
+
+  useEffect(() => {
+    if (!searchOpen || searchLoading || searchError || searchLoadedForSiteId === searchLoadKey) return;
+
+    void loadGlobalSearch();
+  }, [loadGlobalSearch, searchError, searchLoadedForSiteId, searchLoadKey, searchLoading, searchOpen]);
+
+  useEffect(() => {
     const handleSettingsSaved = () => {
-      void loadNotifications();
+      if (notificationsOpen || notificationsLoadedForActiveSite) {
+        void loadNotifications();
+      } else {
+        setNotificationsLoadedForSiteId(null);
+      }
     };
 
     window.addEventListener('backy:settings-saved', handleSettingsSaved);
@@ -948,7 +1058,7 @@ export function Header({ onSidebarToggle }: HeaderProps) {
       window.removeEventListener('backy:settings-saved', handleSettingsSaved);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId]);
+  }, [activeSiteId, notificationsLoadedForActiveSite, notificationsOpen]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -958,8 +1068,14 @@ export function Header({ onSidebarToggle }: HeaderProps) {
         target instanceof HTMLTextAreaElement ||
         (target instanceof HTMLElement && target.isContentEditable);
       const key = event.key.toLowerCase();
+      const editorCommandSurfaceActive = Boolean(
+        document.querySelector('[data-testid="editor-shell-layout"], [data-testid="editor-command-palette"]'),
+      );
 
       if ((event.metaKey || event.ctrlKey) && key === 'k') {
+        if (editorCommandSurfaceActive) {
+          return;
+        }
         event.preventDefault();
         openGlobalSearch();
         return;
@@ -979,9 +1095,20 @@ export function Header({ onSidebarToggle }: HeaderProps) {
     <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6">
       {/* Left Section */}
       <div className="flex items-center gap-4">
+        <span id={mobileNavigationStatusId} className="sr-only" data-testid="header-mobile-navigation-status">
+          {mobileNavigationStatus}
+        </span>
         <button
+          type="button"
           onClick={onSidebarToggle}
-          className="lg:hidden p-2 rounded-lg hover:bg-accent"
+          className="rounded-lg p-2 hover:bg-accent focus-ring lg:hidden"
+          aria-label="Open admin navigation"
+          aria-controls="admin-mobile-sidebar-navigation"
+          aria-expanded={mobileSidebarOpen}
+          aria-describedby={mobileNavigationStatusId}
+          data-action-state="ready"
+          data-action-status={mobileNavigationStatus}
+          data-testid="header-mobile-navigation-toggle"
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -1000,6 +1127,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
           disabled={isGlobalSearchBusy}
           className="inline-flex rounded-lg p-2 transition-colors hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60 md:hidden"
           aria-label="Open search"
+          aria-describedby={searchActionStatusId}
+          data-action-state={searchActionState}
+          data-action-status={searchActionStatus}
+          data-disabled-reason={searchDisabledReason || undefined}
+          data-testid="header-global-search-mobile-toggle"
         >
           <Search className="h-5 w-5" />
         </button>
@@ -1008,7 +1140,14 @@ export function Header({ onSidebarToggle }: HeaderProps) {
           searchOpen
             ? 'fixed inset-x-3 top-3 z-40 flex md:static md:z-auto'
             : 'hidden md:flex',
-        )}>
+        )}
+          data-search-hydration={searchHydrationStatus}
+          data-action-state={searchActionState}
+          data-action-status={searchActionStatus}
+        >
+          <span id={searchActionStatusId} className="sr-only" data-testid="header-global-search-action-status">
+            {searchActionStatus}
+          </span>
           <Search className="w-4 h-4 absolute left-3 text-muted-foreground" />
           <input
             ref={searchInputRef}
@@ -1016,6 +1155,8 @@ export function Header({ onSidebarToggle }: HeaderProps) {
             placeholder="Search..."
             value={searchQuery}
             aria-label="Search Backy"
+            aria-describedby={searchActionStatusId}
+            data-testid="header-global-search-input"
             onFocus={openGlobalSearch}
             onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
             onChange={(event) => {
@@ -1043,12 +1184,13 @@ export function Header({ onSidebarToggle }: HeaderProps) {
             <button
               type="button"
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                setSearchQuery('');
-                searchInputRef.current?.focus();
-              }}
+              onClick={clearGlobalSearch}
               className="absolute right-2 rounded-md p-1 text-muted-foreground hover:bg-background hover:text-foreground focus-ring"
               aria-label="Clear search"
+              aria-describedby={searchActionStatusId}
+              data-action-state="ready"
+              data-action-status={searchActionStatus}
+              data-testid="header-global-search-clear"
             >
               <X className="h-4 w-4" />
             </button>
@@ -1058,7 +1200,13 @@ export function Header({ onSidebarToggle }: HeaderProps) {
             </kbd>
           )}
           {searchOpen && (
-            <div className="fixed left-3 right-3 top-14 z-40 overflow-hidden rounded-lg border border-border bg-card shadow-lg md:absolute md:left-0 md:right-auto md:top-full md:mt-2 md:w-[22rem]">
+            <div
+              className="fixed left-3 right-3 top-14 z-40 overflow-hidden rounded-lg border border-border bg-card shadow-lg md:absolute md:left-0 md:right-auto md:top-full md:mt-2 md:w-[22rem]"
+              aria-describedby={searchActionStatusId}
+              data-action-state={searchActionState}
+              data-action-status={searchActionStatus}
+              data-testid="header-global-search-popover"
+            >
               <div className="border-b border-border px-4 py-3">
                 <div className="text-sm font-semibold">Search Backy</div>
                 <div className="text-xs text-muted-foreground">Sites, pages, posts, forms, contacts, and tools.</div>
@@ -1076,14 +1224,39 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => void loadGlobalSearch()}
                       disabled={isGlobalSearchBusy}
+                      aria-describedby={searchActionStatusId}
+                      data-action-state={searchActionState}
+                      data-action-status={searchActionStatus}
+                      data-disabled-reason={searchDisabledReason || undefined}
+                      data-testid="header-global-search-error-retry"
                       className="mt-2 inline-flex rounded-md border border-amber-300 bg-white/70 px-2 py-1 text-xs font-medium text-amber-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Retry search
                     </button>
                   </div>
                 ) : searchResults.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-                    No matching results.
+                  <div
+                    className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted-foreground"
+                    role="status"
+                    data-testid="header-global-search-empty"
+                    data-empty-query={searchQuery.trim()}
+                  >
+                    <div className="font-medium text-foreground">No results for "{searchQuery.trim()}"</div>
+                    <div className="mx-auto mt-1 max-w-64 text-xs">
+                      Clear search to return to suggested tools and content.
+                    </div>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={clearGlobalSearch}
+                      aria-describedby={searchActionStatusId}
+                      data-action-state="ready"
+                      data-action-status={searchActionStatus}
+                      className="mt-3 inline-flex items-center justify-center rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent focus-ring"
+                      data-testid="header-global-search-empty-clear"
+                    >
+                      Clear search
+                    </button>
                   </div>
                 ) : (
                   searchResults.map((result) => (
@@ -1093,6 +1266,13 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                       disabled={isGlobalSearchBusy}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => handleSearchResult(result)}
+                      aria-describedby={searchActionStatusId}
+                      data-action-state={searchActionState}
+                      data-action-status={searchActionStatus}
+                      data-disabled-reason={searchDisabledReason || undefined}
+                      data-search-result-id={result.id}
+                      data-search-result-type={result.type}
+                      data-testid={`header-global-search-result-${result.id}`}
                       className="block w-full rounded-md px-3 py-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <div className="flex items-center justify-between gap-3">
@@ -1112,12 +1292,22 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
         {/* Notifications */}
         <div className="relative">
+          <span id={notificationActionStatusId} className="sr-only" data-testid="header-notification-action-status">
+            {notificationActionStatus}
+          </span>
           <button
             type="button"
             aria-label={`${notificationCount} pending notifications`}
+            aria-expanded={notificationsOpen}
+            aria-haspopup="dialog"
+            aria-describedby={notificationActionStatusId}
+            data-action-state={notificationActionState}
+            data-action-status={notificationActionStatus}
+            data-disabled-reason={notificationDisabledReason || undefined}
+            data-testid="header-notification-toggle"
             onClick={() => {
               setNotificationsOpen((open) => !open);
-              if (!notificationsOpen && !isNotificationCenterBusy) void loadNotifications();
+              if (!notificationsOpen && !isNotificationCenterBusy && !notificationsLoadedForActiveSite) void loadNotifications();
             }}
             className={cn(
               'relative rounded-lg p-2 transition-colors hover:bg-accent focus-ring',
@@ -1138,7 +1328,18 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                 className="fixed inset-0 z-10"
                 onClick={() => setNotificationsOpen(false)}
               />
-              <div className="absolute right-0 top-full z-20 mt-2 w-[26rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+              <div
+                className="absolute right-0 top-full z-20 mt-2 w-[26rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-border bg-card shadow-xl"
+                data-testid="header-notification-panel"
+                data-notification-state={notificationPanelState}
+                data-notification-count={notificationCount}
+                data-notification-site-id={activeSiteId}
+                data-action-state={notificationActionState}
+                data-action-status={notificationActionStatus}
+                role="dialog"
+                aria-label="Notification center"
+                aria-describedby={notificationActionStatusId}
+              >
                 <div className="flex items-center justify-between border-b border-border px-4 py-3">
                   <div>
                     <div className="flex items-center gap-2 text-sm font-semibold">
@@ -1155,7 +1356,12 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                     type="button"
                     onClick={() => void loadNotifications()}
                     disabled={isNotificationCenterBusy}
+                    aria-describedby={notificationActionStatusId}
+                    data-action-state={notificationActionState}
+                    data-action-status={notificationActionStatus}
+                    data-disabled-reason={notificationDisabledReason || undefined}
                     className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    data-testid="header-notification-refresh"
                   >
                     <RefreshCw className={cn('size-3', notificationsLoading && 'animate-spin')} />
                     Refresh
@@ -1170,7 +1376,13 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                         type="button"
                         onClick={() => navigateToWorkflowShortcut(shortcut)}
                         disabled={isNotificationCenterBusy}
+                        aria-describedby={notificationActionStatusId}
+                        data-action-state={notificationActionState}
+                        data-action-status={notificationActionStatus}
+                        data-disabled-reason={notificationDisabledReason || undefined}
                         className="group rounded-lg border border-border bg-background px-2.5 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                        data-testid={`header-notification-shortcut-${shortcut.id}`}
+                        data-shortcut-count={shortcut.count}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="inline-flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground group-hover:text-primary">
@@ -1203,11 +1415,50 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                       ))}
                     </div>
                   ) : notificationsError ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                      {notificationsError}
+                    <div
+                      className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900"
+                      role="alert"
+                      data-testid="header-notification-error"
+                    >
+                      <div className="font-medium">Notifications could not load</div>
+                      <p className="mt-1 leading-6">{notificationsError}</p>
+                      <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
+                        <button
+                          type="button"
+                          onClick={() => void loadNotifications()}
+                          disabled={isNotificationCenterBusy}
+                          aria-describedby={notificationActionStatusId}
+                          data-action-state={notificationActionState}
+                          data-action-status={notificationActionStatus}
+                          data-disabled-reason={notificationDisabledReason || undefined}
+                          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-amber-300 bg-white/70 px-3 text-xs font-medium text-amber-900 transition hover:bg-white focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid="header-notification-error-retry"
+                        >
+                          <RefreshCw className={cn('size-3.5', notificationsLoading && 'animate-spin')} />
+                          Retry
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openNotificationSettings}
+                          disabled={isNotificationCenterBusy}
+                          aria-describedby={notificationActionStatusId}
+                          data-action-state={notificationActionState}
+                          data-action-status={notificationActionStatus}
+                          data-disabled-reason={notificationDisabledReason || undefined}
+                          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-amber-300 bg-white/70 px-3 text-xs font-medium text-amber-900 transition hover:bg-white focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid="header-notification-error-settings"
+                        >
+                          <Settings className="size-3.5" />
+                          Notification settings
+                        </button>
+                      </div>
                     </div>
                   ) : pendingComments.length === 0 && workflowNotifications.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
+                    <div
+                      className="rounded-lg border border-dashed border-border px-4 py-6 text-center"
+                      role="status"
+                      data-testid="header-notification-empty"
+                    >
                       <CheckCircle2 className="mx-auto size-5 text-success" />
                       <p className="mt-2 text-sm font-medium">No active notifications</p>
                       <p className="mt-1 text-xs text-muted-foreground">New moderation, lead, order, activity, and readiness tasks will appear here.</p>
@@ -1217,6 +1468,36 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                           Comment alerts are off in Settings.
                         </p>
                       )}
+                      <div className="mt-4 flex flex-wrap justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void loadNotifications()}
+                          disabled={isNotificationCenterBusy}
+                          aria-describedby={notificationActionStatusId}
+                          data-action-state={notificationActionState}
+                          data-action-status={notificationActionStatus}
+                          data-disabled-reason={notificationDisabledReason || undefined}
+                          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid="header-notification-empty-refresh"
+                        >
+                          <RefreshCw className={cn('size-3.5', notificationsLoading && 'animate-spin')} />
+                          Refresh
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openNotificationSettings}
+                          disabled={isNotificationCenterBusy}
+                          aria-describedby={notificationActionStatusId}
+                          data-action-state={notificationActionState}
+                          data-action-status={notificationActionStatus}
+                          data-disabled-reason={notificationDisabledReason || undefined}
+                          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid="header-notification-empty-settings"
+                        >
+                          <Settings className="size-3.5" />
+                          Settings
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -1249,6 +1530,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                               type="button"
                               onClick={() => handleWorkflowNotification(notification)}
                               disabled={isNotificationCenterBusy}
+                              aria-describedby={notificationActionStatusId}
+                              data-action-state={notificationActionState}
+                              data-action-status={notificationActionStatus}
+                              data-disabled-reason={notificationDisabledReason || undefined}
+                              data-testid={`header-notification-workflow-action-${notification.id}`}
                               className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {notification.actionLabel}
@@ -1258,6 +1544,15 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                       ))}
                       {pendingComments.map((comment) => {
                         const isUpdating = updatingCommentIds.includes(comment.id);
+                        const commentActionDisabledReason = isUpdating
+                          ? 'This comment action is running.'
+                          : notificationsLoading
+                            ? 'Notifications are loading.'
+                            : '';
+                        const commentActionState = commentActionDisabledReason ? 'blocked' : 'ready';
+                        const commentActionStatus = commentActionDisabledReason
+                          ? `Approve unavailable: ${commentActionDisabledReason} Spam unavailable: ${commentActionDisabledReason}`
+                          : 'Approve available. Spam available.';
                         return (
                           <article key={comment.id} className="rounded-lg border border-border bg-background p-3">
                             <div className="flex items-start justify-between gap-3">
@@ -1285,6 +1580,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                                   navigate({ to: '/comments', search: activeSiteSearch });
                                 }}
                                 disabled={isNotificationCenterBusy}
+                                aria-describedby={notificationActionStatusId}
+                                data-action-state={notificationActionState}
+                                data-action-status={notificationActionStatus}
+                                data-disabled-reason={notificationDisabledReason || undefined}
+                                data-testid={`header-notification-comment-review-${comment.id}`}
                                 className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 Review
@@ -1298,6 +1598,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                                 type="button"
                                 disabled={isUpdating || notificationsLoading}
                                 onClick={() => void moderateNotificationComment(comment, 'approved')}
+                                aria-describedby={notificationActionStatusId}
+                                data-action-state={commentActionState}
+                                data-action-status={commentActionStatus}
+                                data-disabled-reason={commentActionDisabledReason || undefined}
+                                data-testid={`header-notification-comment-approve-${comment.id}`}
                                 className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-success/25 bg-success/10 px-2 text-xs font-medium text-success transition hover:bg-success/15 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <CheckCircle2 className="size-3.5" />
@@ -1307,6 +1612,11 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                                 type="button"
                                 disabled={isUpdating || notificationsLoading}
                                 onClick={() => void moderateNotificationComment(comment, 'spam')}
+                                aria-describedby={notificationActionStatusId}
+                                data-action-state={commentActionState}
+                                data-action-status={commentActionStatus}
+                                data-disabled-reason={commentActionDisabledReason || undefined}
+                                data-testid={`header-notification-comment-spam-${comment.id}`}
                                 className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/20 bg-destructive/10 px-2 text-xs font-medium text-destructive transition hover:bg-destructive/15 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <CircleSlash className="size-3.5" />
@@ -1323,7 +1633,12 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                   type="button"
                   onClick={openNotificationSummaryTarget}
                   disabled={isNotificationCenterBusy}
+                  aria-describedby={notificationActionStatusId}
+                  data-action-state={notificationActionState}
+                  data-action-status={notificationActionStatus}
+                  data-disabled-reason={notificationDisabledReason || undefined}
                   className="flex w-full items-center justify-center border-t border-border px-4 py-3 text-sm font-medium text-primary hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="header-notification-summary-action"
                 >
                   {notificationSummaryLabel}
                 </button>
@@ -1334,9 +1649,21 @@ export function Header({ onSidebarToggle }: HeaderProps) {
 
         {/* User Menu */}
         <div className="relative">
+          <span id={accountActionStatusId} className="sr-only" data-testid="header-account-action-status">
+            {accountActionStatus}
+          </span>
           <button
+            type="button"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent"
+            className="flex items-center gap-2 rounded-lg p-2 hover:bg-accent focus-ring"
+            aria-label="Open account menu"
+            aria-expanded={userMenuOpen}
+            aria-controls={accountMenuId}
+            aria-describedby={accountActionStatusId}
+            aria-haspopup="menu"
+            data-action-state="ready"
+            data-action-status={accountActionStatus}
+            data-testid="header-account-toggle"
           >
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
               <User className="w-4 h-4 text-primary" />
@@ -1353,37 +1680,65 @@ export function Header({ onSidebarToggle }: HeaderProps) {
                 className="fixed inset-0 z-10"
                 onClick={() => setUserMenuOpen(false)}
               />
-              <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-lg z-20 py-1">
+              <div
+                id={accountMenuId}
+                className="absolute right-0 top-full z-20 mt-2 w-48 rounded-lg border border-border bg-card py-1 shadow-lg"
+                role="menu"
+                aria-label="Account"
+                aria-describedby={accountActionStatusId}
+                data-action-state="ready"
+                data-action-status={accountActionStatus}
+                data-testid="header-account-menu"
+              >
                 <button
+                  type="button"
                   onClick={() => {
                     setUserMenuOpen(false);
-                    if (profileUser) {
-                      navigate({ to: '/users/$userId', params: { userId: profileUser.id } });
+                    if (profileRouteUserId) {
+                      navigate({ to: '/users/$userId', params: { userId: profileRouteUserId } });
                       return;
                     }
 
                     navigate({ to: '/settings' });
                   }}
                   data-testid="header-profile-link"
-                  className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent w-full text-left"
+                  aria-describedby={accountActionStatusId}
+                  data-action-state="ready"
+                  data-action-status={accountActionStatus}
+                  data-profile-user-id={profileRouteUserId}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent focus-ring"
+                  role="menuitem"
                 >
                   <User className="w-4 h-4" />
                   Profile
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setUserMenuOpen(false);
                     navigate({ to: '/settings' });
                   }}
-                  className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent w-full text-left"
+                  aria-describedby={accountActionStatusId}
+                  data-action-state="ready"
+                  data-action-status={accountActionStatus}
+                  data-testid="header-account-settings-action"
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent focus-ring"
+                  role="menuitem"
                 >
                   <Settings className="w-4 h-4" />
                   Settings
                 </button>
                 <hr className="my-1 border-border" />
                 <button
+                  type="button"
                   onClick={handleSignOut}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                  aria-describedby={accountActionStatusId}
+                  data-action-state={user ? 'ready' : 'blocked'}
+                  data-action-status={accountActionStatus}
+                  data-disabled-reason={user ? undefined : 'No signed-in admin session.'}
+                  data-testid="header-account-sign-out-action"
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 focus-ring"
+                  role="menuitem"
                 >
                   <LogOut className="w-4 h-4" />
                   Sign out
