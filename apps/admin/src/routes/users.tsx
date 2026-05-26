@@ -1219,6 +1219,8 @@ function UsersListView() {
     && visibleSelectableUsers.every((user) => selectedUserIdSet.has(user.id));
   const usersBulkSelectionSummaryId = 'users-bulk-selection-summary';
   const usersBulkActionStatusId = 'users-bulk-action-status';
+  const usersBulkDeleteDialogDescriptionId = 'users-bulk-delete-confirm-description';
+  const usersBulkDeleteDialogStatusId = 'users-bulk-delete-confirm-action-status';
   const selectedUserActionLabel = `${selectedActionableUsers.length} selected non-current user${selectedActionableUsers.length === 1 ? '' : 's'}`;
   const visibleUserActionLabel = `${visibleSelectableUsers.length} visible non-current user${visibleSelectableUsers.length === 1 ? '' : 's'}`;
   const usersBulkBusyDisabledReason = isUsersBusy ? 'User directory is busy.' : '';
@@ -1246,6 +1248,9 @@ function UsersListView() {
   const usersBulkDeleteActionDisabledReason = usersBulkNoSelectionDisabledReason ||
     usersBulkBusyDisabledReason ||
     usersBulkDeleteDisabledReason;
+  const usersBulkDeleteConfirmDisabledReason = isUserMutationBusy
+    ? 'Bulk user deletion is already running.'
+    : usersBulkNoSelectionDisabledReason || usersBulkDeleteDisabledReason;
   const usersBulkActionStatus = [
     usersBulkSelectionDisabledReason ? `Select visible unavailable: ${usersBulkSelectionDisabledReason}` : `Select visible available for ${visibleUserActionLabel}.`,
     usersBulkStatusDisabledReason ? `Bulk status unavailable: ${usersBulkStatusDisabledReason}` : `Bulk status available for ${selectedUserActionLabel}.`,
@@ -1253,6 +1258,12 @@ function UsersListView() {
     usersBulkDeleteActionDisabledReason ? `Delete selected unavailable: ${usersBulkDeleteActionDisabledReason}` : `Delete selected available for ${selectedUserActionLabel}.`,
     usersBulkClearDisabledReason ? `Clear selection unavailable: ${usersBulkClearDisabledReason}` : `Clear selection available for ${selectedUserActionLabel}.`,
   ].join(' ');
+  const usersBulkDeleteCancelActionStatus = isUserMutationBusy
+    ? 'Cancel bulk user deletion unavailable while deletion is running.'
+    : 'Cancel bulk user deletion available.';
+  const usersBulkDeleteConfirmActionStatus = usersBulkDeleteConfirmDisabledReason
+    ? `Remove selected users unavailable: ${usersBulkDeleteConfirmDisabledReason}`
+    : `Remove selected users available for ${selectedUserActionLabel}.`;
   const usersBulkGroupActionState = selectedActionableUsers.length === 0
     ? 'blocked'
     : usersBulkStatusDisabledReason || usersBulkDeleteActionDisabledReason
@@ -2630,16 +2641,24 @@ function UsersListView() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="users-bulk-delete-confirm-title"
+          aria-describedby={`${usersBulkDeleteDialogDescriptionId} ${usersBulkDeleteDialogStatusId}`}
           data-testid="users-bulk-delete-confirm-dialog"
+          data-action-state={usersBulkDeleteConfirmDisabledReason ? isUserMutationBusy ? 'busy' : 'blocked' : 'ready'}
+          data-action-status={`${usersBulkDeleteCancelActionStatus} ${usersBulkDeleteConfirmActionStatus}`}
+          data-selected-count={selectedActionableUsers.length}
+          data-hidden-selected-count={hiddenSelectedUserCount}
         >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <span id={usersBulkDeleteDialogStatusId} className="sr-only" data-testid="users-bulk-delete-confirm-action-status" aria-live="polite">
+              {usersBulkDeleteCancelActionStatus} {usersBulkDeleteConfirmActionStatus}
+            </span>
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
                 <h2 id="users-bulk-delete-confirm-title" className="text-lg font-semibold text-foreground">Remove selected users?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p id={usersBulkDeleteDialogDescriptionId} className="mt-1 text-sm text-muted-foreground">
                   {`This revokes admin access for ${selectedActionableUsers.length} selected account${selectedActionableUsers.length === 1 ? '' : 's'}${hiddenSelectedUserCount > 0 ? `, including ${hiddenSelectedUserCount} outside this filtered view` : ''}. Current-session users stay locked.`}
                 </p>
               </div>
@@ -2653,6 +2672,11 @@ function UsersListView() {
                   }
                 }}
                 disabled={isUserMutationBusy}
+                aria-describedby={usersBulkDeleteDialogStatusId}
+                data-testid="users-bulk-delete-cancel"
+                data-action-state={isUserMutationBusy ? 'busy' : 'ready'}
+                data-action-status={usersBulkDeleteCancelActionStatus}
+                data-disabled-reason={isUserMutationBusy ? 'Bulk user deletion is already running.' : undefined}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cancel
@@ -2660,7 +2684,12 @@ function UsersListView() {
               <button
                 type="button"
                 onClick={() => void handleBulkDeleteUsers()}
-                disabled={isUserMutationBusy || selectedActionableUsers.length === 0}
+                disabled={Boolean(usersBulkDeleteConfirmDisabledReason)}
+                aria-describedby={usersBulkDeleteDialogStatusId}
+                data-testid="users-bulk-delete-confirm"
+                data-action-state={usersBulkDeleteConfirmDisabledReason ? isUserMutationBusy ? 'busy' : 'blocked' : 'ready'}
+                data-action-status={usersBulkDeleteConfirmActionStatus}
+                data-disabled-reason={usersBulkDeleteConfirmDisabledReason || undefined}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isUserMutationBusy ? 'Removing...' : 'Remove selected'}

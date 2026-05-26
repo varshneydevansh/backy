@@ -185,9 +185,14 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       source.includes('data-testid="users-bulk-status-select"') &&
       source.includes('data-testid="users-bulk-apply-status"') &&
       source.includes('data-testid="users-bulk-delete"') &&
+      source.includes("const usersBulkDeleteDialogStatusId = 'users-bulk-delete-confirm-action-status';") &&
+      source.includes('data-testid="users-bulk-delete-confirm-action-status"') &&
+      source.includes('data-testid="users-bulk-delete-cancel"') &&
+      source.includes('data-testid="users-bulk-delete-confirm"') &&
+      source.includes('data-action-status={`${usersBulkDeleteCancelActionStatus} ${usersBulkDeleteConfirmActionStatus}`}') &&
       source.includes("data-action-state={usersBulkStatusDisabledReason ? 'blocked' : 'ready'}") &&
       source.includes('data-disabled-reason={usersBulkDeleteActionDisabledReason || undefined}'),
-    'Users bulk actions must expose a named shared status group, selected-count metadata, stable hooks, and ready/blocked reasons for status and delete actions.',
+    'Users bulk actions must expose named shared status groups, selected-count metadata, stable hooks, and ready/blocked reasons for status, delete, and delete-confirmation actions.',
   );
   assert(
     createSource.includes('const loadUserInvitePermissions = useCallback(() => {') &&
@@ -2617,6 +2622,176 @@ const setUsersBulkStatus = async (client, fullNames, status) => {
   assert(result.ok, `Unable to run users bulk status action: ${JSON.stringify(result)}`);
 };
 
+const removeUserWithBulkDeleteDialog = async (client, fullName, email) => {
+  await navigateToUsers(client, fullName);
+  await waitForUsersPageUser(client, fullName);
+
+  const clearExistingSelection = await evaluate(client, `(() => {
+    const clear = document.querySelector('[data-testid="users-bulk-clear-selection"]');
+    if (clear instanceof HTMLButtonElement && !clear.disabled) {
+      clear.click();
+      return { cleared: true };
+    }
+    return { cleared: false };
+  })()`);
+  if (clearExistingSelection.cleared) {
+    await sleep(250);
+  }
+
+  const selectResult = await evaluate(client, `(() => {
+    const row = Array.from(document.querySelectorAll('tbody tr')).find((candidate) => (
+      (candidate.textContent || '').includes(${JSON.stringify(fullName)})
+    ));
+    const checkbox = row?.querySelector('input[type="checkbox"]');
+    if (!(checkbox instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'checkbox-missing', rows: Array.from(document.querySelectorAll('tbody tr')).map((row) => row.textContent || '').slice(0, 12) };
+    }
+    if (checkbox.disabled) return { ok: false, reason: 'checkbox-disabled' };
+    if (!checkbox.checked) checkbox.click();
+    return { ok: true };
+  })()`);
+  assert(selectResult.ok, `Unable to select ${fullName} for bulk delete: ${JSON.stringify(selectResult)}`);
+
+  let readyState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    readyState = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="users-bulk-actions"]');
+      const status = document.querySelector('[data-testid="users-bulk-action-status"]');
+      const deleteButton = document.querySelector('[data-testid="users-bulk-delete"]');
+      return {
+        selectedCount: panel?.getAttribute('data-selected-count') || '',
+        actionState: panel?.getAttribute('data-action-state') || '',
+        statusText: (status?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        deleteState: deleteButton?.getAttribute('data-action-state') || '',
+        deleteStatus: deleteButton?.getAttribute('data-action-status') || '',
+        deleteDisabledReason: deleteButton?.getAttribute('data-disabled-reason') || '',
+        deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
+      };
+    })()`);
+    if (
+      readyState.selectedCount === '1' &&
+      readyState.actionState === 'ready' &&
+      readyState.deleteState === 'ready' &&
+      readyState.deleteDisabled === false
+    ) {
+      break;
+    }
+    await sleep(250);
+  }
+  assert(
+    readyState?.selectedCount === '1' &&
+      readyState.actionState === 'ready' &&
+      readyState.deleteState === 'ready' &&
+      readyState.deleteStatus === readyState.statusText &&
+      readyState.deleteDisabledReason === '' &&
+      readyState.deleteDisabled === false,
+    `Users bulk delete action did not become ready: ${JSON.stringify(readyState)}`,
+  );
+
+  const openDialog = async () => evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="users-bulk-delete"]');
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'delete-button-missing' };
+    if (button.disabled) return { ok: false, reason: 'delete-button-disabled' };
+    button.click();
+    return { ok: true };
+  })()`);
+
+  const assertDialogReady = async () => {
+    const state = await evaluate(client, `(() => {
+      const dialog = document.querySelector('[data-testid="users-bulk-delete-confirm-dialog"]');
+      const status = document.querySelector('[data-testid="users-bulk-delete-confirm-action-status"]');
+      const cancel = document.querySelector('[data-testid="users-bulk-delete-cancel"]');
+      const confirm = document.querySelector('[data-testid="users-bulk-delete-confirm"]');
+      const statusId = status?.id || '';
+      const statusText = (status?.textContent || '').replace(/\\s+/g, ' ').trim();
+      return {
+        hasDialog: dialog instanceof HTMLElement,
+        role: dialog?.getAttribute('role') || '',
+        ariaModal: dialog?.getAttribute('aria-modal') || '',
+        labelledBy: dialog?.getAttribute('aria-labelledby') || '',
+        describedBy: dialog?.getAttribute('aria-describedby') || '',
+        actionState: dialog?.getAttribute('data-action-state') || '',
+        actionStatus: dialog?.getAttribute('data-action-status') || '',
+        selectedCount: dialog?.getAttribute('data-selected-count') || '',
+        hiddenSelectedCount: dialog?.getAttribute('data-hidden-selected-count') || '',
+        title: dialog?.querySelector('h2')?.textContent || '',
+        text: dialog?.textContent?.slice(0, 500) || '',
+        statusId,
+        statusText,
+        cancelState: cancel?.getAttribute('data-action-state') || '',
+        cancelStatus: cancel?.getAttribute('data-action-status') || '',
+        cancelDescribedBy: cancel?.getAttribute('aria-describedby') || '',
+        cancelDisabledReason: cancel?.getAttribute('data-disabled-reason') || '',
+        cancelDisabled: cancel instanceof HTMLButtonElement ? cancel.disabled : null,
+        confirmState: confirm?.getAttribute('data-action-state') || '',
+        confirmStatus: confirm?.getAttribute('data-action-status') || '',
+        confirmDescribedBy: confirm?.getAttribute('aria-describedby') || '',
+        confirmDisabledReason: confirm?.getAttribute('data-disabled-reason') || '',
+        confirmDisabled: confirm instanceof HTMLButtonElement ? confirm.disabled : null,
+      };
+    })()`);
+    assert(
+      state.hasDialog &&
+        state.role === 'dialog' &&
+        state.ariaModal === 'true' &&
+        state.labelledBy === 'users-bulk-delete-confirm-title' &&
+        state.describedBy.includes('users-bulk-delete-confirm-description') &&
+        state.describedBy.includes(state.statusId) &&
+        state.actionState === 'ready' &&
+        state.actionStatus === state.statusText &&
+        state.selectedCount === '1' &&
+        state.hiddenSelectedCount === '0' &&
+        state.title === 'Remove selected users?' &&
+        state.text.includes('This revokes admin access for 1 selected account') &&
+        state.cancelState === 'ready' &&
+        state.cancelStatus.includes('Cancel bulk user deletion available.') &&
+        state.cancelDescribedBy === state.statusId &&
+        state.cancelDisabledReason === '' &&
+        state.cancelDisabled === false &&
+        state.confirmState === 'ready' &&
+        state.confirmStatus.includes('Remove selected users available for 1 selected non-current user.') &&
+        state.confirmDescribedBy === state.statusId &&
+        state.confirmDisabledReason === '' &&
+        state.confirmDisabled === false,
+      `Users bulk delete confirmation action status drifted: ${JSON.stringify(state)}`,
+    );
+    return state;
+  };
+
+  const openResult = await openDialog();
+  assert(openResult.ok, `Unable to open users bulk delete confirmation: ${JSON.stringify(openResult)}`);
+  const firstDialogState = await assertDialogReady();
+
+  const cancelResult = await evaluate(client, `(() => {
+    const cancel = document.querySelector('[data-testid="users-bulk-delete-cancel"]');
+    if (!(cancel instanceof HTMLButtonElement)) return { ok: false, reason: 'cancel-missing' };
+    if (cancel.disabled) return { ok: false, reason: 'cancel-disabled' };
+    cancel.click();
+    return { ok: true };
+  })()`);
+  assert(cancelResult.ok, `Unable to cancel users bulk delete confirmation: ${JSON.stringify(cancelResult)}`);
+  const canceled = await evaluate(client, `(() => ({
+    closed: !document.querySelector('[data-testid="users-bulk-delete-confirm-dialog"]'),
+    stillHasUser: document.body?.innerText?.includes(${JSON.stringify(fullName)}) || false,
+  }))()`);
+  assert(canceled.closed && canceled.stillHasUser, `Users bulk delete cancel did not close safely: ${JSON.stringify(canceled)}`);
+
+  const reopenResult = await openDialog();
+  assert(reopenResult.ok, `Unable to reopen users bulk delete confirmation: ${JSON.stringify(reopenResult)}`);
+  await assertDialogReady();
+  const confirmResult = await evaluate(client, `(() => {
+    const confirm = document.querySelector('[data-testid="users-bulk-delete-confirm"]');
+    if (!(confirm instanceof HTMLButtonElement)) return { ok: false, reason: 'confirm-missing' };
+    if (confirm.disabled) return { ok: false, reason: 'confirm-disabled' };
+    confirm.click();
+    return { ok: true };
+  })()`);
+  assert(confirmResult.ok, `Unable to confirm users bulk delete: ${JSON.stringify(confirmResult)}`);
+
+  await waitForUserMissing(email);
+  return firstDialogState;
+};
+
 const waitForUsersImportReady = async (client) => {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const state = await evaluate(client, `(() => {
@@ -3200,10 +3375,11 @@ const main = async () => {
       `Bulk status audit log was not recorded: ${JSON.stringify(bulkAuditLogs).slice(0, 500)}`,
     );
 
-    await bulkUpdateUsers({ action: 'delete', userIds: [bulkUserId] });
-    await waitForUserMissing(bulkEmail);
+    const bulkDeleteDialog = await removeUserWithBulkDeleteDialog(client, bulkFullName, bulkEmail);
     bulkUserId = null;
 
+    await navigateToUsers(client, fullName);
+    await waitForUsersPageUser(client, fullName);
     await waitForUserActivity(client, email);
     await assertLayout(client, fullName);
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
@@ -3226,6 +3402,7 @@ const main = async () => {
         remainingAfterUse: mfaState.remainingAfterUse,
       },
       detailDeleteDialog,
+      bulkDeleteDialog,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

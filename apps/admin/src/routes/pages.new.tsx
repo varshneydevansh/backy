@@ -571,26 +571,31 @@ const DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE: Record<PageTemplate, PageNavigat
 
 const PAGE_CREATION_AREAS = [
     {
+        id: 'basics',
         title: 'Page basics',
         detail: 'Target site, title, route, homepage behavior, and SEO description.',
         href: '#page-basics',
     },
     {
+        id: 'design',
         title: 'Starter design',
         detail: 'Seed a real editable canvas instead of sending the editor an empty page.',
         href: '#page-design',
     },
     {
+        id: 'preview',
         title: 'Route preview',
         detail: 'Confirm the public path and selected site before creating the page.',
         href: '#page-preview',
     },
     {
+        id: 'seo',
         title: 'SEO and social',
         detail: 'Search title, canonical path, Open Graph image, and robots flags.',
         href: '#page-seo',
     },
     {
+        id: 'payload',
         title: 'Create payload',
         detail: 'Review the metadata and canvas handoff that will be sent to the backend.',
         href: '#page-payload',
@@ -2051,6 +2056,17 @@ function NewPageRoute() {
         : previewDraftBlockerMessage
             ? `Preview draft needs attention: ${previewDraftBlockerMessage}`
             : `Preview draft available for ${formData.siteId} at ${routePreview} using ${effectiveTemplateName}.`;
+    const pageCreateAddSiteDisabledReason = isPageCreateBusy
+        ? 'Page creation is already running.'
+        : !canCreateSites
+            ? sitesCreatePermissionTitle || 'Your account cannot create sites.'
+            : '';
+    const pageCreateAddSiteActionState = pageCreateAddSiteDisabledReason
+        ? isPageCreateBusy ? 'busy' : 'blocked'
+        : 'ready';
+    const pageCreateAddSiteActionStatus = pageCreateAddSiteDisabledReason
+        ? `Add site unavailable: ${pageCreateAddSiteDisabledReason}`
+        : 'Add site available before creating this page.';
     const pageCreateSubmitDescribedBy = submitBlockerMessage
         ? `${pageCreateSubmitActionStatusId} page-create-submit-blocker`
         : pageCreateSubmitActionStatusId;
@@ -2089,6 +2105,9 @@ function NewPageRoute() {
     const pageCreateRestoreRecoveryActionStatus = isPageCreateBusy
         ? 'Restore recovered page draft unavailable while page creation is running.'
         : 'Restore recovered page draft available.';
+    const getPageCreateControlMapActionStatus = (areaTitle: string) => isPageCreateBusy
+        ? `${areaTitle} section jump unavailable while page creation is running.`
+        : `${areaTitle} section jump available in the page creation checklist.`;
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
@@ -3184,7 +3203,7 @@ function NewPageRoute() {
             className="w-full min-w-0"
         >
             <span id={pageCreateCommandActionStatusId} className="sr-only" data-testid="page-create-command-action-status" aria-live="polite">
-                {pageCreateBackActionStatus} {pageCreateCopyActionStatus} {pageCreateDownloadActionStatus} {pageCreateCancelActionStatus} {pageCreateRouteRetryActionStatus}
+                {pageCreateBackActionStatus} {pageCreateCopyActionStatus} {pageCreateDownloadActionStatus} {pageCreatePreviewActionStatus} {pageCreateAddSiteActionStatus} {pageCreateCancelActionStatus} {pageCreateRouteRetryActionStatus} {PAGE_CREATION_AREAS.map((area) => getPageCreateControlMapActionStatus(area.title)).join(' ')}
             </span>
             <section
                 className="mb-6 min-w-0 rounded-lg border border-border bg-card p-5 shadow-sm"
@@ -3276,6 +3295,18 @@ function NewPageRoute() {
                             onClick={() => void handleCreatePreview()}
                             disabled={isPageCreateBusy || !canAttemptCreatePreviewDraft}
                             title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                            aria-disabled={isPageCreateBusy || !canAttemptCreatePreviewDraft}
+                            aria-describedby={pageCreatePreviewDescribedBy}
+                            data-testid="page-create-command-preview"
+                            data-state={previewDraftControlState}
+                            data-blocker={previewDraftBlockerMessage || ''}
+                            data-can-preview={String(canCreatePreviewDraft)}
+                            data-action-state={pageCreatePreviewActionState}
+                            data-action-status={pageCreatePreviewActionStatus}
+                            data-disabled-reason={pageCreatePreviewDisabledReason || undefined}
+                            data-target-site-id={formData.siteId || undefined}
+                            data-target-route={routePreview}
+                            data-target-template={effectiveTemplateName}
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Eye className="h-4 w-4" />
@@ -3288,7 +3319,13 @@ function NewPageRoute() {
                                 navigate({ to: '/sites/new' });
                             }}
                             disabled={isPageCreateBusy || !canCreateSites}
-                            title={!canCreateSites ? sitesCreatePermissionTitle : undefined}
+                            title={pageCreateAddSiteActionStatus}
+                            aria-disabled={isPageCreateBusy || !canCreateSites}
+                            aria-describedby={pageCreateCommandActionStatusId}
+                            data-testid="page-create-add-site"
+                            data-action-state={pageCreateAddSiteActionState}
+                            data-action-status={pageCreateAddSiteActionStatus}
+                            data-disabled-reason={pageCreateAddSiteDisabledReason || undefined}
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Globe className="h-4 w-4" />
@@ -3372,9 +3409,16 @@ function NewPageRoute() {
                                 key={area.title}
                                 href={area.href}
                                 aria-disabled={isPageCreateBusy}
+                                aria-describedby={pageCreateCommandActionStatusId}
                                 onClick={(event) => {
                                     if (isPageCreateBusy) event.preventDefault();
                                 }}
+                                data-testid={`page-create-control-map-${area.id}`}
+                                data-action-state={isPageCreateBusy ? 'busy' : 'ready'}
+                                data-action-status={getPageCreateControlMapActionStatus(area.title)}
+                                data-disabled-reason={isPageCreateBusy ? 'Page creation is already running.' : undefined}
+                                data-control-area={area.id}
+                                data-control-target={area.href}
                                 className={cn(
                                     'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
                                     isPageCreateBusy && 'pointer-events-none opacity-60',

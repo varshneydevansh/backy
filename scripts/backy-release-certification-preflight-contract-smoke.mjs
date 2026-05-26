@@ -187,11 +187,17 @@ includesAll(
     'npm run ci:sdk-postgres-smoke',
     'npm run ci:settings-provider-certification',
     'Upload Settings provider certification evidence',
+    'Verify Settings provider certification artifact',
+    'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-settings-provider-certification.json',
+    "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED: '1'",
     'actions/upload-artifact@v4',
     'backy-settings-provider-certification-evidence',
     'artifacts/backy-settings-provider-certification.json',
     'if-no-files-found: error',
     'npm run ci:commerce-provider-certification',
+    'Verify Commerce provider certification artifact',
+    'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-commerce-provider-certification.json',
+    "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED: '1'",
     'Upload Commerce provider certification evidence',
     'backy-commerce-provider-certification-evidence',
     'artifacts/backy-commerce-provider-certification.json',
@@ -280,9 +286,11 @@ assert(
     workflow.indexOf('inputs.disposable_database_confirmed') < workflow.indexOf('- name: Run Forms Postgres certification') &&
     workflow.indexOf('- name: Run Forms Postgres certification') < workflow.indexOf('- name: Run SDK Postgres certification') &&
     workflow.indexOf('- name: Run SDK Postgres certification') < workflow.indexOf('- name: Run Settings provider certification') &&
-    workflow.indexOf('- name: Run Settings provider certification') < workflow.indexOf('- name: Upload Settings provider certification evidence') &&
+    workflow.indexOf('- name: Run Settings provider certification') < workflow.indexOf('- name: Verify Settings provider certification artifact') &&
+    workflow.indexOf('- name: Verify Settings provider certification artifact') < workflow.indexOf('- name: Upload Settings provider certification evidence') &&
     workflow.indexOf('- name: Upload Settings provider certification evidence') < workflow.indexOf('- name: Run Commerce provider certification') &&
-    workflow.indexOf('- name: Run Commerce provider certification') < workflow.indexOf('- name: Upload Commerce provider certification evidence'),
+    workflow.indexOf('- name: Run Commerce provider certification') < workflow.indexOf('- name: Verify Commerce provider certification artifact') &&
+    workflow.indexOf('- name: Verify Commerce provider certification artifact') < workflow.indexOf('- name: Upload Commerce provider certification evidence'),
   'Backy release certification workflow must run preflights, require the database URL before database gates, run provider gates, and upload Settings/Commerce evidence.',
 );
 
@@ -576,6 +584,7 @@ includesAll(
     '"test:settings-source-only"',
     '"test:commerce-source-only"',
     '"test:orders-source-only"',
+    '"test:vercel-release-config"',
     '"test:provider-source-only"',
     '"test:settings-provider-certification-preflight-contract"',
     '"test:commerce-provider-certification-preflight-contract"',
@@ -605,6 +614,7 @@ includesAll(
     'npm run test:sdk-postgres-preflight-contract',
     'npm run test:sdk-postgres-disposable-guard',
     'npm run test:admin-contract-source',
+    'npm run test:vercel-release-config',
     'npm run test:provider-source-only',
     'npm run test:settings-provider-certification-preflight-contract',
     'npm run test:commerce-provider-certification-preflight-contract',

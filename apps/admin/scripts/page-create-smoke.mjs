@@ -1326,6 +1326,8 @@ const assertPageCreateSourceContracts = () => {
       source.includes('const pageCreateBackActionStatus = isPageCreateBusy') &&
       source.includes('const pageCreateCopyActionStatus = isPageCreateBusy') &&
       source.includes('const pageCreateDownloadActionStatus = isPageCreateBusy') &&
+      source.includes('const pageCreateAddSiteActionStatus = pageCreateAddSiteDisabledReason') &&
+      source.includes('const getPageCreateControlMapActionStatus = (areaTitle: string) => isPageCreateBusy') &&
       source.includes('const pageCreateCancelActionStatus = isPageCreateBusy') &&
       source.includes('const pageCreateRouteRetryActionStatus = isPageCreateMutating') &&
       source.includes('const pageCreateDiscardRecoveryActionStatus = isPageCreateMutating') &&
@@ -1334,6 +1336,8 @@ const assertPageCreateSourceContracts = () => {
       source.includes('data-testid="page-create-back-to-pages"') &&
       source.includes('data-testid="page-create-copy-handoff"') &&
       source.includes('data-testid="page-create-download-handoff"') &&
+      source.includes('data-testid="page-create-command-preview"') &&
+      source.includes('data-testid="page-create-add-site"') &&
       source.includes('data-testid="page-create-route-check-retry"') &&
       source.includes('data-testid="page-create-cancel"') &&
       source.includes('data-testid="page-create-recovery-action-status"') &&
@@ -1363,6 +1367,9 @@ const assertPageCreateSourceContracts = () => {
       source.includes('form="page-create-form"') &&
       source.includes('<form id="page-create-form" onSubmit={handleSubmit} noValidate') &&
       source.includes('data-testid="page-creation-control-map"') &&
+      source.includes('data-testid={`page-create-control-map-${area.id}`}') &&
+      source.includes('data-control-area={area.id}') &&
+      source.includes('data-control-target={area.href}') &&
       source.includes('data-testid="page-create-preview-button"') &&
       source.includes('data-testid="page-template-library-shell"') &&
       source.includes("const [templateSearchQuery, setTemplateSearchQuery] = useState('');") &&
@@ -3266,6 +3273,17 @@ const waitForPageCreateControls = async (client, slug, title, navLabel, seo, par
       downloadActionState: document.querySelector('[data-testid="page-create-download-handoff"]')?.getAttribute('data-action-state') || '',
       downloadActionStatus: document.querySelector('[data-testid="page-create-download-handoff"]')?.getAttribute('data-action-status') || '',
       downloadDescribedBy: document.querySelector('[data-testid="page-create-download-handoff"]')?.getAttribute('aria-describedby') || '',
+      commandPreviewActionState: document.querySelector('[data-testid="page-create-command-preview"]')?.getAttribute('data-action-state') || '',
+      commandPreviewActionStatus: document.querySelector('[data-testid="page-create-command-preview"]')?.getAttribute('data-action-status') || '',
+      commandPreviewDescribedBy: document.querySelector('[data-testid="page-create-command-preview"]')?.getAttribute('aria-describedby') || '',
+      addSiteActionState: document.querySelector('[data-testid="page-create-add-site"]')?.getAttribute('data-action-state') || '',
+      addSiteActionStatus: document.querySelector('[data-testid="page-create-add-site"]')?.getAttribute('data-action-status') || '',
+      addSiteDescribedBy: document.querySelector('[data-testid="page-create-add-site"]')?.getAttribute('aria-describedby') || '',
+      controlMapCount: document.querySelectorAll('[data-testid^="page-create-control-map-"]').length,
+      controlMapBasicsState: document.querySelector('[data-testid="page-create-control-map-basics"]')?.getAttribute('data-action-state') || '',
+      controlMapBasicsStatus: document.querySelector('[data-testid="page-create-control-map-basics"]')?.getAttribute('data-action-status') || '',
+      controlMapBasicsDescribedBy: document.querySelector('[data-testid="page-create-control-map-basics"]')?.getAttribute('aria-describedby') || '',
+      controlMapBasicsTarget: document.querySelector('[data-testid="page-create-control-map-basics"]')?.getAttribute('data-control-target') || '',
       cancelActionState: document.querySelector('[data-testid="page-create-cancel"]')?.getAttribute('data-action-state') || '',
       cancelActionStatus: document.querySelector('[data-testid="page-create-cancel"]')?.getAttribute('data-action-status') || '',
       cancelDescribedBy: document.querySelector('[data-testid="page-create-cancel"]')?.getAttribute('aria-describedby') || '',
@@ -3296,15 +3314,29 @@ const waitForPageCreateControls = async (client, slug, title, navLabel, seo, par
       && state.backActionState === 'ready'
       && state.copyActionState === 'ready'
       && state.downloadActionState === 'ready'
+      && state.commandPreviewActionState === 'ready'
+      && state.addSiteActionState === 'ready'
+      && state.controlMapCount === 5
+      && state.controlMapBasicsState === 'ready'
       && state.cancelActionState === 'ready'
       && state.backDescribedBy === state.commandStatusId
       && state.copyDescribedBy === state.commandStatusId
       && state.downloadDescribedBy === state.commandStatusId
+      && state.commandPreviewDescribedBy === 'page-create-preview-action-status'
+      && state.addSiteDescribedBy === state.commandStatusId
+      && state.controlMapBasicsDescribedBy === state.commandStatusId
+      && state.controlMapBasicsTarget === '#page-basics'
       && state.cancelDescribedBy === state.commandStatusId
       && state.backActionStatus.includes(`Back to Pages available for ${SITE_ID}`)
       && state.copyActionStatus.includes(`Copy page creation handoff available for ${SITE_ID} at /${slug}`)
       && state.downloadActionStatus.includes(`Download page creation handoff available for ${SITE_ID} at /${slug}`)
+      && state.commandPreviewActionStatus.includes(`Preview draft available for ${SITE_ID} at /${slug}`)
+      && state.addSiteActionStatus.includes('Add site available before creating this page.')
+      && state.controlMapBasicsStatus.includes('Page basics section jump available')
       && state.cancelActionStatus.includes(`Cancel page creation and return to Pages available for ${SITE_ID}`)
+      && state.commandStatusText.includes(state.commandPreviewActionStatus)
+      && state.commandStatusText.includes(state.addSiteActionStatus)
+      && state.commandStatusText.includes(state.controlMapBasicsStatus)
       && state.commandStatusText.includes(state.copyActionStatus)
       && state.commandStatusText.includes(state.downloadActionStatus)
       && state.commandStatusText.includes(state.cancelActionStatus)
