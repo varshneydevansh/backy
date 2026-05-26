@@ -1028,6 +1028,8 @@ function PageEditorRoute() {
       };
     }
   };
+  const pageEditorPageStateActionStatusId = 'page-editor-page-state-action-status';
+  const pageEditorPageStateBackActionStatus = `Back to Pages available for ${siteId}.`;
 
   // If page not found, show error
   if (isLoadingPage && !page) {
@@ -1043,7 +1045,18 @@ function PageEditorRoute() {
   if (!canViewPage && !isPermissionMatrixPending) {
     return (
       <PageShell title="Page access denied" description={viewPagePermissionTitle || permissionError || "Your account can't view this page."}>
-        <button onClick={() => navigate({ to: '/pages', search: { siteId } })} className="text-primary hover:underline">
+        <span id={pageEditorPageStateActionStatusId} className="sr-only" data-testid="page-editor-page-state-action-status" aria-live="polite">
+          {pageEditorPageStateBackActionStatus}
+        </span>
+        <button
+          type="button"
+          onClick={() => navigate({ to: '/pages', search: { siteId } })}
+          className="text-primary hover:underline"
+          aria-describedby={pageEditorPageStateActionStatusId}
+          data-testid="page-editor-access-denied-back"
+          data-action-state="ready"
+          data-action-status={pageEditorPageStateBackActionStatus}
+        >
           &larr; Back to Pages
         </button>
       </PageShell>
@@ -1053,7 +1066,18 @@ function PageEditorRoute() {
   if (!page) {
     return (
       <PageShell title="Page Not Found" description={loadError || "The page you requested doesn't exist."}>
-        <button onClick={() => navigate({ to: '/pages', search: { siteId } })} className="text-primary hover:underline">
+        <span id={pageEditorPageStateActionStatusId} className="sr-only" data-testid="page-editor-page-state-action-status" aria-live="polite">
+          {pageEditorPageStateBackActionStatus}
+        </span>
+        <button
+          type="button"
+          onClick={() => navigate({ to: '/pages', search: { siteId } })}
+          className="text-primary hover:underline"
+          aria-describedby={pageEditorPageStateActionStatusId}
+          data-testid="page-editor-not-found-back"
+          data-action-state="ready"
+          data-action-status={pageEditorPageStateBackActionStatus}
+        >
           &larr; Back to Pages
         </button>
       </PageShell>
@@ -1957,6 +1981,19 @@ function PageEditorRoute() {
     pageEditorUnpublishActionStatus,
     pageEditorArchiveActionStatus,
   ].join(' ');
+  const pageEditorRecoveryActionStatusId = 'page-editor-recovery-action-status';
+  const pageEditorReloadLatestDisabledReason = pageEditorCommandBusyReason;
+  const pageEditorReloadLatestActionStatus = pageEditorReloadLatestDisabledReason
+    ? `Reload latest unavailable: ${pageEditorReloadLatestDisabledReason}`
+    : 'Reload latest backend page available.';
+  const pageEditorReloadLatestActionState = pageEditorWorkflowActionState(pageEditorReloadLatestDisabledReason);
+  const pageEditorConflictReloadActionStatus = pageEditorReloadLatestDisabledReason
+    ? `Conflict reload unavailable: ${pageEditorReloadLatestDisabledReason}`
+    : 'Conflict reload available to replace the stale editor copy with the latest backend page.';
+  const pageEditorRecoveryActionStatus = [
+    pageEditorReloadLatestActionStatus,
+    pageEditorConflictReloadActionStatus,
+  ].join(' ');
   const pageEditorRevisionActionStatusId = 'page-editor-revision-action-status';
   const pageEditorRestoreActionStatusId = 'page-editor-restore-action-status';
   const pageEditorRevisionPanelActionState = pageEditorCommandBusyReason ? 'busy' : 'ready';
@@ -2023,6 +2060,12 @@ function PageEditorRoute() {
     'data-action-status': actionStatus,
     'data-disabled-reason': disabledReason || undefined,
   });
+  const pageEditorRecoveryActionProps = (actionStatus: string) => ({
+    'aria-describedby': pageEditorRecoveryActionStatusId,
+    'data-action-state': pageEditorReloadLatestActionState,
+    'data-action-status': actionStatus,
+    'data-disabled-reason': pageEditorReloadLatestDisabledReason || undefined,
+  });
 
   return (
     <PageShell
@@ -2070,8 +2113,27 @@ function PageEditorRoute() {
         </Button>
       }
     >
+      {(loadError || saveConflict) && (
+        <span
+          id={pageEditorRecoveryActionStatusId}
+          className="sr-only"
+          data-testid="page-editor-recovery-action-status"
+          aria-live="polite"
+          data-action-state={pageEditorReloadLatestActionState}
+          data-action-status={pageEditorRecoveryActionStatus}
+        >
+          {pageEditorRecoveryActionStatus}
+        </span>
+      )}
+
       {(loadError || saveWarning) && (
-        <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div
+          className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+          aria-describedby={loadError ? pageEditorRecoveryActionStatusId : undefined}
+          data-testid={loadError ? 'page-editor-local-copy-warning' : undefined}
+          data-action-state={loadError ? pageEditorReloadLatestActionState : undefined}
+          data-action-status={loadError ? pageEditorReloadLatestActionStatus : undefined}
+        >
           <span>{saveWarning || `${loadError} Using the local page copy in read-only mode.`}</span>
           {loadError && (
             <Button
@@ -2081,6 +2143,9 @@ function PageEditorRoute() {
               onClick={() => void reloadLatestPage()}
               disabled={isPageEditorBusy}
               iconStart={<RefreshCw className={cn('size-3.5', isLoadingPage && 'animate-spin')} />}
+              title={pageEditorReloadLatestDisabledReason || 'Reload latest backend page'}
+              data-testid="page-editor-load-error-reload"
+              {...pageEditorRecoveryActionProps(pageEditorReloadLatestActionStatus)}
             >
               Reload latest
             </Button>
@@ -2098,6 +2163,9 @@ function PageEditorRoute() {
         <div
           className="mb-4 flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 shadow-sm sm:flex-row sm:items-start sm:justify-between"
           data-testid="page-editor-save-conflict"
+          aria-describedby={pageEditorRecoveryActionStatusId}
+          data-action-state={pageEditorReloadLatestActionState}
+          data-action-status={pageEditorConflictReloadActionStatus}
         >
           <div>
             <div className="font-semibold">Save conflict detected</div>
@@ -2123,6 +2191,8 @@ function PageEditorRoute() {
             disabled={isPageEditorBusy}
             data-testid="page-editor-conflict-reload"
             iconStart={<RefreshCw className="size-4" />}
+            title={pageEditorReloadLatestDisabledReason || 'Reload latest backend page'}
+            {...pageEditorRecoveryActionProps(pageEditorConflictReloadActionStatus)}
           >
             Reload latest
           </Button>

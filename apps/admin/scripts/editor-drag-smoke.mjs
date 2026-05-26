@@ -303,12 +303,21 @@ const assertPageEditorFallbackIsReadOnly = () => {
       source.includes('data-testid="page-editor-panel-preview"') &&
       source.includes('data-testid="page-editor-panel-publish"') &&
       source.includes('data-testid="page-editor-panel-unpublish"') &&
-      source.includes('data-testid="page-editor-panel-archive"') &&
-      source.includes('data-testid="page-editor-copy-publish-impact"') &&
-      source.includes('data-testid="page-editor-panel-refresh-readiness"') &&
-      source.includes('data-testid="page-editor-focus-banner-show-panels"'),
-    'Page editor route controls must expose action-state/status metadata for navigation, focus, handoff, preview, readiness, publish, unpublish, archive, side-panel, and control-map actions.',
-  );
+	      source.includes('data-testid="page-editor-panel-archive"') &&
+	      source.includes('data-testid="page-editor-copy-publish-impact"') &&
+	      source.includes('data-testid="page-editor-panel-refresh-readiness"') &&
+	      source.includes('data-testid="page-editor-focus-banner-show-panels"') &&
+	      source.includes("const pageEditorRecoveryActionStatusId = 'page-editor-recovery-action-status'") &&
+	      source.includes('data-testid="page-editor-recovery-action-status"') &&
+	      source.includes('page-editor-local-copy-warning') &&
+	      source.includes('data-testid="page-editor-load-error-reload"') &&
+	      source.includes('data-testid="page-editor-conflict-reload"') &&
+	      source.includes('pageEditorRecoveryActionProps') &&
+	      source.includes('data-testid="page-editor-page-state-action-status"') &&
+	      source.includes('data-testid="page-editor-access-denied-back"') &&
+	      source.includes('data-testid="page-editor-not-found-back"'),
+	    'Page editor route controls must expose action-state/status metadata for navigation, focus, handoff, preview, readiness, publish, unpublish, archive, side-panel, control-map, recovery, and fallback-state actions.',
+	  );
   assert(source.includes('setLoadError(null);') && source.includes('Latest backend page loaded into the editor.'), 'Page editor reload must clear fallback state after loading backend content');
   assert(source.includes('No saved revisions yet'), 'Page editor revision panel must keep an explicit empty revision title visible');
   assert(source.includes('Save this canvas to create a rollback point before publishing or restoring designs.'), 'Page editor revision empty state must explain how rollback points are captured');
@@ -9870,22 +9879,41 @@ const expectPageSaveConflict = async (client, pageId) => {
     'stale editor save conflict status',
   );
 
-  const conflictBanner = await evaluate(client, `(() => {
-    const banner = document.querySelector('[data-testid="page-editor-save-conflict"]');
-    const reload = document.querySelector('[data-testid="page-editor-conflict-reload"]');
-    return {
-      exists: Boolean(banner),
-      text: banner?.textContent || '',
-      hasReload: reload instanceof HTMLButtonElement && !reload.disabled,
-    };
-  })()`);
-  assert(
-    conflictBanner.exists &&
-      /Save conflict detected/.test(conflictBanner.text) &&
-      /updated after this editor loaded/.test(conflictBanner.text) &&
-      conflictBanner.hasReload,
-    `Conflict banner did not render the reload action: ${JSON.stringify(conflictBanner)}`,
-  );
+	  const conflictBanner = await evaluate(client, `(() => {
+	    const banner = document.querySelector('[data-testid="page-editor-save-conflict"]');
+	    const reload = document.querySelector('[data-testid="page-editor-conflict-reload"]');
+	    const status = document.querySelector('[data-testid="page-editor-recovery-action-status"]');
+	    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+	    return {
+	      exists: Boolean(banner),
+	      text: banner?.textContent || '',
+	      hasReload: reload instanceof HTMLButtonElement && !reload.disabled,
+	      bannerDescribedBy: banner?.getAttribute('aria-describedby') || '',
+	      bannerActionState: banner?.getAttribute('data-action-state') || '',
+	      bannerActionStatus: normalize(banner?.getAttribute('data-action-status')),
+	      reloadDescribedBy: reload?.getAttribute('aria-describedby') || '',
+	      reloadActionState: reload?.getAttribute('data-action-state') || '',
+	      reloadActionStatus: normalize(reload?.getAttribute('data-action-status')),
+	      reloadDisabledReason: reload?.getAttribute('data-disabled-reason') || '',
+	      statusId: status?.id || '',
+	      statusText: normalize(status?.textContent),
+	    };
+	  })()`);
+	  assert(
+	    conflictBanner.exists &&
+	      /Save conflict detected/.test(conflictBanner.text) &&
+	      /updated after this editor loaded/.test(conflictBanner.text) &&
+	      conflictBanner.hasReload &&
+	      conflictBanner.statusId === 'page-editor-recovery-action-status' &&
+	      conflictBanner.bannerDescribedBy === conflictBanner.statusId &&
+	      conflictBanner.reloadDescribedBy === conflictBanner.statusId &&
+	      ['ready', 'busy'].includes(conflictBanner.bannerActionState) &&
+	      ['ready', 'busy'].includes(conflictBanner.reloadActionState) &&
+	      /Conflict reload (available|unavailable)/.test(conflictBanner.bannerActionStatus) &&
+	      /Conflict reload (available|unavailable)/.test(conflictBanner.reloadActionStatus) &&
+	      /Conflict reload/.test(conflictBanner.statusText),
+	    `Conflict banner did not render the reload action contract: ${JSON.stringify(conflictBanner)}`,
+	  );
 
   const afterPayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
   const afterPage = afterPayload.data?.page;
