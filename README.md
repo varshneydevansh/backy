@@ -67,10 +67,9 @@ npm install
 
 ```bash
 # apps/admin/.env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_PUBLIC_API_URL=http://localhost:3001
-VITE_ADMIN_URL=http://localhost:3000
+VITE_BACKY_PUBLIC_API_BASE_URL=http://localhost:3001/api
+VITE_BACKY_ADMIN_API_BASE_URL=http://localhost:3001/api/admin
+VITE_BACKY_ADMIN_API_KEY=dev-admin-key-change-me
 ```
 
 ### 4) Start
@@ -79,7 +78,7 @@ VITE_ADMIN_URL=http://localhost:3000
 npm run dev
 ```
 
-Admin runs on `http://localhost:3000`; public app runs on `http://localhost:3001`.
+Admin runs on `http://localhost:5173`; public app runs on `http://localhost:3001`.
 
 ---
 
@@ -97,6 +96,30 @@ Backy is designed to run as two deployable apps:
    - Form/comment submission endpoints
 
 For external/custom frontends, use the public endpoints from `apps/public` directly and treat `backy-public` as your headless CMS host.
+
+## Vercel release runbook
+
+Create two Vercel projects from this repo so admin/editor traffic and public/custom frontend traffic stay operationally separate.
+
+### `backy-public`
+
+- Root Directory: `apps/public`
+- Framework Preset: Next.js
+- Build Command: `npm run build`
+- Development Command: `npm run dev`
+- Runtime config: set `BACKY_DATA_MODE=database`, `BACKY_DATABASE_URL`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, storage/provider secrets, and `NEXT_PUBLIC_BACKY_ADMIN_APP_URL`.
+- Cron config: `apps/public/vercel.json` schedules `/api/admin/commerce/reconcile?limit=100` at `0 3 * * *`.
+
+### `backy-admin`
+
+- Root Directory: `apps/admin`
+- Framework Preset: Vite
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- Runtime config: set `VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api`, `VITE_BACKY_ADMIN_API_BASE_URL=https://<backy-public-domain>/api/admin`, and `VITE_BACKY_ADMIN_API_KEY`.
+- SPA routing and baseline headers are tracked in `apps/admin/vercel.json`.
+
+Run `npm run test:vercel-release-config` before release to verify the checked-in Vercel topology and launch homepage links.
 
 ---
 
