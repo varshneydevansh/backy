@@ -40,6 +40,7 @@ const assertFormsPersistenceCertificationSource = () => {
   const publicManifestRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/manifest/route.ts', import.meta.url), 'utf8');
   const publicOpenApiRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url), 'utf8');
   const frontendDesignContractSource = fs.readFileSync(new URL('../../public/src/lib/frontendDesignContract.ts', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
   assert(
     source.includes('data-testid="forms-persistence-certification-details"') &&
@@ -248,6 +249,13 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("label: `${field.label || 'Field'} copy`") &&
       source.includes('validation: field.validation ? field.validation.map((rule) => ({ ...rule })) : undefined'),
     'Forms builder must expose duplicate field controls that preserve field configuration with a unique key',
+  );
+  assert(
+    source.includes('form-field-duplicate-button') &&
+      source.includes('validation: field.validation ? field.validation.map((rule) => ({ ...rule })) : undefined') &&
+      smokeSource.includes('duplicateCompanyFieldThroughUi') &&
+      smokeSource.includes('company_copy'),
+    'Forms rendered smoke must click duplicate field and verify copied validation persists with a unique key',
   );
   assert(
     source.includes('buildFormDraftFieldPreset') &&
@@ -1703,6 +1711,99 @@ const assertFormActionsWired = async (client) => {
   }
 };
 
+const duplicateCompanyFieldThroughUi = async (client) => {
+  let clickState = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    clickState = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="form-builder-panel"]');
+      if (!panel) return { ok: false, reason: 'panel-missing' };
+      const fieldCards = Array.from(panel.querySelectorAll('.rounded-lg.border.border-border.bg-card.p-3'));
+      const companyCard = fieldCards.find((candidate) => (
+        Array.from(candidate.querySelectorAll('input')).some((input) => input.value === 'company')
+      ));
+      if (!(companyCard instanceof HTMLElement)) {
+        return {
+          ok: false,
+          reason: 'company-card-missing',
+          fieldKeys: fieldCards.flatMap((candidate) => Array.from(candidate.querySelectorAll('input')).map((input) => input.value)).filter(Boolean).slice(0, 30),
+        };
+      }
+      const minLengthValue = Array.from(companyCard.querySelectorAll('input')).find((input) => (input.getAttribute('aria-label') || '').includes('Min length value'));
+      const minLengthMessage = Array.from(companyCard.querySelectorAll('input')).find((input) => (input.getAttribute('aria-label') || '').includes('Min length message'));
+      const duplicateButton = companyCard.querySelector('[data-testid="form-field-duplicate-button"]');
+      if (!(minLengthValue instanceof HTMLInputElement) || minLengthValue.value !== '4') {
+        return { ok: false, reason: 'company-validation-not-ready', minLengthValue: minLengthValue?.value || '' };
+      }
+      if (!(minLengthMessage instanceof HTMLInputElement) || minLengthMessage.value !== 'Company must be at least 4 characters.') {
+        return { ok: false, reason: 'company-validation-message-not-ready', minLengthMessage: minLengthMessage?.value || '' };
+      }
+      if (!(duplicateButton instanceof HTMLButtonElement)) return { ok: false, reason: 'duplicate-button-missing' };
+      if (duplicateButton.disabled) return { ok: false, reason: 'duplicate-button-disabled' };
+      duplicateButton.scrollIntoView({ block: 'center' });
+      duplicateButton.click();
+      return { ok: true };
+    })()`);
+
+    if (clickState.ok) {
+      break;
+    }
+    if (attempt === 59) {
+      throw new Error(`Unable to duplicate Company form field: ${JSON.stringify(clickState)}`);
+    }
+    await sleep(150);
+  }
+
+  let duplicateState = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    duplicateState = await evaluate(client, `(() => {
+      const panel = document.querySelector('[data-testid="form-builder-panel"]');
+      if (!panel) return { ok: false, reason: 'panel-missing' };
+      const fieldCards = Array.from(panel.querySelectorAll('.rounded-lg.border.border-border.bg-card.p-3'));
+      const duplicateCard = fieldCards.find((candidate) => (
+        Array.from(candidate.querySelectorAll('input')).some((input) => input.value === 'company_copy')
+      ));
+      if (!(duplicateCard instanceof HTMLElement)) {
+        return {
+          ok: false,
+          reason: 'duplicate-card-missing',
+          fieldKeys: fieldCards.flatMap((candidate) => Array.from(candidate.querySelectorAll('input')).map((input) => input.value)).filter(Boolean).slice(0, 40),
+        };
+      }
+      const inputs = Array.from(duplicateCard.querySelectorAll('input'));
+      const key = inputs.find((input) => input.value === 'company_copy');
+      const label = inputs.find((input) => input.value === 'Company copy');
+      const minLengthValue = inputs.find((input) => (input.getAttribute('aria-label') || '').includes('Min length value'));
+      const minLengthMessage = inputs.find((input) => (input.getAttribute('aria-label') || '').includes('Min length message'));
+      const duplicateButton = duplicateCard.querySelector('[data-testid="form-field-duplicate-button"]');
+      return {
+        ok: key instanceof HTMLInputElement &&
+          label instanceof HTMLInputElement &&
+          minLengthValue instanceof HTMLInputElement &&
+          minLengthValue.value === '4' &&
+          minLengthMessage instanceof HTMLInputElement &&
+          minLengthMessage.value === 'Company must be at least 4 characters.' &&
+          duplicateButton instanceof HTMLButtonElement &&
+          !duplicateButton.disabled,
+        key: key?.value || '',
+        label: label?.value || '',
+        minLengthValue: minLengthValue?.value || '',
+        minLengthMessage: minLengthMessage?.value || '',
+        duplicateDisabled: duplicateButton instanceof HTMLButtonElement ? duplicateButton.disabled : null,
+      };
+    })()`);
+
+    if (duplicateState.ok) {
+      return duplicateState;
+    }
+    if (attempt === 79) {
+      throw new Error(`Duplicated Company form field did not preserve configuration: ${JSON.stringify(duplicateState)}`);
+    }
+    await sleep(150);
+  }
+
+  return duplicateState;
+};
+
 const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -1837,10 +1938,24 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       const panel = document.querySelector('[data-testid="form-builder-panel"]');
       if (!panel) return { ok: false, reason: 'panel-missing' };
       const fieldCards = Array.from(panel.querySelectorAll('.rounded-lg.border.border-border.bg-card.p-3'));
+      const companyCard = fieldCards.find((candidate) => (
+        Array.from(candidate.querySelectorAll('input')).some((input) => input.value === 'company') &&
+        Array.from(candidate.querySelectorAll('input')).some((input) => input.value === 'Company')
+      ));
+      if (companyCard) {
+        return { ok: true, reason: 'company-field-ready' };
+      }
       const fieldCard = fieldCards.find((candidate) => (
         Array.from(candidate.querySelectorAll('input')).some((input) => input.value === 'field_6')
       ));
-      const fieldInputs = Array.from((fieldCard || panel).querySelectorAll('input'));
+      if (!(fieldCard instanceof HTMLElement)) {
+        return {
+          ok: false,
+          reason: 'new-field-card-missing',
+          inputs: fieldCards.flatMap((candidate) => Array.from(candidate.querySelectorAll('input')).map((input) => input.value)).filter(Boolean).slice(-24),
+        };
+      }
+      const fieldInputs = Array.from(fieldCard.querySelectorAll('input'));
       const key = fieldInputs.find((input) => input.value === 'field_6');
       const label = fieldInputs.find((input) => input.value === 'Field 6');
       if (!(key instanceof HTMLInputElement) || !(label instanceof HTMLInputElement)) {
@@ -1857,7 +1972,7 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       key.focus();
       setInputValue(key, 'company');
 
-      return { ok: true };
+      return { ok: false, reason: 'company-rename-dispatched', key: key.value, label: label.value };
     })()`);
 
     if (result.ok) break;
@@ -1883,6 +1998,13 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       const fieldCard = fieldCards.find((candidate) => (
         Array.from(candidate.querySelectorAll('input')).some((input) => input.value === 'company')
       ));
+      if (!(fieldCard instanceof HTMLElement)) {
+        return {
+          ok: false,
+          reason: 'company-card-missing',
+          fieldKeys: fieldCards.flatMap((candidate) => Array.from(candidate.querySelectorAll('input')).map((input) => input.value)).filter(Boolean).slice(0, 30),
+        };
+      }
       const fieldInputs = Array.from((fieldCard || panel).querySelectorAll('input'));
       const minLengthValue = fieldInputs.find((input) => (input.getAttribute('aria-label') || '').includes('Min length value'));
       const minLengthMessage = fieldInputs.find((input) => (input.getAttribute('aria-label') || '').includes('Min length message'));
@@ -1938,6 +2060,8 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
 
     await sleep(250);
   }
+
+  const duplicatedCompanyField = await duplicateCompanyFieldThroughUi(client);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
@@ -2019,12 +2143,23 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
     const editedTitle = form?.title === 'Registration edited';
     const company = form?.fields?.some((field) => field.key === 'company' && field.label === 'Company');
     const companyValidation = form?.fields?.find((field) => field.key === 'company')?.validation || [];
+    const companyCopy = form?.fields?.find((field) => field.key === 'company_copy');
+    const companyCopyValidation = companyCopy?.validation || [];
     const collectionTarget = form?.collectionTarget;
     const hasCompanyMinLength = companyValidation.some((rule) => (
       rule.type === 'minLength' &&
       Number(rule.value) === 4 &&
       rule.message === 'Company must be at least 4 characters.'
     ));
+    const hasCompanyCopy = (
+      companyCopy?.label === 'Company copy' &&
+      companyCopy?.type === 'text' &&
+      companyCopyValidation.some((rule) => (
+        rule.type === 'minLength' &&
+        Number(rule.value) === 4 &&
+        rule.message === 'Company must be at least 4 characters.'
+      ))
+    );
     const hasCollectionMapping = (
       collectionTarget?.enabled === true &&
       collectionTarget.collectionId === collectionId &&
@@ -2053,8 +2188,20 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
       consent.exportIncludesIp === false
     );
 
-    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCollectionMapping && placeholder && notificationTargets && spamSettings && consentSettings) {
-      return { ...saved, editedTitle, company, hasCompanyMinLength, hasCollectionMapping, placeholder, notificationTargets, spamSettings, consentSettings };
+    if (saved.notice && editedTitle && company && hasCompanyMinLength && hasCompanyCopy && hasCollectionMapping && placeholder && notificationTargets && spamSettings && consentSettings) {
+      return {
+        ...saved,
+        editedTitle,
+        company,
+        hasCompanyMinLength,
+        hasCompanyCopy,
+        duplicatedCompanyField,
+        hasCollectionMapping,
+        placeholder,
+        notificationTargets,
+        spamSettings,
+        consentSettings,
+      };
     }
 
     if (attempt === 79) {
@@ -2064,6 +2211,7 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
         notificationEmail: form?.notificationEmail,
         notificationWebhook: form?.notificationWebhook,
         collectionTarget,
+        duplicatedCompanyField,
         spam,
         consent,
         fields: form?.fields?.map((field) => ({ key: field.key, label: field.label, placeholder: field.placeholder, validation: field.validation })),
@@ -3150,7 +3298,7 @@ const main = async () => {
     const definition = await requestApi(`/api/sites/${SITE_ID}/forms/${createdFormId}/definition`);
     await assertOpenApiFormSubmissionContract();
     assert(definition.data?.form?.title === 'Registration edited', `Edited registration title did not persist: ${definition.data?.form?.title}`);
-    assert(definition.data?.form?.fields?.length === 6, 'Edited registration definition did not expose six fields');
+    assert(definition.data?.form?.fields?.length === 7, 'Edited registration definition did not expose seven fields after duplicating Company');
     assert(
       definition.data.form.fields.some((field) => field.key === 'company' && field.label === 'Company'),
       'Edited registration definition did not expose Company field',
@@ -3161,6 +3309,18 @@ const main = async () => {
         field.validation?.some((rule) => rule.type === 'minLength' && Number(rule.value) === 4)
       )),
       'Edited registration definition did not expose Company minLength validation',
+    );
+    assert(
+      definition.data.form.fields.some((field) => (
+        field.key === 'company_copy' &&
+        field.label === 'Company copy' &&
+        field.validation?.some((rule) => (
+          rule.type === 'minLength' &&
+          Number(rule.value) === 4 &&
+          rule.message === 'Company must be at least 4 characters.'
+        ))
+      )),
+      'Edited registration definition did not expose duplicated Company field with copied validation',
     );
     assert(
       definition.data.form.collectionTarget?.enabled === true &&
