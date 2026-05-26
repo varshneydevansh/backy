@@ -56,6 +56,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  SmilePlus,
   Square,
 } from 'lucide-react';
 import { ColorPicker } from '@backy-cms/editor';
@@ -79,9 +80,11 @@ interface RichTextFormattingProps {
 
 const MARK_ABSENT = Symbol('richtext-mark-absent');
 const MARK_MIXED = Symbol('richtext-mark-mixed');
+const RICH_TEXT_TOOLBAR_ACTION_STATUS_ID = 'rich-text-toolbar-action-status';
 
 type MarkStateValue = string | number | boolean | null | undefined | symbol;
 type InsertDialogMode = 'link' | 'image';
+type RichTextToolbarActionState = 'ready' | 'selected' | 'blocked';
 
 const FONT_MEDIA_MARK_KEYS = [
   'fontMediaId',
@@ -2741,14 +2744,65 @@ export function RichTextFormatting({
     });
   }, [fontFamilies]);
 
+  const richTextToolbarActionState: RichTextToolbarActionState = canTargetEditorControlContent()
+    ? 'ready'
+    : 'blocked';
+  const richTextToolbarActionStatus = richTextToolbarActionState === 'ready'
+    ? 'Rich text formatting controls are ready for the focused text element.'
+    : 'Focus a rich text element before applying text formatting controls.';
+  const richTextActionProps = (
+    label: string,
+    options: {
+      selected?: boolean;
+      disabledReason?: string;
+    } = {},
+  ) => {
+    const actionState: RichTextToolbarActionState = options.disabledReason
+      ? 'blocked'
+      : options.selected
+        ? 'selected'
+        : 'ready';
+    const actionStatus = options.disabledReason
+      ? `${label} unavailable: ${options.disabledReason}`
+      : options.selected
+        ? `${label} selected.`
+        : `${label} available.`;
+
+    return {
+      title: options.disabledReason || label,
+      'aria-label': label,
+      'aria-describedby': RICH_TEXT_TOOLBAR_ACTION_STATUS_ID,
+      'data-action-state': actionState,
+      'data-action-status': actionStatus,
+      'data-disabled-reason': options.disabledReason || undefined,
+    };
+  };
+
   return (
     <div
       className={cn("space-y-3 border border-border rounded-lg p-3 bg-card/40 text-xs")}
+      role="toolbar"
+      aria-label="Rich text formatting toolbar"
+      aria-describedby={RICH_TEXT_TOOLBAR_ACTION_STATUS_ID}
+      data-testid="rich-text-formatting-toolbar"
+      data-action-state={richTextToolbarActionState}
+      data-action-status={richTextToolbarActionStatus}
       onMouseDown={stopBubble}
       onMouseUp={stopBubble}
       onClick={stopBubble}
     >
-      <div className="flex items-center gap-2">
+      <span
+        id={RICH_TEXT_TOOLBAR_ACTION_STATUS_ID}
+        className="sr-only"
+        data-testid="rich-text-toolbar-action-status"
+        aria-live="polite"
+        data-action-state={richTextToolbarActionState}
+        data-action-status={richTextToolbarActionStatus}
+      >
+        {richTextToolbarActionStatus}
+      </span>
+      <div className="flex flex-wrap items-center gap-2" aria-label="Text style controls">
+        <span className="min-w-12 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Style</span>
             <button
             type="button"
             onMouseDown={(e) => {
@@ -2763,7 +2817,7 @@ export function RichTextFormatting({
             isTargetMarkActive('bold') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
           data-testid="rich-text-bold"
-          title="Bold"
+          {...richTextActionProps('Bold', { selected: isTargetMarkActive('bold') })}
         >
           <Bold className="w-4 h-4" />
         </button>
@@ -2782,7 +2836,7 @@ export function RichTextFormatting({
             isTargetMarkActive('italic') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
           data-testid="rich-text-italic"
-          title="Italic"
+          {...richTextActionProps('Italic', { selected: isTargetMarkActive('italic') })}
         >
           <Italic className="w-4 h-4" />
         </button>
@@ -2801,7 +2855,7 @@ export function RichTextFormatting({
             isTargetMarkActive('underline') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
           data-testid="rich-text-underline"
-          title="Underline"
+          {...richTextActionProps('Underline', { selected: isTargetMarkActive('underline') })}
         >
           <Underline className="w-4 h-4" />
         </button>
@@ -2820,7 +2874,7 @@ export function RichTextFormatting({
             isTargetMarkActive('strikethrough') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
           data-testid="rich-text-strikethrough"
-          title="Strikethrough"
+          {...richTextActionProps('Strikethrough', { selected: isTargetMarkActive('strikethrough') })}
         >
           <Strikethrough className="w-4 h-4" />
         </button>
@@ -2839,13 +2893,14 @@ export function RichTextFormatting({
             isTargetMarkActive('code') ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent"
           )}
           data-testid="rich-text-code"
-          title="Inline code"
+          {...richTextActionProps('Inline code', { selected: isTargetMarkActive('code') })}
         >
           <Type className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" aria-label="Text alignment controls">
+        <span className="min-w-12 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Align</span>
         <button
           type="button"
           onMouseDown={(e) => {
@@ -2855,7 +2910,7 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-align-left"
-          title="Align left"
+          {...richTextActionProps('Align left')}
         >
           <AlignLeft className="w-4 h-4" />
         </button>
@@ -2868,7 +2923,7 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-align-center"
-          title="Align center"
+          {...richTextActionProps('Align center')}
         >
           <AlignCenter className="w-4 h-4" />
         </button>
@@ -2881,7 +2936,7 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-align-right"
-          title="Align right"
+          {...richTextActionProps('Align right')}
         >
           <AlignRight className="w-4 h-4" />
         </button>
@@ -2894,13 +2949,14 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-blockquote"
-          title="Blockquote"
+          {...richTextActionProps('Blockquote')}
         >
           <Quote className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" aria-label="List controls">
+        <span className="min-w-12 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Lists</span>
         <button
           type="button"
           onMouseDown={(e) => {
@@ -2911,7 +2967,7 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-list-ul"
-          title="Bulleted list"
+          {...richTextActionProps('Bulleted list')}
         >
           <List className="w-4 h-4" />
         </button>
@@ -2925,7 +2981,7 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-list-ol"
-          title="Numbered list"
+          {...richTextActionProps('Numbered list')}
         >
           <ListOrdered className="w-4 h-4" />
         </button>
@@ -2948,9 +3004,9 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-list-outdent"
-          title="Outdent list"
+          {...richTextActionProps('Outdent list')}
         >
-          <span className="text-[10px]">◀</span>
+          <ArrowLeft className="w-4 h-4" />
         </button>
         <button
           type="button"
@@ -2971,9 +3027,9 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-list-indent"
-          title="Indent list"
+          {...richTextActionProps('Indent list')}
         >
-          <span className="text-[10px]">▶</span>
+          <ArrowRight className="w-4 h-4" />
         </button>
         <button
           type="button"
@@ -2985,7 +3041,7 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-list-move-up"
-          title="Move list item up"
+          {...richTextActionProps('Move list item up')}
         >
           <ArrowUp className="w-4 h-4" />
         </button>
@@ -2999,7 +3055,7 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-list-move-down"
-          title="Move list item down"
+          {...richTextActionProps('Move list item down')}
         >
           <ArrowDown className="w-4 h-4" />
         </button>
@@ -3023,10 +3079,14 @@ export function RichTextFormatting({
               }
               event.stopPropagation();
             }}
-              className={cn("w-full min-w-0 px-2 py-1.5 text-sm rounded-md border bg-background", "hover:bg-accent")}
-              data-testid="rich-text-font-family"
-              title="Selected font family"
-            >
+            className={cn("w-full min-w-0 px-2 py-1.5 text-sm rounded-md border bg-background", "hover:bg-accent")}
+            data-testid="rich-text-font-family"
+            title="Selected font family"
+            aria-label="Selected font family"
+            aria-describedby={RICH_TEXT_TOOLBAR_ACTION_STATUS_ID}
+            data-action-state={richTextToolbarActionState}
+            data-action-status="Selected font family available."
+          >
             {quickFontFamilies.map((font) => (
               <option
                 key={`${font.source}-${font.value}`}
@@ -3066,6 +3126,10 @@ export function RichTextFormatting({
             }}
             className="w-full px-2 py-1.5 text-sm rounded-md border bg-background"
             data-testid="rich-text-font-size"
+            aria-label="Font size"
+            aria-describedby={RICH_TEXT_TOOLBAR_ACTION_STATUS_ID}
+            data-action-state={richTextToolbarActionState}
+            data-action-status="Font size available."
           />
         </label>
       </div>
@@ -3082,7 +3146,7 @@ export function RichTextFormatting({
           }}
           className="w-full py-1.5 rounded border border-border hover:bg-accent text-[11px] text-muted-foreground"
           data-testid="rich-text-clear-formatting"
-          title="Clear selected text formatting"
+          {...richTextActionProps('Clear selected text formatting')}
         >
           <Eraser className="w-4 h-4 mr-2 inline" />
           Clear Selection Style
@@ -3138,7 +3202,7 @@ export function RichTextFormatting({
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-2 text-xs flex-1">
           <Plus className="w-3 h-3 text-muted-foreground" />
-          <span className="text-muted-foreground whitespace-nowrap">Insert</span>
+          <span className="text-muted-foreground whitespace-nowrap font-semibold uppercase tracking-wide">Insert</span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-1">
           <div className="relative">
@@ -3154,9 +3218,10 @@ export function RichTextFormatting({
                 "w-8 h-8 rounded border border-border grid place-items-center",
                   "hover:bg-accent"
               )}
-              title="Insert emoji"
+              data-testid="rich-text-insert-emoji"
+              {...richTextActionProps('Insert emoji')}
             >
-              <span>😊</span>
+              <SmilePlus className="w-4 h-4" />
             </button>
           </div>
           <EmojiPickerModal
@@ -3174,7 +3239,8 @@ export function RichTextFormatting({
               runContentProperty('insert-image', () => applyOrOpenMediaAction(), { requireActiveEditor: false });
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
-            title="Insert image"
+            data-testid="rich-text-insert-image"
+            {...richTextActionProps('Insert image')}
           >
             <Image className="w-4 h-4" />
           </button>
@@ -3187,7 +3253,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-insert-table"
-            title="Insert table"
+            {...richTextActionProps('Insert table')}
           >
             <Table className="w-4 h-4" />
           </button>
@@ -3200,7 +3266,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-add-row"
-            title="Add table row"
+            {...richTextActionProps('Add table row')}
           >
             <Rows3 className="w-4 h-4" />
           </button>
@@ -3213,7 +3279,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-add-column"
-            title="Add table column"
+            {...richTextActionProps('Add table column')}
           >
             <Columns3 className="w-4 h-4" />
           </button>
@@ -3226,7 +3292,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-merge-cell-down"
-            title="Merge table cell down"
+            {...richTextActionProps('Merge table cell down')}
           >
             <Rows3 className="w-4 h-4" />
           </button>
@@ -3239,7 +3305,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-duplicate-row"
-            title="Duplicate table row"
+            {...richTextActionProps('Duplicate table row')}
           >
             <Copy className="w-4 h-4" />
           </button>
@@ -3252,7 +3318,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-duplicate-column"
-            title="Duplicate table column"
+            {...richTextActionProps('Duplicate table column')}
           >
             <Copy className="w-4 h-4" />
           </button>
@@ -3265,7 +3331,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-remove-row"
-            title="Remove table row"
+            {...richTextActionProps('Remove table row')}
           >
             <Rows2 className="w-4 h-4" />
           </button>
@@ -3278,7 +3344,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-remove-column"
-            title="Remove table column"
+            {...richTextActionProps('Remove table column')}
           >
             <Columns2 className="w-4 h-4" />
           </button>
@@ -3291,7 +3357,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-move-row-up"
-            title="Move table row up"
+            {...richTextActionProps('Move table row up')}
           >
             <ArrowUp className="w-4 h-4" />
           </button>
@@ -3304,7 +3370,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-move-row-down"
-            title="Move table row down"
+            {...richTextActionProps('Move table row down')}
           >
             <ArrowDown className="w-4 h-4" />
           </button>
@@ -3317,7 +3383,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-move-column-left"
-            title="Move table column left"
+            {...richTextActionProps('Move table column left')}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -3330,7 +3396,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-move-column-right"
-            title="Move table column right"
+            {...richTextActionProps('Move table column right')}
           >
             <ArrowRight className="w-4 h-4" />
           </button>
@@ -3343,7 +3409,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-toggle-header-row"
-            title="Toggle table header row"
+            {...richTextActionProps('Toggle table header row')}
           >
             <TableProperties className="w-4 h-4" />
           </button>
@@ -3356,7 +3422,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-toggle-header-column"
-            title="Toggle table header column"
+            {...richTextActionProps('Toggle table header column')}
           >
             <Columns3 className="w-4 h-4" />
           </button>
@@ -3369,7 +3435,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-toggle-header-cell"
-            title="Toggle table header cell"
+            {...richTextActionProps('Toggle table header cell')}
           >
             <Square className="w-4 h-4" />
           </button>
@@ -3382,7 +3448,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-merge-cell-right"
-            title="Merge table cell right"
+            {...richTextActionProps('Merge table cell right')}
           >
             <Columns3 className="w-4 h-4" />
           </button>
@@ -3395,7 +3461,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-split-cell"
-            title="Split table cell"
+            {...richTextActionProps('Split table cell')}
           >
             <Columns2 className="w-4 h-4" />
           </button>
@@ -3408,7 +3474,7 @@ export function RichTextFormatting({
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
             data-testid="rich-text-table-remove"
-            title="Remove table"
+            {...richTextActionProps('Remove table')}
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -3420,7 +3486,8 @@ export function RichTextFormatting({
               runContentProperty('insert-link', () => applyOrOpenLinkAction(), { requireActiveEditor: false });
             }}
             className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
-            title="Insert link"
+            data-testid="rich-text-insert-link"
+            {...richTextActionProps('Insert link')}
           >
             <Link className="w-4 h-4" />
           </button>
@@ -3495,7 +3562,9 @@ export function RichTextFormatting({
                   selectedTableCellVerticalAlignValue === option.value && "bg-accent text-accent-foreground"
                 )}
                 data-testid={`rich-text-table-cell-vertical-${option.value}`}
-                title={option.title}
+                {...richTextActionProps(option.title, {
+                  selected: selectedTableCellVerticalAlignValue === option.value,
+                })}
               >
                 <Icon className="w-4 h-4" />
               </button>
@@ -3536,7 +3605,7 @@ export function RichTextFormatting({
           }}
           className="w-8 h-8 rounded border border-border grid place-items-center hover:bg-accent"
           data-testid="rich-text-table-caption-clear"
-          title="Clear table caption"
+          {...richTextActionProps('Clear table caption')}
         >
           <X className="w-4 h-4" />
         </button>

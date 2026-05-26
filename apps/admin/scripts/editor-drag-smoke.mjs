@@ -407,6 +407,19 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-undo"') && source.includes('aria-keyshortcuts="Control+Z Meta+Z"'), 'Editor undo toolbar control must expose Cmd/Ctrl+Z metadata and a stable id');
   assert(source.includes('data-testid="editor-redo"') && source.includes('aria-keyshortcuts="Control+Y Meta+Y Shift+Control+Z Shift+Meta+Z"'), 'Editor redo toolbar control must expose Cmd/Ctrl+Y and Shift+Cmd/Ctrl+Z metadata with a stable id');
   assert(
+    richTextFormattingSource.includes("const RICH_TEXT_TOOLBAR_ACTION_STATUS_ID = 'rich-text-toolbar-action-status';") &&
+      richTextFormattingSource.includes('data-testid="rich-text-formatting-toolbar"') &&
+      richTextFormattingSource.includes('data-testid="rich-text-toolbar-action-status"') &&
+      richTextFormattingSource.includes('aria-label="Rich text formatting toolbar"') &&
+      richTextFormattingSource.includes("{...richTextActionProps('Bold'") &&
+      richTextFormattingSource.includes("{...richTextActionProps('Insert table')}") &&
+      richTextFormattingSource.includes('data-testid="rich-text-insert-image"') &&
+      richTextFormattingSource.includes('data-testid="rich-text-insert-link"') &&
+      richTextFormattingSource.includes('SmilePlus') &&
+      !/\p{Emoji_Presentation}/u.test(richTextFormattingSource),
+    'Rich-text formatting toolbar must expose action-status metadata, stable insert hooks, and icon-system insert controls',
+  );
+  assert(
     source.includes("const editorSecondaryToolbarStatusId = 'editor-secondary-toolbar-action-status';") &&
       source.includes('const editorSecondaryToolbarCommandProps = (commandId: string) =>') &&
       source.includes('data-testid="editor-secondary-toolbar-action-status"') &&
@@ -6482,6 +6495,53 @@ const testRichTextSelectionPreservedAcrossPropertyPanelFocus = async (client, el
   const selectedForButton = await selectEditorTextRange(client, elementId, 'Beta', 'Beta');
   assert(selectedForButton.selectedText === 'Beta', `Selection preservation setup did not select Beta: ${JSON.stringify(selectedForButton)}`);
   const buttonFocus = await focusPropertyControlByTestId(client, 'rich-text-font-size');
+  const toolbarMetadata = await evaluate(client, `(() => {
+    const toolbar = document.querySelector('[data-testid="rich-text-formatting-toolbar"]');
+    const status = document.querySelector('[data-testid="rich-text-toolbar-action-status"]');
+    const bold = document.querySelector('[data-testid="rich-text-bold"]');
+    const insertImage = document.querySelector('[data-testid="rich-text-insert-image"]');
+    const insertLink = document.querySelector('[data-testid="rich-text-insert-link"]');
+    const insertEmoji = document.querySelector('[data-testid="rich-text-insert-emoji"]');
+    const fontSize = document.querySelector('[data-testid="rich-text-font-size"]');
+    return {
+      role: toolbar?.getAttribute('role') || '',
+      toolbarLabel: toolbar?.getAttribute('aria-label') || '',
+      toolbarDescribedBy: toolbar?.getAttribute('aria-describedby') || '',
+      toolbarActionState: toolbar?.getAttribute('data-action-state') || '',
+      toolbarActionStatus: toolbar?.getAttribute('data-action-status') || '',
+      statusId: status?.id || '',
+      statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      boldDescribedBy: bold?.getAttribute('aria-describedby') || '',
+      boldActionState: bold?.getAttribute('data-action-state') || '',
+      boldActionStatus: bold?.getAttribute('data-action-status') || '',
+      insertImageActionStatus: insertImage?.getAttribute('data-action-status') || '',
+      insertLinkActionStatus: insertLink?.getAttribute('data-action-status') || '',
+      insertEmojiActionStatus: insertEmoji?.getAttribute('data-action-status') || '',
+      insertEmojiText: insertEmoji?.textContent || '',
+      insertEmojiHasSvg: Boolean(insertEmoji?.querySelector('svg')),
+      fontSizeDescribedBy: fontSize?.getAttribute('aria-describedby') || '',
+      fontSizeActionStatus: fontSize?.getAttribute('data-action-status') || '',
+    };
+  })()`);
+  assert(
+    toolbarMetadata.role === 'toolbar' &&
+      toolbarMetadata.toolbarLabel === 'Rich text formatting toolbar' &&
+      toolbarMetadata.toolbarDescribedBy === 'rich-text-toolbar-action-status' &&
+      toolbarMetadata.statusId === 'rich-text-toolbar-action-status' &&
+      toolbarMetadata.toolbarActionState === 'ready' &&
+      toolbarMetadata.statusText === toolbarMetadata.toolbarActionStatus &&
+      toolbarMetadata.boldDescribedBy === 'rich-text-toolbar-action-status' &&
+      toolbarMetadata.boldActionState === 'ready' &&
+      toolbarMetadata.boldActionStatus === 'Bold available.' &&
+      toolbarMetadata.insertImageActionStatus === 'Insert image available.' &&
+      toolbarMetadata.insertLinkActionStatus === 'Insert link available.' &&
+      toolbarMetadata.insertEmojiActionStatus === 'Insert emoji available.' &&
+      toolbarMetadata.insertEmojiText.trim() === '' &&
+      toolbarMetadata.insertEmojiHasSvg === true &&
+      toolbarMetadata.fontSizeDescribedBy === 'rich-text-toolbar-action-status' &&
+      toolbarMetadata.fontSizeActionStatus === 'Font size available.',
+    `Rich-text toolbar action metadata missing: ${JSON.stringify(toolbarMetadata)}`,
+  );
   await mouseDownControlByTestId(client, 'rich-text-bold');
 
   const boldState = await waitForRichTextLeaf(
@@ -6516,6 +6576,7 @@ const testRichTextSelectionPreservedAcrossPropertyPanelFocus = async (client, el
     seeded,
     selectedForButton,
     buttonFocus,
+    toolbarMetadata,
     boldState,
     selectedForInput,
     inputFocus,
