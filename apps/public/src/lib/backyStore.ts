@@ -6,7 +6,7 @@ import {
   type BackyContentDocument,
 } from "@backy-cms/core";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
   BackyAuditLogEntry,
@@ -2690,6 +2690,7 @@ const INTERACTION_STORE_PATH = join(
   "interactions.json",
 );
 let persistedAdminContentLoaded = false;
+let persistedAdminContentSignature = "";
 
 interface AdminContentSnapshot {
   sites?: StoreSite[];
@@ -2818,15 +2819,31 @@ function ensurePersistedAdminContentLoaded() {
   refreshPersistedAdminContent();
 }
 
+function getAdminContentFileSignature(): string {
+  try {
+    const stats = statSync(ADMIN_CONTENT_PATH);
+    return `${stats.mtimeMs}:${stats.size}`;
+  } catch {
+    return "";
+  }
+}
+
 function refreshPersistedAdminContent() {
   if (!existsSync(ADMIN_CONTENT_PATH)) {
+    persistedAdminContentSignature = "";
     return;
   }
 
   try {
+    const nextSignature = getAdminContentFileSignature();
+    if (nextSignature && nextSignature === persistedAdminContentSignature) {
+      return;
+    }
+
     const parsed = JSON.parse(
       readFileSync(ADMIN_CONTENT_PATH, "utf8"),
     ) as AdminContentSnapshot;
+    persistedAdminContentSignature = nextSignature;
 
     if (Array.isArray(parsed.sites)) {
       SITE_LIST.splice(0, SITE_LIST.length, ...parsed.sites);
@@ -2973,6 +2990,7 @@ function persistAdminContent() {
         2,
       ),
     );
+    persistedAdminContentSignature = getAdminContentFileSignature();
   } catch (error) {
     console.error("Unable to persist admin content:", error);
   }

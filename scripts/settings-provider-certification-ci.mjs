@@ -40,6 +40,7 @@ const settingsCertificationSiteId = (
   'site-demo'
 ).trim() || 'site-demo';
 const certificationOutputPath = (process.env.BACKY_SETTINGS_CERTIFICATION_OUTPUT || '').trim();
+const certifiedAt = new Date().toISOString();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -738,6 +739,7 @@ const main = async () => {
     const certificationPayload = {
       ok: true,
       contract: 'backy.settings-provider-certification.v1',
+      certifiedAt,
       artifact: {
         schemaVersion: 'backy.settings-provider-certification-artifact.v1',
         outputPathConfigured: Boolean(certificationOutputPath),
@@ -748,6 +750,13 @@ const main = async () => {
       target: {
         mode: externalBaseUrl ? 'external' : 'local',
         externalBaseUrlConfigured: Boolean(externalBaseUrl),
+      },
+      requested: {
+        storage: certifyStorage,
+        rotation: certifyRotation,
+        vercelSecrets: certifyVercelSecrets,
+        notification: certifyNotification,
+        publicApiCors: certifyPublicApiCors,
       },
 	      requestedProviders: {
 	        storage: requestedStorageProvider,

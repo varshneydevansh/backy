@@ -10987,6 +10987,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   description:
                     "Preferred field value map. Accepts canonical field keys or normalized frontendFieldKeyMap aliases.",
                 },
+                contactShareOverride: {
+                  type: "object",
+                  additionalProperties: false,
+                  description:
+                    "Optional contact-share mapping override. Accepts canonical field keys or normalized frontendFieldKeyMap aliases.",
+                  properties: {
+                    enabled: { type: "boolean" },
+                    nameField: { type: "string" },
+                    emailField: { type: "string" },
+                    phoneField: { type: "string" },
+                    notesField: { type: "string" },
+                    dedupeByEmail: { type: "boolean" },
+                  },
+                },
                 fields: {
                   type: "object",
                   additionalProperties: true,
@@ -12155,13 +12169,280 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   additionalProperties: true,
                 },
                 providerCertification: {
-                  $ref: "#/components/schemas/CommerceProviderCertification",
+                  $ref:
+                    "#/components/schemas/CommerceProductProviderCertification",
                 },
                 storefrontHandoff: {
                   $ref: "#/components/schemas/CommerceProductStorefrontHandoff",
                 },
               },
             }),
+            CommerceProductProviderCertificationEvidencePacket: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "generatedAt",
+                "selectedSiteId",
+                "selectedProductId",
+                "status",
+                "operatorNextAction",
+                "selectedFamilies",
+                "selectedProviderAliases",
+                "runtimeReadiness",
+                "operatorArtifacts",
+                "scenarioAttachments",
+                "commandPreview",
+                "target",
+                "redactionPolicy",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.commerce-provider-certification-evidence-packet.v1",
+                },
+                generatedAt: { type: "string", format: "date-time" },
+                selectedSiteId: { type: "string" },
+                selectedProductId: { type: "string" },
+                status: {
+                  enum: [
+                    "needs-credentials",
+                    "needs-scenario-evidence",
+                    "evidence-complete",
+                  ],
+                },
+                operatorNextAction: {
+                  $ref:
+                    "#/components/schemas/CommerceProviderCertificationOperatorNextAction",
+                },
+                selectedFamilies: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                selectedProviderAliases: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                runtimeReadiness: {
+                  type: "object",
+                  required: ["loaded", "configuredFamilies", "missingSelectedFamilies"],
+                  additionalProperties: true,
+                  properties: {
+                    loaded: { const: true },
+                    configuredFamilies: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    missingSelectedFamilies: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                operatorArtifacts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "family",
+                      "providerAlias",
+                      "status",
+                      "requiredInputs",
+                      "expectedArtifacts",
+                      "captureSource",
+                      "redaction",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: { type: "string" },
+                      family: { type: "string" },
+                      providerAlias: { type: "string" },
+                      status: { enum: ["ready-to-run", "needs-credentials"] },
+                      requiredInputs: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      expectedArtifacts: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      captureSource: { type: "string" },
+                      redaction: { type: "string" },
+                    },
+                  },
+                },
+                scenarioAttachments: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "key",
+                      "label",
+                      "status",
+                      "evidenceCount",
+                      "expectedEvidence",
+                      "nextAction",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      key: { type: "string" },
+                      label: { type: "string" },
+                      status: { enum: ["covered", "missing"] },
+                      evidenceCount: { type: "integer", minimum: 0 },
+                      expectedEvidence: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      nextAction: { type: "string" },
+                    },
+                  },
+                },
+                commandPreview: {
+                  type: "object",
+                  required: ["command", "requiredInputs", "targetInputs"],
+                  additionalProperties: true,
+                  properties: {
+                    command: { type: "string" },
+                    requiredInputs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    targetInputs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                target: {
+                  type: "object",
+                  required: [
+                    "siteId",
+                    "productId",
+                    "siteSelectorEnv",
+                    "productProviderSyncApi",
+                    "orderAnalyticsApi",
+                    "publicCatalogApi",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    siteId: { type: "string" },
+                    productId: { type: "string" },
+                    siteSelectorEnv: { const: "BACKY_COMMERCE_CERTIFY_SITE_ID" },
+                    productProviderSyncApi: { type: "string" },
+                    orderAnalyticsApi: { type: "string" },
+                    publicCatalogApi: { type: "string" },
+                  },
+                },
+                redactionPolicy: {
+                  type: "object",
+                  required: [
+                    "includesProviderSecrets",
+                    "includesCustomerPayloads",
+                    "includesPrivateOrderPayloads",
+                    "includesWebhookBodies",
+                    "allowedEvidence",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    includesProviderSecrets: { const: false },
+                    includesCustomerPayloads: { const: false },
+                    includesPrivateOrderPayloads: { const: false },
+                    includesWebhookBodies: { const: false },
+                    allowedEvidence: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
+            CommerceProductProviderCertification: {
+              allOf: [
+                { $ref: "#/components/schemas/CommerceProviderCertification" },
+                {
+                  type: "object",
+                  required: [
+                    "generatedAt",
+                    "selectedSiteId",
+                    "selectedProductId",
+                    "source",
+                    "operatorGate",
+                    "syncSchemaVersion",
+                    "endpointEvidence",
+                    "certificationEvidence",
+                    "operatorEvidencePacket",
+                    "secretHandling",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    generatedAt: { type: "string", format: "date-time" },
+                    selectedSiteId: { type: "string" },
+                    selectedProductId: { type: "string" },
+                    source: { const: "admin-product-provider-sync-api" },
+                    operatorGate: {
+                      const:
+                        "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification",
+                    },
+                    syncSchemaVersion: {
+                      const: "backy.commerce-product-provider-sync.v1",
+                    },
+                    site: { type: "object", additionalProperties: true },
+                    catalogEvidence: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    endpointEvidence: {
+                      type: "object",
+                      required: [
+                        "providerSync",
+                        "productSubscriptions",
+                        "commerceCatalog",
+                        "commerceOrderCreate",
+                      ],
+                      additionalProperties: true,
+                      properties: {
+                        providerSync: { type: "string" },
+                        productSubscriptions: { type: "string" },
+                        commerceCatalog: { type: "string" },
+                        commerceOrderCreate: { type: "string" },
+                      },
+                    },
+                    providerSync: {
+                      oneOf: [
+                        { type: "object", additionalProperties: true },
+                        { type: "null" },
+                      ],
+                    },
+                    certificationEvidence: {
+                      type: "object",
+                      required: ["schemaVersion", "status", "coverage", "scenarios"],
+                      additionalProperties: true,
+                      properties: {
+                        schemaVersion: {
+                          const: "backy.product-provider-certification-evidence.v1",
+                        },
+                        status: { enum: ["ready", "attention"] },
+                        coverage: {
+                          type: "object",
+                          additionalProperties: true,
+                        },
+                        scenarios: {
+                          type: "array",
+                          items: { type: "object", additionalProperties: true },
+                        },
+                      },
+                    },
+                    operatorEvidencePacket: {
+                      $ref:
+                        "#/components/schemas/CommerceProductProviderCertificationEvidencePacket",
+                    },
+                    secretHandling: { type: "string" },
+                  },
+                },
+              ],
+            },
             CommerceProductSubscriptionLifecycle: {
               type: "object",
               required: [
@@ -13016,6 +13297,47 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 secretHandling: { type: "string" },
               },
             },
+            CommerceProviderCertificationOperatorNextAction: {
+              type: "object",
+              required: [
+                "status",
+                "label",
+                "detail",
+                "command",
+                "missingFamilies",
+                "missingScenarios",
+                "artifactEnv",
+                "artifactPath",
+              ],
+              additionalProperties: true,
+              properties: {
+                status: {
+                  enum: [
+                    "needs-credentials",
+                    "needs-scenario-evidence",
+                    "evidence-complete",
+                  ],
+                },
+                label: { type: "string" },
+                detail: { type: "string" },
+                command: { type: "string" },
+                missingFamilies: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                missingScenarios: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                artifactEnv: {
+                  const: "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+                },
+                artifactPath: {
+                  const:
+                    "artifacts/backy-commerce-provider-certification.json",
+                },
+              },
+            },
             CommerceOrderProviderCertificationEvidencePacket: {
               type: "object",
               required: [
@@ -13023,6 +13345,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "generatedAt",
                 "selectedSiteId",
                 "status",
+                "operatorNextAction",
                 "selectedFamilies",
                 "selectedProviderAliases",
                 "runtimeReadiness",
@@ -13045,6 +13368,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     "needs-scenario-evidence",
                     "evidence-complete",
                   ],
+                },
+                operatorNextAction: {
+                  $ref:
+                    "#/components/schemas/CommerceProviderCertificationOperatorNextAction",
                 },
                 selectedFamilies: {
                   type: "array",

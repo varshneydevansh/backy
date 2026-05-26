@@ -3315,6 +3315,28 @@ const buildProductProviderCertificationEvidencePacket = ({
     : certificationEvidence.status === "ready"
       ? "evidence-complete"
       : "needs-scenario-evidence";
+  const missingScenarios = certificationEvidence.coverage.missing;
+  const operatorNextAction = status === "needs-credentials"
+    ? {
+        label: "Configure live provider credentials",
+        detail: missingSelectedFamilies.length > 0
+          ? `Populate runtime aliases for selected families: ${missingSelectedFamilies.join(", ")}.`
+          : "Load runtime Settings/CI environment aliases so Backy can prove provider readiness.",
+        command: "npm run doctor:release-certification && npm run ci:commerce-provider-certification",
+      }
+    : status === "needs-scenario-evidence"
+      ? {
+          label: "Attach live scenario evidence",
+          detail: missingScenarios.length > 0
+            ? `Capture redacted evidence for: ${missingScenarios.join(", ")}.`
+            : "Run the selected live provider scenarios and attach the redacted packet.",
+          command: "npm run ci:commerce-provider-certification",
+        }
+      : {
+          label: "Attach certification artifact",
+          detail: "Store the redacted artifact at artifacts/backy-commerce-provider-certification.json and expose it through BACKY_COMMERCE_CERTIFICATION_OUTPUT.",
+          command: "npm run doctor:release-certification",
+        };
 
   return {
     schemaVersion: "backy.commerce-provider-certification-evidence-packet.v1",
@@ -3322,6 +3344,14 @@ const buildProductProviderCertificationEvidencePacket = ({
     selectedSiteId: site.id,
     selectedProductId: product.id,
     status,
+    operatorNextAction: {
+      status,
+      ...operatorNextAction,
+      missingFamilies: missingSelectedFamilies,
+      missingScenarios,
+      artifactEnv: "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+      artifactPath: "artifacts/backy-commerce-provider-certification.json",
+    },
     selectedFamilies: familyArtifacts.map((artifact) => artifact.key),
     selectedProviderAliases: Object.fromEntries(familyArtifacts.map((artifact) => [
       artifact.key,

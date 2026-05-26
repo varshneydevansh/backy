@@ -141,8 +141,11 @@ export type {
   GeneratedBackyOpenApiCommerceProduct,
   GeneratedBackyOpenApiCommerceProductDesign,
   GeneratedBackyOpenApiCommerceProductDesignReadiness,
+  GeneratedBackyOpenApiCommerceProductProviderCertification,
+  GeneratedBackyOpenApiCommerceProductProviderCertificationEvidencePacket,
   GeneratedBackyOpenApiCommerceManagementPolicy,
   GeneratedBackyOpenApiCommerceProviderCertification,
+  GeneratedBackyOpenApiCommerceProviderCertificationOperatorNextAction,
   GeneratedBackyOpenApiCommerceOrderTracking,
   GeneratedBackyOpenApiCommerceOrderTrackingEnvelope,
   GeneratedBackyOpenApiCommerceStorefrontContract,
@@ -2191,6 +2194,17 @@ export interface BackyProviderCertificationEvidencePacket {
     | "needs-scenario-evidence"
     | "evidence-complete"
     | string;
+  operatorNextAction?: {
+    status?: string;
+    label?: string;
+    detail?: string;
+    command?: string;
+    missingFamilies?: string[];
+    missingScenarios?: string[];
+    artifactEnv?: string;
+    artifactPath?: string;
+    [key: string]: unknown;
+  };
   selectedFamilies: string[];
   selectedProviderAliases?: Record<string, string>;
   runtimeReadiness?: {

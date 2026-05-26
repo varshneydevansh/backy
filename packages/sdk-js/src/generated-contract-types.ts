@@ -4,7 +4,7 @@
 
 export type GeneratedBackyOpenApiOperationId = "bulkUpdateBackySiteComments" | "createBackyCollectionRecord" | "createBackyCommerceOrder" | "deleteBackyCollectionRecord" | "deleteBackyCommentBlocklistEntries" | "discoverBackySite" | "getBackyAdminSettings" | "getBackyAdminSiteSettings" | "getBackyBlogComment" | "getBackyBlogRssFeed" | "getBackyCollection" | "getBackyCommentAnalytics" | "getBackyCommentReportReasons" | "getBackyCommerceCatalog" | "getBackyCommerceOrderContract" | "getBackyFontManifest" | "getBackyForm" | "getBackyFormContact" | "getBackyFormDefinition" | "getBackyFormSubmission" | "getBackyFrontendDesignContract" | "getBackyFrontendManifest" | "getBackyInteractiveComponentRegistry" | "getBackyInteractiveComponentSandbox" | "getBackyLiveManagedBlogPost" | "getBackyLiveManagedPage" | "getBackyMedia" | "getBackyMediaFile" | "getBackyNavigation" | "getBackyOpenApiDocument" | "getBackyPageComment" | "getBackyRenderPayload" | "getBackyReusableSection" | "getBackySeoDiscovery" | "getBackySiteComment" | "listBackyAdminBlogPostRevisions" | "listBackyAdminPageRevisions" | "listBackyBlogAuthors" | "listBackyBlogCategories" | "listBackyBlogComments" | "listBackyBlogPosts" | "listBackyBlogTags" | "listBackyCollectionRecords" | "listBackyCollections" | "listBackyCommentBlocklist" | "listBackyCommentReportReasons" | "listBackyFormContacts" | "listBackyFormSubmissions" | "listBackyForms" | "listBackyInteractionEvents" | "listBackyMedia" | "listBackyMediaFolders" | "listBackyPageComments" | "listBackyPages" | "listBackyReusableSections" | "listBackySiteComments" | "receiveBackyCommerceWebhook" | "recordBackyInteractiveRuntimeEvent" | "reportBackyComment" | "resolveBackyRoute" | "retryBackyCommentDelivery" | "reviewBackyFormSubmission" | "rollbackBackyAdminBlogPost" | "rollbackBackyAdminPage" | "runBackyAdminSettingsAction" | "submitBackyBlogComment" | "submitBackyForm" | "submitBackyPageComment" | "transformBackyMediaImage" | "updateBackyAdminSettings" | "updateBackyAdminSiteSettings" | "updateBackyBlogComment" | "updateBackyCollectionRecord" | "updateBackyFormContact" | "updateBackyLiveManagedBlogPost" | "updateBackyLiveManagedPage" | "updateBackyPageComment" | "updateBackySiteComment";
 
-export type GeneratedBackyOpenApiComponentName = "AdminBlogPostRevision" | "AdminBlogPostRevisionsEnvelope" | "AdminBlogPostRollbackRequest" | "AdminPageRevision" | "AdminPageRevisionsEnvelope" | "AdminPageRollbackRequest" | "AdminSettings" | "AdminSettingsActionEnvelope" | "AdminSettingsActionRequest" | "AdminSettingsEnvelope" | "AdminSettingsMediaStorageHandoff" | "AdminSettingsProviderCertification" | "AdminSettingsProviderCertificationEvidence" | "AdminSettingsProviderCertificationEvidencePacket" | "AdminSettingsThemeDesignImpact" | "AdminSettingsUpdateRequest" | "AdminSiteSettingsEnvelope" | "AdminSiteSettingsPatchRequest" | "AdminSiteSettingsScope" | "BackyCompletionStatus" | "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyElementAnimation" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentAnalytics" | "CommentAnalyticsEnvelope" | "CommentAnalyticsStatusCounts" | "CommentAnalyticsTarget" | "CommentAnalyticsThread" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentDeliveryRetryAttempt" | "CommentDeliveryRetryEnvelope" | "CommentDeliveryRetryRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceManagementPolicy" | "CommerceOrderAnalytics" | "CommerceOrderAnalyticsEnvelope" | "CommerceOrderAnalyticsProviderCertification" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceOrderFulfillment" | "CommerceOrderFulfillmentEnvelope" | "CommerceOrderProviderCertificationEvidence" | "CommerceOrderProviderCertificationEvidencePacket" | "CommerceOrderProviderRefund" | "CommerceOrderProviderRefundEnvelope" | "CommerceOrderQuote" | "CommerceOrderQuoteEnvelope" | "CommerceOrderShippingLabel" | "CommerceOrderShippingLabelEnvelope" | "CommerceOrderStatusAccess" | "CommerceOrderStatusHandoff" | "CommerceOrderStatusHandoffEnvelope" | "CommerceOrderTracking" | "CommerceOrderTrackingEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProductDesignReadiness" | "CommerceProductProviderSync" | "CommerceProductProviderSyncEnvelope" | "CommerceProductStorefrontHandoff" | "CommerceProductSubscriptionAction" | "CommerceProductSubscriptionActionEnvelope" | "CommerceProductSubscriptionLifecycle" | "CommerceProductSubscriptionsEnvelope" | "CommerceProviderCertification" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "ContentRevisionBranchMetadata" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FormsManagementPolicy" | "FrontendDatabaseCertificationHandoff" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendDesignTemplateContent" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentControlOption" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "LiveManagementDiscovery" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaManagementPolicy" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
+export type GeneratedBackyOpenApiComponentName = "AdminBlogPostRevision" | "AdminBlogPostRevisionsEnvelope" | "AdminBlogPostRollbackRequest" | "AdminPageRevision" | "AdminPageRevisionsEnvelope" | "AdminPageRollbackRequest" | "AdminSettings" | "AdminSettingsActionEnvelope" | "AdminSettingsActionRequest" | "AdminSettingsEnvelope" | "AdminSettingsMediaStorageHandoff" | "AdminSettingsProviderCertification" | "AdminSettingsProviderCertificationEvidence" | "AdminSettingsProviderCertificationEvidencePacket" | "AdminSettingsThemeDesignImpact" | "AdminSettingsUpdateRequest" | "AdminSiteSettingsEnvelope" | "AdminSiteSettingsPatchRequest" | "AdminSiteSettingsScope" | "BackyCompletionStatus" | "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyElementAnimation" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentAnalytics" | "CommentAnalyticsEnvelope" | "CommentAnalyticsStatusCounts" | "CommentAnalyticsTarget" | "CommentAnalyticsThread" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentDeliveryRetryAttempt" | "CommentDeliveryRetryEnvelope" | "CommentDeliveryRetryRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceManagementPolicy" | "CommerceOrderAnalytics" | "CommerceOrderAnalyticsEnvelope" | "CommerceOrderAnalyticsProviderCertification" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceOrderFulfillment" | "CommerceOrderFulfillmentEnvelope" | "CommerceOrderProviderCertificationEvidence" | "CommerceOrderProviderCertificationEvidencePacket" | "CommerceOrderProviderRefund" | "CommerceOrderProviderRefundEnvelope" | "CommerceOrderQuote" | "CommerceOrderQuoteEnvelope" | "CommerceOrderShippingLabel" | "CommerceOrderShippingLabelEnvelope" | "CommerceOrderStatusAccess" | "CommerceOrderStatusHandoff" | "CommerceOrderStatusHandoffEnvelope" | "CommerceOrderTracking" | "CommerceOrderTrackingEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProductDesignReadiness" | "CommerceProductProviderCertification" | "CommerceProductProviderCertificationEvidencePacket" | "CommerceProductProviderSync" | "CommerceProductProviderSyncEnvelope" | "CommerceProductStorefrontHandoff" | "CommerceProductSubscriptionAction" | "CommerceProductSubscriptionActionEnvelope" | "CommerceProductSubscriptionLifecycle" | "CommerceProductSubscriptionsEnvelope" | "CommerceProviderCertification" | "CommerceProviderCertificationOperatorNextAction" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "ContentRevisionBranchMetadata" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FormsManagementPolicy" | "FrontendDatabaseCertificationHandoff" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendDesignTemplateContent" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentControlOption" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "LiveManagementDiscovery" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaManagementPolicy" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
 
 export interface GeneratedBackyOpenApiOperation {
   operationId?: GeneratedBackyOpenApiOperationId;
@@ -2611,6 +2611,14 @@ export type GeneratedBackyOpenApiFormSubmission = {
 
 export type GeneratedBackyOpenApiFormSubmissionRequest = {
   values?: Record<string, unknown>;
+  contactShareOverride?: {
+    enabled?: boolean;
+    nameField?: string;
+    emailField?: string;
+    phoneField?: string;
+    notesField?: string;
+    dedupeByEmail?: boolean;
+  };
   fields?: Record<string, unknown>;
   data?: Record<string, unknown>;
   submission?: Record<string, unknown>;
@@ -3206,11 +3214,102 @@ export type GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope = {
     sync: GeneratedBackyOpenApiCommerceProductProviderSync | null;
     product: GeneratedBackyOpenApiCollectionRecord;
     cacheInvalidation?: Record<string, unknown>;
-    providerCertification: GeneratedBackyOpenApiCommerceProviderCertification;
+    providerCertification: GeneratedBackyOpenApiCommerceProductProviderCertification;
     storefrontHandoff: GeneratedBackyOpenApiCommerceProductStorefrontHandoff;
     [key: string]: unknown;
   };
   error?: GeneratedBackyOpenApiErrorEnvelope;
+};
+
+export type GeneratedBackyOpenApiCommerceProductProviderCertificationEvidencePacket = {
+  schemaVersion: "backy.commerce-provider-certification-evidence-packet.v1";
+  generatedAt: string;
+  selectedSiteId: string;
+  selectedProductId: string;
+  status: "needs-credentials" | "needs-scenario-evidence" | "evidence-complete";
+  operatorNextAction: GeneratedBackyOpenApiCommerceProviderCertificationOperatorNextAction;
+  selectedFamilies: Array<string>;
+  selectedProviderAliases: Record<string, string>;
+  runtimeReadiness: {
+    loaded: true;
+    configuredFamilies: Array<string>;
+    missingSelectedFamilies: Array<string>;
+    [key: string]: unknown;
+  };
+  operatorArtifacts: Array<{
+    key: string;
+    family: string;
+    providerAlias: string;
+    status: "ready-to-run" | "needs-credentials";
+    requiredInputs: Array<string>;
+    expectedArtifacts: Array<string>;
+    captureSource: string;
+    redaction: string;
+    [key: string]: unknown;
+  }>;
+  scenarioAttachments: Array<{
+    key: string;
+    label: string;
+    status: "covered" | "missing";
+    evidenceCount: number;
+    expectedEvidence: Array<string>;
+    nextAction: string;
+    [key: string]: unknown;
+  }>;
+  commandPreview: {
+    command: string;
+    requiredInputs: Array<string>;
+    targetInputs: Array<string>;
+    [key: string]: unknown;
+  };
+  target: {
+    siteId: string;
+    productId: string;
+    siteSelectorEnv: "BACKY_COMMERCE_CERTIFY_SITE_ID";
+    productProviderSyncApi: string;
+    orderAnalyticsApi: string;
+    publicCatalogApi: string;
+    [key: string]: unknown;
+  };
+  redactionPolicy: {
+    includesProviderSecrets: false;
+    includesCustomerPayloads: false;
+    includesPrivateOrderPayloads: false;
+    includesWebhookBodies: false;
+    allowedEvidence: Array<string>;
+    [key: string]: unknown;
+  };
+  secretHandling: string;
+  [key: string]: unknown;
+};
+
+export type GeneratedBackyOpenApiCommerceProductProviderCertification = GeneratedBackyOpenApiCommerceProviderCertification & {
+  generatedAt: string;
+  selectedSiteId: string;
+  selectedProductId: string;
+  source: "admin-product-provider-sync-api";
+  operatorGate: "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification";
+  syncSchemaVersion: "backy.commerce-product-provider-sync.v1";
+  site?: Record<string, unknown>;
+  catalogEvidence?: Record<string, unknown>;
+  endpointEvidence: {
+    providerSync: string;
+    productSubscriptions: string;
+    commerceCatalog: string;
+    commerceOrderCreate: string;
+    [key: string]: unknown;
+  };
+  providerSync?: Record<string, unknown> | null;
+  certificationEvidence: {
+    schemaVersion: "backy.product-provider-certification-evidence.v1";
+    status: "ready" | "attention";
+    coverage: Record<string, unknown>;
+    scenarios: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  operatorEvidencePacket: GeneratedBackyOpenApiCommerceProductProviderCertificationEvidencePacket;
+  secretHandling: string;
+  [key: string]: unknown;
 };
 
 export type GeneratedBackyOpenApiCommerceProductSubscriptionLifecycle = {
@@ -3546,11 +3645,24 @@ export type GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidence = {
   [key: string]: unknown;
 };
 
+export type GeneratedBackyOpenApiCommerceProviderCertificationOperatorNextAction = {
+  status: "needs-credentials" | "needs-scenario-evidence" | "evidence-complete";
+  label: string;
+  detail: string;
+  command: string;
+  missingFamilies: Array<string>;
+  missingScenarios: Array<string>;
+  artifactEnv: "BACKY_COMMERCE_CERTIFICATION_OUTPUT";
+  artifactPath: "artifacts/backy-commerce-provider-certification.json";
+  [key: string]: unknown;
+};
+
 export type GeneratedBackyOpenApiCommerceOrderProviderCertificationEvidencePacket = {
   schemaVersion: "backy.order-provider-certification-evidence-packet.v1";
   generatedAt: string;
   selectedSiteId: string;
   status: "needs-credentials" | "needs-scenario-evidence" | "evidence-complete";
+  operatorNextAction: GeneratedBackyOpenApiCommerceProviderCertificationOperatorNextAction;
   selectedFamilies: Array<string>;
   selectedProviderAliases: Record<string, string>;
   runtimeReadiness: {
@@ -4372,6 +4484,8 @@ export interface GeneratedBackyOpenApiComponentSchemas {
   CommerceProduct?: GeneratedBackyOpenApiCommerceProduct;
   CommerceProductDesign?: GeneratedBackyOpenApiCommerceProductDesign;
   CommerceProductDesignReadiness?: GeneratedBackyOpenApiCommerceProductDesignReadiness;
+  CommerceProductProviderCertification?: GeneratedBackyOpenApiCommerceProductProviderCertification;
+  CommerceProductProviderCertificationEvidencePacket?: GeneratedBackyOpenApiCommerceProductProviderCertificationEvidencePacket;
   CommerceProductProviderSync?: GeneratedBackyOpenApiCommerceProductProviderSync;
   CommerceProductProviderSyncEnvelope?: GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope;
   CommerceProductStorefrontHandoff?: GeneratedBackyOpenApiCommerceProductStorefrontHandoff;
@@ -4380,6 +4494,7 @@ export interface GeneratedBackyOpenApiComponentSchemas {
   CommerceProductSubscriptionLifecycle?: GeneratedBackyOpenApiCommerceProductSubscriptionLifecycle;
   CommerceProductSubscriptionsEnvelope?: GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope;
   CommerceProviderCertification?: GeneratedBackyOpenApiCommerceProviderCertification;
+  CommerceProviderCertificationOperatorNextAction?: GeneratedBackyOpenApiCommerceProviderCertificationOperatorNextAction;
   CommerceStorefrontContract?: GeneratedBackyOpenApiCommerceStorefrontContract;
   CommerceWebhookEnvelope?: GeneratedBackyOpenApiCommerceWebhookEnvelope;
   CommerceWebhookRequest?: GeneratedBackyOpenApiCommerceWebhookRequest;

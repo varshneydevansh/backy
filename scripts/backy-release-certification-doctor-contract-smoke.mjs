@@ -24,7 +24,7 @@ const runDoctor = (env) => new Promise((resolve) => {
   child.stderr.on('data', (chunk) => {
     stderr += chunk.toString();
   });
-  child.on('exit', (code) => resolve({ code, stdout, stderr }));
+  child.on('close', (code) => resolve({ code, stdout, stderr }));
 });
 
 const assert = (condition, message) => {
@@ -70,14 +70,39 @@ const artifactTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'backy-release-doc
 const settingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification.json');
 const staleSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-stale.json');
 const untargetedSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-untargeted.json');
+const missingResultSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-missing-result.json');
+const expiredSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-expired.json');
 const leakedSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-leaked-secret.json');
 const forbiddenFieldSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-forbidden-field.json');
 const commerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification.json');
 const staleCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-stale.json');
 const untargetedCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-untargeted.json');
+const missingResultCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-missing-result.json');
+const expiredCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-expired.json');
+const freshCertifiedAt = new Date().toISOString();
+const expiredCertifiedAt = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+const settingsRequestedGroups = {
+  storage: true,
+  rotation: false,
+  vercelSecrets: false,
+  notification: true,
+  publicApiCors: true,
+};
+const settingsResults = {
+  infrastructure: {
+    groups: 9,
+    areas: ['database', 'storage', 'supabase', 'mediaScanner', 'vercel', 'notifications', 'commerce', 'interactiveComponents', 'publicApi'],
+    requestedAreas: ['storage', 'supabase', 'notifications', 'publicApi'],
+    requiredReady: true,
+  },
+  storage: { provider: 's3', status: 'ready' },
+  notification: { provider: 'resend', productionReady: true, webhookStatus: 'succeeded' },
+  publicApiCors: { origin: 'https://app.example.test', preflightStatus: 204, getStatus: 200 },
+};
 fs.writeFileSync(settingsArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.settings-provider-certification.v1',
+  certifiedAt: freshCertifiedAt,
   artifact: {
     schemaVersion: 'backy.settings-provider-certification-artifact.v1',
     outputPathConfigured: true,
@@ -86,8 +111,9 @@ fs.writeFileSync(settingsArtifactPath, JSON.stringify({
   },
   required: true,
   target: { mode: 'local', externalBaseUrlConfigured: false },
+  requested: settingsRequestedGroups,
   requestedProviders: { storage: 's3', notification: 'resend', publicApiOrigin: 'https://app.example.test' },
-  certified: ['storage', 'notification', 'publicApiCors'],
+  certified: ['infrastructure', 'storage', 'notification', 'publicApiCors'],
   apiHandoffs: {
     settingsAdminApi: {
       status: 'certified',
@@ -116,11 +142,12 @@ fs.writeFileSync(settingsArtifactPath, JSON.stringify({
       frontendDatabaseEvidenceSchema: 'backy.frontend-database-certification-evidence.v1',
     },
   },
-  results: {},
+  results: settingsResults,
 }, null, 2));
 fs.writeFileSync(staleSettingsArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.settings-provider-certification.v1',
+  certifiedAt: freshCertifiedAt,
   artifact: {
     schemaVersion: 'backy.settings-provider-certification-artifact.v1',
     outputPathConfigured: true,
@@ -129,13 +156,15 @@ fs.writeFileSync(staleSettingsArtifactPath, JSON.stringify({
   },
   required: true,
   target: { mode: 'local', externalBaseUrlConfigured: false },
+  requested: settingsRequestedGroups,
   requestedProviders: { storage: 's3', notification: 'resend', publicApiOrigin: 'https://app.example.test' },
-  certified: ['storage', 'notification', 'publicApiCors'],
-  results: {},
+  certified: ['infrastructure', 'storage', 'notification', 'publicApiCors'],
+  results: settingsResults,
 }, null, 2));
 fs.writeFileSync(untargetedSettingsArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.settings-provider-certification.v1',
+  certifiedAt: freshCertifiedAt,
   artifact: {
     schemaVersion: 'backy.settings-provider-certification-artifact.v1',
     outputPathConfigured: true,
@@ -144,8 +173,9 @@ fs.writeFileSync(untargetedSettingsArtifactPath, JSON.stringify({
   },
   required: true,
   target: { mode: 'local', externalBaseUrlConfigured: false },
+  requested: settingsRequestedGroups,
   requestedProviders: { storage: 's3', notification: 'resend', publicApiOrigin: 'https://app.example.test' },
-  certified: ['storage', 'notification', 'publicApiCors'],
+  certified: ['infrastructure', 'storage', 'notification', 'publicApiCors'],
   apiHandoffs: {
     settingsAdminApi: {
       status: 'certified',
@@ -169,11 +199,12 @@ fs.writeFileSync(untargetedSettingsArtifactPath, JSON.stringify({
       frontendDatabaseEvidenceSchema: 'backy.frontend-database-certification-evidence.v1',
     },
   },
-  results: {},
+  results: settingsResults,
 }, null, 2));
 fs.writeFileSync(leakedSettingsArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.settings-provider-certification.v1',
+  certifiedAt: freshCertifiedAt,
   artifact: {
     schemaVersion: 'backy.settings-provider-certification-artifact.v1',
     outputPathConfigured: true,
@@ -182,8 +213,9 @@ fs.writeFileSync(leakedSettingsArtifactPath, JSON.stringify({
   },
   required: true,
   target: { mode: 'local', externalBaseUrlConfigured: false },
+  requested: settingsRequestedGroups,
   requestedProviders: { storage: 's3', notification: 'resend', publicApiOrigin: 'https://app.example.test' },
-  certified: ['storage', 'notification', 'publicApiCors'],
+  certified: ['infrastructure', 'storage', 'notification', 'publicApiCors'],
   apiHandoffs: {
     settingsAdminApi: {
       status: 'certified',
@@ -211,6 +243,7 @@ fs.writeFileSync(leakedSettingsArtifactPath, JSON.stringify({
     },
   },
   results: {
+    ...settingsResults,
     leakedCredential: 'backy-release-doctor-redacted-secret',
   },
 }, null, 2));
@@ -219,9 +252,17 @@ forbiddenFieldSettingsArtifactPayload.target.externalBaseUrl = 'https://backy-ad
 forbiddenFieldSettingsArtifactPayload.results.webhookBody = '{"event":"should-not-be-in-artifact"}';
 forbiddenFieldSettingsArtifactPayload.results.providerSummary = 'https://user:password@backy-admin.example.test/provider';
 fs.writeFileSync(forbiddenFieldSettingsArtifactPath, JSON.stringify(forbiddenFieldSettingsArtifactPayload, null, 2));
+const expiredSettingsArtifactPayload = JSON.parse(fs.readFileSync(settingsArtifactPath, 'utf8'));
+expiredSettingsArtifactPayload.certifiedAt = expiredCertifiedAt;
+fs.writeFileSync(expiredSettingsArtifactPath, JSON.stringify(expiredSettingsArtifactPayload, null, 2));
+const missingResultSettingsArtifactPayload = JSON.parse(fs.readFileSync(settingsArtifactPath, 'utf8'));
+missingResultSettingsArtifactPayload.certified = ['infrastructure', 'storage', 'notification'];
+delete missingResultSettingsArtifactPayload.results.publicApiCors;
+fs.writeFileSync(missingResultSettingsArtifactPath, JSON.stringify(missingResultSettingsArtifactPayload, null, 2));
 fs.writeFileSync(commerceArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.commerce-provider-certification.v1',
+  certifiedAt: freshCertifiedAt,
   artifact: {
     schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
     outputPathConfigured: true,
@@ -233,6 +274,7 @@ fs.writeFileSync(commerceArtifactPath, JSON.stringify({
   requested: { payment: true, tax: true, shipping: true },
   readiness: { payment: true, tax: true, shipping: true },
   requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
+  certified: ['payment', 'tax', 'shipping'],
   runtime: { missing: [] },
   diagnostics: { groups: 1, commerceGroup: 1 },
   apiHandoffs: {
@@ -272,9 +314,17 @@ fs.writeFileSync(commerceArtifactPath, JSON.stringify({
     },
   },
 }, null, 2));
+const expiredCommerceArtifactPayload = JSON.parse(fs.readFileSync(commerceArtifactPath, 'utf8'));
+expiredCommerceArtifactPayload.certifiedAt = expiredCertifiedAt;
+fs.writeFileSync(expiredCommerceArtifactPath, JSON.stringify(expiredCommerceArtifactPayload, null, 2));
+const missingResultCommerceArtifactPayload = JSON.parse(fs.readFileSync(commerceArtifactPath, 'utf8'));
+missingResultCommerceArtifactPayload.certified = ['payment', 'shipping'];
+missingResultCommerceArtifactPayload.readiness.tax = false;
+fs.writeFileSync(missingResultCommerceArtifactPath, JSON.stringify(missingResultCommerceArtifactPayload, null, 2));
 fs.writeFileSync(staleCommerceArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.commerce-provider-certification.v1',
+  certifiedAt: freshCertifiedAt,
   artifact: {
     schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
     outputPathConfigured: true,
@@ -286,12 +336,14 @@ fs.writeFileSync(staleCommerceArtifactPath, JSON.stringify({
   requested: { payment: true, tax: true, shipping: true },
   readiness: { payment: true, tax: true, shipping: true },
   requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
+  certified: ['payment', 'tax', 'shipping'],
   runtime: { missing: [] },
   diagnostics: { groups: 1, commerceGroup: 1 },
 }, null, 2));
 fs.writeFileSync(untargetedCommerceArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.commerce-provider-certification.v1',
+  certifiedAt: freshCertifiedAt,
   artifact: {
     schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
     outputPathConfigured: true,
@@ -303,6 +355,7 @@ fs.writeFileSync(untargetedCommerceArtifactPath, JSON.stringify({
   requested: { payment: true, tax: true, shipping: true },
   readiness: { payment: true, tax: true, shipping: true },
   requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
+  certified: ['payment', 'tax', 'shipping'],
   runtime: { missing: [] },
   diagnostics: { groups: 1, commerceGroup: 1 },
   apiHandoffs: {
@@ -486,8 +539,15 @@ assert(
 const validCertificationArtifactsJson = parseJson(validCertificationArtifacts, 'valid certification artifacts doctor');
 assert(validCertificationArtifactsJson.ok === true, 'Doctor valid artifact mode should report ok=true.');
 assert(
-  validCertificationArtifactsJson.certificationArtifacts.settings.ready === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.ready === true &&
     validCertificationArtifactsJson.certificationArtifacts.settings.schemaReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.certifiedAtReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.artifactFreshReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.artifactMaxAgeHours === 168 &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsInfrastructureEvidenceReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.settingsRequestedGroupEvidenceReady === true &&
+    JSON.stringify(validCertificationArtifactsJson.certificationArtifacts.settings.requestedSettingsResultKeys) === JSON.stringify(['storage', 'notification', 'publicApiCors']) &&
+    validCertificationArtifactsJson.certificationArtifacts.settings.certifiedSettingsGroups.includes('infrastructure') &&
     validCertificationArtifactsJson.certificationArtifacts.settings.noSecretBoundaryReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.settings.noRawSecretValuesReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.settings.noForbiddenArtifactFieldsReady === true &&
@@ -504,6 +564,13 @@ assert(
     validCertificationArtifactsJson.certificationArtifacts.settings.settingsCompletionStatusReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.ready === true &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.schemaReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.certifiedAtReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.artifactFreshReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.artifactMaxAgeHours === 168 &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.commerceRequestedGroupEvidenceReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.commerceRuntimeEvidenceReady === true &&
+    JSON.stringify(validCertificationArtifactsJson.certificationArtifacts.commerce.requestedCommerceGroups) === JSON.stringify(['payment', 'tax', 'shipping']) &&
+    JSON.stringify(validCertificationArtifactsJson.certificationArtifacts.commerce.certifiedCommerceGroups) === JSON.stringify(['payment', 'tax', 'shipping']) &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.noSecretBoundaryReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.noRawSecretValuesReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.noForbiddenArtifactFieldsReady === true &&
@@ -520,6 +587,80 @@ assert(
     validCertificationArtifactsJson.certificationArtifacts.commerce.apiHandoffSiteId === 'site-demo' &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.commerceApiHandoffSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID',
   'Doctor valid artifact mode should expose schema, no-secret, and API-handoff readiness for both artifacts.',
+);
+
+const expiredSettingsArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: expiredSettingsArtifactPath,
+  BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS: '1',
+});
+assert(
+  expiredSettingsArtifact.code === 1,
+  `Doctor should reject an expired Settings certification artifact, got ${expiredSettingsArtifact.code}.`,
+);
+const expiredSettingsArtifactJson = parseJson(expiredSettingsArtifact, 'expired settings certification artifact doctor');
+assert(
+  expiredSettingsArtifactJson.failures.includes('Settings certification artifact') &&
+    expiredSettingsArtifactJson.certificationArtifacts.settings.certifiedAtReady === true &&
+    expiredSettingsArtifactJson.certificationArtifacts.settings.artifactFreshReady === false &&
+    expiredSettingsArtifactJson.certificationArtifacts.settings.artifactMaxAgeHours === 1 &&
+    expiredSettingsArtifactJson.certificationArtifacts.settings.settingsApiHandoffReady === true,
+  'Doctor should reject expired Settings artifacts without hiding valid API-handoff evidence.',
+);
+
+const expiredCommerceArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: expiredCommerceArtifactPath,
+  BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS: '1',
+});
+assert(
+  expiredCommerceArtifact.code === 1,
+  `Doctor should reject an expired Commerce certification artifact, got ${expiredCommerceArtifact.code}.`,
+);
+const expiredCommerceArtifactJson = parseJson(expiredCommerceArtifact, 'expired commerce certification artifact doctor');
+assert(
+  expiredCommerceArtifactJson.failures.includes('Commerce certification artifact') &&
+    expiredCommerceArtifactJson.certificationArtifacts.commerce.certifiedAtReady === true &&
+    expiredCommerceArtifactJson.certificationArtifacts.commerce.artifactFreshReady === false &&
+    expiredCommerceArtifactJson.certificationArtifacts.commerce.artifactMaxAgeHours === 1 &&
+    expiredCommerceArtifactJson.certificationArtifacts.commerce.apiHandoffReady === true,
+  'Doctor should reject expired Commerce artifacts without hiding valid API-handoff evidence.',
+);
+
+const missingResultSettingsArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: missingResultSettingsArtifactPath,
+});
+assert(
+  missingResultSettingsArtifact.code === 1,
+  `Doctor should reject a Settings artifact that lacks requested group result evidence, got ${missingResultSettingsArtifact.code}.`,
+);
+const missingResultSettingsArtifactJson = parseJson(missingResultSettingsArtifact, 'missing-result settings certification artifact doctor');
+assert(
+  missingResultSettingsArtifactJson.failures.includes('Settings certification artifact') &&
+    missingResultSettingsArtifactJson.certificationArtifacts.settings.settingsApiHandoffReady === true &&
+    missingResultSettingsArtifactJson.certificationArtifacts.settings.settingsInfrastructureEvidenceReady === true &&
+    missingResultSettingsArtifactJson.certificationArtifacts.settings.settingsRequestedGroupEvidenceReady === false &&
+    missingResultSettingsArtifactJson.certificationArtifacts.settings.requestedSettingsResultKeys.includes('publicApiCors'),
+  'Doctor should reject Settings artifacts that omit requested provider result evidence while preserving API-handoff diagnostics.',
+);
+
+const missingResultCommerceArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: missingResultCommerceArtifactPath,
+});
+assert(
+  missingResultCommerceArtifact.code === 1,
+  `Doctor should reject a Commerce artifact that lacks requested group readiness evidence, got ${missingResultCommerceArtifact.code}.`,
+);
+const missingResultCommerceArtifactJson = parseJson(missingResultCommerceArtifact, 'missing-result commerce certification artifact doctor');
+assert(
+  missingResultCommerceArtifactJson.failures.includes('Commerce certification artifact') &&
+    missingResultCommerceArtifactJson.certificationArtifacts.commerce.apiHandoffReady === true &&
+    missingResultCommerceArtifactJson.certificationArtifacts.commerce.commerceRuntimeEvidenceReady === true &&
+    missingResultCommerceArtifactJson.certificationArtifacts.commerce.commerceRequestedGroupEvidenceReady === false &&
+    missingResultCommerceArtifactJson.certificationArtifacts.commerce.requestedCommerceGroups.includes('tax'),
+  'Doctor should reject Commerce artifacts that omit requested provider readiness evidence while preserving API-handoff diagnostics.',
 );
 
 const staleSettingsArtifact = await runDoctor({

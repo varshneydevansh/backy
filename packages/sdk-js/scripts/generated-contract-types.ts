@@ -327,6 +327,7 @@ import type {
   GeneratedBackyOpenApiCommerceProduct,
   GeneratedBackyOpenApiCommerceProductDesign,
   GeneratedBackyOpenApiCommerceProductDesignReadiness,
+  GeneratedBackyOpenApiCommerceProductProviderCertificationEvidencePacket,
   GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope,
   GeneratedBackyOpenApiCommerceProductSubscriptionActionEnvelope,
   GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope,
@@ -4811,6 +4812,16 @@ const sdkCommerceProviderCertification = {
     generatedAt: "2026-05-21T00:00:00.000Z",
     selectedSiteId: "site_demo",
     status: "needs-credentials",
+    operatorNextAction: {
+      status: "needs-credentials",
+      label: "Configure live provider credentials",
+      detail: "Populate runtime aliases for selected families: payment-checkout, catalog-sync.",
+      command: "npm run doctor:release-certification && npm run ci:commerce-provider-certification",
+      missingFamilies: ["payment-checkout", "catalog-sync"],
+      missingScenarios: ["provider-catalog-sync"],
+      artifactEnv: "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+      artifactPath: "artifacts/backy-commerce-provider-certification.json",
+    },
     selectedFamilies: ["payment-checkout", "catalog-sync"],
     runtimeReadiness: {
       loaded: true,
@@ -4914,6 +4925,16 @@ const sdkCommerceOrderProviderCertificationEvidencePacket = {
   selectedProviderAliases: {
     "payment-refunds": "Auto payment/refund provider",
     "shipping-labels": "Auto shipping provider",
+  },
+  operatorNextAction: {
+    status: "needs-credentials",
+    label: "Configure order provider credentials",
+    detail: "Populate runtime aliases for selected order families: shipping-labels.",
+    command: "npm run doctor:release-certification && npm run ci:commerce-provider-certification",
+    missingFamilies: ["shipping-labels"],
+    missingScenarios: ["provider-refund"],
+    artifactEnv: "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+    artifactPath: "artifacts/backy-commerce-provider-certification.json",
   },
   runtimeReadiness: {
     loaded: true,
@@ -5108,6 +5129,100 @@ const sdkCommerceOrderAnalyticsEnvelope = {
 } satisfies BackyCommerceOrderAnalyticsResponse &
   GeneratedBackyOpenApiCommerceOrderAnalyticsEnvelope;
 
+const sdkCommerceProductProviderCertificationEvidencePacket = {
+  schemaVersion: "backy.commerce-provider-certification-evidence-packet.v1",
+  generatedAt: "2026-05-21T00:00:00.000Z",
+  selectedSiteId: "site_demo",
+  selectedProductId: "product_starter",
+  status: "needs-credentials",
+  operatorNextAction: {
+    status: "needs-credentials",
+    label: "Configure live provider credentials",
+    detail: "Populate runtime aliases for selected families: payment-checkout, catalog-sync.",
+    command: "npm run doctor:release-certification && npm run ci:commerce-provider-certification",
+    missingFamilies: ["payment-checkout", "catalog-sync"],
+    missingScenarios: ["provider-catalog-sync"],
+    artifactEnv: "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+    artifactPath: "artifacts/backy-commerce-provider-certification.json",
+  },
+  selectedFamilies: ["payment-checkout", "catalog-sync"],
+  selectedProviderAliases: {
+    "payment-checkout": "Auto payment provider",
+    "catalog-sync": "Auto catalog provider",
+  },
+  runtimeReadiness: {
+    loaded: true,
+    configuredFamilies: [],
+    missingSelectedFamilies: ["payment-checkout", "catalog-sync"],
+  },
+  operatorArtifacts: [
+    {
+      key: "payment-checkout",
+      family: "Payment checkout",
+      providerAlias: "Auto payment provider",
+      status: "needs-credentials",
+      requiredInputs: ["BACKY_STRIPE_SECRET_KEY"],
+      expectedArtifacts: ["paid checkout order", "payment provider reference"],
+      captureSource:
+        "public checkout intake response, private order record, and signed provider webhook readback",
+      redaction:
+        "Attach ids, timestamps, event names, totals, and status codes only; remove provider secrets and raw customer payloads.",
+    },
+    {
+      key: "catalog-sync",
+      family: "Catalog sync",
+      providerAlias: "Auto catalog provider",
+      status: "needs-credentials",
+      requiredInputs: ["BACKY_COMMERCE_PRODUCT_SYNC_URL"],
+      expectedArtifacts: ["provider product id", "provider price id", "sync status"],
+      captureSource: "admin provider-sync response and stored provider-sync metadata",
+      redaction:
+        "Attach ids, timestamps, event names, totals, and status codes only; remove provider secrets and raw customer payloads.",
+    },
+  ],
+  scenarioAttachments: [
+    {
+      key: "provider-catalog-sync",
+      label: "Provider catalog sync",
+      status: "missing",
+      evidenceCount: 0,
+      expectedEvidence: ["provider product id", "provider price id", "sync status"],
+      nextAction:
+        "Run provider catalog sync for a selected product and attach the non-secret sync result.",
+    },
+  ],
+  commandPreview: {
+    command: "npm run ci:commerce-provider-certification",
+    requiredInputs: ["BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1"],
+    targetInputs: [
+      "BACKY_COMMERCE_CERTIFICATION_BASE_URL",
+      "BACKY_COMMERCE_CERTIFY_SITE_ID",
+    ],
+  },
+  target: {
+    siteId: "site_demo",
+    productId: "product_starter",
+    siteSelectorEnv: "BACKY_COMMERCE_CERTIFY_SITE_ID",
+    productProviderSyncApi:
+      "/api/admin/sites/site_demo/commerce/products/product_starter/provider-sync",
+    orderAnalyticsApi: "/api/admin/sites/site_demo/commerce/orders/analytics",
+    publicCatalogApi: "/api/sites/site_demo/commerce/catalog",
+  },
+  redactionPolicy: {
+    includesProviderSecrets: false,
+    includesCustomerPayloads: false,
+    includesPrivateOrderPayloads: false,
+    includesWebhookBodies: false,
+    allowedEvidence: [
+      "provider ids and references",
+      "timestamped CI/preflight logs",
+      "quote totals and adjustment names",
+    ],
+  },
+  secretHandling:
+    "Redacted operator attachment manifest only; provider credentials, raw customer data, raw private orders, and webhook bodies stay out of API JSON.",
+} satisfies GeneratedBackyOpenApiCommerceProductProviderCertificationEvidencePacket;
+
 const sdkCommerceProductProviderSyncEnvelope = {
   success: true,
   requestId: "req_product_provider_sync",
@@ -5141,7 +5256,36 @@ const sdkCommerceProductProviderSyncEnvelope = {
     },
     providerCertification: {
       ...sdkCommerceProviderCertification,
-      scenarioEvidence: {
+      generatedAt: "2026-05-21T00:00:00.000Z",
+      selectedSiteId: "site_demo",
+      selectedProductId: "product_starter",
+      source: "admin-product-provider-sync-api",
+      operatorGate:
+        "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification",
+      syncSchemaVersion: "backy.commerce-product-provider-sync.v1",
+      site: {
+        id: "site_demo",
+        slug: "demo",
+        name: "Demo",
+        status: "published",
+      },
+      catalogEvidence: {
+        hasCatalog: true,
+        hasOrderIntake: true,
+        productStatus: "published",
+        productTitleConfigured: true,
+        priceConfigured: true,
+      },
+      endpointEvidence: {
+        providerSync:
+          "/api/admin/sites/site_demo/commerce/products/product_starter/provider-sync",
+        productSubscriptions:
+          "/api/admin/sites/site_demo/commerce/products/product_starter/subscriptions",
+        commerceCatalog: "/api/sites/site_demo/commerce/catalog",
+        commerceOrderCreate: "/api/sites/site_demo/commerce/orders",
+      },
+      providerSync: null,
+      certificationEvidence: {
         schemaVersion: "backy.product-provider-certification-evidence.v1",
         status: "attention",
         coverage: {
@@ -5151,6 +5295,9 @@ const sdkCommerceProductProviderSyncEnvelope = {
         },
         scenarios: [],
       },
+      operatorEvidencePacket: sdkCommerceProductProviderCertificationEvidencePacket,
+      secretHandling:
+        "Provider credentials stay in server environment/configuration; product provider-sync responses expose only non-secret readiness, scenario counts, endpoint names, and provider-family metadata.",
     },
     storefrontHandoff: {
       schemaVersion: "backy.product-storefront-handoff.v1",

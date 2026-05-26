@@ -302,6 +302,14 @@ includesAll(
 	    'certifiedGates',
 	    'certificationArtifacts',
 	    'verifyCertificationArtifact',
+	    'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS',
+	    'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES',
+	    'certifiedAtReady',
+	    'artifactFreshReady',
+	    'artifactAgeHours',
+	    'settingsRequestedGroupEvidenceReady',
+	    'commerceRequestedGroupEvidenceReady',
+	    'certifiedCommerceGroups',
 	    'verifySettingsApiHandoffs',
 	    'verifyCommerceApiHandoffs',
 	    'collectForbiddenArtifactFields',
@@ -431,6 +439,22 @@ includesAll(
 );
 
 includesAll(
+  doctor,
+  [
+    'process.exitCode = 1',
+  ],
+  'Backy release certification doctor failure-status handling',
+);
+
+excludesAll(
+  doctor,
+  [
+    'process.exit(1)',
+  ],
+  'Backy release certification doctor failure-status handling',
+);
+
+includesAll(
   doctorContract,
   [
     'backy.release-certification-doctor-contract.v1',
@@ -441,6 +465,11 @@ includesAll(
 	    'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH',
 	    'Settings certification artifact',
 	    'Commerce certification artifact',
+	    'expired settings certification artifact doctor',
+	    'expired commerce certification artifact doctor',
+	    'missing-result settings certification artifact doctor',
+	    'missing-result commerce certification artifact doctor',
+	    'artifactFreshReady',
 	    'noSecretBoundaryReady',
 		    'noRawSecretValuesReady',
 		    'settingsApiHandoffReady',

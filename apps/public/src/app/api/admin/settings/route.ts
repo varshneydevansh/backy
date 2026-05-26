@@ -2251,6 +2251,7 @@ const sanitizeAuthForResponse = (value: unknown): BackyJsonObject | undefined =>
   const {
     passwordResetTokens: _passwordResetTokens,
     inviteTokens: _inviteTokens,
+    adminSessions: _adminSessions,
     ...auth
   } = input;
 
@@ -2825,6 +2826,7 @@ const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined
     passwordResetTokens: _passwordResetTokens,
     inviteTokens: _inviteTokens,
     apiKeyServiceKeys: _apiKeyServiceKeys,
+    adminSessions: _adminSessions,
     ...safeInput
   } = input;
 

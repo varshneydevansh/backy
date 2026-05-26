@@ -34,6 +34,7 @@ const requestedCatalogProvider = (process.env.BACKY_COMMERCE_CERTIFY_CATALOG_PRO
 const requestedSubscriptionProvider = (process.env.BACKY_COMMERCE_CERTIFY_SUBSCRIPTION_PROVIDER || 'auto').trim().toLowerCase();
 const requestedWebhookProvider = (process.env.BACKY_COMMERCE_CERTIFY_WEBHOOK_PROVIDER || 'auto').trim().toLowerCase();
 const certificationOutputPath = (process.env.BACKY_COMMERCE_CERTIFICATION_OUTPUT || '').trim();
+const certifiedAt = new Date().toISOString();
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -1004,6 +1005,7 @@ const main = async () => {
     const certificationPayload = {
       ok: true,
       contract: 'backy.commerce-provider-certification.v1',
+      certifiedAt,
       artifact: {
         schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
         outputPathConfigured: Boolean(certificationOutputPath),
@@ -1026,6 +1028,9 @@ const main = async () => {
         subscriptions: requestedSubscriptionProvider,
         webhooks: requestedWebhookProvider,
       },
+      certified: Object.entries(requested)
+        .filter(([key, enabled]) => enabled && readiness[key])
+        .map(([key]) => key),
       runtime: {
         paymentProvider: preparedRuntime.paymentProvider,
         taxProvider: preparedRuntime.taxProvider,

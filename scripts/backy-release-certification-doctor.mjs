@@ -13,6 +13,12 @@ const selected = (name, fallback = 'auto') => value(name).toLowerCase() || fallb
 const requested = (name, fallback = false) => (env[name] === undefined ? fallback : env[name] === '1' || env[name] === 'true');
 const isHttpUrl = (name) => /^https?:\/\//i.test(value(name));
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value);
+const parsePositiveNumber = (name, fallback) => {
+  const parsed = Number(value(name));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+const providerArtifactMaxAgeHours = parsePositiveNumber('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS', 168);
+const providerArtifactFutureSkewMinutes = parsePositiveNumber('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES', 15);
 const RAW_SECRET_VALUE_PATTERN = /(sk_live_[A-Za-z0-9]+|sk_test_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]+)/i;
 const URL_WITH_CREDENTIALS_PATTERN = /\b(?:https?|postgres(?:ql)?):\/\/[^/\s:@]+:[^@\s/]+@/i;
 const FORBIDDEN_ARTIFACT_FIELD_NAMES = new Set([
@@ -142,6 +148,8 @@ const verifyCertificationArtifact = ({
     okReady: false,
     contractReady: false,
     schemaReady: false,
+    certifiedAtReady: false,
+    artifactFreshReady: false,
     noSecretBoundaryReady: false,
     noRawSecretValuesReady: false,
     ready: false,
@@ -181,6 +189,15 @@ const verifyCertificationArtifact = ({
   const okReady = payload.ok === true;
   const contractReady = payload.contract === expectedContract;
   const schemaReady = artifact.schemaVersion === expectedSchemaVersion;
+  const certifiedAt = typeof payload.certifiedAt === 'string' ? payload.certifiedAt : '';
+  const certifiedAtMs = Date.parse(certifiedAt);
+  const certifiedAtReady = certifiedAt.length > 0 && Number.isFinite(certifiedAtMs);
+  const artifactAgeHours = certifiedAtReady
+    ? (Date.now() - certifiedAtMs) / (60 * 60 * 1000)
+    : null;
+  const artifactFreshReady = certifiedAtReady &&
+    artifactAgeHours <= providerArtifactMaxAgeHours &&
+    artifactAgeHours >= -(providerArtifactFutureSkewMinutes / 60);
   const secretHandling = typeof artifact.secretHandling === 'string' ? artifact.secretHandling : '';
   const noSecretBoundaryReady = secretHandling.includes('provider credentials') &&
     secretHandling.includes('stay in CI secrets or runtime logs');
@@ -194,6 +211,8 @@ const verifyCertificationArtifact = ({
   const ready = okReady &&
     contractReady &&
     schemaReady &&
+    certifiedAtReady &&
+    artifactFreshReady &&
     noSecretBoundaryReady &&
     noRawSecretValuesReady &&
     noForbiddenArtifactFieldsReady &&
@@ -206,6 +225,12 @@ const verifyCertificationArtifact = ({
     okReady,
     contractReady,
     schemaReady,
+    certifiedAtReady,
+    artifactFreshReady,
+    certifiedAt,
+    artifactAgeHours: artifactAgeHours === null ? null : Number(artifactAgeHours.toFixed(3)),
+    artifactMaxAgeHours: providerArtifactMaxAgeHours,
+    artifactFutureSkewMinutes: providerArtifactFutureSkewMinutes,
     noSecretBoundaryReady,
     noRawSecretValuesReady,
     noForbiddenArtifactFieldsReady,
@@ -218,6 +243,18 @@ const verifyCertificationArtifact = ({
 };
 
 const verifyCommerceApiHandoffs = (payload) => {
+  const requested = isRecord(payload.requested) ? payload.requested : {};
+  const readiness = isRecord(payload.readiness) ? payload.readiness : {};
+  const certified = Array.isArray(payload.certified) ? payload.certified.filter((item) => typeof item === 'string') : [];
+  const runtime = isRecord(payload.runtime) ? payload.runtime : {};
+  const diagnostics = isRecord(payload.diagnostics) ? payload.diagnostics : {};
+  const requestedCommerceGroups = ['payment', 'tax', 'shipping', 'discount', 'catalog', 'subscriptions', 'webhooks']
+    .filter((key) => requested[key] === true);
+  const commerceRequestedGroupEvidenceReady = requestedCommerceGroups.length > 0 &&
+    requestedCommerceGroups.every((key) => readiness[key] === true && certified.includes(key));
+  const commerceRuntimeEvidenceReady = Array.isArray(runtime.missing) &&
+    Number.isFinite(Number(diagnostics.commerceGroup)) &&
+    Number(diagnostics.commerceGroup) > 0;
   const handoffs = isRecord(payload.apiHandoffs) ? payload.apiHandoffs : {};
   const publicApis = isRecord(handoffs.publicApis) ? handoffs.publicApis : {};
   const product = isRecord(handoffs.product) ? handoffs.product : {};
@@ -259,8 +296,12 @@ const verifyCommerceApiHandoffs = (payload) => {
   const apiHandoffReady = publicCommerceApiHandoffReady && productApiHandoffReady && orderApiHandoffReady;
 
   return {
-    ready: apiHandoffReady,
+    ready: apiHandoffReady && commerceRequestedGroupEvidenceReady && commerceRuntimeEvidenceReady,
     fields: {
+      commerceRequestedGroupEvidenceReady,
+      commerceRuntimeEvidenceReady,
+      requestedCommerceGroups,
+      certifiedCommerceGroups: certified,
       apiHandoffReady,
       apiHandoffSiteId,
       publicCommerceApiHandoffReady,
@@ -285,6 +326,23 @@ const verifyCommerceApiHandoffs = (payload) => {
 };
 
 const verifySettingsApiHandoffs = (payload) => {
+  const requested = isRecord(payload.requested) ? payload.requested : {};
+  const results = isRecord(payload.results) ? payload.results : {};
+  const certified = Array.isArray(payload.certified) ? payload.certified.filter((item) => typeof item === 'string') : [];
+  const requestedSettingsResultKeys = Object.entries({
+    storage: 'storage',
+    rotation: 'rotation',
+    vercelSecrets: 'vercelSecretManager',
+    notification: 'notification',
+    publicApiCors: 'publicApiCors',
+  })
+    .filter(([key]) => requested[key] === true)
+    .map(([, resultKey]) => resultKey);
+  const settingsInfrastructureEvidenceReady = certified.includes('infrastructure') &&
+    isRecord(results.infrastructure) &&
+    results.infrastructure.requiredReady === true;
+  const settingsRequestedGroupEvidenceReady = requestedSettingsResultKeys.length > 0 &&
+    requestedSettingsResultKeys.every((key) => certified.includes(key) && isRecord(results[key]));
   const handoffs = isRecord(payload.apiHandoffs) ? payload.apiHandoffs : {};
   const settingsAdminApi = isRecord(handoffs.settingsAdminApi) ? handoffs.settingsAdminApi : {};
   const siteScopedSettingsApi = isRecord(handoffs.siteScopedSettingsApi) ? handoffs.siteScopedSettingsApi : {};
@@ -322,8 +380,15 @@ const verifySettingsApiHandoffs = (payload) => {
   const settingsApiHandoffReady = settingsApiHandoffSchemaReady && settingsApiHandoffSiteTargetReady;
 
   return {
-    ready: settingsApiHandoffReady && siteSettingsApiHandoffReady,
+    ready: settingsApiHandoffReady &&
+      siteSettingsApiHandoffReady &&
+      settingsInfrastructureEvidenceReady &&
+      settingsRequestedGroupEvidenceReady,
     fields: {
+      settingsInfrastructureEvidenceReady,
+      settingsRequestedGroupEvidenceReady,
+      requestedSettingsResultKeys,
+      certifiedSettingsGroups: certified,
       settingsApiHandoffSchemaReady,
       settingsApiHandoffReady,
       settingsApiHandoffSiteTargetReady,
@@ -738,5 +803,5 @@ console.log(JSON.stringify({
 }, null, 2));
 
 if (env.BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED === '1' && failures.length > 0) {
-  process.exit(1);
+  process.exitCode = 1;
 }
