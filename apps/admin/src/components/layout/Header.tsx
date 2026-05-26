@@ -25,13 +25,7 @@ import {
   CircleSlash,
   RefreshCw,
   ShieldAlert,
-  ClipboardList,
-  Globe2,
-  ShoppingBag,
-  Users,
-  SlidersHorizontal,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import { cn, getRelativeTime } from '@/lib/utils';
 import {
@@ -56,14 +50,27 @@ import {
   listPages,
   listSites,
   updateComments,
-  type AdminAuditLog,
   type AdminContact,
   type AdminComment,
   type FormDefinition,
   type FormSubmission,
-  type SiteSettingsInput,
 } from '@/lib/adminContentApi';
 import { listMedia } from '@/lib/mediaApi';
+import {
+  STATIC_ROUTE_AREA,
+  activityNotificationsEnabled,
+  auditNotificationDetail,
+  auditNotificationTitle,
+  buildWorkflowShortcuts,
+  commentsNotificationsEnabled,
+  getHeaderPageTitle,
+  notificationToneClasses,
+  readRecordValue,
+  type SearchResult,
+  type StaticToolRoute,
+  type WorkflowNotification,
+  type WorkflowShortcut,
+} from './headerModel';
 
 // ============================================
 // TYPES
@@ -75,83 +82,6 @@ interface HeaderProps {
   onSidebarToggle: () => void;
 }
 
-type StaticToolRoute =
-  | '/'
-  | '/sites'
-  | '/pages'
-  | '/blog'
-  | '/forms'
-  | '/comments'
-  | '/contacts'
-  | '/media'
-  | '/products'
-  | '/orders'
-  | '/collections'
-  | '/reusable-sections'
-  | '/teams'
-  | '/users'
-  | '/settings';
-
-type SearchResult =
-  | { id: string; type: 'Site'; title: string; detail: string; action: { route: 'site'; siteId: string } }
-  | { id: string; type: 'Page'; title: string; detail: string; action: { route: 'page'; pageId: string } }
-  | { id: string; type: 'Blog'; title: string; detail: string; action: { route: 'blog'; postId: string } }
-  | { id: string; type: 'Form'; title: string; detail: string; action: { route: 'forms' } }
-  | { id: string; type: 'Comment'; title: string; detail: string; action: { route: 'comments' } }
-  | { id: string; type: 'Contact'; title: string; detail: string; action: { route: 'contacts' } }
-  | { id: string; type: 'Media'; title: string; detail: string; action: { route: 'media'; assetId: string } }
-  | { id: string; type: 'Collection'; title: string; detail: string; action: { route: 'collection'; collectionId: string } }
-  | { id: string; type: 'Record'; title: string; detail: string; action: { route: 'collectionRecord'; collectionId: string; recordId: string } }
-  | { id: string; type: 'Product'; title: string; detail: string; action: { route: 'product'; productId: string } }
-  | { id: string; type: 'Order'; title: string; detail: string; action: { route: 'order'; orderId: string } }
-  | { id: string; type: 'User'; title: string; detail: string; action: { route: 'user'; userId: string } }
-  | { id: string; type: 'Tool'; title: string; detail: string; action: { route: 'static'; to: StaticToolRoute } };
-
-const STATIC_ROUTE_AREA: Record<StaticToolRoute, AdminNavigationArea> = {
-  '/': 'dashboard',
-  '/sites': 'sites',
-  '/pages': 'pages',
-  '/blog': 'blog',
-  '/forms': 'forms',
-  '/comments': 'comments',
-  '/contacts': 'contacts',
-  '/media': 'media',
-  '/products': 'commerce',
-  '/orders': 'commerce',
-  '/collections': 'collections',
-  '/reusable-sections': 'sections',
-  '/teams': 'teams',
-  '/users': 'users',
-  '/settings': 'settings',
-};
-
-const commentsNotificationsEnabled = (settings?: SiteSettingsInput): boolean => (
-  settings?.integrations?.notifications?.inApp?.comments !== false
-);
-
-const activityNotificationsEnabled = (settings?: SiteSettingsInput): boolean => (
-  settings?.integrations?.notifications?.inApp?.activity !== false
-);
-
-type WorkflowNotificationTone = 'warning' | 'danger' | 'success' | 'info';
-
-interface WorkflowNotification {
-  id: string;
-  tone: WorkflowNotificationTone;
-  title: string;
-  detail: string;
-  meta: string;
-  actionLabel: string;
-  action:
-    | { route: 'comments' }
-    | { route: 'forms' }
-    | { route: 'contacts' }
-    | { route: 'orders' }
-    | { route: 'site'; siteId: string }
-    | { route: 'dashboard' }
-    | { route: 'settings' };
-}
-
 interface FormSubmissionNotification {
   form: FormDefinition;
   submission: FormSubmission;
@@ -161,42 +91,6 @@ interface ContactNotification {
   form: FormDefinition;
   contact: AdminContact;
 }
-
-interface WorkflowShortcut {
-  id: string;
-  label: string;
-  detail: string;
-  count: number;
-  to: StaticToolRoute;
-  icon: LucideIcon;
-}
-
-const notificationToneClasses: Record<WorkflowNotificationTone, string> = {
-  danger: 'border-red-200 bg-red-50 text-red-800',
-  warning: 'border-amber-200 bg-amber-50 text-amber-800',
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  info: 'border-sky-200 bg-sky-50 text-sky-800',
-};
-
-const readRecordValue = (values: Record<string, unknown>, key: string, fallback = '') => (
-  values[key] ?? values[key.toLowerCase()] ?? values[key.replace(/([A-Z])/g, '').toLowerCase()] ?? fallback
-);
-
-const auditNotificationTitle = (log: AdminAuditLog): string => {
-  const action = log.action
-    .split(/[._-]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-
-  return action || 'Backend activity recorded';
-};
-
-const auditNotificationDetail = (log: AdminAuditLog): string => {
-  const entity = log.entity.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
-  const actor = log.actorId ? ` by ${log.actorId}` : '';
-  return `${entity || 'record'} ${log.entityId || 'updated'}${actor}`;
-};
 
 // ============================================
 // COMPONENT
@@ -270,72 +164,13 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
       : searchLoadedForSiteId === searchLoadKey
         ? 'ready'
         : 'idle';
-  const workflowShortcuts = useMemo<WorkflowShortcut[]>(() => {
-    const routeCount = (route: WorkflowNotification['action']['route']) => (
-      workflowNotifications.filter((notification) => notification.action.route === route).length
-    );
-
-    const shortcuts: WorkflowShortcut[] = [
-      {
-        id: 'comments',
-        label: 'Comments',
-        detail: commentsAlertsDisabled ? 'Alerts off' : 'Moderation',
-        count: pendingComments.length,
-        to: '/comments',
-        icon: MessageSquare,
-      },
-      {
-        id: 'forms',
-        label: 'Forms',
-        detail: 'Submissions',
-        count: routeCount('forms'),
-        to: '/forms',
-        icon: ClipboardList,
-      },
-      {
-        id: 'contacts',
-        label: 'Contacts',
-        detail: 'Leads',
-        count: routeCount('contacts'),
-        to: '/contacts',
-        icon: Users,
-      },
-      {
-        id: 'orders',
-        label: 'Orders',
-        detail: 'Fulfillment',
-        count: routeCount('orders'),
-        to: '/orders',
-        icon: ShoppingBag,
-      },
-      {
-        id: 'site',
-        label: 'Site',
-        detail: 'Readiness',
-        count: routeCount('site'),
-        to: '/sites',
-        icon: Globe2,
-      },
-      {
-        id: 'activity',
-        label: 'Activity',
-        detail: 'Audit trail',
-        count: routeCount('dashboard'),
-        to: '/',
-        icon: ClipboardList,
-      },
-      {
-        id: 'settings',
-        label: 'Settings',
-        detail: 'Notifications',
-        count: commentsAlertsDisabled ? 1 : routeCount('settings'),
-        to: '/settings',
-        icon: SlidersHorizontal,
-      },
-    ];
-
-    return shortcuts.filter((shortcut) => canAccessAdminNavigationArea(permissionMatrix, user, STATIC_ROUTE_AREA[shortcut.to]));
-  }, [commentsAlertsDisabled, pendingComments.length, permissionMatrix, user, workflowNotifications]);
+  const workflowShortcuts = useMemo<WorkflowShortcut[]>(() => buildWorkflowShortcuts({
+    commentsAlertsDisabled,
+    pendingCommentCount: pendingComments.length,
+    permissionMatrix,
+    user,
+    workflowNotifications,
+  }), [commentsAlertsDisabled, pendingComments.length, permissionMatrix, user, workflowNotifications]);
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (normalizedQuery.length < 2) return searchIndex.slice(0, 6);
@@ -371,26 +206,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
     window.setTimeout(() => searchInputRef.current?.focus(), 0);
   }, []);
 
-  // Get page title from route
-  const getPageTitle = () => {
-    const path = routerState.location.pathname;
-    if (path === '/') return 'Dashboard';
-    if (path.startsWith('/sites')) return 'Sites';
-    if (path.startsWith('/pages')) return 'Pages';
-    if (path.startsWith('/blog')) return 'Blog';
-    if (path.startsWith('/collections')) return 'Collections';
-    if (path.startsWith('/reusable-sections')) return 'Sections';
-    if (path.startsWith('/forms')) return 'Forms';
-    if (path.startsWith('/media')) return 'Media';
-    if (path.startsWith('/products')) return 'Products';
-    if (path.startsWith('/orders')) return 'Orders';
-    if (path.startsWith('/comments')) return 'Comments';
-    if (path.startsWith('/contacts')) return 'Contacts';
-    if (path.startsWith('/teams')) return 'Teams';
-    if (path.startsWith('/users')) return 'Users';
-    if (path.startsWith('/settings')) return 'Settings';
-    return 'Dashboard';
-  };
+  const pageTitle = getHeaderPageTitle(routerState.location.pathname);
 
   const handleSignOut = () => {
     signOut();
@@ -956,6 +772,34 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
     setSearchQuery('');
   }, []);
 
+  const toggleMobileNavigation = () => {
+    setSearchOpen(false);
+    setNotificationsOpen(false);
+    setUserMenuOpen(false);
+    onSidebarToggle();
+  };
+
+  const toggleNotifications = () => {
+    const shouldOpen = !notificationsOpen;
+    setNotificationsOpen(shouldOpen);
+
+    if (shouldOpen) {
+      setSearchOpen(false);
+      setUserMenuOpen(false);
+      if (!isNotificationCenterBusy && !notificationsLoadedForActiveSite) void loadNotifications();
+    }
+  };
+
+  const toggleAccountMenu = () => {
+    const shouldOpen = !userMenuOpen;
+    setUserMenuOpen(shouldOpen);
+
+    if (shouldOpen) {
+      setSearchOpen(false);
+      setNotificationsOpen(false);
+    }
+  };
+
   const handleSearchResult = (result: SearchResult) => {
     if (isGlobalSearchBusy) return;
 
@@ -1100,7 +944,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
         </span>
         <button
           type="button"
-          onClick={onSidebarToggle}
+          onClick={toggleMobileNavigation}
           className="rounded-lg p-2 hover:bg-accent focus-ring lg:hidden"
           aria-label="Open admin navigation"
           aria-controls="admin-mobile-sidebar-navigation"
@@ -1114,7 +958,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
         </button>
 
         <h1 className="text-lg font-semibold hidden sm:block">
-          {getPageTitle()}
+          {pageTitle}
         </h1>
       </div>
 
@@ -1305,10 +1149,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
             data-action-status={notificationActionStatus}
             data-disabled-reason={notificationDisabledReason || undefined}
             data-testid="header-notification-toggle"
-            onClick={() => {
-              setNotificationsOpen((open) => !open);
-              if (!notificationsOpen && !isNotificationCenterBusy && !notificationsLoadedForActiveSite) void loadNotifications();
-            }}
+            onClick={toggleNotifications}
             className={cn(
               'relative rounded-lg p-2 transition-colors hover:bg-accent focus-ring',
               notificationsOpen && 'bg-accent text-accent-foreground',
@@ -1325,7 +1166,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
           {notificationsOpen && (
             <>
               <div
-                className="fixed inset-0 z-10"
+                className="fixed inset-x-0 bottom-0 top-16 z-10"
                 onClick={() => setNotificationsOpen(false)}
               />
               <div
@@ -1654,7 +1495,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
           </span>
           <button
             type="button"
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            onClick={toggleAccountMenu}
             className="flex items-center gap-2 rounded-lg p-2 hover:bg-accent focus-ring"
             aria-label="Open account menu"
             aria-expanded={userMenuOpen}
@@ -1677,7 +1518,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
           {userMenuOpen && (
             <>
               <div
-                className="fixed inset-0 z-10"
+                className="fixed inset-x-0 bottom-0 top-16 z-10"
                 onClick={() => setUserMenuOpen(false)}
               />
               <div

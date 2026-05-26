@@ -219,6 +219,7 @@ const assertAuthRecoverySource = () => {
   const sidebarSource = fs.readFileSync(new URL('../src/components/layout/Sidebar.tsx', import.meta.url), 'utf8');
   const sidebarModelSource = fs.readFileSync(new URL('../src/components/layout/sidebarModel.ts', import.meta.url), 'utf8');
   const headerSource = fs.readFileSync(new URL('../src/components/layout/Header.tsx', import.meta.url), 'utf8');
+  const headerModelSource = fs.readFileSync(new URL('../src/components/layout/headerModel.ts', import.meta.url), 'utf8');
   const permissionSource = fs.readFileSync(new URL('../src/lib/adminPermissionUi.ts', import.meta.url), 'utf8');
   const navigationAccessSource = fs.readFileSync(new URL('../src/lib/adminNavigationAccess.ts', import.meta.url), 'utf8');
   const loginSmokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
@@ -559,6 +560,11 @@ const assertAuthRecoverySource = () => {
       headerSource.includes('aria-describedby={mobileNavigationStatusId}') &&
       headerSource.includes('aria-label="Open account menu"') &&
       headerSource.includes('aria-expanded={userMenuOpen}') &&
+      headerSource.includes('const toggleMobileNavigation = () => {') &&
+      headerSource.includes('const toggleAccountMenu = () => {') &&
+      headerSource.includes('setSearchOpen(false);') &&
+      headerSource.includes('setNotificationsOpen(false);') &&
+      headerSource.includes('className="fixed inset-x-0 bottom-0 top-16 z-10"') &&
       headerSource.includes("const accountMenuId = 'header-account-menu';") &&
       headerSource.includes("const accountActionStatusId = 'header-account-action-status';") &&
       headerSource.includes('data-testid="header-account-action-status"') &&
@@ -582,7 +588,9 @@ const assertAuthRecoverySource = () => {
       headerSource.includes('const notificationsLoadedForActiveSite = notificationsLoadedForSiteId === activeSiteId;') &&
       headerSource.includes('setNotificationsLoadedForSiteId(activeSiteId);') &&
       headerSource.includes('setNotificationsLoadedForSiteId(null);') &&
-      headerSource.includes('if (!notificationsOpen && !isNotificationCenterBusy && !notificationsLoadedForActiveSite) void loadNotifications();') &&
+      headerSource.includes('const toggleNotifications = () => {') &&
+      headerSource.includes('if (shouldOpen) {') &&
+      headerSource.includes('if (!isNotificationCenterBusy && !notificationsLoadedForActiveSite) void loadNotifications();') &&
       headerSource.includes('const notificationPanelState = notificationsLoading') &&
       headerSource.includes("const notificationActionStatusId = 'header-notification-action-status';") &&
       headerSource.includes('const notificationActionStatus = notificationDisabledReason') &&
@@ -632,6 +640,18 @@ const assertAuthRecoverySource = () => {
   );
 
   assert(
+    headerSource.includes("import {") &&
+      headerSource.includes("} from './headerModel';") &&
+      headerModelSource.includes('export const STATIC_ROUTE_AREA') &&
+      headerModelSource.includes('export const getHeaderPageTitle = (path: string)') &&
+      headerModelSource.includes('export const buildWorkflowShortcuts = ({') &&
+      headerModelSource.includes('canAccessAdminNavigationArea(permissionMatrix, user, STATIC_ROUTE_AREA[shortcut.to])') &&
+      headerModelSource.includes('export const commentsNotificationsEnabled') &&
+      headerModelSource.includes('export const readRecordValue'),
+    'Admin header static route, workflow shortcut, notification, and search metadata must live in headerModel so the shell component does not keep growing as one monolith.',
+  );
+
+  assert(
     mainLayoutSource.includes('navigationId="admin-mobile-sidebar-navigation"') &&
       mainLayoutSource.includes('testIdPrefix="admin-mobile-sidebar"') &&
       mainLayoutSource.includes('mobileSidebarOpen={mobileSidebarOpen}') &&
@@ -645,6 +665,7 @@ const assertAuthRecoverySource = () => {
 
   assert(
     loginSmokeSource.includes('assertSidebarViewportScrollContract') &&
+      loginSmokeSource.includes('pointerClickTestId') &&
       loginSmokeSource.includes('document.documentElement.scrollHeight') &&
       loginSmokeSource.includes("data-nav-ready") &&
       loginSmokeSource.includes('assertSidebarFilterInteraction') &&
@@ -797,6 +818,51 @@ const clickButton = async (client, label) => {
     return { ok: true };
   })()`);
   assert(result.ok, `Unable to click ${label}: ${JSON.stringify(result)}`);
+};
+
+const pointerClickTestId = async (client, testId, description = testId) => {
+  const target = await evaluate(client, `(() => {
+    const element = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+    if (!(element instanceof HTMLElement)) return { ok: false, reason: 'target-missing', testId: ${JSON.stringify(testId)} };
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    return {
+      ok: rect.width > 0 && rect.height > 0,
+      x,
+      y,
+      width: rect.width,
+      height: rect.height,
+      hitTestId: hit instanceof HTMLElement ? hit.closest('[data-testid]')?.getAttribute('data-testid') || '' : '',
+      hitTag: hit instanceof HTMLElement ? hit.tagName : '',
+      hitText: hit instanceof HTMLElement ? hit.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 120) || '' : '',
+    };
+  })()`);
+  assert(target.ok, `Unable to resolve pointer target for ${description}: ${JSON.stringify(target)}`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: target.x,
+    y: target.y,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: target.x,
+    y: target.y,
+    button: 'left',
+    clickCount: 1,
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: target.x,
+    y: target.y,
+    button: 'left',
+    clickCount: 1,
+  });
+
+  return target;
 };
 
 const waitForText = async (client, text) => {
@@ -1260,6 +1326,8 @@ const assertHeaderNotificationsInteraction = async (client) => {
       const refresh = document.querySelector('[data-testid="header-notification-refresh"]');
       const summary = document.querySelector('[data-testid="header-notification-summary-action"]');
       const shortcut = document.querySelector('[data-testid^="header-notification-shortcut-"]');
+      const searchPopover = document.querySelector('[data-testid="header-global-search-popover"]');
+      const accountMenu = document.querySelector('[data-testid="header-account-menu"]');
       const workflowActions = [...document.querySelectorAll('[data-testid^="header-notification-workflow-action-"]')];
       const commentReviewActions = [...document.querySelectorAll('[data-testid^="header-notification-comment-review-"]')];
       const commentApproveActions = [...document.querySelectorAll('[data-testid^="header-notification-comment-approve-"]')];
@@ -1275,6 +1343,8 @@ const assertHeaderNotificationsInteraction = async (client) => {
           shortcuts >= 3 &&
           refresh instanceof HTMLButtonElement &&
           summary instanceof HTMLButtonElement &&
+          !(searchPopover instanceof HTMLElement) &&
+          !(accountMenu instanceof HTMLElement) &&
           panel.getAttribute('aria-describedby') === status?.id &&
           panel.getAttribute('data-action-status') === status?.textContent?.replace(/\\s+/g, ' ').trim() &&
           refresh.getAttribute('aria-describedby') === status?.id &&
@@ -1288,6 +1358,8 @@ const assertHeaderNotificationsInteraction = async (client) => {
         count: Number(panel?.getAttribute('data-notification-count') || 0),
         shortcuts,
         hasRefresh: refresh instanceof HTMLButtonElement,
+        hasSearchPopover: searchPopover instanceof HTMLElement,
+        hasAccountMenu: accountMenu instanceof HTMLElement,
         refreshState: refresh?.getAttribute('data-action-state') || '',
         refreshDescribedBy: refresh?.getAttribute('aria-describedby') || '',
         shortcutState: shortcut?.getAttribute('data-action-state') || '',
@@ -1327,6 +1399,8 @@ const assertHeaderNotificationsInteraction = async (client) => {
       openedState.statusData === openedState.statusText &&
       openedState.statusText.includes('Refresh available.') &&
       openedState.statusText.includes('Workflow shortcuts available.') &&
+      !openedState.hasSearchPopover &&
+      !openedState.hasAccountMenu &&
       openedState.refreshState === 'ready' &&
       openedState.refreshDescribedBy === openedState.statusId &&
       openedState.shortcutState === 'ready' &&
@@ -1461,21 +1535,60 @@ const assertHeaderNotificationsInteraction = async (client) => {
 };
 
 const assertHeaderAccountMenuInteraction = async (client) => {
-  await evaluate(client, `(() => {
-    const notificationPanel = document.querySelector('[data-testid="header-notification-panel"]');
-    const notificationToggle = document.querySelector('[data-testid="header-notification-toggle"]');
-    if (notificationPanel instanceof HTMLElement && notificationToggle instanceof HTMLButtonElement) {
-      notificationToggle.click();
-    }
-    return { ok: true };
+  const notificationCarryoverState = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="header-notification-panel"]');
+    const toggle = document.querySelector('[data-testid="header-notification-toggle"]');
+    return {
+      hasPanel: panel instanceof HTMLElement,
+      expanded: toggle?.getAttribute('aria-expanded') || '',
+    };
   })()`);
+  assert(
+    notificationCarryoverState.hasPanel && notificationCarryoverState.expanded === 'true',
+    `Notification center should still be open before pointer switch smoke: ${JSON.stringify(notificationCarryoverState)}`,
+  );
+
+  const notificationToAccountPointer = await pointerClickTestId(
+    client,
+    'header-account-toggle',
+    'account toggle while notification backdrop is open',
+  );
+  const notificationToAccountState = await waitForState(
+    client,
+    `(() => {
+      const notificationPanel = document.querySelector('[data-testid="header-notification-panel"]');
+      const accountMenu = document.querySelector('[data-testid="header-account-menu"]');
+      const accountToggle = document.querySelector('[data-testid="header-account-toggle"]');
+      return {
+        ready: accountMenu instanceof HTMLElement &&
+          !(notificationPanel instanceof HTMLElement) &&
+          accountToggle?.getAttribute('aria-expanded') === 'true',
+        hasNotificationPanel: notificationPanel instanceof HTMLElement,
+        hasAccountMenu: accountMenu instanceof HTMLElement,
+        accountExpanded: accountToggle?.getAttribute('aria-expanded') || '',
+      };
+    })()`,
+    'Header account pointer switch from notification center',
+  );
+  assert(
+    notificationToAccountPointer.hitTestId === 'header-account-toggle' &&
+      notificationToAccountState.hasAccountMenu &&
+      !notificationToAccountState.hasNotificationPanel,
+    `Account toggle should be pointer-clickable while notification center is open: ${JSON.stringify({ notificationToAccountPointer, notificationToAccountState })}`,
+  );
+
+  await pointerClickTestId(client, 'header-account-toggle', 'account toggle close after pointer switch');
   await waitForState(
     client,
     `(() => ({
-      ready: !document.querySelector('[data-testid="header-notification-panel"]'),
-      hasPanel: Boolean(document.querySelector('[data-testid="header-notification-panel"]')),
+      ready: !document.querySelector('[data-testid="header-notification-panel"]') &&
+        !document.querySelector('[data-testid="header-account-menu"]') &&
+        document.querySelector('[data-testid="header-account-toggle"]')?.getAttribute('aria-expanded') === 'false',
+      hasNotificationPanel: Boolean(document.querySelector('[data-testid="header-notification-panel"]')),
+      hasAccountMenu: Boolean(document.querySelector('[data-testid="header-account-menu"]')),
+      accountExpanded: document.querySelector('[data-testid="header-account-toggle"]')?.getAttribute('aria-expanded') || '',
     }))()`,
-    'Header notification center closed before account menu smoke',
+    'Header overlays closed before account menu smoke',
   );
 
   const initialState = await evaluate(client, `(() => {
@@ -1509,13 +1622,29 @@ const assertHeaderAccountMenuInteraction = async (client) => {
     `Header account menu should start closed with shared action status: ${JSON.stringify(initialState)}`,
   );
 
-  const openClick = await evaluate(client, `(() => {
-    const toggle = document.querySelector('[data-testid="header-account-toggle"]');
-    if (!(toggle instanceof HTMLButtonElement)) return { ok: false, reason: 'account-toggle-missing' };
-    toggle.click();
+  await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="header-global-search-input"]');
+    if (!(input instanceof HTMLInputElement)) return { ok: false, reason: 'search-input-missing' };
+    input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    input.click();
+    input.focus();
+    input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     return { ok: true };
   })()`);
-  assert(openClick.ok, `Unable to open account menu: ${JSON.stringify(openClick)}`);
+  const searchBeforeAccountState = await waitForState(
+    client,
+    `(() => {
+      const popover = document.querySelector('[data-testid="header-global-search-popover"]');
+      return {
+        ready: popover instanceof HTMLElement,
+        hasSearchPopover: popover instanceof HTMLElement,
+        body: document.body?.innerText?.slice(0, 700) || '',
+      };
+    })()`,
+    'Header global search open before account menu smoke',
+  );
+
+  const openClick = await pointerClickTestId(client, 'header-account-toggle', 'account toggle from search popover');
 
   const openedState = await waitForState(
     client,
@@ -1526,6 +1655,8 @@ const assertHeaderAccountMenuInteraction = async (client) => {
       const profile = document.querySelector('[data-testid="header-profile-link"]');
       const settings = document.querySelector('[data-testid="header-account-settings-action"]');
       const signOut = document.querySelector('[data-testid="header-account-sign-out-action"]');
+      const searchPopover = document.querySelector('[data-testid="header-global-search-popover"]');
+      const notificationPanel = document.querySelector('[data-testid="header-notification-panel"]');
       const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const readyAction = (button) => button instanceof HTMLButtonElement &&
         button.getAttribute('aria-describedby') === status?.id &&
@@ -1538,6 +1669,8 @@ const assertHeaderAccountMenuInteraction = async (client) => {
           menu.getAttribute('role') === 'menu' &&
           menu.getAttribute('aria-describedby') === status?.id &&
           menu.getAttribute('data-action-status') === statusText &&
+          !(searchPopover instanceof HTMLElement) &&
+          !(notificationPanel instanceof HTMLElement) &&
           readyAction(profile) &&
           readyAction(settings) &&
           readyAction(signOut),
@@ -1547,6 +1680,8 @@ const assertHeaderAccountMenuInteraction = async (client) => {
         menuId: menu?.id || '',
         menuDescribedBy: menu?.getAttribute('aria-describedby') || '',
         menuStatus: menu?.getAttribute('data-action-status') || '',
+        hasSearchPopover: searchPopover instanceof HTMLElement,
+        hasNotificationPanel: notificationPanel instanceof HTMLElement,
         profileState: profile?.getAttribute('data-action-state') || '',
         profileStatus: profile?.getAttribute('data-action-status') || '',
         profileUserId: profile?.getAttribute('data-profile-user-id') || '',
@@ -1562,6 +1697,10 @@ const assertHeaderAccountMenuInteraction = async (client) => {
   );
   assert(
     openedState.itemCount === 3 &&
+      openClick.hitTestId === 'header-account-toggle' &&
+      searchBeforeAccountState.hasSearchPopover &&
+      !openedState.hasSearchPopover &&
+      !openedState.hasNotificationPanel &&
       openedState.profileState === 'ready' &&
       openedState.profileStatus === openedState.statusText &&
       openedState.profileUserId === 'user-admin' &&
