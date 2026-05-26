@@ -260,6 +260,7 @@ const catalogItemsMissingResponsiveDefaults = (catalogSource) => (
 );
 
 const assertPageEditorFallbackIsReadOnly = () => {
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const source = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
   const visualDiffSource = fs.readFileSync(new URL('../src/components/editor/RevisionCanvasVisualDiff.tsx', import.meta.url), 'utf8');
   const revisionMetadataSource = fs.readFileSync(new URL('../src/lib/revisionMetadata.ts', import.meta.url), 'utf8');
@@ -398,6 +399,14 @@ const assertPageEditorFallbackIsReadOnly = () => {
     'Page editor restore confirmation must expose dialog semantics and action-state/status metadata for cancel and confirm controls.',
   );
 	  assert(source.includes('pendingRestoreRevisionDiff') && source.includes('data-testid="page-editor-restore-impact"') && source.includes('data-testid="page-editor-confirm-restore"') && source.includes('Current </span>'), 'Page editor restore confirmation must preview restore impact before rollback');
+	  assert(
+	    smokeSource.includes('testPageEditorRevisionRestore') &&
+	      smokeSource.includes('page-editor-cancel-restore') &&
+	      smokeSource.includes('page-editor-confirm-restore') &&
+	      smokeSource.includes('waitForPersistedPageRevisionRestoreState') &&
+	      smokeSource.includes('reloadedEditorState'),
+	    'Page editor revision navigation smoke must verify cancel, confirm, backend rollback, and reload hydration for restore controls.',
+  );
 	  assert(source.includes('data-testid={`page-editor-revision-metadata-${revision.id}`}') && source.includes('createdBy: revision.createdBy') && source.includes('action: getContentRevisionActionLabel(revision)') && revisionMetadataSource.includes('operation') && revisionMetadataSource.includes('getContentRevisionActorLabel') && revisionMetadataSource.includes('getContentRevisionActionLabel'), 'Page editor revisions must expose persisted operation plus actor/action metadata in cards and handoff summaries');
   assert(
 	    source.includes("schemaVersion: 'backy.page-publish-impact.v1'") &&
@@ -2439,11 +2448,110 @@ const deleteSmokePage = async (pageId) => {
   }
 };
 
+const pageRevisionSmokeContentVariant = (baseContent, variant) => {
+  const content = cloneSerializable(baseContent || { elements: [] });
+  const heading = findCanvasElement(content?.elements || [], 'smoke-heading');
+  const image = findCanvasElement(content?.elements || [], 'smoke-image');
+  assert(heading, `Revision restore smoke could not find smoke-heading in base content: ${JSON.stringify(baseContent).slice(0, 500)}`);
+  assert(image, `Revision restore smoke could not find smoke-image in base content: ${JSON.stringify(baseContent).slice(0, 500)}`);
+
+  const values = variant === 'a'
+    ? {
+        headingX: 160,
+        headingY: 132,
+        headingContent: 'Revision A restored heading',
+        headingColor: '#1d4ed8',
+        imageX: 150,
+        imageY: 250,
+      }
+    : {
+        headingX: 260,
+        headingY: 172,
+        headingContent: 'Revision B current heading',
+        headingColor: '#be123c',
+        imageX: 320,
+        imageY: 295,
+      };
+
+  heading.x = values.headingX;
+  heading.y = values.headingY;
+  heading.props = {
+    ...(heading.props || {}),
+    content: values.headingContent,
+    color: values.headingColor,
+  };
+  image.x = values.imageX;
+  image.y = values.imageY;
+  image.props = {
+    ...(image.props || {}),
+    alt: `Revision ${variant.toUpperCase()} image state`,
+  };
+
+  return content;
+};
+
+const pageRevisionRestoreExpectedState = (pageLike) => {
+  const content = pageLike?.content || pageLike?.snapshot?.content || {};
+  const elements = content?.elements || pageLike?.snapshotElements || [];
+  const heading = findCanvasElement(elements, 'smoke-heading');
+  const image = findCanvasElement(elements, 'smoke-image');
+  assert(heading, `Revision restore expected state missing smoke-heading: ${JSON.stringify(pageLike).slice(0, 500)}`);
+  assert(image, `Revision restore expected state missing smoke-image: ${JSON.stringify(pageLike).slice(0, 500)}`);
+
+  return {
+    title: pageLike?.title || pageLike?.snapshot?.title || pageLike?.snapshotTitle || '',
+    heading: {
+      x: heading.x,
+      y: heading.y,
+      width: heading.width,
+      height: heading.height,
+      content: heading.props?.content || '',
+      color: heading.props?.color || '',
+    },
+    image: {
+      x: image.x,
+      y: image.y,
+      width: image.width,
+      height: image.height,
+      alt: image.props?.alt || '',
+    },
+  };
+};
+
+const pageRevisionRestoreStateMatches = (actual, expected) => (
+  actual?.title === expected.title &&
+  actual?.heading?.content === expected.heading.content &&
+  actual?.heading?.color === expected.heading.color &&
+  Math.abs(Number(actual?.heading?.x) - expected.heading.x) <= 1 &&
+  Math.abs(Number(actual?.heading?.y) - expected.heading.y) <= 1 &&
+  Math.abs(Number(actual?.heading?.width) - expected.heading.width) <= 1 &&
+  Math.abs(Number(actual?.heading?.height) - expected.heading.height) <= 1 &&
+  actual?.image?.alt === expected.image.alt &&
+  Math.abs(Number(actual?.image?.x) - expected.image.x) <= 1 &&
+  Math.abs(Number(actual?.image?.y) - expected.image.y) <= 1 &&
+  Math.abs(Number(actual?.image?.width) - expected.image.width) <= 1 &&
+  Math.abs(Number(actual?.image?.height) - expected.image.height) <= 1
+);
+
+const readPersistedPageRevisionRestoreState = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = payload.data?.page || {};
+  return pageRevisionRestoreExpectedState(page);
+};
+
 const createSmokePageRevisionHistory = async (pageId) => {
+  const basePayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const basePage = basePayload.data?.page;
+  assert(basePage?.content?.elements?.length, `Revision navigation smoke could not load base page content: ${JSON.stringify(basePayload).slice(0, 500)}`);
+
+  const revisionAContent = pageRevisionSmokeContentVariant(basePage.content, 'a');
+  const revisionBContent = pageRevisionSmokeContentVariant(basePage.content, 'b');
+
   await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, {
     method: 'PATCH',
     body: JSON.stringify({
       title: 'Editor Drag Smoke Revision A',
+      content: revisionAContent,
       revisionNote: 'Revision navigation smoke checkpoint A',
       updatedBy: 'revision-navigation-smoke',
     }),
@@ -2452,6 +2560,7 @@ const createSmokePageRevisionHistory = async (pageId) => {
     method: 'PATCH',
     body: JSON.stringify({
       title: 'Editor Drag Smoke Revision B',
+      content: revisionBContent,
       revisionNote: 'Revision navigation smoke checkpoint B',
       updatedBy: 'revision-navigation-smoke',
     }),
@@ -2464,7 +2573,25 @@ const createSmokePageRevisionHistory = async (pageId) => {
     `Revision navigation smoke could not seed at least two revisions: ${JSON.stringify(payload).slice(0, 500)}`,
   );
 
-  return revisions;
+  const restoreTarget = revisions.find((revision) => revision.note === 'Revision navigation smoke checkpoint B') ||
+    revisions.find((revision) => revision.snapshot?.title === 'Editor Drag Smoke Revision A');
+  assert(restoreTarget?.id, `Revision navigation smoke could not find the restore target revision: ${JSON.stringify(revisions).slice(0, 1000)}`);
+
+  const expectedRestoreState = pageRevisionRestoreExpectedState(restoreTarget.snapshot || restoreTarget);
+  const currentState = await readPersistedPageRevisionRestoreState(pageId);
+  assert(
+    currentState.title === 'Editor Drag Smoke Revision B' &&
+      currentState.heading.content === 'Revision B current heading' &&
+      !pageRevisionRestoreStateMatches(currentState, expectedRestoreState),
+    `Revision restore smoke fixture did not create a meaningful current-vs-snapshot delta: ${JSON.stringify({ currentState, expectedRestoreState })}`,
+  );
+
+  return {
+    revisions,
+    restoreTargetRevision: restoreTarget,
+    expectedRestoreState,
+    currentState,
+  };
 };
 
 const createSmokeReusableSection = async () => {
@@ -3389,6 +3516,8 @@ const findCanvasElement = (elements, elementId) => {
 
   return null;
 };
+
+const cloneSerializable = (value) => JSON.parse(JSON.stringify(value ?? null));
 
 const collectSlateLeaves = (value, leaves = []) => {
   if (!value) {
@@ -9724,6 +9853,202 @@ const assertPageEditorRevisionNavigationAnchors = async (client) => {
   }
 
   throw new Error(`Page editor revision navigation anchors did not expose action metadata: ${JSON.stringify(state)}`);
+};
+
+const readPageEditorRestoreDialogState = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const dialog = document.querySelector('[data-testid="page-editor-restore-confirm"]');
+    const status = document.querySelector('[data-testid="page-editor-restore-action-status"]');
+    const impact = document.querySelector('[data-testid="page-editor-restore-impact"]');
+    const impactDetails = document.querySelector('[data-testid="page-editor-restore-impact-details"]');
+    const cancel = document.querySelector('[data-testid="page-editor-cancel-restore"]');
+    const confirm = document.querySelector('[data-testid="page-editor-confirm-restore"]');
+    const readButton = (button) => ({
+      exists: button instanceof HTMLButtonElement,
+      disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      describedBy: button?.getAttribute('aria-describedby') || '',
+      actionState: button?.getAttribute('data-action-state') || '',
+      actionStatus: normalize(button?.getAttribute('data-action-status')),
+      disabledReason: button?.getAttribute('data-disabled-reason') || '',
+      text: normalize(button?.textContent),
+    });
+
+    return {
+      exists: dialog instanceof HTMLElement,
+      role: dialog?.getAttribute('role') || '',
+      ariaModal: dialog?.getAttribute('aria-modal') || '',
+      labelledBy: dialog?.getAttribute('aria-labelledby') || '',
+      describedBy: dialog?.getAttribute('aria-describedby') || '',
+      actionState: dialog?.getAttribute('data-action-state') || '',
+      actionStatus: normalize(dialog?.getAttribute('data-action-status')),
+      statusId: status?.id || '',
+      statusText: normalize(status?.textContent),
+      statusActionState: status?.getAttribute('data-action-state') || '',
+      statusActionStatus: normalize(status?.getAttribute('data-action-status')),
+      impactExists: impact instanceof HTMLElement,
+      impactText: normalize(impact?.textContent),
+      impactDetailsExists: impactDetails instanceof HTMLElement,
+      cancel: readButton(cancel),
+      confirm: readButton(confirm),
+    };
+  })()`);
+
+  assert(
+    state.exists &&
+      state.role === 'dialog' &&
+      state.ariaModal === 'true' &&
+      state.labelledBy === 'page-editor-restore-confirm-title' &&
+      state.describedBy.includes('page-editor-restore-confirm-description') &&
+      state.describedBy.includes('page-editor-restore-action-status') &&
+      state.statusId === 'page-editor-restore-action-status' &&
+      state.statusText === state.statusActionStatus &&
+      state.statusActionState === state.actionState &&
+      ['ready', 'busy', 'blocked'].includes(state.actionState) &&
+      /Restore review close (available|unavailable)/.test(state.actionStatus) &&
+      /Restore revision (review available|unavailable)/.test(state.actionStatus) &&
+      state.impactExists &&
+      /Restore impact/.test(state.impactText) &&
+      /Layers/.test(state.impactText) &&
+      /Canvas elements/.test(state.impactText) &&
+      state.cancel.exists &&
+      state.cancel.describedBy === state.statusId &&
+      ['ready', 'busy'].includes(state.cancel.actionState) &&
+      /Restore review close (available|unavailable)/.test(state.cancel.actionStatus) &&
+      state.confirm.exists &&
+      state.confirm.describedBy === state.statusId &&
+      ['ready', 'busy', 'blocked'].includes(state.confirm.actionState) &&
+      /Restore revision (review available|unavailable)/.test(state.confirm.actionStatus) &&
+      state.confirm.disabled !== true,
+    `Page editor restore dialog action contract failed: ${JSON.stringify(state)}`,
+  );
+
+  return state;
+};
+
+const waitForRestoreDialogClosed = async (client, label) => {
+  let state = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    state = await evaluate(client, `(() => ({
+      hasDialog: Boolean(document.querySelector('[data-testid="page-editor-restore-confirm"]')),
+      bodyText: document.body.textContent || '',
+    }))()`);
+
+    if (!state.hasDialog) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(`${label}: restore dialog did not close: ${JSON.stringify(state)}`);
+};
+
+const readEditorRevisionRestoreState = async (client) => {
+  const geometry = await readEditorElementState(client, ['smoke-heading', 'smoke-image']);
+  const detail = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const heading = document.querySelector('[data-element-id="smoke-heading"]');
+    const image = document.querySelector('[data-element-id="smoke-image"]');
+    return {
+      titleInput: document.querySelector('[data-testid="page-editor-title"]')?.value || '',
+      headingText: normalize(heading?.textContent),
+      imageText: normalize(image?.textContent),
+      notice: normalize(document.body.textContent),
+      hasRestoreDialog: Boolean(document.querySelector('[data-testid="page-editor-restore-confirm"]')),
+    };
+  })()`);
+
+  return {
+    geometry,
+    detail,
+  };
+};
+
+const waitForEditorRevisionRestoreState = async (client, expected, label) => {
+  let state = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    state = await readEditorRevisionRestoreState(client);
+    const heading = state.geometry['smoke-heading'];
+    const image = state.geometry['smoke-image'];
+    const matches =
+      !state.detail.hasRestoreDialog &&
+      state.detail.headingText.includes(expected.heading.content) &&
+      Math.abs(heading.x - expected.heading.x) <= 1 &&
+      Math.abs(heading.y - expected.heading.y) <= 1 &&
+      Math.abs(heading.width - expected.heading.width) <= 1 &&
+      Math.abs(heading.height - expected.heading.height) <= 1 &&
+      Math.abs(image.x - expected.image.x) <= 1 &&
+      Math.abs(image.y - expected.image.y) <= 1 &&
+      Math.abs(image.width - expected.image.width) <= 1 &&
+      Math.abs(image.height - expected.image.height) <= 1;
+
+    if (matches) {
+      return state;
+    }
+    await sleep(200);
+  }
+
+  throw new Error(`${label}: editor did not hydrate restored revision state: ${JSON.stringify({ expected, state })}`);
+};
+
+const waitForPersistedPageRevisionRestoreState = async (pageId, expected) => {
+  let state = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    state = await readPersistedPageRevisionRestoreState(pageId);
+    if (pageRevisionRestoreStateMatches(state, expected)) {
+      return state;
+    }
+    await sleep(200);
+  }
+
+  throw new Error(`Backend page did not persist restored revision state: ${JSON.stringify({ expected, state })}`);
+};
+
+const testPageEditorRevisionRestore = async (client, pageId, revisionHistory, editorPath) => {
+  const targetRevision = revisionHistory?.restoreTargetRevision;
+  const expectedRestoreState = revisionHistory?.expectedRestoreState;
+  assert(targetRevision?.id && expectedRestoreState, `Revision restore smoke requires a seeded restore target: ${JSON.stringify(revisionHistory).slice(0, 1000)}`);
+
+  const restoreButtonTestId = `page-editor-restore-revision-${targetRevision.id}`;
+  await clickEnabledControlByTestId(client, restoreButtonTestId, `restore revision ${targetRevision.id}`);
+  const initialDialog = await readPageEditorRestoreDialogState(client);
+
+  await clickEnabledControlByTestId(client, 'page-editor-cancel-restore', 'cancel page revision restore');
+  const cancelClosedState = await waitForRestoreDialogClosed(client, 'cancel page revision restore');
+
+  await clickEnabledControlByTestId(client, restoreButtonTestId, `restore revision ${targetRevision.id} after cancel`);
+  const confirmDialog = await readPageEditorRestoreDialogState(client);
+  await clickEnabledControlByTestId(client, 'page-editor-confirm-restore', 'confirm page revision restore');
+  const restoredEditorState = await waitForEditorRevisionRestoreState(client, expectedRestoreState, 'confirmed page revision restore');
+  const persistedState = await waitForPersistedPageRevisionRestoreState(pageId, expectedRestoreState);
+
+  let reloadClient = null;
+  let reloadedEditorState = null;
+  try {
+    reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
+    await waitForEditorElements(reloadClient, ['smoke-heading', 'smoke-image']);
+    reloadedEditorState = await waitForEditorRevisionRestoreState(reloadClient, expectedRestoreState, 'reloaded page revision restore');
+  } finally {
+    if (reloadClient) {
+      try {
+        await reloadClient.send('Page.close');
+      } catch {
+        // Chrome can close the target while the parent smoke is already cleaning up.
+      }
+      reloadClient.close();
+    }
+  }
+
+  return {
+    restoredRevisionId: targetRevision.id,
+    restoredSnapshotTitle: expectedRestoreState.title,
+    initialDialog,
+    cancelClosedState,
+    confirmDialog,
+    restoredEditorState,
+    persistedState,
+    reloadedEditorState,
+  };
 };
 
 const testPageEditorGeneratedPreviewLink = async (client) => {
@@ -22453,7 +22778,7 @@ const main = async () => {
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
   const seededRevisionHistory = REVISION_NAVIGATION_SMOKE && tempPageId
     ? await createSmokePageRevisionHistory(tempPageId)
-    : [];
+    : { revisions: [] };
   const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   const tempReusableSectionId = needsReusableSectionFixture ? await createSmokeReusableSection() : null;
@@ -22527,15 +22852,17 @@ const main = async () => {
 
     if (REVISION_NAVIGATION_SMOKE) {
       const revisionNavigation = await assertPageEditorRevisionNavigationAnchors(client);
+      const revisionRestore = await testPageEditorRevisionRestore(client, tempPageId, seededRevisionHistory, editorPath);
 
       console.log(JSON.stringify({
         ok: true,
         mode: 'revision-navigation',
         url: `${ADMIN_BASE_URL}${editorPath}`,
-        seededRevisionCount: seededRevisionHistory.length,
+        seededRevisionCount: seededRevisionHistory.revisions.length,
         pageEditorRouteActions,
         primaryActionStatus,
         revisionNavigation,
+        revisionRestore,
       }, null, 2));
       return;
     }
