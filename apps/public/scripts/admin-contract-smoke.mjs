@@ -8306,7 +8306,7 @@ try {
           ...integrations,
           storage: {
             ...storage,
-            supabaseKeySecretRef: 'sk_live_contract_storage_secret_should_not_persist',
+            supabaseKeySecretRef: 'BACKY_SECRET_TEST_VALUE_contractStorageShouldNotPersist',
           },
         },
       }),

@@ -3450,7 +3450,7 @@ const main = async () => {
         integrations: {
           storage: {
             provider: 'supabase',
-            supabaseKeySecretRef: 'sk_live_media_storage_secret_rejected',
+            supabaseKeySecretRef: 'BACKY_SECRET_TEST_VALUE_mediaStorageRejected',
           },
         },
       }),

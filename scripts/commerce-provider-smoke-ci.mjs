@@ -57,7 +57,7 @@ const baseEnv = {
 };
 
 const commerceMockEnv = {
-  BACKY_STRIPE_SECRET_KEY: "sk_test_backy_commerce_mock",
+  BACKY_STRIPE_SECRET_KEY: "backy-stripe-commerce-mock-secret",
   BACKY_STRIPE_API_BASE_URL: stripeCommerceMockBaseUrl,
   BACKY_PAYPAL_ACCESS_TOKEN: "paypal-commerce-mock-token",
   BACKY_PAYPAL_API_BASE_URL: stripeCommerceMockBaseUrl,
@@ -102,7 +102,7 @@ const commerceMockEnv = {
 };
 
 const ordersMockEnv = {
-  BACKY_STRIPE_SECRET_KEY: "sk_test_backy_orders_mock",
+  BACKY_STRIPE_SECRET_KEY: "backy-stripe-orders-mock-secret",
   BACKY_STRIPE_TAX_API_BASE_URL: stripeTaxMockBaseUrl,
   BACKY_STRIPE_DISCOUNT_API_BASE_URL: stripeTaxMockBaseUrl,
   BACKY_STRIPE_REFUND_API_BASE_URL: stripeRefundMockBaseUrl,

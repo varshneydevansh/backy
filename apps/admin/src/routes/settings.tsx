@@ -6828,6 +6828,7 @@ const SIMPLE_DOMAIN_REGEX = /^(?!-)(?:[a-zA-Z0-9-]{1,63}\.)+[a-zA-Z]{2,63}$/;
 const SUPABASE_PROJECT_REF_REGEX = /^[a-z0-9-]{6,63}$/;
 const SECRET_ENV_REFERENCE_REGEX = /^(env:|\$)?[A-Z_][A-Z0-9_]*$/;
 const SECRET_LIKE_VALUE_REGEXES = [
+  /^BACKY_SECRET_TEST_VALUE_/i,
   /^(AKIA|ASIA)[A-Z0-9]{16}$/i,
   /^whsec_/i,
   /^stripe_whsec/i,

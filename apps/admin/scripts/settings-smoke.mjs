@@ -25,7 +25,7 @@ const BROWSER_API_BASE_URL = normalizeBrowserApiBaseUrl();
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_SETTINGS_CDP_PORT || 9376);
 const SCREENSHOT_PATH = process.env.BACKY_SETTINGS_SCREENSHOT || path.join(os.tmpdir(), 'backy-settings-smoke.png');
-const STALE_ADMIN_API_KEY = 'sk_live_stale_settings_smoke_admin_key';
+const STALE_ADMIN_API_KEY = 'BACKY_SECRET_TEST_VALUE_staleSettingsSmokeAdminKey';
 const SOURCE_ONLY_MODE = process.env.BACKY_SETTINGS_SOURCE_ONLY === '1'
   || process.env.BACKY_SETTINGS_SMOKE_SOURCE_ONLY === '1'
   || process.env.BACKY_SETTINGS_SOURCE_GUARD === '1';
@@ -3000,7 +3000,7 @@ const assertDirectSettingsApiRejectsRawSecrets = async (settings) => {
         ...(settings.integrations || {}),
         storage: {
           ...(settings.integrations?.storage || {}),
-          supabaseKeySecretRef: 'sk_live_settings_storage_secret_should_not_persist',
+          supabaseKeySecretRef: 'BACKY_SECRET_TEST_VALUE_settingsStorageShouldNotPersist',
         },
       },
     }),
