@@ -25,8 +25,6 @@ import {
   Trash2,
   Plus,
   Upload,
-  Download,
-  FileText,
   Search,
   X,
 } from 'lucide-react';
@@ -43,6 +41,17 @@ import { EmojiPickerModal } from './EmojiPickerModal';
 import { getFontFamilyOptions, toFontFamilyStyle } from './fontCatalog';
 import { RichTextFormatting } from './RichTextFormatting';
 import { AnimationBuilder, type AnimationConfig } from './AnimationBuilder';
+import {
+  clearDownloadFileProps,
+  downloadFileAssetIdsFromProps,
+  LinkBehaviorProperties,
+} from './LinkBehaviorProperties';
+import {
+  buildEditorMediaPickerAction,
+  type EditorMediaField,
+  type EditorMediaPickerMode,
+  type EditorMediaPickerTarget,
+} from './editorMediaPickerActions';
 import type { CanvasElement, ComponentBindingSlot, ElementProps } from '@/types/editor';
 import {
   listCollectionBindingPresets,
@@ -469,82 +478,6 @@ const parseNavigationItems = (value: string): Array<string | { label: string; hr
     })
 );
 
-const normalizeLinkTarget = (value: unknown): '_self' | '_blank' | '_parent' | '_top' => {
-  if (value === '_blank' || value === '_parent' || value === '_top') {
-    return value;
-  }
-
-  return '_self';
-};
-
-const normalizeRelForTarget = (target: unknown, value: unknown): string | undefined => {
-  const raw = typeof value === 'string' ? value.trim() : '';
-  const tokens = raw.split(/\s+/).filter(Boolean);
-
-  if (target === '_blank') {
-    const lowerTokens = new Set(tokens.map((token) => token.toLowerCase()));
-    if (!lowerTokens.has('noopener')) {
-      tokens.unshift('noopener');
-    }
-    if (!lowerTokens.has('noreferrer')) {
-      const insertAt = tokens[0]?.toLowerCase() === 'noopener' ? 1 : 0;
-      tokens.splice(insertAt, 0, 'noreferrer');
-    }
-  }
-
-  return tokens.length > 0 ? tokens.join(' ') : undefined;
-};
-
-const BUTTON_ACTION_PRESETS = new Set(['custom', 'page', 'section', 'email', 'phone', 'download']);
-
-const normalizeButtonActionPreset = (value: unknown): string => (
-  typeof value === 'string' && BUTTON_ACTION_PRESETS.has(value) ? value : 'custom'
-);
-
-const normalizeButtonActionValue = (preset: string, value: unknown): string => {
-  const raw = typeof value === 'string' ? value.trim() : '';
-
-  if (!raw) {
-    return '';
-  }
-
-  if (preset === 'section') {
-    return raw.replace(/^#/, '');
-  }
-
-  if (preset === 'email') {
-    return raw.replace(/^mailto:/i, '');
-  }
-
-  if (preset === 'phone') {
-    return raw.replace(/^tel:/i, '');
-  }
-
-  return raw;
-};
-
-const buildButtonActionHref = (preset: string, value: unknown): string => {
-  const actionValue = normalizeButtonActionValue(preset, value);
-
-  if (!actionValue) {
-    return '';
-  }
-
-  if (preset === 'section') {
-    return `#${actionValue.replace(/^#+/, '')}`;
-  }
-
-  if (preset === 'email') {
-    return `mailto:${actionValue}`;
-  }
-
-  if (preset === 'phone') {
-    return `tel:${actionValue.replace(/[^\d+*#]/g, '')}`;
-  }
-
-  return actionValue;
-};
-
 const withQueryParam = (url: string, key: string, value: string): string => {
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
@@ -756,43 +689,6 @@ const cleanMediaString = (value: unknown): string | undefined => (
   typeof value === 'string' && value.trim() ? value.trim() : undefined
 );
 
-const clearDownloadFileProps = (): Partial<ElementProps> => ({
-  fileId: undefined,
-  fileIds: undefined,
-  fileMediaId: undefined,
-  fileMediaIds: undefined,
-  fileMediaName: undefined,
-  fileMediaType: undefined,
-  fileMediaUrl: undefined,
-  fileUrl: undefined,
-  fileMediaFolderId: undefined,
-  fileMediaFolderPath: undefined,
-  fileMediaOrganization: undefined,
-  fileMediaVisibility: undefined,
-  fileMediaScope: undefined,
-  fileMediaScopeTargetId: undefined,
-  fileDownloadDisposition: undefined,
-  fileSignedUrlRequired: undefined,
-  fileSignedUrlEndpoint: undefined,
-  downloadMediaId: undefined,
-  downloadMediaIds: undefined,
-});
-
-const cleanMediaStrings = (value: unknown): string[] => (
-  Array.isArray(value)
-    ? value.map(cleanMediaString).filter(Boolean) as string[]
-    : []
-);
-
-const downloadFileAssetIdsFromProps = (props: ElementProps): Array<string | undefined> => [
-  cleanMediaString(props.fileMediaId),
-  cleanMediaString(props.downloadMediaId),
-  cleanMediaString(props.fileId),
-  ...cleanMediaStrings(props.fileIds),
-  ...cleanMediaStrings(props.fileMediaIds),
-  ...cleanMediaStrings(props.downloadMediaIds),
-];
-
 const collectEditorAssetIds = (value: unknown, key: string | null, assetIds: Set<string>) => {
   if (key && EDITOR_ASSET_ID_PROP_KEYS.has(key)) {
     if (Array.isArray(value)) {
@@ -925,59 +821,8 @@ const fontFamilyFromMedia = (font: MediaAsset): string => {
 // TYPES
 // ============================================
 
-type EditorMediaField = 'src' | 'video' | 'embed' | 'interactiveFallbackImage' | 'downloadFile';
-type EditorMediaPickerTarget = EditorMediaField | 'font';
 type EditorMediaAllowedTypes = 'image' | 'video' | 'audio' | 'file' | 'font' | 'other' | 'any';
 type EditorMediaUploadFilter = 'all' | 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
-type EditorMediaPickerMode = 'library' | 'upload';
-
-interface EditorMediaPickerActionInput {
-  field: EditorMediaPickerTarget;
-  mode: EditorMediaPickerMode;
-  disabled?: boolean;
-  canViewMedia?: boolean;
-  canCreateMedia?: boolean;
-  viewDisabledReason?: string;
-  createDisabledReason?: string;
-}
-
-const editorMediaPickerTargetLabel = (field: EditorMediaPickerTarget): string => {
-  if (field === 'video') return 'video';
-  if (field === 'embed') return 'embed media';
-  if (field === 'interactiveFallbackImage') return 'fallback image';
-  if (field === 'downloadFile') return 'download file';
-  if (field === 'font') return 'font file';
-  return 'image';
-};
-
-const buildEditorMediaPickerAction = ({
-  field,
-  mode,
-  disabled = false,
-  canViewMedia = true,
-  canCreateMedia = true,
-  viewDisabledReason = 'You do not have permission to view media.',
-  createDisabledReason = 'You do not have permission to upload media.',
-}: EditorMediaPickerActionInput) => {
-  const targetLabel = editorMediaPickerTargetLabel(field);
-  const actionLabel = `${mode === 'upload' ? 'Upload' : 'Select'} ${targetLabel}`;
-  const disabledReason = disabled
-    ? 'Inspector is read-only for this element.'
-    : !canViewMedia
-      ? viewDisabledReason
-      : mode === 'upload' && !canCreateMedia
-        ? createDisabledReason
-        : '';
-
-  return {
-    actionLabel,
-    actionState: disabledReason ? 'blocked' : 'ready',
-    actionStatus: disabledReason
-      ? `${actionLabel} unavailable: ${disabledReason}`
-      : `${actionLabel} available from the media library.`,
-    disabledReason,
-  };
-};
 
 interface PropertyPanelProps {
   /** Currently selected element */
@@ -2969,6 +2814,7 @@ function ContentProperties({
             canCreateMedia={canCreateMedia}
             mediaViewDisabledReason={mediaViewDisabledReason}
             mediaCreateDisabledReason={mediaCreateDisabledReason}
+            disabled={disabled}
           />
         </div>
       )}
@@ -3055,6 +2901,7 @@ function ContentProperties({
             canCreateMedia={canCreateMedia}
             mediaViewDisabledReason={mediaViewDisabledReason}
             mediaCreateDisabledReason={mediaCreateDisabledReason}
+            disabled={disabled}
           />
         </div>
       )}
@@ -5551,328 +5398,6 @@ function ContentProperties({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-interface LinkBehaviorPropertiesProps {
-  prefix: 'button' | 'link';
-  props: ElementProps;
-  onChange: (updates: Partial<ElementProps>, options?: { staleAssetIds?: Array<unknown> }) => void;
-  onOpenDownloadMedia?: (mode?: EditorMediaPickerMode, openerTestId?: string) => void;
-  mediaPickerStatusId?: string;
-  mediaPickerDisabled?: boolean;
-  canViewMedia?: boolean;
-  canCreateMedia?: boolean;
-  mediaViewDisabledReason?: string;
-  mediaCreateDisabledReason?: string;
-  includeButtonType?: boolean;
-}
-
-function LinkBehaviorProperties({
-  prefix,
-  props,
-  onChange,
-  onOpenDownloadMedia,
-  mediaPickerStatusId,
-  mediaPickerDisabled = false,
-  canViewMedia = true,
-  canCreateMedia = true,
-  mediaViewDisabledReason,
-  mediaCreateDisabledReason,
-  includeButtonType = false,
-}: LinkBehaviorPropertiesProps) {
-  const target = normalizeLinkTarget(props.target);
-  const isButton = prefix === 'button';
-  const actionPreset = isButton ? normalizeButtonActionPreset(props.actionPreset) : 'custom';
-  const actionValue = isButton
-    ? normalizeButtonActionValue(actionPreset, props.actionValue ?? props.href)
-    : '';
-  const selectedFileName = cleanMediaString(props.fileMediaName) || cleanMediaString(props.fileMediaId);
-  const selectedFileType = cleanMediaString(props.fileMediaType);
-  const selectedFileFolder = cleanMediaString(props.fileMediaFolderPath);
-  const selectedFileVisibility = cleanMediaString(props.fileMediaVisibility) || 'public';
-  const linkDownloadEnabled = !isButton && parseBooleanSetting(props.download, false);
-  const showDownloadFileControls = Boolean(onOpenDownloadMedia) && (
-    (isButton && actionPreset === 'download') || linkDownloadEnabled || Boolean(selectedFileName)
-  );
-  const staleDownloadAssetIds = downloadFileAssetIdsFromProps(props);
-  const getDownloadMediaAction = (mode: EditorMediaPickerMode) => buildEditorMediaPickerAction({
-    field: 'downloadFile',
-    mode,
-    disabled: mediaPickerDisabled,
-    canViewMedia,
-    canCreateMedia,
-    viewDisabledReason: mediaViewDisabledReason,
-    createDisabledReason: mediaCreateDisabledReason,
-  });
-  const openDownloadMedia = (mode: EditorMediaPickerMode, openerTestId = '') => {
-    if (getDownloadMediaAction(mode).disabledReason) {
-      return;
-    }
-
-    onOpenDownloadMedia?.(mode, openerTestId);
-  };
-  const downloadMediaAction = getDownloadMediaAction('library');
-  const uploadDownloadMediaAction = getDownloadMediaAction('upload');
-
-  return (
-    <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
-      {isButton && (
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Action preset
-            </label>
-            <select
-              value={actionPreset}
-              onChange={(e) => {
-                const nextPreset = normalizeButtonActionPreset(e.target.value);
-                const nextValue = normalizeButtonActionValue(nextPreset, actionValue || props.href);
-                const clearsDownloadFile = nextPreset !== 'download';
-
-                onChange({
-                  ...(clearsDownloadFile ? clearDownloadFileProps() : {}),
-                  actionPreset: nextPreset,
-                  actionValue: nextValue,
-                  href: buildButtonActionHref(nextPreset, nextValue),
-                  download: nextPreset === 'download',
-                }, {
-                  staleAssetIds: clearsDownloadFile ? staleDownloadAssetIds : [],
-                });
-              }}
-              data-testid="editor-button-action-preset"
-              className={cn(
-                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
-              )}
-            >
-              <option value="custom">Custom URL</option>
-              <option value="page">Site page</option>
-              <option value="section">Page section</option>
-              <option value="email">Email</option>
-              <option value="phone">Phone</option>
-              <option value="download">Download</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Action value
-            </label>
-            <input
-              type="text"
-              value={actionValue}
-              onChange={(e) => {
-                const nextValue = normalizeButtonActionValue(actionPreset, e.target.value);
-                const clearsDownloadFile = actionPreset === 'download';
-
-                onChange({
-                  ...(clearsDownloadFile ? clearDownloadFileProps() : {}),
-                  actionValue: nextValue,
-                  href: buildButtonActionHref(actionPreset, nextValue),
-                  download: actionPreset === 'download',
-                }, {
-                  staleAssetIds: clearsDownloadFile ? staleDownloadAssetIds : [],
-                });
-              }}
-              data-testid="editor-button-action-value"
-              className={cn(
-                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
-              )}
-              placeholder={
-                actionPreset === 'email'
-                  ? 'hello@example.com'
-                  : actionPreset === 'phone'
-                    ? '+15551234567'
-                    : actionPreset === 'section'
-                      ? 'pricing'
-                      : '/path-or-url'
-              }
-            />
-          </div>
-        </div>
-      )}
-
-      {!isButton && (
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={linkDownloadEnabled}
-            onChange={(e) => {
-              if (e.target.checked) {
-                onChange({
-                  actionPreset: 'download',
-                  download: true,
-                });
-                return;
-              }
-
-              onChange({
-                ...clearDownloadFileProps(),
-                actionPreset: 'custom',
-                download: false,
-              }, {
-                staleAssetIds: staleDownloadAssetIds,
-              });
-            }}
-            data-testid="editor-link-download-toggle"
-            className="rounded"
-          />
-          Download file
-        </label>
-      )}
-
-      {showDownloadFileControls && (
-        <div className="space-y-2 rounded-md border border-dashed border-border bg-background/70 p-2">
-          <div className="flex items-start gap-2 text-xs">
-            <Download className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <div className="min-w-0">
-              <p className="truncate font-medium text-foreground">
-                {selectedFileName || 'No file selected'}
-              </p>
-              <p className="truncate text-muted-foreground">
-                {[selectedFileType, selectedFileFolder, selectedFileVisibility].filter(Boolean).join(' • ')}
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => openDownloadMedia('library', `editor-${prefix}-download-media`)}
-              disabled={Boolean(downloadMediaAction.disabledReason)}
-              aria-describedby={mediaPickerStatusId}
-              data-testid={`editor-${prefix}-download-media`}
-              data-action-state={downloadMediaAction.actionState}
-              data-action-status={downloadMediaAction.actionStatus}
-              data-disabled-reason={downloadMediaAction.disabledReason || undefined}
-              data-target-media-field="downloadFile"
-              data-target-media-mode="library"
-              title={downloadMediaAction.disabledReason || downloadMediaAction.actionLabel}
-              className="flex items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <FileText className="h-3.5 w-3.5" />
-              Choose file
-            </button>
-            <button
-              type="button"
-              onClick={() => openDownloadMedia('upload', `editor-${prefix}-upload-download-media`)}
-              disabled={Boolean(uploadDownloadMediaAction.disabledReason)}
-              aria-describedby={mediaPickerStatusId}
-              data-testid={`editor-${prefix}-upload-download-media`}
-              data-action-state={uploadDownloadMediaAction.actionState}
-              data-action-status={uploadDownloadMediaAction.actionStatus}
-              data-disabled-reason={uploadDownloadMediaAction.disabledReason || undefined}
-              data-target-media-field="downloadFile"
-              data-target-media-mode="upload"
-              title={uploadDownloadMediaAction.disabledReason || uploadDownloadMediaAction.actionLabel}
-              className="flex items-center justify-center gap-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Upload
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">
-            Open target
-          </label>
-          <select
-            value={target}
-            onChange={(e) => {
-              const nextTarget = normalizeLinkTarget(e.target.value);
-              onChange({
-                target: nextTarget,
-                rel: normalizeRelForTarget(nextTarget, props.rel),
-              });
-            }}
-            data-testid={`editor-${prefix}-target`}
-            className={cn(
-              'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-              'focus:outline-none focus:ring-2 focus:ring-ring'
-            )}
-          >
-            <option value="_self">Same tab</option>
-            <option value="_blank">New tab</option>
-            <option value="_parent">Parent frame</option>
-            <option value="_top">Top frame</option>
-          </select>
-        </div>
-        {includeButtonType && (
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Button type
-            </label>
-            <select
-              value={props.type || 'button'}
-              onChange={(e) => onChange({ type: e.target.value })}
-              data-testid="editor-button-type"
-              className={cn(
-                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                'focus:outline-none focus:ring-2 focus:ring-ring'
-              )}
-            >
-              <option value="button">Button</option>
-              <option value="submit">Submit</option>
-              <option value="reset">Reset</option>
-            </select>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <label className="text-xs text-muted-foreground mb-1 block">
-          Rel attribute
-        </label>
-        <input
-          type="text"
-          value={props.rel || ''}
-          onChange={(e) => onChange({ rel: normalizeRelForTarget(target, e.target.value) })}
-          data-testid={`editor-${prefix}-rel`}
-          className={cn(
-            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-            'focus:outline-none focus:ring-2 focus:ring-ring'
-          )}
-          placeholder={target === '_blank' ? 'noopener noreferrer' : 'nofollow sponsored'}
-        />
-      </div>
-
-      <div>
-        <label className="text-xs text-muted-foreground mb-1 block">
-          Accessibility label
-        </label>
-        <input
-          type="text"
-          value={props.ariaLabel || ''}
-          onChange={(e) => onChange({ ariaLabel: e.target.value })}
-          data-testid={`editor-${prefix}-aria-label`}
-          className={cn(
-            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-            'focus:outline-none focus:ring-2 focus:ring-ring'
-          )}
-          placeholder="Describe the destination or action"
-        />
-      </div>
-
-      <div>
-        <label className="text-xs text-muted-foreground mb-1 block">
-          Title tooltip
-        </label>
-        <input
-          type="text"
-          value={props.title || ''}
-          onChange={(e) => onChange({ title: e.target.value })}
-          data-testid={`editor-${prefix}-title`}
-          className={cn(
-            'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-            'focus:outline-none focus:ring-2 focus:ring-ring'
-          )}
-          placeholder="Optional hover title"
-        />
-      </div>
     </div>
   );
 }

@@ -928,6 +928,8 @@ const assertCanvasEditorShortcutSource = () => {
 
 const assertPropertyPanelColorControlsSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
+  const linkBehaviorSource = fs.readFileSync(new URL('../src/components/editor/LinkBehaviorProperties.tsx', import.meta.url), 'utf8');
+  const mediaPickerActionSource = fs.readFileSync(new URL('../src/components/editor/editorMediaPickerActions.ts', import.meta.url), 'utf8');
   const animationBuilderSource = fs.readFileSync(new URL('../src/components/editor/AnimationBuilder.tsx', import.meta.url), 'utf8');
   const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
   const pageEditorSource = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
@@ -998,6 +1000,37 @@ const assertPropertyPanelColorControlsSource = () => {
       source.includes('data-target-element-type={element.type}') &&
       source.includes('aria-describedby={deleteElementActionStatusId}'),
     'Editor property panel delete control must expose action-state/status metadata and blocked reasons for locked/read-only elements',
+  );
+  assert(
+    source.includes("import {") &&
+      source.includes("LinkBehaviorProperties,") &&
+      source.includes("} from './LinkBehaviorProperties';") &&
+      source.includes("} from './editorMediaPickerActions';") &&
+      mediaPickerActionSource.includes("export type EditorMediaField = 'src' | 'video' | 'embed' | 'interactiveFallbackImage' | 'downloadFile';") &&
+      mediaPickerActionSource.includes('export const buildEditorMediaPickerAction =') &&
+      linkBehaviorSource.includes('const behaviorActionStatusId = `editor-${prefix}-behavior-action-status`;') &&
+      linkBehaviorSource.includes('const behaviorActionLabel = isButton ?') &&
+      linkBehaviorSource.includes('data-testid={`editor-${prefix}-behavior-actions`}') &&
+      linkBehaviorSource.includes('data-testid={`editor-${prefix}-behavior-action-status`}') &&
+      linkBehaviorSource.includes('data-action-state={behaviorActionState}') &&
+      linkBehaviorSource.includes('data-action-status={behaviorActionStatus}') &&
+      linkBehaviorSource.includes('data-action-preset={isButton ? actionPreset : undefined}') &&
+      linkBehaviorSource.includes('data-download-enabled={linkDownloadEnabled ?') &&
+      linkBehaviorSource.includes('aria-describedby={behaviorActionStatusId}') &&
+      linkBehaviorSource.includes('data-testid="editor-button-action-preset"') &&
+      linkBehaviorSource.includes("data-action-status={behaviorControlActionStatus('Button action preset', actionPreset)}") &&
+      linkBehaviorSource.includes('data-testid="editor-button-action-value"') &&
+      linkBehaviorSource.includes('data-derived-href={buildButtonActionHref(actionPreset, actionValue)}') &&
+      linkBehaviorSource.includes('data-testid="editor-link-download-toggle"') &&
+      linkBehaviorSource.includes('data-action-status={downloadToggleActionStatus}') &&
+      linkBehaviorSource.includes('data-testid={`editor-${prefix}-target`}') &&
+      linkBehaviorSource.includes('data-testid="editor-button-type"') &&
+      linkBehaviorSource.includes('data-current-type={props.type ||') &&
+      linkBehaviorSource.includes('data-testid={`editor-${prefix}-rel`}') &&
+      linkBehaviorSource.includes('data-testid={`editor-${prefix}-aria-label`}') &&
+      linkBehaviorSource.includes('data-testid={`editor-${prefix}-title`}') &&
+      linkBehaviorSource.includes('disabled={disabled}'),
+    'Editor button/link behavior controls must stay decomposed and expose a shared action-status contract for preset, value, target, rel, accessibility, title, and download toggles',
   );
   assert(
     source.includes('testId="editor-form-field-background-color"') &&
@@ -1249,6 +1282,8 @@ const assertMediaLibraryModalEmptyStateSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/MediaLibraryModal.tsx', import.meta.url), 'utf8');
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const propertyPanelSource = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
+  const linkBehaviorSource = fs.readFileSync(new URL('../src/components/editor/LinkBehaviorProperties.tsx', import.meta.url), 'utf8');
+  const mediaPickerActionSource = fs.readFileSync(new URL('../src/components/editor/editorMediaPickerActions.ts', import.meta.url), 'utf8');
   const canvasSource = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
   const canvasEditorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
   const tagInputSource = fs.readFileSync(new URL('../src/components/ui/TagInput.tsx', import.meta.url), 'utf8');
@@ -1405,8 +1440,8 @@ const assertMediaLibraryModalEmptyStateSource = () => {
     'Editor media library insertion, focal, and font registration controls must expose action-state/status metadata before selecting existing assets.',
   );
   assert(
-    propertyPanelSource.includes('type EditorMediaPickerTarget = EditorMediaField |') &&
-      propertyPanelSource.includes('const buildEditorMediaPickerAction = ({') &&
+    mediaPickerActionSource.includes('export type EditorMediaPickerTarget = EditorMediaField |') &&
+      mediaPickerActionSource.includes('export const buildEditorMediaPickerAction = ({') &&
       propertyPanelSource.includes("const mediaPickerActionStatusId = 'editor-media-picker-action-status';") &&
       propertyPanelSource.includes('data-testid="editor-media-picker-action-status"') &&
       propertyPanelSource.includes('data-action-state={action.actionState}') &&
@@ -1417,7 +1452,11 @@ const assertMediaLibraryModalEmptyStateSource = () => {
       propertyPanelSource.includes('data-testid="editor-font-media-picker-action-status"') &&
       propertyPanelSource.includes('data-action-state={fontMediaPickerAction.actionState}') &&
       propertyPanelSource.includes('data-target-media-field="font"') &&
-      propertyPanelSource.includes('data-target-media-mode="upload"'),
+      propertyPanelSource.includes('data-target-media-mode="upload"') &&
+      linkBehaviorSource.includes('data-action-state={downloadMediaAction.actionState}') &&
+      linkBehaviorSource.includes('data-action-status={downloadMediaAction.actionStatus}') &&
+      linkBehaviorSource.includes('data-target-media-field="downloadFile"') &&
+      linkBehaviorSource.includes('data-target-media-mode="library"'),
     'Editor property-panel media/font opener buttons must expose ready/blocked action-state metadata before opening the media picker.',
   );
   assert(
@@ -1432,7 +1471,7 @@ const assertMediaLibraryModalEmptyStateSource = () => {
     'Editor media picker selections must preserve versioned media organization breadcrumbs in element props for custom frontend handoff',
   );
   assert(
-    propertyPanelSource.includes("| 'downloadFile'") &&
+    mediaPickerActionSource.includes("| 'downloadFile'") &&
       propertyPanelSource.includes("setMediaAllowedTypes('file')") &&
       propertyPanelSource.includes("setMediaUploadFilter('file')") &&
       propertyPanelSource.includes('buildMediaDownloadHref') &&
@@ -1445,13 +1484,13 @@ const assertMediaLibraryModalEmptyStateSource = () => {
       propertyPanelSource.includes('downloadMediaIds: [media.id]') &&
       propertyPanelSource.includes("fileSignedUrlRequired: (media.visibility || 'public') === 'private'") &&
       propertyPanelSource.includes('fileSignedUrlEndpoint: mediaContext?.siteId') &&
-      propertyPanelSource.includes('...cleanMediaStrings(props.fileIds)') &&
-      propertyPanelSource.includes('data-testid={`editor-${prefix}-download-media`}') &&
-      propertyPanelSource.includes('data-action-state={downloadMediaAction.actionState}') &&
-      propertyPanelSource.includes('data-action-status={downloadMediaAction.actionStatus}') &&
-      propertyPanelSource.includes('data-action-state={uploadDownloadMediaAction.actionState}') &&
-      propertyPanelSource.includes('data-target-media-field="downloadFile"') &&
-      propertyPanelSource.includes('data-target-media-mode="upload"') &&
+      linkBehaviorSource.includes('...cleanMediaStrings(props.fileIds)') &&
+      linkBehaviorSource.includes('data-testid={`editor-${prefix}-download-media`}') &&
+      linkBehaviorSource.includes('data-action-state={downloadMediaAction.actionState}') &&
+      linkBehaviorSource.includes('data-action-status={downloadMediaAction.actionStatus}') &&
+      linkBehaviorSource.includes('data-action-state={uploadDownloadMediaAction.actionState}') &&
+      linkBehaviorSource.includes('data-target-media-field="downloadFile"') &&
+      linkBehaviorSource.includes('data-target-media-mode="upload"') &&
       propertyPanelSource.includes("allowPrivateSelection={mediaField === 'downloadFile'}") &&
       propertyPanelSource.includes('downloadFileAssetIdsFromProps(element.props)'),
     'Editor buttons and links must open a file picker for download actions and persist stable downloadable media identity props, including signed-delivery metadata for private files',
@@ -19951,9 +19990,12 @@ const testButtonLinkBehaviorControls = async (client) => {
 
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const attr = (testId, name) => document.querySelector('[data-testid="' + testId + '"]')?.getAttribute(name) || '';
     const node = document.querySelector('[data-element-id="smoke-child-button"]');
     const interactive = node?.querySelector('a, button');
     const style = interactive ? getComputedStyle(interactive) : null;
+    const behaviorGroup = document.querySelector('[data-testid="editor-button-behavior-actions"]');
+    const behaviorStatus = document.querySelector('[data-testid="editor-button-behavior-action-status"]');
     return {
       label: value('editor-button-label'),
       actionPreset: value('editor-button-action-preset'),
@@ -19979,6 +20021,28 @@ const testButtonLinkBehaviorControls = async (client) => {
       previewBorderRadius: style?.borderRadius || '',
       previewPadding: style?.padding || '',
       previewBoxShadow: style?.boxShadow || '',
+      behaviorRole: behaviorGroup?.getAttribute('role') || '',
+      behaviorLabel: behaviorGroup?.getAttribute('aria-label') || '',
+      behaviorDescribedBy: behaviorGroup?.getAttribute('aria-describedby') || '',
+      behaviorActionState: behaviorGroup?.getAttribute('data-action-state') || '',
+      behaviorActionStatus: behaviorGroup?.getAttribute('data-action-status') || '',
+      behaviorStatusId: behaviorStatus?.id || '',
+      behaviorStatusText: (behaviorStatus?.textContent || '').replace(/\\s+/g, ' ').trim(),
+      behaviorPreset: behaviorGroup?.getAttribute('data-action-preset') || '',
+      behaviorValue: behaviorGroup?.getAttribute('data-action-value') || '',
+      behaviorTarget: behaviorGroup?.getAttribute('data-open-target') || '',
+      presetState: attr('editor-button-action-preset', 'data-action-state'),
+      presetStatus: attr('editor-button-action-preset', 'data-action-status'),
+      presetDescribedBy: attr('editor-button-action-preset', 'aria-describedby'),
+      valueState: attr('editor-button-action-value', 'data-action-state'),
+      valueStatus: attr('editor-button-action-value', 'data-action-status'),
+      valueDerivedHref: attr('editor-button-action-value', 'data-derived-href'),
+      targetState: attr('editor-button-target', 'data-action-state'),
+      targetStatus: attr('editor-button-target', 'data-action-status'),
+      relStatus: attr('editor-button-rel', 'data-action-status'),
+      ariaStatus: attr('editor-button-aria-label', 'data-action-status'),
+      titleStatus: attr('editor-button-title', 'data-action-status'),
+      typeStatus: attr('editor-button-type', 'data-action-status'),
     };
   })()`);
 
@@ -19990,6 +20054,37 @@ const testButtonLinkBehaviorControls = async (client) => {
   assert(state.rel === 'noopener noreferrer nofollow', `Button rel control mismatch: ${JSON.stringify(state)}`);
   assert(state.ariaLabel === 'Open signup page' && state.title === 'Start signup', `Button accessibility/title controls mismatch: ${JSON.stringify(state)}`);
   assert(state.type === 'button', `Button type control mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.behaviorRole === 'group' &&
+      state.behaviorLabel === 'Button behavior actions' &&
+      state.behaviorDescribedBy === 'editor-button-behavior-action-status' &&
+      state.behaviorActionState === 'ready' &&
+      state.behaviorStatusId === 'editor-button-behavior-action-status' &&
+      state.behaviorStatusText === state.behaviorActionStatus &&
+      state.behaviorActionStatus.includes('Current preset is email') &&
+      state.behaviorActionStatus.includes('sales@example.com') &&
+      state.behaviorPreset === 'email' &&
+      state.behaviorValue === 'sales@example.com' &&
+      state.behaviorTarget === '_blank',
+    `Button behavior action group metadata mismatch: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.presetState === 'ready' &&
+      state.presetDescribedBy === 'editor-button-behavior-action-status' &&
+      state.presetStatus.includes('Button action preset available') &&
+      state.presetStatus.includes('email') &&
+      state.valueState === 'ready' &&
+      state.valueStatus.includes('Button action value available') &&
+      state.valueStatus.includes('sales@example.com') &&
+      state.valueDerivedHref === 'mailto:sales@example.com' &&
+      state.targetState === 'ready' &&
+      state.targetStatus.includes('Button open target available') &&
+      state.relStatus.includes('Button rel attribute available') &&
+      state.ariaStatus.includes('Button accessibility label available') &&
+      state.titleStatus.includes('Button title tooltip available') &&
+      state.typeStatus.includes('Button type available'),
+    `Button behavior control action metadata mismatch: ${JSON.stringify(state)}`,
+  );
   assert(state.fontSize === '18' && state.previewFontSize === '18px', `Button font size mismatch: ${JSON.stringify(state)}`);
   assert(state.fontWeight === '700' && state.previewFontWeight === '700', `Button font weight mismatch: ${JSON.stringify(state)}`);
   assert(state.color === '#ffffff' && /255,\s*255,\s*255/.test(state.previewColor), `Button text color mismatch: ${JSON.stringify(state)}`);
@@ -20067,8 +20162,11 @@ const testLinkBehaviorControls = async (client) => {
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
     const checked = (testId) => Boolean(document.querySelector('[data-testid="' + testId + '"]')?.checked);
+    const attr = (testId, name) => document.querySelector('[data-testid="' + testId + '"]')?.getAttribute(name) || '';
     const link = document.querySelector('[data-element-id="smoke-link"] a');
     const style = link ? getComputedStyle(link) : null;
+    const behaviorGroup = document.querySelector('[data-testid="editor-link-behavior-actions"]');
+    const behaviorStatus = document.querySelector('[data-testid="editor-link-behavior-action-status"]');
     return {
       text: value('editor-link-text'),
       href: value('editor-link-href'),
@@ -20083,6 +20181,23 @@ const testLinkBehaviorControls = async (client) => {
       previewAriaLabel: link?.getAttribute('aria-label') || '',
       previewTitle: link?.getAttribute('title') || '',
       previewTextDecoration: style?.textDecorationLine || '',
+      behaviorRole: behaviorGroup?.getAttribute('role') || '',
+      behaviorLabel: behaviorGroup?.getAttribute('aria-label') || '',
+      behaviorDescribedBy: behaviorGroup?.getAttribute('aria-describedby') || '',
+      behaviorActionState: behaviorGroup?.getAttribute('data-action-state') || '',
+      behaviorActionStatus: behaviorGroup?.getAttribute('data-action-status') || '',
+      behaviorStatusId: behaviorStatus?.id || '',
+      behaviorStatusText: (behaviorStatus?.textContent || '').replace(/\\s+/g, ' ').trim(),
+      behaviorDownloadEnabled: behaviorGroup?.getAttribute('data-download-enabled') || '',
+      behaviorTarget: behaviorGroup?.getAttribute('data-open-target') || '',
+      downloadToggleState: attr('editor-link-download-toggle', 'data-action-state'),
+      downloadToggleStatus: attr('editor-link-download-toggle', 'data-action-status'),
+      downloadToggleDescribedBy: attr('editor-link-download-toggle', 'aria-describedby'),
+      targetState: attr('editor-link-target', 'data-action-state'),
+      targetStatus: attr('editor-link-target', 'data-action-status'),
+      relStatus: attr('editor-link-rel', 'data-action-status'),
+      ariaStatus: attr('editor-link-aria-label', 'data-action-status'),
+      titleStatus: attr('editor-link-title', 'data-action-status'),
     };
   })()`);
 
@@ -20093,6 +20208,29 @@ const testLinkBehaviorControls = async (client) => {
   assert(state.ariaLabel === 'Read Backy docs' && state.previewAriaLabel === 'Read Backy docs', `Link aria label mismatch: ${JSON.stringify(state)}`);
   assert(state.title === 'Open docs' && state.previewTitle === 'Open docs', `Link title mismatch: ${JSON.stringify(state)}`);
   assert(state.underline === false && state.previewTextDecoration === 'none', `Link underline mismatch: ${JSON.stringify(state)}`);
+  assert(
+    state.behaviorRole === 'group' &&
+      state.behaviorLabel === 'Link behavior actions' &&
+      state.behaviorDescribedBy === 'editor-link-behavior-action-status' &&
+      state.behaviorActionState === 'ready' &&
+      state.behaviorStatusId === 'editor-link-behavior-action-status' &&
+      state.behaviorStatusText === state.behaviorActionStatus &&
+      state.behaviorActionStatus.includes('Download file mode is off') &&
+      state.behaviorDownloadEnabled === 'false' &&
+      state.behaviorTarget === '_blank',
+    `Link behavior action group metadata mismatch: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.downloadToggleState === 'ready' &&
+      state.downloadToggleStatus === 'Download file mode available.' &&
+      state.downloadToggleDescribedBy === 'editor-link-behavior-action-status' &&
+      state.targetState === 'ready' &&
+      state.targetStatus.includes('Link open target available') &&
+      state.relStatus.includes('Link rel attribute available') &&
+      state.ariaStatus.includes('Link accessibility label available') &&
+      state.titleStatus.includes('Link title tooltip available'),
+    `Link behavior control action metadata mismatch: ${JSON.stringify(state)}`,
+  );
 
   return state;
 };
