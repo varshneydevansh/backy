@@ -1,0 +1,87 @@
+{
+  "generated_at": "2026-05-26T14:44:19Z",
+  "source_site": "https://open-design.ai/skills/",
+  "source_repo": "https://github.com/nexu-io/open-design/tree/main/skills",
+  "prefix": "backy-frontend-desing",
+  "source_count": 4,
+  "modes": {
+    "design-system": 36,
+    "prototype": 32,
+    "image": 24,
+    "video": 17,
+    "deck": 9,
+    "template": 9,
+    "audio": 4,
+    "utility": 1
+  },
+  "mode": "audio",
+  "skills": [
+    {
+      "slug": "ai-music-album",
+      "name": "ai-music-album",
+      "description": "Full-lifecycle AI music album production — concept, lyric drafting, track sequencing, and export. Useful for indie album experiments and brand soundtracks.",
+      "triggers": [
+        "ai music",
+        "music album",
+        "lyric writing",
+        "track sequencing",
+        "album production"
+      ],
+      "mode": "audio",
+      "scenario": null,
+      "platform": null,
+      "category": "audio-music",
+      "upstream": "https://github.com/bitwize-music-studio/claude-ai-music-skills"
+    },
+    {
+      "slug": "speech",
+      "name": "speech",
+      "description": "Generate spoken audio from text using OpenAI's API with built-in voices. Useful for narrated explainers, lecture audio, and quick voiceover tracks.",
+      "triggers": [
+        "openai speech",
+        "tts openai",
+        "narrated audio",
+        "voice over"
+      ],
+      "mode": "audio",
+      "scenario": null,
+      "platform": null,
+      "category": "audio-music",
+      "upstream": "https://github.com/openai/skills"
+    },
+    {
+      "slug": "venice-audio-music",
+      "name": "venice-audio-music",
+      "description": "Music generation queueing, retrieval, and completion endpoints via Venice.ai. Suited for jingles, background loops, and prototype scoring.",
+      "triggers": [
+        "venice music",
+        "music gen",
+        "jingle",
+        "background loop",
+        "score"
+      ],
+      "mode": "audio",
+      "scenario": null,
+      "platform": null,
+      "category": "audio-music",
+      "upstream": "https://github.com/veniceai/skills"
+    },
+    {
+      "slug": "venice-audio-speech",
+      "name": "venice-audio-speech",
+      "description": "Text-to-speech models, voices, formats, and streaming via Venice.ai. Useful for narration, voiceover, and conversational agent voices.",
+      "triggers": [
+        "tts",
+        "venice speech",
+        "text to speech",
+        "voiceover",
+        "narration"
+      ],
+      "mode": "audio",
+      "scenario": null,
+      "platform": null,
+      "category": "audio-music",
+      "upstream": "https://github.com/veniceai/skills"
+    }
+  ]
+}

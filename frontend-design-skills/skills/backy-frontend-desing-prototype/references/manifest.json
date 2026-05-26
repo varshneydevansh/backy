@@ -1,0 +1,536 @@
+{
+  "generated_at": "2026-05-26T14:44:19Z",
+  "source_site": "https://open-design.ai/skills/",
+  "source_repo": "https://github.com/nexu-io/open-design/tree/main/skills",
+  "prefix": "backy-frontend-desing",
+  "source_count": 32,
+  "modes": {
+    "design-system": 36,
+    "prototype": 32,
+    "image": 24,
+    "video": 17,
+    "deck": 9,
+    "template": 9,
+    "audio": 4,
+    "utility": 1
+  },
+  "mode": "prototype",
+  "skills": [
+    {
+      "slug": "agent-browser",
+      "name": "agent-browser",
+      "description": "Browser automation CLI for AI agents. Use when the user needs to inspect, test, or automate browser behavior: navigating pages, filling forms, clicking buttons, taking screenshots, extracting page data, testing web apps, dogfooding Open Design previews, QA, bug hunts, or reviewing app quality. Prefer local Open Design preview URLs unless the user explicitly asks for external browsing.",
+      "triggers": [
+        "browser",
+        "open website",
+        "test this web app",
+        "take a screenshot",
+        "click a button",
+        "fill out a form",
+        "scrape page",
+        "QA",
+        "dogfood",
+        "bug hunt"
+      ],
+      "mode": "prototype",
+      "scenario": "validation",
+      "platform": "desktop",
+      "category": null,
+      "upstream": "https://github.com/vercel-labs/agent-browser/blob/main/skills/agent-browser/SKILL.md"
+    },
+    {
+      "slug": "article-magazine",
+      "name": "article-magazine",
+      "description": "Huashu / huashu-md-html-inspired magazine article layout for turning Markdown or notes into a polished long-form HTML essay.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "marketing",
+      "platform": "desktop",
+      "category": "article",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "artifacts-builder",
+      "name": "artifacts-builder",
+      "description": "Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui).",
+      "triggers": [
+        "artifacts builder",
+        "html artifact",
+        "multi component artifact",
+        "react artifact"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "web-artifacts",
+      "upstream": "https://github.com/ComposioHQ/awesome-claude-skills/tree/master/artifacts-builder"
+    },
+    {
+      "slug": "card-twitter",
+      "name": "card-twitter",
+      "description": "Twitter quote or data card designed to pair with a post.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "marketing",
+      "platform": "desktop",
+      "category": "card",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "card-xiaohongshu",
+      "name": "card-xiaohongshu",
+      "description": "Xiaohongshu-style knowledge cards, arranged as a swipeable multi-card carousel.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "marketing",
+      "platform": "desktop",
+      "category": "card",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "d3-visualization",
+      "name": "d3-visualization",
+      "description": "Teaches the agent to produce D3 charts and interactive data visualizations. A comprehensive D3.js skill with examples across chart types and techniques giving the agent expert-level knowledge to generate complex, interactive visualizations. Useful for editorial dashboards, reports, data-rich prototypes, and explanatory graphics.",
+      "triggers": [
+        "d3",
+        "d3.js",
+        "interactive chart",
+        "data visualization",
+        "editorial chart",
+        "d3 bar chart",
+        "d3 line chart",
+        "d3 map",
+        "d3 force graph",
+        "d3 sankey",
+        "d3 treemap",
+        "d3 sunburst",
+        "d3 choropleth",
+        "d3 animation",
+        "d3 scroll",
+        "snow-d3"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "diagrams",
+      "upstream": "https://github.com/jiannanya/snow-d3/"
+    },
+    {
+      "slug": "data-report",
+      "name": "data-report",
+      "description": "Turns CSV, Excel, or JSON data into a polished visual report page.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "finance",
+      "platform": "desktop",
+      "category": "data",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "doc-kami-parchment",
+      "name": "doc-kami-parchment",
+      "description": "Warm parchment canvas (#f5f4ed), monochrome ink-blue accent (#1B365D), one serif family, and editorial-grade typography.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "personal",
+      "platform": "desktop",
+      "category": "doc",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "doc",
+      "name": "doc",
+      "description": "Read, create, and edit .docx documents with formatting and layout fidelity via OpenAI's document skill.",
+      "triggers": [
+        "openai doc",
+        "docx fidelity",
+        "word doc edit",
+        "layout doc"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "documents",
+      "upstream": "https://github.com/openai/skills"
+    },
+    {
+      "slug": "docx",
+      "name": "docx",
+      "description": "Create, edit, and analyze Word documents with tracked changes, comments, and formatting. Useful for design briefs, copy docs, and review-ready deliverables.",
+      "triggers": [
+        "docx",
+        "word document",
+        "tracked changes",
+        "design brief doc",
+        "copy doc"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "documents",
+      "upstream": "https://github.com/anthropics/skills/tree/main/docx"
+    },
+    {
+      "slug": "faq-page",
+      "name": "faq-page",
+      "description": "A Frequently Asked Questions (FAQ) page with collapsible accordion sections, search functionality, and category filtering. Use when the brief asks for \"FAQ\", \"help center\", \"questions\", or \"support page\".",
+      "triggers": [
+        "faq",
+        "FAQ",
+        "frequently asked questions",
+        "help center",
+        "support page",
+        "Q&A",
+        "常见问题",
+        "帮助中心"
+      ],
+      "mode": "prototype",
+      "scenario": "support",
+      "platform": "desktop",
+      "category": null,
+      "upstream": null
+    },
+    {
+      "slug": "flutter-animating-apps",
+      "name": "flutter-animating-apps",
+      "description": "Implement animated effects, transitions, and motion in Flutter apps. Useful for native iOS/Android motion design.",
+      "triggers": [
+        "flutter animation",
+        "flutter motion",
+        "mobile animation",
+        "flutter transitions"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "animation-motion",
+      "upstream": "https://github.com/flutter/skills"
+    },
+    {
+      "slug": "frontend-dev",
+      "name": "frontend-dev",
+      "description": "Full-stack frontend with cinematic animations, AI-generated media via MiniMax API, and generative art. Useful for hero pages and showcase sites.",
+      "triggers": [
+        "frontend dev",
+        "cinematic frontend",
+        "generative web",
+        "hero page",
+        "showcase site"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "web-artifacts",
+      "upstream": "https://github.com/MiniMax-AI/skills"
+    },
+    {
+      "slug": "gsap-core",
+      "name": "gsap-core",
+      "description": "Core GSAP API with gsap.to(), from(), fromTo(), easing, duration, stagger, and defaults. Production-grade web animation primitives.",
+      "triggers": [
+        "gsap",
+        "gsap core",
+        "web animation",
+        "tween",
+        "easing"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "animation-motion",
+      "upstream": "https://github.com/greensock/skills"
+    },
+    {
+      "slug": "gsap-react",
+      "name": "gsap-react",
+      "description": "GSAP React integration with useGSAP hook, refs, gsap.context(), cleanup, and SSR. Ships safe motion in React + Next.js apps.",
+      "triggers": [
+        "gsap react",
+        "usegsap",
+        "react animation",
+        "gsap context",
+        "react motion"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "animation-motion",
+      "upstream": "https://github.com/greensock/skills"
+    },
+    {
+      "slug": "gsap-scrolltrigger",
+      "name": "gsap-scrolltrigger",
+      "description": "GSAP ScrollTrigger for scroll-linked animations, pinning, scrub, and refresh handling. Useful for editorial sites and product pages.",
+      "triggers": [
+        "scrolltrigger",
+        "scroll animation",
+        "gsap scroll",
+        "scroll pin",
+        "scroll scrub"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "animation-motion",
+      "upstream": "https://github.com/greensock/skills"
+    },
+    {
+      "slug": "gsap-timeline",
+      "name": "gsap-timeline",
+      "description": "GSAP Timelines with sequencing, position parameter, labels, nesting, and playback control. Useful for orchestrating multi-step motion sequences.",
+      "triggers": [
+        "gsap timeline",
+        "animation timeline",
+        "sequenced animation",
+        "motion choreography"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "animation-motion",
+      "upstream": "https://github.com/greensock/skills"
+    },
+    {
+      "slug": "hand-drawn-diagrams",
+      "name": "hand-drawn-diagrams",
+      "description": "Generate hand-drawn Excalidraw diagrams from a prompt — animated SVG, hosted edit link, and PNG export. Works with Claude Code, Codex, Gemini CLI, and any agent supporting standard skill paths.",
+      "triggers": [
+        "excalidraw",
+        "hand drawn diagram",
+        "sketch diagram",
+        "whiteboard diagram"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "diagrams",
+      "upstream": "https://github.com/muthuishere/hand-drawn-diagrams"
+    },
+    {
+      "slug": "login-flow",
+      "name": "login-flow",
+      "description": "Mobile login and authentication flow screens",
+      "triggers": [
+        "login",
+        "sign in",
+        "注册登录",
+        "登录注册",
+        "手机号登录",
+        "验证码登录",
+        "密码登录"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": "mobile",
+      "category": null,
+      "upstream": null
+    },
+    {
+      "slug": "minimax-docx",
+      "name": "minimax-docx",
+      "description": "Professional DOCX document creation and editing using OpenXML SDK. Useful for branded reports, polished proposals, and template-based authoring.",
+      "triggers": [
+        "minimax docx",
+        "openxml docx",
+        "branded report",
+        "proposal doc",
+        "template authoring"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "documents",
+      "upstream": "https://github.com/MiniMax-AI/skills"
+    },
+    {
+      "slug": "minimax-pdf",
+      "name": "minimax-pdf",
+      "description": "Generate, fill, and reformat PDFs with a token-based design system and 15 cover styles. Useful for branded PDFs, e-guides, and reports.",
+      "triggers": [
+        "minimax pdf",
+        "branded pdf",
+        "cover style pdf",
+        "e-guide pdf",
+        "design system pdf"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "documents",
+      "upstream": "https://github.com/MiniMax-AI/skills"
+    },
+    {
+      "slug": "mockup-device-3d",
+      "name": "mockup-device-3d",
+      "description": "Static iPhone and MacBook 3D-style showcase with real HTML embedded on screens, glass-lens refraction, and 360-degree turntable composition.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "product",
+      "platform": "desktop",
+      "category": "poster",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "pdf",
+      "name": "pdf",
+      "description": "Extract text, create PDFs, and handle forms. Useful for press releases, branded one-pagers, and printable design deliverables.",
+      "triggers": [
+        "pdf",
+        "create pdf",
+        "pdf form",
+        "branded pdf",
+        "one pager"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "documents",
+      "upstream": "https://github.com/anthropics/skills/tree/main/pdf"
+    },
+    {
+      "slug": "poster-hero",
+      "name": "poster-hero",
+      "description": "Vertical poster or Moments-style share image with strong visual impact.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "marketing",
+      "platform": "desktop",
+      "category": "poster",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "release-notes-one-pager",
+      "name": "release-notes-one-pager",
+      "description": "Release notes one-page HTML with highlights, Added, Fixed, Breaking changes, Known issues, and Upgrade note. Writes explicit \"None\" style sections whenever the user does not provide details.",
+      "triggers": [
+        "release notes",
+        "changelog",
+        "what's new",
+        "version update",
+        "change log",
+        "release summary"
+      ],
+      "mode": "prototype",
+      "scenario": "engineering",
+      "platform": "desktop",
+      "category": null,
+      "upstream": null
+    },
+    {
+      "slug": "resume-modern",
+      "name": "resume-modern",
+      "description": "Modern minimal resume, single A4 page, ready for print or PDF export.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "personal",
+      "platform": "desktop",
+      "category": "resume",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "shader-dev",
+      "name": "shader-dev",
+      "description": "GLSL shader techniques for ray marching, fluid simulation, particle systems, and procedural generation. Useful for hero visuals and motion stills.",
+      "triggers": [
+        "shader",
+        "glsl",
+        "ray marching",
+        "fluid simulation",
+        "procedural generation"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "3d-shaders",
+      "upstream": "https://github.com/MiniMax-AI/skills"
+    },
+    {
+      "slug": "social-reddit-card",
+      "name": "social-reddit-card",
+      "description": "Realistic Reddit post card with vote rail and comment count, suited to video overlays or story sharing.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "marketing",
+      "platform": "desktop",
+      "category": "card",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "social-spotify-card",
+      "name": "social-spotify-card",
+      "description": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "personal",
+      "platform": "desktop",
+      "category": "card",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "social-x-post-card",
+      "name": "social-x-post-card",
+      "description": "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards.",
+      "triggers": [
+
+      ],
+      "mode": "prototype",
+      "scenario": "marketing",
+      "platform": "desktop",
+      "category": "card",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "threejs",
+      "name": "threejs",
+      "description": "Three.js skills for creating 3D elements and interactive experiences in the browser — scenes, materials, controls, and post-processing.",
+      "triggers": [
+        "threejs",
+        "three.js",
+        "3d web",
+        "webgl scene",
+        "3d interactive"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "3d-shaders",
+      "upstream": "https://github.com/CloudAI-X/threejs-skills"
+    },
+    {
+      "slug": "web-artifacts-builder",
+      "name": "web-artifacts-builder",
+      "description": "Build complex claude.ai HTML artifacts with React and Tailwind. Anthropic's reference workflow for shipping rich, embeddable artifacts.",
+      "triggers": [
+        "web artifacts",
+        "tailwind artifact",
+        "react artifact",
+        "anthropic artifact"
+      ],
+      "mode": "prototype",
+      "scenario": null,
+      "platform": null,
+      "category": "web-artifacts",
+      "upstream": "https://github.com/anthropics/skills/tree/main/web-artifacts-builder"
+    }
+  ]
+}

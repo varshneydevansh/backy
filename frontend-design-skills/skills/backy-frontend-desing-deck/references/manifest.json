@@ -1,0 +1,155 @@
+{
+  "generated_at": "2026-05-26T14:44:19Z",
+  "source_site": "https://open-design.ai/skills/",
+  "source_repo": "https://github.com/nexu-io/open-design/tree/main/skills",
+  "prefix": "backy-frontend-desing",
+  "source_count": 9,
+  "modes": {
+    "design-system": 36,
+    "prototype": 32,
+    "image": 24,
+    "video": 17,
+    "deck": 9,
+    "template": 9,
+    "audio": 4,
+    "utility": 1
+  },
+  "mode": "deck",
+  "skills": [
+    {
+      "slug": "deck-guizang-editorial",
+      "name": "deck-guizang-editorial",
+      "description": "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+      "triggers": [
+
+      ],
+      "mode": "deck",
+      "scenario": "marketing",
+      "platform": null,
+      "category": "slides",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "deck-open-slide-canvas",
+      "name": "deck-open-slide-canvas",
+      "description": "Locked 1920x1080 canvas deck with React component-level free composition, not bound to a fixed template.",
+      "triggers": [
+
+      ],
+      "mode": "deck",
+      "scenario": "design",
+      "platform": null,
+      "category": "slides",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "deck-swiss-international",
+      "name": "deck-swiss-international",
+      "description": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
+      "triggers": [
+
+      ],
+      "mode": "deck",
+      "scenario": "marketing",
+      "platform": null,
+      "category": "slides",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "frontend-slides",
+      "name": "frontend-slides",
+      "description": "Generate animation-rich HTML presentations with visual style previews. Useful for online keynotes, embedded talks, and interactive briefs.",
+      "triggers": [
+        "html slides",
+        "animation slides",
+        "interactive deck",
+        "web ppt",
+        "reveal slides"
+      ],
+      "mode": "deck",
+      "scenario": null,
+      "platform": null,
+      "category": "slides",
+      "upstream": "https://github.com/zarazhangrui/frontend-slides"
+    },
+    {
+      "slug": "nanobanana-ppt",
+      "name": "nanobanana-ppt",
+      "description": "AI-powered PPT generation with document analysis and styled images via the NanoBanana stack. Combines image generation with structured deck output.",
+      "triggers": [
+        "nanobanana ppt",
+        "ai ppt",
+        "styled ppt",
+        "document to ppt",
+        "banana ppt"
+      ],
+      "mode": "deck",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/op7418/NanoBanana-PPT-Skills"
+    },
+    {
+      "slug": "ppt-keynote",
+      "name": "ppt-keynote",
+      "description": "Apple Keynote-quality slides, one card per screen, with keyboard left/right navigation.",
+      "triggers": [
+
+      ],
+      "mode": "deck",
+      "scenario": "marketing",
+      "platform": null,
+      "category": "slides",
+      "upstream": "https://github.com/nexu-io/html-anything"
+    },
+    {
+      "slug": "pptx-generator",
+      "name": "pptx-generator",
+      "description": "Create and edit PowerPoint presentations from scratch with PptxGenJS — MiniMax's production-tested deck pipeline.",
+      "triggers": [
+        "pptx generator",
+        "minimax ppt",
+        "deck generator",
+        "auto pptx"
+      ],
+      "mode": "deck",
+      "scenario": null,
+      "platform": null,
+      "category": "slides",
+      "upstream": "https://github.com/MiniMax-AI/skills"
+    },
+    {
+      "slug": "pptx",
+      "name": "pptx",
+      "description": "Read, generate, and adjust PowerPoint slides, layouts, and templates. Useful for executive decks, training material, and product reviews.",
+      "triggers": [
+        "pptx",
+        "powerpoint",
+        "slide deck",
+        "create slides",
+        "edit pptx"
+      ],
+      "mode": "deck",
+      "scenario": null,
+      "platform": null,
+      "category": "slides",
+      "upstream": "https://github.com/anthropics/skills/tree/main/pptx"
+    },
+    {
+      "slug": "slides",
+      "name": "slides",
+      "description": "Create and edit .pptx presentation decks with PptxGenJS. Useful for sales decks, kickoff briefs, and design-system showcases.",
+      "triggers": [
+        "slides",
+        "pptxgenjs",
+        "sales deck",
+        "design showcase deck"
+      ],
+      "mode": "deck",
+      "scenario": null,
+      "platform": null,
+      "category": "slides",
+      "upstream": "https://github.com/openai/skills"
+    }
+  ]
+}

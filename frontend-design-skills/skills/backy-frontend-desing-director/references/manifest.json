@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-05-26T14:44:19Z",
+  "source_site": "https://open-design.ai/skills/",
+  "source_repo": "https://github.com/nexu-io/open-design/tree/main/skills",
+  "prefix": "backy-frontend-desing",
+  "source_count": 132,
+  "modes": {
+    "design-system": 36,
+    "prototype": 32,
+    "image": 24,
+    "video": 17,
+    "deck": 9,
+    "template": 9,
+    "audio": 4,
+    "utility": 1
+  }
+}

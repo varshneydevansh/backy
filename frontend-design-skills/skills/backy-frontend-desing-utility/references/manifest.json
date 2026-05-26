@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-05-26T14:44:19Z",
+  "source_site": "https://open-design.ai/skills/",
+  "source_repo": "https://github.com/nexu-io/open-design/tree/main/skills",
+  "prefix": "backy-frontend-desing",
+  "source_count": 1,
+  "modes": {
+    "design-system": 36,
+    "prototype": 32,
+    "image": 24,
+    "video": 17,
+    "deck": 9,
+    "template": 9,
+    "audio": 4,
+    "utility": 1
+  },
+  "mode": "utility",
+  "skills": [
+    {
+      "slug": "pptx-html-fidelity-audit",
+      "name": "pptx-html-fidelity-audit",
+      "description": "Audit a python-pptx export against its source HTML deck, identify layout/content drift (footer overflow, cropped content, missing italic/em, lost styling, off-rhythm spacing), and re-export with strict footer-rail + cursor-flow layout discipline. Use this skill whenever the user has a .pptx that was generated from an HTML slide deck and asks to compare/audit/verify/fix the export — including phrases like \"compare ppt with html\", \"fidelity audit\", \"fix the pptx\", \"ppt is cut off\", \"footer overlap\", \"italic missing in pptx\", \"re-export the deck\", \"pptx-html-fidelity-audit\", or any case where a python-pptx → HTML round-trip needs verification or repair. Also trigger when the user shows you a deck.html and a deck.pptx side by side and is debugging visual differences.",
+      "triggers": [
+        "pptx fidelity",
+        "pptx audit",
+        "ppt 跑掉",
+        "字型不對",
+        "footer overlap",
+        "verify pptx",
+        "html to pptx"
+      ],
+      "mode": "utility",
+      "scenario": "engineering",
+      "platform": null,
+      "category": null,
+      "upstream": null
+    }
+  ]
+}

@@ -1,0 +1,426 @@
+{
+  "generated_at": "2026-05-26T14:44:19Z",
+  "source_site": "https://open-design.ai/skills/",
+  "source_repo": "https://github.com/nexu-io/open-design/tree/main/skills",
+  "prefix": "backy-frontend-desing",
+  "source_count": 24,
+  "modes": {
+    "design-system": 36,
+    "prototype": 32,
+    "image": 24,
+    "video": 17,
+    "deck": 9,
+    "template": 9,
+    "audio": 4,
+    "utility": 1
+  },
+  "mode": "image",
+  "skills": [
+    {
+      "slug": "algorithmic-art",
+      "name": "algorithmic-art",
+      "description": "Create generative art using p5.js with seeded randomness so every render is reproducible. Useful for procedural posters, motion-style stills, and artistic frame studies.",
+      "triggers": [
+        "algorithmic art",
+        "generative art",
+        "p5js",
+        "procedural art",
+        "seeded randomness",
+        "生成艺术"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/anthropics/skills/tree/main/algorithmic-art"
+    },
+    {
+      "slug": "canvas-design",
+      "name": "canvas-design",
+      "description": "Create beautiful visual art in PNG and PDF documents using design philosophy and aesthetic principles for posters, illustrations, and static pieces.",
+      "triggers": [
+        "canvas design",
+        "visual art",
+        "poster design",
+        "create poster",
+        "illustration",
+        "海报",
+        "插画"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/anthropics/skills/tree/main/canvas-design"
+    },
+    {
+      "slug": "fal-3d",
+      "name": "fal-3d",
+      "description": "Generate 3D models from text or images via fal.ai. Useful for game assets, AR previews, product mockups, and concept sculpting.",
+      "triggers": [
+        "fal 3d",
+        "text to 3d",
+        "image to 3d",
+        "3d model gen",
+        "game asset 3d"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "3d-shaders",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "fal-generate",
+      "name": "fal-generate",
+      "description": "Generate images and videos using fal.ai AI models. Production-grade catalogue covering Flux, SDXL, ideogram, and other community-hosted endpoints.",
+      "triggers": [
+        "fal generate",
+        "fal.ai image",
+        "flux image",
+        "sdxl",
+        "ideogram"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "fal-image-edit",
+      "name": "fal-image-edit",
+      "description": "AI-powered image editing with style transfer, background removal, object removal, and inpainting via fal.ai hosted models.",
+      "triggers": [
+        "fal image edit",
+        "inpaint",
+        "style transfer",
+        "background removal",
+        "object removal"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "fal-realtime",
+      "name": "fal-realtime",
+      "description": "Real-time and streaming AI image generation via fal.ai. Suited for moodboard exploration, draft variations, and rapid creative iteration.",
+      "triggers": [
+        "fal realtime",
+        "streaming image",
+        "realtime image gen",
+        "moodboard"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "fal-restore",
+      "name": "fal-restore",
+      "description": "Restore and fix image quality — deblur, denoise, fix faces, and restore old documents using fal.ai's hosted restoration models.",
+      "triggers": [
+        "fal restore",
+        "restore image",
+        "deblur",
+        "denoise",
+        "fix faces",
+        "document restore"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "fal-train",
+      "name": "fal-train",
+      "description": "Train custom AI models (LoRA) on fal.ai for personalized image generation tailored to a brand, character, or style.",
+      "triggers": [
+        "fal train",
+        "train lora",
+        "custom model",
+        "personalized image gen",
+        "brand lora"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "fal-tryon",
+      "name": "fal-tryon",
+      "description": "Virtual try-on — see how clothes look on a person via fal.ai's hosted try-on models. Useful for ecommerce, lookbooks, and styling experiments.",
+      "triggers": [
+        "virtual tryon",
+        "fal tryon",
+        "try on clothes",
+        "lookbook",
+        "ecommerce styling"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "fal-upscale",
+      "name": "fal-upscale",
+      "description": "Upscale and enhance image and video resolution using AI super-resolution models hosted on fal.ai.",
+      "triggers": [
+        "fal upscale",
+        "upscale image",
+        "super resolution",
+        "4k upscale",
+        "enhance resolution"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "fal-vision",
+      "name": "fal-vision",
+      "description": "Analyze images — segment objects, detect, run OCR, describe, and answer visual questions via fal.ai vision models.",
+      "triggers": [
+        "fal vision",
+        "image analysis",
+        "object detection",
+        "ocr image",
+        "visual qa",
+        "segment"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/fal-ai-community/skills"
+    },
+    {
+      "slug": "full-page-screenshot",
+      "name": "full-page-screenshot",
+      "description": "Capture full-page screenshots of web pages via Chrome DevTools Protocol with zero dependencies. Useful for portfolios, case studies, and audit reports.",
+      "triggers": [
+        "full page screenshot",
+        "long screenshot",
+        "devtools screenshot",
+        "web capture"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "screenshots",
+      "upstream": "https://github.com/LewisLiu007/full-page-screenshot"
+    },
+    {
+      "slug": "gif-sticker-maker",
+      "name": "gif-sticker-maker",
+      "description": "Convert photos into animated GIF stickers in Funko Pop / Pop Mart style via the MiniMax API. Useful for personalized chat stickers and avatar packs.",
+      "triggers": [
+        "gif sticker",
+        "funko sticker",
+        "animated sticker",
+        "pop mart",
+        "表情包"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/MiniMax-AI/skills"
+    },
+    {
+      "slug": "hatch-pet",
+      "name": "hatch-pet",
+      "description": "Create, repair, validate, preview, and package Codex-compatible animated pet spritesheets from character art, screenshots, generated images, or visual references. Use when a user wants to hatch a Codex pet, create a custom animated pet, or build a built-in pet asset with an 8x9 atlas, transparent unused cells, row-by-row animation prompts, QA contact sheets, preview videos, and pet.json packaging. This skill composes the installed $imagegen system skill for visual generation and uses bundled scripts for deterministic spritesheet assembly.",
+      "triggers": [
+        "hatch a pet",
+        "hatch pet",
+        "codex pet",
+        "spritesheet pet",
+        "animated pet",
+        "孵化宠物",
+        "电子宠物"
+      ],
+      "mode": "image",
+      "scenario": "personal",
+      "platform": null,
+      "category": null,
+      "upstream": "https://github.com/openai/skills/tree/main/skills/.curated/hatch-pet"
+    },
+    {
+      "slug": "image-enhancer",
+      "name": "image-enhancer",
+      "description": "Improve image and screenshot quality by enhancing resolution, sharpness, and clarity for professional presentations and documentation.",
+      "triggers": [
+        "enhance image",
+        "upscale image",
+        "image quality",
+        "sharpen",
+        "denoise"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/ComposioHQ/awesome-claude-skills/tree/master/image-enhancer"
+    },
+    {
+      "slug": "imagegen",
+      "name": "imagegen",
+      "description": "Generate and edit images using OpenAI's Image API for project assets — UI mockups, icons, illustrations, social cards, and visual references.",
+      "triggers": [
+        "generate image",
+        "create image",
+        "image gen",
+        "openai image",
+        "icon design",
+        "mockup"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/openai/skills"
+    },
+    {
+      "slug": "imagen",
+      "name": "imagen",
+      "description": "Generate images using Google Gemini's image generation API for UI mockups, icons, illustrations, and visual assets.",
+      "triggers": [
+        "gemini image",
+        "imagen",
+        "google image gen",
+        "illustration",
+        "icon"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/sanjay3290/imagen"
+    },
+    {
+      "slug": "pixelbin-media",
+      "name": "pixelbin-media",
+      "description": "Generate and edit images and videos with an 85+ API portfolio and build visually appealing website pages via Pixelbin.",
+      "triggers": [
+        "pixelbin",
+        "media generation",
+        "image transform",
+        "video transform",
+        "cdn media"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/pixelbin-dev/skills"
+    },
+    {
+      "slug": "replicate",
+      "name": "replicate",
+      "description": "Discover, compare, and run AI models using Replicate's API. Strong fit for image, audio, and video generation pipelines that swap models frequently.",
+      "triggers": [
+        "replicate",
+        "run ai model",
+        "model comparison",
+        "replicate api"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/replicate/skills"
+    },
+    {
+      "slug": "screenshot",
+      "name": "screenshot",
+      "description": "Capture desktop, app windows, or pixel regions across OS platforms. Useful for marketing screenshots, design reviews, and bug reports.",
+      "triggers": [
+        "screenshot",
+        "capture screen",
+        "window screenshot",
+        "pixel region capture"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "screenshots",
+      "upstream": "https://github.com/openai/skills"
+    },
+    {
+      "slug": "screenshots-marketing",
+      "name": "screenshots-marketing",
+      "description": "Generate marketing screenshots with Playwright. Useful for landing-page hero shots, App Store screenshots, and changelog visuals.",
+      "triggers": [
+        "marketing screenshot",
+        "playwright screenshot",
+        "hero shot",
+        "app store screenshot"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "screenshots",
+      "upstream": "https://github.com/Shpigford/screenshots"
+    },
+    {
+      "slug": "slack-gif-creator",
+      "name": "slack-gif-creator",
+      "description": "Create animated GIFs optimized for Slack with validators for size constraints and composable animation primitives.",
+      "triggers": [
+        "slack gif",
+        "animated gif",
+        "reaction gif",
+        "tiny gif"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/anthropics/skills/tree/main/slack-gif-creator"
+    },
+    {
+      "slug": "venice-image-edit",
+      "name": "venice-image-edit",
+      "description": "Image edits, upscaling, and background removal via the Venice.ai API.",
+      "triggers": [
+        "venice image edit",
+        "venice upscale",
+        "venice background removal"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/veniceai/skills"
+    },
+    {
+      "slug": "venice-image-generate",
+      "name": "venice-image-generate",
+      "description": "Image generation endpoints and available styles via the Venice.ai API.",
+      "triggers": [
+        "venice image",
+        "venice generate",
+        "venice ai image"
+      ],
+      "mode": "image",
+      "scenario": null,
+      "platform": null,
+      "category": "image-generation",
+      "upstream": "https://github.com/veniceai/skills"
+    }
+  ]
+}
