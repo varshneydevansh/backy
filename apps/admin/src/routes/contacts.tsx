@@ -3346,6 +3346,8 @@ function ContactsRoute() {
                   promoteUserTitle={!canCreateUsers ? usersCreatePermissionTitle : undefined}
                   promoteCustomerDisabled={!canEditCollections}
                   promoteCustomerTitle={!canEditCollections ? collectionsEditPermissionTitle : undefined}
+                  disabledReason={isContactsBusy ? 'Contact actions are temporarily unavailable while Backy updates contacts.' : !canManageForms ? managePermissionTitle : null}
+                  disabledActionState={isContactsBusy ? 'busy' : 'blocked'}
                 />
               ))}
             </div>
@@ -3557,6 +3559,8 @@ function ContactCard({
   promoteUserTitle,
   promoteCustomerDisabled,
   promoteCustomerTitle,
+  disabledReason,
+  disabledActionState,
 }: {
   contact: AdminContact;
   form?: FormDefinition;
@@ -3573,6 +3577,8 @@ function ContactCard({
   promoteUserTitle?: string;
   promoteCustomerDisabled: boolean;
   promoteCustomerTitle?: string;
+  disabledReason?: string | null;
+  disabledActionState?: 'busy' | 'blocked';
 }) {
   const [isEditingIdentity, setIsEditingIdentity] = useState(false);
   const [identityDraft, setIdentityDraft] = useState({
@@ -3605,10 +3611,34 @@ function ContactCard({
   const submittedValues = Object.entries(contact.sourceValues || {})
     .filter(([key]) => key !== CONTACT_PROMOTION_SOURCE_KEY && key !== CONTACT_CUSTOMER_PROMOTION_SOURCE_KEY);
   const contactActionLabel = contact.name || contact.email || contact.id;
+  const contactEditActionStatusId = `contacts-edit-status-${contact.id}`;
   const contactActionStatusId = `contacts-actions-status-${contact.id}`;
-  const contactBusyReason = disabled
+  const contactUnavailableState = disabled ? disabledActionState || 'blocked' : 'ready';
+  const contactBusyReason = disabledReason || (disabled
     ? 'Contact actions are temporarily unavailable while Backy updates contacts.'
-    : null;
+    : null);
+  const identityEditDisabledReason = contactBusyReason;
+  const identityCancelDisabledReason = contactBusyReason;
+  const identitySaveDisabledReason = contactBusyReason || (!identityChanged ? 'Change a name, email, or phone before saving identity.' : null);
+  const notesSaveDisabledReason = contactBusyReason || (!notesChanged ? 'Change internal notes before saving.' : null);
+  const identityEditActionStatus = identityEditDisabledReason
+    ? `${isEditingIdentity ? 'Close identity' : 'Edit identity'} unavailable: ${identityEditDisabledReason}`
+    : `${isEditingIdentity ? 'Close identity' : 'Edit identity'} available.`;
+  const identityCancelActionStatus = identityCancelDisabledReason
+    ? `Cancel identity unavailable: ${identityCancelDisabledReason}`
+    : 'Cancel identity available.';
+  const identitySaveActionStatus = identitySaveDisabledReason
+    ? `Save identity unavailable: ${identitySaveDisabledReason}`
+    : 'Save identity available.';
+  const notesSaveActionStatus = notesSaveDisabledReason
+    ? `Save notes unavailable: ${notesSaveDisabledReason}`
+    : 'Save notes available.';
+  const contactEditActionStatus = [
+    identityEditActionStatus,
+    isEditingIdentity ? identityCancelActionStatus : null,
+    isEditingIdentity ? identitySaveActionStatus : null,
+    notesSaveActionStatus,
+  ].filter(Boolean).join(' ');
   const contactedDisabledReason = contactBusyReason || (contact.status === 'contacted' ? 'This contact is already marked contacted.' : null);
   const qualifiedDisabledReason = contactBusyReason || (contact.status === 'qualified' ? 'This contact is already marked qualified.' : null);
   const newDisabledReason = contactBusyReason || (contact.status === 'new' ? 'This contact is already marked new.' : null);
@@ -3665,149 +3695,202 @@ function ContactCard({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-medium text-muted-foreground">Identity</div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setIsEditingIdentity((current) => !current)}
-          disabled={disabled}
-          iconStart={<Contact className="size-4" />}
-          data-testid="contacts-edit-identity-button"
+      <section
+        className="mt-4"
+        role="group"
+        aria-label={`Editable profile for ${contactActionLabel}`}
+        aria-describedby={contactEditActionStatusId}
+        data-testid="contacts-edit-action-group"
+        data-contact-id={contact.id}
+        data-action-state={contactUnavailableState}
+        data-action-status={contactEditActionStatus}
+      >
+        <span
+          id={contactEditActionStatusId}
+          className="sr-only"
+          data-testid="contacts-edit-action-status"
         >
-          {isEditingIdentity ? 'Close identity' : 'Edit identity'}
-        </Button>
-      </div>
-
-      <div className="mt-2 grid gap-2 text-sm">
-        {contact.email ? (
-          <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-primary hover:underline">
-            <Mail className="size-4" />
-            {contact.email}
-          </a>
-        ) : (
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <Mail className="size-4" />
-            No email
-          </span>
-        )}
-        {contact.phone ? (
-          <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-primary hover:underline">
-            <Phone className="size-4" />
-            {contact.phone}
-          </a>
-        ) : (
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <Phone className="size-4" />
-            No phone
-          </span>
-        )}
-      </div>
-
-      {isEditingIdentity ? (
-        <div className="mt-4 rounded-md border border-border bg-muted/40 p-3" data-testid="contacts-identity-editor">
-          <div className="grid gap-3 md:grid-cols-3">
-            <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
-              Name
-              <input
-                value={identityDraft.name}
-                disabled={disabled}
-                onChange={(event) => setIdentityDraft((current) => ({ ...current, name: event.target.value }))}
-                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                placeholder="Lead name"
-                data-testid="contacts-identity-name-input"
-              />
-            </label>
-            <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
-              Email
-              <input
-                value={identityDraft.email}
-                disabled={disabled}
-                onChange={(event) => setIdentityDraft((current) => ({ ...current, email: event.target.value }))}
-                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                placeholder="lead@example.com"
-                type="email"
-                data-testid="contacts-identity-email-input"
-              />
-            </label>
-            <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
-              Phone
-              <input
-                value={identityDraft.phone}
-                disabled={disabled}
-                onChange={(event) => setIdentityDraft((current) => ({ ...current, phone: event.target.value }))}
-                className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                placeholder="+1 555 0100"
-                data-testid="contacts-identity-phone-input"
-              />
-            </label>
-          </div>
-          <div className="mt-3 flex flex-wrap justify-end gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={disabled}
-              onClick={() => {
-                setIdentityDraft({
-                  name: contact.name || '',
-                  email: contact.email || '',
-                  phone: contact.phone || '',
-                });
-                setIsEditingIdentity(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              disabled={disabled || !identityChanged}
-              onClick={() => {
-                void onIdentity({
-                  name: identityDraft.name.trim() || null,
-                  email: identityDraft.email.trim() || null,
-                  phone: identityDraft.phone.trim() || null,
-                })
-                  .then(() => setIsEditingIdentity(false))
-                  .catch(() => undefined);
-              }}
-              iconStart={<Save className="size-4" />}
-              data-testid="contacts-save-identity-button"
-            >
-              Save identity
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mt-4 rounded-md border border-border bg-muted/40 p-3">
-        <label className="text-xs font-medium text-muted-foreground" htmlFor={`contact-notes-${contact.id}`}>
-          Internal notes
-        </label>
-        <textarea
-          id={`contact-notes-${contact.id}`}
-          value={notesDraft}
-          disabled={disabled}
-          onChange={(event) => {
-            if (disabled) return;
-            setNotesDraft(event.target.value);
-          }}
-          rows={3}
-          className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-          placeholder="Follow-up context, qualification notes, or next steps."
-        />
-        <div className="mt-2 flex justify-end">
+          {contactEditActionStatus}
+        </span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-medium text-muted-foreground">Identity</div>
           <Button
             size="sm"
             variant="outline"
-            disabled={disabled || !notesChanged}
-            onClick={() => onNotes(notesDraft)}
-            iconStart={<Save className="size-4" />}
-            aria-label={`Save notes for ${contact.name || contact.email || contact.id}`}
+            onClick={() => setIsEditingIdentity((current) => !current)}
+            disabled={Boolean(identityEditDisabledReason)}
+            title={identityEditDisabledReason || undefined}
+            aria-describedby={contactEditActionStatusId}
+            data-action-state={identityEditDisabledReason ? contactUnavailableState : 'ready'}
+            data-action-status={identityEditActionStatus}
+            data-disabled-reason={identityEditDisabledReason || undefined}
+            iconStart={<Contact className="size-4" />}
+            data-testid="contacts-edit-identity-button"
           >
-            Save notes
+            {isEditingIdentity ? 'Close identity' : 'Edit identity'}
           </Button>
         </div>
-      </div>
+
+        <div className="mt-2 grid gap-2 text-sm">
+          {contact.email ? (
+            <a href={`mailto:${contact.email}`} className="flex items-center gap-2 text-primary hover:underline">
+              <Mail className="size-4" />
+              {contact.email}
+            </a>
+          ) : (
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <Mail className="size-4" />
+              No email
+            </span>
+          )}
+          {contact.phone ? (
+            <a href={`tel:${contact.phone}`} className="flex items-center gap-2 text-primary hover:underline">
+              <Phone className="size-4" />
+              {contact.phone}
+            </a>
+          ) : (
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <Phone className="size-4" />
+              No phone
+            </span>
+          )}
+        </div>
+
+        {isEditingIdentity ? (
+          <div className="mt-4 rounded-md border border-border bg-muted/40 p-3" data-testid="contacts-identity-editor">
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                Name
+                <input
+                  value={identityDraft.name}
+                  disabled={Boolean(identityEditDisabledReason)}
+                  aria-describedby={contactEditActionStatusId}
+                  data-action-state={identityEditDisabledReason ? contactUnavailableState : 'ready'}
+                  data-disabled-reason={identityEditDisabledReason || undefined}
+                  onChange={(event) => setIdentityDraft((current) => ({ ...current, name: event.target.value }))}
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="Lead name"
+                  data-testid="contacts-identity-name-input"
+                />
+              </label>
+              <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                Email
+                <input
+                  value={identityDraft.email}
+                  disabled={Boolean(identityEditDisabledReason)}
+                  aria-describedby={contactEditActionStatusId}
+                  data-action-state={identityEditDisabledReason ? contactUnavailableState : 'ready'}
+                  data-disabled-reason={identityEditDisabledReason || undefined}
+                  onChange={(event) => setIdentityDraft((current) => ({ ...current, email: event.target.value }))}
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="lead@example.com"
+                  type="email"
+                  data-testid="contacts-identity-email-input"
+                />
+              </label>
+              <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                Phone
+                <input
+                  value={identityDraft.phone}
+                  disabled={Boolean(identityEditDisabledReason)}
+                  aria-describedby={contactEditActionStatusId}
+                  data-action-state={identityEditDisabledReason ? contactUnavailableState : 'ready'}
+                  data-disabled-reason={identityEditDisabledReason || undefined}
+                  onChange={(event) => setIdentityDraft((current) => ({ ...current, phone: event.target.value }))}
+                  className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder="+1 555 0100"
+                  data-testid="contacts-identity-phone-input"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={Boolean(identityCancelDisabledReason)}
+                title={identityCancelDisabledReason || undefined}
+                aria-describedby={contactEditActionStatusId}
+                data-action-state={identityCancelDisabledReason ? contactUnavailableState : 'ready'}
+                data-action-status={identityCancelActionStatus}
+                data-disabled-reason={identityCancelDisabledReason || undefined}
+                data-testid="contacts-cancel-identity-button"
+                onClick={() => {
+                  setIdentityDraft({
+                    name: contact.name || '',
+                    email: contact.email || '',
+                    phone: contact.phone || '',
+                  });
+                  setIsEditingIdentity(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={Boolean(identitySaveDisabledReason)}
+                title={identitySaveDisabledReason || undefined}
+                aria-describedby={contactEditActionStatusId}
+                data-action-state={identitySaveDisabledReason ? (contactBusyReason ? contactUnavailableState : 'blocked') : 'ready'}
+                data-action-status={identitySaveActionStatus}
+                data-disabled-reason={identitySaveDisabledReason || undefined}
+                onClick={() => {
+                  void onIdentity({
+                    name: identityDraft.name.trim() || null,
+                    email: identityDraft.email.trim() || null,
+                    phone: identityDraft.phone.trim() || null,
+                  })
+                    .then(() => setIsEditingIdentity(false))
+                    .catch(() => undefined);
+                }}
+                iconStart={<Save className="size-4" />}
+                data-testid="contacts-save-identity-button"
+              >
+                Save identity
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4 rounded-md border border-border bg-muted/40 p-3">
+          <label className="text-xs font-medium text-muted-foreground" htmlFor={`contact-notes-${contact.id}`}>
+            Internal notes
+          </label>
+          <textarea
+            id={`contact-notes-${contact.id}`}
+            value={notesDraft}
+            disabled={Boolean(contactBusyReason)}
+            aria-describedby={contactEditActionStatusId}
+            data-action-state={contactBusyReason ? contactUnavailableState : 'ready'}
+            data-disabled-reason={contactBusyReason || undefined}
+            data-testid="contacts-notes-textarea"
+            onChange={(event) => {
+              if (disabled) return;
+              setNotesDraft(event.target.value);
+            }}
+            rows={3}
+            className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+            placeholder="Follow-up context, qualification notes, or next steps."
+          />
+          <div className="mt-2 flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={Boolean(notesSaveDisabledReason)}
+              title={notesSaveDisabledReason || undefined}
+              onClick={() => onNotes(notesDraft)}
+              iconStart={<Save className="size-4" />}
+              aria-label={`Save notes for ${contact.name || contact.email || contact.id}`}
+              aria-describedby={contactEditActionStatusId}
+              data-action-state={notesSaveDisabledReason ? (contactBusyReason ? contactUnavailableState : 'blocked') : 'ready'}
+              data-action-status={notesSaveActionStatus}
+              data-disabled-reason={notesSaveDisabledReason || undefined}
+              data-testid="contacts-save-notes-button"
+            >
+              Save notes
+            </Button>
+          </div>
+        </div>
+      </section>
 
       {promotion?.userId ? (
         <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">

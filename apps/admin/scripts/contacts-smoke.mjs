@@ -158,6 +158,23 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
     'Contacts delete confirmation must expose accessible dialog semantics, labelled impact copy, explicit actions, and Escape recovery.',
   );
   assert(
+    source.includes('const contactEditActionStatusId = `contacts-edit-status-${contact.id}`;') &&
+      source.includes('const contactEditActionStatus = [') &&
+      source.includes('aria-label={`Editable profile for ${contactActionLabel}`}') &&
+      source.includes('data-testid="contacts-edit-action-group"') &&
+      source.includes('data-action-status={contactEditActionStatus}') &&
+      source.includes('data-testid="contacts-edit-action-status"') &&
+      source.includes('data-action-status={identityEditActionStatus}') &&
+      source.includes('data-action-status={identitySaveActionStatus}') &&
+      source.includes('data-action-status={notesSaveActionStatus}') &&
+      source.includes('data-testid="contacts-cancel-identity-button"') &&
+      source.includes('data-testid="contacts-save-notes-button"') &&
+      source.includes('data-testid="contacts-notes-textarea"') &&
+      source.includes('disabledReason={isContactsBusy ?') &&
+      source.includes("disabledActionState={isContactsBusy ? 'busy' : 'blocked'}"),
+    'Contacts inline identity and notes editing must expose a shared edit action-status contract with per-control ready/blocked/busy metadata.',
+  );
+  assert(
     source.includes('const contactActionStatusId = `contacts-actions-status-${contact.id}`;') &&
       source.includes('const contactActionStatus = [') &&
       source.includes('role="group"') &&
@@ -918,15 +935,43 @@ const updateContactInUi = async (client, contactId) => {
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
       };
-      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
-      if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 800) || '' };
-      const editIdentity = card.querySelector('[data-testid="contacts-edit-identity-button"]');
-      if (!(editIdentity instanceof HTMLButtonElement)) {
-        return { ok: false, reason: 'edit-identity-missing', buttons: Array.from(card.querySelectorAll('button')).map((button) => button.textContent || '') };
-      }
-      const name = card.querySelector('[data-testid="contacts-identity-name-input"]');
-      const email = card.querySelector('[data-testid="contacts-identity-email-input"]');
-      const phone = card.querySelector('[data-testid="contacts-identity-phone-input"]');
+	      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
+	      if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+	      const editGroup = card.querySelector('[data-testid="contacts-edit-action-group"]');
+	      const editStatus = card.querySelector('[data-testid="contacts-edit-action-status"]');
+	      const editIdentity = card.querySelector('[data-testid="contacts-edit-identity-button"]');
+	      if (!(editIdentity instanceof HTMLButtonElement)) {
+	        return { ok: false, reason: 'edit-identity-missing', buttons: Array.from(card.querySelectorAll('button')).map((button) => button.textContent || '') };
+	      }
+	      if (!(editGroup instanceof HTMLElement) || !(editStatus instanceof HTMLElement)) {
+	        return { ok: false, reason: 'edit-status-missing', body: card.textContent?.slice(0, 800) || '' };
+	      }
+	      const editStatusId = editStatus.id || '';
+	      const editStatusText = editStatus.textContent?.replace(/\\s+/g, ' ').trim() || '';
+	      if (
+	        editGroup.getAttribute('role') !== 'group' ||
+	        !(editGroup.getAttribute('aria-label') || '').includes('Editable profile for') ||
+	        editGroup.getAttribute('aria-describedby') !== editStatusId ||
+	        editGroup.getAttribute('data-action-status') !== editStatusText ||
+	        editIdentity.getAttribute('aria-describedby') !== editStatusId ||
+	        editIdentity.getAttribute('data-action-state') !== 'ready' ||
+	        !(editIdentity.getAttribute('data-action-status') || '').includes('available')
+	      ) {
+	        return {
+	          ok: false,
+	          reason: 'edit-status-drifted',
+	          editStatusId,
+	          editStatusText,
+	          groupDescribedBy: editGroup.getAttribute('aria-describedby') || '',
+	          groupStatus: editGroup.getAttribute('data-action-status') || '',
+	          editDescribedBy: editIdentity.getAttribute('aria-describedby') || '',
+	          editState: editIdentity.getAttribute('data-action-state') || '',
+	          editActionStatus: editIdentity.getAttribute('data-action-status') || '',
+	        };
+	      }
+	      const name = card.querySelector('[data-testid="contacts-identity-name-input"]');
+	      const email = card.querySelector('[data-testid="contacts-identity-email-input"]');
+	      const phone = card.querySelector('[data-testid="contacts-identity-phone-input"]');
       if (!(name instanceof HTMLInputElement) || !(email instanceof HTMLInputElement) || !(phone instanceof HTMLInputElement)) {
         if ((editIdentity.textContent || '').includes('Edit identity')) {
           editIdentity.click();
@@ -951,14 +996,45 @@ const updateContactInUi = async (client, contactId) => {
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
-      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
-      const saveIdentity = card?.querySelector('[data-testid="contacts-save-identity-button"]');
-      if (!(saveIdentity instanceof HTMLButtonElement)) {
-        return { ok: false, reason: 'save-identity-missing', body: card?.textContent?.slice(0, 800) || '' };
-      }
-      if (saveIdentity.disabled) {
-        return { ok: false, reason: 'save-identity-disabled' };
-      }
+	      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
+	      const editGroup = card?.querySelector('[data-testid="contacts-edit-action-group"]');
+	      const editStatus = card?.querySelector('[data-testid="contacts-edit-action-status"]');
+	      const saveIdentity = card?.querySelector('[data-testid="contacts-save-identity-button"]');
+	      const cancelIdentity = card?.querySelector('[data-testid="contacts-cancel-identity-button"]');
+	      if (!(saveIdentity instanceof HTMLButtonElement)) {
+	        return { ok: false, reason: 'save-identity-missing', body: card?.textContent?.slice(0, 800) || '' };
+	      }
+	      if (!(editGroup instanceof HTMLElement) || !(editStatus instanceof HTMLElement) || !(cancelIdentity instanceof HTMLButtonElement)) {
+	        return { ok: false, reason: 'identity-edit-contract-missing', body: card?.textContent?.slice(0, 800) || '' };
+	      }
+	      const editStatusId = editStatus.id || '';
+	      const editStatusText = editStatus.textContent?.replace(/\\s+/g, ' ').trim() || '';
+	      if (
+	        editGroup.getAttribute('aria-describedby') !== editStatusId ||
+	        editGroup.getAttribute('data-action-status') !== editStatusText ||
+	        saveIdentity.getAttribute('aria-describedby') !== editStatusId ||
+	        saveIdentity.getAttribute('data-action-state') !== 'ready' ||
+	        !(saveIdentity.getAttribute('data-action-status') || '').includes('Save identity available.') ||
+	        (saveIdentity.getAttribute('data-disabled-reason') || '') !== '' ||
+	        cancelIdentity.getAttribute('aria-describedby') !== editStatusId ||
+	        cancelIdentity.getAttribute('data-action-state') !== 'ready'
+	      ) {
+	        return {
+	          ok: false,
+	          reason: 'save-identity-action-status-drifted',
+	          editStatusId,
+	          editStatusText,
+	          groupStatus: editGroup.getAttribute('data-action-status') || '',
+	          saveDescribedBy: saveIdentity.getAttribute('aria-describedby') || '',
+	          saveState: saveIdentity.getAttribute('data-action-state') || '',
+	          saveStatus: saveIdentity.getAttribute('data-action-status') || '',
+	          saveDisabledReason: saveIdentity.getAttribute('data-disabled-reason') || '',
+	          cancelState: cancelIdentity.getAttribute('data-action-state') || '',
+	        };
+	      }
+	      if (saveIdentity.disabled) {
+	        return { ok: false, reason: 'save-identity-disabled' };
+	      }
       saveIdentity.click();
       return { ok: true };
     })()`);
@@ -994,28 +1070,54 @@ const updateContactInUi = async (client, contactId) => {
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
         textarea.dispatchEvent(new Event('change', { bubbles: true }));
       };
-      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
-      if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 800) || '' };
-      const notes = card.querySelector('textarea');
-      const save = Array.from(card.querySelectorAll('button')).find((button) => (
-        (button.getAttribute('aria-label') || '').startsWith('Save notes for')
-      ));
-      const qualified = Array.from(card.querySelectorAll('button')).find((button) => (
-        (button.getAttribute('aria-label') || '').includes('as qualified')
-      ));
+	      const card = document.querySelector('[data-testid="contacts-contact-card"][data-contact-id="${contactId.id}"]');
+	      if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+	      const editGroup = card.querySelector('[data-testid="contacts-edit-action-group"]');
+	      const editStatus = card.querySelector('[data-testid="contacts-edit-action-status"]');
+	      const notes = card.querySelector('[data-testid="contacts-notes-textarea"]');
+	      const save = card.querySelector('[data-testid="contacts-save-notes-button"]');
+	      const qualified = Array.from(card.querySelectorAll('button')).find((button) => (
+	        (button.getAttribute('aria-label') || '').includes('as qualified')
+	      ));
 
-      if (!(notes instanceof HTMLTextAreaElement) || !(save instanceof HTMLButtonElement) || !(qualified instanceof HTMLButtonElement)) {
-        return {
-          ok: false,
-          reason: 'controls-missing',
-          buttons: Array.from(card.querySelectorAll('button')).map((button) => button.getAttribute('aria-label') || button.textContent || ''),
-        };
-      }
+	      if (!(editGroup instanceof HTMLElement) || !(editStatus instanceof HTMLElement) || !(notes instanceof HTMLTextAreaElement) || !(save instanceof HTMLButtonElement) || !(qualified instanceof HTMLButtonElement)) {
+	        return {
+	          ok: false,
+	          reason: 'controls-missing',
+	          buttons: Array.from(card.querySelectorAll('button')).map((button) => button.getAttribute('aria-label') || button.textContent || ''),
+	        };
+	      }
 
-      setTextAreaValue(notes, 'Qualified in contacts smoke.');
-      if (save.disabled) return { ok: false, reason: 'save-disabled' };
-      save.click();
-      return { ok: true };
+	      setTextAreaValue(notes, 'Qualified in contacts smoke.');
+	      const editStatusId = editStatus.id || '';
+	      const editStatusText = editStatus.textContent?.replace(/\\s+/g, ' ').trim() || '';
+	      if (
+	        editGroup.getAttribute('aria-describedby') !== editStatusId ||
+	        editGroup.getAttribute('data-action-status') !== editStatusText ||
+	        notes.getAttribute('aria-describedby') !== editStatusId ||
+	        notes.getAttribute('data-action-state') !== 'ready' ||
+	        save.getAttribute('aria-describedby') !== editStatusId ||
+	        save.getAttribute('data-action-state') !== 'ready' ||
+	        !(save.getAttribute('data-action-status') || '').includes('Save notes available.') ||
+	        (save.getAttribute('data-disabled-reason') || '') !== ''
+	      ) {
+	        return {
+	          ok: false,
+	          reason: 'notes-action-status-drifted',
+	          editStatusId,
+	          editStatusText,
+	          groupStatus: editGroup.getAttribute('data-action-status') || '',
+	          notesDescribedBy: notes.getAttribute('aria-describedby') || '',
+	          notesState: notes.getAttribute('data-action-state') || '',
+	          saveDescribedBy: save.getAttribute('aria-describedby') || '',
+	          saveState: save.getAttribute('data-action-state') || '',
+	          saveStatus: save.getAttribute('data-action-status') || '',
+	          saveDisabledReason: save.getAttribute('data-disabled-reason') || '',
+	        };
+	      }
+	      if (save.disabled) return { ok: false, reason: 'save-disabled' };
+	      save.click();
+	      return { ok: true };
     })()`);
 
     if (result.ok) break;
@@ -1639,9 +1741,11 @@ const assertLayout = async (client) => {
 	    const promotionContractDetails = document.querySelector('[data-testid="contacts-promotion-contract-details"]');
 	    const controlMapText = controlMapDetails?.textContent || '';
 	    const connectedWorkflowsText = connectedWorkflowsDetails?.textContent || '';
-	    const promotionContractText = promotionContractDetails?.textContent || '';
-	    const actionGroup = document.querySelector('[data-testid="contacts-action-group"]');
-	    const actionStatus = document.querySelector('[data-testid="contacts-action-status"]');
+		    const promotionContractText = promotionContractDetails?.textContent || '';
+		    const editGroup = document.querySelector('[data-testid="contacts-edit-action-group"]');
+		    const editStatus = document.querySelector('[data-testid="contacts-edit-action-status"]');
+		    const actionGroup = document.querySelector('[data-testid="contacts-action-group"]');
+		    const actionStatus = document.querySelector('[data-testid="contacts-action-status"]');
 	    const bulkGroup = document.querySelector('[data-testid="contacts-bulk-actions"]');
 	    const bulkSelection = document.querySelector('[data-testid="contacts-bulk-selection-summary"]');
 	    const bulkStatus = document.querySelector('[data-testid="contacts-bulk-action-status"]');
@@ -1728,11 +1832,26 @@ const assertLayout = async (client) => {
       hasPromoteUser: Boolean(document.querySelector('[data-testid="contacts-promote-user"]')) &&
         text.includes('/contacts/{contactId}/promote') &&
         text.includes('Promoted user'),
-	      hasPromoteCustomer: Boolean(document.querySelector('[data-testid="contacts-promote-customer"]')) &&
-	        text.includes('/contacts/{contactId}/promote-customer') &&
-	        text.includes('Promoted customer'),
-	      actionGroupRole: actionGroup?.getAttribute('role') || '',
-	      actionGroupLabel: actionGroup?.getAttribute('aria-label') || '',
+		      hasPromoteCustomer: Boolean(document.querySelector('[data-testid="contacts-promote-customer"]')) &&
+		        text.includes('/contacts/{contactId}/promote-customer') &&
+		        text.includes('Promoted customer'),
+		      editGroupRole: editGroup?.getAttribute('role') || '',
+		      editGroupLabel: editGroup?.getAttribute('aria-label') || '',
+		      editGroupDescribedBy: editGroup?.getAttribute('aria-describedby') || '',
+		      editGroupState: editGroup?.getAttribute('data-action-state') || '',
+		      editStatusId: editStatus?.id || '',
+		      editStatusText: editStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+		      editStatusData: editGroup?.getAttribute('data-action-status') || '',
+		      editIdentityState: actionAttr('contacts-edit-identity-button', 'data-action-state'),
+		      editIdentityStatus: actionAttr('contacts-edit-identity-button', 'data-action-status'),
+		      editIdentityDescribedBy: actionAttr('contacts-edit-identity-button', 'aria-describedby'),
+		      notesTextareaState: actionAttr('contacts-notes-textarea', 'data-action-state'),
+		      notesTextareaDescribedBy: actionAttr('contacts-notes-textarea', 'aria-describedby'),
+		      saveNotesState: actionAttr('contacts-save-notes-button', 'data-action-state'),
+		      saveNotesStatus: actionAttr('contacts-save-notes-button', 'data-action-status'),
+		      saveNotesDescribedBy: actionAttr('contacts-save-notes-button', 'aria-describedby'),
+		      actionGroupRole: actionGroup?.getAttribute('role') || '',
+		      actionGroupLabel: actionGroup?.getAttribute('aria-label') || '',
 	      actionGroupDescribedBy: actionGroup?.getAttribute('aria-describedby') || '',
 	      actionStatusId: actionStatus?.id || '',
 	      actionStatusText: actionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
@@ -1804,10 +1923,26 @@ const assertLayout = async (client) => {
     && layout.hasImportTemplate
     && layout.hasMergeDuplicates
     && layout.hasSegmentAnalytics
-    && layout.hasSavedLists
-	    && layout.hasPromoteUser
-	    && layout.hasPromoteCustomer
-	    && layout.actionGroupRole === 'group'
+	    && layout.hasSavedLists
+		    && layout.hasPromoteUser
+		    && layout.hasPromoteCustomer
+		    && layout.editGroupRole === 'group'
+		    && layout.editGroupLabel.includes('Editable profile for')
+		    && layout.editGroupDescribedBy === layout.editStatusId
+		    && layout.editGroupState === 'ready'
+		    && layout.editStatusText
+		    && layout.editStatusData === layout.editStatusText
+		    && layout.editStatusText.includes('Edit identity available.')
+		    && layout.editStatusText.includes('Save notes unavailable: Change internal notes before saving.')
+		    && layout.editIdentityState === 'ready'
+		    && layout.editIdentityStatus.includes('Edit identity available.')
+		    && layout.editIdentityDescribedBy === layout.editStatusId
+		    && layout.notesTextareaState === 'ready'
+		    && layout.notesTextareaDescribedBy === layout.editStatusId
+		    && layout.saveNotesState === 'blocked'
+		    && layout.saveNotesStatus.includes('Save notes unavailable: Change internal notes before saving.')
+		    && layout.saveNotesDescribedBy === layout.editStatusId
+		    && layout.actionGroupRole === 'group'
 	    && layout.actionGroupLabel.includes('Actions for')
 	    && layout.actionGroupDescribedBy === layout.actionStatusId
 	    && layout.actionStatusText
