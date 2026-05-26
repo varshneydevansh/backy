@@ -1024,7 +1024,7 @@ const main = async () => {
       target: {
         mode: externalBaseUrl ? 'external' : 'local',
         externalBaseUrlConfigured: Boolean(externalBaseUrl),
-        siteId,
+        siteId: apiHandoffs.siteId,
         siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
       },
       requested,

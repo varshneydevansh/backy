@@ -1197,6 +1197,13 @@ const assertInteractiveRegistryVersionPinningSource = () => {
   assert(source.includes('component.componentKey === element.props.componentKey') && source.includes('component.version === element.props.version'), 'Interactive registry selection must match the pinned component version');
   assert(source.includes('version: component.version'), 'Interactive registry selection must persist the selected component version');
   assert(source.includes('/api/sites/{siteId}/interactive-components/{componentKey}/{version}/sandbox'), 'Interactive sandbox URL help must point authors to the Backy-owned runtime route');
+  assert(source.includes("import { buildEditorActionStatus } from './editorActionStatus';"), 'Interactive registry inspector must use the shared editor action status helper');
+  assert(source.includes("const interactiveActionStatusId = 'editor-interactive-action-status';"), 'Interactive registry inspector must expose a stable action status id');
+  assert(source.includes('data-testid="editor-interactive-action-status"'), 'Interactive registry inspector must render a live action status region');
+  assert(source.includes('data-action-state={interactiveRegistryAction.actionState}') && source.includes('data-action-status={interactiveRegistryAction.actionStatus}'), 'Interactive registry selector must expose action state and status metadata');
+  assert(source.includes('data-action-status={presetAction.actionStatus}') && source.includes('data-binding-target-path={preset.targetPath}'), 'Interactive binding preset buttons must expose action status and target path metadata');
+  assert(source.includes('data-action-status={controlAction.actionStatus}') && source.includes('data-control-type={controlType}'), 'Interactive schema controls must expose action status and control type metadata');
+  assert(source.includes('data-action-status={optionAction.actionStatus}') && source.includes('data-control-option-value={option.value}'), 'Interactive radio schema options must expose per-option action status metadata');
   assert(source.includes('editor-interactive-runtime-badges'), 'Interactive registry inspector must render runtime capability badges');
   assert(source.includes('getInteractiveRuntimeBadges'), 'Interactive registry inspector must derive runtime capability badges from registry metadata');
   assert(source.includes('Dependency policy') && source.includes('Compatibility') && source.includes('Animation libs'), 'Interactive registry inspector must expose dependency policy and compatibility metadata before publish');
@@ -1213,6 +1220,10 @@ const assertInteractiveRegistryVersionPinningSource = () => {
   assert(source.includes('type InteractiveControlOption') && source.includes('rawValue: unknown') && source.includes('getInteractiveControlOptionValue'), 'Interactive select/radio controls must preserve typed option values instead of flattening registry values to strings');
   assert(source.includes("'select', 'radio'") && source.includes('data-testid={`editor-interactive-control-radio-${controlKey}`}'), 'Interactive registry controls must render radio option groups when a component declares a radio control');
   assert(source.includes("'textarea', 'json', 'code'") && source.includes('formatInteractiveJsonControlValue') && source.includes('normalizeInteractiveJsonControlValue'), 'Interactive registry controls must support textarea/code/JSON controls with JSON object parsing');
+
+  const canvasSource = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
+  assert(canvasSource.includes("normalized === 'interactivefigure'") && canvasSource.includes("return 'interactiveFigure'"), 'Editor canvas must normalize interactiveFigure element types before rendering');
+  assert(canvasSource.includes("normalized === 'codecomponent'") && canvasSource.includes("return 'codeComponent'"), 'Editor canvas must normalize codeComponent element types before rendering');
 
   const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
   assert(editorSource.includes('/api/sites/:siteId/interactive-components/:componentKey/:version/sandbox'), 'Interactive publish readiness must require the Backy-owned sandbox route');
@@ -4154,11 +4165,13 @@ const setLayoutNumberInput = async (client, label, value) => {
   return changed;
 };
 
-const setFormControlByTestId = async (client, testId, value) => {
+const setFormControlByTestId = async (client, testId, value, options = {}) => {
   let changed = null;
+  const acceptedValues = [String(value), ...(options.acceptValues || []).map((item) => String(item))];
   for (let attempt = 0; attempt < 20; attempt += 1) {
     changed = await evaluate(client, `(() => {
       const control = document.querySelector('[data-testid="${testId}"]');
+      const acceptedValues = ${JSON.stringify(acceptedValues)};
       if (!(control instanceof HTMLInputElement) && !(control instanceof HTMLSelectElement) && !(control instanceof HTMLTextAreaElement)) {
         return {
           ok: false,
@@ -4189,7 +4202,7 @@ const setFormControlByTestId = async (client, testId, value) => {
       control.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
       control.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
       return {
-        ok: control.value === ${JSON.stringify(String(value))},
+        ok: acceptedValues.includes(control.value),
         value: control.value,
         testId: ${JSON.stringify(testId)},
         options: control instanceof HTMLSelectElement ? Array.from(control.options).map((option) => option.value) : undefined,
@@ -21220,6 +21233,10 @@ const testInteractiveComponentControls = async (client, elementId, expectedType,
   await selectLayerById(client, elementId);
   await switchToPropertiesPanel(client);
 
+  if (nextValues.registrySelection) {
+    await setFormControlByTestId(client, 'editor-interactive-registry-component', nextValues.registrySelection);
+  }
+
   await setFormControlByTestId(client, 'editor-interactive-component-key', nextValues.componentKey);
   await setFormControlByTestId(client, 'editor-interactive-version', nextValues.version);
   await setFormControlByTestId(client, 'editor-interactive-hydration-mode', nextValues.hydrationMode);
@@ -21230,9 +21247,61 @@ const testInteractiveComponentControls = async (client, elementId, expectedType,
   await setFormControlByTestId(client, 'editor-interactive-fallback-text', nextValues.text);
   await setFormControlByTestId(client, 'editor-interactive-aria-label', nextValues.ariaLabel);
 
+  if (nextValues.bindingPresetTestId) {
+    await clickControlByTestId(client, nextValues.bindingPresetTestId);
+    await sleep(250);
+  }
+
+  if (Array.isArray(nextValues.dynamicControls)) {
+    for (const control of nextValues.dynamicControls) {
+      await setFormControlByTestId(
+        client,
+        control.testId || `editor-interactive-control-input-${control.key}`,
+        control.value,
+        {
+          acceptValues: control.expectedDomValue !== undefined
+            ? [control.expectedDomValue]
+            : control.acceptValues,
+        },
+      );
+      if (control.blur) {
+        await evaluate(client, `(() => {
+          const control = document.querySelector('[data-testid="${control.testId || `editor-interactive-control-input-${control.key}`}"]');
+          if (control instanceof HTMLElement) control.blur();
+        })()`);
+        await sleep(150);
+      }
+    }
+  }
+
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
-    const node = document.querySelector('[data-element-id="${elementId}"]');
+    const attr = (testId, name) => document.querySelector('[data-testid="' + testId + '"]')?.getAttribute(name) || '';
+    const dynamicControlTestIds = ${JSON.stringify((nextValues.dynamicControls || []).map((control) => control.testId || `editor-interactive-control-input-${control.key}`))};
+    const controls = Object.fromEntries(dynamicControlTestIds.map((testId) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      const shell = control?.closest('[data-testid^="editor-interactive-control-"]');
+      return [testId, {
+        value: control instanceof HTMLInputElement && control.type === 'checkbox'
+          ? String(control.checked)
+          : control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+            ? control.value
+            : '',
+        describedBy: control?.getAttribute('aria-describedby') || '',
+        actionState: control?.getAttribute('data-action-state') || '',
+        actionStatus: control?.getAttribute('data-action-status') || '',
+        controlKey: control?.getAttribute('data-control-key') || '',
+        controlType: control?.getAttribute('data-control-type') || '',
+        shellActionState: shell?.getAttribute('data-action-state') || '',
+        shellActionStatus: shell?.getAttribute('data-action-status') || '',
+      }];
+    }));
+    const node = document.querySelector('[data-testid="editor-canvas"] [data-element-id="${elementId}"]')
+      || document.querySelector('[data-element-id="${elementId}"]');
+    const registry = document.querySelector('[data-testid="editor-interactive-registry-component"]');
+    const bindingPreset = ${JSON.stringify(nextValues.bindingPresetTestId || '')}
+      ? document.querySelector('[data-testid="${nextValues.bindingPresetTestId || ''}"]')
+      : null;
     return {
       componentKey: value('editor-interactive-component-key'),
       version: value('editor-interactive-version'),
@@ -21242,7 +21311,24 @@ const testInteractiveComponentControls = async (client, elementId, expectedType,
       text: value('editor-interactive-fallback-text'),
       ariaLabel: value('editor-interactive-aria-label'),
       previewText: node?.textContent || '',
+      previewTexts: Array.from(document.querySelectorAll('[data-element-id="${elementId}"]')).map((candidate) => ({
+        insideCanvas: Boolean(candidate.closest('[data-testid="editor-canvas"]')),
+        text: candidate.textContent || '',
+      })),
       hydrationModeAttr: node?.querySelector('[data-backy-hydration-mode]')?.getAttribute('data-backy-hydration-mode') || '',
+      interactiveActionStatus: document.querySelector('[data-testid="editor-interactive-action-status"]')?.textContent || '',
+      registryValue: registry instanceof HTMLSelectElement ? registry.value : '',
+      registryActionState: attr('editor-interactive-registry-component', 'data-action-state'),
+      registryActionStatus: attr('editor-interactive-registry-component', 'data-action-status'),
+      registryDescribedBy: attr('editor-interactive-registry-component', 'aria-describedby'),
+      registrySelectedComponentKey: attr('editor-interactive-registry-component', 'data-selected-component-key'),
+      registrySelectedComponentVersion: attr('editor-interactive-registry-component', 'data-selected-component-version'),
+      bindingPresetActionState: bindingPreset?.getAttribute('data-action-state') || '',
+      bindingPresetActionStatus: bindingPreset?.getAttribute('data-action-status') || '',
+      bindingPresetTargetPath: bindingPreset?.getAttribute('data-binding-target-path') || '',
+      bindingPresetScope: bindingPreset?.getAttribute('data-binding-scope') || '',
+      selectedBindingPresetText: document.querySelector('[data-testid="editor-interactive-selected-binding-preset"]')?.textContent || '',
+      controls,
     };
   })()`);
 
@@ -21252,9 +21338,41 @@ const testInteractiveComponentControls = async (client, elementId, expectedType,
   if (nextValues.sandboxUrl !== undefined) {
     assert(state.sandboxUrl === nextValues.sandboxUrl, `${expectedType} sandbox URL mismatch: ${JSON.stringify(state)}`);
   }
-  assert(state.title === nextValues.title && state.previewText.includes(nextValues.title), `${expectedType} fallback title mismatch: ${JSON.stringify(state)}`);
-  assert(state.text === nextValues.text && state.previewText.includes(nextValues.text), `${expectedType} fallback text mismatch: ${JSON.stringify(state)}`);
+  assert(state.title === nextValues.title, `${expectedType} fallback title mismatch: ${JSON.stringify(state)}`);
+  assert(state.text === nextValues.text, `${expectedType} fallback text mismatch: ${JSON.stringify(state)}`);
+  const canvasPreview = (state.previewTexts || []).find((item) => item.insideCanvas);
+  if (canvasPreview) {
+    assert(canvasPreview.text.includes(nextValues.title), `${expectedType} canvas fallback title mismatch: ${JSON.stringify(state)}`);
+    assert(canvasPreview.text.includes(nextValues.text), `${expectedType} canvas fallback text mismatch: ${JSON.stringify(state)}`);
+  }
   assert(state.ariaLabel === nextValues.ariaLabel, `${expectedType} aria label mismatch: ${JSON.stringify(state)}`);
+  assert(state.interactiveActionStatus.includes('schema controls available'), `${expectedType} interactive action status missing: ${JSON.stringify(state)}`);
+  assert(state.registryActionState && state.registryActionStatus && state.registryDescribedBy === 'editor-interactive-action-status', `${expectedType} registry action metadata missing: ${JSON.stringify(state)}`);
+  if (nextValues.registrySelection) {
+    assert(state.registryValue === nextValues.registrySelection, `${expectedType} registry selection mismatch: ${JSON.stringify(state)}`);
+    assert(state.registrySelectedComponentKey === nextValues.componentKey, `${expectedType} selected registry component key mismatch: ${JSON.stringify(state)}`);
+    assert(state.registrySelectedComponentVersion === nextValues.version, `${expectedType} selected registry component version mismatch: ${JSON.stringify(state)}`);
+  }
+  if (nextValues.bindingPresetTestId) {
+    assert(state.bindingPresetActionState === 'selected', `${expectedType} binding preset was not selected: ${JSON.stringify(state)}`);
+    assert(state.bindingPresetActionStatus && state.bindingPresetTargetPath === nextValues.expectedBindingTargetPath, `${expectedType} binding preset metadata mismatch: ${JSON.stringify(state)}`);
+    assert(state.selectedBindingPresetText.includes(nextValues.expectedBindingTargetPath), `${expectedType} selected binding preset text mismatch: ${JSON.stringify(state)}`);
+  }
+  if (Array.isArray(nextValues.dynamicControls)) {
+    for (const control of nextValues.dynamicControls) {
+      const testId = control.testId || `editor-interactive-control-input-${control.key}`;
+      const controlState = state.controls[testId];
+      assert(controlState, `${expectedType} control state missing for ${testId}: ${JSON.stringify(state)}`);
+      assert(controlState.actionState && controlState.actionStatus && controlState.describedBy === 'editor-interactive-action-status', `${expectedType} control action metadata missing for ${testId}: ${JSON.stringify(controlState)}`);
+      assert(controlState.shellActionState && controlState.shellActionStatus, `${expectedType} control shell action metadata missing for ${testId}: ${JSON.stringify(controlState)}`);
+      if (control.expectedDomValue !== undefined) {
+        assert(controlState.value === String(control.expectedDomValue), `${expectedType} control ${testId} value mismatch: ${JSON.stringify(controlState)}`);
+      }
+      if (control.expectedDomValueIncludes) {
+        assert(controlState.value.includes(control.expectedDomValueIncludes), `${expectedType} control ${testId} value did not include ${control.expectedDomValueIncludes}: ${JSON.stringify(controlState)}`);
+      }
+    }
+  }
 
   if (Array.isArray(nextValues.dataTargetOptions) && nextValues.dataTargetOptions.length > 0) {
     let dataTargetState = null;
@@ -21347,6 +21465,18 @@ const assertPersistedInteractiveComponent = async (pageId, elementId, expectedTy
   assert(props.renderCapabilities?.hydrationMode === nextValues.hydrationMode, `Persisted ${elementId} hydration mode mismatch: ${JSON.stringify(props)}`);
   if (nextValues.sandboxUrl !== undefined) {
     assert(props.sandboxUrl === nextValues.sandboxUrl, `Persisted ${elementId} sandbox URL mismatch: ${JSON.stringify(props)}`);
+  }
+  if (nextValues.expectedBindingTargetPath) {
+    assert(props.dataBindingTargetPath === nextValues.expectedBindingTargetPath, `Persisted ${elementId} binding target mismatch: ${JSON.stringify(props)}`);
+    assert(props.dataBindingPreset?.targetPath === nextValues.expectedBindingTargetPath, `Persisted ${elementId} binding preset mismatch: ${JSON.stringify(props)}`);
+  }
+  if (nextValues.expectedControlProps) {
+    for (const [key, expectedValue] of Object.entries(nextValues.expectedControlProps)) {
+      assert(
+        JSON.stringify(props[key]) === JSON.stringify(expectedValue),
+        `Persisted ${elementId} control prop ${key} mismatch: ${JSON.stringify(props)}`,
+      );
+    }
   }
   assert(props.renderCapabilities?.fallbackRequired === true, `Persisted ${elementId} fallback requirement mismatch: ${JSON.stringify(props)}`);
   assert(props.renderCapabilities?.postMessageProtocol === 'backy.interactive-component.v1', `Persisted ${elementId} postMessage protocol mismatch: ${JSON.stringify(props)}`);
@@ -23841,42 +23971,92 @@ const main = async () => {
         targetElementId: 'smoke-interactive',
         test: () => testInteractiveComponentControls(client, 'smoke-interactive', 'interactiveFigure', {
           componentKey: 'backy.figure.rounds',
-          version: '1.1.0',
+          version: '1.0.0',
+          registrySelection: 'backy.figure.rounds::1.0.0',
           hydrationMode: 'trusted-component',
           title: 'Smoke self-correction figure',
           text: 'Smoke fallback for communication rounds.',
           ariaLabel: 'Smoke communication rounds figure',
-          dataTargetOptions: ['props.data', 'props.series', 'props.rounds'],
+          bindingPresetTestId: 'editor-interactive-binding-preset-rounds-from-page',
+          expectedBindingTargetPath: 'props.rounds',
+          dynamicControls: [
+            { key: 'rounds', value: '7', expectedDomValue: '7' },
+            { key: 'speed', value: 'fast', expectedDomValue: 'fast' },
+          ],
+          expectedControlProps: {
+            rounds: 7,
+            speed: 'fast',
+          },
         }),
         assertPersisted: () => assertPersistedInteractiveComponent(tempPageId, 'smoke-interactive', 'interactiveFigure', {
           componentKey: 'backy.figure.rounds',
-          version: '1.1.0',
+          version: '1.0.0',
           hydrationMode: 'trusted-component',
           title: 'Smoke self-correction figure',
           text: 'Smoke fallback for communication rounds.',
           ariaLabel: 'Smoke communication rounds figure',
+          expectedBindingTargetPath: 'props.rounds',
+          expectedControlProps: {
+            rounds: 7,
+            speed: 'fast',
+          },
         }),
       },
       codeComponent: {
         targetElementId: 'smoke-code-component',
         test: () => testInteractiveComponentControls(client, 'smoke-code-component', 'codeComponent', {
-          componentKey: 'backy.custom.sandboxed',
+          componentKey: 'backy.canvas.sandboxed',
           version: '1.0.0',
+          registrySelection: 'backy.canvas.sandboxed::1.0.0',
           hydrationMode: 'sandbox-iframe',
-          sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.custom.sandboxed/1.0.0/sandbox`,
+          sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.canvas.sandboxed/1.0.0/sandbox`,
           title: 'Smoke sandbox component',
           text: 'Smoke fallback for sandboxed component.',
           ariaLabel: 'Smoke sandboxed component',
-          dataTargetOptions: ['props.data', 'props.input', 'props.config'],
+          bindingPresetTestId: 'editor-interactive-binding-preset-canvas-frame-data',
+          expectedBindingTargetPath: 'props.frames',
+          dynamicControls: [
+            { key: 'playback', value: 'auto', expectedDomValue: 'auto' },
+            { key: 'intensity', value: '75', expectedDomValue: '75' },
+            { key: 'accentColor', value: '#f97316', expectedDomValue: '#f97316' },
+            { key: 'caption', value: 'Smoke canvas fallback caption.', expectedDomValue: 'Smoke canvas fallback caption.' },
+            {
+              key: 'runtimeConfig',
+              value: '{"reducedMotionFallback":false,"frameBudget":30}',
+              expectedDomValue: '{\n  "reducedMotionFallback": false,\n  "frameBudget": 30\n}',
+              expectedDomValueIncludes: '"frameBudget": 30',
+            },
+          ],
+          expectedControlProps: {
+            playback: 'auto',
+            intensity: 75,
+            accentColor: '#f97316',
+            caption: 'Smoke canvas fallback caption.',
+            runtimeConfig: {
+              reducedMotionFallback: false,
+              frameBudget: 30,
+            },
+          },
         }),
         assertPersisted: () => assertPersistedInteractiveComponent(tempPageId, 'smoke-code-component', 'codeComponent', {
-          componentKey: 'backy.custom.sandboxed',
+          componentKey: 'backy.canvas.sandboxed',
           version: '1.0.0',
           hydrationMode: 'sandbox-iframe',
-          sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.custom.sandboxed/1.0.0/sandbox`,
+          sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.canvas.sandboxed/1.0.0/sandbox`,
           title: 'Smoke sandbox component',
           text: 'Smoke fallback for sandboxed component.',
           ariaLabel: 'Smoke sandboxed component',
+          expectedBindingTargetPath: 'props.frames',
+          expectedControlProps: {
+            playback: 'auto',
+            intensity: 75,
+            accentColor: '#f97316',
+            caption: 'Smoke canvas fallback caption.',
+            runtimeConfig: {
+              reducedMotionFallback: false,
+              frameBudget: 30,
+            },
+          },
         }),
       },
       box: {

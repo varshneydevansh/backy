@@ -54,6 +54,7 @@ import {
 } from './editorMediaPickerActions';
 import { buildEditorDataBindingAction } from './editorDataBindingActions';
 import { buildEditorFormBuilderAction } from './editorFormBuilderActions';
+import { buildEditorActionStatus } from './editorActionStatus';
 import type { CanvasElement, ComponentBindingSlot, ElementProps } from '@/types/editor';
 import {
   listCollectionBindingPresets,
@@ -2202,6 +2203,37 @@ function ContentProperties({
     () => getInteractivePreviewModel(selectedInteractiveComponent, element.props, interactiveControls),
     [element.props, interactiveControls, selectedInteractiveComponent],
   );
+  const interactiveActionStatusId = 'editor-interactive-action-status';
+  const selectedInteractiveComponentLabel = selectedInteractiveComponent?.displayName
+    || selectedInteractiveComponent?.componentKey
+    || 'Interactive component';
+  const interactiveRegistryDisabledReason = disabled
+    ? 'Element editing is disabled.'
+    : interactiveComponentsLoading
+      ? ''
+      : compatibleInteractiveComponents.length === 0
+        ? 'No registry components are available for this block type.'
+        : '';
+  const interactiveRegistryAction = buildEditorActionStatus({
+    label: 'Interactive registry selection',
+    disabledReason: interactiveRegistryDisabledReason,
+    busy: interactiveComponentsLoading,
+    selected: Boolean(selectedInteractiveComponent),
+    readyStatus: 'Interactive registry selection is available.',
+    selectedStatus: `${selectedInteractiveComponentLabel} registry component selected.`,
+    busyStatus: 'Interactive component registry is loading.',
+  });
+  const interactiveBindingPresetSummary = interactiveBindingPresets.length > 0
+    ? `${interactiveBindingPresets.length} binding presets available.`
+    : 'No binding presets available for the selected interactive component.';
+  const interactiveControlSummary = interactiveControls.length > 0
+    ? `${interactiveControls.length} schema controls available.`
+    : 'No schema controls available for the selected interactive component.';
+  const interactiveInspectorActionStatus = [
+    interactiveRegistryAction.actionStatus,
+    interactiveBindingPresetSummary,
+    interactiveControlSummary,
+  ].join(' ');
   const updateInteractiveControlValue = useCallback((controlKey: string, value: unknown) => {
     const control = interactiveControls.find((item) => getInteractiveControlKey(item) === controlKey);
     const normalizedValue = control ? normalizeInteractiveControlValue(control, value) : value;
@@ -4429,6 +4461,14 @@ function ContentProperties({
       {/* Interactive Component Properties */}
       {hasInteractiveContent && (
         <div className="space-y-3">
+          <span
+            id={interactiveActionStatusId}
+            className="sr-only"
+            data-testid="editor-interactive-action-status"
+            aria-live="polite"
+          >
+            {interactiveInspectorActionStatus}
+          </span>
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
             Interactive blocks hydrate in the public frontend from Backy's component registry. The editor and unsupported clients render the saved fallback.
           </div>
@@ -4440,11 +4480,17 @@ function ContentProperties({
               value={selectedInteractiveComponentValue}
               onChange={(e) => applyInteractiveRegistryComponent(e.target.value)}
               data-testid="editor-interactive-registry-component"
-              disabled={interactiveComponentsLoading || compatibleInteractiveComponents.length === 0}
+              aria-describedby={interactiveActionStatusId}
+              disabled={interactiveComponentsLoading || Boolean(interactiveRegistryAction.disabledReason)}
+              data-action-state={interactiveRegistryAction.actionState}
+              data-action-status={interactiveRegistryAction.actionStatus}
+              data-disabled-reason={interactiveRegistryAction.disabledReason || undefined}
+              data-selected-component-key={selectedInteractiveComponent?.componentKey || undefined}
+              data-selected-component-version={selectedInteractiveComponent?.version || undefined}
               className={cn(
                 'mb-2 w-full px-2 py-1.5 text-sm rounded-md border bg-background',
                 'focus:outline-none focus:ring-2 focus:ring-ring',
-                (interactiveComponentsLoading || compatibleInteractiveComponents.length === 0) && 'cursor-not-allowed opacity-60'
+                (interactiveComponentsLoading || Boolean(interactiveRegistryAction.disabledReason)) && 'cursor-not-allowed opacity-60'
               )}
             >
               <option value="">
@@ -4582,15 +4628,30 @@ function ContentProperties({
                     const selectedPreset = getInteractiveRecord(element.props.dataBindingPreset);
                     const isSelected = selectedPreset.id === preset.id
                       && element.props.dataBindingTargetPath === preset.targetPath;
+                    const presetAction = buildEditorActionStatus({
+                      label: `${preset.label} binding preset`,
+                      disabledReason: disabled ? 'Element editing is disabled.' : '',
+                      selected: isSelected,
+                      readyStatus: `Apply ${preset.label} binding preset to ${preset.targetPath}.`,
+                      selectedStatus: `${preset.label} binding preset is selected for ${preset.targetPath}.`,
+                    });
 
                     return (
                       <button
                         key={preset.id}
                         type="button"
                         onClick={() => applyInteractiveBindingPreset(preset)}
+                        disabled={Boolean(presetAction.disabledReason)}
+                        aria-describedby={interactiveActionStatusId}
                         data-testid={`editor-interactive-binding-preset-${preset.id}`}
+                        data-action-state={presetAction.actionState}
+                        data-action-status={presetAction.actionStatus}
+                        data-disabled-reason={presetAction.disabledReason || undefined}
+                        data-binding-target-path={preset.targetPath}
+                        data-binding-scope={preset.scope}
+                        data-binding-mode={preset.mode}
                         className={cn(
-                          'rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted',
+                          'rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60',
                           isSelected && 'border-primary text-primary'
                         )}
                       >
@@ -4629,9 +4690,33 @@ function ContentProperties({
                   const interactiveBooleanValue = parseBooleanSetting(rawValue, false);
                   const interactiveColorValue = normalizeHexColorInputValue(stringValue || '#000000');
                   const interactiveJsonValue = formatInteractiveJsonControlValue(rawValue);
+                  const controlDataValue = controlType === 'json'
+                    ? interactiveJsonValue
+                    : controlType === 'checkbox' || controlType === 'boolean' || controlType === 'toggle'
+                      ? String(interactiveBooleanValue)
+                      : controlType === 'color'
+                        ? interactiveColorValue
+                        : stringValue;
+                  const controlAction = buildEditorActionStatus({
+                    label: `${controlLabel} control`,
+                    disabledReason: disabled ? 'Element editing is disabled.' : '',
+                    selected: controlDataValue !== '',
+                    readyStatus: `${controlLabel} control is available for ${selectedInteractiveComponentLabel}.`,
+                    selectedStatus: `${controlLabel} control is set.`,
+                  });
 
                   return (
-                    <div key={controlKey} className="space-y-1" data-testid={`editor-interactive-control-${controlKey}`}>
+                    <div
+                      key={controlKey}
+                      className="space-y-1"
+                      data-testid={`editor-interactive-control-${controlKey}`}
+                      data-action-state={controlAction.actionState}
+                      data-action-status={controlAction.actionStatus}
+                      data-disabled-reason={controlAction.disabledReason || undefined}
+                      data-control-key={controlKey}
+                      data-control-type={controlType}
+                      data-control-value={controlDataValue || undefined}
+                    >
                       <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                         <span>{controlLabel}</span>
                         <code className="rounded bg-background px-1 py-0.5 text-[10px]">{controlKey}</code>
@@ -4640,10 +4725,18 @@ function ContentProperties({
                         <select
                           value={stringValue}
                           onChange={(e) => updateInteractiveControlValue(controlKey, e.target.value)}
+                          disabled={Boolean(controlAction.disabledReason)}
+                          aria-describedby={interactiveActionStatusId}
                           data-testid={`editor-interactive-control-input-${controlKey}`}
+                          data-action-state={controlAction.actionState}
+                          data-action-status={controlAction.actionStatus}
+                          data-disabled-reason={controlAction.disabledReason || undefined}
+                          data-control-key={controlKey}
+                          data-control-type={controlType}
                           className={cn(
                             'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                            'focus:outline-none focus:ring-2 focus:ring-ring'
+                            'focus:outline-none focus:ring-2 focus:ring-ring',
+                            controlAction.disabledReason && 'cursor-not-allowed opacity-60'
                           )}
                         >
                           <option value="">Select value</option>
@@ -4653,27 +4746,53 @@ function ContentProperties({
                         </select>
                       ) : controlType === 'radio' ? (
                         <fieldset className="space-y-1" data-testid={`editor-interactive-control-radio-${controlKey}`}>
-                          {controlOptions.map((option) => (
-                            <label key={option.value} className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <input
-                                type="radio"
-                                name={`interactive-control-${element.id}-${controlKey}`}
-                                value={option.value}
-                                checked={stringValue === option.value}
-                                onChange={(e) => updateInteractiveControlValue(controlKey, e.target.value)}
-                                data-testid={`editor-interactive-control-input-${controlKey}-${option.value}`}
-                              />
-                              {option.label}
-                            </label>
-                          ))}
+                          {controlOptions.map((option) => {
+                            const optionSelected = stringValue === option.value;
+                            const optionAction = buildEditorActionStatus({
+                              label: `${controlLabel} ${option.label} option`,
+                              disabledReason: controlAction.disabledReason,
+                              selected: optionSelected,
+                              readyStatus: `Set ${controlLabel} to ${option.label}.`,
+                              selectedStatus: `${controlLabel} is set to ${option.label}.`,
+                            });
+
+                            return (
+                              <label key={option.value} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <input
+                                  type="radio"
+                                  name={`interactive-control-${element.id}-${controlKey}`}
+                                  value={option.value}
+                                  checked={optionSelected}
+                                  disabled={Boolean(optionAction.disabledReason)}
+                                  aria-describedby={interactiveActionStatusId}
+                                  onChange={(e) => updateInteractiveControlValue(controlKey, e.target.value)}
+                                  data-testid={`editor-interactive-control-input-${controlKey}-${option.value}`}
+                                  data-action-state={optionAction.actionState}
+                                  data-action-status={optionAction.actionStatus}
+                                  data-disabled-reason={optionAction.disabledReason || undefined}
+                                  data-control-key={controlKey}
+                                  data-control-type={controlType}
+                                  data-control-option-value={option.value}
+                                />
+                                {option.label}
+                              </label>
+                            );
+                          })}
                         </fieldset>
                       ) : controlType === 'checkbox' || controlType === 'boolean' || controlType === 'toggle' ? (
                         <label className="flex items-center gap-2 text-xs text-muted-foreground">
                           <input
                             type="checkbox"
                             checked={interactiveBooleanValue}
+                            disabled={Boolean(controlAction.disabledReason)}
+                            aria-describedby={interactiveActionStatusId}
                             onChange={(e) => updateInteractiveControlValue(controlKey, e.target.checked)}
                             data-testid={`editor-interactive-control-input-${controlKey}`}
+                            data-action-state={controlAction.actionState}
+                            data-action-status={controlAction.actionStatus}
+                            data-disabled-reason={controlAction.disabledReason || undefined}
+                            data-control-key={controlKey}
+                            data-control-type={controlType}
                           />
                           Enabled
                         </label>
@@ -4682,6 +4801,8 @@ function ContentProperties({
                           value={controlType === 'json' ? interactiveJsonValue : stringValue}
                           rows={controlType === 'textarea' ? 3 : 5}
                           spellCheck={controlType === 'textarea'}
+                          disabled={Boolean(controlAction.disabledReason)}
+                          aria-describedby={interactiveActionStatusId}
                           onChange={(e) => updateInteractiveControlValue(
                             controlKey,
                             controlType === 'json' ? e.target.value : e.target.value,
@@ -4692,10 +4813,16 @@ function ContentProperties({
                             }
                           }}
                           data-testid={`editor-interactive-control-input-${controlKey}`}
+                          data-action-state={controlAction.actionState}
+                          data-action-status={controlAction.actionStatus}
+                          data-disabled-reason={controlAction.disabledReason || undefined}
+                          data-control-key={controlKey}
+                          data-control-type={controlType}
                           className={cn(
                             'w-full rounded-md border bg-background px-2 py-1.5 text-sm',
                             controlType !== 'textarea' && 'font-mono text-xs',
-                            'focus:outline-none focus:ring-2 focus:ring-ring'
+                            'focus:outline-none focus:ring-2 focus:ring-ring',
+                            controlAction.disabledReason && 'cursor-not-allowed opacity-60'
                           )}
                         />
                       ) : (
@@ -4705,6 +4832,8 @@ function ContentProperties({
                           min={min === undefined ? undefined : String(min)}
                           max={max === undefined ? undefined : String(max)}
                           step={step === undefined ? undefined : String(step)}
+                          disabled={Boolean(controlAction.disabledReason)}
+                          aria-describedby={interactiveActionStatusId}
                           onChange={(e) => {
                             if (controlType === 'range' || controlType === 'number') {
                               updateInteractiveControlValue(
@@ -4722,9 +4851,15 @@ function ContentProperties({
                             );
                           }}
                           data-testid={`editor-interactive-control-input-${controlKey}`}
+                          data-action-state={controlAction.actionState}
+                          data-action-status={controlAction.actionStatus}
+                          data-disabled-reason={controlAction.disabledReason || undefined}
+                          data-control-key={controlKey}
+                          data-control-type={controlType}
                           className={cn(
                             'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
-                            controlType !== 'color' && 'focus:outline-none focus:ring-2 focus:ring-ring'
+                            controlType !== 'color' && 'focus:outline-none focus:ring-2 focus:ring-ring',
+                            controlAction.disabledReason && 'cursor-not-allowed opacity-60'
                           )}
                         />
                       )}

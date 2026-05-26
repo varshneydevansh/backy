@@ -1444,6 +1444,14 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     return 'input';
   }
 
+  if (normalized === 'interactivefigure') {
+    return 'interactiveFigure';
+  }
+
+  if (normalized === 'codecomponent') {
+    return 'codeComponent';
+  }
+
   return normalized as CanvasElement['type'] || 'text';
 };
 
