@@ -833,6 +833,14 @@ const buildCollectionSlugPolicyReadiness = (
   const actionPlan = {
     schemaVersion: 'backy.collection-slug-policy-action-plan.v1',
     status: readyCount === checks.length ? 'ready' : 'needs-policy-review',
+    routeTemplate: normalizedRoute,
+    exampleItemPath: normalizedRoute.replace(':recordSlug', exampleSlug),
+    sourceField: sourceField?.key || null,
+    fallbackField: fallbackField?.key || null,
+    updateBehavior: slugPolicy.updateBehavior,
+    transform: 'lowercase-dashes',
+    uniquenessScope: 'collection',
+    conflictStrategy: 'reject-duplicates',
     recommendedNextAction: readyCount === checks.length
       ? 'Use the slug policy in custom frontend create/edit forms and import tooling.'
       : 'Choose slug source/fallback fields and keep the item route on :recordSlug before publish.',

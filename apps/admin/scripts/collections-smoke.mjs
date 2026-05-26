@@ -118,6 +118,14 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('backy.collection-slug-policy.v1'), 'Collections metadata must persist a named slug policy contract');
   assert(source.includes('backy.collection-slug-policy-readiness.v1'), 'Collections route must compute slug policy readiness for dynamic routes');
   assert(source.includes('backy.collection-slug-policy-action-plan.v1'), 'Collections route must expose a copyable slug policy action plan');
+  assert(
+    source.includes('sourceField: sourceField?.key || null') &&
+      source.includes('fallbackField: fallbackField?.key || null') &&
+      source.includes('updateBehavior: slugPolicy.updateBehavior') &&
+      source.includes("transform: 'lowercase-dashes'") &&
+      source.includes("conflictStrategy: 'reject-duplicates'"),
+    'Collections copied slug policy action plan must expose selected source/fallback fields, update behavior, transform, and duplicate strategy for custom frontends.',
+  );
   assert(source.includes('data-testid="collections-slug-policy-copy-plan"'), 'Collections schema editor must expose a copy slug policy plan action');
   assert(source.includes('Slug policy'), 'Collections readiness must include slug policy status');
   assert(
@@ -1800,13 +1808,178 @@ const assertCollectionRecordMediaFieldsThroughUi = async (client, collectionId, 
   throw new Error(`Media-backed collection record values did not persist: ${JSON.stringify({ record, pageState }).slice(0, 1200)}`);
 };
 
+const configureDraftCollectionSlugPolicyThroughUi = async (client, {
+  sourceField,
+  fallbackField,
+  updateBehavior,
+}) => {
+  let state = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const setNativeValue = (element, value) => {
+        const prototype = Object.getPrototypeOf(element);
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+        descriptor?.set?.call(element, value);
+      };
+      const sourceSelect = document.querySelector('[data-testid="collections-slug-policy-source-field"]');
+      const fallbackSelect = document.querySelector('[data-testid="collections-slug-policy-fallback-field"]');
+      const behaviorSelect = document.querySelector('[data-testid="collections-slug-policy-update-behavior"]');
+      const copyPlanButton = document.querySelector('[data-testid="collections-slug-policy-copy-plan"]');
+      const controls = document.querySelector('[data-testid="collections-slug-policy-controls"]');
+      const saveButton = document.querySelector('#collections-schema button[type="submit"]');
+      if (!(sourceSelect instanceof HTMLSelectElement)) return { ok: false, reason: 'source-select-missing' };
+      if (!(fallbackSelect instanceof HTMLSelectElement)) return { ok: false, reason: 'fallback-select-missing' };
+      if (!(behaviorSelect instanceof HTMLSelectElement)) return { ok: false, reason: 'behavior-select-missing' };
+      if (!(copyPlanButton instanceof HTMLButtonElement)) return { ok: false, reason: 'copy-plan-missing' };
+      if (!(saveButton instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
+
+      const sourceOptionReady = Array.from(sourceSelect.options).some((option) => option.value === ${JSON.stringify(sourceField)});
+      const fallbackOptionReady = Array.from(fallbackSelect.options).some((option) => option.value === ${JSON.stringify(fallbackField)});
+      const behaviorOptionReady = Array.from(behaviorSelect.options).some((option) => option.value === ${JSON.stringify(updateBehavior)});
+      if (!sourceOptionReady || !fallbackOptionReady || !behaviorOptionReady) {
+        return {
+          ok: false,
+          reason: 'options-not-ready',
+          sourceOptions: Array.from(sourceSelect.options).map((option) => option.value),
+          fallbackOptions: Array.from(fallbackSelect.options).map((option) => option.value),
+          behaviorOptions: Array.from(behaviorSelect.options).map((option) => option.value),
+        };
+      }
+
+      if (sourceSelect.value !== ${JSON.stringify(sourceField)}) {
+        setNativeValue(sourceSelect, ${JSON.stringify(sourceField)});
+        sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (fallbackSelect.value !== ${JSON.stringify(fallbackField)}) {
+        setNativeValue(fallbackSelect, ${JSON.stringify(fallbackField)});
+        fallbackSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (behaviorSelect.value !== ${JSON.stringify(updateBehavior)}) {
+        setNativeValue(behaviorSelect, ${JSON.stringify(updateBehavior)});
+        behaviorSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      return {
+        ok: sourceSelect.value === ${JSON.stringify(sourceField)} &&
+          fallbackSelect.value === ${JSON.stringify(fallbackField)} &&
+          behaviorSelect.value === ${JSON.stringify(updateBehavior)} &&
+          !copyPlanButton.disabled &&
+          !saveButton.disabled,
+        sourceField: sourceSelect.value,
+        fallbackField: fallbackSelect.value,
+        updateBehavior: behaviorSelect.value,
+        copyPlanDisabled: copyPlanButton.disabled,
+        saveDisabled: saveButton.disabled,
+        readinessText: controls?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      };
+    })()`);
+
+    if (state.ok) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(`Collection slug policy controls did not settle: ${JSON.stringify(state)}`);
+};
+
+const copyDraftCollectionSlugPolicyPlanThroughUi = async (client, expected) => {
+  const clickState = await evaluate(client, `(() => {
+    window.__backySlugPolicyCopy = '';
+    try {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (value) => {
+            window.__backySlugPolicyCopy = String(value);
+          },
+        },
+      });
+    } catch {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText = async (value) => {
+          window.__backySlugPolicyCopy = String(value);
+        };
+      }
+    }
+    const button = document.querySelector('[data-testid="collections-slug-policy-copy-plan"]');
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'copy-plan-missing' };
+    if (button.disabled) return { ok: false, reason: 'copy-plan-disabled' };
+    button.scrollIntoView({ block: 'center' });
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickState.ok, `Unable to click collection slug policy copy plan: ${JSON.stringify(clickState)}`);
+
+  let copyState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    copyState = await evaluate(client, `(() => ({
+      value: window.__backySlugPolicyCopy || '',
+      notice: document.querySelector('[data-testid="collections-success-notice"]')?.textContent || '',
+      error: document.querySelector('[data-testid="collections-error"]')?.textContent || '',
+    }))()`);
+    if (copyState.value) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  assert(copyState?.value, `Collection slug policy copy plan did not write clipboard payload: ${JSON.stringify(copyState)}`);
+  const plan = JSON.parse(copyState.value);
+  assert(plan.schemaVersion === 'backy.collection-slug-policy-action-plan.v1', `Slug policy copy plan schema mismatch: ${JSON.stringify(plan)}`);
+  assert(plan.status === 'ready', `Slug policy copy plan was not ready: ${JSON.stringify(plan)}`);
+  assert(plan.sourceField === expected.sourceField, `Slug policy copy plan source field mismatch: ${JSON.stringify(plan)}`);
+  assert(plan.fallbackField === expected.fallbackField, `Slug policy copy plan fallback field mismatch: ${JSON.stringify(plan)}`);
+  assert(plan.updateBehavior === expected.updateBehavior, `Slug policy copy plan update behavior mismatch: ${JSON.stringify(plan)}`);
+  assert(plan.transform === 'lowercase-dashes' && plan.conflictStrategy === 'reject-duplicates', `Slug policy copy plan strategy mismatch: ${JSON.stringify(plan)}`);
+  assert(String(plan.exampleItemPath || '').includes('example-record'), `Slug policy copy plan example path missing: ${JSON.stringify(plan)}`);
+
+  return {
+    plan,
+    notice: copyState.notice,
+  };
+};
+
+const ensureDraftCollectionCustomFieldRow = async (client) => {
+  let state = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const form = document.querySelector('#collections-schema');
+      const rows = Array.from(form?.querySelectorAll('tbody tr') || []);
+      if (rows.length >= 2) {
+        return { ok: true, rowCount: rows.length };
+      }
+      const addButton = Array.from(form?.querySelectorAll('button') || [])
+        .find((candidate) => (candidate.textContent || '').includes('Add field'));
+      if (!(addButton instanceof HTMLButtonElement)) return { ok: false, reason: 'add-field-button-missing', rowCount: rows.length };
+      if (addButton.disabled) return { ok: false, reason: 'add-field-button-disabled', rowCount: rows.length };
+      addButton.scrollIntoView({ block: 'center' });
+      addButton.click();
+      return { ok: false, reason: 'add-field-clicked', rowCount: rows.length };
+    })()`);
+
+    if (state.ok) {
+      return state;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(`Unable to add custom field row for draft collection: ${JSON.stringify(state)}`);
+};
+
 const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => {
   const name = `Smoke Draft Schema ${suffix}`;
   const slug = `smoke-draft-schema-${suffix}`;
   const customFieldKey = `custom_note_${suffix.replace(/[^a-z0-9_]/gi, '_').toLowerCase()}`;
   const customFieldLabel = `Custom note ${suffix}`;
+  const expectedSlugPolicy = {
+    sourceField: 'title',
+    fallbackField: customFieldKey,
+    updateBehavior: 'sync-drafts',
+  };
 
   await assertNewCollectionButtonReset(client, 'collections-new-collection-button');
+  await ensureDraftCollectionCustomFieldRow(client);
 
   const filled = await evaluate(client, `(() => {
     const setNativeValue = (element, value) => {
@@ -1821,8 +1994,9 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
       ?.querySelector('input');
     const statusSelect = Array.from(form?.querySelectorAll('select') || [])
       .find((select) => Array.from(select.options).some((option) => option.value === 'draft'));
-    const firstFieldRow = form?.querySelector('tbody tr');
-    const fieldInputs = Array.from(firstFieldRow?.querySelectorAll('input') || []);
+    const fieldRows = Array.from(form?.querySelectorAll('tbody tr') || []);
+    const customFieldRow = fieldRows[1];
+    const fieldInputs = Array.from(customFieldRow?.querySelectorAll('input') || []);
     const fieldKeyInput = fieldInputs[0];
     const fieldLabelInput = fieldInputs[1];
     const saveButton = form
@@ -1832,6 +2006,7 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
     if (!(nameInput instanceof HTMLInputElement)) return { ok: false, reason: 'name-input-missing' };
     if (!(slugInput instanceof HTMLInputElement)) return { ok: false, reason: 'slug-input-missing' };
     if (!(statusSelect instanceof HTMLSelectElement)) return { ok: false, reason: 'status-select-missing' };
+    if (fieldRows.length < 2) return { ok: false, reason: 'custom-field-row-missing', rowCount: fieldRows.length };
     if (!(fieldKeyInput instanceof HTMLInputElement)) return { ok: false, reason: 'field-key-input-missing' };
     if (!(fieldLabelInput instanceof HTMLInputElement)) return { ok: false, reason: 'field-label-input-missing' };
     if (!(saveButton instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
@@ -1847,7 +2022,6 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
     fieldKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
     setNativeValue(fieldLabelInput, ${JSON.stringify(customFieldLabel)});
     fieldLabelInput.dispatchEvent(new Event('input', { bubbles: true }));
-    saveButton.click();
 
     return {
       ok: true,
@@ -1856,18 +2030,39 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
       status: statusSelect.value,
       fieldKey: fieldKeyInput.value,
       fieldLabel: fieldLabelInput.value,
+      saveDisabled: saveButton.disabled,
     };
   })()`);
-  assert(filled.ok, `Unable to fill and save custom draft collection: ${JSON.stringify(filled)}`);
+  assert(filled.ok, `Unable to fill custom draft collection fields: ${JSON.stringify(filled)}`);
+
+  const slugPolicyControls = await configureDraftCollectionSlugPolicyThroughUi(client, expectedSlugPolicy);
+  const copiedSlugPolicyPlan = await copyDraftCollectionSlugPolicyPlanThroughUi(client, expectedSlugPolicy);
+  const savedClick = await evaluate(client, `(() => {
+    const button = document.querySelector('#collections-schema button[type="submit"]');
+    if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
+    if (button.disabled) return { ok: false, reason: 'save-button-disabled', text: button.textContent || '' };
+    button.scrollIntoView({ block: 'center' });
+    button.click();
+    return { ok: true, text: button.textContent || '' };
+  })()`);
+  assert(savedClick.ok, `Unable to save custom draft collection after slug policy setup: ${JSON.stringify(savedClick)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const collections = await fetchCollections();
     const collection = collections.find((candidate) => candidate.slug === slug);
     const customField = collection?.fields?.find((field) => field.key === customFieldKey);
     if (collection && customField) {
+      const collectionDetail = await fetchCollection(collection.id);
+      const savedCollection = collectionDetail || collection;
+      const savedSlugPolicy = savedCollection.metadata?.slugPolicy || {};
       assert(collection.status === 'draft', `Draft collection status was not persisted: ${JSON.stringify(collection)}`);
       assert(customField.label === customFieldLabel, `Custom field label was not persisted: ${JSON.stringify(customField)}`);
       assert(typeof customField.id === 'string' && customField.id.trim(), `Custom field id was not a stable string: ${JSON.stringify(customField)}`);
+      assert(savedSlugPolicy.schemaVersion === 'backy.collection-slug-policy.v1', `Slug policy schema was not persisted: ${JSON.stringify(savedCollection.metadata)}`);
+      assert(savedSlugPolicy.sourceField === expectedSlugPolicy.sourceField, `Slug policy source field was not persisted: ${JSON.stringify(savedSlugPolicy)}`);
+      assert(savedSlugPolicy.fallbackField === expectedSlugPolicy.fallbackField, `Slug policy fallback field was not persisted: ${JSON.stringify(savedSlugPolicy)}`);
+      assert(savedSlugPolicy.updateBehavior === expectedSlugPolicy.updateBehavior, `Slug policy update behavior was not persisted: ${JSON.stringify(savedSlugPolicy)}`);
+      assert(savedSlugPolicy.transform === 'lowercase-dashes' && savedSlugPolicy.conflictStrategy === 'reject-duplicates', `Slug policy strategy was not persisted: ${JSON.stringify(savedSlugPolicy)}`);
 
       const uiState = await evaluate(client, `(() => {
         const body = document.body?.innerText || '';
@@ -1882,7 +2077,14 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
       })()`);
 
       if (uiState.hasCreateNotice && uiState.collectionId === collection.id && uiState.draft === null && !uiState.hasDraftState) {
-        return collection;
+        return {
+          ...savedCollection,
+          slugPolicySmoke: {
+            controls: slugPolicyControls,
+            copiedPlan: copiedSlugPolicyPlan.plan,
+            notice: copiedSlugPolicyPlan.notice,
+          },
+        };
       }
 
       if (attempt === 79) {
