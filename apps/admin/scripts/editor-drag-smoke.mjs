@@ -1465,6 +1465,10 @@ const assertMediaLibraryModalEmptyStateSource = () => {
 
 const assertPageSettingsModalValidationSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/PageSettingsModal.tsx', import.meta.url), 'utf8');
+  assert(source.includes("const PAGE_SETTINGS_ACTION_STATUS_ID = 'page-settings-action-status';") && source.includes('data-testid="page-settings-action-status"'), 'Page settings modal must expose a shared action-status region');
+  assert(source.includes('aria-describedby={PAGE_SETTINGS_ACTION_STATUS_ID}') && source.includes('data-action-status={pageSettingsDialogActionStatus}'), 'Page settings dialog must be described by its action-status contract');
+  assert(source.includes('role="tablist"') && source.includes('role: \'tab\'') && source.includes('data-action-status\': selected ? `${label} page settings tab selected.`'), 'Page settings tabs must expose tab semantics and action-status metadata');
+  assert(source.includes('data-testid="page-settings-close"') && source.includes('data-action-status={pageSettingsDismissActionStatus}'), 'Page settings close control must expose dismiss action metadata');
   assert(source.includes('const [settingsSubmitted, setSettingsSubmitted] = useState(false);'), 'Page settings modal must track attempted saves for reachable inline validation');
   assert(source.includes('const [jsonLdInlineError, setJsonLdInlineError] = useState<string | null>(null);'), 'Page settings modal must expose JSON-LD field-level validation');
   assert(source.includes('setSettingsSubmitted(true);'), 'Page settings Save must stay reachable and trigger custom validation on submit');
@@ -1473,6 +1477,8 @@ const assertPageSettingsModalValidationSource = () => {
   assert(source.includes('data-testid="page-settings-scheduled-at-error"'), 'Page settings scheduled publish date must show a field-level validation error');
   assert(source.includes('data-testid="page-settings-json-ld-error"'), 'Page settings JSON-LD must show a field-level validation error');
   assert(source.includes('disabled={isSavingSettings || !canEdit}'), 'Page settings Save must not be disabled by editable validation errors');
+  assert(source.includes('data-action-state={pageSettingsSaveActionState}') && source.includes('data-action-status={pageSettingsSaveActionStatus}') && source.includes('data-disabled-reason={pageSettingsSaveDisabledReason}'), 'Page settings Save must expose ready/blocked/busy action metadata');
+  assert(source.includes('data-testid="page-settings-select-social-image"') && source.includes('data-testid="page-settings-remove-social-image"') && source.includes('returnFocusTargetId="page-settings-select-social-image"'), 'Page settings social image actions must expose stable hooks, action metadata, and media-picker return focus');
   assert(!source.includes('disabled={Boolean(settingsValidation) || isSavingSettings || !canEdit}'), 'Page settings Save must not use disabled-only settings validation');
 };
 
@@ -13499,6 +13505,68 @@ const readPageSettingsValidation = async (client) => (
   })()`)
 );
 
+const readPageSettingsActionMetadata = async (client) => (
+  evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const dialog = document.querySelector('[data-testid="page-settings-dialog"]');
+    const status = document.querySelector('[data-testid="page-settings-action-status"]');
+    const panel = document.querySelector('[data-testid="page-settings-tab-panel"]');
+    const close = document.querySelector('[data-testid="page-settings-close"]');
+    const cancel = document.querySelector('[data-testid="page-settings-cancel"]');
+    const save = document.querySelector('[data-testid="page-settings-save"]');
+    const general = document.querySelector('[data-testid="page-settings-tab-general"]');
+    const seo = document.querySelector('[data-testid="page-settings-tab-seo"]');
+    const social = document.querySelector('[data-testid="page-settings-tab-social"]');
+    const selectSocialImage = document.querySelector('[data-testid="page-settings-select-social-image"]');
+    const removeSocialImage = document.querySelector('[data-testid="page-settings-remove-social-image"]');
+    const tabState = (node) => ({
+      role: node?.getAttribute('role') || '',
+      selected: node?.getAttribute('aria-selected') || '',
+      describedBy: node?.getAttribute('aria-describedby') || '',
+      actionState: node?.getAttribute('data-action-state') || '',
+      actionStatus: normalize(node?.getAttribute('data-action-status')),
+      controls: node?.getAttribute('aria-controls') || '',
+    });
+    return {
+      dialogRole: dialog?.getAttribute('role') || '',
+      dialogLabelledBy: dialog?.getAttribute('aria-labelledby') || '',
+      dialogDescribedBy: dialog?.getAttribute('aria-describedby') || '',
+      dialogActiveTab: dialog?.getAttribute('data-active-tab') || '',
+      dialogActionState: dialog?.getAttribute('data-action-state') || '',
+      dialogActionStatus: normalize(dialog?.getAttribute('data-action-status')),
+      statusId: status?.id || '',
+      statusText: normalize(status?.textContent),
+      panelRole: panel?.getAttribute('role') || '',
+      panelLabelledBy: panel?.getAttribute('aria-labelledby') || '',
+      closeDescribedBy: close?.getAttribute('aria-describedby') || '',
+      closeActionStatus: normalize(close?.getAttribute('data-action-status')),
+      cancelDescribedBy: cancel?.getAttribute('aria-describedby') || '',
+      cancelActionStatus: normalize(cancel?.getAttribute('data-action-status')),
+      saveDescribedBy: save?.getAttribute('aria-describedby') || '',
+      saveActionState: save?.getAttribute('data-action-state') || '',
+      saveActionStatus: normalize(save?.getAttribute('data-action-status')),
+      saveDisabledReason: save?.getAttribute('data-disabled-reason') || '',
+      tabs: {
+        general: tabState(general),
+        seo: tabState(seo),
+        social: tabState(social),
+      },
+      selectSocialImage: selectSocialImage ? {
+        describedBy: selectSocialImage.getAttribute('aria-describedby') || '',
+        actionState: selectSocialImage.getAttribute('data-action-state') || '',
+        actionStatus: normalize(selectSocialImage.getAttribute('data-action-status')),
+        disabledReason: selectSocialImage.getAttribute('data-disabled-reason') || '',
+      } : null,
+      removeSocialImage: removeSocialImage ? {
+        describedBy: removeSocialImage.getAttribute('aria-describedby') || '',
+        actionState: removeSocialImage.getAttribute('data-action-state') || '',
+        actionStatus: normalize(removeSocialImage.getAttribute('data-action-status')),
+        disabledReason: removeSocialImage.getAttribute('data-disabled-reason') || '',
+      } : null,
+    };
+  })()`)
+);
+
 const waitForPageSettingsPersisted = async (pageId, expected) => {
   let lastPage = null;
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -13685,7 +13753,39 @@ const testPageSettingsControls = async (client, pageId) => {
   };
 
   await openPageSettingsDialog(client);
+  const initialActionMetadata = await readPageSettingsActionMetadata(client);
+  assert(
+    initialActionMetadata.dialogRole === 'dialog' &&
+      initialActionMetadata.dialogLabelledBy === 'page-settings-dialog-title' &&
+      initialActionMetadata.dialogDescribedBy === 'page-settings-action-status' &&
+      initialActionMetadata.dialogActiveTab === 'general' &&
+      initialActionMetadata.statusId === 'page-settings-action-status' &&
+      initialActionMetadata.statusText === initialActionMetadata.dialogActionStatus &&
+      initialActionMetadata.panelRole === 'tabpanel' &&
+      initialActionMetadata.panelLabelledBy === 'page-settings-tab-general' &&
+      initialActionMetadata.closeDescribedBy === 'page-settings-action-status' &&
+      initialActionMetadata.closeActionStatus === 'Close page settings without saving changes.' &&
+      initialActionMetadata.cancelDescribedBy === 'page-settings-action-status' &&
+      initialActionMetadata.cancelActionStatus === 'Close page settings without saving changes.' &&
+      initialActionMetadata.saveDescribedBy === 'page-settings-action-status' &&
+      initialActionMetadata.saveActionState === 'ready' &&
+      initialActionMetadata.saveActionStatus === 'Save page settings and update frontend metadata.' &&
+      initialActionMetadata.tabs.general.role === 'tab' &&
+      initialActionMetadata.tabs.general.selected === 'true' &&
+      initialActionMetadata.tabs.general.actionState === 'selected' &&
+      initialActionMetadata.tabs.general.controls === 'page-settings-tab-panel' &&
+      initialActionMetadata.tabs.seo.actionState === 'ready' &&
+      initialActionMetadata.tabs.social.actionStatus === 'Open Social Share page settings tab.',
+    `Page settings initial action metadata missing: ${JSON.stringify(initialActionMetadata)}`,
+  );
   await setFormControlByTestId(client, 'page-settings-status', 'scheduled');
+  const scheduledActionMetadata = await readPageSettingsActionMetadata(client);
+  assert(
+    scheduledActionMetadata.saveActionState === 'blocked' &&
+      /publish date/i.test(scheduledActionMetadata.saveActionStatus) &&
+      scheduledActionMetadata.dialogActionStatus.includes(scheduledActionMetadata.saveActionStatus),
+    `Page settings scheduled blocker metadata missing: ${JSON.stringify(scheduledActionMetadata)}`,
+  );
   await clickPageSettingsSave(client);
   const scheduledValidation = await readPageSettingsValidation(client);
   assert(
@@ -13705,6 +13805,20 @@ const testPageSettingsControls = async (client, pageId) => {
 
   await clickPageSettingsTab(client, 'social');
   await setFormControlByTestId(client, 'page-settings-og-image', expected.meta.ogImage);
+  const socialActionMetadata = await readPageSettingsActionMetadata(client);
+  assert(
+    socialActionMetadata.dialogActiveTab === 'social' &&
+      socialActionMetadata.panelLabelledBy === 'page-settings-tab-social' &&
+      socialActionMetadata.tabs.social.selected === 'true' &&
+      socialActionMetadata.tabs.social.actionState === 'selected' &&
+      socialActionMetadata.selectSocialImage?.describedBy === 'page-settings-action-status' &&
+      socialActionMetadata.selectSocialImage?.actionState === 'ready' &&
+      socialActionMetadata.selectSocialImage?.actionStatus === 'Select a social share image from Media.' &&
+      socialActionMetadata.removeSocialImage?.describedBy === 'page-settings-action-status' &&
+      socialActionMetadata.removeSocialImage?.actionState === 'ready' &&
+      socialActionMetadata.removeSocialImage?.actionStatus === 'Remove the current social share image.',
+    `Page settings social action metadata missing: ${JSON.stringify(socialActionMetadata)}`,
+  );
 
   await clickPageSettingsSave(client);
   let closed = false;
@@ -13721,6 +13835,9 @@ const testPageSettingsControls = async (client, pageId) => {
 
   return {
     expected,
+    initialActionMetadata,
+    scheduledActionMetadata,
+    socialActionMetadata,
     scheduledValidation,
     savedStatus,
     persisted: {

@@ -5,6 +5,8 @@ import type { ContentStatus } from '@/stores/mockStore';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { MediaLibraryModal, type MediaContext } from '@/components/editor/MediaLibraryModal';
 
+type PageSettingsTab = 'general' | 'seo' | 'social';
+
 export interface PageSettings {
     title: string;
     slug: string;
@@ -52,6 +54,16 @@ const isPublicationStatus = (status: ContentStatus): boolean => (
     status === 'published' || status === 'scheduled'
 );
 
+const PAGE_SETTINGS_DIALOG_TITLE_ID = 'page-settings-dialog-title';
+const PAGE_SETTINGS_ACTION_STATUS_ID = 'page-settings-action-status';
+const PAGE_SETTINGS_TAB_PANEL_ID = 'page-settings-tab-panel';
+
+const PAGE_SETTINGS_TABS: Array<{ id: PageSettingsTab; label: string; testId: string }> = [
+    { id: 'general', label: 'General', testId: 'page-settings-tab-general' },
+    { id: 'seo', label: 'SEO', testId: 'page-settings-tab-seo' },
+    { id: 'social', label: 'Social Share', testId: 'page-settings-tab-social' },
+];
+
 const parseJsonLd = (
     value: string,
 ): { ok: true; value: Array<Record<string, unknown>> } | { ok: false; message: string } => {
@@ -92,7 +104,7 @@ export function PageSettingsModal({
     mediaCreateDisabledReason,
 }: PageSettingsModalProps) {
     const [settings, setSettings] = useState<PageSettings>(initialSettings);
-    const [activeTab, setActiveTab] = useState<'general' | 'seo' | 'social'>('general');
+    const [activeTab, setActiveTab] = useState<PageSettingsTab>('general');
     const [validationError, setValidationError] = useState<string | null>(null);
     const [settingsSubmitted, setSettingsSubmitted] = useState(false);
     const [jsonLdInlineError, setJsonLdInlineError] = useState<string | null>(null);
@@ -119,6 +131,7 @@ export function PageSettingsModal({
         () => validateSettings?.(settings) || null,
         [settings, validateSettings],
     );
+    const jsonLdValidation = useMemo(() => parseJsonLd(jsonLdText), [jsonLdText]);
     const showSettingsValidation = Boolean(settingsSubmitted && settingsValidation);
     const titleInlineError = showSettingsValidation && settingsValidation && /title/i.test(settingsValidation)
         ? settingsValidation
@@ -132,6 +145,34 @@ export function PageSettingsModal({
     const scheduledAtInlineError = settingsSubmitted && settings.status === 'scheduled' && !settings.scheduledAt
         ? 'Choose a publish date before scheduling this page.'
         : null;
+    const publicationStateChanging = settings.status !== initialSettings.status
+        && (isPublicationStatus(settings.status) || isPublicationStatus(initialSettings.status));
+    const activeTabLabel = PAGE_SETTINGS_TABS.find((tab) => tab.id === activeTab)?.label || 'General';
+    const pageSettingsSaveDisabledReason = isSavingSettings
+        ? 'Page settings save is running.'
+        : !canEdit ? editDisabledReason : undefined;
+    const pageSettingsSaveBlocker = pageSettingsSaveDisabledReason
+        || (publicationStateChanging && !canPublish ? publishDisabledReason : undefined)
+        || (settings.status === 'scheduled' && !settings.scheduledAt ? 'Choose a publish date before saving scheduled page settings.' : undefined)
+        || (settingsValidation ? `Resolve page settings validation before saving: ${settingsValidation}` : undefined)
+        || (!jsonLdValidation.ok ? `Resolve JSON-LD validation before saving: ${jsonLdValidation.message}` : undefined);
+    const pageSettingsSaveActionState = isSavingSettings
+        ? 'busy'
+        : pageSettingsSaveBlocker ? 'blocked' : 'ready';
+    const pageSettingsSaveActionStatus = isSavingSettings
+        ? 'Saving page settings.'
+        : pageSettingsSaveBlocker || 'Save page settings and update frontend metadata.';
+    const pageSettingsDialogActionStatus = `${activeTabLabel} page settings active. ${pageSettingsSaveActionStatus}`;
+    const pageSettingsDismissActionStatus = 'Close page settings without saving changes.';
+    const pageSettingsSelectSocialImageActionState = !canEdit || !canViewMedia ? 'blocked' : 'ready';
+    const pageSettingsSelectSocialImageActionStatus = !canEdit
+        ? editDisabledReason
+        : !canViewMedia ? (mediaViewDisabledReason || 'You do not have permission to view media assets.')
+            : 'Select a social share image from Media.';
+    const pageSettingsRemoveSocialImageActionState = !canEdit ? 'blocked' : settings.meta.ogImage ? 'ready' : 'blocked';
+    const pageSettingsRemoveSocialImageActionStatus = !canEdit
+        ? editDisabledReason
+        : settings.meta.ogImage ? 'Remove the current social share image.' : 'No social share image is selected.';
 
     if (!isOpen) return null;
 
@@ -144,8 +185,6 @@ export function PageSettingsModal({
             setValidationError(editDisabledReason);
             return;
         }
-        const publicationStateChanging = settings.status !== initialSettings.status
-            && (isPublicationStatus(settings.status) || isPublicationStatus(initialSettings.status));
         if (publicationStateChanging && !canPublish) {
             setValidationError(publishDisabledReason);
             return;
@@ -157,7 +196,7 @@ export function PageSettingsModal({
             return;
         }
 
-        const parsedJsonLd = parseJsonLd(jsonLdText);
+        const parsedJsonLd = jsonLdValidation;
         if (!parsedJsonLd.ok) {
             setValidationError(parsedJsonLd.message);
             setJsonLdInlineError(parsedJsonLd.message);
@@ -221,69 +260,87 @@ export function PageSettingsModal({
         updateKeywords(keywords.filter((item) => item !== keyword));
     };
 
+    const pageSettingsTabActionProps = (tab: PageSettingsTab, label: string) => {
+        const selected = activeTab === tab;
+
+        return {
+            role: 'tab',
+            id: `page-settings-tab-${tab}`,
+            'aria-selected': selected,
+            'aria-controls': PAGE_SETTINGS_TAB_PANEL_ID,
+            'aria-describedby': PAGE_SETTINGS_ACTION_STATUS_ID,
+            'data-action-state': selected ? 'selected' : 'ready',
+            'data-action-status': selected ? `${label} page settings tab selected.` : `Open ${label} page settings tab.`,
+        };
+    };
+
     return (
         <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="page-settings-dialog-title"
+            aria-labelledby={PAGE_SETTINGS_DIALOG_TITLE_ID}
+            aria-describedby={PAGE_SETTINGS_ACTION_STATUS_ID}
+            tabIndex={-1}
             data-testid="page-settings-dialog"
+            data-active-tab={activeTab}
+            data-action-state={pageSettingsSaveActionState}
+            data-action-status={pageSettingsDialogActionStatus}
         >
             <div className="w-[500px] bg-background border border-border rounded-lg shadow-xl flex flex-col max-h-[85vh]">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-border">
-                    <h2 id="page-settings-dialog-title" className="text-lg font-semibold">Page Settings</h2>
+                    <h2 id={PAGE_SETTINGS_DIALOG_TITLE_ID} className="text-lg font-semibold">Page Settings</h2>
                     <button
                         onClick={onClose}
                         className="p-1 rounded-md hover:bg-muted text-muted-foreground"
                         aria-label="Close page settings"
+                        aria-describedby={PAGE_SETTINGS_ACTION_STATUS_ID}
+                        data-testid="page-settings-close"
+                        data-action-state="ready"
+                        data-action-status={pageSettingsDismissActionStatus}
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
+                <span
+                    id={PAGE_SETTINGS_ACTION_STATUS_ID}
+                    className="sr-only"
+                    data-testid="page-settings-action-status"
+                    aria-live="polite"
+                >
+                    {pageSettingsDialogActionStatus}
+                </span>
 
                 {/* Tabs */}
-                <div className="flex px-4 border-b border-border gap-6">
-                    <button
-                        onClick={() => setActiveTab('general')}
-                        data-testid="page-settings-tab-general"
-                        className={cn(
-                            'py-3 text-sm font-medium border-b-2 transition-colors',
-                            activeTab === 'general'
-                                ? 'border-primary text-primary'
-                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                        )}
-                    >
-                        General
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('seo')}
-                        data-testid="page-settings-tab-seo"
-                        className={cn(
-                            'py-3 text-sm font-medium border-b-2 transition-colors',
-                            activeTab === 'seo'
-                                ? 'border-primary text-primary'
-                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                        )}
-                    >
-                        SEO
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('social')}
-                        data-testid="page-settings-tab-social"
-                        className={cn(
-                            'py-3 text-sm font-medium border-b-2 transition-colors',
-                            activeTab === 'social'
-                                ? 'border-primary text-primary'
-                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                        )}
-                    >
-                        Social Share
-                    </button>
+                <div className="flex px-4 border-b border-border gap-6" role="tablist" aria-label="Page settings sections">
+                    {PAGE_SETTINGS_TABS.map((tab) => (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveTab(tab.id)}
+                            data-testid={tab.testId}
+                            {...pageSettingsTabActionProps(tab.id, tab.label)}
+                            className={cn(
+                                'py-3 text-sm font-medium border-b-2 transition-colors',
+                                activeTab === tab.id
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                            )}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Content */}
-                <div className="p-6 overflow-y-auto flex-1">
+                <div
+                    id={PAGE_SETTINGS_TAB_PANEL_ID}
+                    role="tabpanel"
+                    aria-labelledby={`page-settings-tab-${activeTab}`}
+                    data-testid="page-settings-tab-panel"
+                    className="p-6 overflow-y-auto flex-1"
+                >
                     {activeTab === 'general' && (
                         <div className="space-y-4">
                             {validationError && (
@@ -601,6 +658,11 @@ export function PageSettingsModal({
                                                 })}
                                                 disabled={!canEdit}
                                                 title={canEdit ? undefined : editDisabledReason}
+                                                aria-describedby={PAGE_SETTINGS_ACTION_STATUS_ID}
+                                                data-testid="page-settings-remove-social-image"
+                                                data-action-state={pageSettingsRemoveSocialImageActionState}
+                                                data-action-status={pageSettingsRemoveSocialImageActionStatus}
+                                                data-disabled-reason={!canEdit ? editDisabledReason : undefined}
                                                 className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                             >
                                                 <Trash2 className="h-3.5 w-3.5" />
@@ -612,6 +674,11 @@ export function PageSettingsModal({
                                             onClick={() => setIsSocialImagePickerOpen(true)}
                                             disabled={!canEdit || !canViewMedia}
                                             title={!canEdit ? editDisabledReason : !canViewMedia ? mediaViewDisabledReason : undefined}
+                                            aria-describedby={PAGE_SETTINGS_ACTION_STATUS_ID}
+                                            data-testid="page-settings-select-social-image"
+                                            data-action-state={pageSettingsSelectSocialImageActionState}
+                                            data-action-status={pageSettingsSelectSocialImageActionStatus}
+                                            data-disabled-reason={!canEdit ? editDisabledReason : !canViewMedia ? mediaViewDisabledReason : undefined}
                                             className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                                         >
                                             <Upload className="h-3.5 w-3.5" />
@@ -647,6 +714,9 @@ export function PageSettingsModal({
                 <div className="flex items-center justify-end gap-2 p-4 border-t border-border bg-muted/20">
                     <button
                         onClick={onClose}
+                        aria-describedby={PAGE_SETTINGS_ACTION_STATUS_ID}
+                        data-action-state="ready"
+                        data-action-status={pageSettingsDismissActionStatus}
                         className="px-4 py-2 text-sm font-medium text-foreground hover:bg-accent rounded-md"
                         data-testid="page-settings-cancel"
                     >
@@ -656,6 +726,10 @@ export function PageSettingsModal({
                         onClick={handleSave}
                         disabled={isSavingSettings || !canEdit}
                         title={canEdit ? undefined : editDisabledReason}
+                        aria-describedby={PAGE_SETTINGS_ACTION_STATUS_ID}
+                        data-action-state={pageSettingsSaveActionState}
+                        data-action-status={pageSettingsSaveActionStatus}
+                        data-disabled-reason={pageSettingsSaveDisabledReason}
                         className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md disabled:cursor-not-allowed disabled:opacity-50"
                         data-testid="page-settings-save"
                     >
@@ -676,6 +750,7 @@ export function PageSettingsModal({
                 initialUploadFilter="image"
                 mediaContext={mediaContext}
                 allowScopeSwitcher={Boolean(mediaContext?.scope)}
+                returnFocusTargetId="page-settings-select-social-image"
                 canView={canViewMedia}
                 canCreate={canCreateMedia}
                 viewDisabledReason={mediaViewDisabledReason}
