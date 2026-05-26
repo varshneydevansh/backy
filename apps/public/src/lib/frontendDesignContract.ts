@@ -16,6 +16,13 @@ const stringValue = (value: unknown): string | undefined => (
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 );
 
+const versionValue = (value: unknown): string | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return stringValue(value);
+};
+
 const stringRecord = (value: unknown): Record<string, string> | undefined => {
   if (!isRecord(value)) return undefined;
 
@@ -994,6 +1001,10 @@ export const buildSiteDefaultFrontendDesignContract = (input: {
       id: template.id,
       type: template.type || 'page',
       name: template.title,
+      status: 'active',
+      version: 1,
+      createdAt: updatedAt,
+      updatedAt,
       routePattern: template.slug === 'home' || template.slug === 'index' ? '/' : `/${template.slug}`,
       description: 'Captured from the current Backy site structure.',
     })),
@@ -1711,6 +1722,10 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
   };
   templateId?: string;
   templateName?: string;
+  templateVersion?: string | number;
+  templateStatus?: string;
+  templateCreatedAt?: string;
+  templateUpdatedAt?: string;
   routePattern?: string;
   source?: Record<string, unknown>;
   bindingHints?: Array<Record<string, unknown>>;
@@ -1724,6 +1739,18 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
   const templateId = input.templateId
     || stringValue(meta.frontendDesignTemplateId)
     || `${input.resource.type}-${input.resource.id}`;
+  const templateVersion = versionValue(input.templateVersion)
+    || versionValue(meta.frontendDesignTemplateVersion)
+    || '1';
+  const templateStatus = stringValue(input.templateStatus)
+    || stringValue(meta.frontendDesignTemplateStatus)
+    || 'active';
+  const templateCreatedAt = stringValue(input.templateCreatedAt)
+    || stringValue(meta.frontendDesignTemplateCreatedAt)
+    || updatedAt;
+  const templateUpdatedAt = stringValue(input.templateUpdatedAt)
+    || stringValue(meta.frontendDesignTemplateUpdatedAt)
+    || updatedAt;
   const defaultRoutePattern = input.resource.type === 'blogPost'
     ? `/blog/${input.resource.slug}`
     : input.resource.type === 'form'
@@ -1787,6 +1814,10 @@ export const buildFrontendDesignContractFromContentTemplate = (input: {
     id: templateId,
     type: input.resource.type,
     name: input.templateName || stringValue(meta.frontendDesignTemplateName) || input.resource.title,
+    status: templateStatus,
+    version: templateVersion,
+    createdAt: templateCreatedAt,
+    updatedAt: templateUpdatedAt,
     routePattern,
     description: input.resource.description || `Captured from ${input.resource.title}.`,
     canvasSize: content.canvasSize,

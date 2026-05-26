@@ -6,6 +6,7 @@ import { withSmokeLock } from './smoke-lock.mjs';
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const SITE_ID = process.env.BACKY_FRONTEND_DESIGN_SMOKE_SITE_ID || 'site-demo';
 const PRODUCT_COLLECTION_SLUG = 'products';
+const TEMPLATE_VERSIONED_AT = '2026-05-26T00:00:00.000Z';
 const SMOKE_TEMPLATE_IDS = [
   'smoke-page-template',
   'smoke-blog-template',
@@ -189,9 +190,8 @@ const assertTemplateRegistry = async () => {
   assert(registry.cloneField === 'frontendDesignTemplateId', `Template registry clone field was unexpected: ${registry.cloneField}`);
   assert(registry.versionSummary?.schemaVersion === 'backy.template-version-readiness.v1', `Template registry missing version readiness: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
   assert(registry.versionSummary?.templateCount >= SMOKE_TEMPLATE_IDS.length, `Template registry version readiness count was unexpected: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
-  assert(registry.versionSummary?.missingVersionCount >= SMOKE_TEMPLATE_IDS.length, `Template registry should flag missing template versions: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
+  assert(registry.versionSummary?.readyCount >= SMOKE_TEMPLATE_IDS.length, `Template registry version-ready count was unexpected: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
   assert(registry.actionPlan?.schemaVersion === 'backy.template-registry-action-plan.v1', `Template registry missing action plan: ${JSON.stringify(registry.actionPlan).slice(0, 500)}`);
-  assert(registry.actionPlan?.status === 'needs-version-metadata', `Template registry action plan status was unexpected: ${JSON.stringify(registry.actionPlan).slice(0, 500)}`);
   assert(registry.cloneTargets?.page === `/api/admin/sites/${SITE_ID}/pages`, 'Template registry missing page clone target');
   assert(registry.cloneTargets?.blogPost === `/api/admin/sites/${SITE_ID}/blog`, 'Template registry missing blog clone target');
   assert(registry.cloneTargets?.form === `/api/admin/sites/${SITE_ID}/forms`, 'Template registry missing form clone target');
@@ -199,12 +199,20 @@ const assertTemplateRegistry = async () => {
   assert(registry.cloneTargets?.collection === `/api/admin/sites/${SITE_ID}/collections`, 'Template registry missing collection clone target');
   assert(registry.cloneTargets?.product === `/api/admin/sites/${SITE_ID}/collections/products/records`, 'Template registry missing product clone target');
 
+  for (const templateId of SMOKE_TEMPLATE_IDS) {
+    const template = registry.templates?.find((candidate) => candidate.id === templateId);
+    assert(template?.versioning?.ready === true, `Template ${templateId} should be version-ready: ${JSON.stringify(template?.versioning).slice(0, 500)}`);
+    assert(template.versioning.version === 'smoke-v1', `Template ${templateId} should expose smoke-v1: ${JSON.stringify(template.versioning).slice(0, 500)}`);
+    assert(template.versioning.updatedAt === TEMPLATE_VERSIONED_AT, `Template ${templateId} should expose version updatedAt: ${JSON.stringify(template.versioning).slice(0, 500)}`);
+  }
+
   const pageTemplate = registry.templates?.find((template) => template.id === 'smoke-page-template');
   assert(pageTemplate?.clone?.endpoint === registry.cloneTargets.page, `Template registry missing page clone payload: ${JSON.stringify(pageTemplate).slice(0, 500)}`);
   assert(pageTemplate.clone.body?.frontendDesignTemplateId === 'smoke-page-template', 'Template registry page clone body missing frontendDesignTemplateId');
   assert(pageTemplate.clone.body?.title === 'Smoke Page Template', 'Template registry page clone body missing title');
   assert(pageTemplate.contentSummary?.hasCanvas && pageTemplate.contentSummary?.canvasSize?.width === 1440, 'Template registry page summary missing canvas contract');
   assert(pageTemplate.versioning?.schemaVersion === 'backy.template-version.v1', 'Template registry page template missing per-template version contract');
+  assert(pageTemplate.versioning?.ready === true && pageTemplate.versioning?.version === 'smoke-v1', `Template registry page template should be version-ready: ${JSON.stringify(pageTemplate.versioning).slice(0, 500)}`);
 
   const formTemplate = registry.templates?.find((template) => template.id === 'smoke-form-template');
   assert(formTemplate?.clone?.body?.name === 'Smoke Form Template', `Template registry missing form clone name: ${JSON.stringify(formTemplate).slice(0, 500)}`);
@@ -213,6 +221,17 @@ const assertTemplateRegistry = async () => {
   const productTemplate = registry.templates?.find((template) => template.id === 'smoke-product-template');
   assert(productTemplate?.clone?.endpoint === registry.cloneTargets.product, `Template registry missing product clone target: ${JSON.stringify(productTemplate).slice(0, 500)}`);
   assert(productTemplate.clone.body?.values?.title === 'Smoke Product Template', 'Template registry product clone body missing title value');
+
+  for (const templateId of SMOKE_TEMPLATE_IDS) {
+    const smokePayload = await requestApi(`/api/admin/sites/${SITE_ID}/templates?search=${encodeURIComponent(templateId)}`);
+    const smokeRegistry = smokePayload.data?.registry;
+    assert(smokeRegistry?.templates?.some((template) => template.id === templateId), `Filtered template lookup did not return ${templateId}: ${JSON.stringify(smokePayload).slice(0, 500)}`);
+    assert(smokeRegistry.versionSummary?.ready === true, `Filtered template ${templateId} should be version-ready: ${JSON.stringify(smokeRegistry.versionSummary).slice(0, 500)}`);
+    assert(smokeRegistry.versionSummary.readyCount === smokeRegistry.versionSummary.templateCount, `Filtered template ${templateId} ready count was unexpected: ${JSON.stringify(smokeRegistry.versionSummary).slice(0, 500)}`);
+    assert(smokeRegistry.versionSummary.missingVersionCount === 0, `Filtered template ${templateId} should not miss versions: ${JSON.stringify(smokeRegistry.versionSummary).slice(0, 500)}`);
+    assert(smokeRegistry.versionSummary.missingUpdatedAtCount === 0, `Filtered template ${templateId} should not miss updatedAt metadata: ${JSON.stringify(smokeRegistry.versionSummary).slice(0, 500)}`);
+    assert(smokeRegistry.actionPlan?.status === 'ready', `Filtered template ${templateId} action plan should be ready: ${JSON.stringify(smokeRegistry.actionPlan).slice(0, 500)}`);
+  }
 
   const filteredPayload = await requestApi(`/api/admin/sites/${SITE_ID}/templates?type=product&search=product`);
   const filtered = filteredPayload.data?.registry;
@@ -325,6 +344,10 @@ const smokeContract = () => ({
       id: 'smoke-page-template',
       type: 'page',
       name: 'Smoke Page Template',
+      status: 'active',
+      version: 'smoke-v1',
+      createdAt: TEMPLATE_VERSIONED_AT,
+      updatedAt: TEMPLATE_VERSIONED_AT,
       routePattern: '/{slug}',
       canvasSize: { width: 1440, height: 1200 },
       bindingHints: [
@@ -335,6 +358,10 @@ const smokeContract = () => ({
       id: 'smoke-blog-template',
       type: 'blogPost',
       name: 'Smoke Blog Template',
+      status: 'active',
+      version: 'smoke-v1',
+      createdAt: TEMPLATE_VERSIONED_AT,
+      updatedAt: TEMPLATE_VERSIONED_AT,
       routePattern: '/blog/{slug}',
       canvasSize: { width: 1200, height: 1000 },
       bindingHints: [
@@ -345,6 +372,10 @@ const smokeContract = () => ({
       id: 'smoke-form-template',
       type: 'form',
       name: 'Smoke Form Template',
+      status: 'active',
+      version: 'smoke-v1',
+      createdAt: TEMPLATE_VERSIONED_AT,
+      updatedAt: TEMPLATE_VERSIONED_AT,
       routePattern: '/forms/{slug}',
       content: {
         name: 'Smoke Lead Form',
@@ -369,6 +400,10 @@ const smokeContract = () => ({
       id: 'smoke-section-template',
       type: 'section',
       name: 'Smoke Section Template',
+      status: 'active',
+      version: 'smoke-v1',
+      createdAt: TEMPLATE_VERSIONED_AT,
+      updatedAt: TEMPLATE_VERSIONED_AT,
       routePattern: '/sections/smoke',
       content: {
         name: 'Smoke Hero Section',
@@ -396,6 +431,10 @@ const smokeContract = () => ({
       id: 'smoke-collection-template',
       type: 'collection',
       name: 'Smoke Directory Collection',
+      status: 'active',
+      version: 'smoke-v1',
+      createdAt: TEMPLATE_VERSIONED_AT,
+      updatedAt: TEMPLATE_VERSIONED_AT,
       routePattern: '/directory/:recordSlug',
       content: {
         name: 'Smoke Directory',
@@ -422,6 +461,10 @@ const smokeContract = () => ({
       id: 'smoke-product-template',
       type: 'product',
       name: 'Smoke Product Template',
+      status: 'active',
+      version: 'smoke-v1',
+      createdAt: TEMPLATE_VERSIONED_AT,
+      updatedAt: TEMPLATE_VERSIONED_AT,
       routePattern: '/products/smoke-design-product',
       content: {
         slug: 'smoke-design-product',
@@ -516,6 +559,7 @@ const main = async () => {
     assert(frontendDesignResponse.templateRegistry?.templateCount >= SMOKE_TEMPLATE_IDS.length, 'Frontend design response template registry summary had unexpected template count');
     assert(frontendDesignResponse.templateRegistry?.cloneField === 'frontendDesignTemplateId', 'Frontend design response missing template registry clone field');
     assert(frontendDesignResponse.templateRegistry?.versionSummary?.schemaVersion === 'backy.template-version-readiness.v1', 'Frontend design response missing template version readiness summary');
+    assert(frontendDesignResponse.templateRegistry?.versionSummary?.readyCount >= SMOKE_TEMPLATE_IDS.length, 'Frontend design response template registry should count version-ready smoke templates');
     assert(frontendDesignResponse.templateRegistry?.actionPlan?.schemaVersion === 'backy.template-registry-action-plan.v1', 'Frontend design response missing template registry action plan');
     const afterPatch = frontendDesignResponse.frontendDesign;
     assert(afterPatch.tokens?.colors?.primary === '#0f766e', 'GET did not persist patched color token');

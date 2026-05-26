@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { SiteSettings } from "@backy-cms/core";
 import {
+  buildSiteDefaultFrontendDesignContract,
   buildFrontendDesignContractFromContentTemplate,
   frontendDesignProvenanceFromMetadata,
   normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope,
@@ -315,6 +316,25 @@ const searched = buildTemplateRegistry("site-template-smoke", frontendDesign, {
 assert.equal(searched.templateCount, 1);
 assert.equal(searched.templates[0]?.id, "signup-form");
 
+const defaultFrontendDesign = buildSiteDefaultFrontendDesignContract({
+  site: {
+    name: "Versioned Site",
+    slug: "versioned-site",
+  },
+  pageTemplates: [
+    { id: "default-home", title: "Home", slug: "home" },
+    { id: "default-blog", title: "Blog article", slug: "blog/{slug}", type: "blogPost" },
+  ],
+  updatedAt: "2026-05-18T00:00:00.000Z",
+});
+const defaultRegistry = buildTemplateRegistry("site-template-smoke", defaultFrontendDesign);
+assert.equal(defaultRegistry.versionSummary.ready, true);
+assert.equal(defaultRegistry.versionSummary.readyCount, 2);
+assert.equal(defaultRegistry.versionSummary.missingVersionCount, 0);
+assert.equal(defaultRegistry.versionSummary.missingUpdatedAtCount, 0);
+assert.equal(defaultRegistry.actionPlan.status, "ready");
+assert(defaultRegistry.templates.every((template) => template.versioning.ready), "Default captured site templates should be version-ready");
+
 const capturedDesignState = buildFrontendDesignContractFromContentTemplate({
   frontendDesign,
   resource: {
@@ -425,6 +445,16 @@ const capturedRoundtripTemplate = capturedDesignState.templates.find(
   (template) => template.id === "captured-roundtrip-template",
 );
 assert(capturedRoundtripTemplate, "Captured frontend template should be added to the design contract");
+assert.equal(capturedRoundtripTemplate.status, "active");
+assert.equal(capturedRoundtripTemplate.version, "1");
+assert.equal(capturedRoundtripTemplate.createdAt, capturedDesignState.updatedAt);
+assert.equal(capturedRoundtripTemplate.updatedAt, capturedDesignState.updatedAt);
+const capturedRoundtripRegistry = buildTemplateRegistry("site-template-smoke", capturedDesignState, {
+  search: "captured-roundtrip-template",
+});
+assert.equal(capturedRoundtripRegistry.versionSummary.ready, true);
+assert.equal(capturedRoundtripRegistry.versionSummary.readyCount, 1);
+assert.equal(capturedRoundtripRegistry.actionPlan.status, "ready");
 const capturedRoundtripEditableTargets = new Map(
   capturedDesignState.editableMap.map((entry) => [`${entry.elementId || ""}:${entry.targetPath || ""}`, entry]),
 );
