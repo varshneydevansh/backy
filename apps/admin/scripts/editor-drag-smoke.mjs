@@ -1221,6 +1221,10 @@ const assertInteractiveRegistryVersionPinningSource = () => {
   assert(source.includes("'select', 'radio'") && source.includes('data-testid={`editor-interactive-control-radio-${controlKey}`}'), 'Interactive registry controls must render radio option groups when a component declares a radio control');
   assert(source.includes("'textarea', 'json', 'code'") && source.includes('formatInteractiveJsonControlValue') && source.includes('normalizeInteractiveJsonControlValue'), 'Interactive registry controls must support textarea/code/JSON controls with JSON object parsing');
 
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
+  assert(smokeSource.includes('assertReloadedInteractiveComponentInspector') && smokeSource.includes('reloadedInspectorState'), 'Interactive component rendered smoke must verify saved inspector state after reload');
+  assert(smokeSource.includes('registryValue === nextValues.registrySelection') && smokeSource.includes("bindingPresetActionState === 'selected'"), 'Interactive reload smoke must verify registry and binding preset hydration');
+
   const canvasSource = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
   assert(canvasSource.includes("normalized === 'interactivefigure'") && canvasSource.includes("return 'interactiveFigure'"), 'Editor canvas must normalize interactiveFigure element types before rendering');
   assert(canvasSource.includes("normalized === 'codecomponent'") && canvasSource.includes("return 'codeComponent'"), 'Editor canvas must normalize codeComponent element types before rendering');
@@ -21409,6 +21413,116 @@ const testInteractiveComponentControls = async (client, elementId, expectedType,
   return state;
 };
 
+const assertReloadedInteractiveComponentInspector = async (client, elementId, expectedType, nextValues) => {
+  await selectLayerById(client, elementId);
+  await switchToPropertiesPanel(client);
+
+  let state = null;
+  const dynamicControlTestIds = (nextValues.dynamicControls || []).map((control) => (
+    control.testId || `editor-interactive-control-input-${control.key}`
+  ));
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+      const attr = (testId, name) => document.querySelector('[data-testid="' + testId + '"]')?.getAttribute(name) || '';
+      const dynamicControlTestIds = ${JSON.stringify(dynamicControlTestIds)};
+      const controls = Object.fromEntries(dynamicControlTestIds.map((testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        const shell = control?.closest('[data-testid^="editor-interactive-control-"]');
+        return [testId, {
+          value: control instanceof HTMLInputElement && control.type === 'checkbox'
+            ? String(control.checked)
+            : control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement
+              ? control.value
+              : '',
+          actionState: control?.getAttribute('data-action-state') || '',
+          actionStatus: control?.getAttribute('data-action-status') || '',
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          controlKey: control?.getAttribute('data-control-key') || '',
+          controlType: control?.getAttribute('data-control-type') || '',
+          shellActionState: shell?.getAttribute('data-action-state') || '',
+          shellActionStatus: shell?.getAttribute('data-action-status') || '',
+        }];
+      }));
+      const registry = document.querySelector('[data-testid="editor-interactive-registry-component"]');
+      const bindingPreset = ${JSON.stringify(nextValues.bindingPresetTestId || '')}
+        ? document.querySelector('[data-testid="${nextValues.bindingPresetTestId || ''}"]')
+        : null;
+      return {
+        componentKey: value('editor-interactive-component-key'),
+        version: value('editor-interactive-version'),
+        hydrationMode: value('editor-interactive-hydration-mode'),
+        sandboxUrl: value('editor-interactive-sandbox-url'),
+        title: value('editor-interactive-fallback-title'),
+        text: value('editor-interactive-fallback-text'),
+        ariaLabel: value('editor-interactive-aria-label'),
+        registryValue: registry instanceof HTMLSelectElement ? registry.value : '',
+        registryActionState: attr('editor-interactive-registry-component', 'data-action-state'),
+        registryActionStatus: attr('editor-interactive-registry-component', 'data-action-status'),
+        registryDescribedBy: attr('editor-interactive-registry-component', 'aria-describedby'),
+        registrySelectedComponentKey: attr('editor-interactive-registry-component', 'data-selected-component-key'),
+        registrySelectedComponentVersion: attr('editor-interactive-registry-component', 'data-selected-component-version'),
+        interactiveActionStatus: document.querySelector('[data-testid="editor-interactive-action-status"]')?.textContent || '',
+        bindingPresetActionState: bindingPreset?.getAttribute('data-action-state') || '',
+        bindingPresetActionStatus: bindingPreset?.getAttribute('data-action-status') || '',
+        bindingPresetTargetPath: bindingPreset?.getAttribute('data-binding-target-path') || '',
+        selectedBindingPresetText: document.querySelector('[data-testid="editor-interactive-selected-binding-preset"]')?.textContent || '',
+        controls,
+      };
+    })()`);
+
+    const controlsReady = dynamicControlTestIds.every((testId) => state.controls?.[testId]?.actionStatus);
+    const registryReady = !nextValues.registrySelection || state.registryValue === nextValues.registrySelection;
+    const bindingReady = !nextValues.bindingPresetTestId || state.bindingPresetActionState === 'selected';
+    if (
+      state.componentKey === nextValues.componentKey &&
+      state.version === nextValues.version &&
+      controlsReady &&
+      registryReady &&
+      bindingReady
+    ) {
+      break;
+    }
+    await sleep(150);
+  }
+
+  assert(state.componentKey === nextValues.componentKey, `Reloaded ${expectedType} component key mismatch: ${JSON.stringify(state)}`);
+  assert(state.version === nextValues.version, `Reloaded ${expectedType} version mismatch: ${JSON.stringify(state)}`);
+  assert(state.hydrationMode === nextValues.hydrationMode, `Reloaded ${expectedType} hydration mode mismatch: ${JSON.stringify(state)}`);
+  if (nextValues.sandboxUrl !== undefined) {
+    assert(state.sandboxUrl === nextValues.sandboxUrl, `Reloaded ${expectedType} sandbox URL mismatch: ${JSON.stringify(state)}`);
+  }
+  assert(state.title === nextValues.title, `Reloaded ${expectedType} fallback title mismatch: ${JSON.stringify(state)}`);
+  assert(state.text === nextValues.text, `Reloaded ${expectedType} fallback text mismatch: ${JSON.stringify(state)}`);
+  assert(state.ariaLabel === nextValues.ariaLabel, `Reloaded ${expectedType} aria label mismatch: ${JSON.stringify(state)}`);
+  assert(state.registryActionState === 'selected' && state.registryActionStatus && state.registryDescribedBy === 'editor-interactive-action-status', `Reloaded ${expectedType} registry action metadata mismatch: ${JSON.stringify(state)}`);
+  if (nextValues.registrySelection) {
+    assert(state.registryValue === nextValues.registrySelection, `Reloaded ${expectedType} registry selection mismatch: ${JSON.stringify(state)}`);
+    assert(state.registrySelectedComponentKey === nextValues.componentKey, `Reloaded ${expectedType} registry component key mismatch: ${JSON.stringify(state)}`);
+    assert(state.registrySelectedComponentVersion === nextValues.version, `Reloaded ${expectedType} registry component version mismatch: ${JSON.stringify(state)}`);
+  }
+  if (nextValues.bindingPresetTestId) {
+    assert(state.bindingPresetActionState === 'selected', `Reloaded ${expectedType} binding preset state mismatch: ${JSON.stringify(state)}`);
+    assert(state.bindingPresetActionStatus && state.bindingPresetTargetPath === nextValues.expectedBindingTargetPath, `Reloaded ${expectedType} binding preset target mismatch: ${JSON.stringify(state)}`);
+    assert(state.selectedBindingPresetText.includes(nextValues.expectedBindingTargetPath), `Reloaded ${expectedType} selected binding text mismatch: ${JSON.stringify(state)}`);
+  }
+  for (const control of nextValues.dynamicControls || []) {
+    const testId = control.testId || `editor-interactive-control-input-${control.key}`;
+    const controlState = state.controls?.[testId];
+    assert(controlState, `Reloaded ${expectedType} control state missing for ${testId}: ${JSON.stringify(state)}`);
+    assert(controlState.actionState && controlState.actionStatus && controlState.describedBy === 'editor-interactive-action-status', `Reloaded ${expectedType} control action metadata missing for ${testId}: ${JSON.stringify(controlState)}`);
+    assert(controlState.shellActionState && controlState.shellActionStatus, `Reloaded ${expectedType} control shell metadata missing for ${testId}: ${JSON.stringify(controlState)}`);
+    if (control.expectedDomValue !== undefined) {
+      assert(controlState.value === String(control.expectedDomValue), `Reloaded ${expectedType} control ${testId} value mismatch: ${JSON.stringify(controlState)}`);
+    }
+    if (control.expectedDomValueIncludes) {
+      assert(controlState.value.includes(control.expectedDomValueIncludes), `Reloaded ${expectedType} control ${testId} value did not include ${control.expectedDomValueIncludes}: ${JSON.stringify(controlState)}`);
+    }
+  }
+
+  return state;
+};
+
 const assertCodeComponentSandboxPreview = async (client, elementId, nextValues) => {
   await clickControlByTestId(client, 'editor-preview-toggle');
 
@@ -23861,6 +23975,59 @@ const main = async () => {
       return;
     }
 
+    const interactiveFigureComponentSmokeValues = {
+      componentKey: 'backy.figure.rounds',
+      version: '1.0.0',
+      registrySelection: 'backy.figure.rounds::1.0.0',
+      hydrationMode: 'trusted-component',
+      title: 'Smoke self-correction figure',
+      text: 'Smoke fallback for communication rounds.',
+      ariaLabel: 'Smoke communication rounds figure',
+      bindingPresetTestId: 'editor-interactive-binding-preset-rounds-from-page',
+      expectedBindingTargetPath: 'props.rounds',
+      dynamicControls: [
+        { key: 'rounds', value: '7', expectedDomValue: '7' },
+        { key: 'speed', value: 'fast', expectedDomValue: 'fast' },
+      ],
+      expectedControlProps: {
+        rounds: 7,
+        speed: 'fast',
+      },
+    };
+    const codeComponentSmokeValues = {
+      componentKey: 'backy.canvas.sandboxed',
+      version: '1.0.0',
+      registrySelection: 'backy.canvas.sandboxed::1.0.0',
+      hydrationMode: 'sandbox-iframe',
+      sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.canvas.sandboxed/1.0.0/sandbox`,
+      title: 'Smoke sandbox component',
+      text: 'Smoke fallback for sandboxed component.',
+      ariaLabel: 'Smoke sandboxed component',
+      bindingPresetTestId: 'editor-interactive-binding-preset-canvas-frame-data',
+      expectedBindingTargetPath: 'props.frames',
+      dynamicControls: [
+        { key: 'playback', value: 'auto', expectedDomValue: 'auto' },
+        { key: 'intensity', value: '75', expectedDomValue: '75' },
+        { key: 'accentColor', value: '#f97316', expectedDomValue: '#f97316' },
+        { key: 'caption', value: 'Smoke canvas fallback caption.', expectedDomValue: 'Smoke canvas fallback caption.' },
+        {
+          key: 'runtimeConfig',
+          value: '{"reducedMotionFallback":false,"frameBudget":30}',
+          expectedDomValue: '{\n  "reducedMotionFallback": false,\n  "frameBudget": 30\n}',
+          expectedDomValueIncludes: '"frameBudget": 30',
+        },
+      ],
+      expectedControlProps: {
+        playback: 'auto',
+        intensity: 75,
+        accentColor: '#f97316',
+        caption: 'Smoke canvas fallback caption.',
+        runtimeConfig: {
+          reducedMotionFallback: false,
+          frameBudget: 30,
+        },
+      },
+    };
     const componentSmokeHandlers = {
       image: {
         targetElementId: 'smoke-image',
@@ -23969,95 +24136,25 @@ const main = async () => {
       },
       interactiveFigure: {
         targetElementId: 'smoke-interactive',
-        test: () => testInteractiveComponentControls(client, 'smoke-interactive', 'interactiveFigure', {
-          componentKey: 'backy.figure.rounds',
-          version: '1.0.0',
-          registrySelection: 'backy.figure.rounds::1.0.0',
-          hydrationMode: 'trusted-component',
-          title: 'Smoke self-correction figure',
-          text: 'Smoke fallback for communication rounds.',
-          ariaLabel: 'Smoke communication rounds figure',
-          bindingPresetTestId: 'editor-interactive-binding-preset-rounds-from-page',
-          expectedBindingTargetPath: 'props.rounds',
-          dynamicControls: [
-            { key: 'rounds', value: '7', expectedDomValue: '7' },
-            { key: 'speed', value: 'fast', expectedDomValue: 'fast' },
-          ],
-          expectedControlProps: {
-            rounds: 7,
-            speed: 'fast',
-          },
-        }),
-        assertPersisted: () => assertPersistedInteractiveComponent(tempPageId, 'smoke-interactive', 'interactiveFigure', {
-          componentKey: 'backy.figure.rounds',
-          version: '1.0.0',
-          hydrationMode: 'trusted-component',
-          title: 'Smoke self-correction figure',
-          text: 'Smoke fallback for communication rounds.',
-          ariaLabel: 'Smoke communication rounds figure',
-          expectedBindingTargetPath: 'props.rounds',
-          expectedControlProps: {
-            rounds: 7,
-            speed: 'fast',
-          },
-        }),
+        test: () => testInteractiveComponentControls(client, 'smoke-interactive', 'interactiveFigure', interactiveFigureComponentSmokeValues),
+        assertPersisted: () => assertPersistedInteractiveComponent(tempPageId, 'smoke-interactive', 'interactiveFigure', interactiveFigureComponentSmokeValues),
+        assertReloadedInspector: (reloadClient) => assertReloadedInteractiveComponentInspector(
+          reloadClient,
+          'smoke-interactive',
+          'interactiveFigure',
+          interactiveFigureComponentSmokeValues,
+        ),
       },
       codeComponent: {
         targetElementId: 'smoke-code-component',
-        test: () => testInteractiveComponentControls(client, 'smoke-code-component', 'codeComponent', {
-          componentKey: 'backy.canvas.sandboxed',
-          version: '1.0.0',
-          registrySelection: 'backy.canvas.sandboxed::1.0.0',
-          hydrationMode: 'sandbox-iframe',
-          sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.canvas.sandboxed/1.0.0/sandbox`,
-          title: 'Smoke sandbox component',
-          text: 'Smoke fallback for sandboxed component.',
-          ariaLabel: 'Smoke sandboxed component',
-          bindingPresetTestId: 'editor-interactive-binding-preset-canvas-frame-data',
-          expectedBindingTargetPath: 'props.frames',
-          dynamicControls: [
-            { key: 'playback', value: 'auto', expectedDomValue: 'auto' },
-            { key: 'intensity', value: '75', expectedDomValue: '75' },
-            { key: 'accentColor', value: '#f97316', expectedDomValue: '#f97316' },
-            { key: 'caption', value: 'Smoke canvas fallback caption.', expectedDomValue: 'Smoke canvas fallback caption.' },
-            {
-              key: 'runtimeConfig',
-              value: '{"reducedMotionFallback":false,"frameBudget":30}',
-              expectedDomValue: '{\n  "reducedMotionFallback": false,\n  "frameBudget": 30\n}',
-              expectedDomValueIncludes: '"frameBudget": 30',
-            },
-          ],
-          expectedControlProps: {
-            playback: 'auto',
-            intensity: 75,
-            accentColor: '#f97316',
-            caption: 'Smoke canvas fallback caption.',
-            runtimeConfig: {
-              reducedMotionFallback: false,
-              frameBudget: 30,
-            },
-          },
-        }),
-        assertPersisted: () => assertPersistedInteractiveComponent(tempPageId, 'smoke-code-component', 'codeComponent', {
-          componentKey: 'backy.canvas.sandboxed',
-          version: '1.0.0',
-          hydrationMode: 'sandbox-iframe',
-          sandboxUrl: `/api/sites/${SITE_ID}/interactive-components/backy.canvas.sandboxed/1.0.0/sandbox`,
-          title: 'Smoke sandbox component',
-          text: 'Smoke fallback for sandboxed component.',
-          ariaLabel: 'Smoke sandboxed component',
-          expectedBindingTargetPath: 'props.frames',
-          expectedControlProps: {
-            playback: 'auto',
-            intensity: 75,
-            accentColor: '#f97316',
-            caption: 'Smoke canvas fallback caption.',
-            runtimeConfig: {
-              reducedMotionFallback: false,
-              frameBudget: 30,
-            },
-          },
-        }),
+        test: () => testInteractiveComponentControls(client, 'smoke-code-component', 'codeComponent', codeComponentSmokeValues),
+        assertPersisted: () => assertPersistedInteractiveComponent(tempPageId, 'smoke-code-component', 'codeComponent', codeComponentSmokeValues),
+        assertReloadedInspector: (reloadClient) => assertReloadedInteractiveComponentInspector(
+          reloadClient,
+          'smoke-code-component',
+          'codeComponent',
+          codeComponentSmokeValues,
+        ),
       },
       box: {
         targetElementId: 'smoke-box',
@@ -24084,11 +24181,15 @@ const main = async () => {
       const savedStatus = await waitForEditorMutationReady(client, `after ${COMPONENT_SMOKE} component smoke save`);
       const persistedBehavior = await componentSmoke.assertPersisted();
       let reloadedState = null;
+      let reloadedInspectorState = null;
       let reloadClient = null;
       try {
         reloadClient = await openAuthenticatedEditorTab(client, `${ADMIN_BASE_URL}${editorPath}`);
         await waitForEditorElements(reloadClient, [targetElementId]);
         reloadedState = await readEditorElementState(reloadClient, [targetElementId]);
+        if (componentSmoke.assertReloadedInspector) {
+          reloadedInspectorState = await componentSmoke.assertReloadedInspector(reloadClient);
+        }
       } finally {
         if (reloadClient) {
           try {
@@ -24108,6 +24209,7 @@ const main = async () => {
         savedStatus,
         persistedBehavior,
         reloadedState,
+        reloadedInspectorState,
       }, null, 2));
       return;
     }
