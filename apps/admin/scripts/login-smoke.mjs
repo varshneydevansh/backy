@@ -410,6 +410,14 @@ const assertAuthRecoverySource = () => {
       mainLayoutSource.includes('setHasStoredDenseSidebarPreference(true);') &&
       mainLayoutSource.includes('window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(standardSidebarCollapsed))') &&
       mainLayoutSource.includes('window.localStorage.setItem(SIDEBAR_DENSE_COLLAPSED_STORAGE_KEY, String(denseSidebarCollapsed))') &&
+      mainLayoutSource.includes('const mobileSidebarDialogRef = useRef<HTMLDivElement | null>(null);') &&
+      mainLayoutSource.includes('const previousMobileFocusRef = useRef<HTMLElement | null>(null);') &&
+      mainLayoutSource.includes("document.body.style.overflow = 'hidden';") &&
+      mainLayoutSource.includes("if (event.key === 'Escape')") &&
+      mainLayoutSource.includes("dialog?.querySelector<HTMLElement>('[data-testid=\"admin-mobile-sidebar-quick-create-new-page\"]')") &&
+      mainLayoutSource.includes("dialog?.querySelector<HTMLElement>('[data-testid=\"admin-mobile-sidebar-link-dashboard\"]')") &&
+      mainLayoutSource.includes("'[data-testid=\"admin-mobile-sidebar-nav\"] a, [data-testid=\"admin-mobile-sidebar-nav\"] button'") &&
+      mainLayoutSource.includes('previousMobileFocusRef.current?.focus();') &&
       mainLayoutSource.includes('const effectiveSidebarCollapsed = isEditorWorkspace || sidebarCollapsed') &&
       mainLayoutSource.includes('if (isEditorWorkspace) return;') &&
       mainLayoutSource.includes('className="flex h-dvh min-h-0 min-w-0 overflow-hidden bg-background"') &&
@@ -654,12 +662,16 @@ const assertAuthRecoverySource = () => {
     mainLayoutSource.includes('navigationId="admin-mobile-sidebar-navigation"') &&
       mainLayoutSource.includes('testIdPrefix="admin-mobile-sidebar"') &&
       mainLayoutSource.includes('mobileSidebarOpen={mobileSidebarOpen}') &&
+      mainLayoutSource.includes('ref={mobileSidebarDialogRef}') &&
+      mainLayoutSource.includes('tabIndex={-1}') &&
       mainLayoutSource.includes('data-testid="admin-mobile-sidebar-dialog"') &&
       mainLayoutSource.includes('data-mobile-navigation-open="true"') &&
+      mainLayoutSource.includes('data-mobile-navigation-escape-dismiss="true"') &&
+      mainLayoutSource.includes('data-mobile-navigation-scroll-lock="true"') &&
       mainLayoutSource.includes('aria-labelledby="admin-mobile-sidebar-title"') &&
       mainLayoutSource.includes('aria-describedby="admin-mobile-sidebar-description"') &&
       mainLayoutSource.includes('data-testid="admin-mobile-sidebar-backdrop"'),
-    'Mobile admin navigation must use unique ids, source/header state, dialog semantics, and test hooks while the hidden desktop shell remains mounted.',
+    'Mobile admin navigation must use unique ids, source/header state, dialog semantics, Escape dismissal, scroll lock, focus recovery, and test hooks while the hidden desktop shell remains mounted.',
   );
 
   assert(
@@ -1797,6 +1809,7 @@ const assertMobileNavigationInteraction = async (client) => {
     const openClick = await evaluate(client, `(() => {
       const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
       if (!(toggle instanceof HTMLButtonElement)) return { ok: false, reason: 'mobile-toggle-missing' };
+      toggle.focus();
       toggle.click();
       return { ok: true };
     })()`);
@@ -1815,6 +1828,7 @@ const assertMobileNavigationInteraction = async (client) => {
         const nav = document.querySelector('[data-testid="admin-mobile-sidebar-nav"]');
         const activeSite = document.querySelector('[data-testid="admin-mobile-sidebar-active-site"]');
         const backdrop = document.querySelector('[data-testid="admin-mobile-sidebar-backdrop"]');
+        const activeElement = document.activeElement;
         const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
         return {
           ready: toggle instanceof HTMLButtonElement &&
@@ -1827,13 +1841,18 @@ const assertMobileNavigationInteraction = async (client) => {
             dialog.getAttribute('aria-labelledby') === 'admin-mobile-sidebar-title' &&
             dialog.getAttribute('aria-describedby') === 'admin-mobile-sidebar-description' &&
             dialog.getAttribute('data-mobile-navigation-open') === 'true' &&
+            dialog.getAttribute('data-mobile-navigation-escape-dismiss') === 'true' &&
+            dialog.getAttribute('data-mobile-navigation-scroll-lock') === 'true' &&
             title instanceof HTMLElement &&
             description instanceof HTMLElement &&
             sidebar instanceof HTMLElement &&
             sidebar.getAttribute('data-nav-ready') === 'true' &&
             nav instanceof HTMLElement &&
             activeSite instanceof HTMLElement &&
-            backdrop instanceof HTMLButtonElement,
+            backdrop instanceof HTMLButtonElement &&
+            document.body.style.overflow === 'hidden' &&
+            activeElement instanceof HTMLElement &&
+            dialog.contains(activeElement),
           width: window.innerWidth,
           expanded: toggle?.getAttribute('aria-expanded') || '',
           statusText,
@@ -1844,6 +1863,10 @@ const assertMobileNavigationInteraction = async (client) => {
           modal: dialog?.getAttribute('aria-modal') || '',
           labelledBy: dialog?.getAttribute('aria-labelledby') || '',
           describedBy: dialog?.getAttribute('aria-describedby') || '',
+          escapeDismiss: dialog?.getAttribute('data-mobile-navigation-escape-dismiss') || '',
+          scrollLock: dialog?.getAttribute('data-mobile-navigation-scroll-lock') || '',
+          bodyOverflow: document.body.style.overflow || '',
+          activeElementTestId: activeElement instanceof HTMLElement ? activeElement.getAttribute('data-testid') || '' : '',
           navReady: sidebar?.getAttribute('data-nav-ready') || '',
           activeSiteText: activeSite?.textContent?.replace(/\\s+/g, '') || '',
           hasBackdrop: backdrop instanceof HTMLButtonElement,
@@ -1855,8 +1878,61 @@ const assertMobileNavigationInteraction = async (client) => {
     assert(
       openedState.statusText.includes('Admin navigation is open.') &&
         openedState.actionStatus === openedState.statusText &&
-        openedState.navReady === 'true',
+        openedState.navReady === 'true' &&
+        openedState.escapeDismiss === 'true' &&
+        openedState.scrollLock === 'true' &&
+        openedState.bodyOverflow === 'hidden' &&
+        Boolean(openedState.activeElementTestId) &&
+        openedState.activeElementTestId !== 'admin-mobile-sidebar-backdrop',
       `Mobile navigation open status and nav readiness should be testable: ${JSON.stringify(openedState)}`,
+    );
+
+    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+
+    const escapeClosedState = await waitForState(
+      client,
+      `(() => {
+        const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+        const status = document.querySelector('[data-testid="header-mobile-navigation-status"]');
+        const dialog = document.querySelector('[data-testid="admin-mobile-sidebar-dialog"]');
+        const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+        const activeElement = document.activeElement;
+        return {
+          ready: toggle instanceof HTMLButtonElement &&
+            toggle.getAttribute('aria-expanded') === 'false' &&
+            toggle.getAttribute('data-action-status') === statusText &&
+            !(dialog instanceof HTMLElement) &&
+            document.body.style.overflow !== 'hidden' &&
+            activeElement === toggle,
+          expanded: toggle?.getAttribute('aria-expanded') || '',
+          statusText,
+          actionStatus: toggle?.getAttribute('data-action-status') || '',
+          hasDialog: dialog instanceof HTMLElement,
+          bodyOverflow: document.body.style.overflow || '',
+          activeElementTestId: activeElement instanceof HTMLElement ? activeElement.getAttribute('data-testid') || '' : '',
+        };
+      })()`,
+      'Mobile admin navigation dialog closed with Escape',
+    );
+
+    const reopenClick = await evaluate(client, `(() => {
+      const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+      if (!(toggle instanceof HTMLButtonElement)) return { ok: false, reason: 'mobile-toggle-missing-after-escape' };
+      toggle.focus();
+      toggle.click();
+      return { ok: true };
+    })()`);
+    assert(reopenClick.ok, `Unable to reopen mobile navigation after Escape: ${JSON.stringify(reopenClick)}`);
+
+    await waitForState(
+      client,
+      `(() => ({
+        ready: document.querySelector('[data-testid="admin-mobile-sidebar-dialog"]') instanceof HTMLElement &&
+          document.body.style.overflow === 'hidden',
+        bodyOverflow: document.body.style.overflow || '',
+      }))()`,
+      'Mobile admin navigation dialog reopened for backdrop recovery',
     );
 
     const closeClick = await evaluate(client, `(() => {
@@ -1878,17 +1954,19 @@ const assertMobileNavigationInteraction = async (client) => {
           ready: toggle instanceof HTMLButtonElement &&
             toggle.getAttribute('aria-expanded') === 'false' &&
             toggle.getAttribute('data-action-status') === statusText &&
-            !(dialog instanceof HTMLElement),
+            !(dialog instanceof HTMLElement) &&
+            document.body.style.overflow !== 'hidden',
           expanded: toggle?.getAttribute('aria-expanded') || '',
           statusText,
           actionStatus: toggle?.getAttribute('data-action-status') || '',
           hasDialog: dialog instanceof HTMLElement,
+          bodyOverflow: document.body.style.overflow || '',
         };
       })()`,
       'Mobile admin navigation dialog closed',
     );
 
-    return { initialState, openedState, closedState };
+    return { initialState, openedState, escapeClosedState, closedState };
   } finally {
     await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
     await evaluate(client, `(() => {

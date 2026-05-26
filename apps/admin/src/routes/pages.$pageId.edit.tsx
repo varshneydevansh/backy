@@ -1884,9 +1884,19 @@ function PageEditorRoute() {
   const pageEditorCommandBusyReason = isPageEditorBusy
     ? 'Wait for the current page editor workflow to finish.'
     : '';
+  const pageEditorWorkflowActionState = (disabledReason: string) => (
+    disabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'
+  );
   const pageEditorHandoffActionStatus = pageEditorCommandBusyReason
     ? `Frontend handoff unavailable: ${pageEditorCommandBusyReason}`
     : 'Frontend handoff ready for custom frontend sync.';
+  const pageEditorApiUrlActionStatus = pageEditorCommandBusyReason
+    ? `Page API URL unavailable: ${pageEditorCommandBusyReason}`
+    : 'Page API URL copy available for custom frontend sync.';
+  const pageEditorPublishImpactActionStatus = pageEditorCommandBusyReason
+    ? `Publish impact unavailable: ${pageEditorCommandBusyReason}`
+    : 'Publish impact copy available for route, relation, navigation, and readiness handoff.';
+  const pageEditorHandoffActionState = pageEditorCommandBusyReason ? 'busy' : 'ready';
   const pageEditorPreviewDisabledReason = isPageEditorBusy
     ? pageEditorCommandBusyReason
     : isUsingLocalPageCopy
@@ -1899,6 +1909,7 @@ function PageEditorRoute() {
   const pageEditorPreviewActionStatus = pageEditorPreviewDisabledReason
     ? `Preview unavailable: ${pageEditorPreviewDisabledReason}`
     : 'Preview available for this page.';
+  const pageEditorPreviewActionState = pageEditorWorkflowActionState(pageEditorPreviewDisabledReason);
   const pageEditorReadinessDisabledReason = isPageEditorBusy
     ? pageEditorCommandBusyReason
     : !canViewPage
@@ -1907,6 +1918,7 @@ function PageEditorRoute() {
   const pageEditorReadinessActionStatus = pageEditorReadinessDisabledReason
     ? `Readiness refresh unavailable: ${pageEditorReadinessDisabledReason}`
     : 'Readiness refresh available.';
+  const pageEditorReadinessActionState = pageEditorWorkflowActionState(pageEditorReadinessDisabledReason);
   const pageEditorPublishDisabledReason = isPageEditorBusy
     ? pageEditorCommandBusyReason
     : page.status === 'published'
@@ -1915,6 +1927,7 @@ function PageEditorRoute() {
   const pageEditorPublishActionStatus = pageEditorPublishDisabledReason
     ? `Publish unavailable: ${pageEditorPublishDisabledReason}`
     : 'Publish available for this page.';
+  const pageEditorPublishActionState = pageEditorWorkflowActionState(pageEditorPublishDisabledReason);
   const pageEditorUnpublishDisabledReason = isPageEditorBusy
     ? pageEditorCommandBusyReason
     : page.status !== 'published'
@@ -1923,13 +1936,26 @@ function PageEditorRoute() {
   const pageEditorUnpublishActionStatus = pageEditorUnpublishDisabledReason
     ? `Unpublish unavailable: ${pageEditorUnpublishDisabledReason}`
     : 'Unpublish available for this page.';
+  const pageEditorUnpublishActionState = pageEditorWorkflowActionState(pageEditorUnpublishDisabledReason);
+  const pageEditorArchiveDisabledReason = isPageEditorBusy
+    ? pageEditorCommandBusyReason
+    : page.status === 'archived'
+      ? 'This page is already archived.'
+      : archiveDisabledReason || '';
+  const pageEditorArchiveActionStatus = pageEditorArchiveDisabledReason
+    ? `Archive unavailable: ${pageEditorArchiveDisabledReason}`
+    : 'Archive available for this page.';
+  const pageEditorArchiveActionState = pageEditorWorkflowActionState(pageEditorArchiveDisabledReason);
   const pageEditorCommandActionStatusId = 'page-editor-command-action-status';
   const pageEditorCommandActionStatus = [
     pageEditorHandoffActionStatus,
+    pageEditorApiUrlActionStatus,
+    pageEditorPublishImpactActionStatus,
     pageEditorPreviewActionStatus,
     pageEditorReadinessActionStatus,
     pageEditorPublishActionStatus,
     pageEditorUnpublishActionStatus,
+    pageEditorArchiveActionStatus,
   ].join(' ');
 
   return (
@@ -2093,7 +2119,7 @@ function PageEditorRoute() {
               iconStart={<Copy className="size-4" />}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-copy-handoff"
-              data-action-state={isPageEditorBusy ? 'busy' : 'ready'}
+              data-action-state={pageEditorHandoffActionState}
               data-action-status={pageEditorHandoffActionStatus}
               data-disabled-reason={pageEditorCommandBusyReason || undefined}
             >
@@ -2107,7 +2133,7 @@ function PageEditorRoute() {
               iconStart={<Download className="size-4" />}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-download-handoff"
-              data-action-state={isPageEditorBusy ? 'busy' : 'ready'}
+              data-action-state={pageEditorHandoffActionState}
               data-action-status={pageEditorHandoffActionStatus}
               data-disabled-reason={pageEditorCommandBusyReason || undefined}
             >
@@ -2122,7 +2148,7 @@ function PageEditorRoute() {
               title={pageEditorPreviewDisabledReason || 'Preview page'}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-preview"
-              data-action-state={pageEditorPreviewDisabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'}
+              data-action-state={pageEditorPreviewActionState}
               data-action-status={pageEditorPreviewActionStatus}
               data-disabled-reason={pageEditorPreviewDisabledReason || undefined}
             >
@@ -2137,7 +2163,7 @@ function PageEditorRoute() {
               iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-refresh-readiness"
-              data-action-state={pageEditorReadinessDisabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'}
+              data-action-state={pageEditorReadinessActionState}
               data-action-status={pageEditorReadinessActionStatus}
               data-disabled-reason={pageEditorReadinessDisabledReason || undefined}
             >
@@ -2151,7 +2177,7 @@ function PageEditorRoute() {
               title={pageEditorPublishDisabledReason || 'Publish page'}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-publish"
-              data-action-state={pageEditorPublishDisabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'}
+              data-action-state={pageEditorPublishActionState}
               data-action-status={pageEditorPublishActionStatus}
               data-disabled-reason={pageEditorPublishDisabledReason || undefined}
             >
@@ -2166,7 +2192,7 @@ function PageEditorRoute() {
               title={pageEditorUnpublishDisabledReason || 'Set published page back to draft'}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-unpublish"
-              data-action-state={pageEditorUnpublishDisabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'}
+              data-action-state={pageEditorUnpublishActionState}
               data-action-status={pageEditorUnpublishActionStatus}
               data-disabled-reason={pageEditorUnpublishDisabledReason || undefined}
             >
@@ -2274,6 +2300,11 @@ function PageEditorRoute() {
               onClick={() => void copyEditorHandoffText(adminPageUrl, 'Page editor API URL')}
               disabled={isPageEditorBusy}
               iconStart={<Copy className="size-4" />}
+              aria-describedby={pageEditorCommandActionStatusId}
+              data-testid="page-editor-control-map-copy-api-url"
+              data-action-state={pageEditorHandoffActionState}
+              data-action-status={pageEditorApiUrlActionStatus}
+              data-disabled-reason={pageEditorCommandBusyReason || undefined}
             >
               Copy API URL
             </Button>
@@ -2283,6 +2314,11 @@ function PageEditorRoute() {
               onClick={() => void copyEditorHandoffText(editorHandoffText, 'Page editor handoff manifest')}
               disabled={isPageEditorBusy}
               iconStart={<Copy className="size-4" />}
+              aria-describedby={pageEditorCommandActionStatusId}
+              data-testid="page-editor-control-map-copy-handoff"
+              data-action-state={pageEditorHandoffActionState}
+              data-action-status={pageEditorHandoffActionStatus}
+              data-disabled-reason={pageEditorCommandBusyReason || undefined}
             >
               Copy handoff
             </Button>
@@ -2396,144 +2432,168 @@ function PageEditorRoute() {
         </div>
 
         {!isWorkspaceFocus && (
-        <aside className="grid gap-4 lg:grid-cols-3 [@media(min-width:2200px)]:sticky [@media(min-width:2200px)]:top-4 [@media(min-width:2200px)]:block [@media(min-width:2200px)]:space-y-4">
-          <Panel id="page-editor-publish" className="scroll-mt-24">
-            <PanelHeader
-              title="Publish"
-              description={page.slug ? `/${page.slug}` : 'Public page'}
-              icon={<History className="size-4" />}
-              action={<StatusBadge status={page.status} />}
-            />
-            <PanelContent className="space-y-4">
-              {editorHasUnsavedChanges && (
-                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>Save the canvas from the editor toolbar before using these page-panel workflows.</span>
+          <aside className="grid gap-4 lg:grid-cols-3 [@media(min-width:2200px)]:sticky [@media(min-width:2200px)]:top-4 [@media(min-width:2200px)]:block [@media(min-width:2200px)]:space-y-4">
+            <Panel id="page-editor-publish" className="scroll-mt-24">
+              <PanelHeader
+                title="Publish"
+                description={page.slug ? `/${page.slug}` : 'Public page'}
+                icon={<History className="size-4" />}
+                action={<StatusBadge status={page.status} />}
+              />
+              <PanelContent className="space-y-4">
+                {editorHasUnsavedChanges && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>Save the canvas from the editor toolbar before using these page-panel workflows.</span>
+                  </div>
+                )}
+
+                <div className="grid gap-2">
+                  <Button
+                    onClick={() => void generatePreview()}
+                    disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
+                    variant="outline"
+                    iconStart={<Eye className="size-4" />}
+                    className="w-full"
+                    title={pageEditorPreviewDisabledReason || 'Preview page'}
+                    aria-describedby={pageEditorCommandActionStatusId}
+                    data-testid="page-editor-panel-preview"
+                    data-action-state={pageEditorPreviewActionState}
+                    data-action-status={pageEditorPreviewActionStatus}
+                    data-disabled-reason={pageEditorPreviewDisabledReason || undefined}
+                  >
+                    Preview
+                  </Button>
+                  <Button
+                    onClick={() => void applyWorkflow('publish')}
+                    disabled={isPageEditorBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
+                    variant="primary"
+                    iconStart={<CheckCircle2 className="size-4" />}
+                    className="w-full"
+                    title={pageEditorPublishDisabledReason || 'Publish page'}
+                    aria-describedby={pageEditorCommandActionStatusId}
+                    data-testid="page-editor-panel-publish"
+                    data-action-state={pageEditorPublishActionState}
+                    data-action-status={pageEditorPublishActionStatus}
+                    data-disabled-reason={pageEditorPublishDisabledReason || undefined}
+                  >
+                    Publish
+                  </Button>
+                  <Button
+                    onClick={() => void applyWorkflow('unpublish')}
+                    disabled={isPageEditorBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
+                    variant="outline"
+                    iconStart={<EyeOff className="size-4" />}
+                    className="w-full"
+                    title={pageEditorUnpublishDisabledReason || 'Set published page back to draft'}
+                    aria-describedby={pageEditorCommandActionStatusId}
+                    data-testid="page-editor-panel-unpublish"
+                    data-action-state={pageEditorUnpublishActionState}
+                    data-action-status={pageEditorUnpublishActionStatus}
+                    data-disabled-reason={pageEditorUnpublishDisabledReason || undefined}
+                  >
+                    Unpublish
+                  </Button>
+                  <Button
+                    onClick={() => void applyWorkflow('archive')}
+                    disabled={isPageEditorBusy || page.status === 'archived' || Boolean(archiveDisabledReason)}
+                    variant="outline"
+                    iconStart={<Archive className="size-4" />}
+                    className="w-full"
+                    title={pageEditorArchiveDisabledReason || 'Archive page'}
+                    aria-describedby={pageEditorCommandActionStatusId}
+                    data-testid="page-editor-panel-archive"
+                    data-action-state={pageEditorArchiveActionState}
+                    data-action-status={pageEditorArchiveActionStatus}
+                    data-disabled-reason={pageEditorArchiveDisabledReason || undefined}
+                  >
+                    Archive
+                  </Button>
                 </div>
-              )}
 
-	              <div className="grid gap-2">
-	                <Button
-	                  onClick={() => void generatePreview()}
-                  disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
-                  variant="outline"
-                  iconStart={<Eye className="size-4" />}
-                  className="w-full"
-                  title={isUsingLocalPageCopy ? localPageCopyDisabledMessage : !canPublishPage ? publishPagePermissionTitle : editorHasUnsavedChanges ? 'Save the canvas before generating a preview' : 'Preview page'}
+                <div
+                  className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs leading-5 text-muted-foreground"
+                  data-testid="page-editor-publish-impact"
+                  data-schema-version={pagePublishImpact.schemaVersion}
+                  data-direct-children={directChildPages.length}
+                  data-descendants={descendantPages.length}
+                  data-route-verified={isRouteCheckBackendVerified ? 'true' : 'false'}
                 >
-                  Preview
-                </Button>
-                <Button
-                  onClick={() => void applyWorkflow('publish')}
-                  disabled={isPageEditorBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
-                  variant="primary"
-                  iconStart={<CheckCircle2 className="size-4" />}
-                  className="w-full"
-                  title={externalWorkflowDisabledReason || 'Publish page'}
-                >
-                  Publish
-                </Button>
-                <Button
-                  onClick={() => void applyWorkflow('unpublish')}
-                  disabled={isPageEditorBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
-                  variant="outline"
-                  iconStart={<EyeOff className="size-4" />}
-                  className="w-full"
-                  title={unpublishDisabledReason || 'Set published page back to draft'}
-                >
-                  Unpublish
-                </Button>
-                <Button
-                  onClick={() => void applyWorkflow('archive')}
-                  disabled={isPageEditorBusy || page.status === 'archived' || Boolean(archiveDisabledReason)}
-                  variant="outline"
-                  iconStart={<Archive className="size-4" />}
-                  className="w-full"
-                  title={archiveDisabledReason || 'Archive page'}
-                >
-	                  Archive
-	                </Button>
-	              </div>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="font-medium text-foreground">Publish impact</div>
+                      <div className="mt-0.5">
+                        {parentPage ? `Nested under ${parentPage.title}. ` : 'Top-level page. '}
+                        {directChildPages.length} direct child page{directChildPages.length === 1 ? '' : 's'} and {descendantPages.length} total descendant{descendantPages.length === 1 ? '' : 's'}.
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={isPageEditorBusy}
+                      onClick={() => void copyEditorHandoffText(pagePublishImpactText, 'Page publish impact')}
+                      data-testid="page-editor-copy-publish-impact"
+                      aria-describedby={pageEditorCommandActionStatusId}
+                      data-action-state={pageEditorHandoffActionState}
+                      data-action-status={pageEditorPublishImpactActionStatus}
+                      data-disabled-reason={pageEditorCommandBusyReason || undefined}
+                    >
+                      Copy impact
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <span className="font-medium text-foreground">Route</span>
+                      <div>{publicPath} · {isRouteCheckBackendVerified ? `${selectedSitePages.length} backend pages checked` : 'backend route check pending'}</div>
+                      {currentRouteConflict ? (
+                        <div className="text-red-700">Conflicts with {currentRouteConflict.title}</div>
+                      ) : null}
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Navigation</span>
+                      <div>{navigationPlacement} · {navigationLabel}</div>
+                      <div>{pagePublishImpact.relations.publishedDescendantCount} published descendant{pagePublishImpact.relations.publishedDescendantCount === 1 ? '' : 's'}</div>
+                    </div>
+                  </div>
+                  {directChildPages.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1" data-testid="page-editor-publish-impact-children">
+                      {directChildPages.slice(0, 4).map((child) => (
+                        <span key={child.id} className="rounded bg-background px-1.5 py-0.5">
+                          {child.title} · {child.status}
+                        </span>
+                      ))}
+                      {directChildPages.length > 4 ? (
+                        <span className="rounded bg-background px-1.5 py-0.5">
+                          +{directChildPages.length - 4} more
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
 
-	              <div
-	                className="rounded-lg border border-border bg-muted/30 px-3 py-3 text-xs leading-5 text-muted-foreground"
-	                data-testid="page-editor-publish-impact"
-	                data-schema-version={pagePublishImpact.schemaVersion}
-	                data-direct-children={directChildPages.length}
-	                data-descendants={descendantPages.length}
-	                data-route-verified={isRouteCheckBackendVerified ? 'true' : 'false'}
-	              >
-	                <div className="flex flex-wrap items-start justify-between gap-2">
-	                  <div>
-	                    <div className="font-medium text-foreground">Publish impact</div>
-	                    <div className="mt-0.5">
-	                      {parentPage ? `Nested under ${parentPage.title}. ` : 'Top-level page. '}
-	                      {directChildPages.length} direct child page{directChildPages.length === 1 ? '' : 's'} and {descendantPages.length} total descendant{descendantPages.length === 1 ? '' : 's'}.
-	                    </div>
-	                  </div>
-	                  <Button
-	                    type="button"
-	                    size="sm"
-	                    variant="ghost"
-	                    disabled={isPageEditorBusy}
-	                    onClick={() => void copyEditorHandoffText(pagePublishImpactText, 'Page publish impact')}
-	                    data-testid="page-editor-copy-publish-impact"
-	                  >
-	                    Copy impact
-	                  </Button>
-	                </div>
-	                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-	                  <div>
-	                    <span className="font-medium text-foreground">Route</span>
-	                    <div>{publicPath} · {isRouteCheckBackendVerified ? `${selectedSitePages.length} backend pages checked` : 'backend route check pending'}</div>
-	                    {currentRouteConflict ? (
-	                      <div className="text-red-700">Conflicts with {currentRouteConflict.title}</div>
-	                    ) : null}
-	                  </div>
-	                  <div>
-	                    <span className="font-medium text-foreground">Navigation</span>
-	                    <div>{navigationPlacement} · {navigationLabel}</div>
-	                    <div>{pagePublishImpact.relations.publishedDescendantCount} published descendant{pagePublishImpact.relations.publishedDescendantCount === 1 ? '' : 's'}</div>
-	                  </div>
-	                </div>
-	                {directChildPages.length > 0 ? (
-	                  <div className="mt-2 flex flex-wrap gap-1" data-testid="page-editor-publish-impact-children">
-	                    {directChildPages.slice(0, 4).map((child) => (
-	                      <span key={child.id} className="rounded bg-background px-1.5 py-0.5">
-	                        {child.title} · {child.status}
-	                      </span>
-	                    ))}
-	                    {directChildPages.length > 4 ? (
-	                      <span className="rounded bg-background px-1.5 py-0.5">
-	                        +{directChildPages.length - 4} more
-	                      </span>
-	                    ) : null}
-	                  </div>
-	                ) : null}
-	              </div>
-
-	              {previewUrl && (
-	                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-disabled={isPageEditorBusy}
-                  onClick={(event) => {
-                    if (isPageEditorBusy) event.preventDefault();
-                  }}
-                  className={cn(
-                    'flex max-w-full items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground',
-                    isPageEditorBusy && 'pointer-events-none opacity-60',
-                  )}
-                >
-                  <span className="truncate">
-                    Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
-                  </span>
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                </a>
-              )}
-            </PanelContent>
-          </Panel>
+                {previewUrl && (
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-disabled={isPageEditorBusy}
+                    onClick={(event) => {
+                      if (isPageEditorBusy) event.preventDefault();
+                    }}
+                    className={cn(
+                      'flex max-w-full items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground',
+                      isPageEditorBusy && 'pointer-events-none opacity-60',
+                    )}
+                  >
+                    <span className="truncate">
+                      Preview expires {previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon'}
+                    </span>
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  </a>
+                )}
+              </PanelContent>
+            </Panel>
 
           <Panel id="page-editor-readiness" className="scroll-mt-24">
             <PanelHeader
@@ -2548,7 +2608,12 @@ function PageEditorRoute() {
                   onClick={() => void loadPageReadiness()}
                   disabled={isPageEditorBusy || !canViewPage}
                   className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                  title={canViewPage ? 'Refresh page readiness' : viewPagePermissionTitle}
+                  title={pageEditorReadinessDisabledReason || 'Refresh page readiness'}
+                  aria-describedby={pageEditorCommandActionStatusId}
+                  data-testid="page-editor-panel-refresh-readiness"
+                  data-action-state={pageEditorReadinessActionState}
+                  data-action-status={pageEditorReadinessActionStatus}
+                  data-disabled-reason={pageEditorReadinessDisabledReason || undefined}
                 >
                   <RefreshCw className={readinessLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
                 </button>

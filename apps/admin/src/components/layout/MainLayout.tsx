@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouterState } from '@tanstack/react-router';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -99,6 +99,8 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [denseSidebarCollapsed, setDenseSidebarCollapsed] = useState(() => getStoredDenseSidebarCollapsed() ?? true);
   const [hasStoredDenseSidebarPreference, setHasStoredDenseSidebarPreference] = useState(() => getStoredDenseSidebarCollapsed() !== null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const mobileSidebarDialogRef = useRef<HTMLDivElement | null>(null);
+  const previousMobileFocusRef = useRef<HTMLElement | null>(null);
   const sidebarCollapsed = isDenseAdminSurface ? denseSidebarCollapsed : standardSidebarCollapsed;
   const effectiveSidebarCollapsed = isEditorWorkspace || sidebarCollapsed;
 
@@ -144,6 +146,50 @@ export function MainLayout({ children }: MainLayoutProps) {
     setStandardSidebarCollapsed((current) => !current);
   };
 
+  useEffect(() => {
+    if (!mobileSidebarOpen || typeof document === 'undefined') return;
+
+    previousMobileFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
+    const handleMobileNavigationKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileSidebarOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleMobileNavigationKeyDown);
+    window.requestAnimationFrame(() => {
+      const dialog = mobileSidebarDialogRef.current;
+      const initialTarget =
+        dialog?.querySelector<HTMLElement>('[data-testid="admin-mobile-sidebar-quick-create-new-page"]') ||
+        dialog?.querySelector<HTMLElement>('[data-testid="admin-mobile-sidebar-link-dashboard"]') ||
+        dialog?.querySelector<HTMLElement>('[data-testid="admin-mobile-sidebar-nav"] a, [data-testid="admin-mobile-sidebar-nav"] button') ||
+        dialog;
+
+      initialTarget?.focus();
+    });
+
+    return () => {
+      document.removeEventListener('keydown', handleMobileNavigationKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.paddingRight = previousBodyPaddingRight;
+      window.requestAnimationFrame(() => {
+        previousMobileFocusRef.current?.focus();
+      });
+    };
+  }, [mobileSidebarOpen]);
+
   return (
     <div className="flex h-dvh min-h-0 min-w-0 overflow-hidden bg-background">
       <a
@@ -171,13 +217,17 @@ export function MainLayout({ children }: MainLayoutProps) {
 
       {mobileSidebarOpen && (
         <div
+          ref={mobileSidebarDialogRef}
           className="fixed inset-0 z-50 flex lg:hidden"
           role="dialog"
           aria-modal="true"
           aria-labelledby="admin-mobile-sidebar-title"
           aria-describedby="admin-mobile-sidebar-description"
+          tabIndex={-1}
           data-testid="admin-mobile-sidebar-dialog"
           data-mobile-navigation-open="true"
+          data-mobile-navigation-escape-dismiss="true"
+          data-mobile-navigation-scroll-lock="true"
         >
           <h2 id="admin-mobile-sidebar-title" className="sr-only">Admin navigation</h2>
           <p id="admin-mobile-sidebar-description" className="sr-only">

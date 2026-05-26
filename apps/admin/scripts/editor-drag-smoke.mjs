@@ -293,12 +293,21 @@ const assertPageEditorFallbackIsReadOnly = () => {
       source.includes('data-action-status={pageEditorCommandActionStatus}') &&
       source.includes('data-testid="page-editor-copy-handoff"') &&
       source.includes('data-testid="page-editor-download-handoff"') &&
+      source.includes('data-testid="page-editor-control-map-copy-api-url"') &&
+      source.includes('data-testid="page-editor-control-map-copy-handoff"') &&
       source.includes('data-testid="page-editor-preview"') &&
       source.includes('data-testid="page-editor-refresh-readiness"') &&
       source.includes('data-testid="page-editor-publish"') &&
       source.includes('data-testid="page-editor-unpublish"') &&
+      source.includes('const pageEditorArchiveActionStatus = pageEditorArchiveDisabledReason') &&
+      source.includes('data-testid="page-editor-panel-preview"') &&
+      source.includes('data-testid="page-editor-panel-publish"') &&
+      source.includes('data-testid="page-editor-panel-unpublish"') &&
+      source.includes('data-testid="page-editor-panel-archive"') &&
+      source.includes('data-testid="page-editor-copy-publish-impact"') &&
+      source.includes('data-testid="page-editor-panel-refresh-readiness"') &&
       source.includes('data-testid="page-editor-focus-banner-show-panels"'),
-    'Page editor route controls must expose action-state/status metadata for navigation, focus, handoff, preview, readiness, publish, and unpublish actions.',
+    'Page editor route controls must expose action-state/status metadata for navigation, focus, handoff, preview, readiness, publish, unpublish, archive, side-panel, and control-map actions.',
   );
   assert(source.includes('setLoadError(null);') && source.includes('Latest backend page loaded into the editor.'), 'Page editor reload must clear fallback state after loading backend content');
   assert(source.includes('No saved revisions yet'), 'Page editor revision panel must keep an explicit empty revision title visible');
@@ -9395,10 +9404,18 @@ const assertPageEditorRouteActionStatus = async (client) => {
     const controls = [
       readControl('page-editor-copy-handoff'),
       readControl('page-editor-download-handoff'),
+      readControl('page-editor-control-map-copy-api-url'),
+      readControl('page-editor-control-map-copy-handoff'),
       readControl('page-editor-preview'),
       readControl('page-editor-refresh-readiness'),
       readControl('page-editor-publish'),
       readControl('page-editor-unpublish'),
+      readControl('page-editor-panel-preview'),
+      readControl('page-editor-panel-publish'),
+      readControl('page-editor-panel-unpublish'),
+      readControl('page-editor-panel-archive'),
+      readControl('page-editor-copy-publish-impact'),
+      readControl('page-editor-panel-refresh-readiness'),
     ];
     const back = readControl('page-editor-back-to-pages');
     const focusToggle = readControl('page-editor-focus-toggle');
@@ -9424,7 +9441,7 @@ const assertPageEditorRouteActionStatus = async (client) => {
         focusToggle.describedBy === status.id &&
         ['ready', 'blocked'].includes(focusToggle.actionState) &&
         Boolean(focusToggle.actionStatus) &&
-        controls.length === 6 &&
+        controls.length === 14 &&
         malformedControls.length === 0,
       path: window.location.pathname,
       commandCenter: {
