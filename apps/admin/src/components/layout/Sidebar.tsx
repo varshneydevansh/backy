@@ -12,7 +12,7 @@
  */
 
 import { Link, useLocation } from '@tanstack/react-router';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ChevronDown,
@@ -33,7 +33,6 @@ import {
 } from '@/lib/adminNavigationAccess';
 import { isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import {
-  createDefaultSidebarSectionState,
   DEFAULT_OPEN_SECTION_IDS,
   isNavRouteActive,
   NAV_SECTIONS,
@@ -103,12 +102,11 @@ export function Sidebar({
     refreshPermissions,
   } = useCurrentAdminPermissionMatrix(currentUser);
   const selectedSiteId = getSiteSelectionFromSearch(sites);
-  const initialSidebarSectionState = useMemo(() => createDefaultSidebarSectionState(), []);
-  const sectionStateHydratedRef = useRef(false);
+  const [initialSidebarSectionState] = useState(() => readSidebarSectionState());
   const [expandedSectionIds, setExpandedSectionIds] = useState(initialSidebarSectionState.sectionIds);
   const [sectionStateSource, setSectionStateSource] = useState<SidebarSectionStateSource>(initialSidebarSectionState.source);
   const [legacySectionStateCount, setLegacySectionStateCount] = useState(initialSidebarSectionState.legacySectionCount);
-  const [sectionStateHydrated, setSectionStateHydrated] = useState(false);
+  const sectionStateHydrated = true;
   const [navFilter, setNavFilter] = useState('');
   const [railTooltip, setRailTooltip] = useState<SidebarRailTooltip | null>(null);
   const deferredNavFilter = useDeferredValue(navFilter);
@@ -298,18 +296,7 @@ export function Sidebar({
   const hideRailTooltip = () => setRailTooltip(null);
 
   useEffect(() => {
-    if (sectionStateHydratedRef.current) return;
-
-    sectionStateHydratedRef.current = true;
-    const storedSectionState = readSidebarSectionState();
-    setExpandedSectionIds(storedSectionState.sectionIds);
-    setSectionStateSource(storedSectionState.source);
-    setLegacySectionStateCount(storedSectionState.legacySectionCount);
-    setSectionStateHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!sectionStateHydrated || collapsed || !activeSectionId) return;
+    if (collapsed || !activeSectionId) return;
 
     setExpandedSectionIds((current) => {
       if (current.has(activeSectionId)) return current;
@@ -320,7 +307,7 @@ export function Sidebar({
       setLegacySectionStateCount(0);
       return next;
     });
-  }, [activeSectionId, collapsed, sectionStateHydrated]);
+  }, [activeSectionId, collapsed]);
 
   return (
     <aside

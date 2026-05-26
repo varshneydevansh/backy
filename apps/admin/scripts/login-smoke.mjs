@@ -446,13 +446,12 @@ const assertAuthRecoverySource = () => {
       sidebarModelSource.includes("source: migratedFromLegacyCount > 0 ? 'legacy-migrated' : 'stored'") &&
       sidebarModelSource.includes('version: SIDEBAR_SECTION_STORAGE_VERSION') &&
       sidebarModelSource.includes('migratedFromLegacyCount') &&
-      sidebarSource.includes('createDefaultSidebarSectionState(), []') &&
-      sidebarSource.includes('const sectionStateHydratedRef = useRef(false);') &&
-      sidebarSource.includes('const [sectionStateHydrated, setSectionStateHydrated] = useState(false);') &&
-      sidebarSource.includes('const storedSectionState = readSidebarSectionState();') &&
-      sidebarSource.includes('setSectionStateHydrated(true);') &&
-      sidebarSource.includes('if (!sectionStateHydrated || collapsed || !activeSectionId) return;') &&
-      !sidebarSource.includes('useState(() => readSidebarSectionState())') &&
+      sidebarSource.includes('const [initialSidebarSectionState] = useState(() => readSidebarSectionState());') &&
+      sidebarSource.includes('const sectionStateHydrated = true;') &&
+      sidebarSource.includes('if (collapsed || !activeSectionId) return;') &&
+      !sidebarSource.includes('const sectionStateHydratedRef = useRef(false);') &&
+      !sidebarSource.includes('const [sectionStateHydrated, setSectionStateHydrated] = useState(false);') &&
+      !sidebarSource.includes('setSectionStateHydrated(true);') &&
       sidebarSource.includes('const [sectionStateSource, setSectionStateSource]') &&
       sidebarSource.includes('const [legacySectionStateCount, setLegacySectionStateCount]') &&
       sidebarSource.includes('aria-controls={navigationId}') &&
