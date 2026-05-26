@@ -6,7 +6,7 @@
  * Uses the reusable CanvasEditor component with real data persistence.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Archive, ArrowLeft, CheckCircle2, Copy, Download, ExternalLink, Eye, EyeOff, History, Maximize2, Minimize2, RefreshCw, RotateCcw } from 'lucide-react';
 import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
@@ -2069,6 +2069,10 @@ function PageEditorRoute() {
     'data-action-status': actionStatus,
     'data-disabled-reason': disabledReason || undefined,
   });
+  const handlePageEditorRevisionAnchorClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!isPageEditorBusy) return;
+    event.preventDefault();
+  };
   const pageEditorRestoreModalActionProps = (
     actionState: string,
     actionStatus: string,
@@ -2933,12 +2937,20 @@ function PageEditorRoute() {
                           <a
                             key={node.id}
                             href={`#page-editor-revision-${node.id}`}
-                            className={nodeClassName}
+                            className={cn(nodeClassName, isPageEditorBusy && 'pointer-events-none opacity-60')}
+                            onClick={handlePageEditorRevisionAnchorClick}
                             title={node.summary}
                             aria-label={node.summary}
+                            aria-disabled={isPageEditorBusy}
+                            tabIndex={isPageEditorBusy ? -1 : undefined}
                             data-action={node.action}
                             data-actor={node.actor}
                             data-testid={`page-editor-revision-graph-node-${node.id}`}
+                            {...pageEditorRevisionActionProps(
+                              pageEditorRevisionReadonlyActionState,
+                              pageEditorRevisionNavigationActionStatus,
+                              pageEditorCommandBusyReason,
+                            )}
                           >
                             {node.position}
                           </a>
@@ -3004,11 +3016,22 @@ function PageEditorRoute() {
                                 <a
                                   key={nodeId}
                                   href={`#page-editor-revision-${nodeId}`}
-                                  className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary"
+                                  className={cn(
+                                    'rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary',
+                                    isPageEditorBusy && 'pointer-events-none opacity-60',
+                                  )}
+                                  onClick={handlePageEditorRevisionAnchorClick}
                                   title={node.summary}
+                                  aria-disabled={isPageEditorBusy}
+                                  tabIndex={isPageEditorBusy ? -1 : undefined}
                                   data-testid={`page-editor-revision-branch-node-${nodeId}`}
                                   data-branch-id={node.branchId}
                                   data-branch-role={node.branchRole}
+                                  {...pageEditorRevisionActionProps(
+                                    pageEditorRevisionReadonlyActionState,
+                                    pageEditorRevisionNavigationActionStatus,
+                                    pageEditorCommandBusyReason,
+                                  )}
                                 >
                                   #{node.position}
                                 </a>
@@ -3108,8 +3131,19 @@ function PageEditorRoute() {
                             {revisionGraphNode?.newerId ? (
                               <a
                                 href={`#page-editor-revision-${revisionGraphNode.newerId}`}
-                                className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                                className={cn(
+                                  'rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground',
+                                  isPageEditorBusy && 'pointer-events-none opacity-60',
+                                )}
+                                onClick={handlePageEditorRevisionAnchorClick}
+                                aria-disabled={isPageEditorBusy}
+                                tabIndex={isPageEditorBusy ? -1 : undefined}
                                 data-testid={`page-editor-revision-newer-${revision.id}`}
+                                {...pageEditorRevisionActionProps(
+                                  pageEditorRevisionReadonlyActionState,
+                                  pageEditorRevisionNavigationActionStatus,
+                                  pageEditorCommandBusyReason,
+                                )}
                               >
                                 Newer
                               </a>
@@ -3117,8 +3151,19 @@ function PageEditorRoute() {
                             {revisionGraphNode?.olderId && visibleRevisionIds.has(revisionGraphNode.olderId) ? (
                               <a
                                 href={`#page-editor-revision-${revisionGraphNode.olderId}`}
-                                className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                                className={cn(
+                                  'rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground',
+                                  isPageEditorBusy && 'pointer-events-none opacity-60',
+                                )}
+                                onClick={handlePageEditorRevisionAnchorClick}
+                                aria-disabled={isPageEditorBusy}
+                                tabIndex={isPageEditorBusy ? -1 : undefined}
                                 data-testid={`page-editor-revision-older-${revision.id}`}
+                                {...pageEditorRevisionActionProps(
+                                  pageEditorRevisionReadonlyActionState,
+                                  pageEditorRevisionNavigationActionStatus,
+                                  pageEditorCommandBusyReason,
+                                )}
                               >
                                 Older
                               </a>

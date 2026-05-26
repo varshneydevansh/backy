@@ -36,6 +36,7 @@ const RENDER_PARITY_SMOKE = process.env.BACKY_EDITOR_RENDER_PARITY_SMOKE === '1'
 const STRESS_SMOKE = process.env.BACKY_EDITOR_STRESS_SMOKE === '1';
 const PRIMARY_ACTION_STATUS_SMOKE = process.env.BACKY_EDITOR_PRIMARY_ACTION_STATUS_SMOKE === '1';
 const PREVIEW_LINK_SMOKE = process.env.BACKY_EDITOR_PREVIEW_LINK_SMOKE === '1';
+const REVISION_NAVIGATION_SMOKE = process.env.BACKY_EDITOR_REVISION_NAVIGATION_SMOKE === '1';
 const COMMAND_PALETTE_SMOKE = process.env.BACKY_EDITOR_COMMAND_PALETTE_SMOKE === '1';
 const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);
 const STRESS_ITERATIONS = Math.max(4, Math.min(Number.isFinite(parsedStressIterations) ? parsedStressIterations : 10, 40));
@@ -374,9 +375,18 @@ const assertPageEditorFallbackIsReadOnly = () => {
     source.includes("const pageEditorRevisionActionStatusId = 'page-editor-revision-action-status'") &&
       source.includes('data-testid="page-editor-revision-action-status"') &&
       source.includes('pageEditorRevisionActionProps') &&
+      source.includes('const handlePageEditorRevisionAnchorClick = (event: MouseEvent<HTMLAnchorElement>) => {') &&
+      source.includes('event.preventDefault();') &&
+      source.includes('onClick={handlePageEditorRevisionAnchorClick}') &&
+      source.includes('aria-disabled={isPageEditorBusy}') &&
+      source.includes('tabIndex={isPageEditorBusy ? -1 : undefined}') &&
+      source.includes('data-testid={`page-editor-revision-graph-node-${node.id}`}') &&
+      source.includes('data-testid={`page-editor-revision-branch-node-${nodeId}`}') &&
+      source.includes('data-testid={`page-editor-revision-newer-${revision.id}`}') &&
+      source.includes('data-testid={`page-editor-revision-older-${revision.id}`}') &&
       source.includes('data-testid={`page-editor-restore-revision-${revision.id}`}') &&
       source.includes('pageEditorRevisionRestoreActionStatus'),
-    'Page editor revision controls must expose action-state/status metadata for copy graph, expand, compare, and restore controls.',
+    'Page editor revision controls must expose action-state/status metadata for copy graph, expand, compare, restore, and anchor navigation controls.',
   );
   assert(
     source.includes("const pageEditorRestoreActionStatusId = 'page-editor-restore-action-status'") &&
@@ -2412,6 +2422,34 @@ const deleteSmokePage = async (pageId) => {
   } catch (error) {
     console.warn(`Unable to delete smoke page ${pageId}:`, error instanceof Error ? error.message : error);
   }
+};
+
+const createSmokePageRevisionHistory = async (pageId) => {
+  await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: 'Editor Drag Smoke Revision A',
+      revisionNote: 'Revision navigation smoke checkpoint A',
+      updatedBy: 'revision-navigation-smoke',
+    }),
+  });
+  await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: 'Editor Drag Smoke Revision B',
+      revisionNote: 'Revision navigation smoke checkpoint B',
+      updatedBy: 'revision-navigation-smoke',
+    }),
+  });
+
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}/revisions?limit=10`);
+  const revisions = payload.data?.revisions || payload.data?.items || payload.revisions || [];
+  assert(
+    Array.isArray(revisions) && revisions.length >= 2,
+    `Revision navigation smoke could not seed at least two revisions: ${JSON.stringify(payload).slice(0, 500)}`,
+  );
+
+  return revisions;
 };
 
 const createSmokeReusableSection = async () => {
@@ -9605,6 +9643,70 @@ const assertPageEditorRouteActionStatus = async (client) => {
 
   assert(state.ok, `Page editor route action status contract failed: ${JSON.stringify(state)}`);
   return state;
+};
+
+const assertPageEditorRevisionNavigationAnchors = async (client) => {
+  let state = null;
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const revisionGraph = document.querySelector('[data-testid="page-editor-revision-graph"]');
+      const status = document.querySelector('[data-testid="page-editor-revision-action-status"]');
+      const readAnchors = (selector) => Array.from(document.querySelectorAll(selector)).map((anchor) => ({
+        testId: anchor.getAttribute('data-testid') || '',
+        exists: anchor instanceof HTMLAnchorElement,
+        describedBy: anchor.getAttribute('aria-describedby') || '',
+        actionState: anchor.getAttribute('data-action-state') || '',
+        actionStatus: normalize(anchor.getAttribute('data-action-status')),
+        disabledReason: anchor.getAttribute('data-disabled-reason') || '',
+        ariaDisabled: anchor.getAttribute('aria-disabled') || '',
+        tabIndex: anchor.getAttribute('tabindex') || '',
+        href: anchor instanceof HTMLAnchorElement ? anchor.getAttribute('href') || '' : '',
+        text: normalize(anchor.textContent),
+      }));
+      const graphAnchors = readAnchors('a[data-testid^="page-editor-revision-graph-node-"]');
+      const branchAnchors = readAnchors('a[data-testid^="page-editor-revision-branch-node-"]');
+      const newerAnchors = readAnchors('a[data-testid^="page-editor-revision-newer-"]');
+      const olderAnchors = readAnchors('a[data-testid^="page-editor-revision-older-"]');
+      const allAnchors = [...graphAnchors, ...branchAnchors, ...newerAnchors, ...olderAnchors];
+      const malformedAnchors = allAnchors.filter((anchor) => (
+        !anchor.exists ||
+        anchor.describedBy !== (status?.id || '') ||
+        !['ready', 'busy'].includes(anchor.actionState) ||
+        !/Revision navigation (available|unavailable)/.test(anchor.actionStatus) ||
+        (anchor.ariaDisabled === 'true' && (anchor.actionState !== 'busy' || anchor.tabIndex !== '-1')) ||
+        (anchor.actionState === 'busy' && !anchor.disabledReason) ||
+        !anchor.href.startsWith('#page-editor-revision-')
+      ));
+
+      return {
+        ok: revisionGraph instanceof HTMLElement &&
+          status?.id === 'page-editor-revision-action-status' &&
+          graphAnchors.length >= 2 &&
+          branchAnchors.length >= 2 &&
+          newerAnchors.length >= 1 &&
+          olderAnchors.length >= 1 &&
+          malformedAnchors.length === 0,
+        graphExists: revisionGraph instanceof HTMLElement,
+        statusId: status?.id || '',
+        statusText: normalize(status?.textContent),
+        graphAnchors,
+        branchAnchors,
+        newerAnchors,
+        olderAnchors,
+        malformedAnchors,
+      };
+    })()`);
+
+    if (state?.ok) {
+      return state;
+    }
+
+    await sleep(150);
+  }
+
+  throw new Error(`Page editor revision navigation anchors did not expose action metadata: ${JSON.stringify(state)}`);
 };
 
 const testPageEditorGeneratedPreviewLink = async (client) => {
@@ -22105,7 +22207,10 @@ const main = async () => {
 
   await loginAdminApi();
   const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || COMMAND_PALETTE_SMOKE;
+  const seededRevisionHistory = REVISION_NAVIGATION_SMOKE && tempPageId
+    ? await createSmokePageRevisionHistory(tempPageId)
+    : [];
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   const tempReusableSectionId = needsReusableSectionFixture ? await createSmokeReusableSection() : null;
   const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
@@ -22175,6 +22280,21 @@ const main = async () => {
 	      }, null, 2));
 	      return;
 	    }
+
+    if (REVISION_NAVIGATION_SMOKE) {
+      const revisionNavigation = await assertPageEditorRevisionNavigationAnchors(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'revision-navigation',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        seededRevisionCount: seededRevisionHistory.length,
+        pageEditorRouteActions,
+        primaryActionStatus,
+        revisionNavigation,
+      }, null, 2));
+      return;
+    }
 
 	    if (COMMAND_PALETTE_SMOKE) {
       const commandPalette = await testEditorCommandPalette(client);
