@@ -1320,6 +1320,11 @@ function NewPageRoute() {
     const sitesConfigurePermissionTitle = canConfigureSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.configure', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const sitesCreatePermissionTitle = canCreateSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.create', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canApplyNavigationPlacement = canViewSites && canConfigureSites;
+    const navigationPlacementUnavailableMessage = !canApplyNavigationPlacement
+        ? canViewSites
+            ? sitesConfigurePermissionTitle || 'Your account can create pages, but only owners and admins can add new pages to site navigation.'
+            : sitesViewPermissionTitle || 'Your account can create pages, but cannot read site navigation for menu placement.'
+        : null;
     const isPageCreateMutating = isLoading || isPreviewAfterCreateBusy;
     const isPageCreateBusy = isPageCreateMutating;
     const isPageCreateStatusBusy = isPageCreateMutating || isCheckingPages;
@@ -1386,6 +1391,20 @@ function NewPageRoute() {
         collectionId: nextFormData.collectionId,
         datasetMode: nextFormData.datasetMode || undefined,
     });
+    useEffect(() => {
+        if (isPermissionsLoading || canApplyNavigationPlacement || formData.navigationPlacement === 'none') {
+            return;
+        }
+
+        setFormData((current) => (
+            current.navigationPlacement === 'none'
+                ? current
+                : { ...current, navigationPlacement: 'none' }
+        ));
+        setError(null);
+        setNotice('Navigation placement changed to "Do not add" because your account cannot update site menus. The page can still be created and edited.');
+    }, [canApplyNavigationPlacement, formData.navigationPlacement, isPermissionsLoading]);
+
     const updatePageDraft = (next: Partial<typeof formData>, options?: { markEdited?: boolean }) => {
         const draftLocked = isPageCreateMutating;
         if (draftLocked || !canEditPages) return;
@@ -1926,7 +1945,8 @@ function NewPageRoute() {
     const scheduleValidationMessage = getScheduledPageDateError(formData.status, formData.scheduledAt);
     const hasFutureSchedule = scheduleValidationMessage === null;
     const minimumScheduledAt = toDateTimeLocalValue(new Date(Date.now() + 60_000).toISOString());
-    const hasNavigationLabel = formData.navigationPlacement === 'none' || Boolean((formData.navigationLabel || formData.title).trim());
+    const effectiveNavigationPlacement = canApplyNavigationPlacement ? formData.navigationPlacement : 'none';
+    const hasNavigationLabel = effectiveNavigationPlacement === 'none' || Boolean((formData.navigationLabel || formData.title).trim());
     const hasValidParentPage = !formData.parentPageId || Boolean(selectedParentPage);
     const datasetImportReady = !formData.collectionId || Boolean(selectedDatasetCollection);
     const pageTargetSiteInlineError = pageCreateFormSubmitted && !selectedSite
@@ -1958,13 +1978,11 @@ function NewPageRoute() {
         [formData.siteId, requestedSiteId],
     );
     const publishPermissionReady = formData.status === 'draft' || canPublishPages;
-    const navigationPermissionReady = formData.navigationPlacement === 'none' || canApplyNavigationPlacement;
     const baseCreateReady = Boolean(
         canEditPages
         && formData.title.trim()
         && formData.siteId
         && selectedSite
-        && navigationPermissionReady
         && !routeConflict
         && !isCheckingPages
         && !routeCheckError
@@ -1984,9 +2002,6 @@ function NewPageRoute() {
         if (isLoading || canSubmit) return null;
         if (!canEditPages) return editPermissionTitle || 'Your account cannot create pages.';
         if (!publishPermissionReady) return publishPermissionTitle || 'Your account cannot publish or schedule pages during creation.';
-        if (!navigationPermissionReady) return !canViewSites
-            ? sitesViewPermissionTitle || 'Your account cannot read site navigation before placing this page in a menu.'
-            : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.';
         if (isCheckingPages) return 'Checking existing page routes for this site before creating the page.';
         if (routeCheckError) return 'Backy could not verify existing routes for this site. Refresh or choose the site again before creating the page.';
         if (isCollectionRouteCheckPending) return 'Checking collection routes for this site before creating the page.';
@@ -2002,15 +2017,12 @@ function NewPageRoute() {
         if (scheduleValidationMessage) return scheduleValidationMessage;
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, scheduleValidationMessage, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
+    }, [canEditPages, canSubmit, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, scheduleValidationMessage, selectedDatasetCollection, selectedSite]);
     const submitControlState = canSubmit ? 'ready' : isPageCreateStatusBusy ? 'busy' : 'blocked';
     const previewDraftBlockerMessage = useMemo(() => {
         if (isPreviewAfterCreateBusy || canCreatePreviewDraft) return null;
         if (!canEditPages) return editPermissionTitle || 'Your account cannot create pages.';
         if (!canPublishPages) return publishPermissionTitle || 'Your account cannot create page preview links.';
-        if (!navigationPermissionReady) return !canViewSites
-            ? sitesViewPermissionTitle || 'Your account cannot read site navigation before placing this page in a menu.'
-            : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.';
         if (isCheckingPages) return 'Checking existing page routes for this site before creating the preview draft.';
         if (routeCheckError) return 'Backy could not verify existing routes for this site. Refresh or choose the site again before creating the preview draft.';
         if (isCollectionRouteCheckPending) return 'Checking collection routes for this site before creating the preview draft.';
@@ -2025,7 +2037,7 @@ function NewPageRoute() {
         if (!hasValidParentPage) return 'Choose an existing parent page or keep this preview draft at the top level.';
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this preview draft to navigation.';
         return 'Review the required page basics before creating this preview draft.';
-    }, [canCreatePreviewDraft, canEditPages, canPublishPages, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isPreviewAfterCreateBusy, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
+    }, [canCreatePreviewDraft, canEditPages, canPublishPages, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isPreviewAfterCreateBusy, jsonLdResult, jsonLdValid, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite]);
     const previewDraftControlState = canCreatePreviewDraft ? 'ready' : isPageCreateStatusBusy ? 'busy' : 'blocked';
     const pageCreateSubmitActionStatusId = 'page-create-submit-action-status';
     const pageCreatePreviewActionStatusId = 'page-create-preview-action-status';
@@ -2948,7 +2960,7 @@ function NewPageRoute() {
                 frontendDesignSeo: frontendTemplateDesignState?.provenance.seo,
                 frontendDesignMetadata: frontendTemplateDesignState?.provenance.metadata,
                 frontendDesignBindingHints: selectedFrontendTemplate?.bindingHints,
-                navigationPlacement: formData.navigationPlacement,
+                navigationPlacement: effectiveNavigationPlacement,
                 navigationLabel: formData.navigationLabel.trim() || title,
                 parentPageId: selectedParentPage?.id || undefined,
                 parentPageTitle: selectedParentPage?.title || undefined,
@@ -2960,6 +2972,10 @@ function NewPageRoute() {
 
     const applyNavigationForCreatedPage = async (created: Page, title: string) => {
         let navigationWarning: string | null = null;
+
+        if (formData.navigationPlacement !== 'none' && !canApplyNavigationPlacement) {
+            return navigationPlacementUnavailableMessage || 'Page was created without menu placement because your account cannot update site navigation.';
+        }
 
         try {
             await applyPageNavigationPlacement({
@@ -3064,14 +3080,6 @@ function NewPageRoute() {
 
         if (!publishPermissionReady) {
             setError(publishPermissionTitle || 'Your account cannot publish or schedule pages during creation.');
-            setNotice(null);
-            return;
-        }
-
-        if (!navigationPermissionReady) {
-            setError(!canViewSites
-                ? sitesViewPermissionTitle || 'Your account cannot read site navigation before placing this page in a menu.'
-                : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.');
             setNotice(null);
             return;
         }
@@ -3794,20 +3802,25 @@ function NewPageRoute() {
                                 <div>
                                     <label htmlFor="page-navigation-placement-select" className="mb-2 block text-sm font-medium">Placement</label>
                                     <select
-	                                        id="page-navigation-placement-select"
-	                                        value={formData.navigationPlacement}
-	                                        onChange={(event) => updatePageDraft({
-	                                            navigationPlacement: event.target.value as PageNavigationPlacement,
-	                                            navigationLabel: formData.navigationLabel || formData.title,
-	                                        })}
-	                                        disabled={isPageCreateBusy}
-	                                        title={!canApplyNavigationPlacement && formData.navigationPlacement !== 'none' ? sitesConfigurePermissionTitle || sitesViewPermissionTitle : undefined}
-	                                        className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-	                                    >
-	                                        <option value="none">Do not add</option>
-	                                        <option value="primary" disabled={!canApplyNavigationPlacement}>Primary menu</option>
-	                                        <option value="footer" disabled={!canApplyNavigationPlacement}>Footer menu</option>
+                                        id="page-navigation-placement-select"
+                                        value={formData.navigationPlacement}
+                                        onChange={(event) => updatePageDraft({
+                                            navigationPlacement: event.target.value as PageNavigationPlacement,
+                                            navigationLabel: formData.navigationLabel || formData.title,
+                                        })}
+                                        disabled={isPageCreateBusy}
+                                        title={!canApplyNavigationPlacement && formData.navigationPlacement !== 'none' ? sitesConfigurePermissionTitle || sitesViewPermissionTitle : undefined}
+                                        className="w-full rounded-lg border bg-card px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <option value="none">Do not add</option>
+                                        <option value="primary" disabled={!canApplyNavigationPlacement}>Primary menu</option>
+                                        <option value="footer" disabled={!canApplyNavigationPlacement}>Footer menu</option>
                                     </select>
+                                    {navigationPlacementUnavailableMessage && (
+                                        <p className="mt-2 text-xs leading-5 text-muted-foreground" data-testid="page-create-navigation-permission-fallback">
+                                            {navigationPlacementUnavailableMessage} New pages will be created without changing menus.
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <label htmlFor="page-navigation-label" className="mb-2 block text-sm font-medium">Menu label</label>

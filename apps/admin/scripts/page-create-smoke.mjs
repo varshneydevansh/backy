@@ -1296,6 +1296,7 @@ const assertPageCreateSourceContracts = () => {
   const mediaApiSource = fs.readFileSync(new URL('../src/lib/mediaApi.ts', import.meta.url), 'utf8');
   const chromeSource = fs.readFileSync(new URL('../src/lib/editorTemplateChrome.ts', import.meta.url), 'utf8');
   const templateLibrarySource = fs.readFileSync(new URL('../src/lib/pageCreateTemplateLibrary.ts', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const pageCreateSubmitKeepsValidationReachable = /data-testid="page-create-submit-button"[\s\S]{0,500}disabled=\{isPageCreateBusy \|\| !canEditPages\}/.test(source);
   assert(
     source.includes('&& selectedSite') &&
@@ -1392,6 +1393,21 @@ const assertPageCreateSourceContracts = () => {
       source.includes('if (templateSelectionDisabled || !canEditPages) return;') &&
       source.includes('disabled={templateSelectionDisabled}'),
     'Page create controls must stay available during permission loading and background route checks, while create and preview mutations still lock controls and route checks surface inline blockers.',
+  );
+  assert(
+    source.includes("const effectiveNavigationPlacement = canApplyNavigationPlacement ? formData.navigationPlacement : 'none';") &&
+      source.includes('navigationPlacementUnavailableMessage') &&
+      source.includes('Navigation placement changed to "Do not add" because your account cannot update site menus.') &&
+      source.includes('navigationPlacement: effectiveNavigationPlacement') &&
+      source.includes('data-testid="page-create-navigation-permission-fallback"') &&
+      source.includes("return navigationPlacementUnavailableMessage || 'Page was created without menu placement because your account cannot update site navigation.';") &&
+      smokeSource.includes('BACKY_PAGE_CREATE_EDITOR_NAV_FALLBACK_SMOKE') &&
+      smokeSource.includes('assertEditorNavigationFallback') &&
+      smokeSource.includes('loginEditorApi') &&
+      smokeSource.includes('assertNavigationDoesNotContainPage') &&
+      !source.includes('&& navigationPermissionReady') &&
+      !source.includes('if (!navigationPermissionReady)'),
+    'Page create must let editors with pages.edit create pages even when sites.configure is unavailable by downgrading menu placement to none.',
   );
   assert(
     source.includes('const [pageCreateFormSubmitted, setPageCreateFormSubmitted] = useState(false);') &&
@@ -2210,22 +2226,23 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
-const loginAdminApi = async () => {
+const loginDemoApi = async ({ email, password, mfaCode, label }) => {
   const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      email: 'admin@backy.io',
-      password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      email,
+      password,
       ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
 
   let response = await login();
   let payload = await response.json().catch(() => ({}));
-  const smokeMfaCode = process.env.BACKY_PAGE_CREATE_SMOKE_MFA_CODE
+  const smokeMfaCode = mfaCode
+    || process.env.BACKY_PAGE_CREATE_SMOKE_MFA_CODE
     || process.env.BACKY_EDITOR_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
     || process.env.BACKY_ADMIN_2FA_CODE
@@ -2236,12 +2253,27 @@ const loginAdminApi = async () => {
   }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
-    throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
+    throw new Error(`Unable to create API ${label} session: ${JSON.stringify(payload).slice(0, 500)}`);
   }
 
-  apiAdminSessionToken = payload.data.session.token;
   return payload.data;
 };
+
+const loginAdminApi = async () => {
+  const auth = await loginDemoApi({
+    email: 'admin@backy.io',
+    password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+    label: 'admin',
+  });
+  apiAdminSessionToken = auth.session.token;
+  return auth;
+};
+
+const loginEditorApi = () => loginDemoApi({
+  email: 'jane@backy.io',
+  password: process.env.BACKY_EDITOR_DEMO_PASSWORD || 'editor123',
+  label: 'editor',
+});
 
 const createParentPage = async () => {
   const slug = `page-create-parent-${Date.now().toString(36)}`;
@@ -2525,27 +2557,27 @@ const connectCdp = (webSocketDebuggerUrl) => {
   };
 };
 
-const authStorageScript = (sessionToken) => `
-localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
-  state: {
-    user: { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' },
-    session: {
-      token: sessionToken,
-      issuedAt: new Date().toISOString(),
+const authStorageScript = (sessionToken, user = { id: 'user-admin', email: 'admin@backy.io', fullName: 'Admin User', role: 'admin' }) => `
+	localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
+	  state: {
+	    user,
+	    session: {
+	      token: sessionToken,
+	      issuedAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
       authMode: 'local-demo',
     },
   },
   version: 0,
-}))});
-`;
+	}))});
+	`;
 
-const seedBrowserSessionCookie = async (client) => {
+const seedBrowserSessionCookie = async (client, sessionToken = apiAdminSessionToken) => {
   await client.send('Network.enable');
   await client.send('Network.setCookie', {
     url: API_BASE_URL,
     name: 'backy_admin_session',
-    value: apiAdminSessionToken,
+    value: sessionToken,
     path: '/',
     httpOnly: true,
     sameSite: 'Lax',
@@ -3373,6 +3405,95 @@ const navigateToPageCreate = async (client, slug, title, navLabel, seo, parentPa
   const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
   await client.send('Page.navigate', { url });
   return waitForPageCreateControls(client, slug, title, navLabel, seo, parentPageId, url);
+};
+
+const assertEditorNavigationFallback = async (client, createdPageIds) => {
+  const slug = `page-create-editor-fallback-${Date.now().toString(36)}`;
+  const title = 'Smoke Editor Navigation Fallback';
+  const query = new URLSearchParams({
+    siteId: SITE_ID,
+    template: 'about',
+    title,
+    slug,
+    nav: 'primary',
+    navLabel: 'Editor Fallback Nav',
+  });
+  const url = `${ADMIN_BASE_URL}/pages/new?${query.toString()}`;
+  await client.send('Page.navigate', { url });
+
+  let fallbackState = null;
+  for (let attempt = 0; attempt < PAGE_CREATE_CONTROL_WAIT_ATTEMPTS; attempt += 1) {
+    fallbackState = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="page-create-submit-button"]');
+      const navSelect = document.querySelector('#page-navigation-placement-select');
+      const navFallback = document.querySelector('[data-testid="page-create-navigation-permission-fallback"]');
+      const status = document.querySelector('[data-testid="page-create-submit-action-status"]');
+      const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      const primaryOption = navSelect?.querySelector('option[value="primary"]');
+      const footerOption = navSelect?.querySelector('option[value="footer"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
+        buttonExists: button instanceof HTMLButtonElement,
+        buttonDisabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        canSubmit: button?.getAttribute('data-can-submit') || '',
+        actionState: button?.getAttribute('data-action-state') || '',
+        actionStatus: button?.getAttribute('data-action-status') || '',
+        state: button?.getAttribute('data-state') || '',
+        blocker: button?.getAttribute('data-blocker') || '',
+        statusText,
+        navPlacement: navSelect instanceof HTMLSelectElement ? navSelect.value : '',
+        primaryDisabled: primaryOption instanceof HTMLOptionElement ? primaryOption.disabled : null,
+        footerDisabled: footerOption instanceof HTMLOptionElement ? footerOption.disabled : null,
+        fallbackText: navFallback?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        body: document.body?.innerText?.slice(0, 500) || '',
+      };
+    })()`);
+
+    if (
+      fallbackState.ready &&
+      fallbackState.buttonExists &&
+      fallbackState.buttonDisabled === false &&
+      fallbackState.canSubmit === 'true' &&
+      fallbackState.actionState === 'ready' &&
+      fallbackState.state === 'ready' &&
+      fallbackState.blocker === '' &&
+      fallbackState.navPlacement === 'none' &&
+      fallbackState.primaryDisabled === true &&
+      fallbackState.footerDisabled === true &&
+      fallbackState.fallbackText.includes('New pages will be created without changing menus') &&
+      fallbackState.statusText.includes(`Create page available for ${SITE_ID} at /${slug}`)
+    ) {
+      break;
+    }
+
+    if (attempt === PAGE_CREATE_CONTROL_WAIT_ATTEMPTS - 1) {
+      throw new Error(`Editor navigation fallback did not make page creation ready: ${JSON.stringify(fallbackState)}`);
+    }
+
+    await sleep(PAGE_CREATE_CONTROL_WAIT_DELAY_MS);
+  }
+
+  const editState = await createPageFromUi(client);
+  const pageId = editState.path.split('/').filter(Boolean).at(-2);
+  createdPageIds.push(pageId);
+
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = payload.data?.page;
+  assert(page?.id === pageId, `Editor-created page was not persisted: ${JSON.stringify(payload).slice(0, 500)}`);
+  assert(
+    page.meta?.navigationPlacement === undefined || page.meta?.navigationPlacement === 'none',
+    `Editor-created page should not persist a menu placement: ${JSON.stringify(page.meta)}`,
+  );
+  const navigationAbsence = await assertNavigationDoesNotContainPage(pageId);
+
+  return {
+    url,
+    fallbackState,
+    editState,
+    pageId,
+    persistedNavigationPlacement: page.meta?.navigationPlacement || 'none',
+    navigationAbsence,
+  };
 };
 
 const assertSlugCanSyncFromTitle = async (client) => {
@@ -4769,6 +4890,20 @@ const assertNavigationContainsPage = async (pageId, navLabel, parentPageId) => {
   return { parentItem, item };
 };
 
+const assertNavigationDoesNotContainPage = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/navigation`);
+  const settings = payload.data?.navigation?.settings || {};
+  const primaryItem = findNavigationItem(settings.primary || [], (candidate) => candidate.pageId === pageId);
+  const footerItem = findNavigationItem(settings.footer || [], (candidate) => candidate.pageId === pageId);
+
+  assert(!primaryItem && !footerItem, `Editor-created page ${pageId} should not be inserted into navigation: ${JSON.stringify({ primaryItem, footerItem })}`);
+
+  return {
+    primary: false,
+    footer: false,
+  };
+};
+
 const removePageFromNavigation = async (pageId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/navigation`);
   const navigation = payload.data?.navigation?.settings;
@@ -4877,7 +5012,8 @@ const main = async () => {
   }
 
   await withSmokeLock(`backy-frontend-design-${SITE_ID}`, async () => {
-  await loginAdminApi();
+  const adminAuth = await loginAdminApi();
+  const editorNavigationFallbackOnly = process.env.BACKY_PAGE_CREATE_EDITOR_NAV_FALLBACK_SMOKE === '1';
   const slug = `page-create-smoke-${Date.now().toString(36)}`;
   const title = 'Smoke Page Create';
   const navLabel = 'Smoke Nav Page';
@@ -4906,11 +5042,13 @@ const main = async () => {
   let originalFrontendDesign = null;
 
   try {
-    originalFrontendDesign = await getFrontendDesign();
-    await patchFrontendDesign(smokeFrontendDesignContract());
-    parentPage = await createParentPage();
-    datasetCollection = await createDatasetCollection();
-    createdCollectionIds.push(datasetCollection.id);
+    if (!editorNavigationFallbackOnly) {
+      originalFrontendDesign = await getFrontendDesign();
+      await patchFrontendDesign(smokeFrontendDesignContract());
+      parentPage = await createParentPage();
+      datasetCollection = await createDatasetCollection();
+      createdCollectionIds.push(datasetCollection.id);
+    }
     const page = await waitForUsablePageTarget();
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
 
@@ -4920,12 +5058,23 @@ const main = async () => {
     await client.send('Page.enable');
     await client.send('DOM.enable');
     await client.send('Log.enable');
-    await seedBrowserSessionCookie(client);
+    const browserAuth = editorNavigationFallbackOnly ? await loginEditorApi() : adminAuth;
+    await seedBrowserSessionCookie(client, browserAuth.session.token);
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
-      source: authStorageScript(apiAdminSessionToken),
+      source: authStorageScript(browserAuth.session.token, browserAuth.user),
     });
 
     await setViewport(client, { width: 1440, height: 1100 });
+    if (editorNavigationFallbackOnly) {
+      const editorNavigationFallback = await assertEditorNavigationFallback(client, createdPageIds);
+      console.log(JSON.stringify({
+        ok: true,
+        focused: 'editor-navigation-fallback',
+        editorNavigationFallback,
+      }, null, 2));
+      return;
+    }
+
     if (process.env.BACKY_PAGE_CREATE_FRONTEND_TEMPLATE_ONLY === '1') {
       const frontendDesignTemplateBackend = await createFrontendDesignTemplateBackend(client, createdPageIds);
       console.log(JSON.stringify({
