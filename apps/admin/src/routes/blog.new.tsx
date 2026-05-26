@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, MoreHorizontal, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
     createBlogPostPreview,
@@ -2230,80 +2230,99 @@ function NewBlogPostPage() {
                                     Draft, preview, publish, taxonomy, frontend handoff, and public canvas controls stay together without pushing the editor out of reach.
                                 </p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                                <Button
-                                    type="button"
-                                    disabled={isCreateBusy || !canViewBlog}
-                                    title={viewBlogPermissionTitle}
-                                    aria-describedby={blogCreateCommandActionStatusId}
-                                    data-testid="blog-create-copy-handoff"
-                                    data-action-state={blogCreateHandoffActionState}
-                                    data-action-status={blogCreateCopyActionStatus}
-                                    data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : !canViewBlog ? viewBlogDeniedMessage : undefined}
-                                    onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
-                                    variant="outline"
-                                    iconStart={<Copy className="size-4" />}
-                                >
-                                    Copy handoff
-                                </Button>
-                                <Button
-                                    type="button"
-                                    disabled={isCreateBusy || !canViewBlog}
-                                    title={viewBlogPermissionTitle}
-                                    aria-describedby={blogCreateCommandActionStatusId}
-                                    data-testid="blog-create-download-handoff"
-                                    data-action-state={blogCreateHandoffActionState}
-                                    data-action-status={blogCreateDownloadActionStatus}
-                                    data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : !canViewBlog ? viewBlogDeniedMessage : undefined}
-                                    onClick={downloadCreationHandoff}
-                                    variant="outline"
-                                    iconStart={<Download className="size-4" />}
-                                >
-                                    Download JSON
-                                </Button>
-                                <Button
-                                    type="button"
-                                    disabled={isCreateBusy || !canAttemptCreatePreviewDraft}
-                                    title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
-                                    aria-describedby={blogCreatePreviewDescribedBy}
-                                    data-state={previewDraftControlState}
-                                    data-can-preview={String(canCreatePreviewDraft)}
-                                    data-blocker={previewDraftBlockerMessage || ''}
-                                    data-action-state={blogCreatePreviewActionState}
-                                    data-action-status={blogCreatePreviewActionStatus}
-                                    data-disabled-reason={blogCreatePreviewDisabledReason || undefined}
-                                    data-target-site-id={activeSiteId || undefined}
-                                    data-target-route={routePath}
-                                    data-target-status="draft"
-                                    data-target-template={blogCreateTemplateName}
-                                    onClick={() => void handleCreatePreview()}
-                                    variant="outline"
-                                    iconStart={<Eye className="size-4" />}
-                                >
-                                    {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    disabled={createFormDisabled}
-                                    title={submitBlockerMessage || 'Save the post and open the visual editor'}
-                                    aria-describedby={blogCreateSubmitDescribedBy}
-                                    data-testid="blog-create-submit-button"
-                                    data-state={submitControlState}
-                                    data-blocker={submitBlockerMessage || ''}
-                                    data-can-submit={String(canSubmit)}
-                                    data-can-preview={String(canCreatePreviewDraft)}
-                                    data-action-state={blogCreateSubmitActionState}
-                                    data-action-status={blogCreateSubmitActionStatus}
-                                    data-disabled-reason={blogCreateSubmitDisabledReason || undefined}
-                                    data-target-site-id={activeSiteId || undefined}
-                                    data-target-route={routePath}
-                                    data-target-status={status}
-                                    data-target-template={blogCreateTemplateName}
-                                    variant="primary"
-                                    iconStart={<Save className="size-4" />}
-                                >
-                                    {isLoading ? 'Saving...' : isCheckingPosts && !canSubmit ? 'Checking routes...' : submitLabel}
-                                </Button>
+                            <div className="flex flex-col gap-2 xl:items-end">
+                                <div className="flex flex-wrap items-center gap-2 xl:justify-end" data-testid="blog-create-primary-actions">
+                                    <Button
+                                        type="submit"
+                                        disabled={createFormDisabled}
+                                        title={submitBlockerMessage || 'Save the post and open the visual editor'}
+                                        aria-describedby={blogCreateSubmitDescribedBy}
+                                        data-testid="blog-create-submit-button"
+                                        data-state={submitControlState}
+                                        data-blocker={submitBlockerMessage || ''}
+                                        data-can-submit={String(canSubmit)}
+                                        data-can-preview={String(canCreatePreviewDraft)}
+                                        data-action-state={blogCreateSubmitActionState}
+                                        data-action-status={blogCreateSubmitActionStatus}
+                                        data-disabled-reason={blogCreateSubmitDisabledReason || undefined}
+                                        data-target-site-id={activeSiteId || undefined}
+                                        data-target-route={routePath}
+                                        data-target-status={status}
+                                        data-target-template={blogCreateTemplateName}
+                                        variant="primary"
+                                        iconStart={<Save className="size-4" />}
+                                    >
+                                        {isLoading ? 'Saving...' : isCheckingPosts && !canSubmit ? 'Checking routes...' : submitLabel}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        disabled={isCreateBusy || !canAttemptCreatePreviewDraft}
+                                        title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                                        aria-describedby={blogCreatePreviewDescribedBy}
+                                        data-testid="blog-create-preview-button"
+                                        data-state={previewDraftControlState}
+                                        data-can-preview={String(canCreatePreviewDraft)}
+                                        data-blocker={previewDraftBlockerMessage || ''}
+                                        data-action-state={blogCreatePreviewActionState}
+                                        data-action-status={blogCreatePreviewActionStatus}
+                                        data-disabled-reason={blogCreatePreviewDisabledReason || undefined}
+                                        data-target-site-id={activeSiteId || undefined}
+                                        data-target-route={routePath}
+                                        data-target-status="draft"
+                                        data-target-template={blogCreateTemplateName}
+                                        onClick={() => void handleCreatePreview()}
+                                        variant="outline"
+                                        iconStart={<Eye className="size-4" />}
+                                    >
+                                        {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
+                                    </Button>
+                                </div>
+                                <details className="group relative self-start xl:self-end" data-testid="blog-create-secondary-actions">
+                                    <summary
+                                        className="inline-flex min-h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring group-open:bg-accent [&::-webkit-details-marker]:hidden"
+                                        aria-describedby={blogCreateCommandActionStatusId}
+                                        data-testid="blog-create-more-actions"
+                                    >
+                                        <MoreHorizontal className="size-4" />
+                                        More actions
+                                    </summary>
+                                    <div className="mt-2 flex flex-col gap-2 rounded-lg border border-border bg-popover p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:w-72" data-testid="blog-create-secondary-action-menu">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            disabled={isCreateBusy || !canViewBlog}
+                                            title={viewBlogPermissionTitle}
+                                            aria-describedby={blogCreateCommandActionStatusId}
+                                            data-testid="blog-create-copy-handoff"
+                                            data-action-state={blogCreateHandoffActionState}
+                                            data-action-status={blogCreateCopyActionStatus}
+                                            data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : !canViewBlog ? viewBlogDeniedMessage : undefined}
+                                            onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
+                                            variant="ghost"
+                                            className="w-full justify-start"
+                                            iconStart={<Copy className="size-4" />}
+                                        >
+                                            Copy handoff
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            disabled={isCreateBusy || !canViewBlog}
+                                            title={viewBlogPermissionTitle}
+                                            aria-describedby={blogCreateCommandActionStatusId}
+                                            data-testid="blog-create-download-handoff"
+                                            data-action-state={blogCreateHandoffActionState}
+                                            data-action-status={blogCreateDownloadActionStatus}
+                                            data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : !canViewBlog ? viewBlogDeniedMessage : undefined}
+                                            onClick={downloadCreationHandoff}
+                                            variant="ghost"
+                                            className="w-full justify-start"
+                                            iconStart={<Download className="size-4" />}
+                                        >
+                                            Download JSON
+                                        </Button>
+                                    </div>
+                                </details>
                             </div>
                         </div>
 
@@ -2783,28 +2802,6 @@ function NewBlogPostPage() {
                                 actions={isWorkspaceFocus ? (
                                     <>
                                         <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={isCreateBusy || !canAttemptCreatePreviewDraft}
-                                            title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
-                                            aria-describedby={blogCreatePreviewDescribedBy}
-                                            data-state={previewDraftControlState}
-                                            data-can-preview={String(canCreatePreviewDraft)}
-                                            data-blocker={previewDraftBlockerMessage || ''}
-                                            data-action-state={blogCreatePreviewActionState}
-                                            data-action-status={blogCreatePreviewActionStatus}
-                                            data-disabled-reason={blogCreatePreviewDisabledReason || undefined}
-                                            data-target-site-id={activeSiteId || undefined}
-                                            data-target-route={routePath}
-                                            data-target-status="draft"
-                                            data-target-template={blogCreateTemplateName}
-                                            onClick={() => void handleCreatePreview()}
-                                            iconStart={<Eye className="size-4" />}
-                                        >
-                                            {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
-                                        </Button>
-                                        <Button
                                             type="submit"
                                             form="blog-create-form"
                                             size="sm"
@@ -2826,6 +2823,28 @@ function NewBlogPostPage() {
                                             iconStart={<Save className="size-4" />}
                                         >
                                             {isLoading ? 'Saving...' : isCheckingPosts && !canSubmit ? 'Checking routes...' : submitLabel}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={isCreateBusy || !canAttemptCreatePreviewDraft}
+                                            title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                                            aria-describedby={blogCreatePreviewDescribedBy}
+                                            data-state={previewDraftControlState}
+                                            data-can-preview={String(canCreatePreviewDraft)}
+                                            data-blocker={previewDraftBlockerMessage || ''}
+                                            data-action-state={blogCreatePreviewActionState}
+                                            data-action-status={blogCreatePreviewActionStatus}
+                                            data-disabled-reason={blogCreatePreviewDisabledReason || undefined}
+                                            data-target-site-id={activeSiteId || undefined}
+                                            data-target-route={routePath}
+                                            data-target-status="draft"
+                                            data-target-template={blogCreateTemplateName}
+                                            onClick={() => void handleCreatePreview()}
+                                            iconStart={<Eye className="size-4" />}
+                                        >
+                                            {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                                         </Button>
                                         <Button
                                             type="button"

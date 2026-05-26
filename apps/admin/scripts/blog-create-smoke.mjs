@@ -170,6 +170,46 @@ const assertBlogCreateSourceContract = () => {
       source.includes("data-testid={isWorkspaceFocus ? 'blog-create-focus-banner' : undefined}"),
     'Blog create default shell must stay compact, keep the collapsed chip control map, and boot the inner editor in focused canvas mode.',
   );
+  {
+    const commandCenterBlockStart = source.indexOf('data-testid="blog-create-command-center"');
+    const commandCenterBlockEnd = source.indexOf('span id={blogCreateSubmitActionStatusId}', commandCenterBlockStart);
+    const commandCenterBlock = commandCenterBlockStart >= 0
+      ? source.slice(commandCenterBlockStart, commandCenterBlockEnd >= 0 ? commandCenterBlockEnd : commandCenterBlockStart + 4200)
+      : '';
+    const commandCenterSubmitButtonIndex = commandCenterBlock.indexOf('data-testid="blog-create-submit-button"');
+    const commandCenterPreviewButtonIndex = commandCenterBlock.indexOf('Save draft and preview');
+    const commandCenterSubmitLabelIndex = source.indexOf('const blogCreateSubmitActionLabel');
+    const commandCenterCopyHandoffIndex = commandCenterBlock.indexOf('data-testid="blog-create-copy-handoff"');
+    const commandCenterDownloadHandoffIndex = commandCenterBlock.indexOf('data-testid="blog-create-download-handoff"');
+    const commandCenterMoreActionsIndex = commandCenterBlock.indexOf('More actions');
+    const commandCenterPrimaryActionMaxIndex = Math.max(commandCenterSubmitButtonIndex, commandCenterPreviewButtonIndex);
+    const handoffHierarchyMode = commandCenterMoreActionsIndex >= 0
+      ? commandCenterMoreActionsIndex > commandCenterPrimaryActionMaxIndex && commandCenterCopyHandoffIndex > commandCenterMoreActionsIndex && commandCenterDownloadHandoffIndex > commandCenterMoreActionsIndex
+      : commandCenterCopyHandoffIndex > commandCenterPrimaryActionMaxIndex && commandCenterDownloadHandoffIndex > commandCenterPrimaryActionMaxIndex;
+    assert(
+      commandCenterSubmitButtonIndex >= 0 &&
+        commandCenterPreviewButtonIndex >= 0 &&
+        commandCenterSubmitLabelIndex >= 0 &&
+        commandCenterCopyHandoffIndex >= 0 &&
+        commandCenterDownloadHandoffIndex >= 0 &&
+        handoffHierarchyMode,
+      'Blog create command center must keep primary create actions ahead of Copy handoff/Download JSON; handoff actions must be secondary or behind More actions.',
+    );
+    const focusActionsBlockStart = source.indexOf('actions={isWorkspaceFocus');
+    const focusActionsBlockEnd = source.indexOf('density={isWorkspaceFocus', focusActionsBlockStart);
+    const focusActionsBlock = focusActionsBlockStart >= 0
+      ? source.slice(focusActionsBlockStart, focusActionsBlockEnd >= 0 ? focusActionsBlockEnd : focusActionsBlockStart + 3200)
+      : '';
+    const focusSubmitIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-submit-button"');
+    const focusPreviewIndex = focusActionsBlock.indexOf('Save draft and preview');
+    const focusPanelsIndex = focusActionsBlock.indexOf('Show panels');
+    assert(
+      focusSubmitIndex >= 0 &&
+        focusPreviewIndex > focusSubmitIndex &&
+        focusPanelsIndex > focusPreviewIndex,
+      'Blog create focused canvas actions must keep Save/Publish first, Preview second, and Show panels last.',
+    );
+  }
   assert(
     source.includes("search: { siteId: activeSiteId, focus: 'canvas' }") &&
       source.includes("navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId, focus: 'canvas' } });"),
@@ -1127,9 +1167,29 @@ const assertBlogCreateReadyActionStatus = async (client, slug) => {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     state = await evaluate(client, `(() => {
       const submit = document.querySelector('[data-testid="blog-create-submit-button"]');
+      const commandCenter = document.querySelector('[data-testid="blog-create-command-center"]');
+      const commandCenterActionNodes = Array.from((commandCenter ? commandCenter.querySelectorAll('button, summary, details') : []));
+      const commandCenterActionNames = commandCenterActionNodes.map((node, index) => ({
+        index,
+        tagName: node.tagName.toLowerCase(),
+        text: (node.textContent || '').replace(/\\s+/g, ' ').trim(),
+        testId: node.getAttribute('data-testid') || '',
+        disabled: node instanceof HTMLButtonElement ? node.disabled : null,
+      })).filter((node) => node.text);
       const preview = Array.from(document.querySelectorAll('button')).find((candidate) => (
         (candidate.textContent || '').includes('Save draft and preview')
       ));
+      const submitNodeIndex = commandCenterActionNames.findIndex((candidate) => (
+        candidate.text.includes('Save draft') || candidate.text.includes('Publish post') || candidate.testId === 'blog-create-submit-button'
+      ));
+      const previewNodeIndex = commandCenterActionNames.findIndex((candidate) => candidate.text.includes('Save draft and preview'));
+      const copyHandoffNodeIndex = commandCenterActionNames.findIndex((candidate) => candidate.text === 'Copy handoff');
+      const downloadHandoffNodeIndex = commandCenterActionNames.findIndex((candidate) => candidate.text === 'Download JSON');
+      const moreActionsNodeIndex = commandCenterActionNames.findIndex((candidate) => candidate.text.includes('More actions'));
+      const primaryActionMaxIndex = Math.max(submitNodeIndex, previewNodeIndex);
+      const handoffNodeCheck = moreActionsNodeIndex >= 0
+        ? moreActionsNodeIndex > primaryActionMaxIndex && copyHandoffNodeIndex > moreActionsNodeIndex && downloadHandoffNodeIndex > moreActionsNodeIndex
+        : copyHandoffNodeIndex > primaryActionMaxIndex && downloadHandoffNodeIndex > primaryActionMaxIndex;
       const submitStatus = document.querySelector('[data-testid="blog-create-submit-action-status"]');
       const previewStatus = document.querySelector('[data-testid="blog-create-preview-action-status"]');
       const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
@@ -1139,6 +1199,7 @@ const assertBlogCreateReadyActionStatus = async (client, slug) => {
           preview instanceof HTMLButtonElement &&
           submit.disabled === false &&
           preview.disabled === false &&
+          handoffNodeCheck &&
           submit.getAttribute('aria-describedby') === 'blog-create-submit-action-status' &&
           preview.getAttribute('aria-describedby') === 'blog-create-preview-action-status' &&
           submit.getAttribute('data-action-state') === 'ready' &&
@@ -1165,6 +1226,8 @@ const assertBlogCreateReadyActionStatus = async (client, slug) => {
         previewActionState: preview?.getAttribute('data-action-state') || '',
         submitActionStatus: submit?.getAttribute('data-action-status') || '',
         previewActionStatus: preview?.getAttribute('data-action-status') || '',
+        commandCenterActionNames,
+        handoffNodeCheck,
         submitStatusText,
         previewStatusText,
         submitTargetSiteId: submit?.getAttribute('data-target-site-id') || '',
