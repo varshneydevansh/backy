@@ -53,6 +53,7 @@ import {
   type EditorMediaPickerTarget,
 } from './editorMediaPickerActions';
 import { buildEditorDataBindingAction } from './editorDataBindingActions';
+import { buildEditorFormBuilderAction } from './editorFormBuilderActions';
 import type { CanvasElement, ComponentBindingSlot, ElementProps } from '@/types/editor';
 import {
   listCollectionBindingPresets,
@@ -2359,6 +2360,22 @@ function ContentProperties({
   const removeFormBuilderField = useCallback((key: string) => {
     updateFormFields(formBuilderFields.filter((field) => field.key !== key));
   }, [formBuilderFields, updateFormFields]);
+  const formBuilderActionStatusId = 'editor-form-builder-action-status';
+  const formBuilderDraftKey = normalizeFormFieldKey(
+    formBuilderDraft.key || formBuilderDraft.label || 'field',
+  );
+  const formBuilderDraftLabel = formBuilderDraft.label.trim() || formBuilderDraftKey;
+  const formBuilderFieldExists = formBuilderFields.some((field) => field.key === formBuilderDraftKey);
+  const formBuilderAddAction = buildEditorFormBuilderAction({
+    label: formBuilderFieldExists ? 'Update form field' : 'Add form field',
+    readyStatus: formBuilderFieldExists
+      ? `Update ${formBuilderDraftLabel} in the form schema.`
+      : `Add ${formBuilderDraftLabel} to the form schema.`,
+  });
+  const formBuilderActionSummary = [
+    formBuilderAddAction.actionStatus,
+    `${formBuilderFields.length} form field${formBuilderFields.length === 1 ? '' : 's'} in the schema.`,
+  ].join(' ');
 
   return (
       <div className="space-y-3">
@@ -3686,7 +3703,19 @@ function ContentProperties({
               Supports key, label, type, placeholder, helpText, options, required, defaultValue, and validation.
             </p>
           </div>
-          <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+          <div
+            className="space-y-2 rounded-md border border-border bg-muted/30 p-3"
+            data-testid="editor-form-builder"
+            data-form-field-count={formBuilderFields.length}
+          >
+            <span
+              id={formBuilderActionStatusId}
+              className="sr-only"
+              data-testid="editor-form-builder-action-status"
+              aria-live="polite"
+            >
+              {formBuilderActionSummary}
+            </span>
             <div className="text-xs font-medium text-foreground">Field builder</div>
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -3786,6 +3815,12 @@ function ContentProperties({
             <button
               type="button"
               onClick={addOrUpdateFormBuilderField}
+              title={formBuilderAddAction.actionStatus}
+              aria-describedby={formBuilderActionStatusId}
+              data-action-state={formBuilderAddAction.actionState}
+              data-action-status={formBuilderAddAction.actionStatus}
+              data-target-field-key={formBuilderDraftKey}
+              data-form-field-mode={formBuilderFieldExists ? 'update' : 'add'}
               data-testid="editor-form-builder-add-field"
               className={cn(
                 'inline-flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs font-medium',
@@ -3797,27 +3832,39 @@ function ContentProperties({
             </button>
             {formBuilderFields.length > 0 ? (
               <div className="space-y-1" data-testid="editor-form-builder-fields">
-                {formBuilderFields.map((field) => (
-                  <div
-                    key={field.key}
-                    data-testid="editor-form-builder-field"
-                    data-field-key={field.key}
-                    className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1.5 text-xs"
-                  >
-                    <span className="min-w-0 truncate">
-                      {field.label} <span className="text-muted-foreground">({field.key}, {field.type})</span>
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${field.key}`}
-                      onClick={() => removeFormBuilderField(field.key)}
-                      data-testid={`editor-form-builder-remove-${field.key}`}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                {formBuilderFields.map((field) => {
+                  const removeFieldAction = buildEditorFormBuilderAction({
+                    label: `Remove ${field.label || field.key}`,
+                    readyStatus: `Remove ${field.label || field.key} from the form schema.`,
+                  });
+
+                  return (
+                    <div
+                      key={field.key}
+                      data-testid="editor-form-builder-field"
+                      data-field-key={field.key}
+                      className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1.5 text-xs"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      <span className="min-w-0 truncate">
+                        {field.label} <span className="text-muted-foreground">({field.key}, {field.type})</span>
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${field.key}`}
+                        onClick={() => removeFormBuilderField(field.key)}
+                        title={removeFieldAction.actionStatus}
+                        aria-describedby={formBuilderActionStatusId}
+                        data-action-state={removeFieldAction.actionState}
+                        data-action-status={removeFieldAction.actionStatus}
+                        data-target-field-key={field.key}
+                        data-testid={`editor-form-builder-remove-${field.key}`}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
           </div>

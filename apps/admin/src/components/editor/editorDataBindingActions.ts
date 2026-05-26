@@ -1,42 +1,13 @@
+import {
+  buildEditorActionStatus,
+  type EditorActionStatusInput,
+} from './editorActionStatus';
+
 export type EditorDataBindingActionState = 'ready' | 'selected' | 'blocked' | 'busy';
 
-interface EditorDataBindingActionInput {
-  label: string;
-  disabledReason?: string;
-  selected?: boolean;
-  busy?: boolean;
-  readyStatus?: string;
-  selectedStatus?: string;
-  busyStatus?: string;
-}
+type EditorDataBindingActionInput = Omit<EditorActionStatusInput, 'selectedStatusFallback'>;
 
-export const buildEditorDataBindingAction = ({
-  label,
-  disabledReason = '',
-  selected = false,
-  busy = false,
-  readyStatus,
-  selectedStatus,
-  busyStatus,
-}: EditorDataBindingActionInput) => {
-  const actionState: EditorDataBindingActionState = busy
-    ? 'busy'
-    : disabledReason
-      ? 'blocked'
-      : selected
-        ? 'selected'
-        : 'ready';
-  const actionStatus = busy
-    ? busyStatus || `${label} is in progress.`
-    : disabledReason
-      ? `${label} unavailable: ${disabledReason}`
-      : selected
-        ? selectedStatus || `${label} already applied.`
-        : readyStatus || `${label} available.`;
-
-  return {
-    actionState,
-    actionStatus,
-    disabledReason,
-  };
-};
+export const buildEditorDataBindingAction = (input: EditorDataBindingActionInput) => buildEditorActionStatus({
+  ...input,
+  selectedStatusFallback: `${input.label} already applied.`,
+});

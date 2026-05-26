@@ -930,6 +930,8 @@ const assertPropertyPanelColorControlsSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
   const linkBehaviorSource = fs.readFileSync(new URL('../src/components/editor/LinkBehaviorProperties.tsx', import.meta.url), 'utf8');
   const mediaPickerActionSource = fs.readFileSync(new URL('../src/components/editor/editorMediaPickerActions.ts', import.meta.url), 'utf8');
+  const actionStatusSource = fs.readFileSync(new URL('../src/components/editor/editorActionStatus.ts', import.meta.url), 'utf8');
+  const formBuilderActionSource = fs.readFileSync(new URL('../src/components/editor/editorFormBuilderActions.ts', import.meta.url), 'utf8');
   const animationBuilderSource = fs.readFileSync(new URL('../src/components/editor/AnimationBuilder.tsx', import.meta.url), 'utf8');
   const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
   const pageEditorSource = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
@@ -1000,6 +1002,26 @@ const assertPropertyPanelColorControlsSource = () => {
       source.includes('data-target-element-type={element.type}') &&
       source.includes('aria-describedby={deleteElementActionStatusId}'),
     'Editor property panel delete control must expose action-state/status metadata and blocked reasons for locked/read-only elements',
+  );
+  assert(
+    actionStatusSource.includes("export type EditorActionState = 'ready' | 'selected' | 'blocked' | 'busy';") &&
+      actionStatusSource.includes('export const buildEditorActionStatus =') &&
+      formBuilderActionSource.includes("from './editorActionStatus';") &&
+      formBuilderActionSource.includes("export type EditorFormBuilderActionState = 'ready' | 'selected' | 'blocked' | 'busy';") &&
+      formBuilderActionSource.includes('export const buildEditorFormBuilderAction =') &&
+      source.includes("import { buildEditorFormBuilderAction } from './editorFormBuilderActions';") &&
+      source.includes("const formBuilderActionStatusId = 'editor-form-builder-action-status';") &&
+      source.includes('data-testid="editor-form-builder"') &&
+      source.includes('data-testid="editor-form-builder-action-status"') &&
+      source.includes('data-form-field-count={formBuilderFields.length}') &&
+      source.includes('data-action-state={formBuilderAddAction.actionState}') &&
+      source.includes('data-action-status={formBuilderAddAction.actionStatus}') &&
+      source.includes('data-target-field-key={formBuilderDraftKey}') &&
+      source.includes("data-form-field-mode={formBuilderFieldExists ? 'update' : 'add'}") &&
+      source.includes('data-action-state={removeFieldAction.actionState}') &&
+      source.includes('data-action-status={removeFieldAction.actionStatus}') &&
+      source.includes('data-target-field-key={field.key}'),
+    'Editor form field builder add/update/remove controls must expose action-state/status metadata and target field keys',
   );
   assert(
     source.includes("import {") &&
@@ -1158,6 +1180,7 @@ const assertComponentLibraryEmptyStateSource = () => {
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const catalogSource = fs.readFileSync(new URL('../src/components/editor/editorCatalog.ts', import.meta.url), 'utf8');
   const propertyPanelSource = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
+  const actionStatusSource = fs.readFileSync(new URL('../src/components/editor/editorActionStatus.ts', import.meta.url), 'utf8');
   const dataBindingActionSource = fs.readFileSync(new URL('../src/components/editor/editorDataBindingActions.ts', import.meta.url), 'utf8');
   const typeSource = fs.readFileSync(new URL('../src/types/editor.ts', import.meta.url), 'utf8');
   const coreContractSource = fs.readFileSync(new URL('../../../packages/core/src/content-contract.ts', import.meta.url), 'utf8');
@@ -1249,7 +1272,9 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(propertyPanelSource.includes("schema: 'backy.editor.dataset-binding.v1'") && propertyPanelSource.includes('navigator.clipboard.writeText(JSON.stringify(datasetBindingBrief, null, 2))') && propertyPanelSource.includes('data-testid="editor-data-copy-binding-brief"'), 'Editor Data panel must expose a copyable selected-element dataset binding brief for custom frontend and AI handoff');
   assert(propertyPanelSource.includes("schema: 'backy.editor.dataset-binding-action-plan.v1'") && propertyPanelSource.includes('data-testid="editor-data-binding-action-plan"') && propertyPanelSource.includes('actionPlan: datasetBindingActionPlan'), 'Editor Data panel must render and export selected-element dataset binding action plans');
   assert(
-    dataBindingActionSource.includes("export type EditorDataBindingActionState = 'ready' | 'selected' | 'blocked' | 'busy';") &&
+    actionStatusSource.includes('export const buildEditorActionStatus =') &&
+      dataBindingActionSource.includes("from './editorActionStatus';") &&
+      dataBindingActionSource.includes("export type EditorDataBindingActionState = 'ready' | 'selected' | 'blocked' | 'busy';") &&
       dataBindingActionSource.includes('export const buildEditorDataBindingAction =') &&
       propertyPanelSource.includes("import { buildEditorDataBindingAction } from './editorDataBindingActions';") &&
       propertyPanelSource.includes("const dataBindingSlotActionStatusId = 'editor-data-binding-slot-action-status';") &&
@@ -20417,7 +20442,52 @@ const testFormBehaviorControls = async (client, collectionId) => {
   await setFormControlByTestId(client, 'editor-form-builder-type', FORM_BUILDER_FIELD.type);
   await setFormControlByTestId(client, 'editor-form-builder-placeholder', FORM_BUILDER_FIELD.placeholder);
   await setCheckboxByTestId(client, 'editor-form-builder-required', true);
+  const formBuilderActionBeforeAdd = await evaluate(client, `(() => {
+    const builder = document.querySelector('[data-testid="editor-form-builder"]');
+    const status = document.querySelector('[data-testid="editor-form-builder-action-status"]');
+    const add = document.querySelector('[data-testid="editor-form-builder-add-field"]');
+    return {
+      builderExists: builder instanceof HTMLElement,
+      statusText: status?.textContent || '',
+      fieldCount: builder?.getAttribute('data-form-field-count') || '',
+      addState: add instanceof HTMLElement ? add.getAttribute('data-action-state') || '' : '',
+      addStatus: add instanceof HTMLElement ? add.getAttribute('data-action-status') || '' : '',
+      addDescribedBy: add instanceof HTMLElement ? add.getAttribute('aria-describedby') || '' : '',
+      addTargetFieldKey: add instanceof HTMLElement ? add.getAttribute('data-target-field-key') || '' : '',
+      addMode: add instanceof HTMLElement ? add.getAttribute('data-form-field-mode') || '' : '',
+    };
+  })()`);
+  assert(
+    formBuilderActionBeforeAdd.builderExists &&
+      formBuilderActionBeforeAdd.addState === 'ready' &&
+      /Add Company to the form schema/i.test(formBuilderActionBeforeAdd.addStatus) &&
+      formBuilderActionBeforeAdd.addDescribedBy.includes('editor-form-builder-action-status') &&
+      formBuilderActionBeforeAdd.addTargetFieldKey === FORM_BUILDER_FIELD.key &&
+      formBuilderActionBeforeAdd.addMode === 'add',
+    `Form builder add action metadata was not ready before adding a field: ${JSON.stringify(formBuilderActionBeforeAdd)}`,
+  );
   await clickControlByTestId(client, 'editor-form-builder-add-field');
+  const formBuilderActionAfterAdd = await evaluate(client, `(() => {
+    const builder = document.querySelector('[data-testid="editor-form-builder"]');
+    const remove = document.querySelector('[data-testid="editor-form-builder-remove-${FORM_BUILDER_FIELD.key}"]');
+    return {
+      fieldCount: builder?.getAttribute('data-form-field-count') || '',
+      removeExists: remove instanceof HTMLElement,
+      removeState: remove instanceof HTMLElement ? remove.getAttribute('data-action-state') || '' : '',
+      removeStatus: remove instanceof HTMLElement ? remove.getAttribute('data-action-status') || '' : '',
+      removeDescribedBy: remove instanceof HTMLElement ? remove.getAttribute('aria-describedby') || '' : '',
+      removeTargetFieldKey: remove instanceof HTMLElement ? remove.getAttribute('data-target-field-key') || '' : '',
+    };
+  })()`);
+  assert(
+    Number(formBuilderActionAfterAdd.fieldCount) === FORM_SCHEMA_FIELDS_WITH_BUILDER.length &&
+      formBuilderActionAfterAdd.removeExists &&
+      formBuilderActionAfterAdd.removeState === 'ready' &&
+      /Remove Company from the form schema/i.test(formBuilderActionAfterAdd.removeStatus) &&
+      formBuilderActionAfterAdd.removeDescribedBy.includes('editor-form-builder-action-status') &&
+      formBuilderActionAfterAdd.removeTargetFieldKey === FORM_BUILDER_FIELD.key,
+    `Form builder remove action metadata was not ready after adding a field: ${JSON.stringify(formBuilderActionAfterAdd)}`,
+  );
   await setFormControlByTestId(client, 'editor-form-submit-label', 'Send lead');
   await setFormControlByTestId(client, 'editor-form-label-color', FORM_APPEARANCE_SPEC.labelColor);
   await setFormControlByTestId(client, 'editor-form-help-color', FORM_APPEARANCE_SPEC.helpTextColor);
