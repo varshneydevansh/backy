@@ -83,26 +83,31 @@ export const Route = createFileRoute('/pages/$pageId/edit')({
 
 const PAGE_EDITOR_CONTROL_AREAS = [
   {
+    id: 'design-canvas',
     title: 'Design canvas',
     detail: 'Drag, group, layer, bind, arrange, and focus the full design workspace.',
     href: '#page-editor-canvas',
   },
   {
+    id: 'publish-controls',
     title: 'Publish controls',
     detail: 'Preview, publish, archive, and confirm the current route state.',
     href: '#page-editor-publish',
   },
   {
+    id: 'readiness-checks',
     title: 'Readiness checks',
     detail: 'Validate SEO, canvas content, route health, blockers, and public delivery.',
     href: '#page-editor-readiness',
   },
   {
+    id: 'revision-history',
     title: 'Revision history',
     detail: 'Restore saved snapshots when a design needs to roll back.',
     href: '#page-editor-revisions',
   },
   {
+    id: 'frontend-handoff',
     title: 'Frontend handoff',
     detail: 'Track the page route, canvas dimensions, element count, and public status.',
     href: '#page-editor-handoff',
@@ -1970,8 +1975,13 @@ function PageEditorRoute() {
     ? `Archive unavailable: ${pageEditorArchiveDisabledReason}`
     : 'Archive available for this page.';
   const pageEditorArchiveActionState = pageEditorWorkflowActionState(pageEditorArchiveDisabledReason);
+  const pageEditorControlMapActionStatus = pageEditorCommandBusyReason
+    ? `Control map navigation unavailable: ${pageEditorCommandBusyReason}`
+    : 'Control map navigation available for page editor areas.';
+  const pageEditorControlMapActionState = pageEditorCommandBusyReason ? 'busy' : 'ready';
   const pageEditorCommandActionStatusId = 'page-editor-command-action-status';
   const pageEditorCommandActionStatus = [
+    pageEditorControlMapActionStatus,
     pageEditorHandoffActionStatus,
     pageEditorApiUrlActionStatus,
     pageEditorPublishImpactActionStatus,
@@ -2392,7 +2402,12 @@ function PageEditorRoute() {
         <div
           id="page-editor-handoff"
           className="mt-4 rounded-lg border border-border bg-background/80 p-4 scroll-mt-24"
+          role="group"
+          aria-label="Page editor control map"
+          aria-describedby={pageEditorCommandActionStatusId}
           data-testid="page-editor-control-map"
+          data-action-state={pageEditorControlMapActionState}
+          data-action-status={pageEditorControlMapActionStatus}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -2409,6 +2424,7 @@ function PageEditorRoute() {
                 key={area.title}
                 href={area.href}
                 aria-disabled={isPageEditorBusy}
+                aria-describedby={pageEditorCommandActionStatusId}
                 aria-label={`${area.title}: ${area.detail}`}
                 onClick={(event) => {
                   if (isPageEditorBusy) event.preventDefault();
@@ -2417,6 +2433,12 @@ function PageEditorRoute() {
                   'inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/40 hover:bg-primary/5',
                   isPageEditorBusy && 'pointer-events-none opacity-60',
                 )}
+                data-testid={`page-editor-control-map-link-${area.id}`}
+                data-control-area={area.id}
+                data-control-target={area.href}
+                data-action-state={pageEditorControlMapActionState}
+                data-action-status={pageEditorControlMapActionStatus}
+                data-disabled-reason={pageEditorCommandBusyReason || undefined}
               >
                 {area.title}
               </a>

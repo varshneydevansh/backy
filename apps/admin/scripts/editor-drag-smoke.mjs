@@ -283,9 +283,10 @@ const assertPageEditorFallbackIsReadOnly = () => {
     'Page editor canvas saves must not fail just because backend route checks are still loading when the selected page route did not change.',
   );
   assert(
-    source.includes("const pageEditorCommandActionStatusId = 'page-editor-command-action-status';") &&
-      source.includes('data-testid="page-editor-back-to-pages"') &&
-      source.includes('data-action-status={pageEditorBackActionStatus}') &&
+	    source.includes("const pageEditorCommandActionStatusId = 'page-editor-command-action-status';") &&
+	      source.includes('const pageEditorControlMapActionStatus = pageEditorCommandBusyReason') &&
+	      source.includes('data-testid="page-editor-back-to-pages"') &&
+	      source.includes('data-action-status={pageEditorBackActionStatus}') &&
       source.includes('data-testid="page-editor-focus-toggle"') &&
       source.includes('data-action-status={pageEditorFocusActionStatus}') &&
       source.includes('data-testid="page-editor-command-center"') &&
@@ -293,9 +294,12 @@ const assertPageEditorFallbackIsReadOnly = () => {
       source.includes('data-action-status={pageEditorCommandActionStatus}') &&
       source.includes('data-testid="page-editor-copy-handoff"') &&
       source.includes('data-testid="page-editor-download-handoff"') &&
-      source.includes('data-testid="page-editor-control-map-copy-api-url"') &&
-      source.includes('data-testid="page-editor-control-map-copy-handoff"') &&
-      source.includes('data-testid="page-editor-preview"') &&
+	      source.includes('data-testid="page-editor-control-map-copy-api-url"') &&
+	      source.includes('data-testid="page-editor-control-map-copy-handoff"') &&
+	      source.includes('data-testid={`page-editor-control-map-link-${area.id}`}') &&
+	      source.includes('data-control-target={area.href}') &&
+	      source.includes('data-action-status={pageEditorControlMapActionStatus}') &&
+	      source.includes('data-testid="page-editor-preview"') &&
       source.includes('data-testid="page-editor-refresh-readiness"') &&
       source.includes('data-testid="page-editor-publish"') &&
       source.includes('data-testid="page-editor-unpublish"') &&
@@ -9412,10 +9416,11 @@ const readEditorSaveStatus = async (client) => {
 const assertPageEditorRouteActionStatus = async (client) => {
   const state = await evaluate(client, `(() => {
     const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
-    const commandCenter = document.querySelector('[data-testid="page-editor-command-center"]');
-    const status = document.querySelector('[data-testid="page-editor-command-action-status"]');
-    const revisionGraph = document.querySelector('[data-testid="page-editor-revision-graph"]');
-    const revisionStatus = document.querySelector('[data-testid="page-editor-revision-action-status"]');
+	    const commandCenter = document.querySelector('[data-testid="page-editor-command-center"]');
+	    const status = document.querySelector('[data-testid="page-editor-command-action-status"]');
+	    const controlMap = document.querySelector('[data-testid="page-editor-control-map"]');
+	    const revisionGraph = document.querySelector('[data-testid="page-editor-revision-graph"]');
+	    const revisionStatus = document.querySelector('[data-testid="page-editor-revision-action-status"]');
     const readControl = (testId) => {
       const control = document.querySelector('[data-testid="' + testId + '"]');
       return {
@@ -9428,8 +9433,23 @@ const assertPageEditorRouteActionStatus = async (client) => {
         disabled: control instanceof HTMLButtonElement ? control.disabled : null,
         text: normalize(control?.textContent),
       };
-    };
-    const readRevisionButton = (selector, label) => {
+	    };
+	    const readControlMapLink = (testId) => {
+	      const link = document.querySelector('[data-testid="' + testId + '"]');
+	      return {
+	        testId,
+	        exists: link instanceof HTMLAnchorElement,
+	        describedBy: link?.getAttribute('aria-describedby') || '',
+	        actionState: link?.getAttribute('data-action-state') || '',
+	        actionStatus: normalize(link?.getAttribute('data-action-status')),
+	        disabledReason: link?.getAttribute('data-disabled-reason') || '',
+	        ariaDisabled: link?.getAttribute('aria-disabled') || '',
+	        target: link?.getAttribute('data-control-target') || '',
+	        href: link instanceof HTMLAnchorElement ? link.getAttribute('href') || '' : '',
+	        text: normalize(link?.textContent),
+	      };
+	    };
+	    const readRevisionButton = (selector, label) => {
       const control = document.querySelector(selector);
       return {
         label,
@@ -9459,9 +9479,16 @@ const assertPageEditorRouteActionStatus = async (client) => {
       readControl('page-editor-copy-publish-impact'),
       readControl('page-editor-panel-refresh-readiness'),
     ];
-    const back = readControl('page-editor-back-to-pages');
-    const focusToggle = readControl('page-editor-focus-toggle');
-    const revisionControls = [
+	    const back = readControl('page-editor-back-to-pages');
+	    const focusToggle = readControl('page-editor-focus-toggle');
+	    const controlMapLinks = [
+	      readControlMapLink('page-editor-control-map-link-design-canvas'),
+	      readControlMapLink('page-editor-control-map-link-publish-controls'),
+	      readControlMapLink('page-editor-control-map-link-readiness-checks'),
+	      readControlMapLink('page-editor-control-map-link-revision-history'),
+	      readControlMapLink('page-editor-control-map-link-frontend-handoff'),
+	    ];
+	    const revisionControls = [
       readRevisionButton('[data-testid="page-editor-copy-revision-branch-graph"]', 'copy graph'),
       readRevisionButton('[data-testid="page-editor-toggle-revision-graph"]', 'toggle graph'),
       readRevisionButton('button[data-testid^="page-editor-revision-graph-node-"]', 'expand timeline node'),
@@ -9476,15 +9503,31 @@ const assertPageEditorRouteActionStatus = async (client) => {
         .filter((control) => requiredRevisionControls.includes(control.label) && !control.exists)
         .map((control) => control.label)
       : [];
-    const malformedControls = controls.filter((control) => (
-      !control.exists ||
-      control.describedBy !== (status?.id || '') ||
+	    const malformedControls = controls.filter((control) => (
+	      !control.exists ||
+	      control.describedBy !== (status?.id || '') ||
       !['ready', 'busy', 'blocked'].includes(control.actionState) ||
       !control.actionStatus ||
       (control.disabled === true && control.actionState === 'ready') ||
-      (control.actionState !== 'ready' && !control.disabledReason && control.actionState !== 'busy')
-    ));
-    const presentRevisionControls = revisionControls.filter((control) => control.exists);
+	      (control.actionState !== 'ready' && !control.disabledReason && control.actionState !== 'busy')
+	    ));
+	    const malformedControlMapLinks = controlMapLinks.filter((link) => (
+	      !link.exists ||
+	      link.describedBy !== (status?.id || '') ||
+	      !['ready', 'busy'].includes(link.actionState) ||
+	      !link.actionStatus ||
+	      !/available|unavailable/i.test(link.actionStatus) ||
+	      link.target !== link.href ||
+	      (link.ariaDisabled === 'true' && link.actionState !== 'busy') ||
+	      (link.actionState === 'busy' && !link.disabledReason)
+	    ));
+	    const controlMapState = {
+	      exists: controlMap instanceof HTMLElement,
+	      describedBy: controlMap?.getAttribute('aria-describedby') || '',
+	      actionState: controlMap?.getAttribute('data-action-state') || '',
+	      actionStatus: normalize(controlMap?.getAttribute('data-action-status')),
+	    };
+	    const presentRevisionControls = revisionControls.filter((control) => control.exists);
     const malformedRevisionControls = presentRevisionControls.filter((control) => (
       control.describedBy !== (revisionStatus?.id || '') ||
       !['ready', 'busy', 'blocked'].includes(control.actionState) ||
@@ -9511,12 +9554,18 @@ const assertPageEditorRouteActionStatus = async (client) => {
         back.describedBy === status.id &&
         ['ready', 'blocked'].includes(back.actionState) &&
         Boolean(back.actionStatus) &&
-        focusToggle.exists &&
-        focusToggle.describedBy === status.id &&
-        ['ready', 'blocked'].includes(focusToggle.actionState) &&
-        Boolean(focusToggle.actionStatus) &&
-        controls.length === 14 &&
-        malformedControls.length === 0 &&
+	        focusToggle.exists &&
+	        focusToggle.describedBy === status.id &&
+	        ['ready', 'blocked'].includes(focusToggle.actionState) &&
+	        Boolean(focusToggle.actionStatus) &&
+	        controlMapState.exists &&
+	        controlMapState.describedBy === status.id &&
+	        ['ready', 'busy'].includes(controlMapState.actionState) &&
+	        /Control map navigation (available|unavailable)/.test(controlMapState.actionStatus) &&
+	        controlMapLinks.length === 5 &&
+	        malformedControlMapLinks.length === 0 &&
+	        controls.length === 14 &&
+	        malformedControls.length === 0 &&
         (!revisionGraphState.exists ||
           (
             Boolean(revisionStatus?.id) &&
@@ -9535,9 +9584,12 @@ const assertPageEditorRouteActionStatus = async (client) => {
         statusId: status?.id || '',
         statusText: normalize(status?.textContent),
       },
-      back,
-      focusToggle,
-      controls,
+	      back,
+	      focusToggle,
+	      controlMap: controlMapState,
+	      controlMapLinks,
+	      malformedControlMapLinks,
+	      controls,
       malformedControls,
       revisionGraph: revisionGraphState,
       revisionControls,
