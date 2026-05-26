@@ -44,8 +44,19 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes("schemaVersion: 'backy.reusable-section-portable-pack.v1'"), 'Reusable sections route must expose the portable section pack contract');
   assert(source.includes("schemaVersion: 'backy.reusable-section-portability-readiness.v1'"), 'Reusable sections route must expose portability readiness evidence');
   assert(source.includes("schemaVersion: 'backy.reusable-section-portability-action-plan.v1'"), 'Reusable sections route must expose a copyable portability action plan');
+  assert(source.includes('data-testid="reusable-section-portability-readiness-details"'), 'Reusable sections command center must expose collapsed portability readiness details');
+  assert(source.includes('data-default-collapsed="true"'), 'Reusable sections portability readiness details must be collapsed by default');
+  assert(source.includes('Show readiness') && source.includes('Hide readiness'), 'Reusable sections portability readiness disclosure must expose visible toggle labels');
   assert(source.includes('data-testid="reusable-section-portability-readiness"'), 'Reusable sections command center must render portability readiness');
   assert(source.includes('data-testid="reusable-section-portability-action-plan"'), 'Reusable sections command center must keep the portability action-plan copy control');
+  assert(
+    source.includes('data-testid="reusable-sections-workflows-details"') &&
+      source.includes('data-testid="reusable-sections-workflow-panels"') &&
+      source.includes('Portable exports, version restore, metadata, and synced-instance refreshes.') &&
+      source.includes('Show workflows') &&
+      source.includes('Hide workflows'),
+    'Reusable sections import/version/instance workflows must live behind a default-collapsed disclosure so the default page prioritizes the editor and library',
+  );
   assert(source.includes('title="No section versions yet"'), 'Reusable sections workflow must keep the empty version-history title visible');
   assert(source.includes('Save this reusable section or restore an imported version to start building a backend version history.'), 'Reusable sections empty version history must explain how versions are created');
   assert(source.includes('title="Version history not loaded"'), 'Reusable sections workflow must keep the unloaded version-history title visible');
@@ -67,7 +78,28 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes('data-testid="reusable-section-name-error"'), 'Reusable sections route must render a stable name inline error');
   assert(source.includes('data-testid="reusable-section-content-error"'), 'Reusable sections route must render a stable content JSON inline error');
   assert(source.includes("setError('Fix required reusable section fields before saving.')"), 'Reusable sections route must block invalid saves with focused validation copy');
+  assert(
+    source.includes('const canUseReusableSectionRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseReusableSectionRoleDefaults;') &&
+      source.includes('const isReusableSectionPermissionAllowed = (key: ReusableSectionPermissionKey) => (') &&
+      source.includes("const canViewSections = isReusableSectionPermissionAllowed('pages.view');") &&
+      source.includes("const canEditSections = isReusableSectionPermissionAllowed('pages.edit');") &&
+      source.includes("const canDeleteSections = isReusableSectionPermissionAllowed('pages.delete');") &&
+      source.includes('const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId);') &&
+      !source.includes('const canViewSections = !isPermissionMatrixPending') &&
+      !source.includes('const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId) || isPermissionMatrixPending;'),
+    'Reusable sections permissions must keep role-default page-builder workflows usable while backend permission details hydrate.',
+  );
   assert(/disabled=\{isBusy \|\| !canEditSections\}[\s\S]{0,500}data-testid="reusable-section-save"/.test(source), 'Reusable sections save button must stay reachable for custom inline validation');
+  assert(source.includes('const actionState = (disabledReason: string) =>'), 'Reusable sections route must expose shared action-state semantics for controls');
+  assert(source.includes('aria-label={`Actions for ${section.name}`}'), 'Reusable section cards must expose named action groups');
+  assert(source.includes('data-testid={`reusable-section-actions-${section.id}`}'), 'Reusable section cards must expose a stable action-group hook');
+  assert(source.includes('data-testid={`reusable-section-actions-status-${section.id}`}'), 'Reusable section cards must expose a stable hidden action status hook');
+  assert(source.includes('data-action-status={sectionActionStatus}'), 'Reusable section cards must publish action status summaries');
+  assert(source.includes('data-testid={`reusable-section-select-${section.id}`}'), 'Reusable section cards must expose a stable select/edit action hook');
+  assert(source.includes('data-action-state={actionState(sectionOpenDisabledReason)}'), 'Reusable section select/edit actions must publish ready or blocked state');
+  assert(source.includes('data-action-state={actionState(sectionDeleteDisabledReason)}'), 'Reusable section delete actions must publish ready or blocked state');
+  assert(source.includes('data-disabled-reason={sectionDeleteDisabledReason || undefined}'), 'Reusable section delete actions must publish blocked reasons');
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -143,7 +175,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_REUSABLE_SECTIONS_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -689,14 +722,23 @@ const navigateToReusableSections = async (client) => {
 const assertReusableSectionsLayout = async (client) => {
   const layout = await evaluate(client, `(() => {
     const body = document.body?.innerText || '';
+    const portabilityDetails = document.querySelector('[data-testid="reusable-section-portability-readiness-details"]');
+    const portabilityText = portabilityDetails?.textContent || '';
+    const workflowDetails = document.querySelector('[data-testid="reusable-sections-workflows-details"]');
+    const workflowText = workflowDetails?.textContent || '';
     return {
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="reusable-sections-command-center"]')),
+      portabilityReadinessCollapsed: portabilityDetails instanceof HTMLDetailsElement &&
+        portabilityDetails.open === false &&
+        portabilityDetails.getAttribute('data-default-collapsed') === 'true',
       hasPortabilityReadiness: Boolean(document.querySelector('[data-testid="reusable-section-portability-readiness"]')) &&
         Boolean(document.querySelector('[data-testid="reusable-section-portability-action-plan"]')) &&
-        body.includes('Portable section readiness') &&
-        body.includes('Copy action plan'),
+        portabilityText.includes('Portable section readiness') &&
+        portabilityText.includes('Show readiness') &&
+        portabilityText.includes('Copy action plan') &&
+        portabilityText.includes('Detailed evidence for portable reusable-section exports'),
       hasFrontendTemplates: Boolean(document.querySelector('[data-testid="reusable-sections-frontend-template-options"]')) &&
         Boolean(document.querySelector(${JSON.stringify(`[data-testid="reusable-sections-frontend-template-${FRONTEND_SECTION_TEMPLATE_ID}"]`)})) &&
         body.includes('Frontend design sections') &&
@@ -708,17 +750,22 @@ const assertReusableSectionsLayout = async (client) => {
         Boolean(document.querySelector('[data-testid="reusable-section-canvas-editor"]')) &&
         Boolean(document.querySelector('[data-testid="editor-save-status"]')) &&
         body.includes('Visual section editor'),
+      workflowCollapsed: workflowDetails instanceof HTMLDetailsElement &&
+        workflowDetails.open === false &&
+        workflowDetails.getAttribute('data-default-collapsed') === 'true',
       hasWorkflowPanel: Boolean(document.querySelector('[data-testid="reusable-sections-workflows"]')) &&
+        Boolean(document.querySelector('[data-testid="reusable-sections-workflow-panels"]')) &&
         Boolean(document.querySelector('[data-testid="reusable-sections-export-visible"]')) &&
         Boolean(document.querySelector('[data-testid="reusable-sections-import"]')) &&
-        body.includes('Import, versions, and instances') &&
-        body.includes('Instance propagation'),
+        workflowText.includes('Import, versions, and instances') &&
+        workflowText.includes('Show workflows') &&
+        workflowText.includes('Instance propagation'),
     };
   })()`);
 
   assert(layout.scrollWidth <= layout.width + 8, `Reusable sections page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasPortabilityReadiness && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasVisualEditor && layout.hasWorkflowPanel,
+    layout.hasCommandCenter && layout.portabilityReadinessCollapsed && layout.hasPortabilityReadiness && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasVisualEditor && layout.workflowCollapsed && layout.hasWorkflowPanel,
     `Reusable sections page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
@@ -837,8 +884,45 @@ const createManualReusableSectionThroughUi = async (client) => {
   throw new Error('Manual reusable section was not created');
 };
 
+const assertReusableSectionCardActionStatus = async (client, section) => {
+  const state = await evaluate(client, `(() => {
+    const group = document.querySelector(${JSON.stringify(`[data-testid="reusable-section-actions-${section.id}"]`)});
+    const status = document.querySelector(${JSON.stringify(`[data-testid="reusable-section-actions-status-${section.id}"]`)});
+    const select = document.querySelector(${JSON.stringify(`[data-testid="reusable-section-select-${section.id}"]`)});
+    const del = document.querySelector(${JSON.stringify(`[data-testid="reusable-section-delete-${section.id}"]`)});
+    return {
+      hasGroup: group instanceof HTMLElement,
+      role: group?.getAttribute('role') || '',
+      label: group?.getAttribute('aria-label') || '',
+      describedBy: group?.getAttribute('aria-describedby') || '',
+      statusId: status?.id || '',
+      statusText: status?.textContent?.trim() || '',
+      dataStatus: group?.getAttribute('data-action-status') || '',
+      selectState: select?.getAttribute('data-action-state') || '',
+      selectReason: select?.getAttribute('data-disabled-reason') || '',
+      selectDescribedBy: select?.getAttribute('aria-describedby') || '',
+      deleteState: del?.getAttribute('data-action-state') || '',
+      deleteReason: del?.getAttribute('data-disabled-reason') || '',
+      deleteDescribedBy: del?.getAttribute('aria-describedby') || '',
+      body: document.body?.innerText?.slice(0, 1600) || '',
+    };
+  })()`);
+
+  assert(state.hasGroup, `Reusable section card is missing an action group: ${JSON.stringify(state)}`);
+  assert(state.role === 'group', `Reusable section card actions must use role=group: ${JSON.stringify(state)}`);
+  assert(state.label === `Actions for ${section.name}`, `Reusable section action group has the wrong accessible name: ${JSON.stringify(state)}`);
+  assert(state.describedBy && state.describedBy === state.statusId, `Reusable section action group must describe itself with its hidden status: ${JSON.stringify(state)}`);
+  assert(state.statusText.includes('Edit available.') && state.statusText.includes('Delete available.'), `Reusable section action status did not explain ready actions: ${JSON.stringify(state)}`);
+  assert(state.dataStatus === state.statusText, `Reusable section action data status must mirror hidden text: ${JSON.stringify(state)}`);
+  assert(state.selectState === 'ready' && !state.selectReason && state.selectDescribedBy === state.statusId, `Reusable section select action state is wrong: ${JSON.stringify(state)}`);
+  assert(state.deleteState === 'ready' && !state.deleteReason && state.deleteDescribedBy === state.statusId, `Reusable section delete action state is wrong: ${JSON.stringify(state)}`);
+  return state;
+};
+
 const deleteReusableSectionThroughUi = async (client, section) => {
   const deleteTestId = `reusable-section-delete-${section.id}`;
+
+  await assertReusableSectionCardActionStatus(client, section);
 
   const firstDelete = await clickReusableSectionControl(client, deleteTestId);
   assert(firstDelete.ok, `Unable to open reusable section delete confirmation: ${JSON.stringify(firstDelete)}`);
@@ -1080,6 +1164,11 @@ const exerciseReusableSectionWorkflows = async (client, section, pageIds = []) =
 
   const page = await createDemoPageWithReusableSectionInstance(section, pageIds);
   try {
+    await evaluate(client, `(() => {
+      const details = document.querySelector('[data-testid="reusable-sections-workflows-details"]');
+      if (details instanceof HTMLDetailsElement) details.open = true;
+    })()`);
+
     const workflowLoaded = await clickReusableSectionControl(client, 'reusable-section-workflow-load');
     assert(workflowLoaded.ok, `Unable to load reusable section workflow state: ${JSON.stringify(workflowLoaded)}`);
 
@@ -1133,6 +1222,8 @@ const exerciseReusableSectionWorkflows = async (client, section, pageIds = []) =
 
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const state = await evaluate(client, `(() => {
+        const details = document.querySelector('[data-testid="reusable-sections-workflows-details"]');
+        if (details instanceof HTMLDetailsElement) details.open = true;
         const body = document.body?.innerText || '';
         return {
           hasCurrentVersion: body.includes('v4 current'),

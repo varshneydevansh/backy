@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { withSmokeLock } from './smoke-lock.mjs';
 
 const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
@@ -78,18 +79,101 @@ const assertBlogCreateSourceContract = () => {
       source.includes('data-testid="blog-create-canonical-error"') &&
       source.includes('data-testid="blog-create-schedule-input"') &&
       source.includes('data-testid="blog-create-schedule-error"') &&
-      source.includes('<Button type="submit" disabled={createFormDisabled}'),
-    'Blog create must expose inline title/slug/canonical/schedule validation while keeping save reachable',
+      source.includes('data-testid="blog-create-control-map"') &&
+      source.includes('data-testid="blog-create-submit-button"') &&
+      source.includes('const isCreateBusy = isLoading || isPreviewAfterCreateBusy;') &&
+      source.includes('const createFormDisabled = isCreateBusy || !canEditBlog;') &&
+      /const canCreateDraft =[\s\S]*?&& !isCheckingPosts[\s\S]*?const canCreatePreviewDraft =/.test(source) &&
+      /const canCreatePreviewDraft =[\s\S]*?&& !isCheckingPosts[\s\S]*?const canAttemptCreatePreviewDraft =/.test(source) &&
+      source.includes('const canAttemptCreatePreviewDraft = canEditBlog && canPublishBlog;') &&
+      source.includes("const submitBlockerMessage = isLoading || canSubmit ? null : getCreateBlockedMessage('save');") &&
+      source.includes("const previewDraftBlockerMessage = isPreviewAfterCreateBusy || canCreatePreviewDraft ? null : getCreateBlockedMessage('preview');") &&
+      source.includes("id=\"blog-create-submit-blocker\"") &&
+      source.includes('data-testid="blog-create-submit-blocker"') &&
+      source.includes('data-state={submitControlState}') &&
+      source.includes("const blogCreateSubmitActionStatusId = 'blog-create-submit-action-status';") &&
+      source.includes("const blogCreatePreviewActionStatusId = 'blog-create-preview-action-status';") &&
+      source.includes("const blogCreateCommandActionStatusId = 'blog-create-command-action-status';") &&
+      source.includes("const blogCreateRecoveryActionStatusId = 'blog-create-recovery-action-status';") &&
+      source.includes('const blogCreateBackActionStatus = isCreateBusy') &&
+      source.includes('const blogCreateFocusActionStatus = isCreateBusy') &&
+      source.includes('const blogCreateCopyActionStatus = isCreateBusy') &&
+      source.includes('const blogCreateDownloadActionStatus = isCreateBusy') &&
+      source.includes('const blogCreateRouteRetryActionStatus = isCreateBusy') &&
+      source.includes('const blogCreateDiscardRecoveryActionStatus = isCreateBusy') &&
+      source.includes('const blogCreateRestoreRecoveryActionStatus = isCreateBusy') &&
+      source.includes('data-testid="blog-create-command-action-status"') &&
+      source.includes('data-testid="blog-create-back-to-blog"') &&
+      source.includes('data-testid="blog-create-focus-toggle"') &&
+      source.includes('data-testid="blog-create-copy-handoff"') &&
+      source.includes('data-testid="blog-create-download-handoff"') &&
+      source.includes('data-testid="blog-create-route-check-retry"') &&
+      source.includes('data-testid="blog-create-recovery-action-status"') &&
+      source.includes('data-testid="blog-create-discard-recovery"') &&
+      source.includes('data-testid="blog-create-restore-recovery"') &&
+      source.includes('const blogCreateSubmitActionState = blogCreateSubmitDisabledReason || submitBlockerMessage ?') &&
+      source.includes('const blogCreatePreviewActionState = blogCreatePreviewDisabledReason || previewDraftBlockerMessage ?') &&
+      source.includes('const blogCreateSubmitDescribedBy = submitBlockerMessage') &&
+      source.includes('const blogCreatePreviewDescribedBy = previewDraftBlockerMessage && submitBlockerMessage') &&
+      source.includes('data-testid="blog-create-submit-action-status"') &&
+      source.includes('data-testid="blog-create-preview-action-status"') &&
+      source.includes('aria-describedby={blogCreateSubmitDescribedBy}') &&
+      source.includes('aria-describedby={blogCreatePreviewDescribedBy}') &&
+      source.includes('data-action-state={blogCreateSubmitActionState}') &&
+      source.includes('data-action-status={blogCreateSubmitActionStatus}') &&
+      source.includes('data-disabled-reason={blogCreateSubmitDisabledReason || undefined}') &&
+      source.includes('data-target-site-id={activeSiteId || undefined}') &&
+      source.includes('data-target-route={routePath}') &&
+      source.includes('data-target-status={status}') &&
+      source.includes('data-target-template={blogCreateTemplateName}') &&
+      source.includes('data-action-state={blogCreatePreviewActionState}') &&
+      source.includes('data-action-status={blogCreatePreviewActionStatus}') &&
+      source.includes('data-disabled-reason={blogCreatePreviewDisabledReason || undefined}') &&
+      source.includes('data-target-status="draft"') &&
+      source.includes('disabled={isCreateBusy || !canAttemptCreatePreviewDraft}') &&
+      source.includes('data-can-preview={String(canCreatePreviewDraft)}') &&
+      source.includes('data-can-submit={String(canSubmit)}') &&
+      source.includes("data-blocker={previewDraftBlockerMessage || ''}") &&
+      source.includes("data-blocker={submitBlockerMessage || ''}") &&
+      !source.includes('const isCreateBusy = isLoading || isPreviewAfterCreateBusy || isPermissionMatrixPending;') &&
+      !source.includes('disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}'),
+    'Blog create must expose inline title/slug/canonical/schedule validation plus submit/preview blocker states while keeping save and preview reachable during permission sync and background route checks',
   );
   assert(
     source.includes('const loadBlogCreatePermissions = useCallback(() => {') &&
       source.includes('data-testid="blog-create-permission-state"') &&
+      source.includes("const blogCreatePermissionActionStatusId = 'blog-create-permission-action-status';") &&
+      source.includes('const blogCreatePermissionRetryActionStatus = isPermissionsLoading') &&
+      source.includes('const blogCreatePermissionReviewActionStatus =') &&
+      source.includes('data-testid="blog-create-permission-action-status"') &&
+      source.includes('data-testid="blog-create-permission-retry"') &&
+      source.includes('data-testid="blog-create-permission-review-users"') &&
       source.includes('Blog creation permissions could not be verified') &&
       source.includes('aria-label="Retry loading blog creation permissions"') &&
       source.includes('Retry permissions') &&
       source.includes('to="/users"') &&
       source.includes('Review users'),
     'Blog create permission alert must expose retryable permission recovery and user-access handoff',
+  );
+  assert(
+    source.includes('data-testid="blog-create-command-center"') &&
+      source.includes('Draft, preview, publish, taxonomy, frontend handoff, and public canvas controls stay together without pushing the editor out of reach.') &&
+      source.includes('data-testid="blog-create-readiness-summary"') &&
+      source.includes('{readinessChecks.filter((check) => check.complete).length} of {readinessChecks.length} checks passing.') &&
+      source.includes('data-testid="blog-create-control-map"') &&
+      source.includes('aria-label="Post creation control map"') &&
+      source.includes('aria-label={`${area.title}: ${area.detail}`}') &&
+      source.includes('inline-flex min-h-10 items-center rounded-lg') &&
+      source.includes('{BLOG_CREATE_CONTROL_AREAS.length} areas') &&
+      source.includes("density={isWorkspaceFocus ? 'compact' : 'default'}") &&
+      source.includes('initialCanvasFocusMode={isWorkspaceFocus}') &&
+      source.includes("data-testid={isWorkspaceFocus ? 'blog-create-focus-banner' : undefined}"),
+    'Blog create default shell must stay compact, keep the collapsed chip control map, and boot the inner editor in focused canvas mode.',
+  );
+  assert(
+    source.includes("search: { siteId: activeSiteId, focus: 'canvas' }") &&
+      source.includes("navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId, focus: 'canvas' } });"),
+    'Blog create save and preview handoffs must open the newly created post in focused canvas mode instead of returning users to the list',
   );
 };
 
@@ -154,7 +238,8 @@ const loginAdminApi = async () => {
   const smokeMfaCode = process.env.BACKY_BLOG_CREATE_SMOKE_MFA_CODE
     || process.env.BACKY_EDITOR_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -291,6 +376,44 @@ const waitForCdp = async () => {
   throw new Error(`Chrome DevTools did not start on port ${PORT}`);
 };
 
+const isUsablePageTarget = (target) => {
+  if (!target || target.type !== 'page' || !target.webSocketDebuggerUrl) return false;
+  const url = target.url || '';
+  return !(
+    url.startsWith('chrome://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('chrome-error://') ||
+    url.startsWith('chrome-extension://')
+  );
+};
+
+const getTargetScore = (target) => {
+  const url = target.url || '';
+  if (url.startsWith(ADMIN_BASE_URL)) return 0;
+  if (url === 'about:blank') return 1;
+  if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return 2;
+  if (url.startsWith('http://') || url.startsWith('https://')) return 3;
+  return 4;
+};
+
+const selectUsablePageTarget = (targets) => (
+  [...targets]
+    .filter(isUsablePageTarget)
+    .sort((left, right) => getTargetScore(left) - getTargetScore(right))[0]
+);
+
+const waitForUsablePageTarget = async () => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const targets = await waitForCdp();
+    const target = selectUsablePageTarget(targets);
+    if (target) return target;
+    await sleep(100);
+  }
+
+  const targets = await fetchJson('/json/list').catch(() => []);
+  throw new Error(`No usable Chrome page target found on port ${PORT}: ${JSON.stringify(targets).slice(0, 1000)}`);
+};
+
 const connectCdp = (webSocketDebuggerUrl) => {
   const socket = new WebSocket(webSocketDebuggerUrl);
   let id = 0;
@@ -361,6 +484,35 @@ const seedBrowserSessionCookie = async (client, sessionToken) => {
   });
 };
 
+const seedBrowserAuthStorage = async (client, sessionToken) => {
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/login` });
+  await sleep(250);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      ${authStorageScript(sessionToken)}
+      let hasToken = false;
+      try {
+        hasToken = Boolean(JSON.parse(localStorage.getItem('backy-auth-storage') || '{}')?.state?.session?.token);
+      } catch {
+        hasToken = false;
+      }
+      return {
+        href: window.location.href,
+        hasToken,
+      };
+    })()`);
+
+    if (state.href.startsWith(ADMIN_BASE_URL) && state.hasToken) {
+      return state;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error('Unable to seed browser auth storage for blog create smoke.');
+};
+
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -396,12 +548,15 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
   const state = await evaluate(client, `(() => {
     const bodyText = document.body?.innerText || '';
     const commandCenter = document.querySelector('[data-testid="blog-create-command-center"]');
+    const submitBlocker = document.querySelector('[data-testid="blog-create-submit-blocker"]');
+    const submitButton = document.querySelector('[data-testid="blog-create-submit-button"]');
     const workspaceGrid = document.querySelector('[data-testid="blog-create-workspace-grid"]');
     const canvasShell = document.querySelector('[data-testid="blog-create-canvas-shell"]');
     const editorCanvas = document.querySelector('[data-testid="editor-canvas"]');
     const componentLibrary = document.querySelector('[data-testid="editor-component-library"]');
     const inspector = document.querySelector('[data-testid="editor-inspector"]');
     const focusBanner = document.querySelector('[data-testid="blog-create-focus-banner"]');
+    const controlMap = document.querySelector('[data-testid="blog-create-control-map"]');
     const frontendTemplatePanel = document.querySelector('[data-testid="blog-frontend-template-panel"]');
     const writingPanel = document.querySelector('[data-testid="blog-create-writing-panel"]');
     const frontendTemplateRoot = document.querySelector('[data-element-id="frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}"]');
@@ -425,12 +580,21 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
       documentWidth: document.documentElement.scrollWidth,
       horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
       commandVisible: Boolean(commandCenter && rect(commandCenter)?.width > 320 && rect(commandCenter)?.height > 120),
+      submitButtonVisible: Boolean(submitButton),
+      submitControlState: submitButton?.getAttribute('data-state') || '',
+      submitCanSubmit: submitButton?.getAttribute('data-can-submit') || '',
+      submitBlockerVisible: Boolean(submitBlocker),
+      submitBlockerState: submitBlocker?.getAttribute('data-state') || '',
+      submitBlockerText: submitBlocker?.textContent || '',
       workspaceVisible: Boolean(workspaceGrid && rect(workspaceGrid)?.width > 320 && rect(workspaceGrid)?.height > 400),
       canvasVisible: Boolean(canvasShell && rect(canvasShell)?.width > 320 && rect(canvasShell)?.height > 500),
       editorCanvasVisible: Boolean(editorCanvas && rect(editorCanvas)?.width > 260 && rect(editorCanvas)?.height > 240),
       componentLibraryVisible: Boolean(componentLibrary && rect(componentLibrary)?.width > 180 && rect(componentLibrary)?.height > 240),
       inspectorVisible: Boolean(inspector && rect(inspector)?.width > 180 && rect(inspector)?.height > 240),
       focusBannerVisible: Boolean(focusBanner && rect(focusBanner)?.width > 320 && rect(focusBanner)?.height > 80),
+      focusDensity: focusBanner?.getAttribute('data-density') || '',
+      controlMapVisible: Boolean(controlMap && rect(controlMap)?.width > 320 && rect(controlMap)?.height > 52),
+      controlMapOpen: controlMap instanceof HTMLDetailsElement ? controlMap.open : null,
       draftPanel: Boolean(document.querySelector('#blog-create-draft')),
       seoPanel: Boolean(document.querySelector('#blog-create-seo')),
       mediaPanel: Boolean(document.querySelector('#blog-create-media')),
@@ -453,7 +617,8 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
       hasSavePreviewAction: bodyText.includes('Save draft and preview'),
       hasFocusAction: bodyText.includes('Focus canvas'),
       hasShowPanelsAction: bodyText.includes('Show panels'),
-      hasGroupingMeta: bodyText.includes('Cmd/Ctrl+G grouping'),
+      groupShortcut: document.querySelector('[data-testid="editor-group-selection"]')?.getAttribute('aria-keyshortcuts') || '',
+      siblingShortcut: document.querySelector('[data-testid="editor-select-sibling-layers"]')?.getAttribute('aria-keyshortcuts') || '',
       hasBreakpointControls: bodyText.includes('Desktop') && bodyText.includes('Tablet') && bodyText.includes('Mobile'),
       hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
       body: bodyText.slice(0, 3000),
@@ -462,18 +627,21 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
 
   assert(state.workspaceVisible, `${label} workspace grid was not visibly rendered: ${JSON.stringify(state)}`);
   assert(state.canvasVisible && state.editorCanvasVisible, `${label} editor canvas was not visibly rendered: ${JSON.stringify(state)}`);
-  assert(state.componentLibraryVisible && state.inspectorVisible, `${label} editor side panels were not visibly rendered: ${JSON.stringify(state)}`);
-  assert(state.hasBreakpointControls && state.hasGroupingMeta, `${label} editor breakpoint/grouping controls missing: ${JSON.stringify(state)}`);
+  assert(state.hasBreakpointControls && state.groupShortcut.includes('Control+G') && state.siblingShortcut.includes('Control+A'), `${label} editor breakpoint/grouping controls missing: ${JSON.stringify(state)}`);
   assert(state.hasSavePreviewAction, `${label} save-preview action missing: ${JSON.stringify(state)}`);
   assert(state.horizontalOverflow <= 4, `${label} has horizontal overflow: ${JSON.stringify(state)}`);
   assert(!state.hasFrameworkOverlay, `${label} rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
 
   if (focus) {
-    assert(state.focusBannerVisible && state.hasShowPanelsAction, `${label} focus banner/actions missing: ${JSON.stringify(state)}`);
+    assert(state.focusBannerVisible && state.focusDensity === 'compact' && state.hasShowPanelsAction, `${label} focus banner/actions missing: ${JSON.stringify(state)}`);
     assert(!state.commandVisible && !state.draftPanel && !state.publishPanel, `${label} focus mode did not hide create panels: ${JSON.stringify(state)}`);
+    assert(!state.componentLibraryVisible && !state.inspectorVisible, `${label} focus mode should start with editor side panels hidden: ${JSON.stringify(state)}`);
   } else {
     assert(state.commandVisible, `${label} command center missing: ${JSON.stringify(state)}`);
+    assert(state.submitButtonVisible, `${label} submit action state missing: ${JSON.stringify(state)}`);
+    assert(state.controlMapVisible && state.controlMapOpen === false, `${label} control map should stay collapsed until requested: ${JSON.stringify(state)}`);
     assert(state.draftPanel && state.seoPanel && state.mediaPanel && state.publishPanel && state.taxonomyPanel && state.writingPanel, `${label} create panels missing: ${JSON.stringify(state)}`);
+    assert(state.componentLibraryVisible && state.inspectorVisible, `${label} editor side panels were not visibly rendered: ${JSON.stringify(state)}`);
     assert(state.writingMetrics && state.addSection && state.addQuote, `${label} writing structure controls missing: ${JSON.stringify(state)}`);
     assert(state.frontendTemplatePanel && state.frontendTemplateRoot && state.activeTemplate === 'true' && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `${label} frontend template handoff missing: ${JSON.stringify(state)}`);
     assert(state.hasFocusAction, `${label} focus canvas action missing: ${JSON.stringify(state)}`);
@@ -767,6 +935,24 @@ const navigateToBlogCreate = async (client) => {
       frontendTemplateRoot: Boolean(document.querySelector('[data-element-id="frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')),
       frontendPanel: Boolean(document.querySelector('[data-testid="blog-frontend-template-options"]')),
       frontendTemplateActive: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
+      submitState: document.querySelector('[data-testid="blog-create-submit-button"]')?.getAttribute('data-state') || '',
+      submitCanSubmit: document.querySelector('[data-testid="blog-create-submit-button"]')?.getAttribute('data-can-submit') || '',
+      submitBlocker: document.querySelector('[data-testid="blog-create-submit-blocker"]')?.textContent || '',
+      commandStatusId: document.querySelector('[data-testid="blog-create-command-action-status"]')?.id || '',
+      commandStatusText: document.querySelector('[data-testid="blog-create-command-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      backActionState: document.querySelector('[data-testid="blog-create-back-to-blog"]')?.getAttribute('data-action-state') || '',
+      backActionStatus: document.querySelector('[data-testid="blog-create-back-to-blog"]')?.getAttribute('data-action-status') || '',
+      backDescribedBy: document.querySelector('[data-testid="blog-create-back-to-blog"]')?.getAttribute('aria-describedby') || '',
+      focusActionState: document.querySelector('[data-testid="blog-create-focus-toggle"]')?.getAttribute('data-action-state') || '',
+      focusActionStatus: document.querySelector('[data-testid="blog-create-focus-toggle"]')?.getAttribute('data-action-status') || '',
+      focusDescribedBy: document.querySelector('[data-testid="blog-create-focus-toggle"]')?.getAttribute('aria-describedby') || '',
+      copyActionState: document.querySelector('[data-testid="blog-create-copy-handoff"]')?.getAttribute('data-action-state') || '',
+      copyActionStatus: document.querySelector('[data-testid="blog-create-copy-handoff"]')?.getAttribute('data-action-status') || '',
+      copyDescribedBy: document.querySelector('[data-testid="blog-create-copy-handoff"]')?.getAttribute('aria-describedby') || '',
+      downloadActionState: document.querySelector('[data-testid="blog-create-download-handoff"]')?.getAttribute('data-action-state') || '',
+      downloadActionStatus: document.querySelector('[data-testid="blog-create-download-handoff"]')?.getAttribute('data-action-status') || '',
+      downloadDescribedBy: document.querySelector('[data-testid="blog-create-download-handoff"]')?.getAttribute('aria-describedby') || '',
+      routeRetryTextInStatus: (document.querySelector('[data-testid="blog-create-command-action-status"]')?.textContent || '').includes('Retry blog route check available for'),
       payloadTemplateId: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}')?.template?.id || '',
       payloadTemplateSource: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}')?.template?.source || '',
       body: document.body?.innerText?.slice(0, 200) || '',
@@ -783,6 +969,22 @@ const navigateToBlogCreate = async (client) => {
       && state.frontendTemplateActive === 'true'
       && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID
       && state.payloadTemplateSource === 'frontend-design'
+      && state.commandStatusId === 'blog-create-command-action-status'
+      && state.backActionState === 'ready'
+      && state.focusActionState === 'ready'
+      && state.copyActionState === 'ready'
+      && state.downloadActionState === 'ready'
+      && state.backDescribedBy === state.commandStatusId
+      && state.focusDescribedBy === state.commandStatusId
+      && state.copyDescribedBy === state.commandStatusId
+      && state.downloadDescribedBy === state.commandStatusId
+      && state.backActionStatus.includes(`Back to Blog posts available for ${SITE_ID}`)
+      && state.focusActionStatus.includes('Focus blog creation canvas available.')
+      && state.copyActionStatus.includes(`Copy blog creation handoff available for ${SITE_ID}`)
+      && state.downloadActionStatus.includes(`Download blog creation handoff available for ${SITE_ID}`)
+      && state.commandStatusText.includes(state.copyActionStatus)
+      && state.commandStatusText.includes(state.downloadActionStatus)
+      && state.routeRetryTextInStatus
     ) {
       return state;
     }
@@ -795,6 +997,65 @@ const navigateToBlogCreate = async (client) => {
   }
 
   return null;
+};
+
+const assertSubmitBlockerState = async (client) => {
+  await evaluate(client, `(() => {
+    const setInput = (selector, value) => {
+      const node = document.querySelector(selector);
+      if (!node) return false;
+      const proto = node instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+      setter?.call(node, value);
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    };
+
+    setInput('#blog-create-title', '');
+    setInput('#blog-create-slug', '');
+    return true;
+  })()`);
+
+  let state = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const submit = document.querySelector('[data-testid="blog-create-submit-button"]');
+      const blocker = document.querySelector('[data-testid="blog-create-submit-blocker"]');
+      const status = document.querySelector('[data-testid="blog-create-submit-action-status"]');
+      const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      return {
+        hasSubmit: Boolean(submit),
+        submitState: submit?.getAttribute('data-state') || '',
+        canSubmit: submit?.getAttribute('data-can-submit') || '',
+        actionState: submit?.getAttribute('data-action-state') || '',
+        actionStatus: submit?.getAttribute('data-action-status') || '',
+        disabledReason: submit?.getAttribute('data-disabled-reason') || '',
+        statusId: status?.id || '',
+        statusText,
+        blockerText: blocker?.textContent || '',
+        blockerState: blocker?.getAttribute('data-state') || '',
+        describedBy: submit?.getAttribute('aria-describedby') || '',
+      };
+    })()`);
+
+    if (
+      state.hasSubmit &&
+      state.canSubmit === 'false' &&
+      state.submitState !== 'ready' &&
+      state.actionState === 'blocked' &&
+      state.actionStatus === state.statusText &&
+      state.statusText.includes('Save draft needs attention:') &&
+      state.blockerText &&
+      state.describedBy === 'blog-create-submit-action-status blog-create-submit-blocker'
+    ) {
+      return state;
+    }
+
+    await sleep(200);
+  }
+
+  throw new Error(`Blog create submit blocker did not render after clearing required fields: ${JSON.stringify(state)}`);
 };
 
 const fillBlogCreateForm = async (client, slug) => {
@@ -860,6 +1121,74 @@ const fillBlogCreateForm = async (client, slug) => {
   return result;
 };
 
+const assertBlogCreateReadyActionStatus = async (client, slug) => {
+  let state = null;
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const submit = document.querySelector('[data-testid="blog-create-submit-button"]');
+      const preview = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').includes('Save draft and preview')
+      ));
+      const submitStatus = document.querySelector('[data-testid="blog-create-submit-action-status"]');
+      const previewStatus = document.querySelector('[data-testid="blog-create-preview-action-status"]');
+      const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      const previewStatusText = previewStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      return {
+        ready: submit instanceof HTMLButtonElement &&
+          preview instanceof HTMLButtonElement &&
+          submit.disabled === false &&
+          preview.disabled === false &&
+          submit.getAttribute('aria-describedby') === 'blog-create-submit-action-status' &&
+          preview.getAttribute('aria-describedby') === 'blog-create-preview-action-status' &&
+          submit.getAttribute('data-action-state') === 'ready' &&
+          preview.getAttribute('data-action-state') === 'ready' &&
+          submit.getAttribute('data-action-status') === submitStatusText &&
+          preview.getAttribute('data-action-status') === previewStatusText &&
+          submit.getAttribute('data-disabled-reason') === null &&
+          preview.getAttribute('data-disabled-reason') === null &&
+          submit.getAttribute('data-target-site-id') === ${JSON.stringify(SITE_ID)} &&
+          preview.getAttribute('data-target-site-id') === ${JSON.stringify(SITE_ID)} &&
+          submit.getAttribute('data-target-route') === ${JSON.stringify(`/blog/${slug}`)} &&
+          preview.getAttribute('data-target-route') === ${JSON.stringify(`/blog/${slug}`)} &&
+          submit.getAttribute('data-target-status') === 'draft' &&
+          preview.getAttribute('data-target-status') === 'draft' &&
+          Boolean(submit.getAttribute('data-target-template')) &&
+          Boolean(preview.getAttribute('data-target-template')) &&
+          submitStatusText.includes(${JSON.stringify(`Save draft available for ${SITE_ID} at /blog/${slug}`)}) &&
+          previewStatusText.includes(${JSON.stringify(`Preview draft available for ${SITE_ID} at /blog/${slug}`)}),
+        submitDisabled: submit instanceof HTMLButtonElement ? submit.disabled : null,
+        previewDisabled: preview instanceof HTMLButtonElement ? preview.disabled : null,
+        submitDescribedBy: submit?.getAttribute('aria-describedby') || '',
+        previewDescribedBy: preview?.getAttribute('aria-describedby') || '',
+        submitActionState: submit?.getAttribute('data-action-state') || '',
+        previewActionState: preview?.getAttribute('data-action-state') || '',
+        submitActionStatus: submit?.getAttribute('data-action-status') || '',
+        previewActionStatus: preview?.getAttribute('data-action-status') || '',
+        submitStatusText,
+        previewStatusText,
+        submitTargetSiteId: submit?.getAttribute('data-target-site-id') || '',
+        previewTargetSiteId: preview?.getAttribute('data-target-site-id') || '',
+        submitTargetRoute: submit?.getAttribute('data-target-route') || '',
+        previewTargetRoute: preview?.getAttribute('data-target-route') || '',
+        submitTargetStatus: submit?.getAttribute('data-target-status') || '',
+        previewTargetStatus: preview?.getAttribute('data-target-status') || '',
+        submitTargetTemplate: submit?.getAttribute('data-target-template') || '',
+        previewTargetTemplate: preview?.getAttribute('data-target-template') || '',
+        body: document.body?.innerText?.slice(0, 500) || '',
+      };
+    })()`);
+
+    if (state.ready) {
+      return state;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Blog create ready action status did not settle: ${JSON.stringify(state)}`);
+};
+
 const assertCanvasFocusMode = async (client) => {
   let clicked = null;
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -888,16 +1217,38 @@ const assertCanvasFocusMode = async (client) => {
       path: window.location.pathname,
       search: window.location.search,
       banner: Boolean(document.querySelector('[data-testid="blog-create-focus-banner"]')),
+      density: document.querySelector('[data-testid="blog-create-focus-banner"]')?.getAttribute('data-density') || '',
       commandCenter: Boolean(document.querySelector('[data-testid="blog-create-command-center"]')),
       draftPanel: Boolean(document.querySelector('#blog-create-draft')),
       publishPanel: Boolean(document.querySelector('#blog-create-publish')),
       canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+      shellFocusMode: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-focus-mode') || '',
+      componentPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-component-panel-visible') || '',
+      inspectorPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-inspector-panel-visible') || '',
+      componentLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
+      inspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
       adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
       adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
       showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
     }))()`);
 
-    if (focused.banner && focused.canvas && focused.showPanels && !focused.commandCenter && !focused.draftPanel && !focused.publishPanel && !focused.adminSidebar && !focused.adminHeader && focused.search.includes('focus=canvas')) {
+    if (
+      focused.banner &&
+      focused.density === 'compact' &&
+      focused.canvas &&
+      focused.showPanels &&
+      focused.shellFocusMode === 'true' &&
+      focused.componentPanelVisible === 'false' &&
+      focused.inspectorPanelVisible === 'false' &&
+      !focused.componentLibrary &&
+      !focused.inspector &&
+      !focused.commandCenter &&
+      !focused.draftPanel &&
+      !focused.publishPanel &&
+      !focused.adminSidebar &&
+      !focused.adminHeader &&
+      focused.search.includes('focus=canvas')
+    ) {
       break;
     }
 
@@ -1006,7 +1357,20 @@ const assertAutosaveWritten = async (client, slug) => {
       };
     })()`);
 
-    if (state.hasDraft) {
+    if (
+      state.hasDraft
+      && state.title === 'Smoke Blog Create'
+      && state.slug === slug
+      && state.noIndex === true
+      && state.seoDescription.length > 50
+      && state.canvasCount > 0
+      && state.designTemplateId === FRONTEND_BLOG_TEMPLATE_ID
+      && state.hasFrontendTemplateRoot === true
+      && state.mobileOverride?.x === 24
+      && state.mobileOverride?.width === 320
+      && state.hasLongFormSection
+      && state.hasLongFormQuote
+    ) {
       break;
     }
 
@@ -1086,12 +1450,30 @@ const assertRecoveryRestore = async (client, slug) => {
       href: window.location.href,
       readyState: document.readyState,
       recovery: document.body?.innerText?.includes('Recovered unsaved blog draft') || false,
-      restore: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Restore draft'),
+      statusId: document.querySelector('[data-testid="blog-create-recovery-action-status"]')?.id || '',
+      statusText: document.querySelector('[data-testid="blog-create-recovery-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      discardState: document.querySelector('[data-testid="blog-create-discard-recovery"]')?.getAttribute('data-action-state') || '',
+      discardStatus: document.querySelector('[data-testid="blog-create-discard-recovery"]')?.getAttribute('data-action-status') || '',
+      discardDescribedBy: document.querySelector('[data-testid="blog-create-discard-recovery"]')?.getAttribute('aria-describedby') || '',
+      restore: document.querySelector('[data-testid="blog-create-restore-recovery"]') instanceof HTMLButtonElement,
+      restoreState: document.querySelector('[data-testid="blog-create-restore-recovery"]')?.getAttribute('data-action-state') || '',
+      restoreStatus: document.querySelector('[data-testid="blog-create-restore-recovery"]')?.getAttribute('data-action-status') || '',
+      restoreDescribedBy: document.querySelector('[data-testid="blog-create-restore-recovery"]')?.getAttribute('aria-describedby') || '',
       body: document.body?.innerText?.slice(0, 220) || '',
       errors: Array.from(document.querySelectorAll('[role="alert"], [data-testid*="error"]')).map((node) => node.textContent || '').slice(0, 3),
     }))()`);
 
-    if (state.recovery && state.restore) {
+    if (
+      state.recovery &&
+      state.statusId === 'blog-create-recovery-action-status' &&
+      state.discardState === 'ready' &&
+      state.restore &&
+      state.restoreState === 'ready' &&
+      state.discardDescribedBy === state.statusId &&
+      state.restoreDescribedBy === state.statusId &&
+      state.statusText.includes(state.discardStatus) &&
+      state.statusText.includes(state.restoreStatus)
+    ) {
       break;
     }
 
@@ -1105,7 +1487,7 @@ const assertRecoveryRestore = async (client, slug) => {
   let restored = null;
   for (let attempt = 0; attempt < 40; attempt += 1) {
     restored = await evaluate(client, `(() => {
-      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').trim() === 'Restore draft');
+      const button = document.querySelector('[data-testid="blog-create-restore-recovery"]');
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
         return { clicked: false, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
       }
@@ -1164,23 +1546,29 @@ const createPreviewFromUi = async (client) => {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     clicked = await evaluate(client, `(() => {
       const button = Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save draft and preview'));
-      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+      const canPreview = button?.getAttribute('data-can-preview') === 'true';
+      if (!(button instanceof HTMLButtonElement) || button.disabled || !canPreview) {
         return {
           ok: false,
           label: button?.textContent || null,
-	          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
-	          title: document.querySelector('#blog-create-title')?.value || '',
-	          slug: document.querySelector('#blog-create-slug')?.value || '',
-	          canonical: document.querySelector('#blog-create-canonical')?.value || '',
-	          payload: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}'),
-	          alerts: Array.from(document.querySelectorAll('[role="alert"], [data-testid*="error"]')).map((node) => node.textContent || '').slice(0, 4),
-	          buttons: Array.from(document.querySelectorAll('button')).filter((candidate) => (candidate.textContent || '').includes('Save')).map((candidate) => ({
-	            text: candidate.textContent || '',
-	            disabled: candidate instanceof HTMLButtonElement ? candidate.disabled : null,
-	            title: candidate.getAttribute('title') || '',
-	          })),
-	          body: document.body?.innerText?.slice(0, 260) || '',
-	        };
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          canPreview,
+          blocker: button?.getAttribute('data-blocker') || '',
+          title: document.querySelector('#blog-create-title')?.value || '',
+          slug: document.querySelector('#blog-create-slug')?.value || '',
+          canonical: document.querySelector('#blog-create-canonical')?.value || '',
+          payload: JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}'),
+          alerts: Array.from(document.querySelectorAll('[role="alert"], [data-testid*="error"]')).map((node) => node.textContent || '').slice(0, 4),
+          buttons: Array.from(document.querySelectorAll('button')).filter((candidate) => (candidate.textContent || '').includes('Save')).map((candidate) => ({
+            text: candidate.textContent || '',
+            disabled: candidate instanceof HTMLButtonElement ? candidate.disabled : null,
+            canPreview: candidate.getAttribute('data-can-preview') || '',
+            state: candidate.getAttribute('data-state') || '',
+            title: candidate.getAttribute('title') || '',
+            blocker: candidate.getAttribute('data-blocker') || '',
+          })),
+          body: document.body?.innerText?.slice(0, 260) || '',
+        };
       }
       button.click();
       return { ok: true, label: button.textContent || '' };
@@ -1198,12 +1586,27 @@ const createPreviewFromUi = async (client) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       path: window.location.pathname,
+      search: window.location.search,
+      focusBanner: Boolean(document.querySelector('[data-testid="blog-editor-focus-banner"]')),
+      focusDensity: document.querySelector('[data-testid="blog-editor-focus-banner"]')?.getAttribute('data-density') || '',
+      commandCenter: Boolean(document.querySelector('[data-testid="blog-editor-command-center"]')),
+      adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
+      adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
       text: document.body?.innerText?.slice(0, 260) || '',
       fullText: document.body?.innerText?.slice(0, 1200) || '',
       storedDraft: localStorage.getItem('backy:blog-new:draft:v1'),
     }))()`);
 
-    if (state.path.startsWith('/blog/') && state.path !== '/blog/new') {
+    if (
+      state.path.startsWith('/blog/') &&
+      state.path !== '/blog/new' &&
+      state.search.includes('focus=canvas') &&
+      state.focusBanner &&
+      state.focusDensity === 'compact' &&
+      !state.commandCenter &&
+      !state.adminSidebar &&
+      !state.adminHeader
+    ) {
       editPath = state.path;
       assert(state.storedDraft === null, `Autosave draft was not cleared after create: ${JSON.stringify(state)}`);
       break;
@@ -1218,7 +1621,7 @@ const createPreviewFromUi = async (client) => {
         .map((event) => event.params)
         .slice(0, 5);
       state.browserErrors = browserErrors;
-      throw new Error(`Create preview did not navigate to edit page: ${JSON.stringify(state)}`);
+      throw new Error(`Create preview did not navigate to focused edit canvas: ${JSON.stringify(state)}`);
     }
 
     await sleep(300);
@@ -1379,6 +1782,8 @@ const main = async () => {
     console.log(JSON.stringify({ ok: true, guard: 'blog-create-source' }));
     return;
   }
+
+  await withSmokeLock(`backy-frontend-design-${SITE_ID}`, async () => {
   await loginAdminApi();
   const slug = `blog-create-smoke-${Date.now().toString(36)}`;
   const { childProcess, userDataDir } = launchChrome();
@@ -1389,8 +1794,7 @@ const main = async () => {
   try {
     originalFrontendDesign = await getFrontendDesign();
     await patchFrontendDesign(smokeFrontendDesignContract());
-    await waitForCdp();
-    const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
+    const page = await waitForUsablePageTarget();
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
 
     client = connectCdp(page.webSocketDebuggerUrl);
@@ -1403,13 +1807,16 @@ const main = async () => {
     await client.send('Page.addScriptToEvaluateOnNewDocument', {
       source: authStorageScript(apiAdminSessionToken),
     });
+    await seedBrowserAuthStorage(client, apiAdminSessionToken);
 
     const initialRender = await navigateToBlogCreate(client);
     const desktopVisual = await assertBlogCreateVisualState(client, 'blog create desktop', DESKTOP_VISUAL_SCREENSHOT_PATH);
+    const submitBlocker = await assertSubmitBlockerState(client);
     const focusMode = await assertCanvasFocusMode(client);
     const mobileBreakpoint = await assertMobileBreakpointAuthoring(client);
     const writingStructure = await assertWritingStructureTools(client);
     const filled = await fillBlogCreateForm(client, slug);
+    const readyActions = await assertBlogCreateReadyActionStatus(client, slug);
     const mediaPicker = await assertFeaturedMediaPicker(client);
     const autosave = await assertAutosaveWritten(client, slug);
     const recovery = await assertRecoveryRestore(client, slug);
@@ -1437,10 +1844,12 @@ const main = async () => {
         horizontalOverflow: desktopVisual.horizontalOverflow,
         viewport: desktopVisual.viewport,
       },
+      submitBlocker,
       focusMode,
       mobileBreakpoint,
       writingStructure,
       filled,
+      readyActions,
       mediaPicker,
       autosave,
       recovery,
@@ -1459,6 +1868,7 @@ const main = async () => {
     }
     await cleanup({ client, childProcess, userDataDir, postId });
   }
+  });
 };
 
 main().catch((error) => {

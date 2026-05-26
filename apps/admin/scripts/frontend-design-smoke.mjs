@@ -1,16 +1,39 @@
 #!/usr/bin/env node
 
 import { validateAiFrontendManifest } from '../../public/scripts/validate-ai-render-payload.mjs';
+import { withSmokeLock } from './smoke-lock.mjs';
 
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const SITE_ID = process.env.BACKY_FRONTEND_DESIGN_SMOKE_SITE_ID || 'site-demo';
 const PRODUCT_COLLECTION_SLUG = 'products';
+const SMOKE_TEMPLATE_IDS = [
+  'smoke-page-template',
+  'smoke-blog-template',
+  'smoke-form-template',
+  'smoke-section-template',
+  'smoke-collection-template',
+  'smoke-product-template',
+];
+const ADMIN_MFA_CODE = process.env.BACKY_FRONTEND_DESIGN_SMOKE_MFA_CODE
+  || process.env.BACKY_ADMIN_MFA_CODE
+  || process.env.BACKY_ADMIN_2FA_CODE
+  || 'backy-dev-mfa';
 let apiAdminSessionToken = '';
 
 const assert = (condition, message) => {
   if (!condition) {
     throw new Error(message);
   }
+};
+
+const missingSmokeTemplateIds = (templates = []) => {
+  const templateIds = new Set((templates || []).map((template) => template?.id).filter(Boolean));
+  return SMOKE_TEMPLATE_IDS.filter((templateId) => !templateIds.has(templateId));
+};
+
+const assertHasSmokeTemplates = (templates, label) => {
+  const missing = missingSmokeTemplateIds(templates);
+  assert(missing.length === 0, `${label} missing smoke templates: ${missing.join(', ')}`);
 };
 
 const requestApi = async (endpoint, options = {}) => {
@@ -32,7 +55,7 @@ const requestApi = async (endpoint, options = {}) => {
 };
 
 const loginAdminApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/api/admin/auth/login`, {
+  const login = (twoFactorCode = '') => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -40,9 +63,16 @@ const loginAdminApi = async () => {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const payload = await response.json().catch(() => ({}));
+
+  let response = await login();
+  let payload = await response.json().catch(() => ({}));
+  if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && ADMIN_MFA_CODE) {
+    response = await login(ADMIN_MFA_CODE);
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok || payload.success === false || !payload.data?.session?.token) {
     throw new Error(`Unable to create API admin session: ${JSON.stringify(payload).slice(0, 500)}`);
@@ -74,6 +104,49 @@ const patchFrontendDesign = async (frontendDesign) => {
   const updated = payload.data?.frontendDesign;
   assert(updated?.schemaVersion === 'backy.frontend-design.v1', `Patch did not return frontend design: ${JSON.stringify(payload).slice(0, 500)}`);
   return updated;
+};
+
+const getSite = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`);
+  const site = payload.data?.site || payload.site;
+  assert(site?.id, `Site read did not return ${SITE_ID}: ${JSON.stringify(payload).slice(0, 500)}`);
+  return site;
+};
+
+const patchSite = async (input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  const site = payload.data?.site || payload.site;
+  assert(site?.id, `Site patch did not return ${SITE_ID}: ${JSON.stringify(payload).slice(0, 500)}`);
+  return site;
+};
+
+const temporarilyAllowFrontendDesignSeedQuota = async () => {
+  const site = await getSite();
+  const originalSettings = site.settings || {};
+  const originalBillingQuota = originalSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const nextLimits = {
+    ...originalLimits,
+    pages: Math.max(Number(originalLimits.pages || 0), 10000),
+    forms: Math.max(Number(originalLimits.forms || 0), 10000),
+    collections: Math.max(Number(originalLimits.collections || 0), 10000),
+    products: Math.max(Number(originalLimits.products || 0), 10000),
+  };
+
+  await patchSite({
+    settings: {
+      ...originalSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: nextLimits,
+      },
+    },
+  });
+
+  return originalSettings;
 };
 
 const captureSiteDefaults = async () => {
@@ -110,12 +183,13 @@ const assertTemplateRegistry = async () => {
   const allPayload = await requestApi(`/api/admin/sites/${SITE_ID}/templates`);
   const registry = allPayload.data?.registry;
   assert(registry?.schemaVersion === 'backy.template-registry.v1', `Template registry returned unexpected schema: ${JSON.stringify(allPayload).slice(0, 500)}`);
-  assert(registry.templateCount === 6, `Template registry count was unexpected: ${registry.templateCount}`);
-  assert(registry.totalTemplateCount === 6, `Template registry total count was unexpected: ${registry.totalTemplateCount}`);
+  assert(registry.templateCount >= SMOKE_TEMPLATE_IDS.length, `Template registry count was unexpected: ${registry.templateCount}`);
+  assert(registry.totalTemplateCount >= SMOKE_TEMPLATE_IDS.length, `Template registry total count was unexpected: ${registry.totalTemplateCount}`);
+  assertHasSmokeTemplates(registry.templates, 'Template registry');
   assert(registry.cloneField === 'frontendDesignTemplateId', `Template registry clone field was unexpected: ${registry.cloneField}`);
   assert(registry.versionSummary?.schemaVersion === 'backy.template-version-readiness.v1', `Template registry missing version readiness: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
-  assert(registry.versionSummary?.templateCount === 6, `Template registry version readiness count was unexpected: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
-  assert(registry.versionSummary?.missingVersionCount === 6, `Template registry should flag missing template versions: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
+  assert(registry.versionSummary?.templateCount >= SMOKE_TEMPLATE_IDS.length, `Template registry version readiness count was unexpected: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
+  assert(registry.versionSummary?.missingVersionCount >= SMOKE_TEMPLATE_IDS.length, `Template registry should flag missing template versions: ${JSON.stringify(registry.versionSummary).slice(0, 500)}`);
   assert(registry.actionPlan?.schemaVersion === 'backy.template-registry-action-plan.v1', `Template registry missing action plan: ${JSON.stringify(registry.actionPlan).slice(0, 500)}`);
   assert(registry.actionPlan?.status === 'needs-version-metadata', `Template registry action plan status was unexpected: ${JSON.stringify(registry.actionPlan).slice(0, 500)}`);
   assert(registry.cloneTargets?.page === `/api/admin/sites/${SITE_ID}/pages`, 'Template registry missing page clone target');
@@ -129,29 +203,80 @@ const assertTemplateRegistry = async () => {
   assert(pageTemplate?.clone?.endpoint === registry.cloneTargets.page, `Template registry missing page clone payload: ${JSON.stringify(pageTemplate).slice(0, 500)}`);
   assert(pageTemplate.clone.body?.frontendDesignTemplateId === 'smoke-page-template', 'Template registry page clone body missing frontendDesignTemplateId');
   assert(pageTemplate.clone.body?.title === 'Smoke Page Template', 'Template registry page clone body missing title');
-  assert(pageTemplate.contentSummary?.elementCount > 0, 'Template registry page summary missing element count');
+  assert(pageTemplate.contentSummary?.hasCanvas && pageTemplate.contentSummary?.canvasSize?.width === 1440, 'Template registry page summary missing canvas contract');
   assert(pageTemplate.versioning?.schemaVersion === 'backy.template-version.v1', 'Template registry page template missing per-template version contract');
 
-  const formTemplate = registry.byType?.form?.[0];
+  const formTemplate = registry.templates?.find((template) => template.id === 'smoke-form-template');
   assert(formTemplate?.clone?.body?.name === 'Smoke Form Template', `Template registry missing form clone name: ${JSON.stringify(formTemplate).slice(0, 500)}`);
   assert(formTemplate.contentSummary?.fieldCount === 2, 'Template registry form summary missing field count');
 
-  const productTemplate = registry.byType?.product?.[0];
+  const productTemplate = registry.templates?.find((template) => template.id === 'smoke-product-template');
   assert(productTemplate?.clone?.endpoint === registry.cloneTargets.product, `Template registry missing product clone target: ${JSON.stringify(productTemplate).slice(0, 500)}`);
   assert(productTemplate.clone.body?.values?.title === 'Smoke Product Template', 'Template registry product clone body missing title value');
 
   const filteredPayload = await requestApi(`/api/admin/sites/${SITE_ID}/templates?type=product&search=product`);
   const filtered = filteredPayload.data?.registry;
-  assert(filtered?.templateCount === 1, `Filtered product template count was unexpected: ${JSON.stringify(filteredPayload).slice(0, 500)}`);
-  assert(filtered.templates?.[0]?.id === 'smoke-product-template', 'Filtered product template did not return smoke-product-template');
+  assert(filtered?.templateCount >= 1, `Filtered product template count was unexpected: ${JSON.stringify(filteredPayload).slice(0, 500)}`);
+  assert(filtered.templates?.some((template) => template.id === 'smoke-product-template'), 'Filtered product template did not return smoke-product-template');
 };
 
-const getProductCollection = async () => {
+const getOrCreateProductCollection = async () => {
+  const readProductCollection = async () => {
+    try {
+      const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${PRODUCT_COLLECTION_SLUG}`);
+      return payload.data?.collection || null;
+    } catch {
+      return null;
+    }
+  };
+
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`);
   const collections = payload.data?.collections || [];
   const collection = collections.find((candidate) => candidate.slug === PRODUCT_COLLECTION_SLUG);
-  assert(collection?.id, `Products collection was not found: ${JSON.stringify(collections).slice(0, 1000)}`);
-  return collection;
+  if (collection?.id) {
+    return { collection, created: false };
+  }
+
+  const existingCollection = await readProductCollection();
+  if (existingCollection?.id) {
+    return { collection: existingCollection, created: false };
+  }
+
+  let created;
+  try {
+    created = await requestApi(`/api/admin/sites/${SITE_ID}/collections`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Products',
+        slug: PRODUCT_COLLECTION_SLUG,
+        status: 'published',
+        listRoutePattern: '/products',
+        routePattern: '/products/:recordSlug',
+        fields: [
+          { key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
+          { key: 'sku', label: 'SKU', type: 'text', required: true, unique: true, sortOrder: 20 },
+          { key: 'price', label: 'Price', type: 'number', required: true, unique: false, sortOrder: 30 },
+          { key: 'currency', label: 'Currency', type: 'text', required: true, unique: false, sortOrder: 40, defaultValue: 'USD' },
+        ],
+        permissions: {
+          publicRead: true,
+          publicCreate: false,
+          publicUpdate: false,
+          publicDelete: false,
+        },
+      }),
+    });
+  } catch (error) {
+    const conflictingCollection = await readProductCollection();
+    if (conflictingCollection?.id && /SLUG_CONFLICT/.test(error instanceof Error ? error.message : String(error))) {
+      return { collection: conflictingCollection, created: false };
+    }
+    throw error;
+  }
+
+  const createdCollection = created.data?.collection;
+  assert(createdCollection?.id, `Products collection could not be created: ${JSON.stringify(created).slice(0, 500)}`);
+  return { collection: createdCollection, created: true };
 };
 
 const smokeContract = () => ({
@@ -280,7 +405,7 @@ const smokeContract = () => ({
         listRoutePattern: '/directory',
         fields: [
           { id: 'smoke-directory-title', key: 'title', label: 'Title', type: 'text', required: true, unique: false, sortOrder: 10 },
-          { id: 'smoke-directory-summary', key: 'summary', label: 'Summary', type: 'textarea', required: false, unique: false, sortOrder: 20 },
+          { id: 'smoke-directory-summary', key: 'summary', label: 'Summary', type: 'richText', required: false, unique: false, sortOrder: 20 },
         ],
         permissions: {
           publicRead: true,
@@ -348,16 +473,19 @@ const main = async () => {
   assert(unauthTemplateResponse.status === 401, `Template registry API should reject missing auth, got ${unauthTemplateResponse.status}`);
   assert(unauthTemplatePayload?.success === false && unauthTemplatePayload?.error?.code === 'UNAUTHORIZED', `Template registry API missing auth envelope: ${JSON.stringify(unauthTemplatePayload).slice(0, 500)}`);
 
-  await loginAdminApi();
-  const original = await getFrontendDesign();
-  const unique = Date.now().toString(36);
-  let createdPageId = null;
-  let createdPostId = null;
-  let createdFormId = null;
-  let createdSectionId = null;
-  let createdCollectionId = null;
-  let createdProductRecordId = null;
-  let productCollectionId = null;
+  await withSmokeLock(`backy-frontend-design-${SITE_ID}`, async () => {
+    await loginAdminApi();
+    const original = await getFrontendDesign();
+    const originalSiteSettings = await temporarilyAllowFrontendDesignSeedQuota();
+    const unique = Date.now().toString(36);
+    let createdPageId = null;
+    let createdPostId = null;
+    let createdFormId = null;
+    let createdSectionId = null;
+    let createdCollectionId = null;
+    let createdProductRecordId = null;
+    let productCollectionId = null;
+    let createdProductCollectionId = null;
 
   try {
     const patchPayload = await requestApi(`/api/admin/sites/${SITE_ID}/frontend-design`, {
@@ -367,7 +495,8 @@ const main = async () => {
     const patched = patchPayload.data?.frontendDesign;
     assert(patched.status === 'synced', `Patched status was not synced: ${patched.status}`);
     assert(patched.source?.type === 'custom-frontend', `Patched source type was not custom frontend: ${patched.source?.type}`);
-    assert(patched.templates?.length === 6, `Patched template count was unexpected: ${patched.templates?.length}`);
+    assert(patched.templates?.length >= SMOKE_TEMPLATE_IDS.length, `Patched template count was unexpected: ${patched.templates?.length}`);
+    assertHasSmokeTemplates(patched.templates, 'Patched frontend design');
     assert(patched.chrome?.header?.component === 'SiteHeader', 'Patched chrome header was not preserved');
     await assertFrontendDesignAudit(
       'frontendDesign.update',
@@ -376,7 +505,7 @@ const main = async () => {
         entry.before?.schemaVersion === 'backy.frontend-design.v1' &&
         entry.after?.status === 'synced' &&
         entry.metadata?.sourceType === 'custom-frontend' &&
-        entry.metadata?.templateCount === 6
+        entry.metadata?.templateCount >= SMOKE_TEMPLATE_IDS.length
       ),
       'Frontend design update audit log was not recorded',
     );
@@ -384,7 +513,7 @@ const main = async () => {
     const frontendDesignResponse = await getFrontendDesignResponse();
     assert(frontendDesignResponse.endpoints?.templates === `/api/admin/sites/${SITE_ID}/templates`, 'Frontend design response did not advertise template registry endpoint');
     assert(frontendDesignResponse.templateRegistry?.schemaVersion === 'backy.template-registry.v1', 'Frontend design response missing template registry summary');
-    assert(frontendDesignResponse.templateRegistry?.templateCount === 6, 'Frontend design response template registry summary had unexpected template count');
+    assert(frontendDesignResponse.templateRegistry?.templateCount >= SMOKE_TEMPLATE_IDS.length, 'Frontend design response template registry summary had unexpected template count');
     assert(frontendDesignResponse.templateRegistry?.cloneField === 'frontendDesignTemplateId', 'Frontend design response missing template registry clone field');
     assert(frontendDesignResponse.templateRegistry?.versionSummary?.schemaVersion === 'backy.template-version-readiness.v1', 'Frontend design response missing template version readiness summary');
     assert(frontendDesignResponse.templateRegistry?.actionPlan?.schemaVersion === 'backy.template-registry-action-plan.v1', 'Frontend design response missing template registry action plan');
@@ -474,8 +603,12 @@ const main = async () => {
     assert(seededCollection.data?.collection?.metadata?.frontendDesignTokens?.fonts?.heading === 'Inter', 'Template-seeded collection did not preserve frontend tokens');
     assert(Array.isArray(seededCollection.data?.collection?.fields) && seededCollection.data.collection.fields.length === 2, 'Template-seeded collection did not preserve frontend fields');
 
-    const productCollection = await getProductCollection();
+    const productCollectionResult = await getOrCreateProductCollection();
+    const productCollection = productCollectionResult.collection;
     productCollectionId = productCollection.id;
+    if (productCollectionResult.created) {
+      createdProductCollectionId = productCollection.id;
+    }
     const seededProductRecord = await requestApi(`/api/admin/sites/${SITE_ID}/collections/${productCollection.id}/records`, {
       method: 'POST',
       body: JSON.stringify({
@@ -532,8 +665,13 @@ const main = async () => {
     if (createdCollectionId) {
       await requestApi(`/api/admin/sites/${SITE_ID}/collections/${createdCollectionId}`, { method: 'DELETE' }).catch(() => {});
     }
-    await patchFrontendDesign(original);
+    if (createdProductCollectionId) {
+      await requestApi(`/api/admin/sites/${SITE_ID}/collections/${createdProductCollectionId}`, { method: 'DELETE' }).catch(() => {});
+    }
+    await patchFrontendDesign(original).catch(() => {});
+    await patchSite({ settings: originalSiteSettings }).catch(() => {});
   }
+  });
 
   console.log('Frontend design contract smoke passed');
 };

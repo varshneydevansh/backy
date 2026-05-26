@@ -13,6 +13,7 @@ const PORT = Number(process.env.BACKY_BLOG_EDITOR_CDP_PORT || 9378);
 const SCREENSHOT_PATH = process.env.BACKY_BLOG_EDITOR_SCREENSHOT || path.join(os.tmpdir(), 'backy-blog-editor-smoke.png');
 const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-editor-template';
 const FRONTEND_BLOG_TEMPLATE_NAME = 'Smoke Blog Editor Template';
+const ROUTE_CHECK_ERROR_SMOKE = process.env.BACKY_BLOG_EDITOR_ROUTE_CHECK_ERROR_SMOKE === '1';
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,6 +26,7 @@ const assert = (condition, message) => {
 
 const assertBlogEditorFallbackIsReadOnly = () => {
   const source = fs.readFileSync(new URL('../src/routes/blog.$postId.tsx', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const visualDiffSource = fs.readFileSync(new URL('../src/components/editor/RevisionCanvasVisualDiff.tsx', import.meta.url), 'utf8');
   const revisionMetadataSource = fs.readFileSync(new URL('../src/lib/revisionMetadata.ts', import.meta.url), 'utf8');
   const blogRevisionRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/blog/[postId]/revisions/route.ts', import.meta.url), 'utf8');
@@ -34,10 +36,111 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   assert(source.includes('canEdit={canEditBlog && !isUsingLocalPostCopy}'), 'Blog editor canvas editing must be disabled for local fallback copies');
   assert(source.includes('editorBusy || !canEditBlog || isUsingLocalPostCopy'), 'Blog editor canvas changes must ignore local fallback copies');
   assert(
-    source.includes('const workspaceFocusDisabled = isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending;') &&
-      source.includes('if (isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending) return;') &&
+    source.includes("const canViewBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);") &&
+      source.includes("const canEditBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);") &&
+      !source.includes('const canEditBlog = !isPermissionMatrixPending') &&
+      source.includes('const workspaceFocusDisabled = isLoadingPost || isLoading || isWorkflowBusy;') &&
+      source.includes('if (isLoadingPost || isLoading || isWorkflowBusy) return;') &&
       source.includes('disabled={workspaceFocusDisabled}'),
-    'Blog editor focus mode must stay available during route/readiness checks while loading/save/workflow locks still apply',
+    'Blog editor focus mode must stay available while backend permissions hydrate, using role-default access until the matrix arrives.',
+  );
+  assert(
+    source.includes('const routeSettingsChanged = normalizedSlug !== savedRouteSlug;') &&
+      source.includes('const routeSaveBlocked = Boolean(routeConflict) || (routeSettingsChanged && (isCheckingRoutes || Boolean(routeCheckError)));') &&
+      source.includes('&& !routeSaveBlocked') &&
+      source.includes('const routeSaveBlockedReason = routeConflict') &&
+      source.includes('|| routeSaveBlockedReason') &&
+      source.includes('const saveActionBusy = editorBusy || isPreviewBusy || readinessLoading;') &&
+      source.includes('if (saveActionBusy) return;') &&
+      source.includes('disabled={saveActionBusy || isUsingLocalPostCopy || !canSave') &&
+      source.includes('Backy is still checking route availability. Wait for the route check before publishing.'),
+    'Blog editor saves must not be blocked by route-check loading/errors unless the post slug changed, while publish route guardrails remain intact.',
+  );
+  assert(
+    smokeSource.includes('BACKY_BLOG_EDITOR_ROUTE_CHECK_ERROR_SMOKE') &&
+      smokeSource.includes('assertUnchangedRouteSaveWithRouteCheckError') &&
+      smokeSource.includes('Smoke route check unavailable') &&
+      smokeSource.includes('unchanged-route save stayed enabled'),
+    'Blog editor smoke must render-test unchanged-route saves while backend route checks fail.',
+  );
+  assert(
+    source.includes("contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : 'flex flex-col gap-5'}") &&
+      source.includes('data-testid="blog-editor-command-center"') &&
+      source.includes('data-default-editor-order="after-canvas"') &&
+      source.includes("data-default-editor-order={isWorkspaceFocus ? 'focused-canvas' : 'canvas-first'}") &&
+      source.includes("!isWorkspaceFocus && 'order-1'") &&
+      source.includes('id="blog-editor-canvas"') &&
+      source.includes("isWorkspaceFocus ? 'h-full min-h-0' : 'order-1'") &&
+      source.includes('initialCanvasFocusMode={isWorkspaceFocus}') &&
+      source.includes('actions={isWorkspaceFocus ? (') &&
+      source.includes('onClick={() => void generatePreview()}'),
+    'Blog editor default layout must open on the canvas first, boot the inner editor in focus mode, keep Save/Preview actions on the canvas frame, and move the dense command center below it',
+  );
+  assert(
+    source.includes("const blogEditorCommandActionStatusId = 'blog-editor-command-action-status';") &&
+      source.includes("const BLOG_EDITOR_STATUS_OPTIONS: ContentStatus[] = ['draft', 'published', 'scheduled', 'archived'];") &&
+      source.includes('data-testid="blog-editor-back-to-blog"') &&
+      source.includes('data-action-status={blogEditorBackActionStatus}') &&
+      source.includes('data-testid="blog-editor-focus-toggle"') &&
+      source.includes('data-action-status={blogEditorFocusActionStatus}') &&
+      source.includes('data-testid="blog-editor-command-action-status"') &&
+      source.includes('data-action-status={blogEditorCommandActionStatus}') &&
+      source.includes('data-testid={`blog-editor-status-${nextStatus}`}') &&
+      source.includes('data-action-status={statusActionStatus}') &&
+      source.includes('data-testid="blog-editor-copy-handoff"') &&
+      source.includes('data-testid="blog-editor-download-handoff"') &&
+      source.includes('data-testid="blog-editor-save"') &&
+      source.includes('data-testid="blog-editor-preview"') &&
+      source.includes('data-testid="blog-editor-refresh-readiness"') &&
+      source.includes('data-testid="blog-editor-publish-panel-refresh-readiness"') &&
+      source.includes('data-testid="blog-editor-copy-publish-impact"') &&
+      source.includes('data-action-status={blogEditorPublishImpactActionStatus}') &&
+      source.includes('data-testid="blog-editor-publish"') &&
+      source.includes('data-action-status={blogEditorPublishActionStatus}') &&
+      source.includes('data-testid="blog-editor-archive"') &&
+      source.includes('data-action-status={blogEditorArchiveActionStatus}') &&
+      source.includes('data-testid="blog-editor-publish-panel-save"') &&
+      source.includes('data-testid="blog-editor-publish-panel-preview"') &&
+      source.includes('data-testid="blog-editor-discard"') &&
+      source.includes('data-action-status={blogEditorDiscardActionStatus}') &&
+      source.includes('data-testid="blog-editor-delete"') &&
+      source.includes('data-action-status={blogEditorDeleteActionStatus}') &&
+      source.includes('data-testid="blog-editor-delete-confirm"') &&
+      source.includes('data-testid="blog-editor-cancel-delete"') &&
+      source.includes('data-testid="blog-editor-confirm-delete"') &&
+      source.includes('data-testid="blog-editor-copy-api-url"') &&
+      source.includes('data-testid="blog-editor-control-map-copy-handoff"') &&
+      source.includes('data-testid="blog-editor-select-featured-image"') &&
+      source.includes('data-action-status={blogEditorMediaSelectActionStatus}') &&
+      source.includes('data-testid="blog-editor-clear-featured-image"') &&
+      source.includes('data-action-status={blogEditorMediaClearActionStatus}') &&
+      source.includes('data-testid="blog-editor-refresh-comments"') &&
+      source.includes('data-action-status={blogEditorCommentsRefreshActionStatus}') &&
+      source.includes('data-testid="blog-editor-approve-pending-comments"') &&
+      source.includes('data-action-status={blogEditorCommentsApprovePendingActionStatus}') &&
+      source.includes('data-testid="blog-editor-reject-pending-comments"') &&
+      source.includes('data-action-status={blogEditorCommentsRejectPendingActionStatus}') &&
+      source.includes('data-testid={`blog-editor-approve-comment-${comment.id}`}') &&
+      source.includes('data-testid={`blog-editor-reject-comment-${comment.id}`}') &&
+      source.includes('data-testid="blog-editor-open-comments-queue"') &&
+      source.includes('data-action-status={blogEditorCommentsOpenQueueActionStatus}') &&
+      source.includes('data-testid="blog-editor-copy-comments-api"') &&
+      source.includes('data-action-status={blogEditorCommentsApiActionStatus}') &&
+      source.includes('data-testid="blog-editor-copy-public-url"') &&
+      source.includes('data-testid="blog-editor-handoff-panel-copy-handoff"') &&
+      source.includes('data-action-status={blogEditorRevisionGraphCopyActionStatus}') &&
+      source.includes('data-action-status={blogEditorRevisionGraphToggleActionStatus}') &&
+      source.includes('data-testid={`blog-editor-restore-revision-${revision.id}`}') &&
+      source.includes('data-action-status={blogEditorRestoreActionStatus}') &&
+      source.includes('data-action-status={blogEditorRestoreCancelActionStatus}') &&
+      source.includes('data-testid="blog-editor-author-select"') &&
+      source.includes('data-action-status={blogEditorAuthorActionStatus}') &&
+      source.includes('data-testid={`blog-editor-taxonomy-${kind}-${item.id}`}') &&
+      source.includes('data-action-status={actionStatus}') &&
+      source.includes('data-testid="blog-editor-canvas-save"') &&
+      source.includes('data-testid="blog-editor-canvas-preview"') &&
+      source.includes('data-testid="blog-editor-focus-banner-show-panels"'),
+    'Blog editor route controls must expose action-state/status metadata for navigation, focus, handoff, save, preview, readiness, publish, archive, discard, delete, media, comments, revisions, taxonomy, author, and status actions.',
   );
   assert(source.includes('setLoadError(null);') && source.includes('Latest backend post loaded into the editor.'), 'Blog editor reload must clear fallback state after loading backend content');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Blog editor must use the shared EmptyState component for sidebar empty states');
@@ -198,7 +301,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_BLOG_EDITOR_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -288,6 +392,33 @@ localStorage.setItem('backy-auth-storage', ${JSON.stringify(JSON.stringify({
   },
   version: 0,
 }))});
+`;
+
+const routeCheckFailureScript = () => `
+(() => {
+  if (window.__backyBlogEditorRouteCheckFailureInstalled) return;
+  window.__backyBlogEditorRouteCheckFailureInstalled = true;
+  window.__backyBlogEditorRouteCheckFailures = 0;
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (input, init = {}) => {
+    const rawUrl = String(input instanceof Request ? input.url : input || '');
+    const requestUrl = new URL(rawUrl, window.location.origin);
+    const method = String(init?.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    if (method === 'GET' && requestUrl.pathname === ${JSON.stringify(`/api/admin/sites/${SITE_ID}/blog`)}) {
+      window.__backyBlogEditorRouteCheckFailures += 1;
+      return new Response(JSON.stringify({
+        success: false,
+        error: {
+          message: 'Smoke route check unavailable',
+        },
+      }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return originalFetch(input, init);
+  };
+})();
 `;
 
 const seedBrowserSessionCookie = async (client, sessionToken) => {
@@ -526,12 +657,157 @@ const waitForEditor = async (client, postId) => {
     const state = await evaluate(client, `(() => {
       const grid = document.querySelector('[data-testid="blog-editor-workspace-grid"]');
       const canvasShell = document.querySelector('[data-testid="blog-editor-canvas-shell"]');
+      const commandCenter = document.querySelector('[data-testid="blog-editor-command-center"]');
+      const draftPanel = document.querySelector('#blog-editor-draft');
       const canvas = document.querySelector('[data-testid="editor-canvas"]');
       const saveStatus = document.querySelector('[data-testid="editor-save-status"]');
       const rect = canvasShell?.getBoundingClientRect();
+      const commandRect = commandCenter?.getBoundingClientRect();
+      const draftRect = draftPanel?.getBoundingClientRect();
+      const commandStatus = document.querySelector('[data-testid="blog-editor-command-action-status"]');
+      const readRouteAction = (testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        const disabled = control instanceof HTMLButtonElement ||
+          control instanceof HTMLInputElement ||
+          control instanceof HTMLSelectElement ||
+          control instanceof HTMLTextAreaElement
+          ? control.disabled
+          : null;
+        return {
+          exists: control instanceof HTMLElement,
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          actionState: control?.getAttribute('data-action-state') || '',
+          actionStatus: control?.getAttribute('data-action-status') || '',
+          disabledReason: control?.getAttribute('data-disabled-reason') || '',
+          disabled,
+        };
+      };
+      const readFirstRouteAction = (selector) => {
+        const control = document.querySelector(selector);
+        const disabled = control instanceof HTMLButtonElement ||
+          control instanceof HTMLInputElement ||
+          control instanceof HTMLSelectElement ||
+          control instanceof HTMLTextAreaElement
+          ? control.disabled
+          : null;
+        return {
+          exists: control instanceof HTMLElement,
+          testId: control?.getAttribute('data-testid') || '',
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          actionState: control?.getAttribute('data-action-state') || '',
+          actionStatus: control?.getAttribute('data-action-status') || '',
+          disabledReason: control?.getAttribute('data-disabled-reason') || '',
+          disabled,
+        };
+      };
+      const routeActions = {
+        back: readRouteAction('blog-editor-back-to-blog'),
+        focus: readRouteAction('blog-editor-focus-toggle'),
+        statusDraft: readRouteAction('blog-editor-status-draft'),
+        statusPublished: readRouteAction('blog-editor-status-published'),
+        statusScheduled: readRouteAction('blog-editor-status-scheduled'),
+        statusArchived: readRouteAction('blog-editor-status-archived'),
+        copy: readRouteAction('blog-editor-copy-handoff'),
+        download: readRouteAction('blog-editor-download-handoff'),
+        save: readRouteAction('blog-editor-save'),
+        preview: readRouteAction('blog-editor-preview'),
+        readiness: readRouteAction('blog-editor-refresh-readiness'),
+        publishPanelReadiness: readRouteAction('blog-editor-publish-panel-refresh-readiness'),
+        publishImpactCopy: readRouteAction('blog-editor-copy-publish-impact'),
+        publish: readRouteAction('blog-editor-publish'),
+        archive: readRouteAction('blog-editor-archive'),
+        publishPanelSave: readRouteAction('blog-editor-publish-panel-save'),
+        publishPanelPreview: readRouteAction('blog-editor-publish-panel-preview'),
+        discard: readRouteAction('blog-editor-discard'),
+        deletePost: readRouteAction('blog-editor-delete'),
+        copyApiUrl: readRouteAction('blog-editor-copy-api-url'),
+        controlMapCopyHandoff: readRouteAction('blog-editor-control-map-copy-handoff'),
+        selectFeaturedImage: readRouteAction('blog-editor-select-featured-image'),
+        clearFeaturedImage: readRouteAction('blog-editor-clear-featured-image'),
+        refreshComments: readRouteAction('blog-editor-refresh-comments'),
+        openCommentsQueue: readRouteAction('blog-editor-open-comments-queue'),
+        copyCommentsApi: readRouteAction('blog-editor-copy-comments-api'),
+        copyPublicUrl: readRouteAction('blog-editor-copy-public-url'),
+        handoffPanelCopyHandoff: readRouteAction('blog-editor-handoff-panel-copy-handoff'),
+        revisionGraphCopy: readRouteAction('blog-editor-copy-revision-branch-graph'),
+        revisionCompareCopy: readFirstRouteAction('[data-testid^="blog-editor-copy-revision-compare-"]'),
+        revisionRestore: readFirstRouteAction('[data-testid^="blog-editor-restore-revision-"]'),
+        authorSelect: readRouteAction('blog-editor-author-select'),
+        taxonomyCategory: readFirstRouteAction('[data-testid^="blog-editor-taxonomy-category-"]'),
+        taxonomyTag: readFirstRouteAction('[data-testid^="blog-editor-taxonomy-tag-"]'),
+        canvasSave: readRouteAction('blog-editor-canvas-save'),
+        canvasPreview: readRouteAction('blog-editor-canvas-preview'),
+      };
+      const describedRouteActions = [
+        routeActions.statusDraft,
+        routeActions.statusPublished,
+        routeActions.statusScheduled,
+        routeActions.statusArchived,
+        routeActions.copy,
+        routeActions.download,
+        routeActions.save,
+        routeActions.preview,
+        routeActions.readiness,
+        routeActions.publishPanelReadiness,
+        routeActions.publishImpactCopy,
+        routeActions.publish,
+        routeActions.archive,
+        routeActions.publishPanelSave,
+        routeActions.publishPanelPreview,
+        routeActions.discard,
+        routeActions.deletePost,
+        routeActions.copyApiUrl,
+        routeActions.controlMapCopyHandoff,
+        routeActions.selectFeaturedImage,
+        routeActions.clearFeaturedImage,
+        routeActions.refreshComments,
+        routeActions.openCommentsQueue,
+        routeActions.copyCommentsApi,
+        routeActions.copyPublicUrl,
+        routeActions.handoffPanelCopyHandoff,
+        routeActions.revisionGraphCopy,
+        routeActions.revisionCompareCopy,
+        routeActions.revisionRestore,
+        routeActions.authorSelect,
+      ];
+      const optionalDescribedRouteActions = [
+        routeActions.publishPanelReadiness,
+        routeActions.taxonomyCategory,
+        routeActions.taxonomyTag,
+      ];
+      const requiredRouteActions = Object.entries(routeActions)
+        .filter(([name]) => name !== 'publishPanelReadiness' && name !== 'taxonomyCategory' && name !== 'taxonomyTag')
+        .map(([, action]) => action);
+      const validState = (action) => ['ready', 'busy', 'blocked', 'selected'].includes(action.actionState);
       return {
-        ready: Boolean(document.querySelector('[data-testid="blog-editor-command-center"]')),
+        ready: Boolean(commandCenter),
         grid: Boolean(grid),
+        commandCenter: Boolean(commandCenter),
+        commandCenterOrder: commandCenter?.getAttribute('data-default-editor-order') || '',
+        commandActionState: commandCenter?.getAttribute('data-action-state') || '',
+        commandActionStatus: commandCenter?.getAttribute('data-action-status') || '',
+        commandStatusId: commandStatus?.id || '',
+        commandStatusText: commandStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        routeActions,
+        routeActionsOk: Boolean(commandStatus?.id) &&
+          commandCenter?.getAttribute('aria-describedby') === commandStatus.id &&
+          commandCenter?.getAttribute('data-action-status') === commandStatus.textContent?.replace(/\\s+/g, ' ').trim() &&
+          requiredRouteActions.every((action) => action.exists && validState(action) && action.actionStatus) &&
+          (!routeActions.publishPanelReadiness.exists || (validState(routeActions.publishPanelReadiness) && routeActions.publishPanelReadiness.actionStatus)) &&
+          optionalDescribedRouteActions.filter((action) => action.exists).every((action) => validState(action) && action.actionStatus) &&
+          describedRouteActions.filter((action) => action.exists).every((action) => action.describedBy === commandStatus.id) &&
+          optionalDescribedRouteActions.filter((action) => action.exists).every((action) => action.describedBy === commandStatus.id) &&
+          routeActions.focus.describedBy === commandStatus.id &&
+          routeActions.back.describedBy === commandStatus.id &&
+          Boolean(routeActions.canvasSave.actionStatus) &&
+          Boolean(routeActions.canvasPreview.actionStatus),
+        workspaceOrder: grid?.getAttribute('data-default-editor-order') || '',
+        canvasOrder: canvasShell?.getAttribute('data-default-editor-order') || '',
+        canvasTop: Math.round(rect?.top || 0),
+        commandCenterTop: Math.round(commandRect?.top || 0),
+        draftTop: Math.round(draftRect?.top || 0),
+        canvasFrameSaveAction: Boolean(canvasShell?.querySelector('button[type="submit"][form="blog-editor-form"]')),
+        canvasFramePreviewAction: Array.from(canvasShell?.querySelectorAll('button') || []).some((button) => (button.textContent || '').trim() === 'Preview'),
         canvasShell: Boolean(canvasShell),
         canvas: Boolean(canvas),
         draft: Boolean(document.querySelector('#blog-editor-draft')),
@@ -568,6 +844,16 @@ const waitForEditor = async (client, postId) => {
     if (
       state.ready &&
       state.grid &&
+      state.commandCenter &&
+      state.commandCenterOrder === 'after-canvas' &&
+      state.routeActionsOk &&
+      state.workspaceOrder === 'canvas-first' &&
+      state.canvasOrder === 'canvas-first' &&
+      state.canvasTop > 0 &&
+      state.commandCenterTop > state.canvasTop &&
+      state.draftTop > state.canvasTop &&
+      state.canvasFrameSaveAction &&
+      state.canvasFramePreviewAction &&
       state.canvasShell &&
       state.canvas &&
       state.draft &&
@@ -632,13 +918,21 @@ const assertFocusMode = async (client) => {
         search: window.location.search,
         viewport: { width: window.innerWidth, height: window.innerHeight },
         banner: Boolean(document.querySelector('[data-testid="blog-editor-focus-banner"]')),
+        density: document.querySelector('[data-testid="blog-editor-focus-banner"]')?.getAttribute('data-density') || '',
         commandCenter: Boolean(document.querySelector('[data-testid="blog-editor-command-center"]')),
         draftPanel: Boolean(document.querySelector('#blog-editor-draft')),
         publishPanel: Boolean(document.querySelector('#blog-editor-publish')),
         adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
         adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
         canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
-        showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
+        shellFocusMode: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-focus-mode') || '',
+        componentPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-component-panel-visible') || '',
+        inspectorPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-inspector-panel-visible') || '',
+        componentLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
+        inspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
+        showPanels: Boolean(document.querySelector('[data-testid="blog-editor-focus-banner-show-panels"]')),
+        showPanelsState: document.querySelector('[data-testid="blog-editor-focus-banner-show-panels"]')?.getAttribute('data-action-state') || '',
+        showPanelsStatus: document.querySelector('[data-testid="blog-editor-focus-banner-show-panels"]')?.getAttribute('data-action-status') || '',
         canvasShellWidth: rect?.width || 0,
         canvasShellHeight: rect?.height || 0,
         horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
@@ -647,8 +941,16 @@ const assertFocusMode = async (client) => {
 
     if (
       state.banner &&
+      state.density === 'compact' &&
       state.canvas &&
       state.showPanels &&
+      state.showPanelsState === 'ready' &&
+      /Show blog panels available/i.test(state.showPanelsStatus) &&
+      state.shellFocusMode === 'true' &&
+      state.componentPanelVisible === 'false' &&
+      state.inspectorPanelVisible === 'false' &&
+      !state.componentLibrary &&
+      !state.inspector &&
       !state.commandCenter &&
       !state.draftPanel &&
       !state.publishPanel &&
@@ -726,6 +1028,111 @@ const assertUnsavedWorkflowGuard = async (client, originalTitle) => {
   }
 
   return null;
+};
+
+const assertUnchangedRouteSaveWithRouteCheckError = async (client, post) => {
+  const nextTitle = `${post.title} route-check save`;
+  let readyState = null;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    readyState = await evaluate(client, `(() => {
+      const routeFailures = window.__backyBlogEditorRouteCheckFailures || 0;
+      const routeErrorVisible = /Smoke route check unavailable|Retry route check|could not verify existing blog routes/i.test(document.body?.innerText || '');
+      const saveButtons = Array.from(document.querySelectorAll('button[type="submit"][form="blog-editor-form"], form#blog-editor-form button[type="submit"]'))
+        .filter((button) => button instanceof HTMLButtonElement)
+        .map((button) => ({
+          text: button.textContent?.trim() || '',
+          disabled: button.disabled,
+          title: button.getAttribute('title') || '',
+          visible: Boolean(button.offsetWidth || button.offsetHeight || button.getClientRects().length),
+        }));
+      const publishButton = Array.from(document.querySelectorAll('#blog-editor-publish button')).find((button) => (
+        (button.textContent || '').trim() === 'Publish'
+      ));
+      return {
+        routeFailures,
+        routeErrorVisible,
+        saveButtons,
+        hasEnabledVisibleSave: saveButtons.some((button) => button.visible && !button.disabled),
+        publishDisabled: publishButton instanceof HTMLButtonElement ? publishButton.disabled : null,
+        publishTitle: publishButton instanceof HTMLButtonElement ? publishButton.getAttribute('title') || '' : '',
+        body: document.body?.innerText?.slice(0, 1000) || '',
+      };
+    })()`);
+
+    if (readyState.routeFailures > 0 && readyState.routeErrorVisible && readyState.hasEnabledVisibleSave && readyState.publishDisabled === true) {
+      break;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Blog editor unchanged-route save did not stay enabled while route check failed: ${JSON.stringify(readyState)}`);
+    }
+
+    await sleep(200);
+  }
+
+  const changed = await evaluate(client, `(() => {
+    const draftPanel = document.querySelector('#blog-editor-draft');
+    const titleInput = draftPanel?.querySelector('input[type="text"]');
+    if (!(titleInput instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'title-input-missing', body: document.body?.innerText?.slice(0, 1200) || '' };
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    descriptor?.set?.call(titleInput, ${JSON.stringify(nextTitle)});
+    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+    titleInput.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: titleInput.value };
+  })()`);
+  assert(changed.ok, `Unable to create unchanged-route blog title change: ${JSON.stringify(changed)}`);
+
+  const clicked = await evaluate(client, `(() => {
+    const buttons = Array.from(document.querySelectorAll('button[type="submit"][form="blog-editor-form"], form#blog-editor-form button[type="submit"]'))
+      .filter((button) => button instanceof HTMLButtonElement);
+    const button = buttons.find((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      const style = window.getComputedStyle(candidate);
+      return !candidate.disabled &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.visibility !== 'hidden' &&
+        style.display !== 'none';
+    });
+    if (!(button instanceof HTMLButtonElement)) {
+      return {
+        ok: false,
+        reason: 'enabled-save-missing',
+        buttons: buttons.map((candidate) => ({
+          text: candidate.textContent?.trim() || '',
+          disabled: candidate.disabled,
+          title: candidate.getAttribute('title') || '',
+        })),
+      };
+    }
+    button.scrollIntoView({ block: 'center', inline: 'center' });
+    button.click();
+    return { ok: true, text: button.textContent?.trim() || '', title: button.getAttribute('title') || '' };
+  })()`);
+  assert(clicked.ok, `Unable to click unchanged-route save while route check failed: ${JSON.stringify(clicked)}`);
+
+  let persisted = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog/${post.id}`);
+    persisted = payload.data?.post || payload.post;
+    if (persisted?.title === nextTitle && persisted.slug === post.slug) {
+      return {
+        readyState,
+        changed,
+        clicked,
+        persistedTitle: persisted.title,
+        persistedSlug: persisted.slug,
+        routeCheckFailures: readyState.routeFailures,
+      };
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Unchanged-route save did not persist while route check failed: ${JSON.stringify({ expectedTitle: nextTitle, persisted })}`);
 };
 
 const assertPublishWorkflowVersionGuard = async (client, post) => {
@@ -807,6 +1214,210 @@ const assertPublishWorkflowVersionGuard = async (client, post) => {
   throw new Error('Blog editor publish workflow did not persist a guarded publish request');
 };
 
+const assertDeleteConfirmActionContract = async (client) => {
+  let openedState = null;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    openedState = await evaluate(client, `(() => {
+      const readAction = (testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          exists: control instanceof HTMLElement,
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          actionState: control?.getAttribute('data-action-state') || '',
+          actionStatus: control?.getAttribute('data-action-status') || '',
+          disabledReason: control?.getAttribute('data-disabled-reason') || '',
+          disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        };
+      };
+      const status = document.querySelector('[data-testid="blog-editor-command-action-status"]');
+      const deleteAction = readAction('blog-editor-delete');
+      if (deleteAction.exists && deleteAction.disabled === false && deleteAction.actionState === 'ready') {
+        document.querySelector('[data-testid="blog-editor-delete"]').click();
+        return { ok: true, commandStatusId: status?.id || '', deleteAction };
+      }
+      return { ok: false, commandStatusId: status?.id || '', deleteAction, body: document.body?.innerText?.slice(0, 1000) || '' };
+    })()`);
+
+    if (openedState.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Blog editor delete action was not ready for confirmation contract check: ${JSON.stringify(openedState)}`);
+    }
+
+    await sleep(200);
+  }
+
+  let modalState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    modalState = await evaluate(client, `(() => {
+      const readAction = (testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          exists: control instanceof HTMLElement,
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          actionState: control?.getAttribute('data-action-state') || '',
+          actionStatus: control?.getAttribute('data-action-status') || '',
+          disabledReason: control?.getAttribute('data-disabled-reason') || '',
+          disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        };
+      };
+      const status = document.querySelector('[data-testid="blog-editor-command-action-status"]');
+      return {
+        modal: Boolean(document.querySelector('[data-testid="blog-editor-delete-confirm"]')),
+        commandStatusId: status?.id || '',
+        cancel: readAction('blog-editor-cancel-delete'),
+        confirm: readAction('blog-editor-confirm-delete'),
+      };
+    })()`);
+
+    if (
+      modalState.modal &&
+      modalState.commandStatusId &&
+      modalState.cancel.exists &&
+      modalState.cancel.describedBy === modalState.commandStatusId &&
+      modalState.cancel.actionState === 'ready' &&
+      /Cancel delete available/i.test(modalState.cancel.actionStatus) &&
+      modalState.confirm.exists &&
+      modalState.confirm.describedBy === modalState.commandStatusId &&
+      modalState.confirm.actionState === 'ready' &&
+      /Delete post available/i.test(modalState.confirm.actionStatus)
+    ) {
+      break;
+    }
+
+    if (attempt === 39) {
+      throw new Error(`Blog editor delete confirmation controls did not expose action metadata: ${JSON.stringify(modalState)}`);
+    }
+
+    await sleep(150);
+  }
+
+  const dismissed = await evaluate(client, `(() => {
+    const cancel = document.querySelector('[data-testid="blog-editor-cancel-delete"]');
+    if (!(cancel instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'cancel-missing' };
+    }
+    cancel.click();
+    return {
+      ok: true,
+      modalStillVisible: Boolean(document.querySelector('[data-testid="blog-editor-delete-confirm"]')),
+    };
+  })()`);
+  assert(dismissed.ok, `Unable to cancel blog editor delete confirmation: ${JSON.stringify(dismissed)}`);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const hidden = await evaluate(client, `!document.querySelector('[data-testid="blog-editor-delete-confirm"]')`);
+    if (hidden) {
+      return { openedState, modalState, dismissed: { ok: dismissed.ok, modalClosed: true } };
+    }
+    await sleep(100);
+  }
+
+  throw new Error('Blog editor delete confirmation did not close after cancel');
+};
+
+const assertRestoreConfirmActionContract = async (client) => {
+  let openedState = null;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    openedState = await evaluate(client, `(() => {
+      const readAction = (control) => ({
+        exists: control instanceof HTMLElement,
+        testId: control?.getAttribute('data-testid') || '',
+        describedBy: control?.getAttribute('aria-describedby') || '',
+        actionState: control?.getAttribute('data-action-state') || '',
+        actionStatus: control?.getAttribute('data-action-status') || '',
+        disabledReason: control?.getAttribute('data-disabled-reason') || '',
+        disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+      });
+      const status = document.querySelector('[data-testid="blog-editor-command-action-status"]');
+      const restoreButton = document.querySelector('[data-testid^="blog-editor-restore-revision-"]');
+      const restoreAction = readAction(restoreButton);
+      if (restoreButton instanceof HTMLButtonElement && restoreButton.disabled === false && restoreAction.actionState === 'ready') {
+        restoreButton.click();
+        return { ok: true, commandStatusId: status?.id || '', restoreAction };
+      }
+      return { ok: false, commandStatusId: status?.id || '', restoreAction, body: document.body?.innerText?.slice(0, 1000) || '' };
+    })()`);
+
+    if (openedState.ok) break;
+
+    if (attempt === 79) {
+      throw new Error(`Blog editor restore action was not ready for confirmation contract check: ${JSON.stringify(openedState)}`);
+    }
+
+    await sleep(200);
+  }
+
+  let modalState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    modalState = await evaluate(client, `(() => {
+      const readAction = (testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          exists: control instanceof HTMLElement,
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          actionState: control?.getAttribute('data-action-state') || '',
+          actionStatus: control?.getAttribute('data-action-status') || '',
+          disabledReason: control?.getAttribute('data-disabled-reason') || '',
+          disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        };
+      };
+      const status = document.querySelector('[data-testid="blog-editor-command-action-status"]');
+      return {
+        modal: Boolean(document.querySelector('[data-testid="blog-editor-restore-confirm"]')),
+        impact: Boolean(document.querySelector('[data-testid="blog-editor-restore-impact"]')),
+        commandStatusId: status?.id || '',
+        cancel: readAction('blog-editor-cancel-restore'),
+        confirm: readAction('blog-editor-confirm-restore'),
+      };
+    })()`);
+
+    if (
+      modalState.modal &&
+      modalState.impact &&
+      modalState.commandStatusId &&
+      modalState.cancel.exists &&
+      modalState.cancel.describedBy === modalState.commandStatusId &&
+      modalState.cancel.actionState === 'ready' &&
+      /Cancel restore available/i.test(modalState.cancel.actionStatus) &&
+      modalState.confirm.exists &&
+      modalState.confirm.describedBy === modalState.commandStatusId &&
+      modalState.confirm.actionState === 'ready' &&
+      /Restore revision available/i.test(modalState.confirm.actionStatus)
+    ) {
+      break;
+    }
+
+    if (attempt === 39) {
+      throw new Error(`Blog editor restore confirmation controls did not expose action metadata: ${JSON.stringify(modalState)}`);
+    }
+
+    await sleep(150);
+  }
+
+  const dismissed = await evaluate(client, `(() => {
+    const cancel = document.querySelector('[data-testid="blog-editor-cancel-restore"]');
+    if (!(cancel instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'cancel-missing' };
+    }
+    cancel.click();
+    return { ok: true };
+  })()`);
+  assert(dismissed.ok, `Unable to cancel blog editor restore confirmation: ${JSON.stringify(dismissed)}`);
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const hidden = await evaluate(client, `!document.querySelector('[data-testid="blog-editor-restore-confirm"]')`);
+    if (hidden) {
+      return { openedState, modalState, dismissed: { ok: dismissed.ok, modalClosed: true } };
+    }
+    await sleep(100);
+  }
+
+  throw new Error('Blog editor restore confirmation did not close after cancel');
+};
+
 const captureScreenshot = async (client, screenshotPath) => {
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(screenshotPath, Buffer.from(screenshot.data, 'base64'));
@@ -869,9 +1480,39 @@ const main = async () => {
     await client.send('Log.enable');
     await seedBrowserSessionCookie(client, apiAdminSessionToken);
     await client.send('Page.addScriptToEvaluateOnNewDocument', { source: authStorageScript(apiAdminSessionToken) });
+    if (ROUTE_CHECK_ERROR_SMOKE) {
+      await client.send('Page.addScriptToEvaluateOnNewDocument', { source: routeCheckFailureScript() });
+    }
 
     const editorState = await waitForEditor(client, post.id);
+    if (ROUTE_CHECK_ERROR_SMOKE) {
+      const unchangedRouteSave = await assertUnchangedRouteSaveWithRouteCheckError(client, post);
+      const screenshotPath = await captureScreenshot(client, SCREENSHOT_PATH);
+
+      const browserErrors = client.events
+        .filter((event) => (
+          event.method === 'Runtime.exceptionThrown'
+          || (event.method === 'Log.entryAdded' && event.params?.entry?.level === 'error')
+        ))
+        .map((event) => event.params);
+
+      assert(browserErrors.length === 0, `Browser emitted errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'route-check-error-save',
+        postId: post.id,
+        slug,
+        editorState,
+        unchangedRouteSave,
+        screenshotPath,
+      }, null, 2));
+      return;
+    }
+
     const publishWorkflowState = await assertPublishWorkflowVersionGuard(client, post);
+    const restoreConfirmState = await assertRestoreConfirmActionContract(client);
+    const deleteConfirmState = await assertDeleteConfirmActionContract(client);
     const unsavedGuardState = await assertUnsavedWorkflowGuard(client, post.title);
     const focusState = await assertFocusMode(client);
     const screenshotPath = await captureScreenshot(client, SCREENSHOT_PATH);
@@ -891,6 +1532,8 @@ const main = async () => {
       slug,
       editorState,
       publishWorkflowState,
+      restoreConfirmState,
+      deleteConfirmState,
       unsavedGuardState,
       focusState,
       screenshotPath,

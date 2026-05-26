@@ -23,6 +23,7 @@ const assert = (condition, message) => {
 const assertSitesRouteSourceContract = () => {
   const source = fs.readFileSync(new URL('../src/routes/sites.tsx', import.meta.url), 'utf8');
   const createSource = fs.readFileSync(new URL('../src/routes/sites.new.tsx', import.meta.url), 'utf8');
+  const detailSource = fs.readFileSync(new URL('../src/routes/sites.$siteId.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Sites route must use the shared EmptyState component');
   assert(source.includes('validateSearch') && source.includes('siteMatchesIdentifier(site, requestedSiteId)'), 'Sites route must allow selecting the API handoff site from the siteId search param');
   assert(source.includes('title="No site audit events yet"'), 'Sites audit panel must keep the empty audit title visible');
@@ -33,6 +34,22 @@ const assertSitesRouteSourceContract = () => {
   assert(source.includes('Change plans or refresh usage to build a quota history for this workspace.'), 'Sites billing history empty state must explain how to populate quota history');
   assert(source.includes('title="No billing workspace selected"'), 'Sites billing workspace must keep the no-site selected empty title visible');
   assert(source.includes('Create or select a site to assign a plan, track quota usage, and review billing ownership.'), 'Sites billing workspace empty state must explain how to start billing setup');
+  assert(
+    source.includes('data-testid="sites-rbac-scope"') &&
+      source.includes('data-testid="sites-control-map"') &&
+      source.includes('data-default-collapsed="true"'),
+    'Sites command center must keep dense RBAC and control-map details in progressive disclosure sections',
+  );
+  assert(
+    source.includes('data-testid="sites-delivery-operations-details"') &&
+      source.includes('data-testid="sites-delivery-operations-panels"') &&
+      source.includes('Delivery, deployment, and quota operations') &&
+      source.includes('DNS verification, Vercel handoffs, plan usage, and provider-adjacent site operations.') &&
+      source.includes('data-testid="sites-audit-details"') &&
+      source.includes('data-testid="sites-audit-disclosure-panel"') &&
+      source.includes('Request-id-backed create, update, archive, duplicate, and delete evidence.'),
+    'Sites route must keep provider-adjacent delivery/quota operations and audit evidence behind default-collapsed disclosures',
+  );
   assert(source.includes('title="No domain verification workspace selected"'), 'Sites domain verification workspace must keep the no-site selected empty title visible');
   assert(source.includes('Create or select a site to prepare custom-domain DNS records and track verification status.'), 'Sites domain verification empty state must explain how to start DNS setup');
   assert(source.includes('title="No deployment workspace selected"'), 'Sites deployment workspace must keep the no-site selected empty title visible');
@@ -45,6 +62,48 @@ const assertSitesRouteSourceContract = () => {
   assert(source.includes('const loadSitePermissions = useCallback(() => {'), 'Sites route must keep permission loading in a reusable callback');
   assert(source.includes('return loadSitePermissions();'), 'Sites route must wire the permission-loading effect through the reusable callback');
   assert(source.includes('loadSitePermissions();') && source.includes('void loadSites();'), 'Sites workspace refresh must re-fetch permissions before reloading site data');
+  assert(
+    source.includes('const canUseSiteRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSiteRoleDefaults;') &&
+      source.includes('const isSitesPermissionAllowed = (key: SitePermissionKey) => (') &&
+      source.includes("const canViewSites = isSitesPermissionAllowed('sites.view');") &&
+      source.includes("const canCreateSites = isSitesPermissionAllowed('sites.create');") &&
+      source.includes("const canConfigureSites = isSitesPermissionAllowed('sites.configure');") &&
+      source.includes("const canDeleteSites = isSitesPermissionAllowed('sites.delete');") &&
+      source.includes("const canManageBilling = isSitesPermissionAllowed('settings.billing');") &&
+      source.includes("const canExportActivity = isSitesPermissionAllowed('activity.export');") &&
+      source.includes('const isSitesBusy = isLoading || isSiteMutationBusy;') &&
+      !source.includes('const canViewSites = !isPermissionMatrixPending') &&
+      !source.includes('const isSitesBusy = isLoading || isSiteMutationBusy || isPermissionMatrixPending;') &&
+      source.includes('data-testid="sites-permission-state"') &&
+      source.includes('Site permissions could not be verified'),
+    'Sites route must expose permission recovery and keep role-default workflows usable while permission details hydrate',
+  );
+  assert(
+    source.includes('data-testid={`sites-actions-${site.id}`}') &&
+      source.includes('data-testid={`sites-actions-status-${site.id}`}') &&
+      source.includes('data-action-status={siteActionStatus}') &&
+      source.includes('aria-label={`Actions for ${site.name}`}') &&
+      source.includes('Preview unavailable:') &&
+      source.includes('Manage unavailable:') &&
+      source.includes('Duplicate unavailable:') &&
+      source.includes('Archive unavailable:') &&
+      source.includes('Delete unavailable:') &&
+      source.includes('data-action-state={archiveDisabledReason ?') &&
+      source.includes('data-disabled-reason={deleteDisabledReason || undefined}') &&
+      source.includes('This site is already archived.'),
+    'Sites row actions must expose named groups, hidden status summaries, action-state metadata, and disabled reasons.',
+  );
+  assert(
+    source.includes("const createSiteActionStatusId = 'sites-create-action-status';") &&
+      source.includes('data-testid="sites-create-action-status"') &&
+      source.includes('New site unavailable:') &&
+      source.includes('aria-describedby={createSiteActionStatusId}') &&
+      source.includes('data-action-state={createSiteActionDisabledReason ?') &&
+      source.includes('data-action-status={createSiteActionStatus}') &&
+      source.includes('data-disabled-reason={createSiteActionDisabledReason || undefined}'),
+    'Sites New site entry points must share a create action status contract instead of relying on disabled styling or title text.',
+  );
   assert(
     createSource.includes('const starterPageControlsDisabled = creationFormDisabled || !canEditPages || (statusSeedsPublishedPages && !canPublishPages);'),
     'Site create blueprint controls must disable starter-page blueprints when published page seeding lacks pages.publish',
@@ -64,6 +123,19 @@ const assertSitesRouteSourceContract = () => {
     'Site create permission state must expose retryable permission recovery and user-access handoff',
   );
   assert(
+    createSource.includes('const canUseSiteCreateRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      createSource.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSiteCreateRoleDefaults;') &&
+      createSource.includes('const isSiteCreateRoutePermissionAllowed = (key: SiteCreatePermissionKey) => (') &&
+      createSource.includes("const canCreateSites = isSiteCreateRoutePermissionAllowed('sites.create');") &&
+      createSource.includes("const canEditPages = isSiteCreateRoutePermissionAllowed('pages.edit');") &&
+      createSource.includes("const canPublishPages = isSiteCreateRoutePermissionAllowed('pages.publish');") &&
+      createSource.includes('const isCreateBusy = isLoading;') &&
+      createSource.includes('data-testid="site-create-permission-sync-state"') &&
+      !createSource.includes('const canCreateSites = !isPermissionMatrixPending') &&
+      !createSource.includes('const isCreateBusy = isLoading || isPermissionMatrixPending;'),
+    'Site create route must keep role-default create/page-seeding workflows usable while permission details hydrate',
+  );
+  assert(
     createSource.includes('buildSiteCreateInlineErrors') &&
       createSource.includes('const [siteCreateSubmitted, setSiteCreateSubmitted] = useState(false);') &&
       createSource.includes('data-testid="site-create-form"') &&
@@ -77,8 +149,187 @@ const assertSitesRouteSourceContract = () => {
       createSource.includes('aria-invalid={Boolean(showSiteCreateInlineErrors') &&
       createSource.includes('aria-describedby={showSiteCreateInlineErrors') &&
       createSource.includes("setError('Fix site creation fields before creating.')") &&
-      createSource.includes('const canSubmit = canCreateSites && canSeedStarterPages;'),
+      createSource.includes('const canSubmit = canCreateSites && canSeedStarterPages;') &&
+      createSource.includes("const siteCreateSubmitStatusId = 'site-create-submit-action-status';") &&
+      createSource.includes('data-testid="site-create-submit-action-status"') &&
+      createSource.includes('Create site unavailable:') &&
+      createSource.includes('aria-describedby={siteCreateSubmitStatusId}') &&
+      createSource.includes('data-action-state={siteCreateSubmitDisabledReason ?') &&
+      createSource.includes('data-action-status={siteCreateSubmitStatus}') &&
+      createSource.includes('data-disabled-reason={siteCreateSubmitDisabledReason || undefined}') &&
+      createSource.includes("data-target-site-id={displaySlug || 'new-site'}") &&
+      createSource.includes('data-target-blueprint={selectedBlueprint.id}'),
     'Site create form must keep the create action reachable for permitted users and show source-guarded inline validation before backend mutation',
+  );
+  assert(
+    /const canUseSiteDetailRoleDefaults =\s*isPermissionsLoading && !permissionMatrix && Boolean\(currentAdmin\);/.test(detailSource) &&
+      /const isPermissionMatrixPending =\s*isPermissionsLoading && !permissionMatrix && !canUseSiteDetailRoleDefaults;/.test(detailSource) &&
+      detailSource.includes('const isSiteDetailRoutePermissionAllowed = (') &&
+      detailSource.includes('const canViewSite = isSiteDetailRoutePermissionAllowed("sites.view");') &&
+      /const canConfigureSite =\s*isSiteDetailRoutePermissionAllowed\("sites.configure"\);/.test(detailSource) &&
+      detailSource.includes('const canDeleteSite = isSiteDetailRoutePermissionAllowed("sites.delete");') &&
+      detailSource.includes('const canViewForms = isSiteDetailRoutePermissionAllowed("forms.view");') &&
+      detailSource.includes('const canCreateForms = isSiteDetailRoutePermissionAllowed("forms.create");') &&
+      detailSource.includes('const canEditForms = isSiteDetailRoutePermissionAllowed("forms.edit");') &&
+      detailSource.includes('const canManageForms = isSiteDetailRoutePermissionAllowed("forms.manage");') &&
+      detailSource.includes('const canViewComments = isSiteDetailRoutePermissionAllowed("comments.view");') &&
+      /const canConfigureComments =\s*isSiteDetailRoutePermissionAllowed\("comments.configure"\);/.test(detailSource) &&
+      /const canExportActivity =\s*isSiteDetailRoutePermissionAllowed\("activity.export"\);/.test(detailSource) &&
+      detailSource.includes('const isSiteSettingsBusy = isLoading;') &&
+      detailSource.includes('const isCommentPolicyDisabled =') &&
+      !detailSource.includes('const isSiteSettingsBusy = isLoading || commentPolicySaving;') &&
+      detailSource.includes('data-testid="site-detail-permission-sync-state"') &&
+      !/const canViewSite =\s*!isPermissionMatrixPending/.test(detailSource) &&
+      !detailSource.includes('isLoading || commentPolicySaving || isPermissionMatrixPending'),
+    'Site detail route must keep role-default workspace/form/comment actions usable while permission details hydrate',
+  );
+  assert(
+    detailSource.includes('const auditLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const isAuditInitialLoading =') &&
+      detailSource.includes('data-testid="site-audit-panel"') &&
+      detailSource.includes('data-hydrated={String(auditState.hydrated)}') &&
+      detailSource.includes('data-initial-loading={String(isAuditInitialLoading)}') &&
+      detailSource.includes('site-audit-background-refresh') &&
+      detailSource.includes('{isAuditInitialLoading ? (') &&
+      !detailSource.includes('{auditState.loading ? ('),
+    'Site detail audit panel must keep existing activity visible during background audit refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('const readinessLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const [readinessHydrated, setReadinessHydrated] = useState(false);') &&
+      detailSource.includes('const isReadinessInitialLoading =') &&
+      detailSource.includes('data-testid="site-readiness-panel"') &&
+      detailSource.includes('data-hydrated={String(readinessHydrated)}') &&
+      detailSource.includes('data-initial-loading={String(isReadinessInitialLoading)}') &&
+      detailSource.includes('site-readiness-background-refresh') &&
+      detailSource.includes('!readinessError || readinessHydrated'),
+    'Site detail readiness panel must keep existing readiness results visible during background readiness refresh/error after hydration.',
+  );
+  assert(
+    detailSource.includes('const submissionLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const contactLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const [submissionsHydrated, setSubmissionsHydrated] = useState(false);') &&
+      detailSource.includes('const [contactsHydrated, setContactsHydrated] = useState(false);') &&
+      detailSource.includes('const isSubmissionInitialLoading =') &&
+      detailSource.includes('const isContactInitialLoading =') &&
+      detailSource.includes('data-testid="site-submissions-panel"') &&
+      detailSource.includes('data-hydrated={String(submissionsHydrated)}') &&
+      detailSource.includes('site-submissions-background-refresh') &&
+      detailSource.includes('{isSubmissionInitialLoading ? (') &&
+      detailSource.includes('data-testid="site-contacts-panel"') &&
+      detailSource.includes('data-hydrated={String(contactsHydrated)}') &&
+      detailSource.includes('site-contacts-background-refresh') &&
+      detailSource.includes('{isContactInitialLoading ? (') &&
+      !detailSource.includes('{state.submissionLoading ? (') &&
+      !detailSource.includes('{state.contactLoading ? ('),
+    'Site detail submission/contact queues must keep existing rows visible during background workflow refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('hydrated: Boolean(response)') &&
+      detailSource.includes('const frontendDesignLoadRequestRef = useRef(0);') &&
+      detailSource.includes('if (!currentAdmin || isPermissionMatrixPending)') &&
+      detailSource.includes('!frontendDesignState.hydrated') &&
+      detailSource.includes('!frontendDesignState.errorMessage') &&
+      detailSource.includes('preserveDirtyDraft') &&
+      detailSource.includes('const isFrontendDesignDraftDisabled =') &&
+      detailSource.includes('data-draft-disabled={String(isFrontendDesignDraftDisabled)}') &&
+      detailSource.includes('site-frontend-design-background-refresh') &&
+      !detailSource.includes('disabled={frontendDesignState.loading || !canConfigureSite}'),
+    'Site detail frontend-design draft controls must not be hard-disabled by background contract refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('const navigationLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const applyNavigationEditorResponse =') &&
+      detailSource.includes('!navigationState.hydrated') &&
+      detailSource.includes('!navigationState.errorMessage') &&
+      detailSource.includes('Latest navigation loaded in the background. Unsaved local edits were preserved.') &&
+      detailSource.includes('const isNavigationDraftDisabled =') &&
+      detailSource.includes('data-draft-disabled={String(isNavigationDraftDisabled)}') &&
+      detailSource.includes('site-navigation-background-refresh') &&
+      detailSource.includes('loading={isNavigationInitialLoading}') &&
+      detailSource.includes('disabled={isNavigationDraftDisabled}') &&
+      !detailSource.includes('loading={navigationState.loading || !canConfigureSite}'),
+    'Site detail navigation draft controls must not be hidden or hard-disabled by background navigation refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('const webhookLoadRequestRef = useRef(0);') &&
+      detailSource.includes('!webhookState.hydrated') &&
+      detailSource.includes('!webhookState.errorMessage') &&
+      detailSource.includes('Latest webhook configuration loaded in the background. Unsaved local edits were preserved.') &&
+      detailSource.includes('const isWebhookInitialLoading =') &&
+      detailSource.includes('const isWebhookConfigurationDisabled =') &&
+      detailSource.includes('const isWebhookSaveDisabled =') &&
+      detailSource.includes('data-draft-disabled={String(isWebhookConfigurationDisabled)}') &&
+      detailSource.includes('site-webhooks-background-refresh') &&
+      detailSource.includes('{isWebhookInitialLoading ? (') &&
+      !detailSource.includes('webhookState.loading || webhookState.saving || !canConfigureSite'),
+    'Site detail webhooks draft controls must not be hidden or hard-disabled by background webhook refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('const redirectLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const redirectPreviewRequestRef = useRef(0);') &&
+      detailSource.includes('!redirectState.hydrated') &&
+      detailSource.includes('!redirectState.errorMessage') &&
+      detailSource.includes('Latest redirects loaded in the background. Unsaved local edits were preserved.') &&
+      detailSource.includes('const isRedirectInitialLoading =') &&
+      detailSource.includes('const isRedirectPreviewDisabled =') &&
+      detailSource.includes('const isRedirectSaveDisabled =') &&
+      detailSource.includes('data-draft-disabled={String(areRedirectEditsDisabled)}') &&
+      detailSource.includes('site-redirects-background-refresh') &&
+      detailSource.includes('{isRedirectInitialLoading ? (') &&
+      !detailSource.includes('disabled={!siteApiId || areRedirectEditsDisabled}'),
+    'Site detail redirects draft controls must not be hidden or hard-disabled by background redirect refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('const seoLoadRequestRef = useRef(0);') &&
+      detailSource.includes('!seoState.hydrated') &&
+      detailSource.includes('!seoState.errorMessage') &&
+      detailSource.includes('Latest SEO settings loaded in the background. Unsaved local edits were preserved.') &&
+      detailSource.includes('const isSeoInitialLoading =') &&
+      detailSource.includes('const isSeoSaveDisabled =') &&
+      detailSource.includes('data-draft-disabled={String(areSeoEditsDisabled)}') &&
+      detailSource.includes('site-seo-background-refresh') &&
+      detailSource.includes('disabled={isSeoSaveDisabled}') &&
+      !detailSource.includes('seoState.loading || seoState.saving || !canConfigureSite') &&
+      !detailSource.includes('disabled={!siteApiId || areSeoEditsDisabled}'),
+    'Site detail SEO draft controls must not be hidden or hard-disabled by background SEO refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('const commentPolicyLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const [commentPolicyHydrated, setCommentPolicyHydrated] = useState(false);') &&
+      detailSource.includes('const isCommentPolicyInitialLoading =') &&
+      detailSource.includes('Latest comment policy loaded in the background. Unsaved local edits were preserved.') &&
+      detailSource.includes('data-draft-disabled={String(isCommentPolicyDisabled)}') &&
+      detailSource.includes('site-comment-policy-background-refresh') &&
+      detailSource.includes('{isCommentPolicyInitialLoading ? (') &&
+      !detailSource.includes('commentPolicyLoading || commentPolicySaving || !canConfigureComments'),
+    'Site detail comment policy draft controls must not be hidden or hard-disabled by background comment-policy refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('const workflowLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const [workflowHydrated, setWorkflowHydrated] = useState(false);') &&
+      detailSource.includes('const formBuilderDraftRef = useRef<FormDefinition | null>(null);') &&
+      detailSource.includes('const savedFormBuilderDraftRef = useRef<FormDefinition | null>(null);') &&
+      detailSource.includes('const isWorkflowInitialLoading =') &&
+      detailSource.includes('Latest form definition loaded in the background. Unsaved local edits were preserved.') &&
+      detailSource.includes('data-draft-disabled={String(isFormBuilderDisabled)}') &&
+      detailSource.includes('site-form-builder-background-refresh') &&
+      detailSource.includes('{isWorkflowInitialLoading ? (') &&
+      !detailSource.includes('const isFormViewDisabled = state.workflowLoading || !canViewForms;') &&
+      !detailSource.includes('state.workflowLoading;'),
+    'Site detail form-builder draft controls must not be hidden or hard-disabled by background workflow refresh after hydration.',
+  );
+  assert(
+    detailSource.includes('const commentsLoadRequestRef = useRef(0);') &&
+      detailSource.includes('const [commentsHydrated, setCommentsHydrated] = useState(false);') &&
+      detailSource.includes('const isCommentInitialLoading =') &&
+      detailSource.includes('data-testid="site-comments-moderation-panel"') &&
+      detailSource.includes('data-hydrated={String(commentsHydrated)}') &&
+      detailSource.includes('data-view-disabled={String(isCommentViewDisabled)}') &&
+      detailSource.includes('site-comments-background-refresh') &&
+      detailSource.includes('{isCommentInitialLoading ? (') &&
+      !detailSource.includes('const isCommentViewDisabled = state.commentsLoading || !canViewComments;'),
+    'Site detail comments moderation controls must not be hidden or hard-disabled by background comment refresh after hydration.',
   );
 };
 
@@ -140,7 +391,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_SITES_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -350,11 +602,12 @@ const assertSiteBillingLimitEnforced = async (suffix) => {
 const assertCustomDomainBillingLimitEnforced = async (suffix) => {
   const settings = await getSettings();
   const existingSites = await listSites();
-  const sourceSite = existingSites[0];
+  const sourceSite = existingSites.find((candidate) => !candidate.customDomain) || existingSites[0];
   const originalIntegrations = settings.integrations || {};
   const originalCommerce = originalIntegrations.commerce || {};
 
   assert(sourceSite?.id, `Custom-domain billing smoke needs an existing source site: ${JSON.stringify(existingSites).slice(0, 500)}`);
+  assert(!sourceSite.customDomain, `Custom-domain billing smoke needs a source site without an existing custom domain before setting the limit to zero: ${JSON.stringify(sourceSite).slice(0, 500)}`);
 
   const site = await getSite(sourceSite.id);
   const originalCustomDomain = site.customDomain || null;
@@ -415,6 +668,32 @@ const assertCustomDomainBillingLimitEnforced = async (suffix) => {
       }),
     });
   }
+};
+
+const temporarilyAllowSiteCreationQuota = async (extraSites = 2) => {
+  const settings = await getSettings();
+  const existingSites = await listSites();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentSiteLimit = Number(originalCommerce.siteLimit || 0);
+  const requiredSiteLimit = existingSites.length + extraSites;
+
+  if (originalCommerce.overageMode !== 'block' || currentSiteLimit >= requiredSiteLimit) {
+    return null;
+  }
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        siteLimit: requiredSiteLimit,
+        overageMode: 'warn',
+      },
+    },
+  });
+
+  return originalIntegrations;
 };
 
 const waitForSeededPages = async (siteId, expectedSlugs, sessionToken) => {
@@ -641,6 +920,49 @@ const setCreateSiteBlueprint = async (client, blueprint) => {
   return result;
 };
 
+const assertCreateSiteSubmitActionStatus = async (client, expectation) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const status = document.querySelector('[data-testid="site-create-submit-action-status"]');
+      const statusId = status?.id || '';
+      const button = document.querySelector('button[type="submit"]');
+      return {
+        statusId,
+        statusText: status?.textContent || '',
+        buttonExists: button instanceof HTMLButtonElement,
+        buttonText: button?.textContent || '',
+        describedBy: button?.getAttribute('aria-describedby') || '',
+        actionState: button?.getAttribute('data-action-state') || '',
+        actionStatus: button?.getAttribute('data-action-status') || '',
+        disabledReason: button?.getAttribute('data-disabled-reason') || '',
+        targetSiteId: button?.getAttribute('data-target-site-id') || '',
+        targetBlueprint: button?.getAttribute('data-target-blueprint') || '',
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        body: document.body?.innerText?.slice(0, 1200) || '',
+      };
+    })()`);
+    const matches = state.statusId &&
+      state.buttonExists &&
+      state.describedBy === state.statusId &&
+      state.actionStatus === state.statusText &&
+      state.actionState === expectation.state &&
+      state.statusText.includes(expectation.statusIncludes) &&
+      (expectation.disabled === undefined || state.disabled === expectation.disabled) &&
+      (!expectation.targetSiteId || state.targetSiteId === expectation.targetSiteId) &&
+      (!expectation.targetBlueprint || state.targetBlueprint === expectation.targetBlueprint) &&
+      (!expectation.reasonIncludes || state.disabledReason.includes(expectation.reasonIncludes));
+    if (matches) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Create-site submit action status did not match: ${JSON.stringify({ state, expectation })}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const submitCreateSiteForm = async (client) => {
   const result = await evaluate(client, `(() => {
     const button = Array.from(document.querySelectorAll('button[type="submit"]')).find((candidate) => (
@@ -675,6 +997,13 @@ const createSiteThroughUi = async (client, { siteName, slug, customDomain, sessi
   await setCreateSiteControl(client, 'Marketplace template ID', `marketplace-${slug}`);
   await setCreateSiteControl(client, 'Status', 'published');
   await setCreateSiteBlueprint(client, 'storefront');
+  await assertCreateSiteSubmitActionStatus(client, {
+    state: 'ready',
+    disabled: false,
+    statusIncludes: `Create site available: Storefront will create ${slug}.`,
+    targetSiteId: slug,
+    targetBlueprint: 'storefront',
+  });
   await submitCreateSiteForm(client);
 
   const created = await waitForSite(slug, (site) => site.status === 'published' || site.isPublished === true, sessionToken);
@@ -741,6 +1070,109 @@ const waitForSitesPageSite = async (client, siteName) => {
   }
 
   return null;
+};
+
+const assertCreateSiteActionStatus = async (client, expectation) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const status = document.querySelector('[data-testid="sites-create-action-status"]');
+      const statusId = status?.id || '';
+      const buttons = Array.from(document.querySelectorAll('button')).filter((button) => (
+        (button.textContent || '').trim() === 'New site' &&
+        button.getAttribute('aria-describedby') === statusId
+      ));
+      return {
+        statusId,
+        statusText: status?.textContent || '',
+        buttons: buttons.map((button) => ({
+          text: (button.textContent || '').trim(),
+          state: button.getAttribute('data-action-state') || '',
+          status: button.getAttribute('data-action-status') || '',
+          reason: button.getAttribute('data-disabled-reason') || '',
+          disabled: button.disabled,
+          describedBy: button.getAttribute('aria-describedby') || '',
+        })),
+        body: document.body?.innerText?.slice(0, 1200) || '',
+      };
+    })()`);
+    if (state.statusId && state.buttons.length > 0) {
+      const matchesExpectation = state.statusText.includes(expectation.statusIncludes) &&
+        state.buttons.every((button) => (
+          button.describedBy === state.statusId &&
+          button.status === state.statusText &&
+          button.state === expectation.state &&
+          (expectation.disabled === undefined || button.disabled === expectation.disabled) &&
+          (!expectation.reasonIncludes || button.reason.includes(expectation.reasonIncludes))
+        ));
+      if (matchesExpectation) {
+        return state;
+      }
+    }
+    if (attempt === 79) {
+      throw new Error(`Sites create action status did not render: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertSiteActionStatus = async (client, siteName, expectations) => {
+  await waitForSitesControlsEnabled(client);
+  await setSitesFilter(client, 'Search sites', siteName);
+  await waitForSitesPageSite(client, siteName);
+  const state = await evaluate(client, `(() => {
+    const group = Array.from(document.querySelectorAll('[data-testid^="sites-actions-"]')).find((candidate) => (
+      candidate.getAttribute('aria-label') === ${JSON.stringify(`Actions for ${siteName}`)}
+    ));
+    const statusId = group?.getAttribute('aria-describedby') || '';
+    const status = statusId ? document.getElementById(statusId) : null;
+    const action = (label) => {
+      const element = Array.from(group?.querySelectorAll('a, button') || []).find((candidate) => (
+        candidate.getAttribute('aria-label') === label + ' ' + ${JSON.stringify(siteName)}
+      ));
+      return {
+        exists: Boolean(element),
+        describedBy: element?.getAttribute('aria-describedby') || '',
+        state: element?.getAttribute('data-action-state') || '',
+        reason: element?.getAttribute('data-disabled-reason') || '',
+        disabled: element instanceof HTMLButtonElement ? element.disabled : element?.getAttribute('aria-disabled') === 'true',
+      };
+    };
+    return {
+      groupExists: Boolean(group),
+      groupLabel: group?.getAttribute('aria-label') || '',
+      groupRole: group?.getAttribute('role') || '',
+      describedBy: statusId,
+      statusText: status?.textContent || '',
+      groupStatus: group?.getAttribute('data-action-status') || '',
+      preview: action('Preview'),
+      manage: action('Manage'),
+      duplicate: action('Duplicate'),
+      archive: action('Archive'),
+      delete: action('Delete'),
+    };
+  })()`);
+
+  assert(state.groupExists, `Site action group did not render for ${siteName}: ${JSON.stringify(state)}`);
+  assert(state.groupRole === 'group', `Site action cluster must be a named group: ${JSON.stringify(state)}`);
+  assert(state.groupLabel === `Actions for ${siteName}`, `Site action group label drifted: ${JSON.stringify(state)}`);
+  assert(state.describedBy && state.statusText === state.groupStatus, `Site action group must expose matching hidden status text: ${JSON.stringify(state)}`);
+
+  for (const [actionName, expectation] of Object.entries(expectations)) {
+    const observed = state[actionName];
+    assert(observed?.exists, `Site ${actionName} action did not render: ${JSON.stringify(state)}`);
+    assert(observed.describedBy === state.describedBy, `Site ${actionName} action is not tied to the group status: ${JSON.stringify(state)}`);
+    if (expectation.state) {
+      assert(observed.state === expectation.state, `Site ${actionName} action state mismatch: ${JSON.stringify({ observed, expectation, state })}`);
+    }
+    if (expectation.reasonIncludes) {
+      assert(observed.reason.includes(expectation.reasonIncludes), `Site ${actionName} disabled reason mismatch: ${JSON.stringify({ observed, expectation, state })}`);
+      assert(state.statusText.includes(expectation.statusIncludes || `${expectation.label || actionName} unavailable`), `Site ${actionName} status text did not describe blocker: ${JSON.stringify({ observed, expectation, state })}`);
+    }
+  }
+
+  return state;
 };
 
 const waitForSelectedSiteOperations = async (client, siteName) => {
@@ -1006,15 +1438,25 @@ const assertLayout = async (client, siteName) => {
     hasCommandCenter: Boolean(document.querySelector('[data-testid="sites-command-center"]')),
     hasSite: document.body?.innerText?.includes(${JSON.stringify(siteName)}) || false,
     hasFrontendApi: document.body?.innerText?.includes('Site frontend API') || false,
+    hasDeliveryOperationsDetails: Boolean(document.querySelector('[data-testid="sites-delivery-operations-details"]')),
+    deliveryOperationsDefaultCollapsed: document.querySelector('[data-testid="sites-delivery-operations-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    deliveryOperationsOpen: document.querySelector('[data-testid="sites-delivery-operations-details"]')?.hasAttribute('open') || false,
+    hasDeliveryOperationsPanels: Boolean(document.querySelector('[data-testid="sites-delivery-operations-panels"]')),
     hasDomainVerification: Boolean(document.querySelector('[data-testid="sites-domain-verification"]')),
     hasVercelDeployment: Boolean(document.querySelector('[data-testid="sites-vercel-deployment"]')),
     hasBillingQuotas: Boolean(document.querySelector('[data-testid="sites-billing-quotas"]')),
     hasFeatureContract: document.body?.innerText?.includes('Website feature contract') || false,
     hasRequiredControls: document.body?.innerText?.includes('What Backy still needs here') || false,
+    hasAuditDetails: Boolean(document.querySelector('[data-testid="sites-audit-details"]')),
+    auditDefaultCollapsed: document.querySelector('[data-testid="sites-audit-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    auditOpen: document.querySelector('[data-testid="sites-audit-details"]')?.hasAttribute('open') || false,
+    hasAuditDisclosurePanel: Boolean(document.querySelector('[data-testid="sites-audit-disclosure-panel"]')),
     hasAuditPanel: Boolean(document.querySelector('[data-testid="sites-audit-panel"]')),
     hasLibrary: Boolean(document.querySelector('input[aria-label="Search sites"]')),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Sites page has horizontal overflow: ${JSON.stringify(layout)}`);
+  assert(layout.hasDeliveryOperationsDetails && layout.deliveryOperationsDefaultCollapsed && !layout.deliveryOperationsOpen && layout.hasDeliveryOperationsPanels, `Sites delivery/deployment/quota operations should start collapsed but remain available: ${JSON.stringify(layout)}`);
+  assert(layout.hasAuditDetails && layout.auditDefaultCollapsed && !layout.auditOpen && layout.hasAuditDisclosurePanel, `Sites audit evidence should start collapsed but remain available: ${JSON.stringify(layout)}`);
   assert(
     layout.hasCommandCenter && layout.hasSite && layout.hasFrontendApi && layout.hasDomainVerification && layout.hasVercelDeployment && layout.hasBillingQuotas && layout.hasFeatureContract && layout.hasRequiredControls && layout.hasAuditPanel && layout.hasLibrary,
     `Sites page missing expected regions: ${JSON.stringify(layout)}`,
@@ -1303,6 +1745,14 @@ const assertSitesRbacFiltering = async (client, viewerSession, siteName, preload
       const newSiteButtons = Array.from(document.querySelectorAll('button')).filter((button) => (
         (button.textContent || '').trim() === 'New site'
       ));
+      const newSiteStatus = document.querySelector('[data-testid="sites-create-action-status"]');
+      const newSiteStatusId = newSiteStatus?.id || '';
+      const newSiteActionStates = newSiteButtons.map((button) => ({
+        state: button.getAttribute('data-action-state') || '',
+        reason: button.getAttribute('data-disabled-reason') || '',
+        status: button.getAttribute('data-action-status') || '',
+        describedBy: button.getAttribute('aria-describedby') || '',
+      }));
       const statusSelect = Array.from(document.querySelectorAll('select')).find((select) => (
         (select.getAttribute('aria-label') || '') === ${JSON.stringify(`Change status for ${siteName}`)}
       ));
@@ -1337,6 +1787,9 @@ const assertSitesRbacFiltering = async (client, viewerSession, siteName, preload
         ready: Boolean(rbacPanel),
         rbacText,
         newSiteDisabled: newSiteButtons.length === 0 || newSiteButtons.every((button) => button.disabled),
+        newSiteStatusId,
+        newSiteStatusText: newSiteStatus?.textContent || '',
+        newSiteActionStates,
         statusDisabled: statusSelect instanceof HTMLSelectElement ? statusSelect.disabled : null,
         duplicateDisabled: duplicateButton instanceof HTMLButtonElement ? duplicateButton.disabled : null,
         archiveDisabled: archiveButton instanceof HTMLButtonElement ? archiveButton.disabled : null,
@@ -1359,6 +1812,17 @@ const assertSitesRbacFiltering = async (client, viewerSession, siteName, preload
       assert(state.rbacText.includes('Configure sites') && state.rbacText.includes('Hidden'), `Viewer sites page did not hide configure permission: ${JSON.stringify(state)}`);
       assert(state.rbacText.includes('Archive/delete') && state.rbacText.includes('Hidden'), `Viewer sites page did not hide delete permission: ${JSON.stringify(state)}`);
       assert(state.newSiteDisabled === true, `Viewer sites page left New site enabled: ${JSON.stringify(state)}`);
+      assert(state.newSiteStatusText.includes('New site unavailable:'), `Viewer sites page did not explain disabled New site controls: ${JSON.stringify(state)}`);
+      assert(
+        state.newSiteActionStates.length > 0 &&
+          state.newSiteActionStates.every((action) => (
+            action.state === 'blocked' &&
+            action.describedBy === state.newSiteStatusId &&
+            action.status === state.newSiteStatusText &&
+            action.reason.length > 0
+          )),
+        `Viewer New site controls did not expose blocked action metadata: ${JSON.stringify(state)}`,
+      );
       assert(state.statusDisabled !== false, `Viewer sites page left status control enabled: ${JSON.stringify(state)}`);
       assert(state.duplicateDisabled !== false, `Viewer sites page left duplicate enabled: ${JSON.stringify(state)}`);
       assert(state.archiveDisabled !== false, `Viewer sites page left archive enabled: ${JSON.stringify(state)}`);
@@ -1442,6 +1906,7 @@ const main = async () => {
   let ownerUserId;
   let viewerUserId;
   let ownerSessionToken;
+  let restoredQuotaIntegrations = null;
   const suffix = Date.now().toString(36);
   const siteName = `Sites Smoke ${suffix}`;
   const slug = `sites-smoke-${suffix}`;
@@ -1456,6 +1921,7 @@ const main = async () => {
     assert(!existing, `Temporary site already exists: ${slug}`);
     await assertSiteBillingLimitEnforced(suffix);
     await assertCustomDomainBillingLimitEnforced(suffix);
+    restoredQuotaIntegrations = await temporarilyAllowSiteCreationQuota(2);
     const owner = await createUser({
       fullName: `Sites Owner ${suffix}`,
       email: ownerEmail,
@@ -1507,7 +1973,19 @@ const main = async () => {
     assert(pages.length >= 3, `Storefront blueprint did not seed enough pages: ${JSON.stringify(pages).slice(0, 700)}`);
 
     await navigateToSites(client, siteName, createdSelectionId);
+    await assertCreateSiteActionStatus(client, {
+      state: 'ready',
+      disabled: false,
+      statusIncludes: 'New site available.',
+    });
     await waitForSitesPageSite(client, siteName);
+    await assertSiteActionStatus(client, siteName, {
+      preview: { state: 'ready' },
+      manage: { state: 'ready' },
+      duplicate: { state: 'ready' },
+      archive: { state: 'ready' },
+      delete: { state: 'ready' },
+    });
     await waitForSelectedSiteOperations(client, siteName);
     await assertLayout(client, siteName);
     await exerciseDomainVerification(client, { siteId: createdSiteId, siteName, sessionToken: ownerSession.session.token });
@@ -1528,6 +2006,17 @@ const main = async () => {
 
     await archiveSiteThroughUi(client, siteName, slug, ownerSession.session.token);
     assert((await getSite(createdSiteId, ownerSession.session.token)).status === 'archived', 'Archive action did not persist through the admin API.');
+    await assertSiteActionStatus(client, siteName, {
+      preview: { state: 'ready' },
+      manage: { state: 'ready' },
+      duplicate: { state: 'ready' },
+      archive: {
+        state: 'blocked',
+        reasonIncludes: 'This site is already archived.',
+        statusIncludes: 'Archive unavailable: This site is already archived.',
+      },
+      delete: { state: 'ready' },
+    });
     await assertSiteAuditTrail(client, { siteId: createdSiteId, siteName });
 
     await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }).then((result) => {
@@ -1558,6 +2047,9 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (restoredQuotaIntegrations) {
+      await updateSettings({ integrations: restoredQuotaIntegrations }).catch(() => {});
+    }
     await updateUser('user-admin', { role: 'owner', status: 'active' }).catch(() => {});
     await cleanup({ client, childProcess, userDataDir, siteId: createdSiteId, ownerSessionToken });
     if (duplicatedSiteId) {

@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { withSmokeLock } from './smoke-lock.mjs';
 
 const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
@@ -1291,6 +1292,7 @@ const assert = (condition, message) => {
 
 const assertPageCreateSourceContracts = () => {
   const source = fs.readFileSync(new URL('../src/routes/pages.new.tsx', import.meta.url), 'utf8');
+  const pageEditorSource = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
   const mediaApiSource = fs.readFileSync(new URL('../src/lib/mediaApi.ts', import.meta.url), 'utf8');
   const chromeSource = fs.readFileSync(new URL('../src/lib/editorTemplateChrome.ts', import.meta.url), 'utf8');
   const pageCreateSubmitKeepsValidationReachable = /data-testid="page-create-submit-button"[\s\S]{0,500}disabled=\{isPageCreateBusy \|\| !canEditPages\}/.test(source);
@@ -1300,26 +1302,76 @@ const assertPageCreateSourceContracts = () => {
     'Page create submit readiness must require a resolved target site, not just a stale siteId',
   );
   assert(
-    source.includes('data-testid="page-create-submit-button"') &&
-      source.includes('const isPageCreateMutating = isLoading || isPreviewAfterCreateBusy || isPermissionMatrixPending;') &&
-      source.includes('const isPageCreateBusy = isPageCreateMutating || isCheckingPages;') &&
+      source.includes('data-testid="page-create-submit-button"') &&
+      source.includes('const isPageCreateMutating = isLoading || isPreviewAfterCreateBusy;') &&
+      !source.includes('|| isPermissionMatrixPending') &&
+      source.includes('const isPageCreateBusy = isPageCreateMutating;') &&
+      source.includes('const isPageCreateStatusBusy = isPageCreateMutating || isCheckingPages;') &&
       source.includes('const templateSelectionDisabled = isPageCreateMutating;') &&
+      source.includes('&& !isCheckingPages') &&
+      source.includes("if (isCheckingPages) return 'Checking existing page routes for this site before creating the page.';") &&
+      source.includes('const canAttemptCreatePreviewDraft = canEditPages && canPublishPages;') &&
+      source.includes('disabled={isPageCreateBusy || !canAttemptCreatePreviewDraft}') &&
       source.includes('const pageCreateBusyState = [') &&
       source.includes("data-busy-state={pageCreateBusyState}") &&
       source.includes("data-template-selection-disabled={String(templateSelectionDisabled)}") &&
       source.includes('const submitControlState = canSubmit ?') &&
+      source.includes("const submitControlState = canSubmit ? 'ready' : isPageCreateStatusBusy ? 'busy' : 'blocked';") &&
       source.includes('data-testid="page-create-submit-blocker"') &&
-      source.includes('aria-describedby={submitBlockerMessage ?') &&
+      source.includes("const pageCreateSubmitActionStatusId = 'page-create-submit-action-status';") &&
+      source.includes("const pageCreatePreviewActionStatusId = 'page-create-preview-action-status';") &&
+      source.includes("const pageCreateCommandActionStatusId = 'page-create-command-action-status';") &&
+      source.includes("const pageCreateRecoveryActionStatusId = 'page-create-recovery-action-status';") &&
+      source.includes('const pageCreateBackActionStatus = isPageCreateBusy') &&
+      source.includes('const pageCreateCopyActionStatus = isPageCreateBusy') &&
+      source.includes('const pageCreateDownloadActionStatus = isPageCreateBusy') &&
+      source.includes('const pageCreateCancelActionStatus = isPageCreateBusy') &&
+      source.includes('const pageCreateRouteRetryActionStatus = isPageCreateMutating') &&
+      source.includes('const pageCreateDiscardRecoveryActionStatus = isPageCreateMutating') &&
+      source.includes('const pageCreateRestoreRecoveryActionStatus = isPageCreateBusy') &&
+      source.includes('data-testid="page-create-command-action-status"') &&
+      source.includes('data-testid="page-create-back-to-pages"') &&
+      source.includes('data-testid="page-create-copy-handoff"') &&
+      source.includes('data-testid="page-create-download-handoff"') &&
+      source.includes('data-testid="page-create-route-check-retry"') &&
+      source.includes('data-testid="page-create-cancel"') &&
+      source.includes('data-testid="page-create-recovery-action-status"') &&
+      source.includes('data-testid="page-create-discard-recovery"') &&
+      source.includes('data-testid="page-create-restore-recovery"') &&
+      source.includes('const pageCreateSubmitActionState = pageCreateSubmitDisabledReason || submitBlockerMessage ?') &&
+      source.includes('const pageCreatePreviewActionState = pageCreatePreviewDisabledReason || previewDraftBlockerMessage ?') &&
+      source.includes('const pageCreateSubmitDescribedBy = submitBlockerMessage') &&
+      source.includes('const pageCreatePreviewDescribedBy = previewDraftBlockerMessage && submitBlockerMessage') &&
+      source.includes('data-testid="page-create-submit-action-status"') &&
+      source.includes('data-testid="page-create-preview-action-status"') &&
+      source.includes('aria-describedby={pageCreateSubmitDescribedBy}') &&
+      source.includes('aria-describedby={pageCreatePreviewDescribedBy}') &&
+      source.includes('data-action-state={pageCreateSubmitActionState}') &&
+      source.includes('data-action-status={pageCreateSubmitActionStatus}') &&
+      source.includes('data-disabled-reason={pageCreateSubmitDisabledReason || undefined}') &&
+      source.includes('data-target-site-id={formData.siteId || undefined}') &&
+      source.includes('data-target-route={routePreview}') &&
+      source.includes('data-target-template={effectiveTemplateName}') &&
+      source.includes('data-action-state={pageCreatePreviewActionState}') &&
+      source.includes('data-action-status={pageCreatePreviewActionStatus}') &&
+      source.includes('data-disabled-reason={pageCreatePreviewDisabledReason || undefined}') &&
       source.includes('data-state={submitControlState}') &&
       source.includes("data-blocker={submitBlockerMessage || ''}") &&
       source.includes('data-can-submit={String(canSubmit)}') &&
+      source.includes('data-testid="page-create-primary-submit"') &&
+      source.includes('form="page-create-form"') &&
+      source.includes('<form id="page-create-form" onSubmit={handleSubmit} noValidate') &&
+      source.includes('data-testid="page-creation-control-map"') &&
       source.includes('data-testid="page-create-preview-button"') &&
-      source.includes('options?: { allowDuringRouteCheck?: boolean }') &&
-      source.includes('const draftLocked = options?.allowDuringRouteCheck ? isPageCreateMutating : isPageCreateBusy;') &&
+      source.includes('data-testid="page-template-library-shell"') &&
+      source.includes('data-testid="page-template-library-scroll"') &&
+      source.includes('max-h-[34rem] overflow-y-auto') &&
+      source.includes('options?: { markEdited?: boolean }') &&
+      source.includes('const draftLocked = isPageCreateMutating;') &&
+      source.includes('const canSyncSlugFromTitle = !isPageCreateMutating') &&
       source.includes('if (templateSelectionDisabled || !canEditPages) return;') &&
-      source.includes('{ allowDuringRouteCheck: true }') &&
       source.includes('disabled={templateSelectionDisabled}'),
-    'Page create template selection must stay available during route checks while create, preview, mutation, and permission locks still apply.',
+    'Page create controls must stay available during permission loading and background route checks, while create and preview mutations still lock controls and route checks surface inline blockers.',
   );
   assert(
     source.includes('const [pageCreateFormSubmitted, setPageCreateFormSubmitted] = useState(false);') &&
@@ -1329,7 +1381,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('const pageJsonLdInlineError = pageCreateFormSubmitted && !jsonLdValid') &&
       source.includes('const pageScheduleInlineError = pageCreateFormSubmitted && scheduleValidationMessage') &&
       source.includes('setPageCreateFormSubmitted(true);') &&
-      source.includes('<form onSubmit={handleSubmit} noValidate') &&
+      source.includes('<form id="page-create-form" onSubmit={handleSubmit} noValidate') &&
       source.includes('data-testid="page-create-site-input"') &&
       source.includes('data-testid="page-create-site-error"') &&
       source.includes('data-testid="page-create-title-input"') &&
@@ -1352,6 +1404,12 @@ const assertPageCreateSourceContracts = () => {
   assert(
     source.includes('const loadPageCreatePermissions = useCallback(() => {') &&
       source.includes('data-testid="page-create-permission-state"') &&
+      source.includes("const pageCreatePermissionActionStatusId = 'page-create-permission-action-status';") &&
+      source.includes('const pageCreatePermissionRetryActionStatus = isPermissionsLoading') &&
+      source.includes('const pageCreatePermissionReviewActionStatus =') &&
+      source.includes('data-testid="page-create-permission-action-status"') &&
+      source.includes('data-testid="page-create-permission-retry"') &&
+      source.includes('data-testid="page-create-permission-review-users"') &&
       source.includes('aria-label="Retry loading page creation permissions"') &&
       source.includes('Retry permissions') &&
       source.includes("navigate({ to: '/users' })"),
@@ -1412,6 +1470,21 @@ const assertPageCreateSourceContracts = () => {
       mediaApiSource.includes('Math.min(Math.max(requestedLimit, 1), MAX_MEDIA_LIST_LIMIT)') &&
       mediaApiSource.includes("query.set('limit', `${safeLimit}`)"),
     'Page editor media preloading must clamp listMediaLibrary limits to the admin media API maximum instead of emitting background 400s',
+  );
+  assert(
+    pageEditorSource.includes('data-testid="page-editor-command-center"') &&
+      pageEditorSource.includes('data-default-editor-order="after-canvas"') &&
+      pageEditorSource.includes('data-testid="page-editor-readiness-summary"') &&
+      pageEditorSource.includes('Publish, preview, readiness, revisions, and frontend handoff stay close without crowding the canvas.') &&
+      pageEditorSource.includes('data-testid="page-editor-control-map"') &&
+      pageEditorSource.includes('aria-label="Page editor control map"') &&
+      pageEditorSource.includes('aria-label={`${area.title}: ${area.detail}`}') &&
+      pageEditorSource.includes('inline-flex min-h-10 items-center rounded-lg') &&
+      pageEditorSource.includes('{PAGE_EDITOR_CONTROL_AREAS.length} areas') &&
+      pageEditorSource.includes("isWorkspaceFocus ? 'Page canvas' : 'Page design canvas'") &&
+      pageEditorSource.includes('initialCanvasFocusMode={isWorkspaceFocus}') &&
+      pageEditorSource.includes('data-testid={isWorkspaceFocus ? \'page-editor-focus-banner\' : undefined}'),
+    'Page editor default shell must keep the canvas-first layout, compact command center, chip control map, and focused canvas escape hatch that boots the inner editor in focus mode.',
   );
   assert(
     chromeSource.includes('const shiftResponsiveY =') &&
@@ -2135,7 +2208,8 @@ const loginAdminApi = async () => {
   const smokeMfaCode = process.env.BACKY_PAGE_CREATE_SMOKE_MFA_CODE
     || process.env.BACKY_EDITOR_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -2348,6 +2422,44 @@ const waitForCdp = async () => {
   }
 
   throw new Error(`Chrome DevTools did not start on port ${PORT}`);
+};
+
+const isUsablePageTarget = (target) => {
+  if (!target || target.type !== 'page' || !target.webSocketDebuggerUrl) return false;
+  const url = target.url || '';
+  return !(
+    url.startsWith('chrome://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('chrome-error://') ||
+    url.startsWith('chrome-extension://')
+  );
+};
+
+const getTargetScore = (target) => {
+  const url = target.url || '';
+  if (url.startsWith(ADMIN_BASE_URL)) return 0;
+  if (url === 'about:blank') return 1;
+  if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return 2;
+  if (url.startsWith('http://') || url.startsWith('https://')) return 3;
+  return 4;
+};
+
+const selectUsablePageTarget = (targets) => (
+  [...targets]
+    .filter(isUsablePageTarget)
+    .sort((left, right) => getTargetScore(left) - getTargetScore(right))[0]
+);
+
+const waitForUsablePageTarget = async () => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const targets = await waitForCdp();
+    const target = selectUsablePageTarget(targets);
+    if (target) return target;
+    await sleep(100);
+  }
+
+  const targets = await fetchJson('/json/list').catch(() => []);
+  throw new Error(`No usable Chrome page target found on port ${PORT}: ${JSON.stringify(targets).slice(0, 1000)}`);
 };
 
 const connectCdp = (webSocketDebuggerUrl) => {
@@ -2603,6 +2715,15 @@ const assertTemplatePreviewVisualState = async (client, label, screenshotPath) =
     const leftBuckets = Array.from(new Set(cards.map((card) => Math.round(card.left / 12) * 12)));
     const selected = document.querySelector('[data-testid="page-selected-template-preview"]');
     const selectedRect = selected?.getBoundingClientRect();
+    const templateLibraryShell = document.querySelector('[data-testid="page-template-library-shell"]');
+    const templateLibraryScroll = document.querySelector('[data-testid="page-template-library-scroll"]');
+    const templateLibraryScrollRect = templateLibraryScroll?.getBoundingClientRect();
+    const summaryRail = document.querySelector('[data-testid="page-create-summary-rail"]');
+    const summaryRailRect = summaryRail?.getBoundingClientRect();
+    const stickySubmit = document.querySelector('[data-testid="page-create-sticky-submit"]');
+    const stickySubmitRect = stickySubmit?.getBoundingClientRect();
+    const stickyPreview = document.querySelector('[data-testid="page-create-sticky-preview"]');
+    const stickyPreviewRect = stickyPreview?.getBoundingClientRect();
     return {
       label: ${JSON.stringify(label)},
       viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -2616,10 +2737,26 @@ const assertTemplatePreviewVisualState = async (client, label, screenshotPath) =
       columns: leftBuckets.length,
       clippedInsideCards: cards.filter((card) => card.clippedInsideCard),
       zeroBlockTemplates: cards.filter((card) => card.blockCount <= 0).map((card) => card.template),
+      templateLibraryBounded: Boolean(
+        templateLibraryShell &&
+        templateLibraryScroll &&
+        templateLibraryScrollRect &&
+        templateLibraryScrollRect.height <= 560 &&
+        templateLibraryScroll.scrollHeight > templateLibraryScroll.clientHeight &&
+        (templateLibraryShell.textContent || '').includes('Starter templates') &&
+        (templateLibraryShell.textContent || '').includes('33 templates')
+      ),
+      templateLibraryHeight: Math.round(templateLibraryScrollRect?.height || 0),
+      templateLibraryScrollHeight: templateLibraryScroll?.scrollHeight || 0,
       documentWidth: document.documentElement.scrollWidth,
       horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
       selectedTemplate: selected?.getAttribute('data-template') || '',
       selectedVisible: Boolean(selectedRect && selectedRect.width > 220 && selectedRect.height > 150),
+      summaryRailVisible: Boolean(summaryRailRect && summaryRailRect.width >= 320 && summaryRailRect.height > 160 && summaryRailRect.top >= -1 && summaryRailRect.top < window.innerHeight - 120),
+      stickySubmitVisible: Boolean(stickySubmitRect && stickySubmitRect.width >= 180 && stickySubmitRect.height >= 36 && stickySubmitRect.top >= -1 && stickySubmitRect.bottom <= window.innerHeight + 1),
+      stickyPreviewVisible: Boolean(stickyPreviewRect && stickyPreviewRect.width >= 180 && stickyPreviewRect.height >= 36 && stickyPreviewRect.top >= -1 && stickyPreviewRect.bottom <= window.innerHeight + 1),
+      summaryRailTop: Math.round(summaryRailRect?.top || 0),
+      summaryRailLeft: Math.round(summaryRailRect?.left || 0),
       body: document.body?.innerText?.slice(0, 220) || '',
     };
   })()`);
@@ -2628,6 +2765,7 @@ const assertTemplatePreviewVisualState = async (client, label, screenshotPath) =
   assert(state.templates.includes('about'), `${label} about template preview missing: ${JSON.stringify(state)}`);
   assert(state.activeTemplates.length === 1 && state.activeTemplates[0] === 'about', `${label} active template mismatch: ${JSON.stringify(state)}`);
   assert(state.zeroBlockTemplates.length === 0, `${label} templates without preview blocks: ${JSON.stringify(state)}`);
+  assert(state.templateLibraryBounded, `${label} template library did not render as a bounded picker: ${JSON.stringify(state)}`);
   assert(state.minPreviewWidth >= 180, `${label} preview width is too small: ${JSON.stringify(state)}`);
   assert(state.minPreviewHeight >= 110, `${label} preview height is too small: ${JSON.stringify(state)}`);
   assert(state.clippedInsideCards.length === 0, `${label} preview clipped inside card: ${JSON.stringify(state)}`);
@@ -2637,6 +2775,11 @@ const assertTemplatePreviewVisualState = async (client, label, screenshotPath) =
 
   if (state.viewport.width >= 1024) {
     assert(state.columns >= 2, `${label} template grid did not use multiple columns on desktop: ${JSON.stringify(state)}`);
+  }
+
+  if (state.viewport.width >= 1200) {
+    assert(state.summaryRailVisible, `${label} summary rail was not visible while starter design was in view: ${JSON.stringify(state)}`);
+    assert(state.stickySubmitVisible && state.stickyPreviewVisible, `${label} sticky create actions were not visible: ${JSON.stringify(state)}`);
   }
 
   await captureScreenshot(client, screenshotPath);
@@ -3006,6 +3149,20 @@ const waitForPageCreateControls = async (client, slug, title, navLabel, seo, par
       activeTemplatePreview: document.querySelector('[data-testid="page-template-preview-about"]')?.getAttribute('data-active') || '',
       activeTemplateBlockCount: Number(document.querySelector('[data-testid="page-template-preview-about"]')?.getAttribute('data-block-count') || 0),
       selectedTemplatePreview: document.querySelector('[data-testid="page-selected-template-preview"]')?.getAttribute('data-template') || '',
+      commandStatusId: document.querySelector('[data-testid="page-create-command-action-status"]')?.id || '',
+      commandStatusText: document.querySelector('[data-testid="page-create-command-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      backActionState: document.querySelector('[data-testid="page-create-back-to-pages"]')?.getAttribute('data-action-state') || '',
+      backActionStatus: document.querySelector('[data-testid="page-create-back-to-pages"]')?.getAttribute('data-action-status') || '',
+      backDescribedBy: document.querySelector('[data-testid="page-create-back-to-pages"]')?.getAttribute('aria-describedby') || '',
+      copyActionState: document.querySelector('[data-testid="page-create-copy-handoff"]')?.getAttribute('data-action-state') || '',
+      copyActionStatus: document.querySelector('[data-testid="page-create-copy-handoff"]')?.getAttribute('data-action-status') || '',
+      copyDescribedBy: document.querySelector('[data-testid="page-create-copy-handoff"]')?.getAttribute('aria-describedby') || '',
+      downloadActionState: document.querySelector('[data-testid="page-create-download-handoff"]')?.getAttribute('data-action-state') || '',
+      downloadActionStatus: document.querySelector('[data-testid="page-create-download-handoff"]')?.getAttribute('data-action-status') || '',
+      downloadDescribedBy: document.querySelector('[data-testid="page-create-download-handoff"]')?.getAttribute('aria-describedby') || '',
+      cancelActionState: document.querySelector('[data-testid="page-create-cancel"]')?.getAttribute('data-action-state') || '',
+      cancelActionStatus: document.querySelector('[data-testid="page-create-cancel"]')?.getAttribute('data-action-status') || '',
+      cancelDescribedBy: document.querySelector('[data-testid="page-create-cancel"]')?.getAttribute('aria-describedby') || '',
       body: document.body?.innerText?.slice(0, 240) || '',
     }))()`);
 
@@ -3029,6 +3186,22 @@ const waitForPageCreateControls = async (client, slug, title, navLabel, seo, par
       && state.activeTemplatePreview === 'true'
       && state.activeTemplateBlockCount > 0
       && state.selectedTemplatePreview === 'about'
+      && state.commandStatusId === 'page-create-command-action-status'
+      && state.backActionState === 'ready'
+      && state.copyActionState === 'ready'
+      && state.downloadActionState === 'ready'
+      && state.cancelActionState === 'ready'
+      && state.backDescribedBy === state.commandStatusId
+      && state.copyDescribedBy === state.commandStatusId
+      && state.downloadDescribedBy === state.commandStatusId
+      && state.cancelDescribedBy === state.commandStatusId
+      && state.backActionStatus.includes(`Back to Pages available for ${SITE_ID}`)
+      && state.copyActionStatus.includes(`Copy page creation handoff available for ${SITE_ID} at /${slug}`)
+      && state.downloadActionStatus.includes(`Download page creation handoff available for ${SITE_ID} at /${slug}`)
+      && state.cancelActionStatus.includes(`Cancel page creation and return to Pages available for ${SITE_ID}`)
+      && state.commandStatusText.includes(state.copyActionStatus)
+      && state.commandStatusText.includes(state.downloadActionStatus)
+      && state.commandStatusText.includes(state.cancelActionStatus)
     ) {
       return { url, state };
     }
@@ -3123,6 +3296,10 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
       const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
       const previewButton = document.querySelector('[data-testid="page-create-preview-button"]');
+      const submitStatus = document.querySelector('[data-testid="page-create-submit-action-status"]');
+      const previewStatus = document.querySelector('[data-testid="page-create-preview-action-status"]');
+      const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      const previewStatusText = previewStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
@@ -3140,8 +3317,23 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
         createButtonState: createButton?.getAttribute('data-state') || '',
         createButtonBlocker: createButton?.getAttribute('data-blocker') || '',
         createButtonCanSubmit: createButton?.getAttribute('data-can-submit') || '',
+        createButtonDescribedBy: createButton?.getAttribute('aria-describedby') || '',
+        createButtonActionState: createButton?.getAttribute('data-action-state') || '',
+        createButtonActionStatus: createButton?.getAttribute('data-action-status') || '',
+        createButtonDisabledReason: createButton?.getAttribute('data-disabled-reason') || '',
+        createButtonTargetSiteId: createButton?.getAttribute('data-target-site-id') || '',
+        createButtonTargetRoute: createButton?.getAttribute('data-target-route') || '',
+        createButtonTargetTemplate: createButton?.getAttribute('data-target-template') || '',
+        submitStatusId: submitStatus?.id || '',
+        submitStatusText,
         previewButtonState: previewButton?.getAttribute('data-state') || '',
         previewButtonBlocker: previewButton?.getAttribute('data-blocker') || '',
+        previewButtonDescribedBy: previewButton?.getAttribute('aria-describedby') || '',
+        previewButtonActionState: previewButton?.getAttribute('data-action-state') || '',
+        previewButtonActionStatus: previewButton?.getAttribute('data-action-status') || '',
+        previewButtonDisabledReason: previewButton?.getAttribute('data-disabled-reason') || '',
+        previewStatusId: previewStatus?.id || '',
+        previewStatusText,
         visibleBlocker: blocker?.textContent || '',
         visibleBlockerState: blocker?.getAttribute('data-state') || '',
         body: document.body?.innerText?.slice(0, 260) || '',
@@ -3161,6 +3353,19 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
       && state.createButtonState === 'ready'
       && state.createButtonCanSubmit === 'true'
       && state.createButtonBlocker === ''
+      && state.createButtonDescribedBy === 'page-create-submit-action-status'
+      && state.createButtonActionState === 'ready'
+      && state.createButtonActionStatus === state.submitStatusText
+      && state.createButtonDisabledReason === ''
+      && state.createButtonTargetSiteId === SITE_ID
+      && state.createButtonTargetRoute === `/${slug}`
+      && state.createButtonTargetTemplate.length > 0
+      && state.submitStatusText.includes(`Create page available for ${SITE_ID} at /${slug}`)
+      && state.previewButtonDescribedBy === 'page-create-preview-action-status'
+      && state.previewButtonActionState === 'ready'
+      && state.previewButtonActionStatus === state.previewStatusText
+      && state.previewButtonDisabledReason === ''
+      && state.previewStatusText.includes(`Preview draft available for ${SITE_ID} at /${slug}`)
     ) {
       return { url, state };
     }
@@ -3193,6 +3398,8 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
     const state = await evaluate(client, `(() => {
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
       const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
+      const submitStatus = document.querySelector('[data-testid="page-create-submit-action-status"]');
+      const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
@@ -3210,6 +3417,13 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
         createButtonState: createButton?.getAttribute('data-state') || '',
         createButtonBlocker: createButton?.getAttribute('data-blocker') || '',
         createButtonCanSubmit: createButton?.getAttribute('data-can-submit') || '',
+        createButtonDescribedBy: createButton?.getAttribute('aria-describedby') || '',
+        createButtonActionState: createButton?.getAttribute('data-action-state') || '',
+        createButtonActionStatus: createButton?.getAttribute('data-action-status') || '',
+        createButtonDisabledReason: createButton?.getAttribute('data-disabled-reason') || '',
+        createButtonTargetSiteId: createButton?.getAttribute('data-target-site-id') || '',
+        createButtonTargetRoute: createButton?.getAttribute('data-target-route') || '',
+        submitStatusText,
         visibleBlocker: blocker?.textContent || '',
         body: document.body?.innerText?.slice(0, 300) || '',
       };
@@ -3231,6 +3445,13 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
       && state.createButtonState === 'ready'
       && state.createButtonCanSubmit === 'true'
       && state.createButtonBlocker === ''
+      && state.createButtonDescribedBy === 'page-create-submit-action-status'
+      && state.createButtonActionState === 'ready'
+      && state.createButtonActionStatus === state.submitStatusText
+      && state.createButtonDisabledReason === ''
+      && state.createButtonTargetSiteId === SITE_ID
+      && state.createButtonTargetRoute === `/${slug}`
+      && state.submitStatusText.includes(`Create page available for ${SITE_ID} at /${slug}`)
     ) {
       return { url, state };
     }
@@ -3267,6 +3488,8 @@ const waitForDatasetPageCreateControls = async (client, collection, mode, slug, 
       const importPanel = document.querySelector('[data-testid="page-create-dataset-import"]');
       const readinessPanel = document.querySelector('[data-testid="page-create-dataset-readiness"]');
       const actionPlanButton = document.querySelector('[data-testid="page-create-dataset-action-plan"]');
+      const submitStatus = document.querySelector('[data-testid="page-create-submit-action-status"]');
+      const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
@@ -3290,6 +3513,13 @@ const waitForDatasetPageCreateControls = async (client, collection, mode, slug, 
         createButtonState: createButton?.getAttribute('data-state') || '',
         createButtonBlocker: createButton?.getAttribute('data-blocker') || '',
         createButtonCanSubmit: createButton?.getAttribute('data-can-submit') || '',
+        createButtonDescribedBy: createButton?.getAttribute('aria-describedby') || '',
+        createButtonActionState: createButton?.getAttribute('data-action-state') || '',
+        createButtonActionStatus: createButton?.getAttribute('data-action-status') || '',
+        createButtonDisabledReason: createButton?.getAttribute('data-disabled-reason') || '',
+        createButtonTargetSiteId: createButton?.getAttribute('data-target-site-id') || '',
+        createButtonTargetRoute: createButton?.getAttribute('data-target-route') || '',
+        submitStatusText,
         visibleBlocker: blocker?.textContent || '',
         body: document.body?.innerText?.slice(0, 360) || '',
       };
@@ -3318,6 +3548,13 @@ const waitForDatasetPageCreateControls = async (client, collection, mode, slug, 
       && state.createButtonState === 'ready'
       && state.createButtonCanSubmit === 'true'
       && state.createButtonBlocker === ''
+      && state.createButtonDescribedBy === 'page-create-submit-action-status'
+      && state.createButtonActionState === 'ready'
+      && state.createButtonActionStatus === state.submitStatusText
+      && state.createButtonDisabledReason === ''
+      && state.createButtonTargetSiteId === SITE_ID
+      && state.createButtonTargetRoute === `/${slug}`
+      && state.submitStatusText.includes(`Create page available for ${SITE_ID} at /${slug}`)
     ) {
       return { url, state };
     }
@@ -3408,11 +3645,29 @@ const assertRecoveryRestore = async (client, slug, title, navLabel, seo, parentP
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       recovery: Boolean(document.querySelector('[data-testid="page-create-recovery"]')),
-      restore: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Restore draft'),
+      statusId: document.querySelector('[data-testid="page-create-recovery-action-status"]')?.id || '',
+      statusText: document.querySelector('[data-testid="page-create-recovery-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      discardState: document.querySelector('[data-testid="page-create-discard-recovery"]')?.getAttribute('data-action-state') || '',
+      discardStatus: document.querySelector('[data-testid="page-create-discard-recovery"]')?.getAttribute('data-action-status') || '',
+      discardDescribedBy: document.querySelector('[data-testid="page-create-discard-recovery"]')?.getAttribute('aria-describedby') || '',
+      restore: document.querySelector('[data-testid="page-create-restore-recovery"]') instanceof HTMLButtonElement,
+      restoreState: document.querySelector('[data-testid="page-create-restore-recovery"]')?.getAttribute('data-action-state') || '',
+      restoreStatus: document.querySelector('[data-testid="page-create-restore-recovery"]')?.getAttribute('data-action-status') || '',
+      restoreDescribedBy: document.querySelector('[data-testid="page-create-restore-recovery"]')?.getAttribute('aria-describedby') || '',
       body: document.body?.innerText?.slice(0, 260) || '',
     }))()`);
 
-    if (state.recovery && state.restore) {
+    if (
+      state.recovery &&
+      state.statusId === 'page-create-recovery-action-status' &&
+      state.discardState === 'ready' &&
+      state.restore &&
+      state.restoreState === 'ready' &&
+      state.discardDescribedBy === state.statusId &&
+      state.restoreDescribedBy === state.statusId &&
+      state.statusText.includes(state.discardStatus) &&
+      state.statusText.includes(state.restoreStatus)
+    ) {
       break;
     }
 
@@ -3424,7 +3679,7 @@ const assertRecoveryRestore = async (client, slug, title, navLabel, seo, parentP
   }
 
   const restored = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').trim() === 'Restore draft');
+    const button = document.querySelector('[data-testid="page-create-restore-recovery"]');
     if (!(button instanceof HTMLButtonElement)) {
       return { clicked: false };
     }
@@ -3808,7 +4063,11 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
       const clipRight = Math.min(window.innerWidth, canvasRect?.right || 0);
       const clipBottom = Math.min(window.innerHeight, canvasRect?.bottom || 0);
       return {
-        editorLoaded: document.body?.innerText?.includes('Page editor command center') || false,
+        editorLoaded: Boolean(document.querySelector('[data-testid="editor-canvas"]')) ||
+          Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')) ||
+          document.body?.innerText?.includes('Page editor command center') || false,
+        focused: Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')),
+        focusDensity: document.querySelector('[data-testid="page-editor-focus-banner"]')?.getAttribute('data-density') || '',
         backendFallbackVisible: document.body?.innerText?.includes('Using the local page copy.') || false,
         canvasPresent: Boolean(canvas),
         canvasWidth: Math.round(canvasRect?.width || 0),
@@ -3858,7 +4117,11 @@ const assertStarterTemplateEditorRender = async (client, testCase) => {
   assert(renderState.canvasOffsetWidth === 1200, `Created ${testCase.template} editor canvas width mismatch: ${JSON.stringify(renderState)}`);
   assert(renderState.canvasOffsetHeight >= testCase.minCanvasHeight, `Created ${testCase.template} editor canvas height mismatch: ${JSON.stringify(renderState)}`);
   assert(renderState.hasLayerTotalsMeta, `Created ${testCase.template} editor missing total/root layer metadata: ${JSON.stringify(renderState)}`);
-  assert(renderState.hasContainerMeta, `Created ${testCase.template} editor missing container layer metadata: ${JSON.stringify(renderState)}`);
+  if (renderState.focused) {
+    assert(renderState.focusDensity === 'compact', `Created ${testCase.template} focused editor did not use compact frame density: ${JSON.stringify(renderState)}`);
+  } else {
+    assert(renderState.hasContainerMeta, `Created ${testCase.template} editor missing container layer metadata: ${JSON.stringify(renderState)}`);
+  }
   assert(renderState.horizontalOverflow <= 4, `Created ${testCase.template} editor route has horizontal page overflow: ${JSON.stringify(renderState)}`);
 
   const screenshotPath = path.join(EDITOR_TEMPLATE_SCREENSHOT_DIR, `backy-page-create-editor-${testCase.template}.png`);
@@ -4118,19 +4381,44 @@ const createPageFromUi = async (client) => {
     clicked = await evaluate(client, `(() => {
       const button = document.querySelector('[data-testid="page-create-submit-button"]');
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
+      const status = document.querySelector('[data-testid="page-create-submit-action-status"]');
+      const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const canSubmit = button?.getAttribute('data-can-submit') === 'true';
-      if (!(button instanceof HTMLButtonElement) || button.disabled || !canSubmit) {
+      const actionReady = button instanceof HTMLButtonElement &&
+        button.getAttribute('aria-describedby') === 'page-create-submit-action-status' &&
+        button.getAttribute('data-action-state') === 'ready' &&
+        button.getAttribute('data-action-status') === statusText &&
+        button.getAttribute('data-disabled-reason') === null &&
+        Boolean(button.getAttribute('data-target-site-id')) &&
+        Boolean(button.getAttribute('data-target-route')) &&
+        Boolean(button.getAttribute('data-target-template')) &&
+        statusText.includes('Create page available for ');
+      if (!(button instanceof HTMLButtonElement) || button.disabled || !canSubmit || !actionReady) {
         return {
           ok: false,
           label: button?.textContent || null,
           disabled: button instanceof HTMLButtonElement ? button.disabled : null,
           state: button?.getAttribute('data-state') || null,
           canSubmit: button?.getAttribute('data-can-submit') || null,
+          describedBy: button?.getAttribute('aria-describedby') || null,
+          actionState: button?.getAttribute('data-action-state') || null,
+          actionStatus: button?.getAttribute('data-action-status') || null,
+          disabledReason: button?.getAttribute('data-disabled-reason') || null,
+          targetSiteId: button?.getAttribute('data-target-site-id') || null,
+          targetRoute: button?.getAttribute('data-target-route') || null,
+          targetTemplate: button?.getAttribute('data-target-template') || null,
+          statusText,
           blocker: button?.getAttribute('data-blocker') || blocker?.textContent || null,
         };
       }
       button.click();
-      return { ok: true, label: button.textContent || '', state: button.getAttribute('data-state') || null };
+      return {
+        ok: true,
+        label: button.textContent || '',
+        state: button.getAttribute('data-state') || null,
+        actionStatus: button.getAttribute('data-action-status') || null,
+        targetRoute: button.getAttribute('data-target-route') || null,
+      };
     })()`);
 
     if (clicked.ok) {
@@ -4147,12 +4435,17 @@ const createPageFromUi = async (client) => {
       path: window.location.pathname,
       search: window.location.search,
       storedDraft: localStorage.getItem('backy:page-new:draft:v1'),
-      editorLoaded: document.body?.innerText?.includes('Page editor command center') || false,
+      editorLoaded: Boolean(document.querySelector('[data-testid="editor-canvas"]')) ||
+        Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')) ||
+        document.body?.innerText?.includes('Page editor command center') || false,
+      canvasFirst: Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')) &&
+        !document.querySelector('[data-testid="page-editor-command-center"]') &&
+        window.location.search.includes('focus=canvas'),
       backendFallbackVisible: document.body?.innerText?.includes('Using the local page copy.') || false,
       body: document.body?.innerText?.slice(0, 260) || '',
     }))()`);
 
-    if (editState.path.startsWith('/pages/') && editState.path.endsWith('/edit') && editState.editorLoaded && !editState.backendFallbackVisible) {
+    if (editState.path.startsWith('/pages/') && editState.path.endsWith('/edit') && editState.editorLoaded && editState.canvasFirst && !editState.backendFallbackVisible) {
       assert(editState.storedDraft === null, `Autosave draft was not cleared after create: ${JSON.stringify(editState)}`);
       return editState;
     }
@@ -4168,42 +4461,77 @@ const createPageFromUi = async (client) => {
 };
 
 const assertPageEditorFocusMode = async (client) => {
-  let clicked = null;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    clicked = await evaluate(client, `(() => {
+  const readFocusState = () => evaluate(client, `(() => ({
+    path: window.location.pathname,
+    search: window.location.search,
+    banner: Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')),
+    density: document.querySelector('[data-testid="page-editor-focus-banner"]')?.getAttribute('data-density') || '',
+    commandCenter: Boolean(document.querySelector('[data-testid="page-editor-command-center"]')),
+    commandCenterOrder: document.querySelector('[data-testid="page-editor-command-center"]')?.getAttribute('data-default-editor-order') || '',
+    publishPanel: Boolean(document.querySelector('#page-editor-publish')),
+    canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
+    canvasOrder: document.querySelector('[data-default-editor-order="canvas-first"], [data-default-editor-order="focused-canvas"]')?.getAttribute('data-default-editor-order') || '',
+    canvasTop: Math.round(document.querySelector('#page-editor-canvas')?.getBoundingClientRect().top || 0),
+    commandCenterTop: Math.round(document.querySelector('[data-testid="page-editor-command-center"]')?.getBoundingClientRect().top || 0),
+    shellFocusMode: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-focus-mode') || '',
+    componentPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-component-panel-visible') || '',
+    inspectorPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-inspector-panel-visible') || '',
+    componentLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
+    inspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
+    adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
+    adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
+    focusCanvas: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Focus canvas'),
+    showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
+  }))()`);
+
+  const clickEditorModeButton = async (label) => {
+    let clicked = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      clicked = await evaluate(client, `((label) => {
       const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-        (candidate.textContent || '').trim() === 'Focus canvas'
+        (candidate.textContent || '').trim() === label
       ));
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
         return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
       }
       button.click();
       return { ok: true };
-    })()`);
+    })(${JSON.stringify(label)})`);
 
-    if (clicked.ok) {
-      break;
+      if (clicked.ok) {
+        return clicked;
+      }
+
+      await sleep(200);
     }
 
-    await sleep(200);
+    assert(clicked.ok, `Page editor ${label} button was not ready: ${JSON.stringify(clicked)}`);
+    return clicked;
+  };
+
+  let focused = await readFocusState();
+  if (!(focused.banner && focused.canvas && focused.showPanels && !focused.commandCenter && !focused.publishPanel && !focused.adminSidebar && !focused.adminHeader && focused.search.includes('focus=canvas'))) {
+    await clickEditorModeButton('Focus canvas');
   }
-  assert(clicked.ok, `Page editor Focus canvas button was not ready: ${JSON.stringify(clicked)}`);
-
-  let focused = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    focused = await evaluate(client, `(() => ({
-      path: window.location.pathname,
-      search: window.location.search,
-      banner: Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')),
-      commandCenter: Boolean(document.querySelector('[data-testid="page-editor-command-center"]')),
-      publishPanel: Boolean(document.querySelector('#page-editor-publish')),
-      canvas: Boolean(document.querySelector('[data-testid="editor-canvas"]')),
-      adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
-      adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
-      showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
-    }))()`);
+    focused = await readFocusState();
 
-    if (focused.banner && focused.canvas && focused.showPanels && !focused.commandCenter && !focused.publishPanel && !focused.adminSidebar && !focused.adminHeader && focused.search.includes('focus=canvas')) {
+    if (
+      focused.banner &&
+      focused.density === 'compact' &&
+      focused.canvas &&
+      focused.showPanels &&
+      focused.shellFocusMode === 'true' &&
+      focused.componentPanelVisible === 'false' &&
+      focused.inspectorPanelVisible === 'false' &&
+      !focused.componentLibrary &&
+      !focused.inspector &&
+      !focused.commandCenter &&
+      !focused.publishPanel &&
+      !focused.adminSidebar &&
+      !focused.adminHeader &&
+      focused.search.includes('focus=canvas')
+    ) {
       break;
     }
 
@@ -4214,39 +4542,24 @@ const assertPageEditorFocusMode = async (client) => {
     await sleep(200);
   }
 
-  let restored = null;
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    restored = await evaluate(client, `(() => {
-      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-        (candidate.textContent || '').trim() === 'Show panels'
-      ));
-      if (!(button instanceof HTMLButtonElement) || button.disabled) {
-        return { ok: false, label: button?.textContent || null, disabled: button instanceof HTMLButtonElement ? button.disabled : null };
-      }
-      button.click();
-      return { ok: true };
-    })()`);
-
-    if (restored.ok) {
-      break;
-    }
-
-    await sleep(200);
-  }
-  assert(restored.ok, `Page editor Show panels button was not ready: ${JSON.stringify(restored)}`);
+  await clickEditorModeButton('Show panels');
 
   let normal = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    normal = await evaluate(client, `(() => ({
-      search: window.location.search,
-      banner: Boolean(document.querySelector('[data-testid="page-editor-focus-banner"]')),
-      commandCenter: Boolean(document.querySelector('[data-testid="page-editor-command-center"]')),
-      publishPanel: Boolean(document.querySelector('#page-editor-publish')),
-      adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
-      adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
-    }))()`);
+    normal = await readFocusState();
 
-    if (!normal.banner && normal.commandCenter && normal.publishPanel && normal.adminSidebar && normal.adminHeader && !normal.search.includes('focus=canvas')) {
+    if (
+      !normal.banner &&
+      normal.commandCenter &&
+      normal.commandCenterOrder === 'after-canvas' &&
+      normal.canvasOrder === 'canvas-first' &&
+      normal.canvasTop > 0 &&
+      normal.commandCenterTop > normal.canvasTop &&
+      normal.publishPanel &&
+      normal.adminSidebar &&
+      normal.adminHeader &&
+      !normal.search.includes('focus=canvas')
+    ) {
       break;
     }
 
@@ -4257,9 +4570,42 @@ const assertPageEditorFocusMode = async (client) => {
     await sleep(200);
   }
 
+  await clickEditorModeButton('Focus canvas');
+
+  let refocused = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    refocused = await readFocusState();
+
+    if (
+      refocused.banner &&
+      refocused.density === 'compact' &&
+      refocused.canvas &&
+      refocused.showPanels &&
+      refocused.shellFocusMode === 'true' &&
+      refocused.componentPanelVisible === 'false' &&
+      refocused.inspectorPanelVisible === 'false' &&
+      !refocused.componentLibrary &&
+      !refocused.inspector &&
+      !refocused.commandCenter &&
+      !refocused.publishPanel &&
+      !refocused.adminSidebar &&
+      !refocused.adminHeader &&
+      refocused.search.includes('focus=canvas')
+    ) {
+      break;
+    }
+
+    if (attempt === 59) {
+      throw new Error(`Page editor did not return to focus mode after panel check: ${JSON.stringify(refocused)}`);
+    }
+
+    await sleep(200);
+  }
+
   return {
     focused,
     normal,
+    refocused,
   };
 };
 
@@ -4391,6 +4737,8 @@ const main = async () => {
     console.log(JSON.stringify({ ok: true, guard: 'page-create-source' }));
     return;
   }
+
+  await withSmokeLock(`backy-frontend-design-${SITE_ID}`, async () => {
   await loginAdminApi();
   const slug = `page-create-smoke-${Date.now().toString(36)}`;
   const title = 'Smoke Page Create';
@@ -4425,8 +4773,7 @@ const main = async () => {
     parentPage = await createParentPage();
     datasetCollection = await createDatasetCollection();
     createdCollectionIds.push(datasetCollection.id);
-    await waitForCdp();
-    const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
+    const page = await waitForUsablePageTarget();
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
 
     client = connectCdp(page.webSocketDebuggerUrl);
@@ -4538,6 +4885,7 @@ const main = async () => {
       collectionIds: createdCollectionIds,
     });
   }
+  });
 };
 
 main().catch((error) => {

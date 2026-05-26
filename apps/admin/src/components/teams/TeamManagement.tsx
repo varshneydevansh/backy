@@ -75,47 +75,59 @@ interface TeamManagementProps {
 
 const styles = {
     container: {
-        padding: '24px',
-        maxWidth: '900px',
-        margin: '0 auto',
+        padding: 0,
+        width: '100%',
+        maxWidth: 'none',
+        margin: 0,
     } as React.CSSProperties,
     header: {
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '24px',
+        alignItems: 'flex-start',
+        gap: '16px',
+        flexWrap: 'wrap',
+        marginBottom: '16px',
+        padding: '16px',
+        border: '1px solid hsl(var(--border))',
+        borderRadius: '8px',
+        backgroundColor: 'hsl(var(--card))',
+        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
     } as React.CSSProperties,
     title: {
-        fontSize: '24px',
+        fontSize: '18px',
         fontWeight: 700,
-        color: '#111827',
+        color: 'hsl(var(--foreground))',
+        margin: 0,
+        letterSpacing: '0',
     } as React.CSSProperties,
     card: {
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
-        border: '1px solid #e5e7eb',
-        padding: '20px',
+        backgroundColor: 'hsl(var(--card))',
+        borderRadius: '8px',
+        border: '1px solid hsl(var(--border))',
+        padding: '16px',
         marginBottom: '16px',
+        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
     } as React.CSSProperties,
     teamHeader: {
         display: 'flex',
         alignItems: 'center',
-        gap: '16px',
+        gap: '12px',
+        flexWrap: 'wrap',
         marginBottom: '20px',
         paddingBottom: '16px',
-        borderBottom: '1px solid #e5e7eb',
+        borderBottom: '1px solid hsl(var(--border))',
     } as React.CSSProperties,
     avatar: {
         width: '48px',
         height: '48px',
         borderRadius: '8px',
-        backgroundColor: '#e5e7eb',
+        backgroundColor: 'hsl(var(--muted))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: '20px',
         fontWeight: 600,
-        color: '#6b7280',
+        color: 'hsl(var(--muted-foreground))',
     } as React.CSSProperties,
     teamInfo: {
         flex: 1,
@@ -123,11 +135,11 @@ const styles = {
     teamName: {
         fontSize: '18px',
         fontWeight: 600,
-        color: '#111827',
+        color: 'hsl(var(--foreground))',
     } as React.CSSProperties,
     teamSlug: {
         fontSize: '13px',
-        color: '#6b7280',
+        color: 'hsl(var(--muted-foreground))',
     } as React.CSSProperties,
     badge: {
         padding: '4px 10px',
@@ -139,20 +151,21 @@ const styles = {
         display: 'flex',
         alignItems: 'center',
         padding: '12px 0',
-        borderBottom: '1px solid #f3f4f6',
+        borderBottom: '1px solid hsl(var(--border))',
         gap: '12px',
+        flexWrap: 'wrap',
     } as React.CSSProperties,
     memberAvatar: {
         width: '36px',
         height: '36px',
         borderRadius: '50%',
-        backgroundColor: '#e5e7eb',
+        backgroundColor: 'hsl(var(--muted))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: '14px',
         fontWeight: 500,
-        color: '#6b7280',
+        color: 'hsl(var(--muted-foreground))',
     } as React.CSSProperties,
     memberInfo: {
         flex: 1,
@@ -160,18 +173,19 @@ const styles = {
     memberName: {
         fontSize: '14px',
         fontWeight: 500,
-        color: '#111827',
+        color: 'hsl(var(--foreground))',
     } as React.CSSProperties,
     memberEmail: {
         fontSize: '12px',
-        color: '#6b7280',
+        color: 'hsl(var(--muted-foreground))',
     } as React.CSSProperties,
     select: {
         padding: '6px 12px',
-        border: '1px solid #d1d5db',
+        border: '1px solid hsl(var(--input))',
         borderRadius: '6px',
         fontSize: '13px',
-        backgroundColor: '#ffffff',
+        backgroundColor: 'hsl(var(--background))',
+        color: 'hsl(var(--foreground))',
     } as React.CSSProperties,
     button: {
         padding: '8px 16px',
@@ -179,42 +193,49 @@ const styles = {
         fontSize: '13px',
         fontWeight: 500,
         cursor: 'pointer',
-        border: 'none',
+        border: '1px solid transparent',
+        minHeight: '36px',
     } as React.CSSProperties,
     primaryButton: {
-        backgroundColor: '#3b82f6',
-        color: 'white',
+        backgroundColor: 'hsl(var(--primary))',
+        color: 'hsl(var(--primary-foreground))',
     } as React.CSSProperties,
     secondaryButton: {
-        backgroundColor: '#f3f4f6',
-        color: '#374151',
+        backgroundColor: 'hsl(var(--secondary))',
+        color: 'hsl(var(--secondary-foreground))',
+        borderColor: 'hsl(var(--border))',
     } as React.CSSProperties,
     dangerButton: {
-        backgroundColor: '#fef2f2',
-        color: '#dc2626',
+        backgroundColor: 'hsl(var(--destructive) / 0.08)',
+        color: 'hsl(var(--destructive))',
+        borderColor: 'hsl(var(--destructive) / 0.22)',
     } as React.CSSProperties,
     input: {
         padding: '10px 12px',
-        border: '1px solid #d1d5db',
+        border: '1px solid hsl(var(--input))',
         borderRadius: '8px',
         fontSize: '14px',
         width: '100%',
+        backgroundColor: 'hsl(var(--background))',
+        color: 'hsl(var(--foreground))',
     } as React.CSSProperties,
     modal: {
         position: 'fixed' as const,
         inset: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(15, 23, 42, 0.44)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1000,
     } as React.CSSProperties,
     modalContent: {
-        backgroundColor: '#ffffff',
-        borderRadius: '12px',
+        backgroundColor: 'hsl(var(--card))',
+        borderRadius: '8px',
         padding: '24px',
         width: '100%',
         maxWidth: '400px',
+        border: '1px solid hsl(var(--border))',
+        boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
     } as React.CSSProperties,
 };
 
@@ -227,6 +248,18 @@ const ROLE_BADGES: Record<TeamRole, { bg: string; color: string; label: string }
 
 const TEAM_INVITE_ROLES: TeamRole[] = ['viewer', 'editor', 'admin'];
 const TEAM_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+const visuallyHiddenStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    padding: 0,
+    margin: '-1px',
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap',
+    border: 0,
+};
 
 const fieldErrorStyle: React.CSSProperties = {
     color: '#dc2626',
@@ -291,6 +324,10 @@ const validateTeamInviteRole = (value: TeamRole): string => (
     TEAM_INVITE_ROLES.includes(value) ? '' : 'Choose viewer, editor, or admin for team invites.'
 );
 
+const actionState = (disabledReason?: string): 'blocked' | 'ready' => (disabledReason ? 'blocked' : 'ready');
+
+const sanitizeActionId = (value: string): string => value.replace(/[^a-zA-Z0-9_-]/g, '-');
+
 // ==========================================================================
 // SUB-COMPONENTS
 // ==========================================================================
@@ -306,6 +343,19 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [fieldErrors, setFieldErrors] = useState<{ email?: string; role?: string }>({});
+    const normalizedEmail = email.trim().toLowerCase();
+    const inviteSubmitEmailError = validateTeamInviteEmail(email);
+    const inviteSubmitRoleError = validateTeamInviteRole(role);
+    const inviteSubmitStatusId = 'teams-invite-submit-action-status';
+    const inviteSubmitDisabledReason = isSubmitting ? 'Team invitation is already sending.' : '';
+    const inviteSubmitActionState = inviteSubmitDisabledReason || inviteSubmitEmailError || inviteSubmitRoleError ? 'blocked' : 'ready';
+    const inviteSubmitActionStatus = inviteSubmitDisabledReason
+        ? `Send invite unavailable: ${inviteSubmitDisabledReason}`
+        : inviteSubmitEmailError
+            ? `Send invite needs a valid email address. ${inviteSubmitEmailError}`
+            : inviteSubmitRoleError
+                ? `Send invite needs a valid team role. ${inviteSubmitRoleError}`
+                : `Send invite available for ${normalizedEmail} as ${role}.`;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -338,6 +388,14 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
                     Invite Team Member
                 </h3>
                 <form onSubmit={handleSubmit} noValidate>
+                    <span
+                        id={inviteSubmitStatusId}
+                        data-testid="teams-invite-submit-action-status"
+                        aria-live="polite"
+                        style={visuallyHiddenStyle}
+                    >
+                        {inviteSubmitActionStatus}
+                    </span>
                     <div style={{ marginBottom: '16px' }}>
                         <label htmlFor="teams-invite-email-input" style={{ display: 'block', fontSize: '13px', marginBottom: '6px' }}>
                             Email Address
@@ -409,6 +467,13 @@ function InviteModal({ onClose, onInvite }: InviteModalProps) {
                             type="submit"
                             style={{ ...styles.button, ...styles.primaryButton }}
                             disabled={isSubmitting}
+                            title={inviteSubmitDisabledReason || undefined}
+                            aria-describedby={inviteSubmitStatusId}
+                            data-action-state={inviteSubmitActionState}
+                            data-action-status={inviteSubmitActionStatus}
+                            data-disabled-reason={inviteSubmitDisabledReason || undefined}
+                            data-target-email={normalizedEmail || undefined}
+                            data-target-role={role}
                         >
                             {isSubmitting ? 'Sending...' : 'Send Invite'}
                         </button>
@@ -663,14 +728,26 @@ export function TeamManagement({
     const [pendingRemoveMember, setPendingRemoveMember] = useState<{ team: Team; member: TeamMember } | null>(null);
 
     const currentTeam = teams.find((t) => t.id === currentTeamId);
-    const mutationsDisabled = isMutating || !canManageTeams;
-    const mutationTitle = canManageTeams ? undefined : mutationDisabledReason;
+    const mutationBusyReason = isMutating ? 'Team actions are temporarily unavailable while Backy syncs teams.' : '';
+    const mutationPermissionReason = canManageTeams ? '' : mutationDisabledReason;
+    const mutationBlockedReason = mutationBusyReason || mutationPermissionReason;
+    const mutationsDisabled = Boolean(mutationBlockedReason);
+    const mutationTitle = mutationBlockedReason || undefined;
     const normalizedCurrentAdminEmail = currentAdminEmail?.trim().toLowerCase() || '';
     const currentTeamSiteCount = currentTeam?.workspace?.siteCount || 0;
-    const teamDeleteDisabled = mutationsDisabled || currentTeamSiteCount > 0;
-    const teamDeleteTitle = currentTeamSiteCount > 0
+    const teamEditDisabledReason = mutationBlockedReason;
+    const teamDeleteDisabledReason = currentTeamSiteCount > 0
         ? 'Move or delete this team\'s sites before deleting the team.'
-        : mutationTitle;
+        : mutationBlockedReason;
+    const teamDeleteDisabled = Boolean(teamDeleteDisabledReason);
+    const teamDeleteTitle = teamDeleteDisabledReason || undefined;
+    const currentTeamActionStatus = [
+        teamEditDisabledReason ? `Edit unavailable: ${teamEditDisabledReason}` : 'Edit available.',
+        teamDeleteDisabledReason ? `Delete unavailable: ${teamDeleteDisabledReason}` : 'Delete available.',
+    ].join(' ');
+    const createTeamActionStatus = mutationBlockedReason
+        ? `Create team unavailable: ${mutationBlockedReason}`
+        : 'Create team available.';
 
     const memberMutationBlockReason = useCallback(
         (team: Team, member: TeamMember, action: 'role' | 'remove') => {
@@ -791,26 +868,52 @@ export function TeamManagement({
     return (
         <div style={styles.container}>
             <div style={styles.header}>
-                <h1 style={styles.title}>Team Management</h1>
-                <button
-                    data-testid="teams-create-button"
-                    style={{ ...styles.button, ...styles.primaryButton }}
-                    onClick={() => setShowCreateModal(true)}
-                    disabled={mutationsDisabled}
-                    title={mutationTitle}
+                <div>
+                    <h1 style={styles.title}>Team Management</h1>
+                    <p style={{ margin: '4px 0 0', maxWidth: '620px', color: 'hsl(var(--muted-foreground))', fontSize: '13px', lineHeight: 1.5 }}>
+                        Create teams, assign members, and keep workspace ownership tied to the right site portfolio.
+                    </p>
+                </div>
+                <div
+                    role="group"
+                    aria-label="Team creation actions"
+                    aria-describedby="teams-create-action-status"
+                    data-testid="teams-create-actions"
+                    data-action-status={createTeamActionStatus}
                 >
-                    + Create Team
-                </button>
+                    <span
+                        id="teams-create-action-status"
+                        data-testid="teams-create-action-status"
+                        aria-live="polite"
+                        style={visuallyHiddenStyle}
+                    >
+                        {createTeamActionStatus}
+                    </span>
+                    <button
+                        data-testid="teams-create-button"
+                        style={{ ...styles.button, ...styles.primaryButton }}
+                        onClick={() => setShowCreateModal(true)}
+                        disabled={mutationsDisabled}
+                        aria-describedby="teams-create-action-status"
+                        aria-disabled={mutationsDisabled}
+                        data-action-state={actionState(mutationBlockedReason)}
+                        data-disabled-reason={mutationBlockedReason || undefined}
+                        title={mutationTitle}
+                    >
+                        Create team
+                    </button>
+                </div>
             </div>
 
             {/* Team Selector */}
-            <div style={{ marginBottom: '24px' }}>
-                <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: '#6b7280' }}>
+            <div style={{ marginBottom: '16px', display: 'grid', gap: '6px' }}>
+                <label htmlFor="teams-current-select" style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>
                     Current Team
                 </label>
                 <select
+                    id="teams-current-select"
                     data-testid="teams-current-select"
-                    style={{ ...styles.select, width: '300px', padding: '10px 12px' }}
+                    style={{ ...styles.select, width: 'min(100%, 360px)', padding: '10px 12px' }}
                     value={currentTeamId}
                     onChange={(e) => onSwitchTeam(e.target.value)}
                 >
@@ -869,46 +972,82 @@ export function TeamManagement({
                                 {currentTeam.plan.charAt(0).toUpperCase() + currentTeam.plan.slice(1)}
                             </span>
                         )}
-                        <button
-                            data-testid="teams-edit-button"
-                            style={{ ...styles.button, ...styles.secondaryButton }}
-                            onClick={() => setEditTeam(currentTeam)}
-                            disabled={mutationsDisabled}
-                            title={mutationTitle}
+                        <div
+                            role="group"
+                            aria-label={`Actions for ${currentTeam.name}`}
+                            aria-describedby="teams-current-actions-status"
+                            data-testid="teams-current-actions"
+                            data-action-status={currentTeamActionStatus}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
                         >
-                            Edit
-                        </button>
-                        <button
-                            data-testid="teams-delete-button"
-                            style={{ ...styles.button, ...styles.dangerButton }}
-                            onClick={() => setPendingDeleteTeam(currentTeam)}
-                            disabled={teamDeleteDisabled}
-                            title={teamDeleteTitle}
-                        >
-                            Delete
-                        </button>
+                            <span
+                                id="teams-current-actions-status"
+                                data-testid="teams-current-actions-status"
+                                aria-live="polite"
+                                style={visuallyHiddenStyle}
+                            >
+                                {currentTeamActionStatus}
+                            </span>
+                            <button
+                                data-testid="teams-edit-button"
+                                style={{ ...styles.button, ...styles.secondaryButton }}
+                                onClick={() => setEditTeam(currentTeam)}
+                                disabled={mutationsDisabled}
+                                aria-describedby="teams-current-actions-status"
+                                aria-disabled={mutationsDisabled}
+                                data-action-state={actionState(teamEditDisabledReason)}
+                                data-disabled-reason={teamEditDisabledReason || undefined}
+                                title={teamEditDisabledReason || 'Edit team'}
+                            >
+                                Edit
+                            </button>
+                            <button
+                                data-testid="teams-delete-button"
+                                style={{ ...styles.button, ...styles.dangerButton }}
+                                onClick={() => setPendingDeleteTeam(currentTeam)}
+                                disabled={teamDeleteDisabled}
+                                aria-describedby="teams-current-actions-status"
+                                aria-disabled={teamDeleteDisabled}
+                                data-action-state={actionState(teamDeleteDisabledReason)}
+                                data-disabled-reason={teamDeleteDisabledReason || undefined}
+                                title={teamDeleteTitle || 'Delete team'}
+                            >
+                                Delete
+                            </button>
+                        </div>
                     </div>
 
-                    <div
-                        data-testid="teams-workspace-sites-panel"
+                    <details
+                        data-testid="teams-workspace-sites-details"
+                        data-default-collapsed="true"
                         style={{
-                            border: '1px solid #e5e7eb',
+                            border: '1px solid hsl(var(--border))',
                             borderRadius: '8px',
-                            padding: '16px',
                             marginBottom: '20px',
-                            backgroundColor: '#f9fafb',
+                            backgroundColor: 'hsl(var(--background))',
+                            overflow: 'hidden',
                         }}
                     >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-                            <div>
-                                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
+                        <summary
+                            style={{
+                                cursor: 'pointer',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                gap: '16px',
+                                flexWrap: 'wrap',
+                                padding: '14px 16px',
+                                listStyle: 'none',
+                            }}
+                        >
+                            <span>
+                                <span style={{ display: 'block', fontSize: '15px', fontWeight: 700, color: 'hsl(var(--foreground))' }}>
                                     Workspace Sites
-                                </h3>
-                                <p style={{ fontSize: '13px', color: '#6b7280' }}>
-                                    Team ownership gates deletion and keeps site workspaces attached to the right account.
-                                </p>
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                </span>
+                                <span style={{ display: 'block', marginTop: '4px', fontSize: '13px', color: 'hsl(var(--muted-foreground))' }}>
+                                    Ownership gates deletion and keeps site workspaces attached to the right account.
+                                </span>
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                 <span style={{ ...styles.badge, backgroundColor: '#e0f2fe', color: '#075985' }}>
                                     {currentTeam.workspace?.siteCount || 0} total
                                 </span>
@@ -918,43 +1057,54 @@ export function TeamManagement({
                                 <span style={{ ...styles.badge, backgroundColor: '#fef3c7', color: '#92400e' }}>
                                     {currentTeam.workspace?.draftSiteCount || 0} draft
                                 </span>
-                            </div>
-                        </div>
-                        {currentTeam.workspace?.sites?.length ? (
-                            <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
-                                {currentTeam.workspace.sites.map((site) => (
-                                    <div
-                                        key={site.id}
-                                        data-testid={`teams-workspace-site-${site.id}`}
-                                        style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            gap: '12px',
-                                            borderRadius: '6px',
-                                            border: '1px solid #e5e7eb',
-                                            backgroundColor: '#ffffff',
-                                            padding: '10px 12px',
-                                        }}
-                                    >
-                                        <div>
-                                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{site.name}</div>
-                                            <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                                                /{site.slug}{site.customDomain ? ` | ${site.customDomain}` : ''}
+                                <span style={{ ...styles.badge, backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
+                                    Show sites
+                                </span>
+                            </span>
+                        </summary>
+                        <div
+                            data-testid="teams-workspace-sites-panel"
+                            style={{
+                                borderTop: '1px solid hsl(var(--border))',
+                                padding: '16px',
+                            }}
+                        >
+                            {currentTeam.workspace?.sites?.length ? (
+                                <div style={{ display: 'grid', gap: '8px' }}>
+                                    {currentTeam.workspace.sites.map((site) => (
+                                        <div
+                                            key={site.id}
+                                            data-testid={`teams-workspace-site-${site.id}`}
+                                            style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                borderRadius: '6px',
+                                                border: '1px solid hsl(var(--border))',
+                                                backgroundColor: 'hsl(var(--card))',
+                                                padding: '10px 12px',
+                                            }}
+                                        >
+                                            <div>
+                                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'hsl(var(--foreground))' }}>{site.name}</div>
+                                                <div style={{ fontSize: '12px', color: 'hsl(var(--muted-foreground))' }}>
+                                                    /{site.slug}{site.customDomain ? ` | ${site.customDomain}` : ''}
+                                                </div>
                                             </div>
+                                            <span style={{ ...styles.badge, backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))' }}>
+                                                {site.status}
+                                            </span>
                                         </div>
-                                        <span style={{ ...styles.badge, backgroundColor: '#f3f4f6', color: '#374151' }}>
-                                            {site.status}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p style={{ marginTop: '12px', fontSize: '13px', color: '#6b7280' }}>
-                                No sites are currently owned by this team.
-                            </p>
-                        )}
-                    </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p style={{ margin: 0, fontSize: '13px', color: 'hsl(var(--muted-foreground))' }}>
+                                    No sites are currently owned by this team.
+                                </p>
+                            )}
+                        </div>
+                    </details>
 
                     {/* Members List */}
                     <div
@@ -968,25 +1118,62 @@ export function TeamManagement({
                         <h3 style={{ fontSize: '16px', fontWeight: 600 }}>
                             Team Members ({currentTeam.members.length})
                         </h3>
-                        <button
-                            data-testid="teams-invite-button"
-                            style={{ ...styles.button, ...styles.primaryButton }}
-                            onClick={() => {
-                                setInviteTeamId(currentTeam.id);
-                                setShowInviteModal(true);
-                            }}
-                            disabled={mutationsDisabled}
-                            title={mutationTitle}
+                        <div
+                            role="group"
+                            aria-label={`Member actions for ${currentTeam.name}`}
+                            aria-describedby="teams-invite-action-status"
+                            data-testid="teams-invite-actions"
+                            data-action-status={mutationBlockedReason ? `Invite member unavailable: ${mutationBlockedReason}` : 'Invite member available.'}
                         >
-                            + Invite Member
-                        </button>
+                            <span
+                                id="teams-invite-action-status"
+                                data-testid="teams-invite-action-status"
+                                aria-live="polite"
+                                style={visuallyHiddenStyle}
+                            >
+                                {mutationBlockedReason ? `Invite member unavailable: ${mutationBlockedReason}` : 'Invite member available.'}
+                            </span>
+                            <button
+                                data-testid="teams-invite-button"
+                                style={{ ...styles.button, ...styles.primaryButton }}
+                                onClick={() => {
+                                    setInviteTeamId(currentTeam.id);
+                                    setShowInviteModal(true);
+                                }}
+                                disabled={mutationsDisabled}
+                                aria-describedby="teams-invite-action-status"
+                                aria-disabled={mutationsDisabled}
+                                data-action-state={actionState(mutationBlockedReason)}
+                                data-disabled-reason={mutationBlockedReason || undefined}
+                                title={mutationTitle || 'Invite member'}
+                            >
+                                + Invite Member
+                            </button>
+                        </div>
                     </div>
 
                     {currentTeam.members.map((member) => {
+                        const memberActionStatusId = `teams-member-actions-status-${sanitizeActionId(member.id)}`;
                         const roleBlockReason = memberMutationBlockReason(currentTeam, member, 'role');
                         const removeBlockReason = memberMutationBlockReason(currentTeam, member, 'remove');
-                        const roleDisabled = mutationsDisabled || Boolean(roleBlockReason) || busyMemberAction === `role:${member.id}` || busyMemberAction === `remove:${member.id}`;
-                        const removeDisabled = mutationsDisabled || Boolean(removeBlockReason) || busyMemberAction === `role:${member.id}` || busyMemberAction === `remove:${member.id}`;
+                        const roleBusyReason = busyMemberAction === `role:${member.id}`
+                            ? 'Role update is in progress.'
+                            : busyMemberAction === `remove:${member.id}`
+                                ? 'Member removal is in progress.'
+                                : '';
+                        const removeBusyReason = busyMemberAction === `remove:${member.id}`
+                            ? 'Member removal is in progress.'
+                            : busyMemberAction === `role:${member.id}`
+                                ? 'Role update is in progress.'
+                                : '';
+                        const roleDisabledReason = mutationBlockedReason || roleBlockReason || roleBusyReason;
+                        const removeDisabledReason = mutationBlockedReason || removeBlockReason || removeBusyReason;
+                        const roleDisabled = Boolean(roleDisabledReason);
+                        const removeDisabled = Boolean(removeDisabledReason);
+                        const memberActionStatus = [
+                            roleDisabledReason ? `Role change unavailable: ${roleDisabledReason}` : 'Role change available.',
+                            removeDisabledReason ? `Remove unavailable: ${removeDisabledReason}` : 'Remove available.',
+                        ].join(' ');
 
                         return (
                         <div key={member.id} style={styles.memberRow}>
@@ -1016,14 +1203,34 @@ export function TeamManagement({
                                 {ROLE_BADGES[member.role].label}
                             </span>
                             {member.role !== 'owner' && (
-                                <>
+                                <div
+                                    role="group"
+                                    aria-label={`Actions for ${member.name}`}
+                                    aria-describedby={memberActionStatusId}
+                                    data-testid={`teams-member-actions-${member.id}`}
+                                    data-action-status={memberActionStatus}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
+                                >
+                                    <span
+                                        id={memberActionStatusId}
+                                        data-testid={`teams-member-actions-status-${member.id}`}
+                                        aria-live="polite"
+                                        style={visuallyHiddenStyle}
+                                    >
+                                        {memberActionStatus}
+                                    </span>
                                     <select
                                         data-testid={`teams-member-role-${member.id}`}
                                         style={styles.select}
                                         value={member.role}
                                         onChange={(e) => handleUpdateMemberRole(currentTeam.id, member.id, e.target.value as TeamRole)}
                                         disabled={roleDisabled}
-                                        title={roleBlockReason || mutationTitle}
+                                        aria-label={`Change role for ${member.name}`}
+                                        aria-describedby={memberActionStatusId}
+                                        aria-disabled={roleDisabled}
+                                        data-action-state={actionState(roleDisabledReason)}
+                                        data-disabled-reason={roleDisabledReason || undefined}
+                                        title={roleDisabledReason || 'Change member role'}
                                     >
                                         <option value="viewer">Viewer</option>
                                         <option value="editor">Editor</option>
@@ -1034,11 +1241,16 @@ export function TeamManagement({
                                         style={{ ...styles.button, ...styles.dangerButton }}
                                         onClick={() => setPendingRemoveMember({ team: currentTeam, member })}
                                         disabled={removeDisabled}
-                                        title={removeBlockReason || mutationTitle}
+                                        aria-label={`Remove ${member.name} from ${currentTeam.name}`}
+                                        aria-describedby={memberActionStatusId}
+                                        aria-disabled={removeDisabled}
+                                        data-action-state={actionState(removeDisabledReason)}
+                                        data-disabled-reason={removeDisabledReason || undefined}
+                                        title={removeDisabledReason || 'Remove member'}
                                     >
                                         {busyMemberAction === `remove:${member.id}` ? 'Removing...' : 'Remove'}
                                     </button>
-                                </>
+                                </div>
                             )}
                         </div>
                     );

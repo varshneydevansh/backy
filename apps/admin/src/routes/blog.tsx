@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X, MessageSquare, History } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Copy, Download, ExternalLink, Eye, Filter, Plus, FileText, Edit, Trash2, Save, Tag, X, MessageSquare, History, MoreHorizontal, RefreshCw } from 'lucide-react';
 import {
   AdminContentApiError,
   archiveBlogPost,
@@ -46,6 +46,7 @@ import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { getSiteSearchParam, getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
 
 export const Route = createFileRoute('/blog')({
@@ -264,13 +265,12 @@ function BlogListView() {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', BLOG_PERMISSION_ROLE_DEFAULTS);
-  const canEditBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', BLOG_PERMISSION_ROLE_DEFAULTS);
-  const canPublishBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', BLOG_PERMISSION_ROLE_DEFAULTS);
-  const canDeleteBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', BLOG_PERMISSION_ROLE_DEFAULTS);
-  const canViewComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', BLOG_PERMISSION_ROLE_DEFAULTS);
-  const canExportBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canViewBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canEditBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canPublishBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canDeleteBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canViewComments = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', BLOG_PERMISSION_ROLE_DEFAULTS);
+  const canExportBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', BLOG_PERMISSION_ROLE_DEFAULTS);
   const viewBlogPermissionTitle = canViewBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', BLOG_PERMISSION_ROLE_DEFAULTS);
   const editBlogPermissionTitle = canEditBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', BLOG_PERMISSION_ROLE_DEFAULTS);
   const publishBlogPermissionTitle = canPublishBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', BLOG_PERMISSION_ROLE_DEFAULTS);
@@ -296,7 +296,25 @@ function BlogListView() {
   const isPostPreviewBusy = previewingPostId !== null;
   const isTaxonomyBusy = Boolean(mutatingTaxonomyKey);
   const isSeoBusy = Boolean(updatingSeoPostId);
-  const isBlogWorkflowBusy = isLoading || isBulkBusy || isPostMutationBusy || isPostPreviewBusy || isTaxonomyBusy || isSeoBusy || isPermissionMatrixPending;
+  const isBlogMutationBusy = isBulkBusy || isPostMutationBusy || isTaxonomyBusy || isSeoBusy;
+  const isBlogPreviewBusy = isPostPreviewBusy;
+  const isBlogWorkflowBusy = isBlogMutationBusy;
+  const isBlogBulkActionBusy = isBlogMutationBusy || isBlogPreviewBusy;
+  const taxonomyEditDisabledReason = isBlogWorkflowBusy
+    ? 'Taxonomy actions are temporarily unavailable while Backy updates blog content.'
+    : !canEditBlog
+      ? editBlogPermissionTitle || 'Your account needs pages.edit to change blog taxonomy.'
+      : '';
+  const taxonomyDeleteDisabledReason = isBlogWorkflowBusy
+    ? 'Taxonomy actions are temporarily unavailable while Backy updates blog content.'
+    : !canDeleteBlog
+      ? deleteBlogPermissionTitle || 'Your account needs pages.delete to remove blog taxonomy.'
+      : '';
+  const getTaxonomyActionStatus = (kind: 'category' | 'tag', name: string) => [
+    `Edit ${kind} ${name} ${taxonomyEditDisabledReason ? `unavailable: ${taxonomyEditDisabledReason}` : 'available'}.`,
+    `Delete ${kind} ${name} ${taxonomyDeleteDisabledReason ? `unavailable: ${taxonomyDeleteDisabledReason}` : 'available'}.`,
+  ].join(' ');
+  const createPostLinkDisabled = !canEditBlog;
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
@@ -305,6 +323,13 @@ function BlogListView() {
     () => activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo',
     [activeSite, selectedSiteId],
   );
+  const createPostActionStatusId = 'blog-create-action-status';
+  const createPostActionDisabledReason = createPostLinkDisabled
+    ? editBlogPermissionTitle || 'Your account needs pages.edit to create blog posts.'
+    : '';
+  const createPostActionStatus = createPostActionDisabledReason
+    ? `New post unavailable: ${createPostActionDisabledReason}`
+    : `New post available for ${activeSiteId}.`;
   const siteSlug = activeSite?.slug || activeSiteId;
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
@@ -396,8 +421,6 @@ function BlogListView() {
 
   const refreshPosts = useMemo(
     () => async (siteId: string) => {
-      if (isPermissionMatrixPending) return;
-
       if (!canViewBlog) {
         setIsLoading(false);
         setIsRevisionSummaryLoading(false);
@@ -417,17 +440,26 @@ function BlogListView() {
           listBlogTags(siteId),
           listBlogAuthors(siteId),
         ]);
-        const commentResult = canViewComments
-          ? await listAllComments(siteId, { targetType: 'post', status: 'all', limit: 100 }).catch(() => ({ comments: [] }))
-          : { comments: [] };
-        const revisionSummaries = await loadBlogRevisionSummaries(siteId, backendPosts);
         setPosts(backendPosts);
         setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
         setCategories(backendCategories);
         setTags(backendTags);
         setAuthors(backendAuthors);
-        setCommentSummaries(buildPostCommentSummaries(commentResult.comments));
-        setRevisionSummaryMap(revisionSummaries);
+        setIsLoading(false);
+
+        try {
+          const [commentResult, revisionSummaries] = await Promise.all([
+            canViewComments
+              ? loadBlogCommentsWithTimeout(siteId)
+              : Promise.resolve({ comments: [] }),
+            loadBlogRevisionSummaries(siteId, backendPosts),
+          ]);
+          setCommentSummaries(buildPostCommentSummaries(commentResult.comments));
+          setRevisionSummaryMap(revisionSummaries);
+        } catch {
+          setCommentSummaries({});
+          setRevisionSummaryMap({});
+        }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load posts');
       } finally {
@@ -435,7 +467,7 @@ function BlogListView() {
         setIsRevisionSummaryLoading(false);
       }
     },
-    [canViewBlog, canViewComments, isPermissionMatrixPending, setPosts, viewBlogDeniedMessage],
+    [canViewBlog, canViewComments, setPosts, viewBlogDeniedMessage],
   );
 
   useEffect(() => {
@@ -448,8 +480,6 @@ function BlogListView() {
     let cancelled = false;
 
     const loadPosts = async () => {
-      if (isPermissionMatrixPending) return;
-
       if (!canViewBlog) {
         setIsLoading(false);
         setIsRevisionSummaryLoading(false);
@@ -469,18 +499,31 @@ function BlogListView() {
           listBlogTags(activeSiteId),
           listBlogAuthors(activeSiteId),
         ]);
-        const commentResult = canViewComments
-          ? await listAllComments(activeSiteId, { targetType: 'post', status: 'all', limit: 100 }).catch(() => ({ comments: [] }))
-          : { comments: [] };
-        const revisionSummaries = await loadBlogRevisionSummaries(activeSiteId, backendPosts);
         if (!cancelled) {
           setPosts(backendPosts);
           setSelectedPostIds((current) => new Set(backendPosts.filter((post) => current.has(post.id)).map((post) => post.id)));
           setCategories(backendCategories);
           setTags(backendTags);
           setAuthors(backendAuthors);
-          setCommentSummaries(buildPostCommentSummaries(commentResult.comments));
-          setRevisionSummaryMap(revisionSummaries);
+          setIsLoading(false);
+        }
+
+        try {
+          const [commentResult, revisionSummaries] = await Promise.all([
+            canViewComments
+              ? loadBlogCommentsWithTimeout(activeSiteId)
+              : Promise.resolve({ comments: [] }),
+            loadBlogRevisionSummaries(activeSiteId, backendPosts),
+          ]);
+          if (!cancelled) {
+            setCommentSummaries(buildPostCommentSummaries(commentResult.comments));
+            setRevisionSummaryMap(revisionSummaries);
+          }
+        } catch {
+          if (!cancelled) {
+            setCommentSummaries({});
+            setRevisionSummaryMap({});
+          }
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -499,7 +542,7 @@ function BlogListView() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, canViewBlog, canViewComments, isPermissionMatrixPending, setPosts, viewBlogDeniedMessage]);
+  }, [activeSiteId, canViewBlog, canViewComments, setPosts, viewBlogDeniedMessage]);
 
   const categoryById = useMemo(
     () => new Map(categories.map((category) => [category.id, category])),
@@ -698,6 +741,19 @@ function BlogListView() {
     }
   };
 
+  useEffect(() => {
+    if (!pendingTaxonomyDelete) return;
+
+    const handleTaxonomyDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isTaxonomyBusy) return;
+      event.preventDefault();
+      setPendingTaxonomyDelete(null);
+    };
+
+    document.addEventListener('keydown', handleTaxonomyDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleTaxonomyDeleteDialogKeyDown, true);
+  }, [isTaxonomyBusy, pendingTaxonomyDelete]);
+
   const togglePostSeoFlag = async (post: BlogPost, key: 'noIndex' | 'noFollow') => {
     if (isBlogWorkflowBusy) return;
     if (!canEditBlog) {
@@ -779,7 +835,7 @@ function BlogListView() {
   );
 
   const handlePreviewPost = async (post: BlogPost) => {
-    if (isBlogWorkflowBusy) return;
+    if (isBlogWorkflowBusy || isBlogPreviewBusy) return;
     if (!canPublishBlog) {
       setError(publishBlogDeniedMessage);
       setNotice(null);
@@ -829,8 +885,21 @@ function BlogListView() {
     }
   };
 
+  useEffect(() => {
+    if (!pendingDeletePost) return;
+
+    const handlePostDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || mutatingPostId === pendingDeletePost.id) return;
+      event.preventDefault();
+      setPendingDeletePost(null);
+    };
+
+    document.addEventListener('keydown', handlePostDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePostDeleteDialogKeyDown, true);
+  }, [mutatingPostId, pendingDeletePost]);
+
   const handleBulkAction = async () => {
-    if (isBlogWorkflowBusy) return;
+    if (isBlogBulkActionBusy) return;
 
     if (!bulkAction || selectedPosts.length === 0) {
       return;
@@ -1082,64 +1151,129 @@ function BlogListView() {
     {
       key: 'actions',
       label: '',
-      render: (post) => (
-        <div className="flex items-center justify-end gap-2">
-          {post.status === 'published' && (
-            <a
-              href={publicPostUrl(post)}
-              target="_blank"
-              rel="noreferrer"
-              title="Open published post"
-              aria-disabled={isBlogWorkflowBusy}
-              onClick={(event) => {
-                if (isBlogWorkflowBusy) {
-                  event.preventDefault();
-                }
-              }}
-              className={cn(
-                'p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors',
-                isBlogWorkflowBusy && 'pointer-events-none opacity-50',
-              )}
+      render: (post) => {
+        const postActionStatusId = `blog-post-actions-status-${post.id}`;
+        const workflowReason = isBlogWorkflowBusy
+          ? 'Blog actions are temporarily unavailable while Backy updates posts or taxonomy.'
+          : null;
+        const openDisabledReason = post.status === 'published' ? workflowReason : null;
+        const previewDisabledReason = !canPublishBlog
+          ? publishBlogPermissionTitle || 'Your account cannot preview blog posts.'
+          : isBlogPreviewBusy || isBlogWorkflowBusy
+            ? 'Blog preview is temporarily unavailable while Backy updates posts.'
+            : null;
+        const editDisabledReason = !canViewBlog
+          ? viewBlogPermissionTitle || 'Your account cannot open blog posts.'
+          : workflowReason;
+        const deleteDisabledReason = !canDeleteBlog
+          ? deleteBlogPermissionTitle || 'Your account cannot delete blog posts.'
+          : workflowReason;
+        const postActionStatus = [
+          post.status === 'published'
+            ? openDisabledReason
+              ? `Open published post unavailable: ${openDisabledReason}`
+              : 'Open published post available.'
+            : null,
+          previewDisabledReason ? `Preview unavailable: ${previewDisabledReason}` : 'Preview available.',
+          editDisabledReason ? `Edit unavailable: ${editDisabledReason}` : 'Edit available.',
+          deleteDisabledReason ? `Delete unavailable: ${deleteDisabledReason}` : 'Delete available.',
+        ].filter(Boolean).join(' ');
+
+        return (
+          <div
+            className="flex items-center justify-end gap-2"
+            role="group"
+            aria-label={`Actions for ${post.title}`}
+            aria-describedby={postActionStatusId}
+            data-testid={`blog-post-actions-${post.id}`}
+            data-action-status={postActionStatus}
+          >
+            <span
+              id={postActionStatusId}
+              className="sr-only"
+              data-testid={`blog-post-actions-status-${post.id}`}
             >
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          )}
-          <button
-            onClick={() => {
-              void handlePreviewPost(post);
-            }}
-            disabled={isBlogWorkflowBusy || !canPublishBlog}
-            title={publishBlogPermissionTitle || 'Preview post'}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => {
-              if (!isBlogWorkflowBusy) {
-                void navigate({ to: '/blog/$postId', params: { postId: post.id }, search: { siteId: activeSiteId } });
-              }
-            }}
-            disabled={isBlogWorkflowBusy || !canViewBlog}
-            title={viewBlogPermissionTitle || 'Edit post'}
-            className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Edit className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => {
-              if (!isBlogWorkflowBusy) {
+              {postActionStatus}
+            </span>
+            {post.status === 'published' && (
+              <a
+                href={publicPostUrl(post)}
+                target="_blank"
+                rel="noreferrer"
+                title={openDisabledReason || 'Open published post'}
+                aria-label={`Open published post ${post.title}`}
+                aria-describedby={postActionStatusId}
+                aria-disabled={Boolean(openDisabledReason)}
+                data-action-state={openDisabledReason ? 'blocked' : 'ready'}
+                data-disabled-reason={openDisabledReason || undefined}
+                data-testid={`blog-post-open-${post.id}`}
+                onClick={(event) => {
+                  if (openDisabledReason) {
+                    event.preventDefault();
+                  }
+                }}
+                className={cn(
+                  'p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors',
+                  openDisabledReason && 'pointer-events-none opacity-50',
+                )}
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+            <button
+              onClick={() => {
+                if (previewDisabledReason) return;
+                void handlePreviewPost(post);
+              }}
+              disabled={Boolean(previewDisabledReason)}
+              aria-disabled={Boolean(previewDisabledReason)}
+              aria-describedby={postActionStatusId}
+              aria-label={`Preview ${post.title}`}
+              data-action-state={previewDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={previewDisabledReason || undefined}
+              data-testid={`blog-post-preview-${post.id}`}
+              title={previewDisabledReason || 'Preview post'}
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                if (editDisabledReason) return;
+                void navigate({ to: '/blog/$postId', params: { postId: post.id }, search: { siteId: activeSiteId, focus: 'canvas' } });
+              }}
+              disabled={Boolean(editDisabledReason)}
+              aria-disabled={Boolean(editDisabledReason)}
+              aria-describedby={postActionStatusId}
+              aria-label={`Edit ${post.title}`}
+              data-action-state={editDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={editDisabledReason || undefined}
+              title={editDisabledReason || 'Edit post'}
+              data-testid={`blog-post-edit-${post.id}`}
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => {
+                if (deleteDisabledReason) return;
                 setPendingDeletePost(post);
-              }
-            }}
-            disabled={isBlogWorkflowBusy || !canDeleteBlog}
-            title={deleteBlogPermissionTitle || 'Delete post'}
-            className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      )
+              }}
+              disabled={Boolean(deleteDisabledReason)}
+              aria-disabled={Boolean(deleteDisabledReason)}
+              aria-describedby={postActionStatusId}
+              aria-label={`Delete ${post.title}`}
+              data-action-state={deleteDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={deleteDisabledReason || undefined}
+              title={deleteDisabledReason || 'Delete post'}
+              data-testid={`blog-post-delete-${post.id}`}
+              className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        );
+      }
     }
   ];
 
@@ -1195,10 +1329,40 @@ function BlogListView() {
   const selectedFilteredPosts = filteredPosts.filter((post) => selectedPostIds.has(post.id));
   const visiblePostIdSet = useMemo(() => new Set(data.map((post) => post.id)), [data]);
   const hiddenSelectedCount = Math.max(0, selectedPosts.length - selectedCurrentRows.length);
+  const visibleSelectedCount = selectedCurrentRows.length;
   const filteredSelectionMode = filteredPosts.length > data.length ? 'all-filtered' : 'visible-page';
   const allFilteredPostsSelected = filteredPosts.length > 0 && selectedFilteredPosts.length === filteredPosts.length;
   const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPosts.length, pendingBulkDelete);
   const bulkBusyLabel = getBulkBusyLabel(bulkAction);
+  const bulkSelectionStatusId = 'blog-bulk-selection-status';
+  const bulkActionStatusId = 'blog-bulk-action-status';
+  const bulkSelectionStatus = selectedPosts.length === 0
+    ? `No blog posts selected. ${data.length} visible post${data.length === 1 ? '' : 's'} on this table page.`
+    : `${selectedPosts.length} blog post${selectedPosts.length === 1 ? '' : 's'} selected. ${visibleSelectedCount} visible, ${hiddenSelectedCount} not visible, ${selectedFilteredPosts.length} of ${filteredPosts.length} filtered post${filteredPosts.length === 1 ? '' : 's'} selected.`;
+  const bulkActionPermissionTitle = bulkAction === 'publish'
+    ? publishBlogPermissionTitle
+    : bulkAction === 'archive'
+      ? editBlogPermissionTitle
+      : bulkAction === 'delete'
+        ? deleteBlogPermissionTitle
+        : !canSelectBlogRows
+          ? bulkSelectionPermissionTitle
+          : undefined;
+  const bulkActionReady = Boolean(
+    bulkAction &&
+    selectedPosts.length > 0 &&
+    !isBlogBulkActionBusy &&
+    canRunBulkAction,
+  );
+  const bulkActionStatus = selectedPosts.length === 0
+    ? 'Select one or more blog posts to enable bulk actions.'
+    : !bulkAction
+      ? `Choose a bulk action for ${selectedPosts.length} selected blog post${selectedPosts.length === 1 ? '' : 's'}.`
+      : isBlogBulkActionBusy
+        ? 'Bulk blog actions are temporarily unavailable while Backy updates or previews posts.'
+        : !canRunBulkAction
+          ? bulkActionPermissionTitle || 'Your account cannot run this blog bulk action.'
+          : `Ready to ${bulkActionLabel.toLowerCase()}.`;
   const hasPosts = siteScopedPosts.length > 0;
   const scheduleMetrics = useMemo(() => {
     const summaries = siteScopedPosts.map((post) => getPostScheduleSummary(post));
@@ -1273,6 +1437,8 @@ function BlogListView() {
 
     return {
       score: Math.round((readyCount / checks.length) * 100),
+      readyCount,
+      total: checks.length,
       checks,
       workflow: [
         { label: 'Draft', detail: 'Create posts, assign title, slug, author, taxonomy, excerpt, and canvas design.' },
@@ -1573,12 +1739,18 @@ function BlogListView() {
         <Link
           to="/blog/new"
           search={createPostSearch}
-          aria-disabled={isBlogWorkflowBusy || !canEditBlog}
-          title={editBlogPermissionTitle}
+          aria-disabled={createPostLinkDisabled}
+          aria-describedby={createPostActionStatusId}
+          title={createPostActionDisabledReason || undefined}
           className={cn(
             'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors',
-            (isBlogWorkflowBusy || !canEditBlog) && 'pointer-events-none opacity-60',
+            createPostLinkDisabled && 'pointer-events-none opacity-60',
           )}
+          data-action-state={createPostActionDisabledReason ? 'blocked' : 'ready'}
+          data-action-status={createPostActionStatus}
+          data-disabled-reason={createPostActionDisabledReason || undefined}
+          data-target-site-id={activeSiteId}
+          data-testid="blog-header-create"
         >
           <Plus className="w-4 h-4" />
           New Post
@@ -1666,15 +1838,19 @@ function BlogListView() {
         </div>
       )}
 
-      {isLoading && (
-        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Loading blog posts from backend...
+      {isLoading && data.length === 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          <RefreshCw className="mt-0.5 size-4 shrink-0 animate-spin text-sky-700" />
+          <span>Loading blog posts from backend.</span>
         </div>
       )}
+      <span id={createPostActionStatusId} className="sr-only" data-testid="blog-create-action-status" aria-live="polite">
+        {createPostActionStatus}
+      </span>
 
-      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-command-center">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
+      <section className="mb-5 rounded-lg border border-border bg-card shadow-sm" data-testid="blog-command-center">
+        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-5">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold text-foreground">Editorial command center</h2>
               <span className={cn(
@@ -1689,142 +1865,196 @@ function BlogListView() {
               Control the full blog surface for the active site: drafts, taxonomy, authors, previews, bulk publishing, archive state, and frontend article delivery.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
-              disabled={isBlogWorkflowBusy || !canViewBlog}
-              title={viewBlogPermissionTitle}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Copy className="size-4" />
-              Copy handoff
-            </button>
-            <button
-              type="button"
-              onClick={downloadBlogHandoff}
-              disabled={isBlogWorkflowBusy || !canViewBlog}
-              title={viewBlogPermissionTitle}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="size-4" />
-              Download JSON
-            </button>
-            <button
-              type="button"
-              onClick={downloadBlogCsv}
-              disabled={data.length === 0 || isBlogWorkflowBusy || !canExportBlog}
-              title={exportBlogPermissionTitle}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="size-4" />
-              Export CSV
-            </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end">
             <Link
               to="/blog/new"
               search={createPostSearch}
-              aria-disabled={isBlogWorkflowBusy || !canEditBlog}
-              title={editBlogPermissionTitle}
+              aria-disabled={createPostLinkDisabled}
+              aria-describedby={createPostActionStatusId}
+              title={createPostActionDisabledReason || undefined}
               className={cn(
                 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90',
-                (isBlogWorkflowBusy || !canEditBlog) && 'pointer-events-none opacity-60',
+                createPostLinkDisabled && 'pointer-events-none opacity-60',
               )}
+              data-action-state={createPostActionDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={createPostActionStatus}
+              data-disabled-reason={createPostActionDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
               data-testid="blog-command-create"
             >
               <Plus className="h-4 w-4" />
               New post
             </Link>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="text-sm font-semibold">Editorial readiness</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Checks whether this site can draft, organize, preview, publish, and maintain articles.</p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn('h-full rounded-full', editorialReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
-                style={{ width: `${editorialReadiness.score}%` }}
-              />
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {editorialReadiness.checks.map((check) => (
-                <BlogReadinessCheck key={check.label} {...check} />
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-background p-4">
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Editorial workflow</h3>
-            </div>
-            <div className="mt-3 grid gap-2">
-              {editorialReadiness.workflow.map((step, index) => (
-                <BlogWorkflowStep key={step.label} index={index + 1} {...step} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Blog control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to post status, bulk actions, filters, and the editorial table.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {BLOG_CONTROL_AREAS.map((area) => (
-              <a
-                key={area.title}
-                href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-              >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <FileText className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Connected editorial workflows</h3>
+            <details className="group relative" data-testid="blog-command-secondary-actions">
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden">
+                <MoreHorizontal className="size-4" />
+                More actions
+              </summary>
+              <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-48">
+                <button
+                  type="button"
+                  onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
+                  disabled={isBlogWorkflowBusy || !canViewBlog}
+                  title={viewBlogPermissionTitle}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Copy className="size-4" />
+                  Copy handoff
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadBlogHandoff}
+                  disabled={isBlogWorkflowBusy || !canViewBlog}
+                  title={viewBlogPermissionTitle}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Download className="size-4" />
+                  Download JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadBlogCsv}
+                  disabled={data.length === 0 || isBlogWorkflowBusy || !canExportBlog}
+                  title={exportBlogPermissionTitle}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Download className="size-4" />
+                  Export CSV
+                </button>
               </div>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Blog publishing works best when the public index page, media library, comments, author identity, and runtime settings are wired together.
-              </p>
-            </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              {BLOG_WORKFLOW_SURFACES.length} surfaces
-            </span>
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {BLOG_WORKFLOW_SURFACES.map((surface) => (
-              surface.route === '/pages/new' ? (
-                <Link
-                  key={surface.key}
-                  to="/pages/new"
-                  search={{ siteId: activeSiteId, template: surface.template }}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-                </Link>
-              ) : (
-                <Link
-                  key={surface.key}
-                  to={surface.route}
-                  search={getBlogSurfaceSearch(surface)}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-                </Link>
-              )
-            ))}
+            </details>
           </div>
         </div>
+
+        <div className="grid gap-3 border-t border-border bg-background/55 p-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Posts', value: postMetrics.total, detail: `${postMetrics.draft} drafts` },
+            { label: 'Published', value: postMetrics.published, detail: 'Article routes' },
+            { label: 'Scheduled', value: postMetrics.scheduled, detail: scheduleMetrics.future > 0 ? `${scheduleMetrics.future} upcoming` : 'No future queue' },
+            { label: 'Readiness', value: `${editorialReadiness.score}%`, detail: `${editorialReadiness.readyCount}/${editorialReadiness.total} checks` },
+          ].map((metric) => (
+            <div key={metric.label} className="rounded-lg border border-border bg-card px-3 py-2.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</div>
+              <div className="mt-1 flex items-end justify-between gap-3">
+                <span className="font-mono text-xl font-semibold text-foreground">{metric.value}</span>
+                <span className="truncate text-xs text-muted-foreground">{metric.detail}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <details className="group border-t border-border" data-testid="blog-readiness-details">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+            <span>Editorial readiness and workflow</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+          </summary>
+          <div className="grid gap-3 border-t border-border p-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] lg:p-5">
+            <div className="rounded-lg border border-border bg-background p-4">
+              <h3 className="text-sm font-semibold">Editorial readiness</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Checks whether this site can draft, organize, preview, publish, and maintain articles.</p>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn('h-full rounded-full', editorialReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                  style={{ width: `${editorialReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {editorialReadiness.checks.map((check) => (
+                  <BlogReadinessCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Editorial workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {editorialReadiness.workflow.map((step, index) => (
+                  <BlogWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details
+          className="group border-t border-border"
+          data-testid="blog-advanced-workflows-details"
+          data-disclosure="advanced-editorial-workflows"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex items-center gap-2">
+              <FileText className="size-4 text-primary" />
+              Workflow map and connected surfaces
+            </span>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              {BLOG_CONTROL_AREAS.length + BLOG_WORKFLOW_SURFACES.length} links
+            </span>
+          </summary>
+          <div className="grid gap-4 border-t border-border bg-background/55 p-4 lg:p-5">
+            <div>
+              <h3 className="text-sm font-semibold">Blog control map</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Jump to post status, bulk actions, filters, and the editorial table.</p>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                {BLOG_CONTROL_AREAS.map((area) => (
+                  <a
+                    key={area.title}
+                    href={area.href}
+                    className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            <details className="group overflow-hidden rounded-lg border border-border bg-background" data-testid="blog-connected-workflows-details">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <span className="inline-flex items-center gap-2">
+                  <FileText className="size-4 text-primary" />
+                  Connected editorial workflows
+                </span>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {BLOG_WORKFLOW_SURFACES.length} surfaces
+                </span>
+              </summary>
+              <div className="border-t border-border p-4">
+                <p className="max-w-3xl text-sm text-muted-foreground">
+                  Blog publishing works best when the public index page, media library, comments, author identity, and runtime settings are wired together.
+                </p>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                  {BLOG_WORKFLOW_SURFACES.map((surface) => (
+                    surface.route === '/pages/new' ? (
+                      <Link
+                        key={surface.key}
+                        to="/pages/new"
+                        search={{ siteId: activeSiteId, template: surface.template }}
+                        className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                      </Link>
+                    ) : (
+                      <Link
+                        key={surface.key}
+                        to={surface.route}
+                        search={getBlogSurfaceSearch(surface)}
+                        className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                      </Link>
+                    )
+                  ))}
+                </div>
+              </div>
+            </details>
+          </div>
+        </details>
       </section>
 
       <div id="blog-overview" className="mb-6 grid gap-3 scroll-mt-24 lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -1881,8 +2111,22 @@ function BlogListView() {
         </div>
       </div>
 
-      <section className="mb-6 rounded-lg border border-border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <details
+        id="blog-api"
+        className="group mb-6 overflow-hidden rounded-lg border border-border bg-card"
+        data-testid="blog-api-contract"
+        data-disclosure="blog-api-contract"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            Blog API contract
+          </span>
+          <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show handoff</span>
+          <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide handoff</span>
+        </summary>
+        <div className="border-t border-border p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
@@ -1925,49 +2169,75 @@ function BlogListView() {
             </button>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <BlogApiSnippet label="Public posts" value={publicBlogUrl} />
-          <BlogApiSnippet label="Post by slug" value={publicPostBySlugUrl} />
-          <BlogApiSnippet label="Search feed" value={publicBlogSearchUrl} />
-          <BlogApiSnippet label="Archive feed" value={publicBlogArchiveUrl} />
-          <BlogApiSnippet label="Render post" value={publicPostRenderUrl} />
-          <BlogApiSnippet label="Resolve post" value={publicPostResolveUrl} />
-          <BlogApiSnippet label="Admin posts" value={adminBlogUrl} />
-          <BlogApiSnippet label="Preview" value={adminBlogPreviewUrl} />
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Blog frontend control contract</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Public frontends need these editorial systems to render blog lists, article pages, taxonomy views, bylines, and preview states from Backy.
-              </p>
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="blog-api-details">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>API endpoints and frontend systems</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+          </summary>
+          <div className="border-t border-border p-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <BlogApiSnippet label="Public posts" value={publicBlogUrl} />
+              <BlogApiSnippet label="Post by slug" value={publicPostBySlugUrl} />
+              <BlogApiSnippet label="Search feed" value={publicBlogSearchUrl} />
+              <BlogApiSnippet label="Archive feed" value={publicBlogArchiveUrl} />
+              <BlogApiSnippet label="Render post" value={publicPostRenderUrl} />
+              <BlogApiSnippet label="Resolve post" value={publicPostResolveUrl} />
+              <BlogApiSnippet label="Admin posts" value={adminBlogUrl} />
+              <BlogApiSnippet label="Preview" value={adminBlogPreviewUrl} />
             </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              {BLOG_FRONTEND_SYSTEMS.length} systems
-            </span>
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {BLOG_FRONTEND_SYSTEMS.map((system) => (
-              <div key={system.key} className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-foreground">{system.title}</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                    {system.key}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      <section id="blog-taxonomy" className="mb-6 scroll-mt-24 rounded-lg border border-border bg-card p-4" data-testid="blog-taxonomy-manager">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="mt-4 rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Blog frontend control contract</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Public frontends need these editorial systems to render blog lists, article pages, taxonomy views, bylines, and preview states from Backy.
+                  </p>
+                </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                  {BLOG_FRONTEND_SYSTEMS.length} systems
+                </span>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {BLOG_FRONTEND_SYSTEMS.map((system) => (
+                  <div key={system.key} className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground">{system.title}</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                        {system.key}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </details>
+        </div>
+      </details>
+
+      <details
+        id="blog-taxonomy"
+        className="group mb-6 scroll-mt-24 overflow-hidden rounded-lg border border-border bg-card"
+        data-testid="blog-taxonomy-manager"
+        data-disclosure="blog-taxonomy-manager"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-2">
+            <Tag className="h-4 w-4 text-primary" />
+            Taxonomy manager
+          </span>
+          <span className="flex shrink-0 flex-wrap justify-end gap-2 text-xs text-muted-foreground">
+            <span className="rounded-full bg-muted px-2.5 py-1">{categories.length} categories</span>
+            <span className="rounded-full bg-muted px-2.5 py-1">{tags.length} tags</span>
+          </span>
+        </summary>
+        <div className="border-t border-border p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <Tag className="h-4 w-4 text-primary" />
@@ -2004,7 +2274,11 @@ function BlogListView() {
                   title="No categories yet"
                   description="Create category terms to power blog archive navigation, related-post groups, and frontend feed filters."
                 />
-              ) : categories.map((category) => (
+              ) : categories.map((category) => {
+                const actionStatusId = `blog-category-actions-status-${category.id}`;
+                const actionStatus = getTaxonomyActionStatus('category', category.name);
+
+                return (
                 <div key={category.id} className="rounded-lg border border-border bg-card px-3 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -2021,13 +2295,27 @@ function BlogListView() {
                         {category.description || 'No description'} · {category.postCount} post{category.postCount === 1 ? '' : 's'}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div
+                      className="flex items-center gap-1"
+                      role="group"
+                      aria-label={`Actions for category ${category.name}`}
+                      aria-describedby={actionStatusId}
+                      data-testid={`blog-category-actions-${category.id}`}
+                      data-action-status={actionStatus}
+                    >
+                      <span id={actionStatusId} className="sr-only" data-testid={`blog-category-actions-status-${category.id}`}>
+                        {actionStatus}
+                      </span>
                       <button
                         type="button"
                         onClick={() => startEditCategory(category)}
                         disabled={isBlogWorkflowBusy || !canEditBlog}
-                        title={editBlogPermissionTitle}
+                        title={taxonomyEditDisabledReason || `Edit category ${category.name}`}
                         aria-label={`Edit category ${category.name}`}
+                        aria-describedby={actionStatusId}
+                        data-action-state={taxonomyEditDisabledReason ? 'blocked' : 'ready'}
+                        data-disabled-reason={taxonomyEditDisabledReason || undefined}
+                        data-testid={`blog-category-edit-${category.id}`}
                         className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Edit className="h-4 w-4" />
@@ -2036,8 +2324,12 @@ function BlogListView() {
                         type="button"
                         onClick={() => setPendingTaxonomyDelete({ type: 'category', id: category.id, name: category.name, postCount: category.postCount })}
                         disabled={isBlogWorkflowBusy || !canDeleteBlog}
-                        title={deleteBlogPermissionTitle}
+                        title={taxonomyDeleteDisabledReason || `Delete category ${category.name}`}
                         aria-label={`Delete category ${category.name}`}
+                        aria-describedby={actionStatusId}
+                        data-action-state={taxonomyDeleteDisabledReason ? 'blocked' : 'ready'}
+                        data-disabled-reason={taxonomyDeleteDisabledReason || undefined}
+                        data-testid={`blog-category-delete-${category.id}`}
                         className="rounded-lg p-2 text-muted-foreground transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -2045,7 +2337,8 @@ function BlogListView() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -2068,7 +2361,11 @@ function BlogListView() {
                   title="No tags yet"
                   description="Create tags to expose lightweight topic filters for blog cards, public feeds, and custom frontend chips."
                 />
-              ) : tags.map((tag) => (
+              ) : tags.map((tag) => {
+                const actionStatusId = `blog-tag-actions-status-${tag.id}`;
+                const actionStatus = getTaxonomyActionStatus('tag', tag.name);
+
+                return (
                 <div key={tag.id} className="rounded-lg border border-border bg-card px-3 py-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -2080,13 +2377,27 @@ function BlogListView() {
                         {tag.description || 'No description'} · {tag.postCount} post{tag.postCount === 1 ? '' : 's'}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div
+                      className="flex items-center gap-1"
+                      role="group"
+                      aria-label={`Actions for tag ${tag.name}`}
+                      aria-describedby={actionStatusId}
+                      data-testid={`blog-tag-actions-${tag.id}`}
+                      data-action-status={actionStatus}
+                    >
+                      <span id={actionStatusId} className="sr-only" data-testid={`blog-tag-actions-status-${tag.id}`}>
+                        {actionStatus}
+                      </span>
                       <button
                         type="button"
                         onClick={() => startEditTag(tag)}
                         disabled={isBlogWorkflowBusy || !canEditBlog}
-                        title={editBlogPermissionTitle}
+                        title={taxonomyEditDisabledReason || `Edit tag ${tag.name}`}
                         aria-label={`Edit tag ${tag.name}`}
+                        aria-describedby={actionStatusId}
+                        data-action-state={taxonomyEditDisabledReason ? 'blocked' : 'ready'}
+                        data-disabled-reason={taxonomyEditDisabledReason || undefined}
+                        data-testid={`blog-tag-edit-${tag.id}`}
                         className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Edit className="h-4 w-4" />
@@ -2095,8 +2406,12 @@ function BlogListView() {
                         type="button"
                         onClick={() => setPendingTaxonomyDelete({ type: 'tag', id: tag.id, name: tag.name, postCount: tag.postCount })}
                         disabled={isBlogWorkflowBusy || !canDeleteBlog}
-                        title={deleteBlogPermissionTitle}
+                        title={taxonomyDeleteDisabledReason || `Delete tag ${tag.name}`}
                         aria-label={`Delete tag ${tag.name}`}
+                        aria-describedby={actionStatusId}
+                        data-action-state={taxonomyDeleteDisabledReason ? 'blocked' : 'ready'}
+                        data-disabled-reason={taxonomyDeleteDisabledReason || undefined}
+                        data-testid={`blog-tag-delete-${tag.id}`}
                         className="rounded-lg p-2 text-muted-foreground transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -2104,22 +2419,45 @@ function BlogListView() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
-      </section>
+        </div>
+      </details>
 
       {hasPosts && (
-        <div id="blog-bulk" className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
-          <span className="text-sm font-medium">
-            {selectedPosts.length} selected{hiddenSelectedCount > 0 ? `, ${hiddenSelectedCount} not visible` : ''}
+        <div
+          id="blog-bulk"
+          className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24"
+          role="group"
+          aria-label="Bulk blog post actions"
+          aria-describedby={`${bulkSelectionStatusId} ${bulkActionStatusId}`}
+          data-testid="blog-bulk-toolbar"
+          data-selected-count={selectedPosts.length}
+          data-visible-selected-count={visibleSelectedCount}
+          data-hidden-selected-count={hiddenSelectedCount}
+          data-filtered-selected-count={selectedFilteredPosts.length}
+          data-filtered-total-count={filteredPosts.length}
+          data-bulk-action={bulkAction || 'none'}
+          data-bulk-action-ready={bulkActionReady ? 'true' : 'false'}
+        >
+          <span
+            id={bulkSelectionStatusId}
+            className="text-sm font-medium"
+            aria-live="polite"
+            data-testid="blog-bulk-selection-status"
+          >
+            {bulkSelectionStatus}
           </span>
           <button
             type="button"
             onClick={() => setPostSelection(data, selectedCurrentRows.length !== data.length)}
             disabled={data.length === 0 || isBlogWorkflowBusy || !canSelectBlogRows}
             title={bulkSelectionPermissionTitle}
+            aria-label={selectedCurrentRows.length === data.length && data.length > 0 ? 'Clear visible blog post selection' : 'Select visible blog posts'}
+            data-testid="blog-bulk-select-visible"
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {selectedCurrentRows.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
@@ -2130,6 +2468,7 @@ function BlogListView() {
               onClick={() => setPostSelection(filteredPosts, !allFilteredPostsSelected)}
               disabled={filteredPosts.length === 0 || isBlogWorkflowBusy || !canSelectBlogRows}
               title={bulkSelectionPermissionTitle || 'Select every post matching the current search, status, taxonomy, and author filters'}
+              aria-label={allFilteredPostsSelected ? `Clear all ${filteredPosts.length} filtered blog post selections` : `Select all ${filteredPosts.length} filtered blog posts`}
               className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               data-testid="blog-bulk-select-filtered"
               data-selection-mode={filteredSelectionMode}
@@ -2140,6 +2479,10 @@ function BlogListView() {
           <select
             value={bulkAction}
             disabled={isBlogWorkflowBusy || !canSelectBlogRows}
+            title={!canSelectBlogRows ? bulkSelectionPermissionTitle : undefined}
+            aria-label="Choose bulk blog post action"
+            aria-describedby={bulkActionStatusId}
+            data-testid="blog-bulk-action-select"
             onChange={(event) => {
               if (isBlogWorkflowBusy || !canSelectBlogRows) return;
 
@@ -2156,7 +2499,16 @@ function BlogListView() {
           <button
             type="button"
             onClick={() => void handleBulkAction()}
-            disabled={!bulkAction || selectedPosts.length === 0 || isBlogWorkflowBusy || !canRunBulkAction}
+            disabled={!bulkAction || selectedPosts.length === 0 || isBlogBulkActionBusy || !canRunBulkAction}
+            aria-disabled={!bulkAction || selectedPosts.length === 0 || isBlogBulkActionBusy || !canRunBulkAction}
+            aria-label={bulkAction ? `Apply blog bulk action: ${bulkActionLabel}` : 'Apply selected blog bulk action'}
+            aria-describedby={bulkActionStatusId}
+            data-testid="blog-bulk-action-apply"
+            data-action-state={bulkActionReady ? 'ready' : 'blocked'}
+            data-disabled-reason={bulkActionReady ? undefined : bulkActionStatus}
+            data-bulk-action-ready={bulkActionReady ? 'true' : 'false'}
+            data-bulk-action-status={bulkActionStatus}
+            title={!canRunBulkAction ? bulkActionPermissionTitle : 'Apply selected blog bulk action'}
             className={cn(
               'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-primary-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60',
               bulkAction === 'delete'
@@ -2169,6 +2521,14 @@ function BlogListView() {
             {bulkAction === 'delete' && <Trash2 className="size-4" />}
             {isBulkBusy ? bulkBusyLabel : bulkActionLabel}
           </button>
+          <span
+            id={bulkActionStatusId}
+            className="min-w-48 text-xs font-medium leading-5 text-muted-foreground"
+            aria-live="polite"
+            data-testid="blog-bulk-action-status"
+          >
+            {bulkActionStatus}
+          </span>
           {selectedPosts.length > 0 && (
             <button
               type="button"
@@ -2178,6 +2538,8 @@ function BlogListView() {
                 }
               }}
               disabled={isBlogWorkflowBusy}
+              aria-label={`Clear selection for ${selectedPosts.length} selected blog post${selectedPosts.length === 1 ? '' : 's'}`}
+              data-testid="blog-bulk-clear-selection"
               className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               Clear selection
@@ -2197,6 +2559,8 @@ function BlogListView() {
                   }
                 }}
                 disabled={isBlogWorkflowBusy}
+                aria-label={`Clear ${hiddenSelectedCount} non-visible selected blog post${hiddenSelectedCount === 1 ? '' : 's'}`}
+                data-testid="blog-bulk-clear-non-visible"
                 className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Clear non-visible
@@ -2300,6 +2664,7 @@ function BlogListView() {
           type="button"
           onClick={clearBlogFilters}
           disabled={isBlogWorkflowBusy}
+          data-testid="blog-clear-filters"
           className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear Filters
@@ -2322,7 +2687,7 @@ function BlogListView() {
         <DataGrid
           columns={columns}
           data={data}
-          loading={isLoading}
+          loading={isLoading && data.length === 0}
           interactionDisabled={isBlogWorkflowBusy}
           sortConfig={sortConfig}
           onSort={(key) => {
@@ -2364,12 +2729,17 @@ function BlogListView() {
                     to="/blog/new"
                     search={createPostSearch}
                     data-testid="blog-empty-create"
-                    aria-disabled={isBlogWorkflowBusy || !canEditBlog}
-                    title={editBlogPermissionTitle}
+                    aria-disabled={createPostLinkDisabled}
+                    aria-describedby={createPostActionStatusId}
+                    title={createPostActionDisabledReason || undefined}
                     className={cn(
                       'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
-                      (isBlogWorkflowBusy || !canEditBlog) && 'pointer-events-none opacity-60',
+                      createPostLinkDisabled && 'pointer-events-none opacity-60',
                     )}
+                    data-action-state={createPostActionDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={createPostActionStatus}
+                    data-disabled-reason={createPostActionDisabledReason || undefined}
+                    data-target-site-id={activeSiteId}
                   >
                     <Plus className="w-4 h-4" />
                     Create Post
@@ -2382,20 +2752,27 @@ function BlogListView() {
       </div>
 
       {pendingTaxonomyDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="blog-taxonomy-delete-confirm-title"
+          aria-describedby="blog-taxonomy-delete-confirm-description blog-taxonomy-delete-confirm-impact"
+          data-testid="blog-taxonomy-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete {pendingTaxonomyDelete.name}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="blog-taxonomy-delete-confirm-title" className="text-lg font-semibold text-foreground">Delete {pendingTaxonomyDelete.name}?</h2>
+                <p id="blog-taxonomy-delete-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   This removes the {pendingTaxonomyDelete.type} from the blog taxonomy API and detaches it from matching posts.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id="blog-taxonomy-delete-confirm-impact" className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Assigned posts: <span className="font-medium text-foreground">{pendingTaxonomyDelete.postCount}</span>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -2403,6 +2780,8 @@ function BlogListView() {
                 type="button"
                 onClick={() => setPendingTaxonomyDelete(null)}
                 disabled={isTaxonomyBusy}
+                aria-label={`Cancel deleting ${pendingTaxonomyDelete.name} ${pendingTaxonomyDelete.type}`}
+                data-testid="blog-taxonomy-delete-cancel-button"
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2412,6 +2791,7 @@ function BlogListView() {
                 onClick={() => void deleteTaxonomyTarget()}
                 disabled={isTaxonomyBusy || !canDeleteBlog}
                 title={deleteBlogPermissionTitle}
+                aria-label={`Confirm deleting ${pendingTaxonomyDelete.name} ${pendingTaxonomyDelete.type}`}
                 data-testid="blog-taxonomy-confirm-delete"
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -2423,20 +2803,27 @@ function BlogListView() {
       )}
 
       {pendingDeletePost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="blog-post-delete-confirm-title"
+          aria-describedby="blog-post-delete-confirm-description blog-post-delete-confirm-impact"
+          data-testid="blog-post-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeletePost.title}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="blog-post-delete-confirm-title" className="text-lg font-semibold text-foreground">Delete {pendingDeletePost.title}?</h2>
+                <p id="blog-post-delete-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   This removes the post from the backend and from public API delivery. Archive it instead if you only want it hidden.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id="blog-post-delete-confirm-impact" className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Route: <span className="font-medium text-foreground">/blog/{pendingDeletePost.slug}</span>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -2444,6 +2831,8 @@ function BlogListView() {
                 type="button"
                 onClick={() => setPendingDeletePost(null)}
                 disabled={mutatingPostId === pendingDeletePost.id}
+                aria-label={`Cancel deleting ${pendingDeletePost.title}`}
+                data-testid="blog-post-delete-cancel-button"
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -2453,6 +2842,8 @@ function BlogListView() {
                 onClick={() => void handleDeletePost(pendingDeletePost)}
                 disabled={mutatingPostId === pendingDeletePost.id || !canDeleteBlog}
                 title={deleteBlogPermissionTitle}
+                aria-label={`Confirm deleting ${pendingDeletePost.title}`}
+                data-testid="blog-post-delete-confirm-button"
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {mutatingPostId === pendingDeletePost.id ? 'Deleting...' : 'Delete post'}
@@ -2573,18 +2964,51 @@ const buildPostCommentSummaries = (comments: AdminComment[]): Record<string, Blo
   }, {})
 );
 
+const BLOG_SUPPORT_METADATA_TIMEOUT_MS = 8_000;
+
+const withBlogSupportTimeout = <T,>(
+  promise: Promise<T>,
+  fallback: T,
+  timeoutMs = BLOG_SUPPORT_METADATA_TIMEOUT_MS,
+): Promise<T> => new Promise((resolve) => {
+  const timeout = window.setTimeout(() => resolve(fallback), timeoutMs);
+  promise
+    .then((value) => {
+      window.clearTimeout(timeout);
+      resolve(value);
+    })
+    .catch(() => {
+      window.clearTimeout(timeout);
+      resolve(fallback);
+    });
+});
+
+const loadBlogCommentsWithTimeout = (siteId: string): Promise<{ comments: AdminComment[] }> => (
+  withBlogSupportTimeout(
+    listAllComments(siteId, { targetType: 'post', status: 'all', limit: 100 })
+      .then((result) => ({ comments: result.comments })),
+    { comments: [] },
+  )
+);
+
 const loadBlogRevisionSummaries = async (siteId: string, targetPosts: BlogPost[]): Promise<Record<string, ContentRevisionSummary>> => {
-  const results = await Promise.allSettled(
+  const results = await Promise.all(
     targetPosts.map(async (post) => {
-      const summary = await getBlogPostRevisionSummary(post.siteId || siteId, post.id);
+      const summary = await withBlogSupportTimeout<ContentRevisionSummary | null>(
+        getBlogPostRevisionSummary(post.siteId || siteId, post.id),
+        null,
+      );
+      if (!summary) {
+        return null;
+      }
+
       return [post.id, summary] as const;
     }),
   );
 
   return Object.fromEntries(
     results
-      .filter((result): result is PromiseFulfilledResult<readonly [string, ContentRevisionSummary]> => result.status === 'fulfilled')
-      .map((result) => result.value),
+      .filter((result): result is readonly [string, ContentRevisionSummary] => result !== null),
   );
 };
 
@@ -2928,10 +3352,10 @@ const getPublicBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
 
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()))
     .replace(/\/api\/admin$/, '')
     .replace(/\/api$/, '')
     .replace(/\/$/, '');

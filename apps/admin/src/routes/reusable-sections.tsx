@@ -172,6 +172,10 @@ const stringOrEmpty = (value: unknown): string => (
   typeof value === 'string' ? value : ''
 );
 
+const actionState = (disabledReason: string) => (disabledReason ? 'blocked' : 'ready');
+
+const safeActionId = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '-');
+
 const metadataDraftFromLibrary = (metadata: ReusableSectionMetadata | null): SectionMetadataDraft => {
   const library = metadata?.library || {};
   return {
@@ -515,14 +519,19 @@ function ReusableSectionsRoute() {
     })),
     [frontendDesign, frontendSectionTemplates],
   );
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewSections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
-  const canEditSections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
-  const canDeleteSections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
+  const canUseReusableSectionRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseReusableSectionRoleDefaults;
+  const isReusableSectionPermissionAllowed = (key: ReusableSectionPermissionKey) => (
+    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS)
+    || (canUseReusableSectionRoleDefaults && Boolean(currentAdmin && REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canViewSections = isReusableSectionPermissionAllowed('pages.view');
+  const canEditSections = isReusableSectionPermissionAllowed('pages.edit');
+  const canDeleteSections = isReusableSectionPermissionAllowed('pages.delete');
   const viewPermissionTitle = canViewSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
   const editPermissionTitle = canEditSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
   const deletePermissionTitle = canDeleteSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
-  const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId) || isPermissionMatrixPending;
+  const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId);
   const isWorkflowBusy = isBusy || isWorkflowLoading;
   const sectionNameInlineError = sectionFormSubmitted && !formState.name.trim()
     ? 'Section name is required before saving.'
@@ -1632,37 +1641,46 @@ function ReusableSectionsRoute() {
           ))}
         </div>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="reusable-section-portability-readiness">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Portable section readiness</h3>
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="reusable-section-portability-readiness-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-foreground">Portable section readiness</span>
                 <StatusBadge
                   status={reusableSectionPortabilityReadiness.status}
                   type={reusableSectionPortabilityReadiness.status === 'attention' ? 'warning' : undefined}
                   className="capitalize"
                 />
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {reusableSectionPortabilityReadiness.score.ready}/{reusableSectionPortabilityReadiness.score.total} checks ready for reusable-section export, synced-instance propagation, and custom frontend discovery.
+              </span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {reusableSectionPortabilityReadiness.score.ready}/{reusableSectionPortabilityReadiness.score.total} checks ready for export, synced-instance propagation, and custom frontend discovery.
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show readiness</span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide readiness</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="reusable-section-portability-readiness">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
+                Detailed evidence for portable reusable-section exports, restore/version handoff, stale instance refreshes, metadata, and custom frontend discovery.
               </p>
+              <Button size="sm" onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />} data-testid="reusable-section-portability-action-plan">
+                Copy action plan
+              </Button>
             </div>
-            <Button size="sm" onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />} data-testid="reusable-section-portability-action-plan">
-              Copy action plan
-            </Button>
-          </div>
-          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-            {reusableSectionPortabilityReadiness.checks.slice(0, 4).map((check) => (
-              <div key={check.id} className="rounded-md border border-border px-3 py-2 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-foreground">{check.label}</span>
-                  <StatusBadge status={check.status} type={check.status === 'attention' ? 'warning' : undefined} />
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {reusableSectionPortabilityReadiness.checks.slice(0, 4).map((check) => (
+                <div key={check.id} className="rounded-md border border-border px-3 py-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">{check.label}</span>
+                    <StatusBadge status={check.status} type={check.status === 'attention' ? 'warning' : undefined} />
+                  </div>
+                  <p className="mt-1 leading-5 text-muted-foreground">{check.evidence}</p>
                 </div>
-                <p className="mt-1 leading-5 text-muted-foreground">{check.evidence}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        </details>
       </section>
 
       <Panel id="reusable-sections-site" className="mb-5 scroll-mt-24">
@@ -1721,7 +1739,33 @@ function ReusableSectionsRoute() {
         </PanelContent>
       </Panel>
 
-      <Panel className="mb-5" data-testid="reusable-sections-workflows">
+      <details
+        className="group mb-5 overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+        data-testid="reusable-sections-workflows-details"
+        data-default-collapsed="true"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex min-w-0 items-center gap-3">
+            <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <GitBranch className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block">Import, versions, and instances</span>
+              <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
+                Portable exports, version restore, metadata, and synced-instance refreshes.
+              </span>
+            </span>
+          </span>
+          <span className="flex flex-shrink-0 items-center gap-2">
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+              {activeSection ? activeSection.slug : 'No section selected'}
+            </span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show workflows</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide workflows</span>
+          </span>
+        </summary>
+        <div className="border-t border-border bg-background/40 p-4" data-testid="reusable-sections-workflow-panels">
+      <Panel data-testid="reusable-sections-workflows">
         <PanelHeader
           title="Import, versions, and instances"
           description="Use the backend section workflow APIs for portable section exports, version restore, structured metadata, and stale instance refreshes."
@@ -1907,6 +1951,8 @@ function ReusableSectionsRoute() {
           ) : null}
         </PanelContent>
       </Panel>
+        </div>
+      </details>
 
       <Panel className="mb-5" data-testid="reusable-sections-visual-editor">
         <PanelHeader
@@ -2077,21 +2123,46 @@ function ReusableSectionsRoute() {
               <div className="grid gap-3">
                 {filteredSections.map((section) => {
                   const frontendTemplateId = getSectionFrontendTemplateId(section);
+                  const sectionActionStatusId = `reusable-section-actions-status-${safeActionId(section.id)}`;
+                  const sectionActionBusyReason = isBusy
+                    ? 'Reusable section actions are temporarily unavailable while Backy updates the section library.'
+                    : '';
+                  const sectionOpenLabel = canEditSections ? 'Edit' : 'View';
+                  const sectionOpenDisabledReason = sectionActionBusyReason || (!canViewSections
+                    ? viewPermissionTitle || 'Your account cannot view reusable sections.'
+                    : '');
+                  const sectionDeleteDisabledReason = sectionActionBusyReason || (!canDeleteSections
+                    ? deletePermissionTitle || 'Your account cannot delete reusable sections.'
+                    : '');
+                  const sectionActionStatus = [
+                    sectionOpenDisabledReason ? `${sectionOpenLabel} unavailable: ${sectionOpenDisabledReason}` : `${sectionOpenLabel} available.`,
+                    sectionDeleteDisabledReason ? `Delete unavailable: ${sectionDeleteDisabledReason}` : 'Delete available.',
+                  ].join(' ');
+
                   return (
                     <article
                       key={section.id}
                       data-testid={`reusable-section-card-${section.id}`}
                       className={cn(
-                      'rounded-lg border bg-background p-4 transition',
-                      selectedSectionId === section.id ? 'border-primary shadow-sm' : 'border-border',
-                    )}
+                        'rounded-lg border bg-background p-4 transition',
+                        selectedSectionId === section.id ? 'border-primary shadow-sm' : 'border-border',
+                      )}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <button
                             type="button"
-                            onClick={() => selectSection(section)}
-                            disabled={isBusy}
+                            onClick={() => {
+                              if (!sectionOpenDisabledReason) {
+                                selectSection(section);
+                              }
+                            }}
+                            disabled={Boolean(sectionOpenDisabledReason)}
+                            aria-disabled={Boolean(sectionOpenDisabledReason)}
+                            aria-describedby={sectionActionStatusId}
+                            data-action-state={actionState(sectionOpenDisabledReason)}
+                            data-disabled-reason={sectionOpenDisabledReason || undefined}
+                            title={sectionOpenDisabledReason || `${sectionOpenLabel} reusable section`}
                             className="text-left text-sm font-semibold text-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {section.name}
@@ -2107,19 +2178,53 @@ function ReusableSectionsRoute() {
                       </div>
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <div className="text-xs text-muted-foreground">Updated {formatDate(section.updatedAt || section.createdAt || '')}</div>
-                        <div className="flex gap-2">
-                            <Button size="sm" onClick={() => selectSection(section)} disabled={isBusy}>{canEditSections ? 'Edit' : 'View'}</Button>
-                            <Button
-                              size="sm"
-                              variant="danger"
-                              onClick={() => requestDeleteSection(section)}
-                              disabled={isBusy || !canDeleteSections}
-                              title={!canDeleteSections ? deletePermissionTitle : undefined}
-                              iconStart={<Trash2 className="size-3.5" />}
-                              data-testid={`reusable-section-delete-${section.id}`}
-                            >
-                              Delete
-                            </Button>
+                        <div
+                          className="flex gap-2"
+                          role="group"
+                          aria-label={`Actions for ${section.name}`}
+                          aria-describedby={sectionActionStatusId}
+                          data-testid={`reusable-section-actions-${section.id}`}
+                          data-action-status={sectionActionStatus}
+                        >
+                          <span id={sectionActionStatusId} className="sr-only" data-testid={`reusable-section-actions-status-${section.id}`} aria-live="polite">
+                            {sectionActionStatus}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              if (!sectionOpenDisabledReason) {
+                                selectSection(section);
+                              }
+                            }}
+                            disabled={Boolean(sectionOpenDisabledReason)}
+                            aria-disabled={Boolean(sectionOpenDisabledReason)}
+                            aria-describedby={sectionActionStatusId}
+                            data-testid={`reusable-section-select-${section.id}`}
+                            data-action-state={actionState(sectionOpenDisabledReason)}
+                            data-disabled-reason={sectionOpenDisabledReason || undefined}
+                            title={sectionOpenDisabledReason || `${sectionOpenLabel} reusable section`}
+                          >
+                            {sectionOpenLabel}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => {
+                              if (!sectionDeleteDisabledReason) {
+                                requestDeleteSection(section);
+                              }
+                            }}
+                            disabled={Boolean(sectionDeleteDisabledReason)}
+                            aria-disabled={Boolean(sectionDeleteDisabledReason)}
+                            aria-describedby={sectionActionStatusId}
+                            title={sectionDeleteDisabledReason || 'Delete reusable section'}
+                            iconStart={<Trash2 className="size-3.5" />}
+                            data-testid={`reusable-section-delete-${section.id}`}
+                            data-action-state={actionState(sectionDeleteDisabledReason)}
+                            data-disabled-reason={sectionDeleteDisabledReason || undefined}
+                          >
+                            Delete
+                          </Button>
                         </div>
                       </div>
                     </article>

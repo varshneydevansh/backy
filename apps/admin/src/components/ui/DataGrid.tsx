@@ -5,7 +5,8 @@
  * Works with useDataTable hook.
  */
 
-import { ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react';
+import { useId } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Column } from '@/hooks/useDataTable';
 
@@ -42,75 +43,74 @@ export function DataGrid<T extends { id: string }>({
     totalItems,
     pageSize = data.length || 1
 }: DataGridProps<T>) {
+    const descriptionId = useId();
+    const paginationStatusId = useId();
+    const safeTotalPages = Math.max(1, totalPages);
+    const safeCurrentPage = Math.min(Math.max(currentPage, 1), safeTotalPages);
+    const safePageSize = Math.max(1, pageSize);
     const itemCount = totalItems ?? data.length;
-    const firstVisibleItem = itemCount === 0 ? 0 : ((currentPage - 1) * pageSize) + 1;
-    const lastVisibleItem = Math.min(itemCount, firstVisibleItem + data.length - 1);
+    const firstVisibleItem = itemCount === 0 ? 0 : ((safeCurrentPage - 1) * safePageSize) + 1;
+    const lastVisibleItem = itemCount === 0 ? 0 : Math.min(itemCount, firstVisibleItem + data.length - 1);
+    const previousPage = Math.max(1, safeCurrentPage - 1);
+    const nextPage = Math.min(safeTotalPages, safeCurrentPage + 1);
+    const previousPageLabel = safeCurrentPage === 1
+        ? `Previous page unavailable. Page ${safeCurrentPage} is the first page.`
+        : `Go to previous page, page ${previousPage} of ${safeTotalPages}.`;
+    const nextPageLabel = safeCurrentPage === safeTotalPages
+        ? `Next page unavailable. Page ${safeCurrentPage} is the last page.`
+        : `Go to next page, page ${nextPage} of ${safeTotalPages}.`;
+    const gridSummary = itemCount === 0
+        ? 'No rows to show.'
+        : `Showing ${firstVisibleItem}-${lastVisibleItem} of ${itemCount} rows.`;
+    const getColumnKey = (column: Column<T>) => String(column.key);
+    const getSafeColumnKey = (columnKey: string) => columnKey.replace(/[^a-zA-Z0-9_-]/g, '-') || 'column';
+    const getColumnLabel = (column: Column<T>) => {
+        const label = column.label.trim();
+        if (label) return label;
+        return getColumnKey(column) === 'actions' ? 'Actions' : 'Column';
+    };
+    const getColumnHeaderId = (column: Column<T>) => `${descriptionId}-header-${getSafeColumnKey(getColumnKey(column))}`;
 
     if (loading) {
         return (
-            <div className="w-full h-64 flex items-center justify-center border border-border rounded-xl bg-card">
-                <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-            </div>
-        );
-    }
-
-    if (data.length === 0 && emptyState) {
-        return emptyState;
-    }
-
-    return (
-        <div className="space-y-4">
-            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border">
+            <div
+                className="overflow-hidden rounded-xl border border-border bg-card"
+                role="status"
+                aria-live="polite"
+                aria-label="Loading table data"
+                data-testid="admin-data-grid-loading"
+                data-column-count={columns.length}
+            >
+                <div className="overflow-x-hidden">
+                    <table className="w-full text-left text-sm">
+                        <thead className="border-b border-border bg-muted/50">
                             <tr>
-                                {columns.map((col) => {
-                                    const isSorted = sortConfig?.key === col.key;
-                                    const ariaSort = isSorted
-                                        ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending')
-                                        : undefined;
-
-                                    return (
+                                {columns.map((col) => (
                                     <th
-                                        key={String(col.key)}
-                                        aria-sort={ariaSort}
+                                        key={getColumnKey(col)}
+                                        scope="col"
+                                        aria-label={getColumnLabel(col)}
+                                        data-column-key={getColumnKey(col)}
+                                        data-column-label={getColumnLabel(col)}
                                         className="px-6 py-3"
                                     >
-                                        {col.sortable ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => onSort?.(col.key as keyof T)}
-                                                disabled={interactionDisabled}
-                                                className={cn(
-                                                    'inline-flex items-center gap-2 rounded-md text-left transition-colors',
-                                                    'hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-                                                    'disabled:cursor-not-allowed disabled:opacity-50',
-                                                    isSorted ? 'text-foreground' : 'text-muted-foreground'
-                                                )}
-                                            >
-                                                {col.label}
-                                                <ArrowUpDown className={cn(
-                                                    "w-3 h-3",
-                                                    isSorted && sortConfig.direction === 'asc' ? "text-primary" : "text-muted-foreground"
-                                                )} />
-                                            </button>
-                                        ) : (
-                                            <div className="flex items-center gap-2">
-                                                {col.label}
-                                            </div>
-                                        )}
+                                        <div className="h-3 w-24 animate-pulse rounded bg-muted-foreground/15" aria-hidden="true" />
                                     </th>
-                                    );
-                                })}
+                                ))}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {data.map((item) => (
-                                <tr key={item.id} className="hover:bg-muted/30 transition-colors">
-                                    {columns.map((col) => (
+                            {Array.from({ length: 5 }).map((_, rowIndex) => (
+                                <tr key={rowIndex}>
+                                    {columns.map((col, colIndex) => (
                                         <td key={String(col.key)} className="px-6 py-4">
-                                            {col.render ? col.render(item) : String(item[col.key as keyof T])}
+                                            <div
+                                                className={cn(
+                                                    'h-4 animate-pulse rounded bg-muted',
+                                                    colIndex === 0 ? 'w-44 max-w-full' : colIndex % 2 === 0 ? 'w-28 max-w-full' : 'w-20 max-w-full',
+                                                )}
+                                                style={{ animationDelay: `${(rowIndex + colIndex) * 45}ms` }}
+                                            />
                                         </td>
                                     ))}
                                 </tr>
@@ -119,37 +119,226 @@ export function DataGrid<T extends { id: string }>({
                     </table>
                 </div>
             </div>
+        );
+    }
+
+    if (data.length === 0) {
+        return (
+            <div
+                data-testid="admin-data-grid-empty"
+                data-total-items={itemCount}
+                role="status"
+                aria-live="polite"
+            >
+                {emptyState ?? (
+                    <div className="rounded-xl border border-dashed border-border bg-card px-6 py-12 text-center">
+                        <p className="text-sm font-semibold text-foreground">No rows yet</p>
+                        <p className="mt-1 text-sm text-muted-foreground">Create or import records to populate this table.</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className="min-w-0 max-w-full space-y-3"
+            aria-describedby={descriptionId}
+            data-testid="admin-data-grid"
+            data-row-count={data.length}
+            data-total-items={itemCount}
+            data-current-page={safeCurrentPage}
+            data-total-pages={safeTotalPages}
+            data-interaction-disabled={interactionDisabled ? 'true' : 'false'}
+        >
+            <span id={descriptionId} className="sr-only" data-testid="admin-data-grid-summary">
+                {gridSummary}
+            </span>
+            <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <div className="w-full min-w-0 overflow-x-auto" data-testid="admin-data-grid-scroll">
+                    <table className="w-full table-fixed text-left text-sm">
+                        <caption className="sr-only">{gridSummary}</caption>
+                        <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border" data-testid="admin-data-grid-head">
+                            <tr>
+                                {columns.map((col) => {
+                                    const columnKey = getColumnKey(col);
+                                    const columnLabel = getColumnLabel(col);
+                                    const columnHeaderId = getColumnHeaderId(col);
+                                    const isSorted = sortConfig?.key === col.key;
+                                    const activeDirection = isSorted ? sortConfig?.direction ?? 'asc' : null;
+                                    const canSortColumn = Boolean(onSort) && !interactionDisabled;
+                                    const ariaSort = activeDirection
+                                        ? (activeDirection === 'asc' ? 'ascending' : 'descending')
+                                        : undefined;
+                                    const sortDirection = activeDirection ?? 'none';
+                                    const nextSortDirection = activeDirection === 'asc' ? 'desc' : 'asc';
+                                    const sortDirectionWord = nextSortDirection === 'asc' ? 'ascending' : 'descending';
+                                    const sortDisabledReason = !onSort
+                                        ? 'sorting-handler-missing'
+                                        : interactionDisabled
+                                            ? 'table-interaction-disabled'
+                                            : '';
+                                    const sortStatusId = `${descriptionId}-sort-status-${getSafeColumnKey(columnKey)}`;
+                                    const sortStatusText = activeDirection
+                                        ? `Currently sorted ${activeDirection === 'asc' ? 'ascending' : 'descending'}. Activate to sort ${sortDirectionWord}.`
+                                        : 'Not currently sorted. Activate to sort ascending.';
+                                    const sortAriaLabel = canSortColumn
+                                        ? `Sort by ${columnLabel} ${sortDirectionWord}`
+                                        : `Sorting by ${columnLabel} is unavailable.`;
+                                    const sortButtonTitle = sortAriaLabel;
+                                    const SortIcon = activeDirection === 'asc'
+                                        ? ArrowUp
+                                        : activeDirection === 'desc'
+                                            ? ArrowDown
+                                            : ArrowUpDown;
+
+                                    return (
+                                    <th
+                                        key={columnKey}
+                                        id={columnHeaderId}
+                                        scope="col"
+                                        aria-sort={ariaSort}
+                                        aria-label={columnLabel}
+                                        className="px-6 py-3 align-top"
+                                        data-column-key={columnKey}
+                                        data-column-label={columnLabel}
+                                    >
+                                        {col.sortable ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (canSortColumn) {
+                                                        onSort?.(col.key as keyof T);
+                                                    }
+                                                }}
+                                                disabled={!canSortColumn}
+                                                aria-disabled={!canSortColumn}
+                                                aria-label={sortAriaLabel}
+                                                aria-describedby={sortStatusId}
+                                                title={sortButtonTitle}
+                                                data-testid={`admin-data-grid-sort-${columnKey}`}
+                                                data-sort-active={isSorted ? 'true' : 'false'}
+                                                data-sort-state={sortDirection}
+                                                data-sort-next-direction={nextSortDirection}
+                                                data-sort-icon-direction={activeDirection ?? 'unsorted'}
+                                                data-sort-disabled-reason={sortDisabledReason}
+                                                className={cn(
+                                                    'inline-flex min-h-8 items-center gap-2 rounded-md px-1.5 text-left transition-colors',
+                                                    'hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+                                                    'disabled:cursor-not-allowed disabled:opacity-50',
+                                                    isSorted ? 'text-foreground' : 'text-muted-foreground'
+                                                )}
+                                            >
+                                                <span>{columnLabel}</span>
+                                                <SortIcon
+                                                    className={cn(
+                                                        "w-3 h-3",
+                                                        isSorted ? "text-primary" : "text-muted-foreground"
+                                                    )}
+                                                    aria-hidden="true"
+                                                />
+                                                <span
+                                                    id={sortStatusId}
+                                                    className="sr-only"
+                                                    data-testid={`admin-data-grid-sort-status-${columnKey}`}
+                                                >
+                                                    {sortStatusText}
+                                                </span>
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                {col.label.trim() ? col.label : <span className="sr-only">{columnLabel}</span>}
+                                            </div>
+                                        )}
+                                    </th>
+                                    );
+                                })}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border" data-testid="admin-data-grid-body">
+                            {data.map((item) => (
+                                <tr
+                                    key={item.id}
+                                    className="hover:bg-muted/30 transition-colors"
+                                    data-testid="admin-data-grid-row"
+                                    data-row-id={item.id}
+                                >
+                                    {columns.map((col) => {
+                                        const columnKey = getColumnKey(col);
+                                        const columnLabel = getColumnLabel(col);
+                                        return (
+                                            <td
+                                                key={columnKey}
+                                                headers={getColumnHeaderId(col)}
+                                                className="max-w-0 break-words px-6 py-4 align-top"
+                                                data-column-key={columnKey}
+                                                data-column-label={columnLabel}
+                                            >
+                                                {col.render ? col.render(item) : String(item[col.key as keyof T])}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
             {/* Pagination Footer */}
-            {totalPages > 1 && onPageChange && (
-                <div className="flex items-center justify-between px-2">
-                    <p className="text-sm text-muted-foreground">
+            {safeTotalPages > 1 && onPageChange && (
+                <nav
+                    className="flex items-center justify-between gap-3 px-2"
+                    aria-label="Table pagination"
+                    aria-describedby={paginationStatusId}
+                    data-testid="admin-data-grid-pagination"
+                >
+                    <p
+                        id={paginationStatusId}
+                        className="min-w-0 text-sm text-muted-foreground"
+                        aria-live="polite"
+                        data-testid="admin-data-grid-pagination-summary"
+                    >
                         Showing {firstVisibleItem}-{lastVisibleItem} of {itemCount} items
                     </p>
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
                         <button
                             type="button"
-                            onClick={() => onPageChange(currentPage - 1)}
-                            disabled={currentPage === 1 || interactionDisabled}
-                            aria-label="Previous page"
+                            onClick={() => onPageChange(previousPage)}
+                            disabled={safeCurrentPage === 1 || interactionDisabled}
+                            aria-disabled={safeCurrentPage === 1 || interactionDisabled}
+                            aria-label={previousPageLabel}
+                            data-testid="admin-data-grid-previous-page"
+                            data-current-page={safeCurrentPage}
+                            data-target-page={previousPage}
                             className="p-2 rounded-lg border border-border hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </button>
-                        <span className="text-sm font-medium px-2">
-                            Page {currentPage} of {totalPages}
+                        <span
+                            className="text-sm font-medium px-2 tabular-nums"
+                            aria-current="page"
+                            data-testid="admin-data-grid-page-indicator"
+                            data-current-page={safeCurrentPage}
+                            data-total-pages={safeTotalPages}
+                        >
+                            Page {safeCurrentPage} of {safeTotalPages}
                         </span>
                         <button
                             type="button"
-                            onClick={() => onPageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages || interactionDisabled}
-                            aria-label="Next page"
+                            onClick={() => onPageChange(nextPage)}
+                            disabled={safeCurrentPage === safeTotalPages || interactionDisabled}
+                            aria-disabled={safeCurrentPage === safeTotalPages || interactionDisabled}
+                            aria-label={nextPageLabel}
+                            data-testid="admin-data-grid-next-page"
+                            data-current-page={safeCurrentPage}
+                            data-target-page={nextPage}
                             className="p-2 rounded-lg border border-border hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <ChevronRight className="w-4 h-4" />
                         </button>
                     </div>
-                </div>
+                </nav>
             )}
         </div>
     );

@@ -137,7 +137,65 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('data-testid="orders-error-state"') && source.includes('Orders workspace needs attention'), 'Orders route must expose a labelled backend error state');
   assert(source.includes('aria-label="Retry loading orders"') && source.includes('Clear filters'), 'Orders backend error state must expose retry and filter recovery actions');
   assert(source.includes('data-testid="orders-permission-state"') && source.includes('Order permissions could not be verified'), 'Orders route must expose a labelled permission error state');
+  assert(
+    source.includes('const canUseOrderRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseOrderRoleDefaults;') &&
+      source.includes('const isOrderPermissionAllowed = (key: OrderPermissionKey) => (') &&
+      source.includes("const canViewCommerce = isOrderPermissionAllowed('commerce.view');") &&
+      source.includes("const canEditCommerce = isOrderPermissionAllowed('commerce.edit');") &&
+      source.includes("const canConfigureCommerce = isOrderPermissionAllowed('commerce.configure');") &&
+      source.includes("const canDeleteCommerce = isOrderPermissionAllowed('commerce.delete');") &&
+      source.includes("const canViewCollections = isOrderPermissionAllowed('collections.view');") &&
+      source.includes("const canEditCollections = isOrderPermissionAllowed('collections.edit');") &&
+      source.includes("const canExportCollections = isOrderPermissionAllowed('collections.export');") &&
+      source.includes("const canDeleteCollections = isOrderPermissionAllowed('collections.delete');") &&
+      source.includes("const canEditPages = isOrderPermissionAllowed('pages.edit');") &&
+      source.includes('const isOrdersAccessBusy = isOrdersBusy;') &&
+      source.includes('data-testid="orders-permission-sync-state"') &&
+      !source.includes('const canViewCommerce = !isPermissionMatrixPending') &&
+      !source.includes('const isOrdersAccessBusy = isOrdersBusy || isPermissionMatrixPending;') &&
+      !source.includes('disabled={isOrdersMutationBusy || isPermissionMatrixPending || !canConfigureOrders}') &&
+      !source.includes('disabled={isProviderReadinessLoading || isPermissionMatrixPending || !canViewCommerce}') &&
+      !source.includes('disabled={isOrderAnalyticsLoading || isPermissionMatrixPending || !canViewCommerce}') &&
+      !source.includes('disabled={isPermissionMatrixPending || !canViewCommerce}'),
+    'Orders route must keep role-default commerce workflows usable while permission details hydrate',
+  );
   assert(source.includes('to="/users"') && source.includes('Review users') && source.includes('aria-label="Retry loading order permissions"'), 'Orders permission error state must expose user-management and retry actions');
+  assert(
+    source.includes('data-testid="orders-command-secondary-actions"') &&
+      source.includes('data-testid="orders-readiness-details"') &&
+      source.includes('data-testid="orders-control-map"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Order readiness, workflow, and navigation') &&
+      source.includes('data-testid="orders-command-copy-manifest"') &&
+      source.includes('data-testid="orders-command-download-json"') &&
+      source.includes('data-testid="orders-command-export-csv"') &&
+      source.includes('data-testid="orders-command-csv-template"') &&
+      source.includes('data-testid="orders-command-import-csv"') &&
+      source.includes('data-testid="orders-command-products"') &&
+      source.includes('data-testid="orders-command-storefront-page"') &&
+      source.includes('aria-label="More order actions"') &&
+      source.indexOf('New order') < source.indexOf('data-testid="orders-command-secondary-actions"'),
+    'Orders command center must keep New order primary while grouping secondary actions and dense readiness/navigation details',
+  );
+  assert(
+    source.includes('data-testid="orders-api-provider-details"') &&
+      source.includes('Order APIs, provider readiness, and certification') &&
+      source.includes('Checkout intake, admin contracts, provider readiness, reconciliation, cron, and live certification handoff.') &&
+      source.includes('data-testid="orders-api-secondary-actions"') &&
+      source.includes('aria-label="More order API actions"') &&
+      source.includes('More API actions') &&
+      source.indexOf('Copy manifest') < source.indexOf('data-testid="orders-api-secondary-actions"') &&
+      source.indexOf('Reconcile provider') < source.indexOf('data-testid="orders-api-secondary-actions"'),
+    'Orders API/provider panel must stay collapsed by default while preserving core API/reconciliation controls and lower-frequency API actions',
+  );
+  assert(
+    source.includes('data-testid="orders-analytics-details"') &&
+      source.includes('Order analytics and delivery events') &&
+      source.includes('Backend totals, provider execution analytics, and checkout notification delivery diagnostics.') &&
+      source.includes('data-testid="orders-analytics-panel"'),
+    'Orders analytics/provider-event panel must stay collapsed by default while preserving backend metrics and delivery diagnostics',
+  );
   assert(source.includes('title="No order source data yet"'), 'Orders source analytics empty state must keep the shared title visible');
   assert(source.includes('Checkout, admin-created, and provider-imported order sources will appear here after analytics records revenue by source.'), 'Orders source analytics empty state must explain when data appears');
   assert(source.includes("emptyTitle: 'No payment provider data yet'"), 'Orders payment-provider analytics empty state must keep the shared title visible');
@@ -158,8 +216,33 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   assert(source.includes('const selectedOrders = selectedLoadedOrders;'), 'Orders bulk workflow must apply actions to all selected loaded orders, not only the visible filtered subset');
   assert(source.includes('selectedVisibleOrders.length !== selectedLoadedOrders.length') && source.includes('selectedLoadedOrders.length === 0'), 'Orders bulk toolbar must summarize total selected orders and enable actions for selected loaded orders');
   assert(source.includes('data-testid="orders-bulk-selection-summary"') && source.includes('data-testid="orders-bulk-clear-selection"'), 'Orders bulk toolbar must expose selection summary and clear-selection controls');
+  assert(
+    source.includes("const ordersBulkActionStatusId = 'orders-bulk-action-status';") &&
+      source.includes('const ordersBulkActionStatus = [') &&
+      source.includes('data-testid="orders-bulk-action-status"') &&
+      source.includes('aria-label="Selected order bulk actions"') &&
+      source.includes('data-testid="orders-bulk-toolbar"') &&
+      source.includes('data-action-status={ordersBulkActionStatus}') &&
+      source.includes('data-testid="orders-bulk-mark-paid"') &&
+      source.includes('data-testid="orders-bulk-processing"') &&
+      source.includes('data-testid="orders-bulk-fulfill"') &&
+      source.includes('data-testid="orders-bulk-cancel"') &&
+      source.includes("data-action-state={ordersBulkWorkflowDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes('data-disabled-reason={ordersBulkWorkflowDisabledReason || undefined}'),
+    'Orders bulk workflow controls must expose shared action status and explicit ready/blocked metadata',
+  );
   assert(source.includes('providerAnalytics: orderAnalytics?.providerOperations || null'), 'Orders handoff manifest must expose provider analytics for custom admin frontends');
   assert(source.includes('apiContracts: ORDER_API_CONTRACTS.map'), 'Orders handoff manifest must expose API response contracts for custom admin frontends');
+  assert(
+    source.includes('const syncOrdersCollectionForOperations = async (collection: Collection): Promise<Collection> =>') &&
+      source.includes('getMissingOrderFieldKeys(collection).length > 0') &&
+      source.includes('const operationCollection = await syncOrdersCollectionForOperations(ordersCollection);') &&
+      source.includes('const normalizeOrderFieldMetadata = (field: CollectionField): CollectionField =>') &&
+      source.includes("!['select', 'tags'].includes(normalized.type)") &&
+      source.includes("ordersApiReady ? 'Reconcile provider' : 'Sync & reconcile'") &&
+      !source.includes('disabled={isOrdersMutationBusy || isPermissionMatrixPending || !ordersApiReady || !canConfigureOrders}'),
+    'Orders reconciliation must auto-sync schema/privacy drift instead of leaving the provider button disabled',
+  );
   assert(
     source.includes('const [orderFormSubmitted, setOrderFormSubmitted] = useState(false);') &&
       source.includes('const isLikelyOrderEmail = (value: string): boolean =>') &&
@@ -167,7 +250,7 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('const orderEmailInlineError = orderFormSubmitted') &&
       source.includes('const orderRequiredFieldsInvalid = Boolean(') &&
       source.includes("setError('Fix required order fields before saving.')") &&
-      source.includes('<form onSubmit={saveOrder} noValidate>') &&
+      source.includes('<form onSubmit={saveOrder} noValidate') &&
       source.includes('data-testid="orders-order-number-input"') &&
       source.includes('aria-describedby={orderNumberInlineError ?') &&
       source.includes('data-testid="orders-order-number-error"') &&
@@ -196,11 +279,50 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
 	      !source.includes('disabled={isOrdersAccessBusy || !canEditOrders || !itemDraft.title.trim() || orderLineItems.length >= 100}'),
 	    'Orders editor must expose inline order identity/contact/total/item and manual line-item validation instead of silently disabling save/add',
 	  );
+  assert(
+    source.includes('const ORDER_EDITOR_SECTIONS = [') &&
+      source.includes('xl:max-h-[calc(100vh-2rem)]') &&
+      source.includes('data-testid="orders-editor-panel"') &&
+      source.includes('data-testid="orders-editor-sticky-actions"') &&
+      source.includes('data-testid="orders-editor-sticky-save"') &&
+      source.includes('data-testid="orders-editor-section-nav"') &&
+      source.includes('aria-label="Order editor sections"') &&
+      source.includes('id="orders-editor-identity"') &&
+      source.includes('id="orders-editor-customer"') &&
+      source.includes('id="orders-editor-status-handoff"') &&
+      source.includes('id="orders-editor-workflow"') &&
+      source.includes('id="orders-editor-labels"') &&
+      source.includes('id="orders-editor-risk"') &&
+      source.includes('id="orders-editor-items"') &&
+      source.includes('id="orders-editor-refunds"'),
+    'Orders editor must stay constrained with sticky save actions and section shortcuts so the side pane remains operable',
+  );
   assert(source.includes('data-testid="orders-action-plan"'), 'Orders page must render the provider operation action-plan summary');
   assert(source.includes("schemaVersion: 'backy.order-operation-action-plan-summary.v1'"), 'Orders handoff manifest must expose the order operation action-plan summary schema');
   assert(source.includes("schemaVersion: 'backy.order-operation-action-plan.v1'"), 'Orders handoff manifest must expose per-order operation action plans');
   assert(source.includes('buildOrderOperationActionPlan') && source.includes('actionPlan={orderOperationPlans.get(order.id)}'), 'Orders list must build and pass per-order operation action plans');
-  assert(source.includes('actionPlan.recommendation') && source.includes('disabledByPlan'), 'Orders action buttons must surface action-plan recommendations and disabled reasons');
+  assert(
+    source.includes('actionPlan.recommendation') &&
+      source.includes('const orderActionStatusId = `orders-actions-status-${order.id}`;') &&
+      source.includes('data-testid="orders-order-card"') &&
+      source.includes('data-testid="orders-action-group"') &&
+      source.includes('data-testid="orders-action-status"') &&
+      source.includes('data-action-status={orderActionStatus}') &&
+      source.includes('aria-label={`Actions for order ${orderNumber}`}') &&
+      source.includes('aria-describedby={orderActionStatusId}') &&
+      source.includes('const planDisabledReason = (plan?: OrderOperationAction) => (') &&
+      source.includes('Order actions are temporarily unavailable while Backy updates order data') &&
+      source.includes('Mark the order paid before dispatching fulfillment') &&
+      source.includes('Mark the order paid before creating a provider refund') &&
+      source.includes('data-testid="orders-refresh-quote"') &&
+      source.includes('data-testid="orders-prepare-label"') &&
+      source.includes('data-testid="orders-dispatch-fulfillment"') &&
+      source.includes('data-testid="orders-provider-refund"') &&
+      source.includes('data-testid="orders-delete-order"') &&
+      source.includes("data-action-state={dispatchFulfillmentDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes('data-disabled-reason={providerRefundDisabledReason || undefined}'),
+    'Orders action buttons must expose action-plan recommendations, named action groups, status summaries, and explicit disabled reasons',
+  );
   assert(source.includes('data-testid="orders-status-handoff"'), 'Orders page must render the selected-order customer status handoff');
   assert(
     source.includes("schemaVersion: 'backy.order-status-handoff.v1'") &&
@@ -261,12 +383,20 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-testid="orders-provider-certification-env-template-body"') &&
       source.includes('data-testid="orders-provider-certification-command-builder-copy-button"') &&
       source.includes('data-testid="orders-provider-certification-site-target"') &&
+      source.includes('data-testid="orders-provider-certification-readiness-summary"') &&
+      source.includes('data-testid="orders-provider-certification-next-action"') &&
+      source.includes('data-testid="orders-provider-certification-details"') &&
       source.includes('data-testid="orders-provider-certification-evidence-packet"') &&
       source.includes('data-testid="orders-provider-certification-evidence-packet-copy-button"') &&
       source.includes('providerCertificationHandoffText') &&
       source.includes('providerCertificationEnvTemplate') &&
       source.includes('providerCertificationEvidencePacket') &&
       source.includes('providerCertificationEvidencePacketText') &&
+      source.includes('operatorNextAction') &&
+      source.includes('providerCertificationReadinessItems') &&
+      source.includes('providerCertificationRuntimeGapDetail') &&
+      source.includes('ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV') &&
+      source.includes('ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT') &&
       source.includes('operatorEvidencePacket: providerCertificationEvidencePacket') &&
       source.includes('orderEvidence') &&
       source.includes('endpointEvidence') &&
@@ -308,6 +438,17 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('Carrier labels and tracking') &&
       source.includes('Webhook and reconciliation') &&
       source.includes('Order certification evidence') &&
+      source.includes('Order certification readiness summary') &&
+      source.includes('Runtime credentials') &&
+      source.includes('Scenario coverage') &&
+      source.includes('Artifact output') &&
+      source.includes('Gate command') &&
+      source.includes('Required site selector') &&
+      source.includes('Next operator action') &&
+      source.includes('Configure order provider credentials') &&
+      source.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT') &&
+      source.includes('artifacts/backy-commerce-provider-certification.json') &&
+      source.includes('Secret boundary: no commerce provider credentials, customer payloads, raw order payloads, payment references, addresses, or webhook bodies are copied.') &&
       source.includes('Certification evidence packet') &&
       source.includes('Copy evidence packet') &&
       source.includes('Redacted operator attachment manifest') &&
@@ -1403,6 +1544,12 @@ const enableCommerceWebhookSettings = async (settings) => {
       taxEnabled: true,
       shippingEnabled: true,
       discountsEnabled: false,
+      taxProvider: 'manual',
+      taxProviderUrl: '',
+      shippingProvider: 'manual',
+      shippingProviderUrl: '',
+      discountProvider: 'manual',
+      discountProviderUrl: '',
       taxRatePercent: 10,
       digitalTaxRatePercent: 4,
       shippingBaseAmount: 8,
@@ -1538,7 +1685,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_ORDERS_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -2204,20 +2352,52 @@ const setAriaControl = async (client, ariaLabel, value) => {
 const assertOrdersLayout = async (client) => {
   let layout = null;
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    layout = await evaluate(client, `(() => ({
+    layout = await evaluate(client, `(() => {
+      const pageText = document.body?.textContent || '';
+      const apiRoot = document.querySelector('[data-testid="orders-api-provider-details"]');
+      const apiText = apiRoot?.textContent || '';
+      const analyticsDetails = document.querySelector('[data-testid="orders-analytics-details"]');
+      const analyticsRoot = document.querySelector('[data-testid="orders-analytics-panel"]');
+      const analyticsText = analyticsDetails?.textContent || analyticsRoot?.textContent || '';
+      const editorRoot = document.querySelector('[data-testid="orders-editor-panel"]');
+      const editorText = editorRoot?.textContent || '';
+      const orderCard = document.querySelector('[data-testid="orders-order-card"]');
+      const orderActionGroup = orderCard?.querySelector('[data-testid="orders-action-group"]');
+      const orderActionStatus = orderCard?.querySelector('[data-testid="orders-action-status"]');
+      const orderActionStatusText = (orderActionStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const orderActionStatusId = orderActionStatus?.id || '';
+      const orderActionGroupStatus = orderActionGroup?.getAttribute('data-action-status') || '';
+      const orderActionGroupLabel = orderActionGroup?.getAttribute('aria-label') || '';
+      const orderActionControls = Array.from(orderActionGroup?.querySelectorAll('[data-action-state]') || []);
+      const orderActionStates = orderActionControls.map((action) => action.getAttribute('data-action-state') || '');
+      const orderActionDescriptions = orderActionControls.map((action) => action.getAttribute('aria-describedby') || '');
+      const orderActionDisabledReasons = orderActionControls.map((action) => action.getAttribute('data-disabled-reason') || '');
+      return ({
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
       command: Boolean(document.querySelector('[data-testid="orders-command-center"]')),
-      api: Boolean(document.querySelector('#orders-api')),
+      readinessDetailsCollapsed: document.querySelector('[data-testid="orders-readiness-details"]') instanceof HTMLDetailsElement &&
+        document.querySelector('[data-testid="orders-readiness-details"]')?.open === false,
+      controlMapCollapsed: document.querySelector('[data-testid="orders-control-map"]') instanceof HTMLDetailsElement &&
+        document.querySelector('[data-testid="orders-control-map"]')?.open === false,
+      api: apiRoot instanceof HTMLDetailsElement && apiRoot.id === 'orders-api',
+      apiProviderDetailsCollapsed: apiRoot instanceof HTMLDetailsElement &&
+        apiRoot.getAttribute('data-default-collapsed') === 'true' &&
+        apiRoot.open === false,
+      apiSecondaryActionsCollapsed: document.querySelector('[data-testid="orders-api-secondary-actions"]') instanceof HTMLDetailsElement &&
+        document.querySelector('[data-testid="orders-api-secondary-actions"]')?.open === false,
       metrics: Boolean(document.querySelector('#orders-metrics')),
-      analytics: Boolean(document.querySelector('[data-testid="orders-analytics-panel"]')),
+      analytics: Boolean(analyticsRoot),
+      analyticsDetailsCollapsed: analyticsDetails instanceof HTMLDetailsElement &&
+        analyticsDetails.getAttribute('data-default-collapsed') === 'true' &&
+        analyticsDetails.open === false,
       providerAnalyticsPanel: Boolean(document.querySelector('[data-testid="orders-provider-analytics"]')),
       providerAnalyticsLabels: {
-        heading: document.body?.innerText?.includes('Provider execution analytics') || false,
-        payment: document.body?.innerText?.includes('Payment providers') || false,
-        refund: document.body?.innerText?.includes('Refund providers') || false,
-        fulfillment: document.body?.innerText?.includes('Fulfillment providers') || false,
-        shipping: document.body?.innerText?.includes('Shipping labels') || false,
+        heading: analyticsText.includes('Provider execution analytics') || false,
+        payment: analyticsText.includes('Payment providers') || false,
+        refund: analyticsText.includes('Refund providers') || false,
+        fulfillment: analyticsText.includes('Fulfillment providers') || false,
+        shipping: analyticsText.includes('Shipping labels') || false,
       },
       providerAnalytics: Boolean(document.querySelector('[data-testid="orders-provider-analytics"]')),
       analyticsError: Array.from(document.querySelectorAll('[data-testid="orders-analytics-panel"] .text-amber-900'))
@@ -2237,38 +2417,61 @@ const assertOrdersLayout = async (client) => {
         return true;
       })(),
       apiContracts: Boolean(document.querySelector('[data-testid="orders-api-contracts"]')) &&
-        document.body?.innerText?.includes('Order API response contracts') &&
-        document.body?.innerText?.includes('backy.order-quote.v1') &&
-        document.body?.innerText?.includes('backy.shipping-label.v1') &&
-        document.body?.innerText?.includes('backy.provider-refund.v1') &&
-        document.body?.innerText?.includes('backy.commerce-webhook.v1') &&
-        document.body?.innerText?.includes('backy.commerce-reconciliation-readiness.v1'),
+        apiText.includes('Order API response contracts') &&
+        apiText.includes('backy.order-quote.v1') &&
+        apiText.includes('backy.shipping-label.v1') &&
+        apiText.includes('backy.provider-refund.v1') &&
+        apiText.includes('backy.commerce-webhook.v1') &&
+        apiText.includes('backy.commerce-reconciliation-readiness.v1'),
       notificationDelivery: Boolean(document.querySelector('[data-testid="orders-notification-delivery"]')),
       queue: Boolean(document.querySelector('#orders-queue')),
       editor: Boolean(document.querySelector('#orders-editor')),
+      editorActionBar: (() => {
+        const panel = document.querySelector('[data-testid="orders-editor-panel"]');
+        const panelClass = panel?.getAttribute('class') || '';
+        const nav = document.querySelector('[data-testid="orders-editor-section-nav"]');
+        const links = Array.from(nav?.querySelectorAll('a') || []).map((link) => link.getAttribute('href'));
+        return Boolean(panel) &&
+          panelClass.includes('xl:max-h-[calc(100vh-2rem)]') &&
+          panelClass.includes('xl:overflow-y-auto') &&
+          Boolean(document.querySelector('[data-testid="orders-editor-sticky-actions"]')) &&
+          Boolean(document.querySelector('[data-testid="orders-editor-sticky-save"]')) &&
+          Boolean(document.querySelector('[data-testid="orders-editor-sticky-clear"]')) &&
+          Boolean(nav) &&
+          [
+            '#orders-editor-identity',
+            '#orders-editor-customer',
+            '#orders-editor-status-handoff',
+            '#orders-editor-workflow',
+            '#orders-editor-labels',
+            '#orders-editor-risk',
+            '#orders-editor-items',
+            '#orders-editor-refunds',
+          ].every((href) => links.includes(href));
+      })(),
       shippingLabelControls: Boolean(document.querySelector('[data-testid="orders-shipping-label-controls"]')),
       providerRefundControls: Boolean(document.querySelector('[data-testid="orders-provider-refund-controls"]')),
       providerReadiness: Boolean(document.querySelector('[data-testid="orders-provider-readiness"]')) &&
-        document.body?.innerText?.includes('Provider execution readiness') &&
-        document.body?.innerText?.includes('Stripe checkout/refund') &&
-        document.body?.innerText?.includes('Payment refund providers') &&
-        document.body?.innerText?.includes('Tax quote') &&
-        document.body?.innerText?.includes('TaxJar') &&
-        document.body?.innerText?.includes('Avalara') &&
-        document.body?.innerText?.includes('Shipping quote') &&
-        document.body?.innerText?.includes('EasyPost rates') &&
-        document.body?.innerText?.includes('Shippo rates') &&
-        document.body?.innerText?.includes('Discount quote') &&
-        document.body?.innerText?.includes('Stripe promotion codes') &&
-        document.body?.innerText?.includes('Carrier labels/tracking') &&
-        document.body?.innerText?.includes('Fulfillment dispatch') &&
-        document.body?.innerText?.includes('Webhook settlement'),
+        apiText.includes('Provider execution readiness') &&
+        apiText.includes('Stripe checkout/refund') &&
+        apiText.includes('Payment refund providers') &&
+        apiText.includes('Tax quote') &&
+        apiText.includes('TaxJar') &&
+        apiText.includes('Avalara') &&
+        apiText.includes('Shipping quote') &&
+        apiText.includes('EasyPost rates') &&
+        apiText.includes('Shippo rates') &&
+        apiText.includes('Discount quote') &&
+        apiText.includes('Stripe promotion codes') &&
+        apiText.includes('Carrier labels/tracking') &&
+        apiText.includes('Fulfillment dispatch') &&
+        apiText.includes('Webhook settlement'),
       operationActionPlan: Boolean(document.querySelector('[data-testid="orders-action-plan"]')) &&
-        document.body?.innerText?.includes('Order action plan') &&
-        document.body?.innerText?.includes('backy.order-operation-action-plan-summary.v1') &&
-        document.body?.innerText?.includes('Attention') &&
-        document.body?.innerText?.includes('Executable') &&
-        document.body?.innerText?.includes('Blocked actions'),
+        apiText.includes('Order action plan') &&
+        apiText.includes('backy.order-operation-action-plan-summary.v1') &&
+        apiText.includes('Attention') &&
+        apiText.includes('Executable') &&
+        apiText.includes('Blocked actions'),
       providerCertificationExport: (() => {
         const root = document.querySelector('[data-testid="orders-provider-certification"]');
         const text = root?.textContent || document.body?.innerText || '';
@@ -2283,6 +2486,11 @@ const assertOrdersLayout = async (client) => {
           envTemplate: Boolean(document.querySelector('[data-testid="orders-provider-certification-env-template"]')),
           envTemplateBody: Boolean(document.querySelector('[data-testid="orders-provider-certification-env-template-body"]')),
           commandBuilderCopyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-command-builder-copy-button"]')),
+          readinessSummary: Boolean(document.querySelector('[data-testid="orders-provider-certification-readiness-summary"]')),
+          nextAction: Boolean(document.querySelector('[data-testid="orders-provider-certification-next-action"]')),
+          detailsCollapsed: document.querySelector('[data-testid="orders-provider-certification-details"]')?.tagName === 'DETAILS' &&
+            document.querySelector('[data-testid="orders-provider-certification-details"]')?.getAttribute('data-default-collapsed') === 'true' &&
+            document.querySelector('[data-testid="orders-provider-certification-details"]')?.hasAttribute('open') === false,
           evidencePacket: Boolean(document.querySelector('[data-testid="orders-provider-certification-evidence-packet"]')),
           evidencePacketCopyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-evidence-packet-copy-button"]')),
           paymentToggle: Boolean(document.querySelector('[data-testid="orders-provider-certification-payment-toggle"]')),
@@ -2290,6 +2498,14 @@ const assertOrdersLayout = async (client) => {
           command: Boolean(document.querySelector('[data-testid="orders-provider-certification-command"]')),
           runbook: Boolean(document.querySelector('[data-testid="orders-provider-certification-runbook"]')),
           liveHeading: text.includes('Live provider certification'),
+          readinessHeading: text.includes('Order certification readiness summary'),
+          runtimeCredentials: text.includes('Runtime credentials'),
+          artifactOutput: text.includes('Artifact output'),
+          artifactOutputEnv: text.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT'),
+          artifactOutputPath: text.includes('artifacts/backy-commerce-provider-certification.json'),
+          requiredSiteSelector: text.includes('Required site selector'),
+          nextOperatorAction: text.includes('Next operator action'),
+          nextOperatorCredentialAction: text.includes('Configure order provider credentials'),
           commandBuilderText: text.includes('Order certification command builder'),
           envTemplateText: text.includes('Env template') || text.includes('ENV TEMPLATE'),
           envTemplateSchema: text.includes('backy.order-provider-certification-env-template.v1'),
@@ -2322,17 +2538,38 @@ const assertOrdersLayout = async (client) => {
       statusHandoff: Boolean(document.querySelector('[data-testid="orders-status-handoff"]')) &&
         Boolean(document.querySelector('[data-testid="orders-status-handoff-copy-button"]')) &&
         Boolean(document.querySelector('[data-testid="orders-status-handoff-action-plan"]')) &&
-        document.body?.innerText?.includes('Order status handoff') &&
-        document.body?.innerText?.includes('backy.order-status-handoff.v1') &&
-        document.body?.innerText?.includes('Copy status JSON') &&
-        document.body?.innerText?.includes('Selected order') &&
-        document.body?.innerText?.includes('Payment status') &&
-        document.body?.innerText?.includes('Fulfillment and tracking'),
-      checkout: document.body?.innerText?.includes('/commerce/orders') || false,
-      privateContract: document.body?.innerText?.includes('Private order backend contract') || false,
-      analyticsEndpoint: document.body?.innerText?.includes('/commerce/orders/analytics') || false,
-      deliveryEndpoint: document.body?.innerText?.includes('/events?kind=commerce-order') || false,
-      hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
+        editorText.includes('Order status handoff') &&
+        editorText.includes('backy.order-status-handoff.v1') &&
+        editorText.includes('Copy status JSON') &&
+        editorText.includes('Selected order') &&
+        editorText.includes('Payment status') &&
+        editorText.includes('Fulfillment and tracking'),
+      orderActionStatus: Boolean(orderCard) &&
+        orderActionGroup?.getAttribute('role') === 'group' &&
+        orderActionGroupLabel.startsWith('Actions for order ') &&
+        orderActionGroup?.getAttribute('aria-describedby') === orderActionStatusId &&
+        orderActionStatusId.startsWith('orders-actions-status-') &&
+        orderActionGroupStatus === orderActionStatusText &&
+        orderActionStatusText.includes('Edit ') &&
+        orderActionStatusText.includes('Refresh Quote ') &&
+        orderActionStatusText.includes('Prepare Label ') &&
+        orderActionStatusText.includes('Dispatch Fulfillment ') &&
+        orderActionStatusText.includes('Provider Refund ') &&
+        orderActionStatusText.includes('Delete ') &&
+        orderActionControls.length >= 10 &&
+        orderActionDescriptions.every((description) => description === orderActionStatusId) &&
+        orderActionStates.every((state) => state === 'ready' || state === 'blocked') &&
+        orderActionStates.some((state) => state === 'ready') &&
+        orderActionDisabledReasons.every((reason, index) => orderActionStates[index] === 'blocked' ? Boolean(reason) : reason === ''),
+      orderActionGroupLabel,
+      orderActionStatusText,
+      orderActionStates,
+      orderActionDisabledReasons,
+      checkout: apiText.includes('/commerce/orders') || pageText.includes('/commerce/orders'),
+      privateContract: apiText.includes('Private order backend contract') || pageText.includes('Private order backend contract'),
+      analyticsEndpoint: apiText.includes('/commerce/orders/analytics') || pageText.includes('/commerce/orders/analytics'),
+      deliveryEndpoint: analyticsText.includes('/events?kind=commerce-order') || pageText.includes('/events?kind=commerce-order'),
+      hasImportControls: pageText.includes('Import CSV') && pageText.includes('CSV template'),
       hasBulkControls: Boolean(document.querySelector('[aria-label="Select all visible orders"]')) &&
         Array.from(document.querySelectorAll('#orders-queue button')).some((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim() === 'Processing'),
       adminApiOpensWithButton: (() => {
@@ -2341,9 +2578,10 @@ const assertOrdersLayout = async (client) => {
         return control instanceof HTMLButtonElement;
       })(),
       body: (document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 1000),
-    }))()`);
+    });
+    })()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.api && layout.metrics && layout.analytics && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.operationActionPlan && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.statusHandoff && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.readinessDetailsCollapsed && layout.controlMapCollapsed && layout.api && layout.apiProviderDetailsCollapsed && layout.apiSecondaryActionsCollapsed && layout.metrics && layout.analytics && layout.analyticsDetailsCollapsed && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.editorActionBar && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.operationActionPlan && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.statusHandoff && layout.orderActionStatus && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
@@ -2576,12 +2814,12 @@ const fillOrderEditor = async (client, suffix, customerRecord) => {
     price: 40,
     lineTotal: 80,
     sku: `ORDER-SMOKE-${suffix.toUpperCase()}`,
-    productType: 'digital',
+    productType: 'physical',
     digitalDelivery: true,
     downloadMediaId: `media_orders_download_${suffix}`,
     downloadUrl: `https://downloads.example.com/orders/${suffix}.zip`,
     taxable: true,
-    shippingRequired: false,
+    shippingRequired: true,
     discountCode: 'STRIPESMOKE',
   }]), { exact: true });
 
@@ -2781,6 +3019,166 @@ const selectOrderForBulk = async (client, orderNumber) => {
   assert(result.ok && result.checked, `Unable to select order for bulk action: ${JSON.stringify(result)}`);
   await sleep(200);
   return result;
+};
+
+const assertOrdersBulkActionStatus = async (client, orderNumber) => {
+  const clearExistingSelection = await evaluate(client, `(() => {
+    const clear = document.querySelector('[data-testid="orders-bulk-clear-selection"]');
+    if (clear instanceof HTMLButtonElement && !clear.disabled) {
+      clear.click();
+      return { cleared: true };
+    }
+    return { cleared: false };
+  })()`);
+  if (clearExistingSelection.cleared) {
+    await sleep(250);
+  }
+
+  let noSelection = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    noSelection = await evaluate(client, `(() => {
+      const status = document.querySelector('[data-testid="orders-bulk-action-status"]');
+      const statusText = (status?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const statusId = status?.id || '';
+      const toolbar = document.querySelector('[data-testid="orders-bulk-toolbar"]');
+      const selectVisible = document.querySelector('[aria-label="Select all visible orders"]');
+      const blockedControls = [
+        'orders-bulk-mark-paid',
+        'orders-bulk-processing',
+        'orders-bulk-fulfill',
+        'orders-bulk-cancel',
+      ].map((testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          testId,
+          state: control?.getAttribute('data-action-state') || '',
+          status: control?.getAttribute('data-action-status') || '',
+          reason: control?.getAttribute('data-disabled-reason') || '',
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        };
+      });
+      return {
+        statusId,
+        statusText,
+        toolbarLabel: toolbar?.getAttribute('aria-label') || '',
+        toolbarRole: toolbar?.getAttribute('role') || '',
+        toolbarDescribedBy: toolbar?.getAttribute('aria-describedby') || '',
+        toolbarStatus: toolbar?.getAttribute('data-action-status') || '',
+        selectVisibleState: selectVisible?.getAttribute('data-action-state') || '',
+        selectVisibleDescribedBy: selectVisible?.getAttribute('aria-describedby') || '',
+        selectVisibleReason: selectVisible?.getAttribute('data-disabled-reason') || '',
+        selectVisibleDisabled: selectVisible instanceof HTMLInputElement ? selectVisible.disabled : null,
+        blockedControls,
+      };
+    })()`);
+    if (
+      noSelection.statusId === 'orders-bulk-action-status' &&
+      noSelection.toolbarRole === 'group' &&
+      noSelection.toolbarLabel === 'Selected order bulk actions' &&
+      noSelection.toolbarDescribedBy === noSelection.statusId &&
+      noSelection.toolbarStatus === noSelection.statusText &&
+      noSelection.statusText.includes('Select visible available for ') &&
+      noSelection.statusText.includes('Mark paid selected unavailable: Select one or more loaded orders first.') &&
+      noSelection.selectVisibleState === 'ready' &&
+      noSelection.selectVisibleDescribedBy === noSelection.statusId &&
+      noSelection.selectVisibleDisabled === false &&
+      noSelection.blockedControls.every((control) => (
+        control.state === 'blocked' &&
+        control.status === noSelection.statusText &&
+        control.reason === 'Select one or more loaded orders first.' &&
+        control.describedBy === noSelection.statusId &&
+        control.disabled === true
+      ))
+    ) {
+      break;
+    }
+    await sleep(250);
+  }
+  assert(
+    noSelection?.statusText?.includes('Mark paid selected unavailable: Select one or more loaded orders first.') &&
+      noSelection.blockedControls?.every((control) => control.reason === 'Select one or more loaded orders first.'),
+    `Orders bulk no-selection status did not expose blocked action metadata: ${JSON.stringify(noSelection)}`,
+  );
+
+  await selectOrderForBulk(client, orderNumber);
+
+  let selectedState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    selectedState = await evaluate(client, `(() => {
+      const status = document.querySelector('[data-testid="orders-bulk-action-status"]');
+      const statusText = (status?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const statusId = status?.id || '';
+      const toolbar = document.querySelector('[data-testid="orders-bulk-toolbar"]');
+      const summary = document.querySelector('[data-testid="orders-bulk-selection-summary"]');
+      const readyControls = [
+        'orders-bulk-mark-paid',
+        'orders-bulk-processing',
+        'orders-bulk-fulfill',
+        'orders-bulk-cancel',
+        'orders-bulk-clear-selection',
+      ].map((testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          testId,
+          state: control?.getAttribute('data-action-state') || '',
+          status: control?.getAttribute('data-action-status') || '',
+          reason: control?.getAttribute('data-disabled-reason') || '',
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        };
+      });
+      return {
+        statusId,
+        statusText,
+        toolbarLabel: toolbar?.getAttribute('aria-label') || '',
+        toolbarRole: toolbar?.getAttribute('role') || '',
+        toolbarDescribedBy: toolbar?.getAttribute('aria-describedby') || '',
+        toolbarStatus: toolbar?.getAttribute('data-action-status') || '',
+        summaryText: (summary?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        readyControls,
+      };
+    })()`);
+    if (
+      selectedState.statusId === 'orders-bulk-action-status' &&
+      selectedState.toolbarRole === 'group' &&
+      selectedState.toolbarLabel === 'Selected order bulk actions' &&
+      selectedState.toolbarDescribedBy === selectedState.statusId &&
+      selectedState.toolbarStatus === selectedState.statusText &&
+      selectedState.summaryText.includes('1 selected') &&
+      selectedState.statusText.includes('Mark paid selected available for 1 selected order.') &&
+      selectedState.statusText.includes('Processing selected available for 1 selected order.') &&
+      selectedState.statusText.includes('Fulfill selected available for 1 selected order.') &&
+      selectedState.statusText.includes('Record cancel selected available for 1 selected order.') &&
+      selectedState.statusText.includes('Clear selection available for 1 selected order.') &&
+      selectedState.readyControls.every((control) => (
+        control.state === 'ready' &&
+        control.status === selectedState.statusText &&
+        control.reason === '' &&
+        control.describedBy === selectedState.statusId &&
+        control.disabled === false
+      ))
+    ) {
+      break;
+    }
+    await sleep(250);
+  }
+  assert(
+    selectedState?.summaryText?.includes('1 selected') &&
+      selectedState.readyControls?.every((control) => control.state === 'ready' && control.disabled === false),
+    `Orders bulk selected status did not expose ready action metadata: ${JSON.stringify(selectedState)}`,
+  );
+
+  const cleared = await evaluate(client, `(() => {
+    const clear = document.querySelector('[data-testid="orders-bulk-clear-selection"]');
+    if (!(clear instanceof HTMLButtonElement) || clear.disabled) {
+      return { ok: false, reason: 'clear-not-ready', disabled: clear instanceof HTMLButtonElement ? clear.disabled : null };
+    }
+    clear.click();
+    return { ok: true };
+  })()`);
+  assert(cleared.ok, `Unable to clear orders bulk selection: ${JSON.stringify(cleared)}`);
+  await sleep(250);
 };
 
 const waitForOrderEditorSelection = async (client, orderNumber) => {
@@ -3279,34 +3677,51 @@ const verifyShippoProviderExecution = async (collectionId, slug, shippoMockServe
 };
 
 const clickReconcileProvider = async (client) => {
-  const result = await evaluate(client, `(() => {
-    const button = document.querySelector('[data-testid="orders-reconcile-provider"]');
-    if (!(button instanceof HTMLButtonElement) || button.disabled) {
-      return { ok: false, disabled: button instanceof HTMLButtonElement ? button.disabled : null, text: button?.textContent || '' };
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="orders-reconcile-provider"]');
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, missing: true, disabled: null, text: '', body: document.body?.innerText?.slice(0, 500) || '' };
+      }
+      if (button.disabled) {
+        return { ok: false, missing: false, disabled: true, text: button.textContent || '', title: button.title || '' };
+      }
+      button.click();
+      return { ok: true, missing: false, disabled: false, text: button.textContent || '' };
+    })()`);
+    if (result.ok) {
+      await sleep(500);
+      return result;
     }
-    button.click();
-    return { ok: true, text: button.textContent || '' };
-  })()`);
-  assert(result.ok, `Unable to click provider reconciliation control: ${JSON.stringify(result)}`);
-  await sleep(500);
+    if (attempt === 79) {
+      assert(false, `Unable to click provider reconciliation control: ${JSON.stringify(result)}`);
+    }
+    await sleep(250);
+  }
+  return null;
 };
 
 const waitForReconciliationPanel = async (client) => {
+  let lastState = null;
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const panel = document.querySelector('[data-testid="orders-reconciliation-result"]');
+      const error = document.querySelector('[data-testid="orders-error-state"]');
       return {
         ready: Boolean(panel),
         text: panel?.textContent || '',
+        errorText: error?.textContent || '',
+        body: document.body?.innerText?.slice(0, 1200) || '',
       };
     })()`);
+    lastState = state;
     if (state.ready && /orders updated/.test(state.text)) {
       return state;
     }
     await sleep(250);
   }
 
-  throw new Error('Provider reconciliation result panel did not render');
+  throw new Error(`Provider reconciliation result panel did not render: ${JSON.stringify(lastState)}`);
 };
 
 const deleteOrderThroughUi = async (client, orderNumber) => {
@@ -3574,6 +3989,8 @@ const main = async () => {
     assert(initialProviderCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === 'checkout-settlement'), `Order analytics provider certification missing checkout scenario: ${JSON.stringify(initialProviderCertification.certificationEvidence).slice(0, 700)}`);
     assert(initialProviderCertification.certificationEvidence.scenarios?.some((scenario) => scenario.key === 'provider-refund'), `Order analytics provider certification missing refund scenario: ${JSON.stringify(initialProviderCertification.certificationEvidence).slice(0, 700)}`);
     assert(initialProviderCertification.operatorEvidencePacket?.schemaVersion === 'backy.order-provider-certification-evidence-packet.v1', `Order analytics provider certification missing operator evidence packet: ${JSON.stringify(initialProviderCertification).slice(0, 700)}`);
+    assert(initialProviderCertification.operatorEvidencePacket.operatorNextAction?.command?.includes('ci:commerce-provider-certification'), `Order analytics provider evidence packet missing operator next action command: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
+    assert(initialProviderCertification.operatorEvidencePacket.operatorNextAction?.artifactEnv === 'BACKY_COMMERCE_CERTIFICATION_OUTPUT', `Order analytics provider evidence packet missing artifact env in next action: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
     assert(initialProviderCertification.operatorEvidencePacket.operatorArtifacts?.some((artifact) => artifact.key === 'payment-refunds'), `Order analytics provider evidence packet missing payment/refund artifact: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
     assert(initialProviderCertification.operatorEvidencePacket.operatorArtifacts?.some((artifact) => artifact.key === 'webhook-reconciliation'), `Order analytics provider evidence packet missing webhook/reconciliation artifact: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
     assert(initialProviderCertification.operatorEvidencePacket.scenarioAttachments?.some((scenario) => scenario.key === 'provider-refund'), `Order analytics provider evidence packet missing refund scenario attachment: ${JSON.stringify(initialProviderCertification.operatorEvidencePacket).slice(0, 700)}`);
@@ -3844,6 +4261,7 @@ const main = async () => {
       assert(promotionRequests[0]?.search.active === 'true', `Stripe discount lookup did not restrict promotion codes to active values: ${JSON.stringify(promotionRequests[0])}`);
     }
 
+    await assertOrdersBulkActionStatus(client, orderNumber);
     await selectOrderForBulk(client, orderNumber);
     await clickByText(client, 'Mark Paid', { exact: true, rootSelector: '#orders-queue' });
     await waitForOrderValue(
@@ -4561,6 +4979,8 @@ const main = async () => {
     assert(reconciledAnalytics.providerOperations?.attention?.providerRefundRequiresActionCount >= 0, `Order analytics did not expose provider attention counters: ${JSON.stringify(reconciledAnalytics.providerOperations).slice(0, 500)}`);
     assert(reconciledAnalytics.providerOperations?.paymentProviders?.some((provider) => provider.statuses.paid >= 1), `Order analytics did not update payment provider status mix after reconciliation: ${JSON.stringify(reconciledAnalytics.providerOperations).slice(0, 500)}`);
 
+    await navigateToOrders(client);
+    const layout = await assertOrdersLayout(client);
     await clickReconcileProvider(client);
     await waitForReconciliationPanel(client);
     await waitForOrderValue(
@@ -4589,6 +5009,11 @@ const main = async () => {
       slug,
       ordersReady: readyState,
       managedCustomerStatus: 'vip',
+      orderActionStatus: layout.orderActionStatus,
+      orderActionGroupLabel: layout.orderActionGroupLabel,
+      orderActionStatusText: layout.orderActionStatusText,
+      orderActionStates: layout.orderActionStates,
+      orderActionDisabledReasons: layout.orderActionDisabledReasons,
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {

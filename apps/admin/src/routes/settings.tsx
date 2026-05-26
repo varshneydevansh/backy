@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   Copy,
   Download,
+  MoreHorizontal,
   CreditCard,
   ShoppingCart,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedTabs';
 import { useAuthStore } from '@/stores/authStore';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
+import { getLocalBackendOrigin as getLocalDevBackendOrigin } from '@/lib/localBackendOrigin';
 import type { AdminSession } from '@/lib/adminAuthApi';
 import { useStore, type DeliveryMode, type Site } from '@/stores/mockStore';
 import {
@@ -135,6 +137,12 @@ const TABS: Array<SegmentedTabItem<SettingsTab>> = [
   { id: 'security', name: 'Security', icon: Shield },
 ];
 
+const SETTINGS_WORKBAR_SECTIONS = [
+  { id: 'settings-command-center', label: 'Command center' },
+  { id: 'settings-tabs', label: 'Sections' },
+  { id: 'settings-tab-content', label: 'Active controls' },
+] as const;
+
 type ApiEndpoint = {
   method: string;
   path: string;
@@ -219,6 +227,28 @@ type BackyCompletionGate = {
   runtime: Record<string, unknown>;
 };
 
+type BackyCompletionEvidenceArtifact = {
+  key: string;
+  label: string;
+  workflow: string;
+  alternateWorkflows: string[];
+  artifactName: string;
+  path: string;
+  schemaVersion: string;
+  producerEnv: string;
+  requiredForReady: true;
+  includesSecretValues: false;
+};
+
+type BackyCompletionArtifactVerifier = {
+  command: string;
+  requiredEnv: string;
+  pathEnv: string;
+  schemaVersion: string;
+  validates: string[];
+  includesSecretValues: false;
+};
+
 type BackyCertifiedCompletionGate = {
   key: 'forms-postgres' | 'sdk-postgres';
   label: string;
@@ -248,6 +278,8 @@ type BackyCompletionSurfaceRunbook = {
   sourceOnlyGuard: string;
   proofSources: string[];
   expectedArtifacts: string[];
+  evidenceArtifacts: BackyCompletionEvidenceArtifact[];
+  artifactVerifier: BackyCompletionArtifactVerifier;
   runtime: Record<string, unknown>;
   secretBoundary: {
     includesSecretValues: false;
@@ -272,6 +304,72 @@ const BACKY_COMPLETION_SURFACES = [
   { key: 'settings', label: '/settings', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
   { key: 'settings-admin-apis', label: 'Settings admin APIs', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
 ] as const;
+
+const SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS: BackyCompletionEvidenceArtifact[] = [
+  {
+    key: 'settings-provider-certification-json',
+    label: 'Settings provider certification evidence',
+    workflow: '.github/workflows/settings-provider-certification.yml',
+    alternateWorkflows: ['.github/workflows/backy-release-certification.yml'],
+    artifactName: 'backy-settings-provider-certification-evidence',
+    path: 'artifacts/backy-settings-provider-certification.json',
+    schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+    producerEnv: 'BACKY_SETTINGS_CERTIFICATION_OUTPUT',
+    requiredForReady: true,
+    includesSecretValues: false,
+  },
+];
+
+const COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS: BackyCompletionEvidenceArtifact[] = [
+  {
+    key: 'commerce-provider-certification-json',
+    label: 'Commerce provider certification evidence',
+    workflow: '.github/workflows/commerce-provider-certification.yml',
+    alternateWorkflows: ['.github/workflows/settings-provider-certification.yml', '.github/workflows/backy-release-certification.yml'],
+    artifactName: 'backy-commerce-provider-certification-evidence',
+    path: 'artifacts/backy-commerce-provider-certification.json',
+    schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+    producerEnv: 'BACKY_COMMERCE_CERTIFICATION_OUTPUT',
+    requiredForReady: true,
+    includesSecretValues: false,
+  },
+];
+
+const SETTINGS_COMPLETION_ARTIFACT_VERIFIER: BackyCompletionArtifactVerifier = {
+  command: 'npm run doctor:release-certification',
+  requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+  pathEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT',
+  schemaVersion: 'backy.settings-provider-certification-artifact.v1',
+  validates: [
+    'file exists',
+    'valid JSON',
+    'ok: true',
+    'artifact schema version',
+    'no-secret boundary',
+    'apiHandoffs.settingsAdminApi present',
+    'apiHandoffs.siteScopedSettingsApi present',
+    'settingsCompletionStatusReady',
+  ],
+  includesSecretValues: false,
+};
+
+const COMMERCE_COMPLETION_ARTIFACT_VERIFIER: BackyCompletionArtifactVerifier = {
+  command: 'npm run doctor:release-certification',
+  requiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+  pathEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT',
+  schemaVersion: 'backy.commerce-provider-certification-artifact.v1',
+  validates: [
+    'file exists',
+    'valid JSON',
+    'ok: true',
+    'artifact schema version',
+    'no-secret boundary',
+    'apiHandoffs.publicApis present',
+    'productApiHandoffReady',
+    'orderApiHandoffReady',
+  ],
+  includesSecretValues: false,
+};
 
 const DELIVERY_OPTIONS: Array<{
   id: DeliveryMode;
@@ -1549,6 +1647,9 @@ const buildSettingsProviderCertificationRequiredAliases = (options: SettingsCert
   return uniqueTextValues(aliases);
 };
 
+const SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV = 'BACKY_SETTINGS_CERTIFICATION_OUTPUT';
+const SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-settings-provider-certification.json';
+
 const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildSettingsProviderCertificationCommand(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
   envTemplate: buildSettingsProviderCertificationEnvTemplate(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
@@ -1716,7 +1817,7 @@ function isLocalAdminDevHost(): boolean {
 }
 
 function getLocalBackendOrigin(): string {
-  return isLocalAdminDevHost() ? 'http://localhost:3001' : 'http://localhost:3000';
+  return isLocalAdminDevHost() ? getLocalDevBackendOrigin() : 'http://localhost:3000';
 }
 
 function getApiBase(kind: 'public' | 'admin'): string {
@@ -2062,7 +2163,10 @@ function SettingsPage() {
   const updateSettings = useStore((state) => state.updateSettings);
   const publicApiKey = useStore((state) => state.settings.apiKeys.publicApiKey);
   const adminApiKey = useStore((state) => state.settings.apiKeys.adminApiKey);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
+  const canUseSettingsRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(
+    currentUser && SETTINGS_PERMISSION_ROLE_DEFAULTS['settings.view'].includes(currentUser.role),
+  );
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSettingsRoleDefaults;
   const canViewSettings = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'settings.view');
   const canConfigureSettings = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'settings.configure');
   const canManageApiKeys = isSettingsPermissionAllowed(permissionMatrix, currentUser, 'settings.manageKeys');
@@ -2590,6 +2694,28 @@ function SettingsPage() {
   const activeBlockingValidationIssues = isMediaOnlyInfrastructureEditor && activeTab === 'infrastructure'
     ? blockingValidationIssues.filter((issue) => issue.tab === 'infrastructure' && !issue.label.startsWith('Vercel '))
     : blockingValidationIssues;
+  const activeTabIndex = Math.max(0, TABS.findIndex((item) => item.id === activeTab));
+  const activeTabMeta = TABS[activeTabIndex] || TABS[0];
+  const ActiveTabIcon = activeTabMeta.icon;
+  const previousSettingsTab = TABS[(activeTabIndex + TABS.length - 1) % TABS.length];
+  const nextSettingsTab = TABS[(activeTabIndex + 1) % TABS.length];
+  const saveButtonDisabled = isSaving || !canSaveActiveSettingsTab || !hasUnsavedChanges || activeBlockingValidationIssues.length > 0;
+  const saveButtonLabel = saved ? 'Saved' : isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes' : 'No changes';
+  const activeSettingsStatusLabel = activeBlockingValidationIssues.length > 0
+    ? `${activeBlockingValidationIssues.length} blocked`
+    : hasUnsavedChanges
+      ? 'Unsaved changes'
+      : 'Saved';
+  const activeSettingsStatusTone = activeBlockingValidationIssues.length > 0
+    ? 'bg-destructive/10 text-destructive'
+    : hasUnsavedChanges
+      ? 'bg-warning/10 text-warning'
+      : 'bg-success/10 text-success';
+  const activeSettingsHelperText = activeBlockingValidationIssues.length > 0
+    ? 'Fix highlighted validation issues before saving.'
+    : hasUnsavedChanges
+      ? 'Save or discard changes from here without returning to the page header.'
+      : 'Jump between Settings sections without losing the active control context.';
   const platformReadiness = useMemo(() => {
     const savedGeneral = integrations.general;
     const savedAppearance = integrations.appearance;
@@ -3260,9 +3386,13 @@ function SettingsPage() {
         expectedArtifacts: [
           'provider runtime alias summary',
           'operator evidence packet',
+          'artifacts/backy-settings-provider-certification.json',
+          'backy-settings-provider-certification-evidence',
           'Settings provider workflow summary',
           'release doctor summary',
         ],
+        evidenceArtifacts: SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS,
+        artifactVerifier: SETTINGS_COMPLETION_ARTIFACT_VERIFIER,
         runtime: providerRuntime,
         secretBoundary: {
           includesSecretValues: false,
@@ -3295,8 +3425,12 @@ function SettingsPage() {
         expectedArtifacts: [
           'typed AdminSettings providerCertification response',
           'operator evidence packet',
+          'artifacts/backy-settings-provider-certification.json',
+          'backy-settings-provider-certification-evidence',
           'Settings API no-secret response headers',
         ],
+        evidenceArtifacts: SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS,
+        artifactVerifier: SETTINGS_COMPLETION_ARTIFACT_VERIFIER,
         runtime: providerRuntime,
         secretBoundary: {
           includesSecretValues: false,
@@ -3328,10 +3462,14 @@ function SettingsPage() {
         ],
         expectedArtifacts: [
           'product provider-sync evidence',
+          'artifacts/backy-commerce-provider-certification.json',
+          'backy-commerce-provider-certification-evidence',
           'product storefront handoff',
           'provider catalog sync proof',
           'subscription lifecycle proof when selected',
         ],
+        evidenceArtifacts: COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS,
+        artifactVerifier: COMMERCE_COMPLETION_ARTIFACT_VERIFIER,
         runtime: commerceRuntime,
         secretBoundary: {
           includesSecretValues: false,
@@ -3363,10 +3501,14 @@ function SettingsPage() {
         ],
         expectedArtifacts: [
           'order analytics provider evidence',
+          'artifacts/backy-commerce-provider-certification.json',
+          'backy-commerce-provider-certification-evidence',
           'status handoff evidence',
           'quote/tracking/fulfillment/refund proof',
           'webhook/reconciliation proof',
         ],
+        evidenceArtifacts: COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS,
+        artifactVerifier: COMMERCE_COMPLETION_ARTIFACT_VERIFIER,
         runtime: commerceRuntime,
         secretBoundary: {
           includesSecretValues: false,
@@ -3818,36 +3960,54 @@ function SettingsPage() {
               disabled={isSaving || !canSaveActiveSettingsTab}
               title={activeSavePermissionTitle}
               onClick={discardUnsavedChanges}
+              data-testid="settings-header-discard"
             >
               Discard changes
             </Button>
           )}
-          <Button
-            variant="outline"
-            disabled={isSaving || !canConfigureSettings}
-            title={configurePermissionTitle}
-            onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
-            iconStart={<Copy className="size-4" />}
-          >
-            Copy handoff
-          </Button>
-          <Button
-            variant="outline"
-            disabled={isSaving || !canConfigureSettings}
-            title={configurePermissionTitle}
-            onClick={downloadSettingsHandoff}
-            iconStart={<Download className="size-4" />}
-          >
-            Download JSON
-          </Button>
+          <details className="group relative" data-testid="settings-header-secondary-actions">
+            <summary
+              className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+              aria-label="More settings actions"
+            >
+              <MoreHorizontal className="size-4" />
+              More actions
+              <span className="sr-only">Copy handoff and Download JSON</span>
+            </summary>
+            <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-52">
+              <button
+                type="button"
+                disabled={isSaving || !canConfigureSettings}
+                title={configurePermissionTitle}
+                onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
+                className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="settings-header-copy-handoff"
+              >
+                <Copy className="size-4" />
+                Copy handoff
+              </button>
+              <button
+                type="button"
+                disabled={isSaving || !canConfigureSettings}
+                title={configurePermissionTitle}
+                onClick={downloadSettingsHandoff}
+                className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="settings-header-download-json"
+              >
+                <Download className="size-4" />
+                Download JSON
+              </button>
+            </div>
+          </details>
           <Button
             variant="primary"
             onClick={() => void handleSave()}
-            disabled={isSaving || !canSaveActiveSettingsTab || !hasUnsavedChanges || activeBlockingValidationIssues.length > 0}
+            disabled={saveButtonDisabled}
             title={activeSavePermissionTitle}
             iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
+            data-testid="settings-header-save"
           >
-            {saved ? 'Saved' : isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes' : 'No changes'}
+            {saveButtonLabel}
           </Button>
         </div>
       </div>
@@ -3875,6 +4035,18 @@ function SettingsPage() {
         </Notice>
       )}
 
+      {(canUseSettingsRoleDefaults || isPermissionMatrixPending) && (
+        <Notice
+          tone="info"
+          title="Settings permissions syncing"
+          data-testid="settings-permission-sync-state"
+        >
+          {canUseSettingsRoleDefaults
+            ? 'Using owner/admin role defaults while detailed settings permissions sync.'
+            : 'Loading detailed settings permissions before enabling role-specific controls.'}
+        </Notice>
+      )}
+
       {hasUnsavedChanges && activeBlockingValidationIssues.length === 0 && (
         <Notice tone="info" title="Unsaved settings">
           Review the current tab or save changes to update Backy’s API, frontend handoff, infrastructure metadata, and security policy.
@@ -3887,6 +4059,90 @@ function SettingsPage() {
           onOpenTab={openSettingsTab}
         />
       )}
+
+      <div
+        className="sticky top-2 z-20 -mx-4 rounded-none border-y border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border"
+        data-testid="settings-sticky-workbar"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {ActiveTabIcon ? <ActiveTabIcon className="size-4 shrink-0 text-primary" /> : null}
+              <span className="text-sm font-semibold text-foreground" data-testid="settings-sticky-active-tab">
+                {activeTabMeta.name}
+              </span>
+              <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', activeSettingsStatusTone)}>
+                {activeSettingsStatusLabel}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {activeSettingsHelperText}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => openSettingsTab(previousSettingsTab.id)}
+              aria-label={`Open previous Settings section: ${previousSettingsTab.name}`}
+              data-testid="settings-sticky-previous-tab"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => openSettingsTab(nextSettingsTab.id)}
+              aria-label={`Open next Settings section: ${nextSettingsTab.name}`}
+              data-testid="settings-sticky-next-tab"
+            >
+              Next
+            </Button>
+            {hasUnsavedChanges && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={isSaving || !canSaveActiveSettingsTab}
+                title={activeSavePermissionTitle}
+                onClick={discardUnsavedChanges}
+                data-testid="settings-sticky-discard"
+              >
+                Discard
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="primary"
+              onClick={() => void handleSave()}
+              disabled={saveButtonDisabled}
+              title={activeSavePermissionTitle}
+              iconStart={saved ? <Check className="size-4" /> : <Save className="size-4" />}
+              data-testid="settings-sticky-save"
+            >
+              {saveButtonLabel}
+            </Button>
+          </div>
+        </div>
+        <nav
+          aria-label="Settings page shortcuts"
+          className="mt-3 flex gap-1 overflow-x-auto pb-1"
+          data-testid="settings-sticky-section-nav"
+        >
+          {SETTINGS_WORKBAR_SECTIONS.map((section) => (
+            <a
+              key={section.id}
+              href={`#${section.id}`}
+              className="shrink-0 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground focus-ring"
+            >
+              {section.label}
+            </a>
+          ))}
+        </nav>
+      </div>
 
       <div id="settings-command-center" className="scroll-mt-24" data-testid="settings-command-center">
         <Panel>
@@ -3988,41 +4244,54 @@ function SettingsPage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-launch-readiness-action-plan">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+              <details className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-launch-readiness-details" data-default-collapsed="true">
+                <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
                   <div>
-                    <div className="text-xs font-semibold text-foreground">Action plan</div>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{settingsLaunchReadiness.actionPlan.nextAction}</p>
+                    <div className="text-xs font-semibold text-foreground">Launch action plan and gate detail</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Expand when you need the full operator handoff, recommended commands, and per-gate status.
+                    </p>
                   </div>
                   <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                    {settingsLaunchReadiness.actionPlan.schemaVersion}
+                    {settingsLaunchReadiness.checks.length} checks
                   </span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {settingsLaunchReadiness.actionPlan.recommendedCommands.length ? settingsLaunchReadiness.actionPlan.recommendedCommands.map((command) => (
-                    <span key={command} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                      {command}
-                    </span>
-                  )) : (
-                    <span className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                      .github/workflows/backy-release-certification.yml
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {settingsLaunchReadiness.checks.map((check) => (
-                  <div key={check.key} className="rounded-md border border-border bg-card px-3 py-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-xs font-semibold text-foreground">{check.label}</div>
-                      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', SETTINGS_LAUNCH_STATUS_STYLES[check.status])}>
-                        {SETTINGS_LAUNCH_STATUS_LABELS[check.status]}
-                      </span>
+                </summary>
+                <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="settings-launch-readiness-action-plan">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">Action plan</div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{settingsLaunchReadiness.actionPlan.nextAction}</p>
                     </div>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+                    <span className="rounded bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      {settingsLaunchReadiness.actionPlan.schemaVersion}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {settingsLaunchReadiness.actionPlan.recommendedCommands.length ? settingsLaunchReadiness.actionPlan.recommendedCommands.map((command) => (
+                      <span key={command} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {command}
+                      </span>
+                    )) : (
+                      <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        .github/workflows/backy-release-certification.yml
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {settingsLaunchReadiness.checks.map((check) => (
+                    <div key={check.key} className="rounded-md border border-border bg-card px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-xs font-semibold text-foreground">{check.label}</div>
+                        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', SETTINGS_LAUNCH_STATUS_STYLES[check.status])}>
+                          {SETTINGS_LAUNCH_STATUS_LABELS[check.status]}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{check.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
 
             <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="settings-backy-completion-status">
@@ -4068,42 +4337,54 @@ function SettingsPage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-backy-completion-status-action-plan">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+              <details className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-backy-completion-status-details" data-default-collapsed="true">
+                <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
                   <div>
-                    <div className="text-xs font-semibold text-foreground">Next action</div>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{settingsBackyCompletionStatus.nextAction}</p>
+                    <div className="text-xs font-semibold text-foreground">Partial gates and runbooks</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Expand for the operator commands, evidence paths, and remaining external certification gates.
+                    </p>
                   </div>
                   <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                    x-backy-completion-status
+                    {settingsBackyCompletionStatus.audit.partial} partial
                   </span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {settingsBackyCompletionStatus.recommendedCommands.map((command) => (
-                    <span key={command} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                      {command}
+                </summary>
+                <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="settings-backy-completion-status-action-plan">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">Next action</div>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{settingsBackyCompletionStatus.nextAction}</p>
+                    </div>
+                    <span className="rounded bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      x-backy-completion-status
                     </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {settingsBackyCompletionStatus.recommendedCommands.map((command) => (
+                      <span key={command} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {command}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 lg:grid-cols-2 xl:grid-cols-4" data-testid="settings-backy-completion-status-gates">
+                  {settingsBackyCompletionStatus.gates.map((gate) => (
+                    <div key={gate.key} className="rounded-md border border-border bg-card px-3 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-xs font-semibold text-foreground">{gate.label}</div>
+                        <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', BACKY_COMPLETION_GATE_STYLES[gate.status])}>
+                          {BACKY_COMPLETION_GATE_LABELS[gate.status]}
+                        </span>
+                      </div>
+                      <div className="mt-2 break-words font-mono text-[11px] leading-4 text-muted-foreground">{gate.command}</div>
+                      <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                        Affects {gate.affectedSurfaces.join(', ')}.
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
-              <div className="mt-3 grid gap-2 lg:grid-cols-2 xl:grid-cols-4" data-testid="settings-backy-completion-status-gates">
-                {settingsBackyCompletionStatus.gates.map((gate) => (
-                  <div key={gate.key} className="rounded-md border border-border bg-card px-3 py-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="text-xs font-semibold text-foreground">{gate.label}</div>
-                      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', BACKY_COMPLETION_GATE_STYLES[gate.status])}>
-                        {BACKY_COMPLETION_GATE_LABELS[gate.status]}
-                      </span>
-                    </div>
-                    <div className="mt-2 break-words font-mono text-[11px] leading-4 text-muted-foreground">{gate.command}</div>
-                    <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
-                      Affects {gate.affectedSurfaces.join(', ')}.
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-backy-completion-status-runbooks">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <details className="mt-3 rounded-md border border-border bg-background p-3" data-testid="settings-backy-completion-status-runbooks" data-default-collapsed="true">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
                   <div>
                     <div className="text-xs font-semibold text-foreground">Partial surface runbooks</div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -4113,7 +4394,7 @@ function SettingsPage() {
                   <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
                     surfaceRunbooks
                   </span>
-                </div>
+                </summary>
                 <div className="mt-3 grid gap-2 lg:grid-cols-2">
                   {settingsBackyCompletionStatus.surfaceRunbooks.map((runbook) => (
                     <div
@@ -4152,6 +4433,29 @@ function SettingsPage() {
                       <div className="mt-2 text-[11px] leading-5 text-muted-foreground">
                         Evidence API: <span className="break-words font-mono text-[10px] text-foreground">{runbook.evidenceApi}</span>
                       </div>
+                      <div className="mt-2 rounded border border-border bg-background px-2.5 py-2" data-testid={`settings-backy-completion-status-runbook-artifacts-${runbook.key}`}>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidence artifact</div>
+                        {runbook.evidenceArtifacts.map((artifact) => (
+                          <div key={artifact.key} className="mt-1 grid gap-1 text-[11px] leading-4 text-muted-foreground">
+                            <div className="font-semibold text-foreground">{artifact.label}</div>
+                            <div className="break-words font-mono text-[10px] text-foreground">{artifact.artifactName}</div>
+                            <div className="break-words font-mono text-[10px]">{artifact.path}</div>
+                            <div className="break-words font-mono text-[10px]">{artifact.schemaVersion}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 rounded border border-border bg-background px-2.5 py-2" data-testid={`settings-backy-completion-status-runbook-verifier-${runbook.key}`}>
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Artifact verifier</div>
+                        <div className="mt-1 break-words font-mono text-[10px] leading-4 text-foreground">{runbook.artifactVerifier.command}</div>
+                        <div className="mt-1 break-words font-mono text-[10px] leading-4 text-muted-foreground">{runbook.artifactVerifier.requiredEnv}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {runbook.artifactVerifier.validates.slice(0, 4).map((check) => (
+                            <span key={check} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              {check}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                       <div className="mt-1 text-[11px] leading-5 text-muted-foreground">
                         Secret boundary: no secret values; excludes {runbook.secretBoundary.excludes.slice(0, 4).join(', ')}.
                       </div>
@@ -4166,92 +4470,109 @@ function SettingsPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {settingsBackyCompletionStatus.surfaces.map((surface) => (
-                  <span key={surface.key} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {surface.label}: {surface.blocker}
-                  </span>
-                ))}
-              </div>
+                </details>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {settingsBackyCompletionStatus.surfaces.map((surface) => (
+                    <span key={surface.key} className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {surface.label}: {surface.blocker}
+                    </span>
+                  ))}
+                </div>
+              </details>
             </div>
 
-            <div className="mt-4 rounded-lg border border-border bg-background p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Platform ownership map</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Backy owns the CMS, editor, media metadata, commerce records, APIs, and admin workflows. Supabase and Vercel are connected providers for hosted database/storage and deployment runtime.
-                  </p>
-                </div>
-                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  {PLATFORM_RESPONSIBILITIES.length} control areas
+            <details
+              className="group mt-4 overflow-hidden rounded-lg border border-border bg-background"
+              data-default-collapsed="true"
+              data-testid="settings-command-maps"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">Ownership, controls, and frontend API maps</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">Reference maps for platform ownership, Settings tabs, and custom frontend API coverage.</span>
                 </span>
-              </div>
-              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3" data-testid="settings-platform-ownership-map">
-                {PLATFORM_RESPONSIBILITIES.map((item) => (
-                  <SettingsResponsibilityCard key={item.area} item={item} />
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-lg border border-border bg-background p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Settings control map</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Jump to the settings that control public APIs, visual defaults, infrastructure, notifications, and security.
-                  </p>
+                <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show maps</span>
+                <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide maps</span>
+              </summary>
+              <div className="space-y-4 border-t border-border p-4">
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Platform ownership map</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Backy owns the CMS, editor, media metadata, commerce records, APIs, and admin workflows. Supabase and Vercel are connected providers for hosted database/storage and deployment runtime.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                      {PLATFORM_RESPONSIBILITIES.length} control areas
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3" data-testid="settings-platform-ownership-map">
+                    {PLATFORM_RESPONSIBILITIES.map((item) => (
+                      <SettingsResponsibilityCard key={item.area} item={item} />
+                    ))}
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => openSettingsTab('infrastructure')}
-                  iconStart={<Cloud className="size-4" />}
-                >
-                  Open infrastructure
-                </Button>
-              </div>
-              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {SETTINGS_CONTROL_AREAS.map((area) => (
-                  <button
-                    key={area.title}
-                    type="button"
-                    onClick={() => openSettingsTab(area.tab)}
-                    className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
 
-            <div className="mt-4 rounded-lg border border-border bg-background p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Frontend API capability map</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    What a custom frontend can already consume from Backy, and which Wix/Webflow/Squarespace-level backend pieces still need product work.
-                  </p>
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Settings control map</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Jump to the settings that control public APIs, visual defaults, infrastructure, notifications, and security.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openSettingsTab('infrastructure')}
+                      iconStart={<Cloud className="size-4" />}
+                    >
+                      Open infrastructure
+                    </Button>
+                  </div>
+                  <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                    {SETTINGS_CONTROL_AREAS.map((area) => (
+                      <button
+                        key={area.title}
+                        type="button"
+                        onClick={() => openSettingsTab(area.tab)}
+                        className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => openSettingsTab('delivery')}
-                  iconStart={<Code className="size-4" />}
-                >
-                  Open API delivery
-                </Button>
+
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Frontend API capability map</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        What a custom frontend can already consume from Backy, and which Wix/Webflow/Squarespace-level backend pieces still need product work.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openSettingsTab('delivery')}
+                      iconStart={<Code className="size-4" />}
+                    >
+                      Open API delivery
+                    </Button>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                    {FRONTEND_API_CAPABILITIES.map((capability) => (
+                      <SettingsCapabilityCard key={capability.area} capability={capability} />
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                {FRONTEND_API_CAPABILITIES.map((capability) => (
-                  <SettingsCapabilityCard key={capability.area} capability={capability} />
-                ))}
-              </div>
-            </div>
+            </details>
           </PanelContent>
         </Panel>
       </div>
@@ -4680,17 +5001,51 @@ function SiteScopedSettingsPanel({
 
   if (!canView) {
     return (
-      <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4" data-testid="settings-site-scope-panel">
-        <h3 className="text-sm font-semibold">Site-scoped settings</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Site settings are hidden until your account can view sites.
-        </p>
-      </div>
+      <details
+        className="group mt-6 overflow-hidden rounded-lg border border-border bg-muted/30"
+        data-default-collapsed="true"
+        data-testid="settings-site-scope-details"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span>
+            <span className="block text-sm font-semibold text-foreground">Site-scoped settings</span>
+            <span className="mt-1 block text-sm text-muted-foreground">Per-site SEO, analytics, localization, and comment-policy overrides.</span>
+          </span>
+          <span className="shrink-0 rounded-md bg-background px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show site controls</span>
+          <span className="hidden shrink-0 rounded-md bg-background px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide site controls</span>
+        </summary>
+        <div className="border-t border-border p-4" data-testid="settings-site-scope-panel">
+          <h3 className="text-sm font-semibold">Site-scoped settings</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Site settings are hidden until your account can view sites.
+          </p>
+        </div>
+      </details>
     );
   }
 
   return (
-    <div className="mt-6 rounded-lg border border-border bg-background p-4" data-testid="settings-site-scope-panel">
+    <details
+      className="group mt-6 overflow-hidden rounded-lg border border-border bg-background"
+      data-default-collapsed="true"
+      data-testid="settings-site-scope-details"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">Site-scoped settings</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {scope?.schemaVersion || 'backy.site-settings-scope.v1'}
+            </span>
+          </span>
+          <span className="mt-1 block text-sm text-muted-foreground">
+            Per-site SEO, analytics, localization, comment-policy, API scope, and audit controls for {selectedSite?.name || selectedSite?.slug || scope?.scope.siteSlug || 'the selected site'}.
+          </span>
+        </span>
+        <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show site controls</span>
+        <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide site controls</span>
+      </summary>
+      <div className="border-t border-border p-4" data-testid="settings-site-scope-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Site-scoped settings</h3>
@@ -5090,7 +5445,8 @@ function SiteScopedSettingsPanel({
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </details>
   );
 }
 
@@ -5887,7 +6243,22 @@ function DeliveryModeSettings({
               </div>
             ))}
           </div>
-          <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="settings-frontend-database-certification-evidence">
+          <details className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="settings-frontend-database-certification-details" data-default-collapsed="true">
+            <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
+              <div>
+                <div className="font-medium text-foreground">Database evidence and command builder</div>
+                <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                  Expand when you need the scenario matrix, disposable database command, env template, and required input aliases.
+                </p>
+              </div>
+              <span className={cn(
+                'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                frontendDatabaseCertificationScenarioEvidence.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+              )}>
+                {frontendDatabaseCertificationScenarioEvidence.coverage.covered}/{frontendDatabaseCertificationScenarioEvidence.coverage.total} scenarios
+              </span>
+            </summary>
+          <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="settings-frontend-database-certification-evidence">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="font-medium text-foreground">Frontend database scenario evidence</div>
@@ -5938,7 +6309,7 @@ function DeliveryModeSettings({
               {frontendDatabaseCertificationScenarioEvidence.secretHandling}
             </div>
           </div>
-          <div className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="settings-frontend-database-certification-command-builder">
+          <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="settings-frontend-database-certification-command-builder">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="font-medium text-foreground">SDK Postgres command builder</div>
@@ -6085,9 +6456,10 @@ function DeliveryModeSettings({
               </div>
             </div>
           </div>
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            The public manifest exposes <span className="font-mono">backy.frontend-database-certification.v1</span> as <span className="font-mono">contract.databaseCertification</span>, and the SDK exposes <span className="font-mono">BackyFrontendDatabaseCertification</span>. Database URLs and service credentials stay in server/CI environment variables.
-          </p>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              The public manifest exposes <span className="font-mono">backy.frontend-database-certification.v1</span> as <span className="font-mono">contract.databaseCertification</span>, and the SDK exposes <span className="font-mono">BackyFrontendDatabaseCertification</span>. Database URLs and service credentials stay in server/CI environment variables.
+            </p>
+          </details>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -7905,6 +8277,12 @@ const formatEnvTemplate = (
   })
   .join('\n');
 
+const RUNTIME_CARD_DETAIL_LIMIT = 6;
+
+const runtimeCardTestIdForTitle = (title: string) => (
+  `settings-runtime-card-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
+);
+
 function RuntimeCard({
   title,
   description,
@@ -7918,8 +8296,26 @@ function RuntimeCard({
   configured: boolean;
   details: Array<{ label: string; value?: string | boolean | null }>;
 }) {
+  const runtimeCardTestId = runtimeCardTestIdForTitle(title);
+  const visibleDetails = details.slice(0, RUNTIME_CARD_DETAIL_LIMIT);
+  const extraDetails = details.slice(RUNTIME_CARD_DETAIL_LIMIT);
+
+  const renderDetailRow = (item: { label: string; value?: string | boolean | null }) => (
+    <div key={item.label} className="flex items-center justify-between gap-3">
+      <dt className="text-muted-foreground">{item.label}</dt>
+      <dd className="max-w-[60%] truncate text-right font-mono text-xs">
+        {item.value === true ? 'yes' : item.value === false ? 'no' : item.value || 'not set'}
+      </dd>
+    </div>
+  );
+
   return (
-    <Panel>
+    <Panel
+      data-testid={runtimeCardTestId}
+      data-detail-count={details.length}
+      data-visible-detail-count={visibleDetails.length}
+      data-collapsible={String(extraDetails.length > 0)}
+    >
       <PanelHeader
         title={title}
         description={description}
@@ -7935,16 +8331,24 @@ function RuntimeCard({
         }
       />
       <PanelContent>
-        <dl className="grid gap-3 text-sm">
-          {details.map((item) => (
-            <div key={item.label} className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">{item.label}</dt>
-              <dd className="max-w-[60%] truncate text-right font-mono text-xs">
-                {item.value === true ? 'yes' : item.value === false ? 'no' : item.value || 'not set'}
-              </dd>
-            </div>
-          ))}
+        <dl className="grid gap-3 text-sm" data-testid={`${runtimeCardTestId}-primary-details`}>
+          {visibleDetails.map(renderDetailRow)}
         </dl>
+        {extraDetails.length > 0 && (
+          <details
+            className="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm"
+            data-testid={`${runtimeCardTestId}-extra-details`}
+            data-default-collapsed="true"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm text-xs font-semibold text-muted-foreground focus-ring">
+              <span>Show {extraDetails.length} provider rows</span>
+              <span className="font-mono text-[10px] text-muted-foreground">{details.length} total</span>
+            </summary>
+            <dl className="mt-3 grid gap-3 border-t border-border pt-3 text-sm">
+              {extraDetails.map(renderDetailRow)}
+            </dl>
+          </details>
+        )}
       </PanelContent>
     </Panel>
   );
@@ -8544,6 +8948,49 @@ function InfrastructureSettings({
     runtimeVercel,
   ]);
   const providerRuntimeEvidenceReadyCount = providerRuntimeEvidenceRows.filter((row) => row.ready).length;
+  const settingsCertificationSelectedFamilySummary = settingsCertificationEvidencePacket.selectedFamilies.length > 0
+    ? settingsCertificationEvidencePacket.selectedFamilies.join(', ')
+    : 'Select storage, Vercel, notifications, Public API/CORS, or commerce to build a live run.';
+  const settingsCertificationRuntimeMissingAliasPreview = settingsCertificationRuntimeEvidence.missingInputAliases.length > 0
+    ? settingsCertificationRuntimeEvidence.missingInputAliases.slice(0, 4).join(', ')
+    : 'No missing runtime aliases detected.';
+  const settingsCertificationRuntimeGapDetail = settingsCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length > 0
+    ? `Selected gaps: ${settingsCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.join(', ')}`
+    : settingsCertificationRuntimeMissingAliasPreview;
+  const settingsCertificationReadinessItems = [
+    {
+      label: 'Selected families',
+      value: String(settingsCertificationEvidencePacket.selectedFamilies.length),
+      detail: settingsCertificationSelectedFamilySummary,
+    },
+    {
+      label: 'Runtime inputs',
+      value: `${providerRuntimeEvidenceReadyCount}/${providerRuntimeEvidenceRows.length} ready`,
+      detail: settingsCertificationRuntimeGapDetail,
+    },
+    {
+      label: 'Scenario coverage',
+      value: `${providerCertificationScenarioEvidence.coverage.covered}/${providerCertificationScenarioEvidence.coverage.total}`,
+      detail: providerCertificationScenarioEvidence.coverage.missing.length > 0
+        ? `Missing: ${providerCertificationScenarioEvidence.coverage.missing.join(', ')}`
+        : 'All Settings provider scenarios have evidence hooks.',
+    },
+    {
+      label: 'Artifact output',
+      value: SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV,
+      detail: SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT,
+    },
+    {
+      label: 'Gate command',
+      value: 'ci:settings-provider-certification',
+      detail: 'Run npm run ci:settings-provider-certification after live env aliases are populated.',
+    },
+    {
+      label: 'Required site selector',
+      value: 'BACKY_SETTINGS_CERTIFY_SITE_ID',
+      detail: settingsCertificationEvidencePacket.target.siteId,
+    },
+  ];
 
   const runInfrastructureCheck = async () => {
     if (disabled || isCheckingInfrastructure) return;
@@ -8852,6 +9299,51 @@ function InfrastructureSettings({
               <div className="mt-2 text-xs text-muted-foreground">Covers storage, credential rotation, Vercel secret planning, notification delivery, and commerce providers.</div>
             </div>
           </div>
+          <div className="mt-4 rounded-lg border border-border bg-background p-3" data-testid="settings-provider-certification-readiness-summary">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-foreground">Certification readiness summary</div>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                  One-screen operator summary for the remaining Settings provider gate before opening the full matrix and command builder.
+                </p>
+              </div>
+              <span className={cn(
+                'rounded-full px-2.5 py-1 text-xs font-semibold',
+                settingsCertificationEvidencePacket.status === 'evidence-complete'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : settingsCertificationEvidencePacket.status === 'needs-runtime-inputs'
+                    ? 'bg-red-50 text-red-700'
+                    : 'bg-amber-50 text-amber-700',
+              )}>
+                {settingsCertificationEvidencePacket.status}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {settingsCertificationReadinessItems.map((item) => (
+                <div key={item.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</div>
+                  <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
+                  <div className="mt-1 break-words text-[11px] leading-4 text-muted-foreground">{item.detail}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+              <span className="rounded-md border border-border bg-muted/20 px-2 py-1">Secret boundary: no provider credential values are stored in Settings metadata.</span>
+              <span className="rounded-md border border-border bg-muted/20 px-2 py-1">Artifact env: <span className="font-mono">{SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}</span></span>
+            </div>
+          </div>
+          <details className="mt-4 rounded-lg border border-border bg-muted/10 p-3" data-testid="settings-provider-certification-details" data-default-collapsed="true">
+            <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
+              <div>
+                <div className="text-sm font-semibold text-foreground">Provider matrix, secret families, and command builder</div>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                  Expand when you are actively certifying live provider paths. The readiness summary above stays visible for daily Settings work.
+                </p>
+              </div>
+              <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                {providerRuntimeEvidenceReadyCount}/{providerRuntimeEvidenceRows.length} runtime ready
+              </span>
+            </summary>
           <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {[
               'certify_settings_providers -> npm run ci:settings-provider-certification',
@@ -8866,9 +9358,12 @@ function InfrastructureSettings({
               </div>
             ))}
           </div>
-          <p className="mt-4 text-sm text-muted-foreground">
-            Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>/<span className="font-mono">DATABASE_URL</span>, public API origin configuration through <span className="font-mono">BACKY_CORS_ALLOWED_ORIGINS</span>, storage aliases such as <span className="font-mono">BACKY_STORAGE_PROVIDER</span>/<span className="font-mono">BACKY_MEDIA_STORAGE_PROVIDER</span>, <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, and <span className="font-mono">AWS_ACCESS_KEY_ID</span>, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification aliases such as <span className="font-mono">RESEND_API_KEY</span>, <span className="font-mono">SMTP_HOST</span>, <span className="font-mono">SMTP_USER</span>, <span className="font-mono">SMTP_PASSWORD</span>, and <span className="font-mono">BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL</span>, commerce aliases such as <span className="font-mono">STRIPE_SECRET_KEY</span>, <span className="font-mono">TAXJAR_API_KEY</span>, <span className="font-mono">PAYPAL_ACCESS_TOKEN</span>, <span className="font-mono">SHOPIFY_ADMIN_ACCESS_TOKEN</span>, and <span className="font-mono">COMMERCE_WEBHOOK_SECRET</span> for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento, plus HTTP endpoint aliases such as <span className="font-mono">COMMERCE_TAX_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_SHIPPING_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_DISCOUNT_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_PRODUCT_SYNC_URL</span>, and <span className="font-mono">COMMERCE_SUBSCRIPTION_ACTION_URL</span>.
-          </p>
+          <details className="mt-4 rounded-lg border border-border bg-muted/10 p-3" data-testid="settings-provider-certification-required-secret-families">
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">Required secret families</summary>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Required secret families include <span className="font-mono">BACKY_DATABASE_URL</span>/<span className="font-mono">DATABASE_URL</span>, public API origin configuration through <span className="font-mono">BACKY_CORS_ALLOWED_ORIGINS</span>, storage aliases such as <span className="font-mono">BACKY_STORAGE_PROVIDER</span>/<span className="font-mono">BACKY_MEDIA_STORAGE_PROVIDER</span>, <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>, and <span className="font-mono">AWS_ACCESS_KEY_ID</span>, <span className="font-mono">VERCEL_TOKEN</span>/<span className="font-mono">BACKY_VERCEL_TOKEN</span> with project metadata, notification aliases such as <span className="font-mono">RESEND_API_KEY</span>, <span className="font-mono">SMTP_HOST</span>, <span className="font-mono">SMTP_USER</span>, <span className="font-mono">SMTP_PASSWORD</span>, and <span className="font-mono">BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL</span>, commerce aliases such as <span className="font-mono">STRIPE_SECRET_KEY</span>, <span className="font-mono">TAXJAR_API_KEY</span>, <span className="font-mono">PAYPAL_ACCESS_TOKEN</span>, <span className="font-mono">SHOPIFY_ADMIN_ACCESS_TOKEN</span>, and <span className="font-mono">COMMERCE_WEBHOOK_SECRET</span> for Stripe, TaxJar, Avalara, EasyPost, Shippo, PayPal, Paddle, Square, Adyen, Mollie, Razorpay, Shopify, BigCommerce, WooCommerce, Etsy, and Magento, plus HTTP endpoint aliases such as <span className="font-mono">COMMERCE_TAX_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_SHIPPING_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_DISCOUNT_PROVIDER_URL</span>, <span className="font-mono">COMMERCE_PRODUCT_SYNC_URL</span>, and <span className="font-mono">COMMERCE_SUBSCRIPTION_ACTION_URL</span>.
+            </p>
+          </details>
           <div className="mt-4 rounded-lg border border-border bg-background p-3" data-testid="settings-provider-certification">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -9377,6 +9872,7 @@ function InfrastructureSettings({
               ))}
             </div>
           </div>
+          </details>
         </PanelContent>
       </Panel>
 
@@ -11103,6 +11599,37 @@ function SecuritySettings({
   const serviceKeyLabelInlineError = serviceKeySubmitted && serviceKeyLabel.trim().length === 0
     ? 'Add a label before issuing a key.'
     : null;
+  const securityActionStatusId = 'settings-security-actions-status';
+  const manageKeysDisabledReason = !canManageApiKeys
+    ? manageKeysPermissionTitle || 'Requires settings.manageKeys permission'
+    : null;
+  const sessionRotateDisabledReason = !currentSession?.token
+    ? 'No active admin session is available'
+    : isRotatingSession
+      ? 'Session rotation is already running'
+      : null;
+  const regenerateDisabledReason = manageKeysDisabledReason || (rotatingKey !== null
+    ? 'API key regeneration is already running'
+    : null);
+  const issueServiceKeyDisabledReason = manageKeysDisabledReason || (issuingServiceKey
+    ? 'Service key issuance is already running'
+    : null);
+  const revokeServiceKeyDisabledReason = manageKeysDisabledReason || (revokingServiceKeyId !== null
+    ? 'A service key revocation is already running'
+    : activeServiceKeys.length === 0
+      ? 'No active service keys are available to revoke'
+      : null);
+  const actionStatus = (label: string, reason: string | null) => (
+    `${label} ${reason ? `unavailable: ${reason}` : 'available'}.`
+  );
+  const securityActionStatus = [
+    actionStatus('Rotate session', sessionRotateDisabledReason),
+    actionStatus('Regenerate public API key', regenerateDisabledReason),
+    actionStatus('Regenerate admin API key', regenerateDisabledReason),
+    actionStatus('Regenerate all API keys', regenerateDisabledReason),
+    actionStatus('Issue service key', issueServiceKeyDisabledReason),
+    actionStatus('Revoke service keys', revokeServiceKeyDisabledReason),
+  ].join(' ');
 
   const issueServiceKey = async () => {
     const label = serviceKeyLabel.trim();
@@ -11154,7 +11681,17 @@ function SecuritySettings({
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      role="group"
+      aria-label="Security settings actions"
+      aria-describedby={securityActionStatusId}
+      data-testid="settings-security-action-group"
+      data-action-status={securityActionStatus}
+    >
+      <span id={securityActionStatusId} className="sr-only" data-testid="settings-security-action-status">
+        {securityActionStatus}
+      </span>
       <Panel>
         <PanelHeader
           title="Workspace security policy"
@@ -11247,9 +11784,14 @@ function SecuritySettings({
                 size="sm"
                 variant="outline"
                 onClick={() => void onRotateCurrentSession()}
-                disabled={!currentSession?.token || isRotatingSession}
+                disabled={Boolean(sessionRotateDisabledReason)}
+                title={sessionRotateDisabledReason || undefined}
+                aria-label="Rotate current admin session"
+                aria-describedby={securityActionStatusId}
                 iconStart={<RefreshCw className={cn('size-3.5', isRotatingSession && 'animate-spin')} />}
                 data-testid="settings-session-rotate"
+                data-action-state={sessionRotateDisabledReason ? 'blocked' : 'ready'}
+                data-disabled-reason={sessionRotateDisabledReason || undefined}
               >
                 {isRotatingSession ? 'Rotating...' : 'Rotate session'}
               </Button>
@@ -11312,6 +11854,12 @@ function SecuritySettings({
               : statusLabel === 'Hidden'
                 ? 'bg-amber-100 text-amber-700'
                 : 'bg-muted text-muted-foreground';
+            const copyDisabledReason = !item.value
+              ? `${item.label} is not configured`
+              : !canShowValue
+                ? manageKeysDisabledReason || 'Admin API key is hidden without settings.manageKeys permission'
+                : null;
+            const regenerateKeyDisabledReason = regenerateDisabledReason;
 
             return (
             <div key={item.scope} className="rounded-xl border border-border bg-muted/40 p-4">
@@ -11335,8 +11883,13 @@ function SecuritySettings({
                   size="sm"
                   variant="outline"
                   onClick={() => void copyKey(item.scope, item.value)}
-                  disabled={!item.value || !canShowValue}
-                  title={item.scope === 'admin' ? manageKeysPermissionTitle : undefined}
+                  disabled={Boolean(copyDisabledReason)}
+                  title={copyDisabledReason || undefined}
+                  aria-label={`Copy ${item.label}`}
+                  aria-describedby={securityActionStatusId}
+                  data-testid={`settings-api-key-copy-${item.scope}`}
+                  data-action-state={copyDisabledReason ? 'blocked' : 'ready'}
+                  data-disabled-reason={copyDisabledReason || undefined}
                 >
                   {copiedKey === item.scope ? 'Copied' : 'Copy'}
                 </Button>
@@ -11344,9 +11897,13 @@ function SecuritySettings({
                   size="sm"
                   variant="outline"
                   onClick={() => requestRotateKey(item.scope)}
-                  disabled={!canManageApiKeys || rotatingKey !== null}
-                  title={manageKeysPermissionTitle}
+                  disabled={Boolean(regenerateKeyDisabledReason)}
+                  title={regenerateKeyDisabledReason || undefined}
+                  aria-label={`Regenerate ${item.label}`}
+                  aria-describedby={securityActionStatusId}
                   data-testid={`settings-api-key-regenerate-${item.scope}`}
+                  data-action-state={regenerateKeyDisabledReason ? 'blocked' : 'ready'}
+                  data-disabled-reason={regenerateKeyDisabledReason || undefined}
                 >
                   {rotatingKey === item.scope ? 'Regenerating...' : `Regenerate ${item.scope}`}
                 </Button>
@@ -11366,9 +11923,13 @@ function SecuritySettings({
             <Button
               variant="outline"
               onClick={() => requestRotateKey('all')}
-              disabled={!canManageApiKeys || rotatingKey !== null}
-              title={manageKeysPermissionTitle}
+              disabled={Boolean(regenerateDisabledReason)}
+              title={regenerateDisabledReason || undefined}
+              aria-label="Regenerate all API keys"
+              aria-describedby={securityActionStatusId}
               data-testid="settings-api-key-regenerate-all"
+              data-action-state={regenerateDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={regenerateDisabledReason || undefined}
             >
               {rotatingKey === 'all' ? 'Regenerating...' : 'Regenerate all keys'}
             </Button>
@@ -11418,9 +11979,13 @@ function SecuritySettings({
             <Button
               variant="outline"
               onClick={() => void issueServiceKey()}
-              disabled={!canManageApiKeys || issuingServiceKey}
-              title={manageKeysPermissionTitle}
+              disabled={Boolean(issueServiceKeyDisabledReason)}
+              title={issueServiceKeyDisabledReason || undefined}
+              aria-label="Issue admin service key"
+              aria-describedby={securityActionStatusId}
               data-testid="settings-admin-service-key-issue"
+              data-action-state={issueServiceKeyDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={issueServiceKeyDisabledReason || undefined}
             >
               {issuingServiceKey ? 'Issuing...' : 'Issue key'}
             </Button>
@@ -11435,7 +12000,18 @@ function SecuritySettings({
                   Backy stores only the hash and fingerprint after this response.
                 </p>
               </div>
-              <Button size="sm" variant="outline" onClick={() => void copyIssuedServiceKey()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void copyIssuedServiceKey()}
+                disabled={!issuedServiceKey.adminApiKey}
+                title={!issuedServiceKey.adminApiKey ? 'No one-time service key is available to copy' : undefined}
+                aria-label="Copy issued admin service key"
+                aria-describedby={securityActionStatusId}
+                data-testid="settings-admin-service-key-issued-copy"
+                data-action-state={issuedServiceKey.adminApiKey ? 'ready' : 'blocked'}
+                data-disabled-reason={!issuedServiceKey.adminApiKey ? 'No one-time service key is available to copy' : undefined}
+              >
                 {copiedIssuedServiceKey ? 'Copied' : 'Copy'}
               </Button>
             </div>
@@ -11459,6 +12035,9 @@ function SecuritySettings({
           <div className="mt-4 divide-y divide-border rounded-lg border border-border">
             {serviceKeys.slice(0, 10).map((entry) => {
               const revoked = Boolean(entry.revokedAt || entry.status === 'revoked');
+              const revokeDisabledReason = manageKeysDisabledReason ||
+                (revoked ? 'This service key is already revoked' : null) ||
+                (revokingServiceKeyId !== null ? 'A service key revocation is already running' : null);
               return (
                 <div key={entry.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[1fr_auto]">
                   <div>
@@ -11496,9 +12075,13 @@ function SecuritySettings({
                       size="sm"
                       variant="danger"
                       onClick={() => void revokeServiceKey(entry.id)}
-                      disabled={!canManageApiKeys || revoked || revokingServiceKeyId !== null}
-                      title={manageKeysPermissionTitle}
+                      disabled={Boolean(revokeDisabledReason)}
+                      title={revokeDisabledReason || undefined}
+                      aria-label={`Revoke admin service key ${entry.label}`}
+                      aria-describedby={securityActionStatusId}
                       data-testid={`settings-admin-service-key-revoke-${entry.id}`}
+                      data-action-state={revokeDisabledReason ? 'blocked' : 'ready'}
+                      data-disabled-reason={revokeDisabledReason || undefined}
                     >
                       {revokingServiceKeyId === entry.id ? 'Revoking...' : 'Revoke'}
                     </Button>

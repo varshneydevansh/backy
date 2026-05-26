@@ -81,15 +81,20 @@ function TeamsPage() {
   const [isLoadingTeamAudit, setIsLoadingTeamAudit] = useState(false);
   const [teamAuditError, setTeamAuditError] = useState<string | null>(null);
 
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewTeams = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', TEAM_PERMISSION_ROLE_DEFAULTS);
-  const canManageTeams = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.manage', TEAM_PERMISSION_ROLE_DEFAULTS);
-  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', TEAM_PERMISSION_ROLE_DEFAULTS);
+  const canUseTeamRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseTeamRoleDefaults;
+  const isTeamPermissionAllowed = (key: TeamPermissionKey) => (
+    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, TEAM_PERMISSION_ROLE_DEFAULTS)
+    || (canUseTeamRoleDefaults && Boolean(currentAdmin && TEAM_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canViewTeams = isTeamPermissionAllowed('users.view');
+  const canManageTeams = isTeamPermissionAllowed('users.manage');
+  const canExportActivity = isTeamPermissionAllowed('activity.export');
   const viewPermissionTitle = canViewTeams ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.view', TEAM_PERMISSION_ROLE_DEFAULTS);
   const managePermissionTitle = canManageTeams ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'users.manage', TEAM_PERMISSION_ROLE_DEFAULTS);
   const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', TEAM_PERMISSION_ROLE_DEFAULTS);
-  const isTeamsBusy = isLoading || isRefreshing || isPermissionMatrixPending;
-  const isTeamAuditDisabled = isLoadingTeamAudit || isPermissionMatrixPending || !canExportActivity || !currentTeamId;
+  const isTeamsBusy = isLoading || isRefreshing;
+  const isTeamAuditDisabled = isLoadingTeamAudit || !canExportActivity || !currentTeamId;
 
   const currentTeamExists = useMemo(
     () => teams.some((team) => team.id === currentTeamId),
@@ -421,8 +426,8 @@ function TeamsPage() {
                 onDeleteTeam={handleDeleteTeam}
                 onInviteMember={handleInviteMember}
                 onUpdateMemberRole={handleUpdateMemberRole}
-                  onRemoveMember={handleRemoveMember}
-                  onSwitchTeam={setCurrentTeamId}
+                onRemoveMember={handleRemoveMember}
+                onSwitchTeam={setCurrentTeamId}
                 />
               </div>
             )}
@@ -445,12 +450,28 @@ function TeamsPage() {
             onSwitchTeam={setCurrentTeamId}
           />
         )}
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="teams-audit-panel">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="rounded-lg border border-border bg-muted/40 p-2 text-muted-foreground">
+        <details
+          className="group overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+          data-testid="teams-audit-panel"
+          data-default-collapsed="true"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span className="flex min-w-0 items-start gap-3">
+              <span className="rounded-lg border border-border bg-muted/40 p-2 text-muted-foreground">
                 <Activity className="size-4" />
-              </div>
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">Team activity</span>
+                <span className="mt-1 block text-sm text-muted-foreground">
+                  Audit log evidence for selected team changes. Required permission: activity.export.
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show activity</span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide activity</span>
+          </summary>
+          <div className="border-t border-border p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Team activity</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -460,44 +481,44 @@ function TeamsPage() {
                   Required permission: activity.export
                 </p>
               </div>
+              <Button
+                size="sm"
+                variant="outline"
+                iconStart={<RefreshCw className={isLoadingTeamAudit ? 'size-3.5 animate-spin' : 'size-3.5'} />}
+                onClick={() => void loadTeamAuditLogs()}
+                disabled={isTeamAuditDisabled}
+                title={!canExportActivity ? activityPermissionTitle : undefined}
+              >
+                Refresh audit
+              </Button>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              iconStart={<RefreshCw className={isLoadingTeamAudit ? 'size-3.5 animate-spin' : 'size-3.5'} />}
-              onClick={() => void loadTeamAuditLogs()}
-              disabled={isTeamAuditDisabled}
-              title={!canExportActivity ? activityPermissionTitle : undefined}
-            >
-              Refresh audit
-            </Button>
+            {teamAuditError ? (
+              <Notice tone="error" className="mt-4">
+                {teamAuditError}
+              </Notice>
+            ) : isLoadingTeamAudit ? (
+              <div className="mt-4 space-y-2" aria-label="Loading team activity">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="h-16 animate-pulse rounded-lg bg-muted/50" />
+                ))}
+              </div>
+            ) : teamAuditLogs.length === 0 ? (
+              <div className="mt-4">
+                <EmptyState
+                  icon={Activity}
+                  title="No team activity yet"
+                  description="Team creation, member invites, role changes, and workspace ownership updates will appear here."
+                />
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3" data-testid="teams-audit-list">
+                {teamAuditLogs.map((log) => (
+                  <TeamAuditEvent key={log.id} log={log} />
+                ))}
+              </div>
+            )}
           </div>
-          {teamAuditError ? (
-            <Notice tone="error" className="mt-4">
-              {teamAuditError}
-            </Notice>
-          ) : isLoadingTeamAudit ? (
-            <div className="mt-4 space-y-2" aria-label="Loading team activity">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="h-16 animate-pulse rounded-lg bg-muted/50" />
-              ))}
-            </div>
-          ) : teamAuditLogs.length === 0 ? (
-            <div className="mt-4">
-              <EmptyState
-                icon={Activity}
-                title="No team activity yet"
-                description="Team creation, member invites, role changes, and workspace ownership updates will appear here."
-              />
-            </div>
-          ) : (
-            <div className="mt-4 space-y-3" data-testid="teams-audit-list">
-              {teamAuditLogs.map((log) => (
-                <TeamAuditEvent key={log.id} log={log} />
-              ))}
-            </div>
-          )}
-        </section>
+        </details>
       </div>
     </PageShell>
   );

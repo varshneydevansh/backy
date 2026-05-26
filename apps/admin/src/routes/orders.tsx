@@ -13,6 +13,7 @@ import {
   Clock3,
   ExternalLink,
   FileText,
+  MoreHorizontal,
   PackageCheck,
   Plus,
   Receipt,
@@ -71,6 +72,7 @@ import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 
@@ -105,6 +107,17 @@ const ORDER_CONTROL_AREAS = [
     detail: 'Customer, items, payment, fulfillment, tracking, refunds, and notes.',
     href: '#orders-editor',
   },
+] as const;
+
+const ORDER_EDITOR_SECTIONS = [
+  { id: 'orders-editor-identity', label: 'Basics' },
+  { id: 'orders-editor-customer', label: 'Customer' },
+  { id: 'orders-editor-status-handoff', label: 'Status handoff' },
+  { id: 'orders-editor-workflow', label: 'Workflow' },
+  { id: 'orders-editor-labels', label: 'Labels' },
+  { id: 'orders-editor-risk', label: 'Risk' },
+  { id: 'orders-editor-items', label: 'Items' },
+  { id: 'orders-editor-refunds', label: 'Refunds' },
 ] as const;
 
 const ORDER_RECORD_PAGE_SIZE = 100;
@@ -936,6 +949,8 @@ const ORDER_PROVIDER_CERTIFICATION_GROUPS = [
 ] as const;
 
 const ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE = 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification';
+const ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV = 'BACKY_COMMERCE_CERTIFICATION_OUTPUT';
+const ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-commerce-provider-certification.json';
 const ORDER_PROVIDER_CERTIFICATION_PREFLIGHT_GATES = [
   'npm run test:commerce-provider-certification-preflight-contract',
   'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification',
@@ -1075,6 +1090,16 @@ interface OrderProviderCertificationEvidencePacket {
   generatedAt: string;
   selectedSiteId: string;
   status: OrderProviderCertificationEvidencePacketStatus;
+  operatorNextAction: {
+    status: OrderProviderCertificationEvidencePacketStatus;
+    label: string;
+    detail: string;
+    command: string;
+    missingFamilies: string[];
+    missingScenarios: string[];
+    artifactEnv: typeof ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV;
+    artifactPath: typeof ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT;
+  };
   selectedFamilies: string[];
   selectedProviderAliases: Record<string, string>;
   runtimeReadiness: {
@@ -1463,7 +1488,8 @@ function OrdersRoute() {
   const [orderAnalyticsError, setOrderAnalyticsError] = useState<string | null>(null);
   const [orderDeliveryEvents, setOrderDeliveryEvents] = useState<OrderDeliveryEvent[]>([]);
   const [orderDeliveryError, setOrderDeliveryError] = useState<string | null>(null);
-  const isOrdersBusy = isLoading || isSaving || isSavingCustomerProfile || isImportingOrders || isReconcilingOrders;
+  const isOrdersMutationBusy = isSaving || isSavingCustomerProfile || isImportingOrders || isReconcilingOrders;
+  const isOrdersBusy = isLoading || isOrdersMutationBusy;
   const orderImportInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -1472,16 +1498,21 @@ function OrdersRoute() {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.view', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const canEditCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const canConfigureCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.configure', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const canDeleteCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.delete', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const canEditCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const canExportCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const canDeleteCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
+  const canUseOrderRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseOrderRoleDefaults;
+  const isOrderPermissionAllowed = (key: OrderPermissionKey) => (
+    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, ORDER_PERMISSION_ROLE_DEFAULTS)
+    || (canUseOrderRoleDefaults && Boolean(currentAdmin && ORDER_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canViewCommerce = isOrderPermissionAllowed('commerce.view');
+  const canEditCommerce = isOrderPermissionAllowed('commerce.edit');
+  const canConfigureCommerce = isOrderPermissionAllowed('commerce.configure');
+  const canDeleteCommerce = isOrderPermissionAllowed('commerce.delete');
+  const canViewCollections = isOrderPermissionAllowed('collections.view');
+  const canEditCollections = isOrderPermissionAllowed('collections.edit');
+  const canExportCollections = isOrderPermissionAllowed('collections.export');
+  const canDeleteCollections = isOrderPermissionAllowed('collections.delete');
+  const canEditPages = isOrderPermissionAllowed('pages.edit');
   const canViewOrders = canViewCommerce && canViewCollections;
   const canEditOrders = canEditCommerce && canEditCollections;
   const canConfigureOrders = canConfigureCommerce && canEditCollections;
@@ -1510,7 +1541,7 @@ function OrdersRoute() {
     ? undefined
     : adminPermissionReason(permissionMatrix, currentAdmin, !canDeleteCommerce ? 'commerce.delete' : 'collections.delete', ORDER_PERMISSION_ROLE_DEFAULTS);
   const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
-  const isOrdersAccessBusy = isOrdersBusy || isPermissionMatrixPending;
+  const isOrdersAccessBusy = isOrdersBusy;
   const orderTotalValue = Number(formState.total || 0);
   const orderNumberMissing = !formState.orderNumber.trim();
   const orderCustomerMissing = !formState.customerName.trim();
@@ -1698,6 +1729,33 @@ function OrdersRoute() {
   );
   const hiddenSelectedOrderCount = Math.max(0, selectedLoadedOrders.length - selectedVisibleOrders.length);
   const allVisibleOrdersSelected = filteredOrders.length > 0 && selectedVisibleOrders.length === filteredOrders.length;
+  const ordersBulkActionStatusId = 'orders-bulk-action-status';
+  const selectedOrderActionLabel = `${selectedLoadedOrders.length} selected order${selectedLoadedOrders.length === 1 ? '' : 's'}`;
+  const visibleOrderActionLabel = `${filteredOrders.length} visible order${filteredOrders.length === 1 ? '' : 's'}`;
+  const ordersBulkBusyDisabledReason = isOrdersAccessBusy ? 'Order queue is busy.' : '';
+  const ordersBulkEditDisabledReason = !canEditOrders
+    ? editPermissionTitle || 'Your account cannot edit orders.'
+    : '';
+  const ordersBulkSelectionDisabledReason = filteredOrders.length === 0
+    ? 'No visible orders to select.'
+    : ordersBulkBusyDisabledReason || ordersBulkEditDisabledReason;
+  const ordersBulkNoSelectionDisabledReason = selectedLoadedOrders.length === 0
+    ? 'Select one or more loaded orders first.'
+    : '';
+  const ordersBulkWorkflowDisabledReason = ordersBulkNoSelectionDisabledReason ||
+    ordersBulkBusyDisabledReason ||
+    ordersBulkEditDisabledReason;
+  const ordersBulkClearDisabledReason = ordersBulkNoSelectionDisabledReason ||
+    ordersBulkBusyDisabledReason ||
+    ordersBulkEditDisabledReason;
+  const ordersBulkActionStatus = [
+    ordersBulkSelectionDisabledReason ? `Select visible unavailable: ${ordersBulkSelectionDisabledReason}` : `Select visible available for ${visibleOrderActionLabel}.`,
+    ordersBulkWorkflowDisabledReason ? `Mark paid selected unavailable: ${ordersBulkWorkflowDisabledReason}` : `Mark paid selected available for ${selectedOrderActionLabel}.`,
+    ordersBulkWorkflowDisabledReason ? `Processing selected unavailable: ${ordersBulkWorkflowDisabledReason}` : `Processing selected available for ${selectedOrderActionLabel}.`,
+    ordersBulkWorkflowDisabledReason ? `Fulfill selected unavailable: ${ordersBulkWorkflowDisabledReason}` : `Fulfill selected available for ${selectedOrderActionLabel}.`,
+    ordersBulkWorkflowDisabledReason ? `Record cancel selected unavailable: ${ordersBulkWorkflowDisabledReason}` : `Record cancel selected available for ${selectedOrderActionLabel}.`,
+    ordersBulkClearDisabledReason ? `Clear selection unavailable: ${ordersBulkClearDisabledReason}` : `Clear selection available for ${selectedOrderActionLabel}.`,
+  ].join(' ');
   const metrics = useMemo(() => ({
     orders: totalOrderCount,
     revenue: orders
@@ -2207,12 +2265,48 @@ function OrdersRoute() {
         : orderProviderCertificationEvidence.status === 'ready'
           ? 'evidence-complete'
           : 'needs-scenario-evidence';
+    const missingScenarios = orderProviderCertificationEvidence.coverage.missing;
+    const operatorNextAction = status === 'no-family-selected'
+      ? {
+          label: 'Select live order provider families',
+          detail: 'Choose payment/refunds, tax, shipping, discount, fulfillment, subscription, or webhook families before copying the guarded certification command.',
+          command: '# Select at least one commerce provider selector before running certification.',
+        }
+      : status === 'needs-credentials'
+        ? {
+            label: 'Configure order provider credentials',
+            detail: missingSelectedFamilies.length > 0
+              ? `Populate runtime aliases for selected order families: ${missingSelectedFamilies.join(', ')}.`
+              : 'Load runtime Settings/CI environment aliases so Backy can prove order-operation provider readiness.',
+            command: 'npm run doctor:release-certification && npm run ci:commerce-provider-certification',
+          }
+        : status === 'needs-scenario-evidence'
+          ? {
+              label: 'Attach live order evidence',
+              detail: missingScenarios.length > 0
+                ? `Capture redacted evidence for: ${missingScenarios.join(', ')}.`
+                : 'Run the selected live order-provider scenarios and attach the redacted packet.',
+              command: 'npm run ci:commerce-provider-certification',
+            }
+          : {
+              label: 'Attach certification artifact',
+              detail: `Store the redacted artifact at ${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT} and expose it through ${ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV}.`,
+              command: 'npm run doctor:release-certification',
+            };
 
     return {
       schemaVersion: 'backy.order-provider-certification-evidence-packet.v1',
       generatedAt: new Date().toISOString(),
       selectedSiteId: activeSiteId,
       status,
+      operatorNextAction: {
+        status,
+        ...operatorNextAction,
+        missingFamilies: missingSelectedFamilies,
+        missingScenarios,
+        artifactEnv: ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV,
+        artifactPath: ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT,
+      },
       selectedFamilies: selectedArtifacts.map((artifact) => artifact.key),
       selectedProviderAliases: Object.fromEntries(selectedArtifacts.map((artifact) => [
         artifact.key,
@@ -2277,6 +2371,7 @@ function OrdersRoute() {
     commerceSettings,
     orderProviderCertificationEvidence.scenarios,
     orderProviderCertificationEvidence.status,
+    orderProviderCertificationEvidence.coverage.missing,
     providerCertificationCommand,
     providerCertificationCommandOptions.certifyDiscount,
     providerCertificationCommandOptions.certifyPayment,
@@ -2297,6 +2392,48 @@ function OrdersRoute() {
     providerRuntimeEvidence.configuredFamilies,
     runtimeCommerce,
   ]);
+  const providerCertificationSelectedFamilySummary = providerCertificationEvidencePacket.selectedFamilies.length > 0
+    ? providerCertificationEvidencePacket.selectedFamilies.join(', ')
+    : 'Select payment/refunds, tax, shipping, discount, fulfillment, subscription, or webhook families.';
+  const providerCertificationRuntimeGapDetail = providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length > 0
+    ? `Selected gaps: ${providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.join(', ')}`
+    : providerRuntimeEvidence.missingFamilies.length > 0
+      ? `Unconfigured families: ${providerRuntimeEvidence.missingFamilies.slice(0, 5).join(', ')}`
+      : 'No runtime credential gaps detected for order-operation families.';
+  const providerCertificationReadinessItems = [
+    {
+      label: 'Selected families',
+      value: String(providerCertificationEvidencePacket.selectedFamilies.length),
+      detail: providerCertificationSelectedFamilySummary,
+    },
+    {
+      label: 'Runtime credentials',
+      value: `${providerRuntimeEvidence.readyCount}/${providerRuntimeEvidence.total} ready`,
+      detail: providerCertificationRuntimeGapDetail,
+    },
+    {
+      label: 'Scenario coverage',
+      value: `${orderProviderCertificationEvidence.coverage.covered}/${orderProviderCertificationEvidence.coverage.total}`,
+      detail: orderProviderCertificationEvidence.coverage.missing.length > 0
+        ? `Missing: ${orderProviderCertificationEvidence.coverage.missing.join(', ')}`
+        : 'All order provider scenarios have evidence hooks.',
+    },
+    {
+      label: 'Artifact output',
+      value: ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV,
+      detail: ORDER_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT,
+    },
+    {
+      label: 'Gate command',
+      value: 'ci:commerce-provider-certification',
+      detail: 'Run npm run ci:commerce-provider-certification after live env aliases are populated.',
+    },
+    {
+      label: 'Required site selector',
+      value: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      detail: activeSiteId,
+    },
+  ];
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -3213,22 +3350,7 @@ function OrdersRoute() {
     setNotice(null);
 
     try {
-      const synced = await updateCollection(activeSiteId, ordersCollection.id, {
-        name: ordersCollection.name || 'Orders',
-        slug: ORDERS_COLLECTION_SLUG,
-        description: ordersCollection.description || 'Commerce orders for storefronts, custom checkout flows, and fulfillment dashboards.',
-        status: 'published',
-        listRoutePattern: ordersCollection.listRoutePattern || '/orders',
-        routePattern: ordersCollection.routePattern || '/orders/:recordSlug',
-        fields: mergeOrderFields(ordersCollection.fields),
-        permissions: {
-          ...ordersCollection.permissions,
-          publicRead: false,
-          publicCreate: false,
-          publicUpdate: false,
-          publicDelete: false,
-        },
-      });
+      const synced = await syncOrdersCollectionForOperations(ordersCollection);
       setOrdersCollection(synced);
       setNotice('Order schema synced. Payment, fulfillment, tracking, refund, and address fields are now available.');
     } catch (syncError) {
@@ -3236,6 +3358,33 @@ function OrdersRoute() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const syncOrdersCollectionForOperations = async (collection: Collection): Promise<Collection> => {
+    const needsSync = (
+      collection.status !== 'published' ||
+      !isOrderCollectionPrivate(collection) ||
+      getMissingOrderFieldKeys(collection).length > 0
+    );
+
+    if (!needsSync) return collection;
+
+    return updateCollection(activeSiteId, collection.id, {
+      name: collection.name || 'Orders',
+      slug: ORDERS_COLLECTION_SLUG,
+      description: collection.description || 'Commerce orders for storefronts, custom checkout flows, and fulfillment dashboards.',
+      status: 'published',
+      listRoutePattern: collection.listRoutePattern || '/orders',
+      routePattern: collection.routePattern || '/orders/:recordSlug',
+      fields: mergeOrderFields(collection.fields),
+      permissions: {
+        ...collection.permissions,
+        publicRead: false,
+        publicCreate: false,
+        publicUpdate: false,
+        publicDelete: false,
+      },
+    });
   };
 
   const saveOrder = async (event: FormEvent<HTMLFormElement>) => {
@@ -3777,7 +3926,7 @@ function OrdersRoute() {
 
   const reconcileOrders = async () => {
     if (!ordersCollection) return;
-    if (isOrdersBusy) return;
+    if (isOrdersMutationBusy) return;
     if (!canConfigureOrders) {
       setError(configurePermissionTitle || 'Your account cannot reconcile commerce orders.');
       return;
@@ -3788,9 +3937,13 @@ function OrdersRoute() {
     setNotice(null);
 
     try {
+      const operationCollection = await syncOrdersCollectionForOperations(ordersCollection);
+      if (operationCollection !== ordersCollection) {
+        setOrdersCollection(operationCollection);
+      }
       const result = await reconcileCommerceOrders(activeSiteId, 100);
       setReconciliationResult(result);
-      const refreshed = await listCollectionRecords(activeSiteId, ordersCollection.id, {
+      const refreshed = await listCollectionRecords(activeSiteId, operationCollection.id, {
         limit: ORDER_RECORD_PAGE_SIZE,
         offset: 0,
         sortBy: 'updatedAt',
@@ -4317,29 +4470,15 @@ function OrdersRoute() {
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
               Control private commerce operations: public checkout intake, payment state, fulfillment, tracking, refunds, customer support notes, and admin API handoff.
             </p>
+            {(canUseOrderRoleDefaults || isPermissionMatrixPending) && (
+              <p className="mt-1 text-xs text-muted-foreground" data-testid="orders-permission-sync-state">
+                {canUseOrderRoleDefaults
+                  ? 'Using role defaults while detailed order permissions sync.'
+                  : 'Loading detailed order permissions before enabling role-specific controls.'}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void copyOrderHandoff()} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
-              Copy manifest
-            </Button>
-            <Button variant="outline" onClick={downloadOrderHandoff} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
-              Download JSON
-            </Button>
-            <Button variant="outline" onClick={exportOrdersCsv} disabled={isOrdersAccessBusy || !canExportOrders || filteredOrders.length === 0} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
-              Export CSV
-            </Button>
-            <Button variant="outline" onClick={downloadOrderImportTemplate} disabled={!ordersCollection || isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
-              CSV template
-            </Button>
-            <Button variant="outline" onClick={() => orderImportInputRef.current?.click()} disabled={!ordersCollection || isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
-              {isImportingOrders ? 'Importing...' : 'Import CSV'}
-            </Button>
-            <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
-              Products
-            </Button>
-            <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
-              Storefront page
-            </Button>
             {!ordersCollection ? (
               <Button onClick={() => void createOrdersCollection()} disabled={isOrdersAccessBusy || !canConfigureOrders} title={!canConfigureOrders ? configurePermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up orders'}
@@ -4352,61 +4491,194 @@ function OrdersRoute() {
             <Button onClick={() => void loadOrders()} disabled={isOrdersAccessBusy || !canViewOrders} title={!canViewOrders ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="text-sm font-semibold">Order readiness</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Checks whether orders are private, complete enough for payment reconciliation, and ready for fulfillment work.
-            </p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn('h-full rounded-full', orderReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
-                style={{ width: `${orderReadiness.score}%` }}
-              />
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {orderReadiness.checks.map((check) => (
-                <OrderReadinessCheck key={check.label} {...check} />
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-background p-4">
-            <div className="flex items-center gap-2">
-              <Receipt className="size-4 text-primary" />
-              <h3 className="text-sm font-semibold">Order workflow</h3>
-            </div>
-            <div className="mt-3 grid gap-2">
-              {orderReadiness.workflow.map((step, index) => (
-                <OrderWorkflowStep key={step.label} index={index + 1} {...step} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Order control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, checkout intake, private API, order health, queue, and editor controls.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-            {ORDER_CONTROL_AREAS.map((area) => (
-              <a
-                key={area.title}
-                href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+            <details className="group relative" data-testid="orders-command-secondary-actions">
+              <summary
+                className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+                aria-label="More order actions"
               >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-              </a>
-            ))}
+                <MoreHorizontal className="size-4" />
+                More actions
+                <span className="sr-only">Copy manifest, Download JSON, Export CSV, CSV template, Import CSV, Products, and Storefront page</span>
+              </summary>
+              <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56">
+                <button
+                  type="button"
+                  onClick={() => void copyOrderHandoff()}
+                  disabled={isOrdersAccessBusy || !canExportOrders}
+                  title={!canExportOrders ? exportPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="orders-command-copy-manifest"
+                >
+                  <Copy className="size-4" />
+                  Copy manifest
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadOrderHandoff}
+                  disabled={isOrdersAccessBusy || !canExportOrders}
+                  title={!canExportOrders ? exportPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="orders-command-download-json"
+                >
+                  <Download className="size-4" />
+                  Download JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={exportOrdersCsv}
+                  disabled={isOrdersAccessBusy || !canExportOrders || filteredOrders.length === 0}
+                  title={!canExportOrders ? exportPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="orders-command-export-csv"
+                >
+                  <Download className="size-4" />
+                  Export CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadOrderImportTemplate}
+                  disabled={!ordersCollection || isOrdersAccessBusy || !canEditOrders}
+                  title={!canEditOrders ? editPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="orders-command-csv-template"
+                >
+                  <FileText className="size-4" />
+                  CSV template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => orderImportInputRef.current?.click()}
+                  disabled={!ordersCollection || isOrdersAccessBusy || !canEditOrders}
+                  title={!canEditOrders ? editPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="orders-command-import-csv"
+                >
+                  <Upload className="size-4" />
+                  {isImportingOrders ? 'Importing...' : 'Import CSV'}
+                </button>
+                <button
+                  type="button"
+                  onClick={openProductsWorkspace}
+                  disabled={isOrdersBusy}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="orders-command-products"
+                >
+                  <ShoppingCart className="size-4" />
+                  Products
+                </button>
+                <button
+                  type="button"
+                  onClick={openStorefrontPage}
+                  disabled={isOrdersAccessBusy || !canEditPages}
+                  title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="orders-command-storefront-page"
+                >
+                  <Sparkles className="size-4" />
+                  Storefront page
+                </button>
+              </div>
+            </details>
           </div>
         </div>
+
+        <details
+          className="group mt-5 overflow-hidden rounded-lg border border-border bg-background"
+          data-default-collapsed="true"
+          data-testid="orders-readiness-details"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>Order readiness, workflow, and navigation</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+          </summary>
+          <div className="border-t border-border p-4">
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <h3 className="text-sm font-semibold">Order readiness</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Checks whether orders are private, complete enough for payment reconciliation, and ready for fulfillment work.
+                </p>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn('h-full rounded-full', orderReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                    style={{ width: `${orderReadiness.score}%` }}
+                  />
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {orderReadiness.checks.map((check) => (
+                    <OrderReadinessCheck key={check.label} {...check} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-center gap-2">
+                  <Receipt className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Order workflow</h3>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {orderReadiness.workflow.map((step, index) => (
+                    <OrderWorkflowStep key={step.label} index={index + 1} {...step} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <details
+              className="group mt-4 overflow-hidden rounded-lg border border-border bg-background"
+              data-default-collapsed="true"
+              data-testid="orders-control-map"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">Order control map</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">Jump to site scope, checkout intake, private API, order health, queue, and editor controls.</span>
+                </span>
+                <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show map</span>
+                <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide map</span>
+              </summary>
+              <div className="grid gap-2 border-t border-border p-4 md:grid-cols-2 xl:grid-cols-6">
+                {ORDER_CONTROL_AREAS.map((area) => (
+                  <a
+                    key={area.title}
+                    href={area.href}
+                    className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                  </a>
+                ))}
+              </div>
+            </details>
+          </div>
+        </details>
       </section>
 
       {ordersCollection && (
-        <Panel id="orders-api" className="mb-6 scroll-mt-24">
+        <details
+          id="orders-api"
+          className="group mb-6 overflow-hidden rounded-lg border border-border bg-card shadow-sm scroll-mt-24"
+          data-default-collapsed="true"
+          data-testid="orders-api-provider-details"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span className="flex min-w-0 items-start gap-3">
+              <span className="mt-0.5 flex size-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ShieldCheck className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-semibold text-foreground">Order APIs, provider readiness, and certification</span>
+                <span className="mt-1 block text-sm text-muted-foreground">
+                  Checkout intake, admin contracts, provider readiness, reconciliation, cron, and live certification handoff.
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+          </summary>
+          <div className="border-t border-border bg-background/40 p-4">
+        <Panel className="border-0 bg-transparent shadow-none">
           <PanelHeader
             title="Order API and security"
             description="Custom frontends post checkout carts to a public intake endpoint while raw order records stay private."
@@ -4426,17 +4698,11 @@ function OrdersRoute() {
                 <Button onClick={() => void copyOrderHandoff()} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
                   Copy manifest
                 </Button>
-                <Button onClick={exportOrdersCsv} disabled={isOrdersAccessBusy || !canExportOrders || filteredOrders.length === 0} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
-                  Export CSV
-                </Button>
                 <Button variant="outline" onClick={downloadOrderImportTemplate} disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
                   CSV template
                 </Button>
                 <Button variant="outline" onClick={() => orderImportInputRef.current?.click()} disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
                   {isImportingOrders ? 'Importing...' : 'Import CSV'}
-                </Button>
-                <Button onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
-                  Copy admin API
                 </Button>
                 <Button onClick={() => void copyOrdersApiUrl(publicOrderIntakeUrl, 'Checkout intake URL')} disabled={isOrdersAccessBusy || !canExportOrders} title={!canExportOrders ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
                   Copy checkout
@@ -4444,28 +4710,74 @@ function OrdersRoute() {
                 <Button
                   variant="outline"
                   onClick={() => void reconcileOrders()}
-                  disabled={isOrdersAccessBusy || !ordersApiReady || !canConfigureOrders}
-                  title={!canConfigureOrders ? configurePermissionTitle : undefined}
+                  disabled={isOrdersMutationBusy || !canConfigureOrders}
+                  title={!canConfigureOrders ? configurePermissionTitle : !ordersApiReady ? 'Sync the private order schema, then reconcile provider state.' : undefined}
                   iconStart={<RefreshCw className="size-4" />}
                   data-testid="orders-reconcile-provider"
                 >
-                  {isReconcilingOrders ? 'Reconciling...' : 'Reconcile provider'}
+                  {isReconcilingOrders ? 'Reconciling...' : ordersApiReady ? 'Reconcile provider' : 'Sync & reconcile'}
                 </Button>
-                <Button variant="outline" onClick={openProductsWorkspace} disabled={isOrdersBusy} iconStart={<ShoppingCart className="size-4" />}>
-                  Products
-                </Button>
-                <Button variant="outline" onClick={openStorefrontPage} disabled={isOrdersAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
-                  Storefront page
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void openAdminOrdersApi()}
-                  disabled={isOrdersAccessBusy || !canExportOrders}
-                  title={!canExportOrders ? exportPermissionTitle : 'Fetch with your admin session and open the JSON response.'}
-                  iconStart={<ExternalLink className="size-4" />}
-                >
-                  Open admin API
-                </Button>
+                <details className="group relative" data-testid="orders-api-secondary-actions">
+                  <summary
+                    className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+                    aria-label="More order API actions"
+                  >
+                    <MoreHorizontal className="size-4" />
+                    More API actions
+                    <span className="sr-only">Export CSV, Copy admin API, Products, Storefront page, and Open admin API</span>
+                  </summary>
+                  <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56">
+                    <button
+                      type="button"
+                      onClick={exportOrdersCsv}
+                      disabled={isOrdersAccessBusy || !canExportOrders || filteredOrders.length === 0}
+                      title={!canExportOrders ? exportPermissionTitle : undefined}
+                      className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Download className="size-4" />
+                      Export CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')}
+                      disabled={isOrdersAccessBusy || !canExportOrders}
+                      title={!canExportOrders ? exportPermissionTitle : undefined}
+                      className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Copy className="size-4" />
+                      Copy admin API
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openProductsWorkspace}
+                      disabled={isOrdersBusy}
+                      className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <ShoppingCart className="size-4" />
+                      Products
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openStorefrontPage}
+                      disabled={isOrdersAccessBusy || !canEditPages}
+                      title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                      className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Sparkles className="size-4" />
+                      Storefront page
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void openAdminOrdersApi()}
+                      disabled={isOrdersAccessBusy || !canExportOrders}
+                      title={!canExportOrders ? exportPermissionTitle : 'Fetch with your admin session and open the JSON response.'}
+                      className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <ExternalLink className="size-4" />
+                      Open admin API
+                    </button>
+                  </div>
+                </details>
               </div>
             }
           />
@@ -4552,7 +4864,7 @@ function OrdersRoute() {
                     size="sm"
                     variant="outline"
                     onClick={() => void loadProviderReadiness()}
-                    disabled={isProviderReadinessLoading || isPermissionMatrixPending || !canViewCommerce}
+                    disabled={isProviderReadinessLoading || !canViewCommerce}
                     title={!canViewCommerce ? viewPermissionTitle : undefined}
                     iconStart={<RefreshCw className={cn('size-4', isProviderReadinessLoading && 'animate-spin')} />}
                   >
@@ -4666,7 +4978,64 @@ function OrdersRoute() {
                       <div className="mt-1 text-muted-foreground">Server env only</div>
                     </div>
                   </div>
-                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="orders-provider-certification-runbook">
+                  <div className="mt-3 rounded-md border border-border bg-background p-3 text-xs" data-testid="orders-provider-certification-readiness-summary">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-foreground">Order certification readiness summary</div>
+                        <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                          One-screen operator summary for the remaining Orders live-provider gate before opening the runbook, env template, and evidence packet.
+                        </p>
+                      </div>
+                      <span className={cn(
+                        'rounded-full px-2.5 py-1 text-[11px] font-semibold',
+                        providerCertificationEvidencePacket.status === 'evidence-complete'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : providerCertificationEvidencePacket.status === 'needs-credentials'
+                            ? 'bg-red-50 text-red-700'
+                            : 'bg-amber-50 text-amber-700',
+                      )}>
+                        {providerCertificationEvidencePacket.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {providerCertificationReadinessItems.map((item) => (
+                        <div key={item.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</div>
+                          <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
+                          <div className="mt-1 break-words text-[11px] leading-4 text-muted-foreground">{item.detail}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      <span className="rounded-md border border-border bg-muted/20 px-2 py-1">Secret boundary: no commerce provider credentials, customer payloads, raw order payloads, payment references, addresses, or webhook bodies are copied.</span>
+                      <span className="rounded-md border border-border bg-muted/20 px-2 py-1">Artifact env: <span className="font-mono">{ORDER_PROVIDER_CERTIFICATION_OUTPUT_ENV}</span></span>
+                    </div>
+                    <div
+                      className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                      data-testid="orders-provider-certification-next-action"
+                      data-status={providerCertificationEvidencePacket.operatorNextAction.status}
+                    >
+                      <div className="font-semibold">Next operator action</div>
+                      <div className="mt-1 font-medium">{providerCertificationEvidencePacket.operatorNextAction.label}</div>
+                      <p className="mt-1 leading-5">{providerCertificationEvidencePacket.operatorNextAction.detail}</p>
+                      <div className="mt-2 break-words rounded border border-amber-200 bg-background/80 px-2 py-1.5 font-mono text-[11px]">
+                        {providerCertificationEvidencePacket.operatorNextAction.command}
+                      </div>
+                    </div>
+                  </div>
+                  <details className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="orders-provider-certification-details" data-default-collapsed="true">
+                    <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
+                      <div>
+                        <div className="font-medium text-foreground">Provider runbook, evidence, and command builder</div>
+                        <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                          Expand when running live provider certification. Daily order work keeps the readiness summary, handoff copy, CI command, and download actions visible.
+                        </p>
+                      </div>
+                      <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                        {providerRuntimeEvidence.readyCount}/{providerRuntimeEvidence.total} runtime ready
+                      </span>
+                    </summary>
+                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="orders-provider-certification-runbook">
                     <div className="font-medium text-foreground">Live provider runbook</div>
                     <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
                       {providerCertificationSummary.operatorGate}
@@ -5229,6 +5598,7 @@ function OrdersRoute() {
                       </div>
                     ))}
                   </div>
+                  </details>
                 </div>
               </div>
               <div className="rounded-lg border border-border bg-background p-3 text-sm" data-testid="orders-cron-readiness">
@@ -5347,6 +5717,8 @@ function OrdersRoute() {
             </div>
           </PanelContent>
         </Panel>
+          </div>
+        </details>
       )}
 
       <div id="orders-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
@@ -5384,7 +5756,29 @@ function OrdersRoute() {
       </div>
 
       {ordersCollection && (
-        <Panel id="orders-analytics" className="mb-6 scroll-mt-24" data-testid="orders-analytics-panel">
+        <details
+          id="orders-analytics"
+          className="group mb-6 overflow-hidden rounded-lg border border-border bg-card shadow-sm scroll-mt-24"
+          data-default-collapsed="true"
+          data-testid="orders-analytics-details"
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span className="flex min-w-0 items-start gap-3">
+              <span className="mt-0.5 flex size-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <BarChart3 className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-semibold text-foreground">Order analytics and delivery events</span>
+                <span className="mt-1 block text-sm text-muted-foreground">
+                  Backend totals, provider execution analytics, and checkout notification delivery diagnostics.
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show analytics</span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide analytics</span>
+          </summary>
+          <div className="border-t border-border bg-background/40 p-4">
+        <Panel className="border-0 bg-transparent shadow-none" data-testid="orders-analytics-panel">
           <PanelHeader
             title="Order Analytics"
             description="Backend totals across the private order queue, independent of the currently loaded page."
@@ -5393,7 +5787,7 @@ function OrdersRoute() {
               <Button
                 variant="outline"
                 onClick={() => void loadOrderAnalytics()}
-                disabled={isOrderAnalyticsLoading || isPermissionMatrixPending || !canViewCommerce}
+                disabled={isOrderAnalyticsLoading || !canViewCommerce}
                 title={!canViewCommerce ? viewPermissionTitle : undefined}
                 iconStart={<RefreshCw className={cn('size-4', isOrderAnalyticsLoading && 'animate-spin')} />}
               >
@@ -5610,7 +6004,7 @@ function OrdersRoute() {
                     <Button
                       variant="outline"
                       onClick={() => void loadOrderDeliveryEvents()}
-                      disabled={isPermissionMatrixPending || !canViewCommerce}
+                      disabled={!canViewCommerce}
                       title={!canViewCommerce ? viewPermissionTitle : undefined}
                       iconStart={<RefreshCw className="size-4" />}
                     >
@@ -5664,6 +6058,8 @@ function OrdersRoute() {
             )}
           </PanelContent>
         </Panel>
+          </div>
+        </details>
       )}
 
       {!ordersCollection ? (
@@ -5833,14 +6229,29 @@ function OrdersRoute() {
                 </div>
               ) : (
                 <div className="grid gap-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2">
+                  <span id={ordersBulkActionStatusId} className="sr-only" data-testid="orders-bulk-action-status" aria-live="polite">
+                    {ordersBulkActionStatus}
+                  </span>
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2"
+                    role="group"
+                    aria-label="Selected order bulk actions"
+                    aria-describedby={ordersBulkActionStatusId}
+                    data-testid="orders-bulk-toolbar"
+                    data-action-status={ordersBulkActionStatus}
+                  >
                     <label className="flex items-center gap-2 text-sm font-medium text-foreground">
                       <input
                         type="checkbox"
                         aria-label="Select all visible orders"
                         checked={allVisibleOrdersSelected}
                         onChange={(event) => toggleVisibleOrderSelection(event.target.checked)}
-                        disabled={isOrdersAccessBusy || !canEditOrders || filteredOrders.length === 0}
+                        disabled={Boolean(ordersBulkSelectionDisabledReason)}
+                        title={ordersBulkSelectionDisabledReason || undefined}
+                        aria-describedby={ordersBulkActionStatusId}
+                        data-action-state={ordersBulkSelectionDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={ordersBulkActionStatus}
+                        data-disabled-reason={ordersBulkSelectionDisabledReason || undefined}
                         className="size-4 rounded border-border"
                       />
                       <span data-testid="orders-bulk-selection-summary">
@@ -5855,8 +6266,12 @@ function OrdersRoute() {
                           size="sm"
                           variant="ghost"
                           onClick={clearOrderSelection}
-                          disabled={isOrdersAccessBusy || !canEditOrders}
-                          title={!canEditOrders ? editPermissionTitle : undefined}
+                          disabled={Boolean(ordersBulkClearDisabledReason)}
+                          title={ordersBulkClearDisabledReason || undefined}
+                          aria-describedby={ordersBulkActionStatusId}
+                          data-action-state={ordersBulkClearDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={ordersBulkActionStatus}
+                          data-disabled-reason={ordersBulkClearDisabledReason || undefined}
                           data-testid="orders-bulk-clear-selection"
                         >
                           Clear selection
@@ -5866,9 +6281,14 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateOrderWorkflow('paid')}
-                        disabled={isOrdersAccessBusy || !canEditOrders || selectedLoadedOrders.length === 0}
-                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        disabled={Boolean(ordersBulkWorkflowDisabledReason)}
+                        title={ordersBulkWorkflowDisabledReason || undefined}
+                        aria-describedby={ordersBulkActionStatusId}
+                        data-action-state={ordersBulkWorkflowDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={ordersBulkActionStatus}
+                        data-disabled-reason={ordersBulkWorkflowDisabledReason || undefined}
                         iconStart={<CreditCard className="size-4" />}
+                        data-testid="orders-bulk-mark-paid"
                       >
                         Mark Paid
                       </Button>
@@ -5876,9 +6296,14 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateOrderWorkflow('processing')}
-                        disabled={isOrdersAccessBusy || !canEditOrders || selectedLoadedOrders.length === 0}
-                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        disabled={Boolean(ordersBulkWorkflowDisabledReason)}
+                        title={ordersBulkWorkflowDisabledReason || undefined}
+                        aria-describedby={ordersBulkActionStatusId}
+                        data-action-state={ordersBulkWorkflowDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={ordersBulkActionStatus}
+                        data-disabled-reason={ordersBulkWorkflowDisabledReason || undefined}
                         iconStart={<Truck className="size-4" />}
+                        data-testid="orders-bulk-processing"
                       >
                         Processing
                       </Button>
@@ -5886,9 +6311,14 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateOrderWorkflow('fulfilled')}
-                        disabled={isOrdersAccessBusy || !canEditOrders || selectedLoadedOrders.length === 0}
-                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        disabled={Boolean(ordersBulkWorkflowDisabledReason)}
+                        title={ordersBulkWorkflowDisabledReason || undefined}
+                        aria-describedby={ordersBulkActionStatusId}
+                        data-action-state={ordersBulkWorkflowDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={ordersBulkActionStatus}
+                        data-disabled-reason={ordersBulkWorkflowDisabledReason || undefined}
                         iconStart={<PackageCheck className="size-4" />}
+                        data-testid="orders-bulk-fulfill"
                       >
                         Fulfill
                       </Button>
@@ -5896,9 +6326,14 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateOrderWorkflow('cancelled')}
-                        disabled={isOrdersAccessBusy || !canEditOrders || selectedLoadedOrders.length === 0}
-                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        disabled={Boolean(ordersBulkWorkflowDisabledReason)}
+                        title={ordersBulkWorkflowDisabledReason || undefined}
+                        aria-describedby={ordersBulkActionStatusId}
+                        data-action-state={ordersBulkWorkflowDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={ordersBulkActionStatus}
+                        data-disabled-reason={ordersBulkWorkflowDisabledReason || undefined}
                         iconStart={<Archive className="size-4" />}
+                        data-testid="orders-bulk-cancel"
                       >
                         Record cancel
                       </Button>
@@ -5942,15 +6377,74 @@ function OrdersRoute() {
             </PanelContent>
           </Panel>
 
-          <Panel id="orders-editor" className="scroll-mt-24 xl:sticky xl:top-4 xl:self-start">
+          <Panel
+            id="orders-editor"
+            data-testid="orders-editor-panel"
+            className="scroll-mt-24 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto"
+          >
             <PanelHeader
               title={selectedOrder ? 'Edit order' : 'New order'}
               description="Customer, item, payment, and fulfillment state."
               icon={<Receipt className="size-4" />}
             />
             <PanelContent>
-              <form onSubmit={saveOrder} noValidate>
+              <form onSubmit={saveOrder} noValidate data-testid="orders-editor-form">
+                <div
+                  className="sticky top-0 z-10 -mx-5 mb-4 border-y border-border bg-card/95 px-5 py-3 shadow-sm backdrop-blur"
+                  data-testid="orders-editor-sticky-actions"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-foreground">
+                        {selectedOrder ? 'Editing order' : 'Record order'}
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {orderFormSubmitted && orderRequiredFieldsInvalid
+                          ? 'Fix the highlighted order fields before saving.'
+                          : 'Save and workflow controls stay available while you review the order.'}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={resetForm}
+                        disabled={isOrdersAccessBusy || !canEditOrders}
+                        data-testid="orders-editor-sticky-clear"
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        size="sm"
+                        type="submit"
+                        variant="primary"
+                        disabled={isOrdersAccessBusy || !canEditOrders}
+                        title={!canEditOrders ? editPermissionTitle : undefined}
+                        iconStart={<Receipt className="size-4" />}
+                        data-testid="orders-editor-sticky-save"
+                      >
+                        {isSaving ? 'Saving...' : selectedOrder ? 'Save Order' : 'Create Order'}
+                      </Button>
+                    </div>
+                  </div>
+                  <nav
+                    aria-label="Order editor sections"
+                    className="mt-3 flex gap-1 overflow-x-auto pb-1"
+                    data-testid="orders-editor-section-nav"
+                  >
+                    {ORDER_EDITOR_SECTIONS.map((section) => (
+                      <a
+                        key={section.id}
+                        href={`#${section.id}`}
+                        className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground focus-ring"
+                      >
+                        {section.label}
+                      </a>
+                    ))}
+                  </nav>
+                </div>
                 <fieldset disabled={isOrdersAccessBusy || !canEditOrders} title={!canEditOrders ? editPermissionTitle : undefined} className={cn('space-y-4', (isOrdersAccessBusy || !canEditOrders) && 'opacity-70')}>
+                <div id="orders-editor-identity" className="scroll-mt-28" data-testid="orders-editor-identity-section" />
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Order number">
                     <input
@@ -6127,6 +6621,7 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
+                <div id="orders-editor-customer" className="scroll-mt-28" data-testid="orders-editor-customer-section" />
                 <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-customer-profile-manager">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -6251,6 +6746,7 @@ function OrdersRoute() {
                     </>
                   ) : null}
                 </div>
+                <div id="orders-editor-status-handoff" className="scroll-mt-28" data-testid="orders-editor-status-handoff-section" />
                 <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-status-handoff">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -6440,6 +6936,7 @@ function OrdersRoute() {
                     <div className="mt-1 leading-5">{selectedOrderStatusHandoff.nextSteps.join(' ')}</div>
                   </div>
                 </div>
+                <div id="orders-editor-workflow" className="scroll-mt-28" data-testid="orders-editor-workflow-section" />
                 <div className="grid grid-cols-3 gap-3">
                   <Field label="Provider">
                     <input
@@ -6562,6 +7059,7 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
+                <div id="orders-editor-labels" className="scroll-mt-28" data-testid="orders-editor-labels-section" />
                 <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-shipping-label-controls">
                   <div>
                     <div className="text-sm font-semibold text-foreground">Shipment label handoff</div>
@@ -6704,6 +7202,7 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
+                <div id="orders-editor-risk" className="scroll-mt-28" data-testid="orders-editor-risk-section" />
                 <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="orders-risk-controls">
                   <div>
                     <div className="text-sm font-semibold text-foreground">Fraud risk controls</div>
@@ -6758,6 +7257,7 @@ function OrdersRoute() {
                     />
                   </Field>
                 </div>
+                <div id="orders-editor-items" className="scroll-mt-28" data-testid="orders-editor-items-section" />
                 <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -6932,6 +7432,7 @@ function OrdersRoute() {
                     placeholder="Private fulfillment notes..."
                   />
                 </Field>
+                <div id="orders-editor-refunds" className="scroll-mt-28" data-testid="orders-editor-refunds-section" />
                 <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-3">
                   <Field label="Refund amount">
                     <input
@@ -7215,6 +7716,7 @@ function OrderCard({
   onDelete: () => void;
 }) {
   const values = order.values;
+  const orderNumber = String(readOrderValue(values, 'ordernumber', order.slug));
   const total = toNumber(values.total);
   const currency = normalizeCurrency(String(values.currency || 'USD'));
   const paymentStatus = String(readOrderValue(values, 'paymentstatus', 'pending'));
@@ -7263,18 +7765,84 @@ function OrderCard({
   const dispatchFulfillmentPlan = actionByKey('dispatch-fulfillment');
   const providerRefundPlan = actionByKey('provider-refund');
   const refreshProviderRefundPlan = actionByKey('refresh-provider-refund');
-  const disabledByPlan = (baseDisabled: boolean, plan?: OrderOperationAction) => (
-    disabled || baseDisabled || (plan ? !plan.enabled : false)
-  );
   const planTitle = (plan?: OrderOperationAction) => plan?.reason;
+  const orderActionStatusId = `orders-actions-status-${order.id}`;
+  const orderBusyReason = disabled
+    ? 'Order actions are temporarily unavailable while Backy updates order data'
+    : null;
+  const planDisabledReason = (plan?: OrderOperationAction) => (
+    plan && !plan.enabled ? plan.reason || `${plan.label} is not currently available` : null
+  );
+  const refreshQuoteDisabledReason = orderBusyReason ||
+    (orderStatus === 'cancelled' ? 'Cancelled orders cannot be requoted' : null) ||
+    (paymentStatus === 'refunded' ? 'Refunded orders cannot be requoted' : null) ||
+    planDisabledReason(refreshQuotePlan);
+  const markPaidDisabledReason = orderBusyReason ||
+    (paymentStatus === 'paid' ? 'This order is already paid' : null);
+  const prepareLabelDisabledReason = orderBusyReason ||
+    (Boolean(shippingLabelId) && shippingLabelStatus !== 'voided' ? 'A shipping label is already prepared for this order' : null) ||
+    (fulfillmentStatus === 'fulfilled' ? 'Fulfilled orders cannot prepare a new label' : null) ||
+    (fulfillmentStatus === 'cancelled' ? 'Cancelled fulfillment cannot prepare a new label' : null) ||
+    planDisabledReason(prepareLabelPlan);
+  const voidLabelDisabledReason = orderBusyReason ||
+    (shippingLabelStatus === 'voided' ? 'This shipping label is already voided' : null) ||
+    (fulfillmentStatus === 'fulfilled' ? 'Fulfilled orders cannot void the shipping label' : null);
+  const refreshTrackingDisabledReason = orderBusyReason ||
+    (fulfillmentStatus === 'cancelled' ? 'Cancelled fulfillment cannot refresh tracking' : null) ||
+    planDisabledReason(refreshTrackingPlan);
+  const dispatchFulfillmentDisabledReason = orderBusyReason ||
+    (Boolean(fulfillmentId) ? 'Fulfillment has already been dispatched' : null) ||
+    (paymentStatus !== 'paid' ? 'Mark the order paid before dispatching fulfillment' : null) ||
+    (fulfillmentStatus === 'fulfilled' ? 'This order is already fulfilled' : null) ||
+    (fulfillmentStatus === 'cancelled' ? 'Cancelled fulfillment cannot be dispatched' : null) ||
+    planDisabledReason(dispatchFulfillmentPlan);
+  const fulfillDisabledReason = orderBusyReason ||
+    (fulfillmentStatus === 'fulfilled' ? 'This order is already fulfilled' : null);
+  const refundDisabledReason = orderBusyReason ||
+    (paymentStatus === 'refunded' ? 'This order is already refunded' : null);
+  const providerRefundLabel = providerRefundRetryable ? 'Retry Provider Refund' : 'Provider Refund';
+  const providerRefundDisabledReason = orderBusyReason ||
+    (Boolean(providerRefundId) && !providerRefundRetryable ? 'A provider refund is already recorded for this order' : null) ||
+    (paymentStatus === 'pending' ? 'Mark the order paid before creating a provider refund' : null) ||
+    (paymentStatus === 'failed' ? 'Failed payments cannot create a provider refund' : null) ||
+    planDisabledReason(providerRefundPlan);
+  const refreshProviderRefundDisabledReason = orderBusyReason ||
+    planDisabledReason(refreshProviderRefundPlan);
+  const cancelDisabledReason = orderBusyReason ||
+    (orderStatus === 'cancelled' ? 'This order is already cancelled' : null);
+  const deleteOrderDisabledReason = orderBusyReason ||
+    (!canDelete ? deleteDisabledReason || 'Your account cannot delete orders' : null);
+  const actionStatus = (label: string, reason: string | null) => (
+    `${label} ${reason ? `unavailable: ${reason}` : 'available'}.`
+  );
+  const orderActionStatus = [
+    actionStatus('Edit', orderBusyReason),
+    actionStatus('Refresh Quote', refreshQuoteDisabledReason),
+    actionStatus('Mark Paid', markPaidDisabledReason),
+    actionStatus('Prepare Label', prepareLabelDisabledReason),
+    shippingLabelId ? actionStatus('Void Label', voidLabelDisabledReason) : null,
+    shippingLabelUrl ? actionStatus('Open Label', null) : null,
+    trackingNumber ? actionStatus('Refresh Tracking', refreshTrackingDisabledReason) : null,
+    actionStatus('Dispatch Fulfillment', dispatchFulfillmentDisabledReason),
+    actionStatus('Fulfill', fulfillDisabledReason),
+    actionStatus('Record Refund/Return', refundDisabledReason),
+    actionStatus(providerRefundLabel, providerRefundDisabledReason),
+    providerRefundRefreshable ? actionStatus('Refresh Provider Refund', refreshProviderRefundDisabledReason) : null,
+    actionStatus('Record Cancel', cancelDisabledReason),
+    actionStatus('Delete', deleteOrderDisabledReason),
+  ].filter(Boolean).join(' ');
 
   return (
-    <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}>
+    <article
+      className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')}
+      data-testid="orders-order-card"
+      data-order-id={order.id}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 gap-3">
           <input
             type="checkbox"
-            aria-label={`Select order ${String(readOrderValue(values, 'ordernumber', order.slug))}`}
+            aria-label={`Select order ${orderNumber}`}
             checked={selectedForBulk}
             onChange={(event) => onSelectionChange(event.target.checked)}
             disabled={disabled}
@@ -7282,7 +7850,7 @@ function OrderCard({
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-semibold">{String(readOrderValue(values, 'ordernumber', order.slug))}</h3>
+              <h3 className="font-semibold">{orderNumber}</h3>
               <StatusBadge status={order.status} />
             </div>
             <div className="mt-1 text-sm text-muted-foreground">
@@ -7456,19 +8024,103 @@ function OrderCard({
           ) : null}
         </div>
       )}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Receipt className="size-4" />}>Edit</Button>
-        <Button size="sm" variant="outline" onClick={onRefreshQuote} disabled={disabledByPlan(orderStatus === 'cancelled' || paymentStatus === 'refunded', refreshQuotePlan)} title={planTitle(refreshQuotePlan)} iconStart={<RefreshCw className="size-4" />}>Refresh Quote</Button>
-        <Button size="sm" variant="outline" onClick={onPaid} disabled={disabled || paymentStatus === 'paid'} iconStart={<CreditCard className="size-4" />}>Mark Paid</Button>
-        <Button size="sm" variant="outline" onClick={onShippingLabel} disabled={disabledByPlan((Boolean(shippingLabelId) && shippingLabelStatus !== 'voided') || fulfillmentStatus === 'fulfilled' || fulfillmentStatus === 'cancelled', prepareLabelPlan)} title={planTitle(prepareLabelPlan)} iconStart={<Truck className="size-4" />}>Prepare Label</Button>
+      <div
+        className="mt-4 flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label={`Actions for order ${orderNumber}`}
+        aria-describedby={orderActionStatusId}
+        data-testid="orders-action-group"
+        data-order-id={order.id}
+        data-action-status={orderActionStatus}
+      >
+        <span id={orderActionStatusId} className="sr-only" data-testid="orders-action-status">
+          {orderActionStatus}
+        </span>
+        <Button
+          size="sm"
+          onClick={onEdit}
+          disabled={Boolean(orderBusyReason)}
+          title={orderBusyReason || undefined}
+          aria-label={`Edit order ${orderNumber}`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-edit-order"
+          data-action-state={orderBusyReason ? 'blocked' : 'ready'}
+          data-disabled-reason={orderBusyReason || undefined}
+          iconStart={<Receipt className="size-4" />}
+        >
+          Edit
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onRefreshQuote}
+          disabled={Boolean(refreshQuoteDisabledReason)}
+          title={refreshQuoteDisabledReason || planTitle(refreshQuotePlan)}
+          aria-label={`Refresh quote for order ${orderNumber}`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-refresh-quote"
+          data-action-state={refreshQuoteDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={refreshQuoteDisabledReason || undefined}
+          iconStart={<RefreshCw className="size-4" />}
+        >
+          Refresh Quote
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onPaid}
+          disabled={Boolean(markPaidDisabledReason)}
+          title={markPaidDisabledReason || undefined}
+          aria-label={`Mark order ${orderNumber} paid`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-mark-paid"
+          data-action-state={markPaidDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={markPaidDisabledReason || undefined}
+          iconStart={<CreditCard className="size-4" />}
+        >
+          Mark Paid
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onShippingLabel}
+          disabled={Boolean(prepareLabelDisabledReason)}
+          title={prepareLabelDisabledReason || planTitle(prepareLabelPlan)}
+          aria-label={`Prepare shipping label for order ${orderNumber}`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-prepare-label"
+          data-action-state={prepareLabelDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={prepareLabelDisabledReason || undefined}
+          iconStart={<Truck className="size-4" />}
+        >
+          Prepare Label
+        </Button>
         {shippingLabelId ? (
-          <Button size="sm" variant="outline" onClick={onVoidShippingLabel} disabled={disabled || shippingLabelStatus === 'voided' || fulfillmentStatus === 'fulfilled'} iconStart={<Archive className="size-4" />}>Void Label</Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onVoidShippingLabel}
+            disabled={Boolean(voidLabelDisabledReason)}
+            title={voidLabelDisabledReason || undefined}
+            aria-label={`Void shipping label for order ${orderNumber}`}
+            aria-describedby={orderActionStatusId}
+            data-testid="orders-void-label"
+            data-action-state={voidLabelDisabledReason ? 'blocked' : 'ready'}
+            data-disabled-reason={voidLabelDisabledReason || undefined}
+            iconStart={<Archive className="size-4" />}
+          >
+            Void Label
+          </Button>
         ) : null}
         {shippingLabelUrl ? (
           <a
             href={shippingLabelUrl}
             target="_blank"
             rel="noreferrer"
+            aria-label={`Open shipping label for order ${orderNumber}`}
+            aria-describedby={orderActionStatusId}
+            data-testid="orders-open-label"
+            data-action-state="ready"
             className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-transparent bg-transparent px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
           >
             <ExternalLink className="size-4" />
@@ -7476,17 +8128,129 @@ function OrderCard({
           </a>
         ) : null}
         {trackingNumber ? (
-          <Button size="sm" variant="outline" onClick={onRefreshTracking} disabled={disabledByPlan(fulfillmentStatus === 'cancelled', refreshTrackingPlan)} title={planTitle(refreshTrackingPlan)} iconStart={<RefreshCw className="size-4" />}>Refresh Tracking</Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRefreshTracking}
+            disabled={Boolean(refreshTrackingDisabledReason)}
+            title={refreshTrackingDisabledReason || planTitle(refreshTrackingPlan)}
+            aria-label={`Refresh tracking for order ${orderNumber}`}
+            aria-describedby={orderActionStatusId}
+            data-testid="orders-refresh-tracking"
+            data-action-state={refreshTrackingDisabledReason ? 'blocked' : 'ready'}
+            data-disabled-reason={refreshTrackingDisabledReason || undefined}
+            iconStart={<RefreshCw className="size-4" />}
+          >
+            Refresh Tracking
+          </Button>
         ) : null}
-        <Button size="sm" variant="outline" onClick={onDispatchFulfillment} disabled={disabledByPlan(Boolean(fulfillmentId) || paymentStatus !== 'paid' || fulfillmentStatus === 'fulfilled' || fulfillmentStatus === 'cancelled', dispatchFulfillmentPlan)} title={planTitle(dispatchFulfillmentPlan)} iconStart={<PackageCheck className="size-4" />}>Dispatch Fulfillment</Button>
-        <Button size="sm" variant="outline" onClick={onFulfilled} disabled={disabled || fulfillmentStatus === 'fulfilled'} iconStart={<PackageCheck className="size-4" />}>Fulfill</Button>
-        <Button size="sm" variant="outline" onClick={onRefunded} disabled={disabled || paymentStatus === 'refunded'} iconStart={<RotateCcw className="size-4" />}>Record Refund/Return</Button>
-        <Button size="sm" variant="outline" onClick={onProviderRefund} disabled={disabledByPlan((Boolean(providerRefundId) && !providerRefundRetryable) || paymentStatus === 'pending' || paymentStatus === 'failed', providerRefundPlan)} title={planTitle(providerRefundPlan)} iconStart={<CreditCard className="size-4" />}>{providerRefundRetryable ? 'Retry Provider Refund' : 'Provider Refund'}</Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onDispatchFulfillment}
+          disabled={Boolean(dispatchFulfillmentDisabledReason)}
+          title={dispatchFulfillmentDisabledReason || planTitle(dispatchFulfillmentPlan)}
+          aria-label={`Dispatch fulfillment for order ${orderNumber}`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-dispatch-fulfillment"
+          data-action-state={dispatchFulfillmentDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={dispatchFulfillmentDisabledReason || undefined}
+          iconStart={<PackageCheck className="size-4" />}
+        >
+          Dispatch Fulfillment
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onFulfilled}
+          disabled={Boolean(fulfillDisabledReason)}
+          title={fulfillDisabledReason || undefined}
+          aria-label={`Mark order ${orderNumber} fulfilled`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-fulfill-order"
+          data-action-state={fulfillDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={fulfillDisabledReason || undefined}
+          iconStart={<PackageCheck className="size-4" />}
+        >
+          Fulfill
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onRefunded}
+          disabled={Boolean(refundDisabledReason)}
+          title={refundDisabledReason || undefined}
+          aria-label={`Record refund or return for order ${orderNumber}`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-record-refund"
+          data-action-state={refundDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={refundDisabledReason || undefined}
+          iconStart={<RotateCcw className="size-4" />}
+        >
+          Record Refund/Return
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onProviderRefund}
+          disabled={Boolean(providerRefundDisabledReason)}
+          title={providerRefundDisabledReason || planTitle(providerRefundPlan)}
+          aria-label={`${providerRefundLabel} for order ${orderNumber}`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-provider-refund"
+          data-action-state={providerRefundDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={providerRefundDisabledReason || undefined}
+          iconStart={<CreditCard className="size-4" />}
+        >
+          {providerRefundLabel}
+        </Button>
         {providerRefundRefreshable ? (
-          <Button size="sm" variant="outline" onClick={onRefreshProviderRefund} disabled={disabledByPlan(false, refreshProviderRefundPlan)} title={planTitle(refreshProviderRefundPlan)} iconStart={<RefreshCw className="size-4" />}>Refresh Provider Refund</Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRefreshProviderRefund}
+            disabled={Boolean(refreshProviderRefundDisabledReason)}
+            title={refreshProviderRefundDisabledReason || planTitle(refreshProviderRefundPlan)}
+            aria-label={`Refresh provider refund for order ${orderNumber}`}
+            aria-describedby={orderActionStatusId}
+            data-testid="orders-refresh-provider-refund"
+            data-action-state={refreshProviderRefundDisabledReason ? 'blocked' : 'ready'}
+            data-disabled-reason={refreshProviderRefundDisabledReason || undefined}
+            iconStart={<RefreshCw className="size-4" />}
+          >
+            Refresh Provider Refund
+          </Button>
         ) : null}
-        <Button size="sm" variant="outline" onClick={onCancelled} disabled={disabled || orderStatus === 'cancelled'} iconStart={<Archive className="size-4" />}>Record Cancel</Button>
-        <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled || !canDelete} title={!canDelete ? deleteDisabledReason : undefined} iconStart={<Trash2 className="size-4" />}>Delete</Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onCancelled}
+          disabled={Boolean(cancelDisabledReason)}
+          title={cancelDisabledReason || undefined}
+          aria-label={`Record cancellation for order ${orderNumber}`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-record-cancel"
+          data-action-state={cancelDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={cancelDisabledReason || undefined}
+          iconStart={<Archive className="size-4" />}
+        >
+          Record Cancel
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={onDelete}
+          disabled={Boolean(deleteOrderDisabledReason)}
+          title={deleteOrderDisabledReason || undefined}
+          aria-label={`Delete order ${orderNumber}`}
+          aria-describedby={orderActionStatusId}
+          data-testid="orders-delete-order"
+          data-action-state={deleteOrderDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={deleteOrderDisabledReason || undefined}
+          iconStart={<Trash2 className="size-4" />}
+        >
+          Delete
+        </Button>
       </div>
     </article>
   );
@@ -7580,10 +8344,10 @@ const getPublicBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && isLocalAdminDevHost()) {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
 
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()))
     .replace(/\/api\/admin$/, '')
     .replace(/\/api$/, '')
     .replace(/\/$/, '');
@@ -8704,15 +9468,35 @@ const getMissingOrderFieldKeys = (collection: Collection): string[] => {
     .map((field) => field.key);
 };
 
+const normalizeOrderFieldMetadata = (field: CollectionField): CollectionField => {
+  const normalized = { ...field };
+  if (!['select', 'tags'].includes(normalized.type)) {
+    delete normalized.options;
+  }
+  return normalized;
+};
+
 const mergeOrderFields = (currentFields: CollectionField[]): CollectionField[] => {
   const fieldsByKey = new Map(currentFields.map((field) => [field.key, field]));
-  const merged = ORDER_FIELDS.map((requiredField) => ({
-    ...requiredField,
-    ...fieldsByKey.get(requiredField.key),
-    sortOrder: requiredField.sortOrder,
-  }));
+  const merged = ORDER_FIELDS.map((requiredField) => {
+    const currentField = fieldsByKey.get(requiredField.key);
+    const mergedField = normalizeOrderFieldMetadata({
+      ...requiredField,
+      ...currentField,
+      type: requiredField.type,
+      required: requiredField.required,
+      unique: requiredField.unique,
+      sortOrder: requiredField.sortOrder,
+    });
+    if (requiredField.options) {
+      mergedField.options = requiredField.options;
+    }
+    return mergedField;
+  });
   const requiredKeys = new Set(ORDER_FIELDS.map((field) => field.key));
-  const customFields = currentFields.filter((field) => !requiredKeys.has(field.key));
+  const customFields = currentFields
+    .filter((field) => !requiredKeys.has(field.key))
+    .map(normalizeOrderFieldMetadata);
   return [...merged, ...customFields].sort((a, b) => a.sortOrder - b.sortOrder);
 };
 

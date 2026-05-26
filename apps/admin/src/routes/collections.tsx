@@ -55,6 +55,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { useStore, type Page } from '@/stores/mockStore';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { cn, formatDate } from '@/lib/utils';
@@ -103,6 +104,8 @@ const normalizedRecordPageSize = (value: unknown): number | undefined => {
   const parsed = normalizedPositiveInteger(value);
   return parsed && RECORD_PAGE_SIZES.includes(parsed as (typeof RECORD_PAGE_SIZES)[number]) ? parsed : undefined;
 };
+
+const actionState = (disabledReason: string) => (disabledReason ? 'blocked' : 'ready');
 
 export const Route = createFileRoute('/collections')({
   validateSearch: (search: Record<string, unknown>): CollectionsSearch => ({
@@ -877,7 +880,7 @@ const getPublicBaseUrl = () => {
     return envBase.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '');
   }
   if (isLocalAdminHost()) {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
   return typeof window !== 'undefined' ? window.location.origin : '';
 };
@@ -897,7 +900,7 @@ const getAdminBaseUrl = () => {
     return `${envBase.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
   }
   if (isLocalAdminHost()) {
-    return 'http://localhost:3001/api/admin';
+    return `${getLocalBackendOrigin()}/api/admin`;
   }
   return typeof window !== 'undefined'
     ? `${window.location.origin.replace(/\/$/, '')}/api/admin`
@@ -1759,12 +1762,15 @@ const collectionPermissionRule = (
 
 const isCollectionPermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
-  _currentAdmin: User | null,
+  currentAdmin: User | null,
   key: CollectionPermissionKey,
 ): boolean => {
   const matrixRule = collectionPermissionRule(permissionMatrix, key);
   if (matrixRule) {
     return matrixRule.allowed;
+  }
+  if (!permissionMatrix && currentAdmin) {
+    return COLLECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);
   }
   return false;
 };
@@ -1977,13 +1983,14 @@ function CollectionsPage() {
   const activeCollectionIsPublic = activeCollection?.status === 'published' && activeCollection.permissions?.publicRead === true;
   const recordsCopyUrl = activeCollectionIsPublic ? publicRecordsUrl : adminRecordsUrl;
   const recordsCopyLabel = activeCollectionIsPublic ? 'Public records URL' : 'Admin records URL';
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');
-  const canEditCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit');
-  const canExportCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export');
-  const canDeleteCollections = !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete');
-  const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
-  const canCreateMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
+  const canUseCollectionRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseCollectionRoleDefaults;
+  const canViewCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');
+  const canEditCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit');
+  const canExportCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export');
+  const canDeleteCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete');
+  const canViewMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
+  const canCreateMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
   const schemaMutationDisabled = isLoading || isCollectionMutationPending || !canEditCollections;
   const recordMutationDisabled = isCollectionsBusy || !canEditCollections;
   const recordExportDisabled = isCollectionsBusy || !canExportCollections;
@@ -2010,6 +2017,25 @@ function CollectionsPage() {
   const deletePermissionTitle = canDeleteCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.delete');
   const mediaViewPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
   const mediaCreatePermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
+  const recordActionBusyReason = isCollectionsBusy
+    ? 'Collection record actions are temporarily unavailable while Backy updates records.'
+    : '';
+  const recordBulkEditDisabledReason = recordActionBusyReason || (!canEditCollections
+    ? editPermissionTitle || 'Your account cannot edit collection records.'
+    : '');
+  const recordBulkClearDisabledReason = recordActionBusyReason;
+  const recordBulkDeleteDisabledReason = recordActionBusyReason || (!canDeleteCollections
+    ? deletePermissionTitle || 'Your account cannot delete collection records.'
+    : '');
+  const selectedRecordActionLabel = `${selectedRecordIds.length} selected record${selectedRecordIds.length === 1 ? '' : 's'}`;
+  const recordBulkActionStatusId = 'collections-record-bulk-action-status';
+  const recordBulkActionStatus = [
+    recordBulkEditDisabledReason ? `Publish selected unavailable: ${recordBulkEditDisabledReason}` : `Publish selected available for ${selectedRecordActionLabel}.`,
+    recordBulkEditDisabledReason ? `Draft selected unavailable: ${recordBulkEditDisabledReason}` : `Draft selected available for ${selectedRecordActionLabel}.`,
+    recordBulkEditDisabledReason ? `Archive selected unavailable: ${recordBulkEditDisabledReason}` : `Archive selected available for ${selectedRecordActionLabel}.`,
+    recordBulkClearDisabledReason ? `Clear selection unavailable: ${recordBulkClearDisabledReason}` : `Clear selection available for ${selectedRecordActionLabel}.`,
+    recordBulkDeleteDisabledReason ? `Delete selected unavailable: ${recordBulkDeleteDisabledReason}` : `Delete selected available for ${selectedRecordActionLabel}.`,
+  ].join(' ');
   const schemaActionDisabledTitle = isPermissionMatrixPending
     ? 'Loading collection permissions...'
     : !canEditCollections
@@ -2027,6 +2053,29 @@ function CollectionsPage() {
   const newCollectionDisabledReason = schemaMutationDisabled
     ? schemaActionDisabledTitle || 'New collection is temporarily unavailable.'
     : undefined;
+  const collectionActionStatusId = 'collections-collection-action-status';
+  const backupImportDisabledReason = isLoading
+    ? 'Collections are loading.'
+    : isImportingBackup
+      ? 'A collection JSON import is already running.'
+      : isSavingCollection
+        ? 'A collection schema is saving.'
+        : isExportingBackup
+          ? 'A collection JSON export is in progress.'
+          : isCreatingFrontendTemplateId
+            ? 'A frontend template collection is being created.'
+            : !canEditCollections
+              ? editPermissionTitle || 'Your account cannot edit collections.'
+              : '';
+  const newCollectionActionStatus = newCollectionDisabledReason
+    ? `New collection unavailable: ${newCollectionDisabledReason}`
+    : isNewCollectionDraftOpen
+      ? `New collection draft is open for ${activeSiteId}.`
+      : `New collection available for ${activeSiteId}.`;
+  const backupImportActionStatus = backupImportDisabledReason
+    ? `Import JSON unavailable: ${backupImportDisabledReason}`
+    : `Import JSON available for ${activeSiteId}.`;
+  const collectionActionStatus = `${newCollectionActionStatus} ${backupImportActionStatus}`;
   const activeSchemaFields = activeCollection?.fields.length
     ? activeCollection.fields
     : collectionForm.fields.filter((field) => field.key.trim() && field.label.trim());
@@ -4396,9 +4445,13 @@ function CollectionsPage() {
                 onClick={beginNewCollection}
                 disabled={schemaMutationDisabled}
                 title={newCollectionButtonTitle}
-                aria-describedby={newCollectionDisabledReason ? 'collections-new-collection-disabled-reason' : undefined}
+                aria-describedby={`${collectionActionStatusId}${newCollectionDisabledReason ? ' collections-new-collection-disabled-reason' : ''}`}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Create new collection"
+                data-action-state={actionState(newCollectionDisabledReason || '')}
+                data-action-status={newCollectionActionStatus}
+                data-disabled-reason={newCollectionDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="collections-new-collection-button"
               >
                 <Plus className="h-4 w-4" />
@@ -4492,6 +4545,10 @@ function CollectionsPage() {
           {notice}
         </div>
       )}
+
+      <span id={collectionActionStatusId} className="sr-only" data-testid="collections-collection-action-status" aria-live="polite">
+        {collectionActionStatus}
+      </span>
 
       {isCollectionDraftMode && !activeCollection && canEditCollections && (
         <div
@@ -4662,14 +4719,25 @@ function CollectionsPage() {
               className="hidden"
               onChange={(event) => void handleImportCollectionsBackup(event)}
               aria-label="Import collections JSON backup"
+              aria-describedby={collectionActionStatusId}
+              disabled={Boolean(backupImportDisabledReason)}
+              data-action-state={actionState(backupImportDisabledReason)}
+              data-action-status={backupImportActionStatus}
+              data-disabled-reason={backupImportDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
               data-testid="collections-import-backup-input"
             />
             <button
               type="button"
               onClick={() => backupImportInputRef.current?.click()}
-              disabled={isCollectionsBusy || !canEditCollections}
-              title={editPermissionTitle}
+              disabled={Boolean(backupImportDisabledReason)}
+              title={backupImportDisabledReason || undefined}
+              aria-describedby={collectionActionStatusId}
               className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              data-action-state={actionState(backupImportDisabledReason)}
+              data-action-status={backupImportActionStatus}
+              data-disabled-reason={backupImportDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
               data-testid="collections-import-backup"
             >
               <Upload className="h-4 w-4" />
@@ -4690,8 +4758,12 @@ function CollectionsPage() {
                 onClick={beginNewCollection}
                 disabled={schemaMutationDisabled}
                 title={newCollectionButtonTitle}
-                aria-describedby={newCollectionDisabledReason ? 'collections-library-new-collection-disabled-reason' : undefined}
+                aria-describedby={`${collectionActionStatusId}${newCollectionDisabledReason ? ' collections-library-new-collection-disabled-reason' : ''}`}
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                data-action-state={actionState(newCollectionDisabledReason || '')}
+                data-action-status={newCollectionActionStatus}
+                data-disabled-reason={newCollectionDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="collections-library-new-collection-button"
               >
                 <Plus className="h-4 w-4" />
@@ -4750,56 +4822,103 @@ function CollectionsPage() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Collections control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, API delivery, schema library, builder, and record operations.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {COLLECTION_CONTROL_AREAS.map((area) => (
-              <a
-                key={area.title}
-                href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-              >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-              </a>
-            ))}
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="collections-control-map-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Collections control map</span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                Jump links for site scope, API delivery, schema library, builder, and record operations.
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show map</span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide map</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="collections-control-map">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              {COLLECTION_CONTROL_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
+        </details>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="collections-connected-workflows-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Database className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Connected data workflows</h3>
-              </div>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Connected data workflows
+              </span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                Keep page, media, commerce, form, site, and API shortcuts available without stretching the schema workspace.
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">
+              Show workflows
+            </span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide workflows</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="collections-connected-workflows">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="max-w-3xl text-sm text-muted-foreground">
                 Collections become useful when records can power pages, media-backed fields, commerce objects, public form writes, site routes, and runtime API delivery.
               </p>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {COLLECTION_WORKFLOW_SURFACES.length} surfaces
+              </span>
             </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              {COLLECTION_WORKFLOW_SURFACES.length} surfaces
-            </span>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+              {COLLECTION_WORKFLOW_SURFACES.map((surface) => (
+                <button
+                  key={surface.key}
+                  type="button"
+                  onClick={() => openCollectionWorkflowSurface(surface)}
+                  disabled={isCollectionsBusy}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-            {COLLECTION_WORKFLOW_SURFACES.map((surface) => (
-              <button
-                key={surface.key}
-                type="button"
-                onClick={() => openCollectionWorkflowSurface(surface)}
-                disabled={isCollectionsBusy}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+        </details>
       </section>
 
-      <section id="collections-audit" className="mb-5 rounded-lg border border-border bg-card p-4 scroll-mt-24" data-testid="collections-audit-panel">
+      <details
+        id="collections-audit"
+        className="group mb-5 overflow-hidden rounded-lg border border-border bg-card shadow-sm scroll-mt-24"
+        data-testid="collections-audit-details"
+        data-default-collapsed="true"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex min-w-0 items-center gap-3">
+            <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <History className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block">Collections access and activity</span>
+              <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
+                Permission keys plus request-id-backed schema and record activity evidence.
+              </span>
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+              {collectionAuditLogs.length} shown
+            </span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show activity</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide activity</span>
+          </span>
+        </summary>
+        <section className="border-t border-border bg-background/40 p-4" data-testid="collections-audit-panel">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold">
@@ -4833,6 +4952,13 @@ function CollectionsPage() {
                 Effective role {permissionMatrix?.role || currentAdmin?.role || 'unknown'}
               </span>
             </div>
+            {(canUseCollectionRoleDefaults || isPermissionMatrixPending) && (
+              <p className="mt-2 text-xs text-muted-foreground" data-testid="collections-permission-sync-state">
+                {canUseCollectionRoleDefaults
+                  ? 'Using role defaults while detailed collection permissions sync.'
+                  : 'Loading detailed collection permissions before enabling role-specific controls.'}
+              </p>
+            )}
             {permissionError && (
               <div
                 role="alert"
@@ -4862,7 +4988,7 @@ function CollectionsPage() {
             <div className="mt-3 grid gap-2">
               {COLLECTION_PERMISSION_CONTRACT.map((permission) => {
                 const allowed = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, permission.key);
-                const pending = isPermissionsLoading && !permissionMatrix;
+                const pending = isPermissionMatrixPending;
 
                 return (
                   <div key={permission.key} className="rounded-lg border border-border bg-card px-3 py-2">
@@ -4924,7 +5050,8 @@ function CollectionsPage() {
             </div>
           </div>
         </div>
-      </section>
+        </section>
+      </details>
 
       <section className="mb-5 rounded-lg border border-border bg-card p-4" data-testid="collections-templates">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -5443,7 +5570,12 @@ function CollectionsPage() {
                         onClick={beginNewCollection}
                         disabled={schemaMutationDisabled}
                         title={newCollectionButtonTitle}
+                        aria-describedby={collectionActionStatusId}
                         className="mx-auto mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-action-state={actionState(newCollectionDisabledReason || '')}
+                        data-action-status={newCollectionActionStatus}
+                        data-disabled-reason={newCollectionDisabledReason || undefined}
+                        data-target-site-id={activeSiteId}
                         data-testid="collections-empty-new-collection-button"
                       >
                         <Plus className="h-4 w-4" />
@@ -6975,7 +7107,17 @@ function CollectionsPage() {
               </div>
 
               {selectedRecordIds.length > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 text-sm" data-testid="collections-record-bulk-toolbar">
+                <div
+                  className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 text-sm"
+                  role="group"
+                  aria-label="Selected collection record actions"
+                  aria-describedby={recordBulkActionStatusId}
+                  data-testid="collections-record-bulk-toolbar"
+                  data-action-status={recordBulkActionStatus}
+                >
+                  <span id={recordBulkActionStatusId} className="sr-only" data-testid="collections-record-bulk-action-status" aria-live="polite">
+                    {recordBulkActionStatus}
+                  </span>
                   <span className="font-medium" data-testid="collections-record-bulk-selection-summary">
                     {selectedRecordIds.length} selected
                     {selectedRecordsOnPageIds.length !== selectedRecordIds.length ? ` · ${selectedRecordsOnPageIds.length} visible` : ''}
@@ -6985,9 +7127,13 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('published')}
-                      disabled={recordMutationDisabled}
-                      title={editPermissionTitle}
+                      disabled={Boolean(recordBulkEditDisabledReason)}
+                      aria-disabled={Boolean(recordBulkEditDisabledReason)}
+                      aria-describedby={recordBulkActionStatusId}
+                      title={recordBulkEditDisabledReason || 'Publish selected records'}
                       data-testid="collections-record-bulk-publish"
+                      data-action-state={actionState(recordBulkEditDisabledReason)}
+                      data-disabled-reason={recordBulkEditDisabledReason || undefined}
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Publish
@@ -6995,9 +7141,13 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('draft')}
-                      disabled={recordMutationDisabled}
-                      title={editPermissionTitle}
+                      disabled={Boolean(recordBulkEditDisabledReason)}
+                      aria-disabled={Boolean(recordBulkEditDisabledReason)}
+                      aria-describedby={recordBulkActionStatusId}
+                      title={recordBulkEditDisabledReason || 'Move selected records to draft'}
                       data-testid="collections-record-bulk-draft"
+                      data-action-state={actionState(recordBulkEditDisabledReason)}
+                      data-disabled-reason={recordBulkEditDisabledReason || undefined}
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Draft
@@ -7005,9 +7155,13 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => void handleBulkUpdateStatus('archived')}
-                      disabled={recordMutationDisabled}
-                      title={editPermissionTitle}
+                      disabled={Boolean(recordBulkEditDisabledReason)}
+                      aria-disabled={Boolean(recordBulkEditDisabledReason)}
+                      aria-describedby={recordBulkActionStatusId}
+                      title={recordBulkEditDisabledReason || 'Archive selected records'}
                       data-testid="collections-record-bulk-archive"
+                      data-action-state={actionState(recordBulkEditDisabledReason)}
+                      data-disabled-reason={recordBulkEditDisabledReason || undefined}
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Archive
@@ -7015,8 +7169,13 @@ function CollectionsPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedRecordIds([])}
-                      disabled={isCollectionsBusy}
+                      disabled={Boolean(recordBulkClearDisabledReason)}
+                      aria-disabled={Boolean(recordBulkClearDisabledReason)}
+                      aria-describedby={recordBulkActionStatusId}
+                      title={recordBulkClearDisabledReason || 'Clear selected records'}
                       data-testid="collections-record-bulk-clear-selection"
+                      data-action-state={actionState(recordBulkClearDisabledReason)}
+                      data-disabled-reason={recordBulkClearDisabledReason || undefined}
                       className="rounded-lg border border-border px-3 py-2 hover:bg-background disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Clear
@@ -7027,8 +7186,13 @@ function CollectionsPage() {
                         if (destructiveActionDisabled) return;
                         setPendingBulkDelete(true);
                       }}
-                      disabled={destructiveActionDisabled}
-                      title={deletePermissionTitle}
+                      disabled={Boolean(recordBulkDeleteDisabledReason)}
+                      aria-disabled={Boolean(recordBulkDeleteDisabledReason)}
+                      aria-describedby={recordBulkActionStatusId}
+                      title={recordBulkDeleteDisabledReason || 'Delete selected records'}
+                      data-testid="collections-record-bulk-delete"
+                      data-action-state={actionState(recordBulkDeleteDisabledReason)}
+                      data-disabled-reason={recordBulkDeleteDisabledReason || undefined}
                       className="rounded-lg border border-red-200 px-3 py-2 text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Delete

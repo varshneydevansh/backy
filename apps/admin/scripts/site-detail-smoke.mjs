@@ -37,22 +37,164 @@ const assertSiteDetailSourceContract = () => {
   );
   assert(source.includes('title="No site audit events yet"'), 'Site detail audit panel must keep the empty audit title visible');
   assert(source.includes('Save navigation, redirects, SEO, frontend design, or site settings to create request-id activity for this site.'), 'Site detail audit empty state must explain which actions populate activity');
+  assert(
+    source.includes('const auditLoadRequestRef = useRef(0);') &&
+      source.includes('hydrated: false') &&
+      source.includes('const isAuditInitialLoading =') &&
+      source.includes('data-testid="site-audit-panel"') &&
+      source.includes('data-hydrated={String(auditState.hydrated)}') &&
+      source.includes('data-initial-loading={String(isAuditInitialLoading)}') &&
+      source.includes('data-testid="site-audit-background-refresh"') &&
+      source.includes('{isAuditInitialLoading ? (') &&
+      !source.includes('{auditState.loading ? ('),
+    'Site detail audit panel must keep existing activity visible during background refresh after hydration.',
+  );
+  assert(
+    source.includes('const readinessLoadRequestRef = useRef(0);') &&
+      source.includes('const [readinessHydrated, setReadinessHydrated] = useState(false);') &&
+      source.includes('const isReadinessInitialLoading =') &&
+      source.includes('data-testid="site-readiness-panel"') &&
+      source.includes('data-hydrated={String(readinessHydrated)}') &&
+      source.includes('data-initial-loading={String(isReadinessInitialLoading)}') &&
+      source.includes('data-testid="site-readiness-background-refresh"') &&
+      source.includes('Refreshing publish readiness in the background. Current') &&
+      source.includes('!readinessError || readinessHydrated'),
+    'Site detail readiness panel must keep existing readiness results visible during background refresh/error after hydration.',
+  );
   assert(source.includes('title="No webhook endpoints configured"'), 'Site detail webhooks panel must keep the empty webhook title visible');
   assert(source.includes('Add an endpoint to deliver site lifecycle, navigation, SEO, and form events to downstream systems.'), 'Site detail webhooks empty state must explain how to configure delivery');
+  assert(
+    source.includes('const webhookLoadRequestRef = useRef(0);') &&
+      source.includes('!webhookState.hydrated') &&
+      source.includes('!webhookState.errorMessage') &&
+      source.includes('Latest webhook configuration loaded in the background. Unsaved local edits were preserved.') &&
+      source.includes('const isWebhookInitialLoading =') &&
+      source.includes('const isWebhookConfigurationDisabled =') &&
+      source.includes('const isWebhookSaveDisabled =') &&
+      source.includes('data-hydrated={String(webhookState.hydrated)}') &&
+      source.includes('data-dirty={String(webhookState.dirty)}') &&
+      source.includes('data-draft-disabled={String(isWebhookConfigurationDisabled)}') &&
+      source.includes('data-testid="site-webhooks-background-refresh"') &&
+      source.includes('{isWebhookInitialLoading ? (') &&
+      !source.includes('webhookState.loading || webhookState.saving || !canConfigureSite'),
+    'Site detail webhooks controls must stay visible/editable after hydration during background refresh and preserve dirty local edits.',
+  );
   assert(source.includes('title="No redirect or 410 rules configured"'), 'Site detail redirects panel must keep the empty redirects title visible');
   assert(source.includes('Add a redirect rule to preserve old URLs, point traffic to new content, or mark retired paths as gone.'), 'Site detail redirects empty state must explain redirect setup');
+  assert(
+    source.includes('const redirectLoadRequestRef = useRef(0);') &&
+      source.includes('const redirectPreviewRequestRef = useRef(0);') &&
+      source.includes('!redirectState.hydrated') &&
+      source.includes('!redirectState.errorMessage') &&
+      source.includes('Latest redirects loaded in the background. Unsaved local edits were preserved.') &&
+      source.includes('const isRedirectInitialLoading =') &&
+      source.includes('const isRedirectPreviewDisabled =') &&
+      source.includes('const isRedirectSaveDisabled =') &&
+      source.includes('data-hydrated={String(redirectState.hydrated)}') &&
+      source.includes('data-dirty={String(redirectState.dirty)}') &&
+      source.includes('data-draft-disabled={String(areRedirectEditsDisabled)}') &&
+      source.includes('data-testid="site-redirects-background-refresh"') &&
+      source.includes('{isRedirectInitialLoading ? (') &&
+      !source.includes('redirectState.loading ||\\n    redirectState.saving ||\\n    redirectState.previewing') &&
+      !source.includes('disabled={!siteApiId || areRedirectEditsDisabled}'),
+    'Site detail redirect controls must stay visible/editable after hydration during background refresh and avoid stale preview locks.',
+  );
   assert(source.includes('title="No route-level SEO overrides"'), 'Site detail SEO route override panel must keep the empty override title visible');
   assert(source.includes('Add route overrides for custom canonical paths, campaign landing pages, and dynamic collection route SEO.'), 'Site detail SEO route override empty state must explain override use cases');
+  assert(
+    source.includes('const seoLoadRequestRef = useRef(0);') &&
+      source.includes('!seoState.hydrated') &&
+      source.includes('!seoState.errorMessage') &&
+      source.includes('Latest SEO settings loaded in the background. Unsaved local edits were preserved.') &&
+      source.includes('const isSeoInitialLoading =') &&
+      source.includes('const isSeoSaveDisabled =') &&
+      source.includes('data-hydrated={String(seoState.hydrated)}') &&
+      source.includes('data-dirty={String(seoState.dirty)}') &&
+      source.includes('data-draft-disabled={String(areSeoEditsDisabled)}') &&
+      source.includes('data-testid="site-seo-background-refresh"') &&
+      source.includes('disabled={isSeoSaveDisabled}') &&
+      !source.includes('seoState.loading || seoState.saving || !canConfigureSite') &&
+      !source.includes('disabled={!siteApiId || areSeoEditsDisabled}'),
+    'Site detail SEO controls must stay editable after hydration during background refresh and preserve dirty local edits.',
+  );
   assert(source.includes('title="No navigation links yet"'), 'Site detail navigation editor must keep the empty menu title visible');
   assert(source.includes('Add route or URL links to build this menu for custom frontend navigation.'), 'Site detail navigation empty state must explain menu setup');
+  assert(
+    source.includes('const navigationLoadRequestRef = useRef(0);') &&
+      source.includes('const applyNavigationEditorResponse =') &&
+      source.includes('!navigationState.hydrated') &&
+      source.includes('!navigationState.errorMessage') &&
+      source.includes('Latest navigation loaded in the background. Unsaved local edits were preserved.') &&
+      source.includes('const isNavigationDraftDisabled =') &&
+      source.includes('data-hydrated={String(navigationState.hydrated)}') &&
+      source.includes('data-dirty={String(navigationState.dirty)}') &&
+      source.includes('data-draft-disabled={String(isNavigationDraftDisabled)}') &&
+      source.includes('data-testid="site-navigation-background-refresh"') &&
+      source.includes('loading={isNavigationInitialLoading}') &&
+      source.includes('disabled={isNavigationDraftDisabled}') &&
+      !source.includes('loading={navigationState.loading || !canConfigureSite}'),
+    'Site detail navigation draft controls must stay visible/editable after hydration during background refresh and preserve dirty local edits.',
+  );
+  assert(
+    source.includes('hydrated: Boolean(response)') &&
+      source.includes('dirty: false') &&
+      source.includes('const frontendDesignLoadRequestRef = useRef(0);') &&
+      source.includes('if (!currentAdmin || isPermissionMatrixPending)') &&
+      source.includes('!frontendDesignState.hydrated') &&
+      source.includes('!frontendDesignState.errorMessage') &&
+      source.includes('preserveDirtyDraft') &&
+      source.includes('Unsaved local edits were preserved') &&
+      source.includes('const isFrontendDesignDraftDisabled =') &&
+      source.includes('data-hydrated={String(frontendDesignState.hydrated)}') &&
+      source.includes('data-dirty={String(frontendDesignState.dirty)}') &&
+      source.includes('data-draft-disabled={String(isFrontendDesignDraftDisabled)}') &&
+      source.includes('data-testid="site-frontend-design-background-refresh"') &&
+      !source.includes('disabled={frontendDesignState.loading || !canConfigureSite}'),
+    'Site detail frontend-design draft controls must stay editable after hydration during background refresh and preserve dirty local edits.',
+  );
   assert(source.includes('title="No form selected"'), 'Site detail forms workspace must keep the empty form selection title visible');
   assert(source.includes('Create a standalone form or choose an existing form from the Active Form selector to edit its fields and delivery settings.'), 'Site detail form selection empty state must explain how to start editing');
   assert(source.includes('title="No submissions in the selected state"'), 'Site detail submissions panel must keep the filtered empty submissions title visible');
   assert(source.includes('Submissions that match the active form and status filter will appear here after visitors complete the form.'), 'Site detail submissions empty state must explain filtered results');
   assert(source.includes('title="No contacts in the selected state"'), 'Site detail contacts panel must keep the filtered empty contacts title visible');
   assert(source.includes('Lead-share contacts that match the active form and status filter will appear here.'), 'Site detail contacts empty state must explain filtered contacts');
+  assert(
+    source.includes('const submissionLoadRequestRef = useRef(0);') &&
+      source.includes('const contactLoadRequestRef = useRef(0);') &&
+      source.includes('const [submissionsHydrated, setSubmissionsHydrated] = useState(false);') &&
+      source.includes('const [contactsHydrated, setContactsHydrated] = useState(false);') &&
+      source.includes('const isSubmissionInitialLoading =') &&
+      source.includes('const isContactInitialLoading =') &&
+      source.includes('data-testid="site-submissions-panel"') &&
+      source.includes('data-hydrated={String(submissionsHydrated)}') &&
+      source.includes('data-testid="site-submissions-background-refresh"') &&
+      source.includes('{isSubmissionInitialLoading ? (') &&
+      source.includes('data-testid="site-contacts-panel"') &&
+      source.includes('data-hydrated={String(contactsHydrated)}') &&
+      source.includes('data-testid="site-contacts-background-refresh"') &&
+      source.includes('{isContactInitialLoading ? (') &&
+      !source.includes('{state.submissionLoading ? (') &&
+      !source.includes('{state.contactLoading ? ('),
+    'Site detail submission/contact queues must keep existing rows visible during background refresh after hydration.',
+  );
   assert(source.includes('title="No comments in the selected state"'), 'Site detail comments panel must keep the filtered empty comments title visible');
   assert(source.includes('Comments that match the active moderation status will appear here for review and bulk actions.'), 'Site detail comments empty state must explain filtered moderation results');
+  assert(
+    source.includes('const workflowLoadRequestRef = useRef(0);') &&
+      source.includes('const [workflowHydrated, setWorkflowHydrated] = useState(false);') &&
+      source.includes('const formBuilderDraftRef = useRef<FormDefinition | null>(null);') &&
+      source.includes('const savedFormBuilderDraftRef = useRef<FormDefinition | null>(null);') &&
+      source.includes('const isWorkflowInitialLoading =') &&
+      source.includes('Latest form definition loaded in the background. Unsaved local edits were preserved.') &&
+      source.includes('data-hydrated={String(workflowHydrated)}') &&
+      source.includes('data-dirty={String(formBuilderDirty)}') &&
+      source.includes('data-draft-disabled={String(isFormBuilderDisabled)}') &&
+      source.includes('data-testid="site-form-builder-background-refresh"') &&
+      source.includes('{isWorkflowInitialLoading ? (') &&
+      !source.includes('const isFormViewDisabled = state.workflowLoading || !canViewForms;') &&
+      !source.includes('state.workflowLoading;'),
+    'Site detail form-builder controls must stay editable after workflow hydration during background refresh and preserve dirty local edits.',
+  );
   assert(
     source.includes('const selectedCommentSet = useMemo') &&
       source.includes('const selectedLoadedComments = useMemo') &&
@@ -62,6 +204,18 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-detail-comments-clear-selection"') &&
       source.includes('outside this loaded view'),
     'Site detail comments moderation must summarize loaded selected comments and expose loaded-selection controls',
+  );
+  assert(
+    source.includes('const commentsLoadRequestRef = useRef(0);') &&
+      source.includes('const [commentsHydrated, setCommentsHydrated] = useState(false);') &&
+      source.includes('const isCommentInitialLoading =') &&
+      source.includes('data-testid="site-comments-moderation-panel"') &&
+      source.includes('data-hydrated={String(commentsHydrated)}') &&
+      source.includes('data-view-disabled={String(isCommentViewDisabled)}') &&
+      source.includes('data-testid="site-comments-background-refresh"') &&
+      source.includes('{isCommentInitialLoading ? (') &&
+      !source.includes('const isCommentViewDisabled = state.commentsLoading || !canViewComments;'),
+    'Site detail comments moderation controls must stay usable after hydration during background comment refresh.',
   );
   assert(
     source.includes('const selectedCommentIds = selectedLoadedCommentIds') &&
@@ -88,6 +242,21 @@ const assertSiteDetailSourceContract = () => {
       source.includes('Fix site settings fields before saving.') &&
       source.includes('normalizeSiteSettingsDomain(formData.customDomain) || null'),
     'Site detail settings form must use source-guarded inline validation for saved site identity and custom domain updates',
+  );
+  assert(
+    source.includes('const commentPolicyLoadRequestRef = useRef(0);') &&
+      source.includes('const [commentPolicyHydrated, setCommentPolicyHydrated] = useState(false);') &&
+      source.includes('const isCommentPolicyInitialLoading =') &&
+      source.includes('const isSiteSettingsBusy = isLoading;') &&
+      !source.includes('const isSiteSettingsBusy = isLoading || commentPolicySaving;') &&
+      source.includes('Latest comment policy loaded in the background. Unsaved local edits were preserved.') &&
+      source.includes('data-hydrated={String(commentPolicyHydrated)}') &&
+      source.includes('data-dirty={String(commentPolicyDirty)}') &&
+      source.includes('data-draft-disabled={String(isCommentPolicyDisabled)}') &&
+      source.includes('data-testid="site-comment-policy-background-refresh"') &&
+      source.includes('{isCommentPolicyInitialLoading ? (') &&
+      !source.includes('commentPolicyLoading || commentPolicySaving || !canConfigureComments'),
+    'Site detail comment policy controls must stay editable after hydration during background refresh and preserve dirty local edits.',
   );
 };
 
@@ -149,7 +318,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_SITE_DETAIL_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -209,6 +379,45 @@ const updateUser = async (userId, input) => {
 const listSites = async () => {
   const payload = await requestApi('/api/admin/sites?includeUnpublished=true');
   return payload.data?.sites || payload.sites || [];
+};
+
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings || {};
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings || {};
+};
+
+const temporarilyAllowSiteCreationQuota = async (extraSites = 1) => {
+  const settings = await getSettings();
+  const sites = await listSites();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentSiteLimit = Number(originalCommerce.siteLimit || 0);
+  const requiredSiteLimit = sites.length + extraSites;
+
+  if (originalCommerce.overageMode !== 'block' || currentSiteLimit >= requiredSiteLimit) {
+    return null;
+  }
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        siteLimit: requiredSiteLimit,
+        overageMode: 'warn',
+      },
+    },
+  });
+
+  return originalIntegrations;
 };
 
 const createSite = async ({ name, slug, customDomain }) => {
@@ -571,16 +780,450 @@ const waitForButtonEnabled = async (client, selector, text, description) => {
   return null;
 };
 
+const waitForWebhooksEditorReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-webhooks-panel"]');
+      const text = section?.textContent || '';
+      const addButton = section
+        ? Array.from(section.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Add endpoint'
+          ))
+        : null;
+      const draftControls = section
+        ? Array.from(section.querySelectorAll('input, textarea')).filter((control) => (
+            control instanceof HTMLInputElement ||
+            control instanceof HTMLTextAreaElement
+          ))
+        : [];
+      const disabledDraftControls = draftControls.filter((control) => control.disabled);
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-draft-disabled') === 'false' &&
+          addButton instanceof HTMLButtonElement &&
+          !addButton.disabled &&
+          draftControls.length >= 1 &&
+          disabledDraftControls.length === 0 &&
+          !text.includes('Loading webhooks...'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        draftDisabled: section?.getAttribute('data-draft-disabled'),
+        addDisabled: addButton instanceof HTMLButtonElement ? addButton.disabled : null,
+        draftControlCount: draftControls.length,
+        disabledDraftControlCount: disabledDraftControls.length,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Webhooks editor did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForRedirectsEditorReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-redirects-panel"]');
+      const text = section?.textContent || '';
+      const addButton = section
+        ? Array.from(section.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Add rule'
+          ))
+        : null;
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-draft-disabled') === 'false' &&
+          addButton instanceof HTMLButtonElement &&
+          !addButton.disabled &&
+          !text.includes('Loading redirect rules...'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        draftDisabled: section?.getAttribute('data-draft-disabled'),
+        addDisabled: addButton instanceof HTMLButtonElement ? addButton.disabled : null,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Redirects editor did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForSeoEditorReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-seo-panel"]');
+      const text = section?.textContent || '';
+      const saveButton = section
+        ? Array.from(section.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Save SEO'
+          ))
+        : null;
+      const addOverrideButton = section
+        ? Array.from(section.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Add route override'
+          ))
+        : null;
+      const draftControls = section
+        ? Array.from(section.querySelectorAll('select, input, textarea')).filter((control) => (
+            control instanceof HTMLSelectElement ||
+            control instanceof HTMLInputElement ||
+            control instanceof HTMLTextAreaElement
+          ))
+        : [];
+      const disabledDraftControls = draftControls.filter((control) => control.disabled);
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-draft-disabled') === 'false' &&
+          saveButton instanceof HTMLButtonElement &&
+          !saveButton.disabled &&
+          addOverrideButton instanceof HTMLButtonElement &&
+          !addOverrideButton.disabled &&
+          draftControls.length >= 10 &&
+          disabledDraftControls.length === 0 &&
+          !text.includes('Loading SEO'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        draftDisabled: section?.getAttribute('data-draft-disabled'),
+        saveDisabled: saveButton instanceof HTMLButtonElement ? saveButton.disabled : null,
+        addOverrideDisabled: addOverrideButton instanceof HTMLButtonElement ? addOverrideButton.disabled : null,
+        draftControlCount: draftControls.length,
+        disabledDraftControlCount: disabledDraftControls.length,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`SEO editor did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForFormBuilderPanelReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-form-builder-panel"]');
+      const text = section?.textContent || '';
+      const newFormButton = section
+        ? Array.from(section.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'New form'
+          ))
+        : null;
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-draft-disabled') === 'false' &&
+          newFormButton instanceof HTMLButtonElement &&
+          !newFormButton.disabled &&
+          !text.includes('Loading form workflow...'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        draftDisabled: section?.getAttribute('data-draft-disabled'),
+        newFormDisabled: newFormButton instanceof HTMLButtonElement ? newFormButton.disabled : null,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Form builder panel did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForFormBuilderEditorReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-form-builder-panel"]');
+      const text = section?.textContent || '';
+      const controls = [
+        section?.querySelector('[aria-label="Site form title"]'),
+        section?.querySelector('[aria-label="Site form machine name"]'),
+        section?.querySelector('[aria-label="Site form description"]'),
+        section?.querySelector('[aria-label="Site form audience"]'),
+        section?.querySelector('[aria-label="Site form moderation"]'),
+        section?.querySelector('[aria-label="Site form success message"]'),
+      ];
+      const controlsEnabled = controls.every((control) => (
+        control instanceof HTMLInputElement ||
+        control instanceof HTMLSelectElement ||
+        control instanceof HTMLTextAreaElement
+      ) && !control.disabled);
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-draft-disabled') === 'false' &&
+          controlsEnabled &&
+          !text.includes('Loading form workflow...'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        draftDisabled: section?.getAttribute('data-draft-disabled'),
+        controlsEnabled,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Form builder editor did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForFormQueuesReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const submissions = document.querySelector('[data-testid="site-submissions-panel"]');
+      const contacts = document.querySelector('[data-testid="site-contacts-panel"]');
+      const submissionsText = submissions?.textContent || '';
+      const contactsText = contacts?.textContent || '';
+      const submissionsReload = submissions
+        ? Array.from(submissions.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Reload'
+          ))
+        : null;
+      const contactsReload = contacts
+        ? Array.from(contacts.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Reload'
+          ))
+        : null;
+      return {
+        ready: Boolean(submissions) &&
+          Boolean(contacts) &&
+          submissions.getAttribute('data-hydrated') === 'true' &&
+          contacts.getAttribute('data-hydrated') === 'true' &&
+          submissions.getAttribute('data-initial-loading') === 'false' &&
+          contacts.getAttribute('data-initial-loading') === 'false' &&
+          submissionsReload instanceof HTMLButtonElement &&
+          !submissionsReload.disabled &&
+          contactsReload instanceof HTMLButtonElement &&
+          !contactsReload.disabled &&
+          !submissionsText.includes('Loading submissions...') &&
+          !contactsText.includes('Loading contacts...'),
+        submissionsHydrated: submissions?.getAttribute('data-hydrated'),
+        contactsHydrated: contacts?.getAttribute('data-hydrated'),
+        submissionsInitialLoading: submissions?.getAttribute('data-initial-loading'),
+        contactsInitialLoading: contacts?.getAttribute('data-initial-loading'),
+        submissionsReloadDisabled: submissionsReload instanceof HTMLButtonElement ? submissionsReload.disabled : null,
+        contactsReloadDisabled: contactsReload instanceof HTMLButtonElement ? contactsReload.disabled : null,
+        submissionsText: submissionsText.replace(/\\s+/g, ' ').slice(0, 500),
+        contactsText: contactsText.replace(/\\s+/g, ' ').slice(0, 500),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Form queues did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForCommentPolicyEditorReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-comment-policy-panel"]');
+      const text = section?.textContent || '';
+      const findCheckbox = (labelText) => Array.from(section?.querySelectorAll('label') || []).find((label) => (
+        (label.textContent || '').includes(labelText)
+      ))?.querySelector('input[type="checkbox"]');
+      const requireEmail = findCheckbox('Require email');
+      const reports = findCheckbox('Enable reports');
+      const moderation = section?.querySelector('select[aria-label="Site default comment moderation"]');
+      const sort = section?.querySelector('select[aria-label="Site default comment sort"]');
+      const closed = section?.querySelector('input[aria-label="Site comment closed message"]');
+      const blockedTerms = section?.querySelector('textarea[aria-label="Site comment blocked terms"]');
+      const controls = [requireEmail, reports, moderation, sort, closed, blockedTerms];
+      const controlsEnabled = controls.every((control) => (
+        control instanceof HTMLInputElement ||
+        control instanceof HTMLSelectElement ||
+        control instanceof HTMLTextAreaElement
+      ) && !control.disabled);
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-draft-disabled') === 'false' &&
+          controlsEnabled &&
+          !text.includes('Loading comment policy...'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        draftDisabled: section?.getAttribute('data-draft-disabled'),
+        controlsEnabled,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Comment policy editor did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForCommentsModerationReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-comments-moderation-panel"]');
+      const text = section?.textContent || '';
+      const status = section?.querySelector('select[aria-label="Site comment status filter"]');
+      const target = section?.querySelector('select[aria-label="Site comment target filter"]');
+      const targetId = section?.querySelector('input[aria-label="Site comment target id filter"]');
+      const requestId = section?.querySelector('input[aria-label="Site comment request id filter"]');
+      const search = section?.querySelector('input[aria-label="Site comment search filter"]');
+      const controls = [status, target, targetId, requestId, search];
+      const controlsEnabled = controls.every((control) => (
+        control instanceof HTMLInputElement ||
+        control instanceof HTMLSelectElement
+      ) && !control.disabled);
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-view-disabled') === 'false' &&
+          controlsEnabled &&
+          !text.includes('Loading comments...'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        viewDisabled: section?.getAttribute('data-view-disabled'),
+        controlsEnabled,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Comments moderation panel did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForSiteAuditPanelReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-audit-panel"]');
+      const text = section?.textContent || '';
+      const refreshButton = section
+        ? Array.from(section.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Refresh activity'
+          ))
+        : null;
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-initial-loading') === 'false' &&
+          refreshButton instanceof HTMLButtonElement &&
+          !refreshButton.disabled &&
+          !text.includes('Loading site audit activity...'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        initialLoading: section?.getAttribute('data-initial-loading'),
+        refreshDisabled: refreshButton instanceof HTMLButtonElement ? refreshButton.disabled : null,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Site audit panel did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
+const waitForReadinessPanelReady = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const section = document.querySelector('[data-testid="site-readiness-panel"]');
+      const text = section?.textContent || '';
+      const refreshButton = section
+        ? Array.from(section.querySelectorAll('button')).find((candidate) => (
+            (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Refresh'
+          ))
+        : null;
+      return {
+        ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-initial-loading') === 'false' &&
+          refreshButton instanceof HTMLButtonElement &&
+          !refreshButton.disabled &&
+          text.includes('Publish readiness'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        initialLoading: section?.getAttribute('data-initial-loading'),
+        refreshDisabled: refreshButton instanceof HTMLButtonElement ? refreshButton.disabled : null,
+        text: text.replace(/\\s+/g, ' ').slice(0, 1000),
+      };
+    })()`);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Readiness panel did not finish loading: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return null;
+};
+
 const waitForNavigationEditorReady = async (client) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const section = document.querySelector('[data-testid="site-navigation-panel"]');
       const text = section?.textContent || '';
+      const draftControls = section
+        ? Array.from(section.querySelectorAll('select, input, textarea')).filter((control) => (
+            control instanceof HTMLSelectElement ||
+            control instanceof HTMLInputElement ||
+            control instanceof HTMLTextAreaElement
+          ))
+        : [];
+      const disabledDraftControls = draftControls.filter((control) => control.disabled);
       return {
         ready: Boolean(section) &&
+          section.getAttribute('data-hydrated') === 'true' &&
+          section.getAttribute('data-draft-disabled') === 'false' &&
           text.includes('Primary menu') &&
           text.includes('Footer menu') &&
+          draftControls.length >= 8 &&
+          disabledDraftControls.length === 0 &&
           !text.includes('Loading navigation...'),
+        hydrated: section?.getAttribute('data-hydrated'),
+        draftDisabled: section?.getAttribute('data-draft-disabled'),
+        draftControlCount: draftControls.length,
+        disabledDraftControlCount: disabledDraftControls.length,
         text: text.replace(/\\s+/g, ' ').slice(0, 1000),
       };
     })()`);
@@ -597,13 +1240,26 @@ const waitForNavigationEditorReady = async (client) => {
 };
 
 const assertSiteDetailLayout = async (client, siteName) => {
-  const layout = await evaluate(client, `(() => {
+  let layout = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    layout = await evaluate(client, `(() => {
     const body = document.body?.innerText || '';
     const text = document.body?.textContent || body;
     const frontendPanel = document.querySelector('[data-testid="site-frontend-design-panel"]');
     const frontendText = frontendPanel?.textContent || text;
+    const frontendDraftControls = frontendPanel
+      ? Array.from(frontendPanel.querySelectorAll('select, input, textarea')).filter((control) => (
+          control instanceof HTMLSelectElement ||
+          control instanceof HTMLInputElement ||
+          control instanceof HTMLTextAreaElement
+        ))
+      : [];
+    const disabledFrontendDraftControls = frontendDraftControls.filter((control) => control.disabled);
     const frontendDesign = {
       hasPanel: Boolean(frontendPanel),
+      hydrated: frontendPanel?.getAttribute('data-hydrated') === 'true',
+      draftEnabled: frontendPanel?.getAttribute('data-draft-disabled') === 'false',
+      draftControlsEnabled: frontendDraftControls.length >= 10 && disabledFrontendDraftControls.length === 0,
       hasRegistrySummary: Boolean(document.querySelector('[data-testid="site-template-registry-summary"]')),
       hasTemplateList: Boolean(document.querySelector('[data-testid="site-template-registry-template-list"]')),
       hasContractTitle: frontendText.includes('Frontend design contract'),
@@ -650,8 +1306,14 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasFormBuilder: Boolean(document.querySelector('[data-testid="site-form-builder-panel"]')) && body.includes('Site form builder') && body.includes('New form') && body.includes('Save form'),
       hasHandoff: body.includes('Frontend handoff') && body.includes('Public render') && body.includes('OpenAPI'),
     };
-  })()`);
+    })()`);
+    if (layout.hasFrontendDesign) {
+      break;
+    }
+    await sleep(150);
+  }
 
+  assert(layout, 'Site detail page layout could not be evaluated');
   assert(layout.scrollWidth <= layout.width + 8, `Site detail page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.path.startsWith('/sites/') &&
@@ -774,6 +1436,7 @@ const configureThemePublishThroughUi = async (client, expected) => {
 
 const configureWebhooksThroughUi = async (client, expected) => {
   await waitForText(client, '[data-testid="site-webhooks-panel"]', 'Webhooks', 'Webhooks panel');
+  await waitForWebhooksEditorReady(client);
   await clickButtonByText(client, '[data-testid="site-webhooks-panel"]', 'Add endpoint');
   const result = await evaluate(client, `(() => {
     ${setInputValue}
@@ -829,11 +1492,13 @@ const configureWebhooksThroughUi = async (client, expected) => {
 };
 
 const configureFormBuilderThroughUi = async (client, expected) => {
+  await waitForFormBuilderPanelReady(client);
   await waitForText(client, '[data-testid="site-form-builder-panel"]', 'Site form builder', 'Site form builder panel');
   await waitForButtonEnabled(client, '[data-testid="site-form-builder-panel"]', 'New form', 'New site form button');
   await clickButtonByText(client, '[data-testid="site-form-builder-panel"]', 'New form');
   await waitForText(client, '[data-testid="site-form-builder-panel"]', 'Standalone site form created.', 'Site form created notice');
   await clickButtonByText(client, '[data-testid="site-form-builder-panel"]', 'Add field');
+  await waitForFormBuilderEditorReady(client);
 
   const result = await evaluate(client, `(() => {
     ${setInputValue}
@@ -1445,6 +2110,7 @@ const configureFrontendDesignThroughUi = async (client, { frontendLabel, fronten
 };
 
 const configureRedirectsThroughUi = async (client, { from, to }) => {
+  await waitForRedirectsEditorReady(client);
   await clickButtonByText(client, '[data-testid="site-redirects-panel"]', 'Add rule');
 
   const result = await evaluate(client, `(() => {
@@ -1493,6 +2159,7 @@ const configureSeoThroughUi = async (client, {
   seoOverridePriority,
   seoOverrideFrequency,
 }) => {
+  await waitForSeoEditorReady(client);
   if (seoOverrideMatch) {
     await clickButtonByText(client, '[data-testid="site-seo-route-overrides-panel"]', 'Add route override');
   }
@@ -1586,6 +2253,7 @@ const configureSeoThroughUi = async (client, {
 };
 
 const configureCommentPolicyThroughUi = async (client, { blockedTerm, closedMessage }) => {
+  await waitForCommentPolicyEditorReady(client);
   const result = await evaluate(client, `(() => {
     ${setInputValue}
     const section = document.querySelector('[data-testid="site-comment-policy-panel"]');
@@ -1870,6 +2538,7 @@ const main = async () => {
   let seoPageId;
   let ownerUserId;
   let ownerSessionToken;
+  let restoredQuotaIntegrations = null;
   const suffix = Date.now().toString(36);
   const siteName = `Site Detail Smoke ${suffix}`;
   const slug = `site-detail-smoke-${suffix}`;
@@ -1944,6 +2613,7 @@ const main = async () => {
     await updateUser('user-admin', { role: 'admin', status: 'active' });
     const existing = await findSiteBySlug(slug);
     assert(!existing, `Temporary site already exists: ${slug}`);
+    restoredQuotaIntegrations = await temporarilyAllowSiteCreationQuota(1);
     const owner = await createUser({
       fullName: `Site Detail Owner ${suffix}`,
       email: `site-detail-owner-${suffix}@example.com`,
@@ -1986,11 +2656,14 @@ const main = async () => {
     await navigateToSites(client, siteName);
     await navigateToSiteDetail(client, site.id, siteName);
     await assertSiteDetailLayout(client, siteName);
+    await waitForReadinessPanelReady(client);
+    await waitForCommentsModerationReady(client);
 
     await configureDomainVerificationThroughUi(client);
     await configureThemePublishThroughUi(client, expected);
     await configureWebhooksThroughUi(client, expected);
     await configureFormBuilderThroughUi(client, expected);
+    await waitForFormQueuesReady(client);
     await configureNavigationThroughUi(client, expected);
     await configureFrontendDesignThroughUi(client, expected);
     await configureRedirectsThroughUi(client, {
@@ -2003,6 +2676,7 @@ const main = async () => {
       closedMessage: expected.commentClosedMessage,
     });
     await assertApiReadback(site.id, expected);
+    await waitForSiteAuditPanelReady(client);
     await clickButtonByText(client, '[data-testid="site-audit-panel"]', 'Refresh activity');
     await waitForText(client, '[data-testid="site-audit-panel"]', 'site.navigation.updated', 'Site activity audit row');
     await waitForText(client, '[data-testid="site-audit-panel"]', 'site.webhooks.updated', 'Site webhooks audit row');
@@ -2028,6 +2702,9 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
+    if (restoredQuotaIntegrations) {
+      await updateSettings({ integrations: restoredQuotaIntegrations }).catch(() => {});
+    }
     await updateUser('user-admin', { role: 'owner', status: 'active' }).catch(() => {});
     if (siteId && seoPageId) {
       await deletePage(siteId, seoPageId).catch(() => {});

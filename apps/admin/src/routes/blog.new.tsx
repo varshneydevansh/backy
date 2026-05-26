@@ -270,6 +270,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function frontendDesignProvenanceArray(value: unknown): Array<Record<string, unknown>> | undefined {
+    if (Array.isArray(value)) {
+        const records = value.filter(isRecord);
+        return records.length > 0 ? records : undefined;
+    }
+
+    return isRecord(value) && Object.keys(value).length > 0 ? [value] : undefined;
+}
+
 function buildFrontendBlogTemplateElements(
     template: SiteFrontendDesignTemplate,
     input: { title: string; slug: string; excerpt: string },
@@ -749,7 +758,7 @@ function NewBlogPostPage() {
     const viewMediaDeniedMessage = `Your account needs media.view to select featured media. ${viewMediaPermissionTitle}`;
     const createMediaDeniedMessage = `Your account needs media.create to upload featured media. ${createMediaPermissionTitle}`;
     const viewCollectionsDeniedMessage = `Your account needs collections.view to bind blog canvas elements to collection data. ${viewCollectionsPermissionTitle}`;
-    const isCreateBusy = isLoading || isPreviewAfterCreateBusy || isPermissionMatrixPending;
+    const isCreateBusy = isLoading || isPreviewAfterCreateBusy;
     const createFormDisabled = isCreateBusy || !canEditBlog;
 
     const clearCreationFeedback = () => {
@@ -1272,6 +1281,7 @@ function NewBlogPostPage() {
     const canCreateDraft = title.trim().length > 0
         && canEditBlog
         && slugValue.trim().length > 0
+        && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
         && canonicalValid;
@@ -1279,10 +1289,12 @@ function NewBlogPostPage() {
         && canEditBlog
         && canPublishBlog
         && slugValue.trim().length > 0
+        && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
         && canonicalValid
         && interactivePublishReady;
+    const canAttemptCreatePreviewDraft = canEditBlog && canPublishBlog;
     const canSubmit = canCreateDraft
         && (status === 'draft' || canPublishBlog)
         && (status === 'draft' || interactivePublishReady)
@@ -1820,9 +1832,12 @@ function NewBlogPostPage() {
                 frontendDesignElements: frontendTemplateDesignState?.provenance.elements,
                 frontendDesignCanvasSize: frontendTemplateDesignState?.provenance.canvasSize,
                 frontendDesignThemeTokenRefs: frontendTemplateDesignState?.provenance.themeTokenRefs,
-                frontendDesignAssets: frontendTemplateDesignState?.provenance.assets,
-                frontendDesignAnimations: frontendTemplateDesignState?.provenance.animations,
-                frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions,
+                frontendDesignAssets: frontendTemplateDesignState?.provenance.assets
+                    && frontendDesignProvenanceArray(frontendTemplateDesignState.provenance.assets),
+                frontendDesignAnimations: frontendTemplateDesignState?.provenance.animations
+                    && frontendDesignProvenanceArray(frontendTemplateDesignState.provenance.animations),
+                frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions
+                    && frontendDesignProvenanceArray(frontendTemplateDesignState.provenance.interactions),
                 frontendDesignDataBindings: frontendTemplateDesignState?.provenance.dataBindings,
                 frontendDesignEditableMap: frontendTemplateDesignState?.provenance.editableMap,
                 frontendDesignSeo: frontendTemplateDesignState?.provenance.seo,
@@ -1846,6 +1861,85 @@ function NewBlogPostPage() {
         if (mode === 'save' && scheduleValidationMessage) return scheduleValidationMessage;
         return 'Add a title and URL slug before saving';
     };
+    const submitBlockerMessage = isLoading || canSubmit ? null : getCreateBlockedMessage('save');
+    const previewDraftBlockerMessage = isPreviewAfterCreateBusy || canCreatePreviewDraft ? null : getCreateBlockedMessage('preview');
+    const submitControlState = canSubmit ? 'ready' : (isCreateBusy || isCheckingPosts || isPermissionMatrixPending) ? 'busy' : 'blocked';
+    const previewDraftControlState = canCreatePreviewDraft ? 'ready' : (isCreateBusy || isCheckingPosts || isPermissionMatrixPending) ? 'busy' : 'blocked';
+    const blogCreateSubmitActionStatusId = 'blog-create-submit-action-status';
+    const blogCreatePreviewActionStatusId = 'blog-create-preview-action-status';
+    const blogCreateCommandActionStatusId = 'blog-create-command-action-status';
+    const blogCreatePermissionActionStatusId = 'blog-create-permission-action-status';
+    const blogCreateRecoveryActionStatusId = 'blog-create-recovery-action-status';
+    const blogCreateTemplateName = createPayloadPreview.template.name;
+    const blogCreateSubmitActionLabel = status === 'published'
+        ? 'Publish post'
+        : status === 'scheduled'
+            ? 'Schedule post'
+            : 'Save draft';
+    const blogCreateSubmitDisabledReason = isCreateBusy
+        ? 'Blog post creation is already running.'
+        : !canEditBlog
+            ? editBlogDeniedMessage
+            : '';
+    const blogCreatePreviewDisabledReason = isCreateBusy
+        ? 'Blog post creation is already running.'
+        : !canAttemptCreatePreviewDraft
+            ? !canEditBlog
+                ? editBlogDeniedMessage
+                : publishBlogDeniedMessage
+            : '';
+    const blogCreateSubmitActionState = blogCreateSubmitDisabledReason || submitBlockerMessage ? 'blocked' : 'ready';
+    const blogCreatePreviewActionState = blogCreatePreviewDisabledReason || previewDraftBlockerMessage ? 'blocked' : 'ready';
+    const blogCreateSubmitActionStatus = blogCreateSubmitDisabledReason
+        ? `${blogCreateSubmitActionLabel} unavailable: ${blogCreateSubmitDisabledReason}`
+        : submitBlockerMessage
+            ? `${blogCreateSubmitActionLabel} needs attention: ${submitBlockerMessage}`
+            : `${blogCreateSubmitActionLabel} available for ${activeSiteId} at ${routePath} using ${blogCreateTemplateName}.`;
+    const blogCreatePreviewActionStatus = blogCreatePreviewDisabledReason
+        ? `Preview draft unavailable: ${blogCreatePreviewDisabledReason}`
+        : previewDraftBlockerMessage
+            ? `Preview draft needs attention: ${previewDraftBlockerMessage}`
+            : `Preview draft available for ${activeSiteId} at ${routePath} using ${blogCreateTemplateName}.`;
+    const blogCreateSubmitDescribedBy = submitBlockerMessage
+        ? `${blogCreateSubmitActionStatusId} blog-create-submit-blocker`
+        : blogCreateSubmitActionStatusId;
+    const blogCreatePreviewDescribedBy = previewDraftBlockerMessage && submitBlockerMessage
+        ? `${blogCreatePreviewActionStatusId} blog-create-submit-blocker`
+        : blogCreatePreviewActionStatusId;
+    const blogCreateBackActionState = isCreateBusy ? 'busy' : 'ready';
+    const blogCreateBackActionStatus = isCreateBusy
+        ? 'Blog list unavailable while blog post creation is running.'
+        : `Back to Blog posts available for ${activeSiteId}.`;
+    const blogCreateFocusActionStatus = isCreateBusy
+        ? 'Canvas focus switch unavailable while blog post creation is running.'
+        : isWorkspaceFocus
+            ? 'Show blog creation panels available.'
+            : 'Focus blog creation canvas available.';
+    const blogCreateHandoffActionState = isCreateBusy ? 'busy' : canViewBlog ? 'ready' : 'blocked';
+    const blogCreateCopyActionStatus = isCreateBusy
+        ? 'Copy blog creation handoff unavailable while blog post creation is running.'
+        : !canViewBlog
+            ? `Copy blog creation handoff unavailable: ${viewBlogDeniedMessage}`
+            : `Copy blog creation handoff available for ${activeSiteId} at ${routePath}.`;
+    const blogCreateDownloadActionStatus = isCreateBusy
+        ? 'Download blog creation handoff unavailable while blog post creation is running.'
+        : !canViewBlog
+            ? `Download blog creation handoff unavailable: ${viewBlogDeniedMessage}`
+            : `Download blog creation handoff available for ${activeSiteId} at ${routePath}.`;
+    const blogCreateRouteRetryActionStatus = isCreateBusy
+        ? 'Retry blog route check unavailable while blog post creation is running.'
+        : `Retry blog route check available for ${activeSiteId}.`;
+    const blogCreatePermissionRetryActionStatus = isPermissionsLoading
+        ? 'Retry blog creation permissions unavailable while permissions are loading.'
+        : 'Retry blog creation permissions available.';
+    const blogCreatePermissionReviewActionStatus = 'Review user access for blog creation permissions available.';
+    const blogCreateRecoveryActionState = isCreateBusy ? 'busy' : 'ready';
+    const blogCreateDiscardRecoveryActionStatus = isCreateBusy
+        ? 'Discard recovered blog draft unavailable while blog post creation is running.'
+        : 'Discard recovered blog draft available.';
+    const blogCreateRestoreRecoveryActionStatus = isCreateBusy
+        ? 'Restore recovered blog draft unavailable while blog post creation is running.'
+        : 'Restore recovered blog draft available.';
 
     const handleCreatePreview = async () => {
         if (isLoading || isPreviewAfterCreateBusy) return;
@@ -1856,7 +1950,7 @@ function NewBlogPostPage() {
         }
 
         if (!canCreatePreviewDraft) {
-            setError(getCreateBlockedMessage('preview'));
+            setError(previewDraftBlockerMessage || 'Review the required blog basics before creating this preview draft.');
             setNotice(null);
             return;
         }
@@ -1874,10 +1968,10 @@ function NewBlogPostPage() {
 
             const preview = await createBlogPostPreview(activeSiteId, created.id);
             window.open(preview.url, '_blank', 'noopener,noreferrer');
-            navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId } });
+            navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId, focus: 'canvas' } });
         } catch (createError) {
             if (created) {
-                navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId } });
+                navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId, focus: 'canvas' } });
                 return;
             }
 
@@ -1908,7 +2002,7 @@ function NewBlogPostPage() {
         }
 
         if (!canSubmit) {
-            setError(getCreateBlockedMessage('save'));
+            setError(submitBlockerMessage || 'Review the required blog basics before saving.');
             setNotice(null);
             return;
         }
@@ -1922,7 +2016,7 @@ function NewBlogPostPage() {
             const created = await createBlogPost(activeSiteId, buildPostInput(status));
             setPosts([created, ...posts.filter((post) => post.id !== created.id)]);
             clearAutosavedDraft();
-            navigate({ to: '/blog', search: { siteId: activeSiteId } });
+            navigate({ to: '/blog/$postId', params: { postId: created.id }, search: { siteId: activeSiteId, focus: 'canvas' } });
         } catch (createError) {
             setError(createError instanceof Error
                 ? `${createError.message}. The post was not created because the backend did not persist it.`
@@ -1944,6 +2038,13 @@ function NewBlogPostPage() {
                             }
                         }}
                         disabled={isCreateBusy}
+                        title={blogCreateBackActionStatus}
+                        aria-label="Back to blog posts"
+                        aria-describedby={blogCreateCommandActionStatusId}
+                        data-testid="blog-create-back-to-blog"
+                        data-action-state={blogCreateBackActionState}
+                        data-action-status={blogCreateBackActionStatus}
+                        data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : undefined}
                         className="rounded-lg border border-border bg-background p-2 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         <ArrowLeft className="w-5 h-5" />
@@ -1957,7 +2058,7 @@ function NewBlogPostPage() {
                     ? 'h-[calc(100vh-1rem)] overflow-hidden lg:h-[calc(100vh-1.5rem)]'
                     : undefined,
             )}
-            contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : undefined}
+            contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : 'flex flex-col gap-5'}
             hideHeader={isWorkspaceFocus}
             action={
                 <Button
@@ -1965,6 +2066,12 @@ function NewBlogPostPage() {
                     variant="outline"
                     onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
                     disabled={isCreateBusy}
+                    title={blogCreateFocusActionStatus}
+                    aria-describedby={blogCreateCommandActionStatusId}
+                    data-testid="blog-create-focus-toggle"
+                    data-action-state={blogCreateBackActionState}
+                    data-action-status={blogCreateFocusActionStatus}
+                    data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : undefined}
                     iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 >
                     {isWorkspaceFocus ? 'Show blog panels' : 'Focus canvas'}
@@ -1972,6 +2079,9 @@ function NewBlogPostPage() {
             }
         >
             <div className={cn('w-full', isWorkspaceFocus ? 'h-full min-h-0 overflow-hidden pb-0' : 'pb-24')}>
+                <span id={blogCreateCommandActionStatusId} className="sr-only" data-testid="blog-create-command-action-status" aria-live="polite">
+                    {blogCreateBackActionStatus} {blogCreateFocusActionStatus} {blogCreateCopyActionStatus} {blogCreateDownloadActionStatus} {blogCreateRouteRetryActionStatus}
+                </span>
                 {error && (
                     <Notice tone="warning" className="mb-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1982,6 +2092,11 @@ function NewBlogPostPage() {
                                     size="sm"
                                     variant="outline"
                                     disabled={isCreateBusy}
+                                    aria-describedby={blogCreateCommandActionStatusId}
+                                    data-testid="blog-create-route-check-retry"
+                                    data-action-state={isCreateBusy ? 'busy' : 'ready'}
+                                    data-action-status={blogCreateRouteRetryActionStatus}
+                                    data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : undefined}
                                     onClick={() => {
                                         if (isCreateBusy) return;
                                         setRouteCheckRetry((value) => value + 1);
@@ -2007,6 +2122,9 @@ function NewBlogPostPage() {
                         role="alert"
                         data-testid="blog-create-permission-state"
                     >
+                        <span id={blogCreatePermissionActionStatusId} className="sr-only" data-testid="blog-create-permission-action-status" aria-live="polite">
+                            {blogCreatePermissionRetryActionStatus} {blogCreatePermissionReviewActionStatus}
+                        </span>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <span>{permissionError}</span>
                             <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -2017,12 +2135,21 @@ function NewBlogPostPage() {
                                     onClick={loadBlogCreatePermissions}
                                     disabled={isPermissionsLoading}
                                     aria-label="Retry loading blog creation permissions"
+                                    aria-describedby={blogCreatePermissionActionStatusId}
+                                    data-testid="blog-create-permission-retry"
+                                    data-action-state={isPermissionsLoading ? 'busy' : 'ready'}
+                                    data-action-status={blogCreatePermissionRetryActionStatus}
+                                    data-disabled-reason={isPermissionsLoading ? 'Blog creation permissions are already loading.' : undefined}
                                     iconStart={<RefreshCw className={cn('size-3.5', isPermissionsLoading && 'animate-spin')} />}
                                 >
                                     Retry permissions
                                 </Button>
                                 <Link
                                     to="/users"
+                                    aria-describedby={blogCreatePermissionActionStatusId}
+                                    data-testid="blog-create-permission-review-users"
+                                    data-action-state="ready"
+                                    data-action-status={blogCreatePermissionReviewActionStatus}
                                     className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring"
                                 >
                                     Review users
@@ -2033,6 +2160,9 @@ function NewBlogPostPage() {
                 )}
                 {draftRecovery && (
                     <Notice tone="info" title="Recovered unsaved blog draft" className="mb-4">
+                        <span id={blogCreateRecoveryActionStatusId} className="sr-only" data-testid="blog-create-recovery-action-status" aria-live="polite">
+                            {blogCreateDiscardRecoveryActionStatus} {blogCreateRestoreRecoveryActionStatus}
+                        </span>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <span>
                                 Local autosave found a draft from {new Date(draftRecovery.savedAt).toLocaleString()} for {draftRecovery.activeSiteId}.
@@ -2043,6 +2173,11 @@ function NewBlogPostPage() {
                                     size="sm"
                                     variant="outline"
                                     disabled={isLoading || isPreviewAfterCreateBusy}
+                                    aria-describedby={blogCreateRecoveryActionStatusId}
+                                    data-testid="blog-create-discard-recovery"
+                                    data-action-state={blogCreateRecoveryActionState}
+                                    data-action-status={blogCreateDiscardRecoveryActionStatus}
+                                    data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : undefined}
                                     onClick={discardRecoveredDraft}
                                 >
                                     Discard recovery
@@ -2051,6 +2186,11 @@ function NewBlogPostPage() {
                                     type="button"
                                     size="sm"
                                     disabled={isLoading || isPreviewAfterCreateBusy}
+                                    aria-describedby={blogCreateRecoveryActionStatusId}
+                                    data-testid="blog-create-restore-recovery"
+                                    data-action-state={blogCreateRecoveryActionState}
+                                    data-action-status={blogCreateRestoreRecoveryActionStatus}
+                                    data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : undefined}
                                     onClick={restoreRecoveredDraft}
                                 >
                                     Restore draft
@@ -2062,9 +2202,9 @@ function NewBlogPostPage() {
 
                 <form id="blog-create-form" onSubmit={handleSubmit} noValidate className={cn('grid gap-5', isWorkspaceFocus && 'h-full min-h-0')}>
                     {!isWorkspaceFocus && (
-                    <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-create-command-center">
-                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                            <div>
+                    <section className="rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5" data-testid="blog-create-command-center">
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                            <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <h2 className="text-base font-semibold text-foreground">Post creation command center</h2>
                                     <span className={cn(
@@ -2087,14 +2227,19 @@ function NewBlogPostPage() {
                                     </span>
                                 </div>
                                 <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                                    Create the article record and its public design in one workspace: editorial metadata, canvas layout, publishing state, author, taxonomy, and frontend route.
+                                    Draft, preview, publish, taxonomy, frontend handoff, and public canvas controls stay together without pushing the editor out of reach.
                                 </p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                                 <Button
                                     type="button"
                                     disabled={isCreateBusy || !canViewBlog}
                                     title={viewBlogPermissionTitle}
+                                    aria-describedby={blogCreateCommandActionStatusId}
+                                    data-testid="blog-create-copy-handoff"
+                                    data-action-state={blogCreateHandoffActionState}
+                                    data-action-status={blogCreateCopyActionStatus}
+                                    data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : !canViewBlog ? viewBlogDeniedMessage : undefined}
                                     onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
                                     variant="outline"
                                     iconStart={<Copy className="size-4" />}
@@ -2105,6 +2250,11 @@ function NewBlogPostPage() {
                                     type="button"
                                     disabled={isCreateBusy || !canViewBlog}
                                     title={viewBlogPermissionTitle}
+                                    aria-describedby={blogCreateCommandActionStatusId}
+                                    data-testid="blog-create-download-handoff"
+                                    data-action-state={blogCreateHandoffActionState}
+                                    data-action-status={blogCreateDownloadActionStatus}
+                                    data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : !canViewBlog ? viewBlogDeniedMessage : undefined}
                                     onClick={downloadCreationHandoff}
                                     variant="outline"
                                     iconStart={<Download className="size-4" />}
@@ -2113,25 +2263,89 @@ function NewBlogPostPage() {
                                 </Button>
                                 <Button
                                     type="button"
-                                    disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}
+                                    disabled={isCreateBusy || !canAttemptCreatePreviewDraft}
+                                    title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                                    aria-describedby={blogCreatePreviewDescribedBy}
+                                    data-state={previewDraftControlState}
+                                    data-can-preview={String(canCreatePreviewDraft)}
+                                    data-blocker={previewDraftBlockerMessage || ''}
+                                    data-action-state={blogCreatePreviewActionState}
+                                    data-action-status={blogCreatePreviewActionStatus}
+                                    data-disabled-reason={blogCreatePreviewDisabledReason || undefined}
+                                    data-target-site-id={activeSiteId || undefined}
+                                    data-target-route={routePath}
+                                    data-target-status="draft"
+                                    data-target-template={blogCreateTemplateName}
                                     onClick={() => void handleCreatePreview()}
                                     variant="outline"
                                     iconStart={<Eye className="size-4" />}
                                 >
                                     {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                                 </Button>
-                                <Button type="submit" disabled={createFormDisabled} variant="primary" iconStart={<Save className="size-4" />}>
-                                    {isLoading ? 'Saving...' : submitLabel}
+                                <Button
+                                    type="submit"
+                                    disabled={createFormDisabled}
+                                    title={submitBlockerMessage || 'Save the post and open the visual editor'}
+                                    aria-describedby={blogCreateSubmitDescribedBy}
+                                    data-testid="blog-create-submit-button"
+                                    data-state={submitControlState}
+                                    data-blocker={submitBlockerMessage || ''}
+                                    data-can-submit={String(canSubmit)}
+                                    data-can-preview={String(canCreatePreviewDraft)}
+                                    data-action-state={blogCreateSubmitActionState}
+                                    data-action-status={blogCreateSubmitActionStatus}
+                                    data-disabled-reason={blogCreateSubmitDisabledReason || undefined}
+                                    data-target-site-id={activeSiteId || undefined}
+                                    data-target-route={routePath}
+                                    data-target-status={status}
+                                    data-target-template={blogCreateTemplateName}
+                                    variant="primary"
+                                    iconStart={<Save className="size-4" />}
+                                >
+                                    {isLoading ? 'Saving...' : isCheckingPosts && !canSubmit ? 'Checking routes...' : submitLabel}
                                 </Button>
                             </div>
                         </div>
 
-                        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-                            <div className="rounded-lg border border-border bg-background p-4">
-                                <h3 className="text-sm font-semibold">Creation readiness</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    Checks the minimum article data needed before Backy can save, publish, or schedule this post.
-                                </p>
+                        <span id={blogCreateSubmitActionStatusId} className="sr-only" data-testid="blog-create-submit-action-status" aria-live="polite">
+                            {blogCreateSubmitActionStatus}
+                        </span>
+                        <span id={blogCreatePreviewActionStatusId} className="sr-only" data-testid="blog-create-preview-action-status" aria-live="polite">
+                            {blogCreatePreviewActionStatus}
+                        </span>
+                        {submitBlockerMessage && (
+                            <div
+                                id="blog-create-submit-blocker"
+                                role="status"
+                                aria-live="polite"
+                                data-testid="blog-create-submit-blocker"
+                                data-state={submitControlState}
+                                className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                            >
+                                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                                <div>
+                                    <div className="font-semibold">Save is blocked</div>
+                                    <div className="mt-0.5">{submitBlockerMessage}</div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                            <details
+                                className="group rounded-lg border border-border bg-background/80 p-4"
+                                data-testid="blog-create-readiness-summary"
+                            >
+                                <summary className="flex cursor-pointer list-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0">
+                                        <h3 className="text-sm font-semibold">Creation readiness</h3>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            {readinessChecks.filter((check) => check.complete).length} of {readinessChecks.length} checks passing.
+                                        </p>
+                                    </div>
+                                    <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground group-open:bg-primary/10 group-open:text-primary">
+                                        Review checks
+                                    </span>
+                                </summary>
                                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                                     <div
                                         className={cn('h-full rounded-full', readinessScore >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
@@ -2143,37 +2357,58 @@ function NewBlogPostPage() {
                                         <BlogCreateReadinessCheck key={check.label} label={check.label} ready={check.complete} />
                                     ))}
                                 </div>
-                            </div>
+                            </details>
 
-                            <div className="rounded-lg border border-border bg-background p-4">
-                                <div className="flex items-center gap-2">
-                                    <FileText className="size-4 text-primary" />
-                                    <h3 className="text-sm font-semibold">Create-to-publish workflow</h3>
-                                </div>
+                            <details className="group rounded-lg border border-border bg-background/80 p-4">
+                                <summary className="flex cursor-pointer list-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <FileText className="size-4 shrink-0 text-primary" />
+                                        <div className="min-w-0">
+                                            <h3 className="text-sm font-semibold">Create-to-publish workflow</h3>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                Write, design, validate, then publish from the same draft.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground group-open:bg-primary/10 group-open:text-primary">
+                                        {BLOG_CREATE_WORKFLOW.length} steps
+                                    </span>
+                                </summary>
                                 <div className="mt-3 grid gap-2">
                                     {BLOG_CREATE_WORKFLOW.map((step, index) => (
                                         <BlogCreateWorkflowStep key={step.label} index={index + 1} {...step} />
                                     ))}
                                 </div>
-                            </div>
+                            </details>
                         </div>
 
-                        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-                            <h3 className="text-sm font-semibold">Post creation control map</h3>
-                            <p className="mt-1 text-sm text-muted-foreground">Jump to draft fields, canvas design, publishing, ownership, and taxonomy.</p>
-                            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+                        <details className="mt-4 rounded-lg border border-border bg-background/80 p-4" data-testid="blog-create-control-map">
+                            <summary className="cursor-pointer list-none rounded-md outline-none transition hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
+                                <span className="flex flex-wrap items-center justify-between gap-3">
+                                    <span>
+                                        <span className="block text-sm font-semibold">Post creation control map</span>
+                                        <span className="mt-1 block text-sm text-muted-foreground">
+                                            Jump directly to the creation area you need.
+                                        </span>
+                                    </span>
+                                    <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                                        {BLOG_CREATE_CONTROL_AREAS.length} areas
+                                    </span>
+                                </span>
+                            </summary>
+                            <nav className="mt-3 flex flex-wrap gap-2" aria-label="Post creation control map">
                                 {BLOG_CREATE_CONTROL_AREAS.map((area) => (
                                     <a
                                         key={area.title}
                                         href={area.href}
-                                        className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                                        aria-label={`${area.title}: ${area.detail}`}
+                                        className="inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/40 hover:bg-primary/5"
                                     >
-                                        <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                                        {area.title}
                                     </a>
                                 ))}
-                            </div>
-                        </div>
+                            </nav>
+                        </details>
                     </section>
                     )}
 
@@ -2518,7 +2753,7 @@ function NewBlogPostPage() {
 
                         <div id="blog-create-canvas" className={cn('scroll-mt-24', isWorkspaceFocus && 'h-full min-h-0')} data-testid="blog-create-canvas-shell">
                             <EditorWorkspaceFrame
-                                title="Post design canvas"
+                                title={isWorkspaceFocus ? 'Post canvas' : 'Post design canvas'}
                                 description={isWorkspaceFocus
                                     ? 'Focused article design workspace with the same component, layer, media, grouping, and data-binding controls used by pages.'
                                     : 'Use components, layers, grouping, resizing, reusable sections, and data bindings to design the public post page.'}
@@ -2538,12 +2773,6 @@ function NewBlogPostPage() {
                                                 {effectiveFrontendTemplate.name}
                                             </span>
                                         )}
-                                        <span className="rounded bg-muted px-2 py-1">
-                                            Cmd/Ctrl+G grouping
-                                        </span>
-                                        <span className="rounded bg-muted px-2 py-1">
-                                            Cmd/Ctrl+A siblings
-                                        </span>
                                         {isWorkspaceFocus && (
                                             <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
                                                 Focused
@@ -2557,7 +2786,19 @@ function NewBlogPostPage() {
                                             type="button"
                                             variant="outline"
                                             size="sm"
-                                            disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}
+                                            disabled={isCreateBusy || !canAttemptCreatePreviewDraft}
+                                            title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                                            aria-describedby={blogCreatePreviewDescribedBy}
+                                            data-state={previewDraftControlState}
+                                            data-can-preview={String(canCreatePreviewDraft)}
+                                            data-blocker={previewDraftBlockerMessage || ''}
+                                            data-action-state={blogCreatePreviewActionState}
+                                            data-action-status={blogCreatePreviewActionStatus}
+                                            data-disabled-reason={blogCreatePreviewDisabledReason || undefined}
+                                            data-target-site-id={activeSiteId || undefined}
+                                            data-target-route={routePath}
+                                            data-target-status="draft"
+                                            data-target-template={blogCreateTemplateName}
                                             onClick={() => void handleCreatePreview()}
                                             iconStart={<Eye className="size-4" />}
                                         >
@@ -2568,9 +2809,23 @@ function NewBlogPostPage() {
                                             form="blog-create-form"
                                             size="sm"
                                             disabled={createFormDisabled}
+                                            title={submitBlockerMessage || 'Save the post and open the visual editor'}
+                                            aria-describedby={blogCreateSubmitDescribedBy}
+                                            data-testid="blog-create-focus-submit-button"
+                                            data-state={submitControlState}
+                                            data-blocker={submitBlockerMessage || ''}
+                                            data-can-submit={String(canSubmit)}
+                                            data-can-preview={String(canCreatePreviewDraft)}
+                                            data-action-state={blogCreateSubmitActionState}
+                                            data-action-status={blogCreateSubmitActionStatus}
+                                            data-disabled-reason={blogCreateSubmitDisabledReason || undefined}
+                                            data-target-site-id={activeSiteId || undefined}
+                                            data-target-route={routePath}
+                                            data-target-status={status}
+                                            data-target-template={blogCreateTemplateName}
                                             iconStart={<Save className="size-4" />}
                                         >
-                                            {isLoading ? 'Saving...' : submitLabel}
+                                            {isLoading ? 'Saving...' : isCheckingPosts && !canSubmit ? 'Checking routes...' : submitLabel}
                                         </Button>
                                         <Button
                                             type="button"
@@ -2584,6 +2839,7 @@ function NewBlogPostPage() {
                                         </Button>
                                     </>
                                 ) : undefined}
+                                density={isWorkspaceFocus ? 'compact' : 'default'}
                                 data-testid={isWorkspaceFocus ? 'blog-create-focus-banner' : undefined}
                                 className={cn(
                                     'relative',
@@ -2598,6 +2854,7 @@ function NewBlogPostPage() {
                                     initialElements={canvasElements}
                                     initialSettings={dummySettings}
                                     initialSize={canvasSize}
+                                    initialCanvasFocusMode={isWorkspaceFocus}
                                     theme={selectedSite?.theme}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
@@ -2725,13 +2982,45 @@ function NewBlogPostPage() {
                                 </div>
 
                                 <div className="grid gap-2">
-                                    <Button type="submit" disabled={createFormDisabled} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
-                                        {isLoading ? 'Saving...' : submitLabel}
+                                    <Button
+                                        type="submit"
+                                        disabled={createFormDisabled}
+                                        title={submitBlockerMessage || 'Save the post and open the visual editor'}
+                                        aria-describedby={blogCreateSubmitDescribedBy}
+                                        data-testid="blog-create-publish-submit-button"
+                                        data-state={submitControlState}
+                                        data-blocker={submitBlockerMessage || ''}
+                                        data-can-submit={String(canSubmit)}
+                                        data-can-preview={String(canCreatePreviewDraft)}
+                                        data-action-state={blogCreateSubmitActionState}
+                                        data-action-status={blogCreateSubmitActionStatus}
+                                        data-disabled-reason={blogCreateSubmitDisabledReason || undefined}
+                                        data-target-site-id={activeSiteId || undefined}
+                                        data-target-route={routePath}
+                                        data-target-status={status}
+                                        data-target-template={blogCreateTemplateName}
+                                        variant="primary"
+                                        iconStart={<Save className="size-4" />}
+                                        className="w-full"
+                                    >
+                                        {isLoading ? 'Saving...' : isCheckingPosts && !canSubmit ? 'Checking routes...' : submitLabel}
                                     </Button>
                                     <Button
                                         type="button"
                                         onClick={() => void handleCreatePreview()}
-                                        disabled={isLoading || isPreviewAfterCreateBusy || !canCreatePreviewDraft}
+                                        disabled={isCreateBusy || !canAttemptCreatePreviewDraft}
+                                        title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                                        aria-describedby={blogCreatePreviewDescribedBy}
+                                        data-state={previewDraftControlState}
+                                        data-can-preview={String(canCreatePreviewDraft)}
+                                        data-blocker={previewDraftBlockerMessage || ''}
+                                        data-action-state={blogCreatePreviewActionState}
+                                        data-action-status={blogCreatePreviewActionStatus}
+                                        data-disabled-reason={blogCreatePreviewDisabledReason || undefined}
+                                        data-target-site-id={activeSiteId || undefined}
+                                        data-target-route={routePath}
+                                        data-target-status="draft"
+                                        data-target-template={blogCreateTemplateName}
                                         variant="outline"
                                         iconStart={<Eye className="size-4" />}
                                         className="w-full"

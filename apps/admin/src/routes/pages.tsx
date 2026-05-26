@@ -6,9 +6,9 @@
  * - At /pages/new or /pages/:id/edit: renders child via <Outlet />
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate, Outlet, useRouterState } from '@tanstack/react-router';
-import { AlertTriangle, Archive, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, EyeOff, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus, History, LogIn } from 'lucide-react';
+import { AlertTriangle, Archive, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, EyeOff, Filter, Plus, Layout, Edit, Trash2, Home, RefreshCw, Sparkles, ShoppingBag, Newspaper, Mail, UserPlus, History, LogIn, MoreHorizontal } from 'lucide-react';
 import {
   archivePage,
   createPagePreview,
@@ -35,6 +35,7 @@ import { DataGrid } from '@/components/ui/DataGrid';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
 
 type PageStatusFilter = 'all' | Page['status'];
@@ -79,6 +80,10 @@ const PAGE_HEALTH_FILTERS: PageLibraryFilter[] = [
   'not-checked',
 ];
 const PAGE_SORT_KEYS: PageSortKey[] = ['title', 'status', 'lastUpdated'];
+const PAGE_REVISION_SUMMARY_TIMEOUT_MS = 10000;
+const PAGE_REVISION_SUMMARY_MAX_ATTEMPTS = 2;
+const PAGE_REVISION_SUMMARY_RETRY_DELAY_MS = 500;
+const PAGE_READINESS_PREFLIGHT_TIMEOUT_MS = 10000;
 
 const PAGE_PERMISSION_ROLE_DEFAULTS: Record<PagePermissionKey, Array<AuthUser['role']>> = {
   'pages.view': ['owner', 'admin', 'editor', 'viewer'],
@@ -336,13 +341,17 @@ type PageDeliveryHealth = {
 
 type PageDeliveryHealthHistory = Record<string, PageDeliveryHealth[]>;
 
-const PAGE_CREATION_SHORTCUTS: Array<{
+const isStringIdentifier = (value: string | null | undefined): value is string => Boolean(value);
+
+type PageCreationShortcut = {
   key: PageCreationTemplate;
   title: string;
   detail: string;
   badge: string;
   icon: typeof Layout;
-}> = [
+};
+
+const PAGE_CREATION_SHORTCUTS: PageCreationShortcut[] = [
   {
     key: 'blank',
     title: 'Blank canvas',
@@ -576,6 +585,44 @@ const PAGE_CREATION_SHORTCUTS: Array<{
   },
 ];
 
+const PAGE_STARTER_GROUPS: Array<{
+  id: string;
+  title: string;
+  detail: string;
+  badges: string[];
+}> = [
+  {
+    id: 'build',
+    title: 'Build the site',
+    detail: 'Core pages for launching the main website surface.',
+    badges: ['Design freely', 'Site starter', 'Brand', 'Media', 'Events', 'Proof', 'People', 'Hiring'],
+  },
+  {
+    id: 'commerce',
+    title: 'Sell and fulfill',
+    detail: 'Storefront, checkout, policies, and order flows.',
+    badges: ['Products', 'Commerce', 'Plans'],
+  },
+  {
+    id: 'content',
+    title: 'Publish content',
+    detail: 'Editorial, help, and support surfaces.',
+    badges: ['Editorial', 'Support'],
+  },
+  {
+    id: 'capture',
+    title: 'Capture leads',
+    detail: 'Forms, newsletter, booking, and member entry points.',
+    badges: ['Forms', 'Bookings', 'Members', 'Access', 'Account'],
+  },
+  {
+    id: 'trust',
+    title: 'Trust and compliance',
+    detail: 'Legal and compliance pages expected on real sites.',
+    badges: ['Legal', 'Compliance'],
+  },
+];
+
 /**
  * Layout component that decides what to render based on current path:
  * - /pages -> shows PagesListView
@@ -595,9 +642,11 @@ function PagesLayout() {
 
 function PagesListView() {
   const navigate = useNavigate();
+  const bulkSelectionStatusId = useId();
+  const bulkActionStatusId = useId();
   const routeSearch = Route.useSearch();
   const currentAdmin = useAuthStore((state) => state.user);
-  const { sites, pages, setPages, deletePage, updatePage } = useStore();
+  const { sites, pages, setPages, setPagesForSite, deletePage, updatePage } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingReadiness, setIsLoadingReadiness] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -615,29 +664,34 @@ function PagesListView() {
   const [isRefreshingAllDeliveryHealth, setIsRefreshingAllDeliveryHealth] = useState(false);
   const [routeCollections, setRouteCollections] = useState<Collection[]>([]);
   const [isLoadingRevisions, setIsLoadingRevisions] = useState(false);
+  const [loadedPageSiteIds, setLoadedPageSiteIds] = useState<Set<string>>(() => new Set());
   const [previewingPageId, setPreviewingPageId] = useState<string | null>(null);
   const [mutatingPageId, setMutatingPageId] = useState<string | null>(null);
   const [pendingPublishPage, setPendingPublishPage] = useState<Page | null>(null);
+  const [pendingUnpublishPage, setPendingUnpublishPage] = useState<Page | null>(null);
+  const [pendingArchivePage, setPendingArchivePage] = useState<Page | null>(null);
   const [pendingDeletePage, setPendingDeletePage] = useState<Page | null>(null);
   const [pendingBulkPublish, setPendingBulkPublish] = useState(false);
+  const [pendingBulkUnpublish, setPendingBulkUnpublish] = useState(false);
+  const [pendingBulkArchive, setPendingBulkArchive] = useState(false);
   const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', PAGE_PERMISSION_ROLE_DEFAULTS);
-  const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PAGE_PERMISSION_ROLE_DEFAULTS);
-  const canPublishPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', PAGE_PERMISSION_ROLE_DEFAULTS);
-  const canDeletePages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', PAGE_PERMISSION_ROLE_DEFAULTS);
-  const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', PAGE_PERMISSION_ROLE_DEFAULTS);
-  const canViewSites = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.view', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canViewPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canEditPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canPublishPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canDeletePages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canViewCollections = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', PAGE_PERMISSION_ROLE_DEFAULTS);
+  const canViewSites = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.view', PAGE_PERMISSION_ROLE_DEFAULTS);
   const viewPermissionTitle = canViewPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', PAGE_PERMISSION_ROLE_DEFAULTS);
   const editPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', PAGE_PERMISSION_ROLE_DEFAULTS);
   const publishPermissionTitle = canPublishPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', PAGE_PERMISSION_ROLE_DEFAULTS);
   const deletePermissionTitle = canDeletePages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', PAGE_PERMISSION_ROLE_DEFAULTS);
   const isPageMutationBusy = isBulkBusy || mutatingPageId !== null || previewingPageId !== null;
-  const isPageLibraryBusy = isLoading || isLoadingReadiness || isPageMutationBusy || isPermissionMatrixPending;
+  const isPageRowMutationBusy = isBulkBusy || mutatingPageId !== null;
+  const isPagePreviewBusy = previewingPageId !== null;
   const canRunAnyBulkAction = canPublishPages || canEditPages || canDeletePages;
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -647,13 +701,40 @@ function PagesListView() {
     () => activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo',
     [activeSite, selectedSiteId],
   );
+  const activeSiteIdentifiers = useMemo(
+    () => Array.from(new Set([activeSiteId, activeSite?.id, activeSite?.publicSiteId].filter(isStringIdentifier))),
+    [activeSite?.id, activeSite?.publicSiteId, activeSiteId],
+  );
+  const pagesForActiveSite = useCallback(
+    (siteId: string) => Array.from(new Set([siteId, ...activeSiteIdentifiers].filter(isStringIdentifier))),
+    [activeSiteIdentifiers],
+  );
+  const markPagesLoadedForSite = useCallback((siteIdentifiers: string[]) => {
+    setLoadedPageSiteIds((current) => {
+      const next = new Set(current);
+      siteIdentifiers.forEach((siteId) => next.add(siteId));
+      return next;
+    });
+  }, []);
   const activeSitePages = useMemo(() => {
-    const siteIdentifiers = new Set(
-      [activeSiteId, activeSite?.id, activeSite?.publicSiteId].filter(Boolean),
-    );
+    const siteIdentifiers = new Set(activeSiteIdentifiers);
 
     return pages.filter((page) => siteIdentifiers.has(page.siteId));
-  }, [activeSite?.id, activeSite?.publicSiteId, activeSiteId, pages]);
+  }, [activeSiteIdentifiers, pages]);
+  const hasLoadedActiveSitePages = activeSiteIdentifiers.some((siteId) => loadedPageSiteIds.has(siteId));
+  const isInitialPageLoad = isLoading && activeSitePages.length === 0 && !hasLoadedActiveSitePages;
+  const isBlockingInitialPageLoad = isInitialPageLoad && !canEditPages;
+  const isPageLibraryBusy = isBlockingInitialPageLoad;
+  const isPageBulkControlsBusy = isBlockingInitialPageLoad || isBulkBusy;
+  const isPageRefreshBusy = isLoading;
+  const createPageLinkDisabled = !canEditPages;
+  const createPageActionStatusId = 'pages-create-action-status';
+  const createPageActionDisabledReason = createPageLinkDisabled
+    ? editPermissionTitle || 'Your account needs pages.edit to create pages.'
+    : '';
+  const createPageActionStatus = createPageActionDisabledReason
+    ? `New page unavailable: ${createPageActionDisabledReason}`
+    : `New page available for ${activeSiteId}.`;
   const activeSitePageMap = useMemo(
     () => new Map(activeSitePages.map((page) => [page.id, page])),
     [activeSitePages],
@@ -746,6 +827,32 @@ function PagesListView() {
   const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
     template === 'blank' ? createPageSearch : { ...createPageSearch, template }
   );
+  const pageStarterGroups = useMemo(() => {
+    const assignedKeys = new Set<PageCreationTemplate>();
+    const groups = PAGE_STARTER_GROUPS.map((group) => {
+      const shortcuts = PAGE_CREATION_SHORTCUTS.filter((shortcut) => {
+        if (!group.badges.includes(shortcut.badge) || assignedKeys.has(shortcut.key)) return false;
+        assignedKeys.add(shortcut.key);
+        return true;
+      });
+
+      return { ...group, shortcuts };
+    }).filter((group) => group.shortcuts.length > 0);
+
+    const remainingShortcuts = PAGE_CREATION_SHORTCUTS.filter((shortcut) => !assignedKeys.has(shortcut.key));
+    return remainingShortcuts.length > 0
+      ? [
+          ...groups,
+          {
+            id: 'more',
+            title: 'More starters',
+            detail: 'Additional starter surfaces for specialized site flows.',
+            badges: [],
+            shortcuts: remainingShortcuts,
+          },
+        ]
+      : groups;
+  }, []);
   const pageDesignReadiness = useMemo(() => {
     const checkedPages = activeSitePages.filter((page) => readinessMap[page.id]);
     const readyPages = activeSitePages.filter((page) => readinessMap[page.id]?.statusLabel === 'ready');
@@ -965,7 +1072,7 @@ function PagesListView() {
   };
 
   const togglePageSelection = (pageId: string) => {
-    if (isPageLibraryBusy || !canRunAnyBulkAction) return;
+    if (isPageBulkControlsBusy || !canRunAnyBulkAction) return;
 
     setSelectedPageIds((current) => {
       const next = new Set(current);
@@ -981,7 +1088,7 @@ function PagesListView() {
   };
 
   const setPageSelection = (targetPages: Page[], selected: boolean) => {
-    if (isPageLibraryBusy || !canRunAnyBulkAction) return;
+    if (isPageBulkControlsBusy || !canRunAnyBulkAction) return;
 
     setSelectedPageIds((current) => {
       const next = new Set(current);
@@ -1060,14 +1167,10 @@ function PagesListView() {
       setError(null);
 
       try {
-        const [backendPages, readiness] = await Promise.all([
-          listPages(siteId),
-          canViewSites ? getSiteReadiness(siteId).catch(() => null) : Promise.resolve(null),
-        ]);
-        const collections = canViewCollections ? await listCollections(siteId).catch(() => []) : [];
-        const revisionSummaries = await loadPageRevisionSummaries(siteId, backendPages);
-        setPages(backendPages);
-        setRouteCollections(collections);
+        const backendPages = await listPages(siteId);
+        const sitePageIdentifiers = pagesForActiveSite(siteId);
+        setPagesForSite(sitePageIdentifiers, backendPages);
+        markPagesLoadedForSite(sitePageIdentifiers);
         setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
         setDeliveryHealthHistoryMap((current) => {
           const nextIds = new Set(backendPages.map((page) => page.id));
@@ -1075,8 +1178,20 @@ function PagesListView() {
             Object.entries(current).filter(([pageId]) => nextIds.has(pageId)),
           ) as PageDeliveryHealthHistory;
         });
+        setIsLoading(false);
+
+        const [readiness, collections] = await Promise.all([
+          canViewSites ? getSiteReadiness(siteId).catch(() => null) : Promise.resolve(null),
+          canViewCollections ? listCollections(siteId).catch(() => []) : Promise.resolve([]),
+        ]);
         setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
-        setRevisionSummaryMap(revisionSummaries);
+        setRouteCollections(collections);
+        setRevisionSummaryMap((current) => {
+          const nextIds = new Set(backendPages.map((page) => page.id));
+          return Object.fromEntries(
+            Object.entries(current).filter(([pageId]) => nextIds.has(pageId)),
+          ) as Record<string, ContentRevisionSummary>;
+        });
       } catch (loadError) {
         if (isAdminPermissionDeniedError(loadError)) {
           setPages([]);
@@ -1092,14 +1207,13 @@ function PagesListView() {
         setIsLoadingRevisions(false);
       }
     },
-    [canViewCollections, canViewPages, canViewSites, isPageLibraryBusy, setPages, viewPermissionTitle],
+    [canViewCollections, canViewPages, canViewSites, isPageLibraryBusy, markPagesLoadedForSite, pagesForActiveSite, setPages, setPagesForSite, viewPermissionTitle],
   );
 
   useEffect(() => {
     let cancelled = false;
 
     const loadPages = async () => {
-      if (isPermissionMatrixPending) return;
       if (!canViewPages) {
         setPages([]);
         setRouteCollections([]);
@@ -1119,15 +1233,11 @@ function PagesListView() {
       setError(null);
 
       try {
-        const [backendPages, readiness] = await Promise.all([
-          listPages(activeSiteId),
-          canViewSites ? getSiteReadiness(activeSiteId).catch(() => null) : Promise.resolve(null),
-        ]);
-        const collections = canViewCollections ? await listCollections(activeSiteId).catch(() => []) : [];
-        const revisionSummaries = await loadPageRevisionSummaries(activeSiteId, backendPages);
+        const backendPages = await listPages(activeSiteId);
         if (!cancelled) {
-          setPages(backendPages);
-          setRouteCollections(collections);
+          const sitePageIdentifiers = pagesForActiveSite(activeSiteId);
+          setPagesForSite(sitePageIdentifiers, backendPages);
+          markPagesLoadedForSite(sitePageIdentifiers);
           setSelectedPageIds((current) => new Set(backendPages.filter((page) => current.has(page.id)).map((page) => page.id)));
           setDeliveryHealthHistoryMap((current) => {
             const nextIds = new Set(backendPages.map((page) => page.id));
@@ -1135,8 +1245,22 @@ function PagesListView() {
               Object.entries(current).filter(([pageId]) => nextIds.has(pageId)),
             ) as PageDeliveryHealthHistory;
           });
+          setIsLoading(false);
+        }
+
+        const [readiness, collections] = await Promise.all([
+          canViewSites ? getSiteReadiness(activeSiteId).catch(() => null) : Promise.resolve(null),
+          canViewCollections ? listCollections(activeSiteId).catch(() => []) : Promise.resolve([]),
+        ]);
+        if (!cancelled) {
           setReadinessMap(Object.fromEntries((readiness?.pages || []).map((page) => [page.id, page])));
-          setRevisionSummaryMap(revisionSummaries);
+          setRouteCollections(collections);
+          setRevisionSummaryMap((current) => {
+            const nextIds = new Set(backendPages.map((page) => page.id));
+            return Object.fromEntries(
+              Object.entries(current).filter(([pageId]) => nextIds.has(pageId)),
+            ) as Record<string, ContentRevisionSummary>;
+          });
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -1163,7 +1287,7 @@ function PagesListView() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, canViewCollections, canViewPages, canViewSites, isPermissionMatrixPending, setPages, viewPermissionTitle]);
+  }, [activeSiteId, canViewCollections, canViewPages, canViewSites, markPagesLoadedForSite, pagesForActiveSite, setPages, setPagesForSite, viewPermissionTitle]);
 
   const publicPageUrl = (page: Page) => (
     `${publicBaseUrl}/sites/${encodeURIComponent(siteSlug)}${pagePublicPath(page)}`
@@ -1311,7 +1435,7 @@ function PagesListView() {
   };
 
   const handlePreviewPage = async (page: Page) => {
-    if (isPageLibraryBusy) return;
+    if (isPageLibraryBusy || isPagePreviewBusy) return;
     if (!canPublishPages) {
       setNotice(publishPermissionTitle || 'Your account cannot create page preview links.');
       return;
@@ -1331,7 +1455,7 @@ function PagesListView() {
   };
 
   const handlePublishPage = async (page: Page) => {
-    if (isPageLibraryBusy) return;
+    if (isPageLibraryBusy || isPageRowMutationBusy) return;
     if (!canPublishPages) {
       setNotice(publishPermissionTitle || 'Your account cannot publish pages.');
       setPendingPublishPage(null);
@@ -1349,13 +1473,15 @@ function PagesListView() {
         return;
       }
 
-      const readiness = await getPageReadiness(page.siteId || activeSiteId, page.id);
-      setReadinessMap((current) => ({ ...current, [page.id]: readiness }));
-      const blocker = getPublishBlocker(readiness);
+      const readiness = await getPageReadinessPreflight(page.siteId || activeSiteId, page.id);
+      if (readiness) {
+        setReadinessMap((current) => ({ ...current, [page.id]: readiness }));
+        const blocker = getPublishBlocker(readiness);
 
-      if (blocker) {
-        setError(`${page.title} is blocked: ${blocker}`);
-        return;
+        if (blocker) {
+          setError(`${page.title} is blocked: ${blocker}`);
+          return;
+        }
       }
 
       const updated = await publishPage(page.siteId || activeSiteId, page.id, {
@@ -1373,7 +1499,7 @@ function PagesListView() {
   };
 
   const handleArchivePage = async (page: Page) => {
-    if (isPageLibraryBusy) return;
+    if (isPageLibraryBusy || isPageRowMutationBusy) return;
     if (!canEditPages) {
       setNotice(editPermissionTitle || 'Your account cannot archive pages.');
       return;
@@ -1389,6 +1515,7 @@ function PagesListView() {
       });
       updatePage(page.id, updated);
       void refreshPageRevisionSummary(page.siteId || activeSiteId, page.id, setRevisionSummaryMap);
+      setPendingArchivePage(null);
       setNotice(`${updated.title || page.title} archived.`);
     } catch (archiveError) {
       setError(archiveError instanceof Error ? archiveError.message : 'Unable to archive page');
@@ -1398,7 +1525,7 @@ function PagesListView() {
   };
 
   const handleUnpublishPage = async (page: Page) => {
-    if (isPageLibraryBusy) return;
+    if (isPageLibraryBusy || isPageRowMutationBusy) return;
     if (!canEditPages) {
       setNotice(editPermissionTitle || 'Your account cannot unpublish pages.');
       return;
@@ -1418,6 +1545,7 @@ function PagesListView() {
       });
       updatePage(page.id, updated);
       void refreshPageRevisionSummary(page.siteId || activeSiteId, page.id, setRevisionSummaryMap);
+      setPendingUnpublishPage(null);
       setNotice(`${updated.title || page.title} unpublished.`);
     } catch (unpublishError) {
       setError(unpublishError instanceof Error ? unpublishError.message : 'Unable to unpublish page');
@@ -1427,7 +1555,7 @@ function PagesListView() {
   };
 
   const handleDeletePage = async (page: Page) => {
-    if (isPageLibraryBusy) return;
+    if (isPageLibraryBusy || isPageRowMutationBusy) return;
     if (!canDeletePages) {
       setNotice(deletePermissionTitle || 'Your account cannot delete pages.');
       setPendingDeletePage(null);
@@ -1465,8 +1593,112 @@ function PagesListView() {
     }
   };
 
+  useEffect(() => {
+    if (!pendingPublishPage) return;
+
+    const handlePagePublishDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || mutatingPageId === pendingPublishPage.id) return;
+      event.preventDefault();
+      setPendingPublishPage(null);
+    };
+
+    document.addEventListener('keydown', handlePagePublishDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePagePublishDialogKeyDown, true);
+  }, [mutatingPageId, pendingPublishPage]);
+
+  useEffect(() => {
+    if (!pendingUnpublishPage) return;
+
+    const handlePageUnpublishDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || mutatingPageId === pendingUnpublishPage.id) return;
+      event.preventDefault();
+      setPendingUnpublishPage(null);
+    };
+
+    document.addEventListener('keydown', handlePageUnpublishDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePageUnpublishDialogKeyDown, true);
+  }, [mutatingPageId, pendingUnpublishPage]);
+
+  useEffect(() => {
+    if (!pendingArchivePage) return;
+
+    const handlePageArchiveDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || mutatingPageId === pendingArchivePage.id) return;
+      event.preventDefault();
+      setPendingArchivePage(null);
+    };
+
+    document.addEventListener('keydown', handlePageArchiveDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePageArchiveDialogKeyDown, true);
+  }, [mutatingPageId, pendingArchivePage]);
+
+  useEffect(() => {
+    if (!pendingDeletePage) return;
+
+    const handlePageDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || mutatingPageId === pendingDeletePage.id) return;
+      event.preventDefault();
+      setPendingDeletePage(null);
+    };
+
+    document.addEventListener('keydown', handlePageDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePageDeleteDialogKeyDown, true);
+  }, [mutatingPageId, pendingDeletePage]);
+
+  useEffect(() => {
+    if (!pendingBulkDelete) return;
+
+    const handlePagesBulkDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isBulkBusy) return;
+      event.preventDefault();
+      setPendingBulkDelete(false);
+    };
+
+    document.addEventListener('keydown', handlePagesBulkDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePagesBulkDeleteDialogKeyDown, true);
+  }, [isBulkBusy, pendingBulkDelete]);
+
+  useEffect(() => {
+    if (!pendingBulkPublish) return;
+
+    const handlePagesBulkPublishDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isBulkBusy) return;
+      event.preventDefault();
+      setPendingBulkPublish(false);
+    };
+
+    document.addEventListener('keydown', handlePagesBulkPublishDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePagesBulkPublishDialogKeyDown, true);
+  }, [isBulkBusy, pendingBulkPublish]);
+
+  useEffect(() => {
+    if (!pendingBulkUnpublish) return;
+
+    const handlePagesBulkUnpublishDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isBulkBusy) return;
+      event.preventDefault();
+      setPendingBulkUnpublish(false);
+    };
+
+    document.addEventListener('keydown', handlePagesBulkUnpublishDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePagesBulkUnpublishDialogKeyDown, true);
+  }, [isBulkBusy, pendingBulkUnpublish]);
+
+  useEffect(() => {
+    if (!pendingBulkArchive) return;
+
+    const handlePagesBulkArchiveDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isBulkBusy) return;
+      event.preventDefault();
+      setPendingBulkArchive(false);
+    };
+
+    document.addEventListener('keydown', handlePagesBulkArchiveDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handlePagesBulkArchiveDialogKeyDown, true);
+  }, [isBulkBusy, pendingBulkArchive]);
+
   const handleBulkAction = async () => {
-    if (isPageLibraryBusy) {
+    if (isPageLibraryBusy || isPageMutationBusy) {
       return;
     }
 
@@ -1501,6 +1733,26 @@ function PagesListView() {
       return;
     }
 
+    if (bulkAction === 'unpublish' && !pendingBulkUnpublish) {
+      const pagesToUnpublish = selectedPages.filter((page) => page.status === 'published' || page.status === 'scheduled');
+      if (pagesToUnpublish.length === 0) {
+        setNotice('Select at least one published or scheduled page to unpublish.');
+        return;
+      }
+      setPendingBulkUnpublish(true);
+      return;
+    }
+
+    if (bulkAction === 'archive' && !pendingBulkArchive) {
+      const pagesToArchive = selectedPages.filter((page) => page.status !== 'archived');
+      if (pagesToArchive.length === 0) {
+        setNotice('Select at least one active page to archive.');
+        return;
+      }
+      setPendingBulkArchive(true);
+      return;
+    }
+
     if (bulkAction === 'delete' && !pendingBulkDelete) {
       setPendingBulkDelete(true);
       return;
@@ -1528,15 +1780,20 @@ function PagesListView() {
         const readinessResults = await Promise.all(
           selectedPages.map(async (page) => ({
             page,
-            readiness: await getPageReadiness(page.siteId || activeSiteId, page.id),
+            readiness: await getPageReadinessPreflight(page.siteId || activeSiteId, page.id),
           })),
         );
         setReadinessMap((current) => ({
           ...current,
-          ...Object.fromEntries(readinessResults.map(({ page, readiness }) => [page.id, readiness])),
+          ...Object.fromEntries(
+            readinessResults
+              .filter((result): result is { page: Page; readiness: PageReadiness } => Boolean(result.readiness))
+              .map(({ page, readiness }) => [page.id, readiness]),
+          ),
         }));
 
         const blockedPages = readinessResults
+          .filter((result): result is { page: Page; readiness: PageReadiness } => Boolean(result.readiness))
           .map(({ page, readiness }) => ({ page, blocker: getPublishBlocker(readiness) }))
           .filter((result): result is { page: Page; blocker: string } => Boolean(result.blocker));
 
@@ -1560,18 +1817,26 @@ function PagesListView() {
       }
 
       if (bulkAction === 'archive') {
+        const pagesToArchive = selectedPages.filter((page) => page.status !== 'archived');
+        if (pagesToArchive.length === 0) {
+          setPendingBulkArchive(false);
+          setNotice('Select at least one active page to archive.');
+          return;
+        }
         const updatedPages = await Promise.all(
-          selectedPages.map((page) => archivePage(page.siteId || activeSiteId, page.id, {
+          pagesToArchive.map((page) => archivePage(page.siteId || activeSiteId, page.id, {
             expectedUpdatedAt: page.lastUpdated,
           })),
         );
         updatedPages.forEach((page) => updatePage(page.id, page));
+        setPendingBulkArchive(false);
         setNotice(`${updatedPages.length} page${updatedPages.length === 1 ? '' : 's'} archived.`);
       }
 
       if (bulkAction === 'unpublish') {
         const pagesToUnpublish = selectedPages.filter((page) => page.status === 'published' || page.status === 'scheduled');
         if (pagesToUnpublish.length === 0) {
+          setPendingBulkUnpublish(false);
           setNotice('Select at least one published or scheduled page to unpublish.');
           return;
         }
@@ -1581,6 +1846,7 @@ function PagesListView() {
           })),
         );
         updatedPages.forEach((page) => updatePage(page.id, page));
+        setPendingBulkUnpublish(false);
         setNotice(`${updatedPages.length} page${updatedPages.length === 1 ? '' : 's'} unpublished.`);
       }
 
@@ -1597,7 +1863,9 @@ function PagesListView() {
       setSelectedPageIds(new Set());
       setBulkAction('');
       setPendingBulkPublish(false);
-      await refreshPages(activeSiteId);
+      setPendingBulkUnpublish(false);
+      setPendingBulkArchive(false);
+      void refreshPages(activeSiteId);
     } catch (bulkError) {
       setError(bulkError instanceof Error ? bulkError.message : 'Unable to apply bulk action');
     } finally {
@@ -1615,7 +1883,7 @@ function PagesListView() {
           aria-label={`Select ${page.title}`}
           data-testid={`pages-select-${page.id}`}
           checked={selectedPageIds.has(page.id)}
-          disabled={isPageLibraryBusy || !canRunAnyBulkAction}
+          disabled={isPageBulkControlsBusy || !canRunAnyBulkAction}
           title={!canRunAnyBulkAction ? publishPermissionTitle || editPermissionTitle || deletePermissionTitle : undefined}
           onChange={() => togglePageSelection(page.id)}
           className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -1763,17 +2031,89 @@ function PagesListView() {
         const routeBlocker = pageRouteDiagnostics[page.id]?.status === 'conflict'
           ? pageRouteDiagnostics[page.id]?.message
           : null;
+        const rowActionStatusId = `pages-actions-status-${page.id}`;
+        const rowMutationReason = isPageLibraryBusy || isPageRowMutationBusy
+          ? 'Page actions are temporarily unavailable while Backy updates pages.'
+          : null;
+        const publishDisabledReason = !canPublishPages
+          ? publishPermissionTitle || 'Your account cannot publish pages.'
+          : routeBlocker
+            ? `Resolve route before publishing: ${routeBlocker}`
+            : publishBlocker
+              ? `Resolve before publishing: ${publishBlocker}`
+              : rowMutationReason;
+        const unpublishDisabledReason = !canEditPages
+          ? editPermissionTitle || 'Your account cannot edit pages.'
+          : !canPublishPages
+            ? publishPermissionTitle || 'Your account cannot publish pages.'
+            : rowMutationReason;
+        const archiveDisabledReason = !canEditPages
+          ? editPermissionTitle || 'Your account cannot edit pages.'
+          : rowMutationReason;
+        const previewDisabledReason = !canPublishPages
+          ? publishPermissionTitle || 'Your account cannot preview pages.'
+          : isPageLibraryBusy || isPagePreviewBusy
+            ? 'Page preview is temporarily unavailable while Backy updates pages.'
+            : null;
+        const editDisabledReason = !canEditPages
+          ? editPermissionTitle || 'Your account cannot edit pages.'
+          : isPageLibraryBusy || isPageBulkControlsBusy || mutatingPageId === page.id
+            ? 'Page editing is temporarily unavailable while Backy updates pages.'
+            : null;
+        const deleteDisabledReason = !canDeletePages
+          ? deletePermissionTitle || 'Your account cannot delete pages.'
+          : rowMutationReason;
+        const rowActionStatus = [
+          page.status !== 'published'
+            ? publishDisabledReason
+              ? `Publish unavailable: ${publishDisabledReason}`
+              : 'Publish available.'
+            : null,
+          page.status === 'published'
+            ? unpublishDisabledReason
+              ? `Unpublish unavailable: ${unpublishDisabledReason}`
+              : 'Unpublish available.'
+            : null,
+          page.status !== 'archived'
+            ? archiveDisabledReason
+              ? `Archive unavailable: ${archiveDisabledReason}`
+              : 'Archive available.'
+            : null,
+          page.status === 'published' ? 'Open published page available.' : null,
+          previewDisabledReason ? `Preview unavailable: ${previewDisabledReason}` : 'Preview available.',
+          editDisabledReason ? `Edit unavailable: ${editDisabledReason}` : 'Edit available.',
+          deleteDisabledReason ? `Delete unavailable: ${deleteDisabledReason}` : 'Delete available.',
+        ].filter(Boolean).join(' ');
 
         return (
-          <div className="flex items-center justify-end gap-2">
+          <div
+            className="flex items-center justify-end gap-2"
+            role="group"
+            aria-label={`Actions for ${page.title}`}
+            aria-describedby={rowActionStatusId}
+            data-testid={`pages-actions-${page.id}`}
+            data-action-status={rowActionStatus}
+          >
+            <span
+              id={rowActionStatusId}
+              className="sr-only"
+              data-testid={`pages-actions-status-${page.id}`}
+            >
+              {rowActionStatus}
+            </span>
             {page.status !== 'published' && (
               <button
-	                onClick={() => {
-	                  if (isPageLibraryBusy || !canPublishPages) return;
-	                  setPendingPublishPage(page);
-	                }}
-	                disabled={isPageLibraryBusy || !canPublishPages || Boolean(routeBlocker || publishBlocker)}
-	                title={!canPublishPages ? publishPermissionTitle : routeBlocker ? `Resolve route before publishing: ${routeBlocker}` : publishBlocker ? `Resolve before publishing: ${publishBlocker}` : 'Publish page'}
+                onClick={() => {
+                  if (publishDisabledReason) return;
+                  setPendingPublishPage(page);
+                }}
+                disabled={Boolean(publishDisabledReason)}
+                aria-disabled={Boolean(publishDisabledReason)}
+                aria-describedby={rowActionStatusId}
+                data-action-state={publishDisabledReason ? 'blocked' : 'ready'}
+                data-disabled-reason={publishDisabledReason || undefined}
+                title={publishDisabledReason || 'Publish page'}
+                aria-label={`Publish ${page.title}`}
                 data-testid={`pages-publish-${page.id}`}
                 className="p-2 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1783,10 +2123,16 @@ function PagesListView() {
             {page.status === 'published' && (
               <button
                 onClick={() => {
-                  void handleUnpublishPage(page);
+                  if (unpublishDisabledReason) return;
+                  setPendingUnpublishPage(page);
                 }}
-                disabled={isPageLibraryBusy || !canEditPages || !canPublishPages}
-                title={!canEditPages ? editPermissionTitle : !canPublishPages ? publishPermissionTitle : 'Unpublish page'}
+                disabled={Boolean(unpublishDisabledReason)}
+                aria-disabled={Boolean(unpublishDisabledReason)}
+                aria-describedby={rowActionStatusId}
+                data-action-state={unpublishDisabledReason ? 'blocked' : 'ready'}
+                data-disabled-reason={unpublishDisabledReason || undefined}
+                title={unpublishDisabledReason || 'Unpublish page'}
+                aria-label={`Unpublish ${page.title}`}
                 data-testid={`pages-unpublish-${page.id}`}
                 className="p-2 text-muted-foreground hover:text-sky-700 hover:bg-sky-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1796,10 +2142,16 @@ function PagesListView() {
             {page.status !== 'archived' && (
               <button
                 onClick={() => {
-	                  void handleArchivePage(page);
-	                }}
-	                disabled={isPageLibraryBusy || !canEditPages}
-	                title={!canEditPages ? editPermissionTitle : 'Archive page'}
+                  if (archiveDisabledReason) return;
+                  setPendingArchivePage(page);
+                }}
+                disabled={Boolean(archiveDisabledReason)}
+                aria-disabled={Boolean(archiveDisabledReason)}
+                aria-describedby={rowActionStatusId}
+                data-action-state={archiveDisabledReason ? 'blocked' : 'ready'}
+                data-disabled-reason={archiveDisabledReason || undefined}
+                title={archiveDisabledReason || 'Archive page'}
+                aria-label={`Archive ${page.title}`}
                 data-testid={`pages-archive-${page.id}`}
                 className="p-2 text-muted-foreground hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1812,6 +2164,10 @@ function PagesListView() {
                 target="_blank"
                 rel="noreferrer"
                 title="Open published page"
+                aria-label={`Open published page ${page.title}`}
+                aria-describedby={rowActionStatusId}
+                data-action-state="ready"
+                data-testid={`pages-open-${page.id}`}
                 className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
               >
                 <ExternalLink className="w-4 h-4" />
@@ -1819,34 +2175,50 @@ function PagesListView() {
             )}
             <button
               onClick={() => {
-	                void handlePreviewPage(page);
-	              }}
-	              disabled={isPageLibraryBusy || !canPublishPages}
-	              title={!canPublishPages ? publishPermissionTitle : 'Preview page'}
+                if (previewDisabledReason) return;
+                void handlePreviewPage(page);
+              }}
+              disabled={Boolean(previewDisabledReason)}
+              aria-disabled={Boolean(previewDisabledReason)}
+              aria-describedby={rowActionStatusId}
+              data-action-state={previewDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={previewDisabledReason || undefined}
+              title={previewDisabledReason || 'Preview page'}
+              aria-label={`Preview ${page.title}`}
               data-testid={`pages-preview-${page.id}`}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Eye className="w-4 h-4" />
             </button>
             <button
-	              onClick={() => {
-	                if (isPageMutationBusy || !canEditPages) return;
-	                navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id }, search: { siteId: activeSiteId } });
-	              }}
-	              disabled={isPageMutationBusy || !canEditPages}
-	              title={!canEditPages ? editPermissionTitle : 'Edit page'}
+              onClick={() => {
+                if (editDisabledReason) return;
+                navigate({ to: '/pages/$pageId/edit', params: { pageId: page.id }, search: { siteId: activeSiteId, focus: 'canvas' } });
+              }}
+              disabled={Boolean(editDisabledReason)}
+              aria-disabled={Boolean(editDisabledReason)}
+              aria-describedby={rowActionStatusId}
+              data-action-state={editDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={editDisabledReason || undefined}
+              title={editDisabledReason || 'Edit page'}
+              aria-label={`Edit ${page.title}`}
               data-testid={`pages-edit-${page.id}`}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Edit className="w-4 h-4" />
             </button>
             <button
-	              onClick={() => {
-	                if (isPageLibraryBusy || !canDeletePages) return;
-	                setPendingDeletePage(page);
-	              }}
-	              disabled={isPageLibraryBusy || !canDeletePages}
-	              title={!canDeletePages ? deletePermissionTitle : 'Delete page'}
+              onClick={() => {
+                if (deleteDisabledReason) return;
+                setPendingDeletePage(page);
+              }}
+              disabled={Boolean(deleteDisabledReason)}
+              aria-disabled={Boolean(deleteDisabledReason)}
+              aria-describedby={rowActionStatusId}
+              data-action-state={deleteDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={deleteDisabledReason || undefined}
+              aria-label={`Delete ${page.title}`}
+              title={deleteDisabledReason || 'Delete page'}
               data-testid={`pages-delete-${page.id}`}
               className="p-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -1881,6 +2253,35 @@ function PagesListView() {
     },
     pageSize: 10
   });
+  const visibleRevisionSummaryKey = useMemo(
+    () => data.map((page) => page.id).join('|'),
+    [data],
+  );
+  const visibleRevisionSummaryTargets = useMemo(
+    () => data.map((page) => ({
+      id: page.id,
+      siteId: page.siteId || activeSiteId,
+    })),
+    [activeSiteId, visibleRevisionSummaryKey],
+  );
+  useEffect(() => {
+    if (!canViewPages || visibleRevisionSummaryTargets.length === 0) return;
+
+    const missingPages = visibleRevisionSummaryTargets.filter((page) => !revisionSummaryMap[page.id]);
+    if (missingPages.length === 0) return;
+
+    setIsLoadingRevisions(true);
+
+    loadPageRevisionSummariesWithRetry(activeSiteId, missingPages)
+      .then((summaries) => {
+        if (Object.keys(summaries).length > 0) {
+          setRevisionSummaryMap((current) => ({ ...current, ...summaries }));
+        }
+      })
+      .finally(() => {
+        setIsLoadingRevisions(false);
+      });
+  }, [activeSiteId, canViewPages, revisionSummaryMap, visibleRevisionSummaryTargets]);
   const pagesRouteSearch = useMemo<PagesSearch>(() => ({
     siteId: activeSiteId,
     ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
@@ -1948,6 +2349,12 @@ function PagesListView() {
   const hiddenSelectedCount = Math.max(0, selectedPages.length - selectedTablePages.length);
   const filteredSelectionMode = filteredPages.length > data.length ? 'all-filtered' : 'visible-page';
   const allFilteredPagesSelected = filteredPages.length > 0 && selectedFilteredPages.length === filteredPages.length;
+  const visibleSelectedCount = selectedTablePages.length;
+  const bulkSelectionStatus = selectedPages.length === 0
+    ? `No pages selected. ${data.length} visible page${data.length === 1 ? '' : 's'} on this table page.`
+    : `${selectedPages.length} page${selectedPages.length === 1 ? '' : 's'} selected. ${visibleSelectedCount} visible, ${hiddenSelectedCount} not visible, ${selectedFilteredPages.length} of ${filteredPages.length} filtered page${filteredPages.length === 1 ? '' : 's'} selected.`;
+  const selectedUnpublishablePages = selectedPages.filter((page) => page.status === 'published' || page.status === 'scheduled');
+  const selectedArchivablePages = selectedPages.filter((page) => page.status !== 'archived');
   const selectedKnownPublishBlockers = useMemo(
     () => selectedPages
       .map((page) => {
@@ -1962,7 +2369,7 @@ function PagesListView() {
       .filter((result): result is { page: Page; blocker: string } => Boolean(result?.blocker)),
     [pageRouteDiagnostics, readinessMap, selectedPages],
   );
-  const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPages.length, pendingBulkDelete, pendingBulkPublish);
+  const bulkActionLabel = getBulkActionLabel(bulkAction, selectedPages.length, pendingBulkDelete, pendingBulkPublish, pendingBulkUnpublish, pendingBulkArchive);
   const bulkBusyLabel = getBulkBusyLabel(bulkAction);
   const bulkPermissionTitle = bulkAction === 'publish'
     ? publishPermissionTitle
@@ -1984,6 +2391,52 @@ function PagesListView() {
     : bulkAction === 'delete'
       ? canDeletePages
       : true;
+  const bulkActionReady = Boolean(
+    bulkAction &&
+    selectedPages.length > 0 &&
+    !isPageMutationBusy &&
+    selectedBulkActionAllowed &&
+    !(bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0),
+  );
+  const bulkActionStatus = selectedPages.length === 0
+    ? 'Select one or more pages to enable bulk actions.'
+    : !bulkAction
+      ? `Choose a bulk action for ${selectedPages.length} selected page${selectedPages.length === 1 ? '' : 's'}.`
+      : isPageMutationBusy
+        ? 'Bulk actions are temporarily unavailable while Backy updates pages.'
+        : !selectedBulkActionAllowed
+          ? bulkPermissionTitle || 'Your account cannot run this bulk action.'
+          : bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0
+            ? `Resolve ${selectedKnownPublishBlockers.length} selected publish blocker${selectedKnownPublishBlockers.length === 1 ? '' : 's'} before publishing.`
+            : `Ready to ${bulkActionLabel.toLowerCase()}.`;
+  const bulkControlsBusyReason = isPageBulkControlsBusy
+    ? 'Bulk page controls are temporarily unavailable while Backy loads or updates pages.'
+    : '';
+  const bulkSelectionPermissionReason = !canRunAnyBulkAction
+    ? bulkPermissionTitle || 'Your account cannot run page bulk actions.'
+    : '';
+  const selectVisibleDisabledReason = data.length === 0
+    ? 'No visible pages are available to select.'
+    : bulkControlsBusyReason || bulkSelectionPermissionReason;
+  const selectFilteredDisabledReason = filteredPages.length === 0
+    ? 'No filtered pages are available to select.'
+    : bulkControlsBusyReason || bulkSelectionPermissionReason;
+  const bulkActionSelectDisabledReason = bulkControlsBusyReason || bulkSelectionPermissionReason;
+  const bulkActionApplyDisabledReason = selectedPages.length === 0
+    ? 'Select one or more pages before applying this bulk action.'
+    : !bulkAction
+      ? 'Choose a bulk action before applying it.'
+      : isPageMutationBusy
+        ? 'Bulk page actions are temporarily unavailable while Backy updates pages.'
+        : !selectedBulkActionAllowed
+          ? bulkPermissionTitle || 'Your account cannot run this bulk action.'
+          : bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0
+            ? `Resolve ${selectedKnownPublishBlockers.length} selected publish blocker${selectedKnownPublishBlockers.length === 1 ? '' : 's'} before publishing.`
+            : '';
+  const clearSelectionDisabledReason = isPageBulkControlsBusy
+    ? 'Selection cannot be cleared while Backy is loading or updating pages.'
+    : '';
+  const bulkGroupActionStatus = `${bulkSelectionStatus} ${bulkActionStatus}`;
   const selectedPageLaunchHandoff = useMemo(() => {
     const generatedAt = new Date().toISOString();
     const site = {
@@ -2430,7 +2883,7 @@ function PagesListView() {
     setNotice('Pages handoff manifest downloaded.');
   };
 
-  if (!isPermissionMatrixPending && !canViewPages) {
+  if (!isPermissionsLoading && !canViewPages) {
     return (
       <PageShell
         title="Pages unavailable"
@@ -2480,15 +2933,20 @@ function PagesListView() {
       description="Manage the structure and content of your site."
       action={
         <Link
-	          to="/pages/new"
-	          search={createPageSearch}
-	          aria-disabled={isPageLibraryBusy || !canEditPages}
-	          className={cn(
-	            'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors',
-	            (isPageLibraryBusy || !canEditPages) && 'pointer-events-none opacity-60',
-	          )}
-	          title={!canEditPages ? editPermissionTitle : undefined}
+          to="/pages/new"
+          search={createPageSearch}
+          aria-disabled={createPageLinkDisabled}
+          aria-describedby={createPageActionStatusId}
+          className={cn(
+            'inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors',
+            createPageLinkDisabled && 'pointer-events-none opacity-60',
+          )}
+          title={createPageActionDisabledReason || undefined}
           aria-label="Create new page for active site"
+          data-action-state={createPageActionDisabledReason ? 'blocked' : 'ready'}
+          data-action-status={createPageActionStatus}
+          data-disabled-reason={createPageActionDisabledReason || undefined}
+          data-target-site-id={activeSiteId}
           data-testid="pages-header-create"
         >
           <Plus className="w-4 h-4" />
@@ -2522,14 +2980,14 @@ function PagesListView() {
                   Clear filters
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => void refreshPages(activeSiteId)}
-                disabled={isPageLibraryBusy || !canViewPages}
-                title={!canViewPages ? viewPermissionTitle : undefined}
-                aria-label="Retry loading pages"
-                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
-              >
+                <button
+                  type="button"
+                  onClick={() => void refreshPages(activeSiteId)}
+                  disabled={isPageRefreshBusy || !canViewPages}
+                  title={!canViewPages ? viewPermissionTitle : undefined}
+                  aria-label="Retry loading pages"
+                  className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                >
                 Retry load
               </button>
             </div>
@@ -2544,14 +3002,20 @@ function PagesListView() {
       )}
 
       {isLoading && (
-        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Loading pages from backend...
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          <RefreshCw className="mt-0.5 size-4 shrink-0 animate-spin text-sky-700" />
+          <span>
+            {isBlockingInitialPageLoad ? 'Loading pages from backend...' : 'Refreshing pages in the background. Current rows stay usable while Backy syncs. Create actions stay usable too.'}
+          </span>
         </div>
       )}
+      <span id={createPageActionStatusId} className="sr-only" data-testid="pages-create-action-status" aria-live="polite">
+        {createPageActionStatus}
+      </span>
 
-      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="pages-command-center">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
+      <section className="mb-5 rounded-lg border border-border bg-card shadow-sm" data-testid="pages-command-center">
+        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-5">
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-base font-semibold text-foreground">Pages command center</h2>
               <span className={cn(
@@ -2566,180 +3030,316 @@ function PagesListView() {
               Control the site page library, visual editor entry points, publish readiness, public render APIs, preview links, and bulk page operations.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-	              onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
-	              disabled={isPageLibraryBusy || !canViewPages}
-	              title={!canViewPages ? viewPermissionTitle : undefined}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end">
+            <Link
+              to="/pages/new"
+              search={createPageSearch}
+              aria-disabled={createPageLinkDisabled}
+              aria-describedby={createPageActionStatusId}
+              className={cn(
+                'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90',
+                createPageLinkDisabled && 'pointer-events-none opacity-60',
+              )}
+              title={createPageActionDisabledReason || undefined}
+              data-action-state={createPageActionDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={createPageActionStatus}
+              data-disabled-reason={createPageActionDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
+              data-testid="pages-command-create"
             >
-              <Copy className="size-4" />
-              Copy handoff
-            </button>
+              <Plus className="size-4" />
+              New Page
+            </Link>
             <button
               type="button"
-	              onClick={downloadPageHandoff}
-	              disabled={isPageLibraryBusy || !canViewPages}
-	              title={!canViewPages ? viewPermissionTitle : undefined}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="size-4" />
-              Download JSON
-            </button>
-            <button
-              type="button"
-	              onClick={downloadPagesCsv}
-	              disabled={filteredPages.length === 0 || isPageLibraryBusy || !canViewPages}
-	              title={!canViewPages ? viewPermissionTitle : undefined}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="size-4" />
-              Export CSV
-            </button>
-            <button
-              type="button"
-	              onClick={() => void refreshPages(activeSiteId)}
-	              disabled={isPageLibraryBusy || !canViewPages}
-	              title={!canViewPages ? viewPermissionTitle : undefined}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void refreshPages(activeSiteId)}
+              disabled={isPageRefreshBusy || !canViewPages}
+              title={!canViewPages ? viewPermissionTitle : undefined}
+              aria-label="Refresh page library"
+              data-testid="pages-command-refresh"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />
               Refresh pages
             </button>
             <button
               type="button"
-	              onClick={() => void handleRefreshDeliveryHealth()}
-	              disabled={isLoading || isRefreshingAllDeliveryHealth || deliveryProbeTargets.length === 0 || !canViewPages}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => void handleRefreshDeliveryHealth()}
+              disabled={isLoading || isRefreshingAllDeliveryHealth || deliveryProbeTargets.length === 0 || !canViewPages}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               data-testid="pages-refresh-delivery-health"
-	              title={!canViewPages ? viewPermissionTitle : deliveryProbeTargets.length === 0 ? 'No published pages are ready for delivery health checks' : 'Refresh published page delivery health'}
+              title={!canViewPages ? viewPermissionTitle : deliveryProbeTargets.length === 0 ? 'No published pages are ready for delivery health checks' : 'Refresh published page delivery health'}
+              aria-label="Refresh delivery health for published pages"
             >
               <RefreshCw className={cn('size-4', isRefreshingAllDeliveryHealth && 'animate-spin')} />
               Refresh delivery
             </button>
-            <Link
-              to="/pages/new"
-	              search={createPageSearch}
-	              aria-disabled={isPageLibraryBusy || !canEditPages}
-	              className={cn(
-	                'inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90',
-	                (isPageLibraryBusy || !canEditPages) && 'pointer-events-none opacity-60',
-	              )}
-	              title={!canEditPages ? editPermissionTitle : undefined}
-              data-testid="pages-command-create"
-            >
+            <details className="group relative" data-testid="pages-command-secondary-actions">
+              <summary
+                aria-label="Show page export and handoff actions"
+                className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+              >
+                <MoreHorizontal className="size-4" />
+                More actions
+              </summary>
+              <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-48">
+                <button
+                  type="button"
+                  onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
+                  disabled={isPageLibraryBusy || !canViewPages}
+                  title={!canViewPages ? viewPermissionTitle : undefined}
+                  aria-label="Copy pages handoff manifest"
+                  data-testid="pages-command-copy-handoff"
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Copy className="size-4" />
+                  Copy handoff
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadPageHandoff}
+                  disabled={isPageLibraryBusy || !canViewPages}
+                  title={!canViewPages ? viewPermissionTitle : undefined}
+                  aria-label="Download pages handoff JSON"
+                  data-testid="pages-command-download-handoff"
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Download className="size-4" />
+                  Download JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadPagesCsv}
+                  disabled={filteredPages.length === 0 || isPageLibraryBusy || !canViewPages}
+                  title={!canViewPages ? viewPermissionTitle : undefined}
+                  aria-label="Export filtered pages CSV"
+                  data-testid="pages-command-export-csv"
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Download className="size-4" />
+                  Export CSV
+                </button>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div className="grid gap-3 border-t border-border bg-background/55 p-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Pages', value: pageMetrics.total, detail: `${pageMetrics.draft} drafts` },
+            { label: 'Published', value: pageMetrics.published, detail: 'Live routes' },
+            { label: 'Blocked', value: pageMetrics.blocked, detail: 'Needs attention' },
+            { label: 'Readiness', value: `${pageDesignReadiness.score}%`, detail: `${pageDesignReadiness.readyCount}/${pageDesignReadiness.total} checks` },
+          ].map((metric) => (
+            <div key={metric.label} className="rounded-lg border border-border bg-card px-3 py-2.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</div>
+              <div className="mt-1 flex items-end justify-between gap-3">
+                <span className="font-mono text-xl font-semibold text-foreground">{metric.value}</span>
+                <span className="truncate text-xs text-muted-foreground">{metric.detail}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <details className="group border-t border-border" data-testid="pages-readiness-details">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+            <span>Page library readiness and workflow</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+          </summary>
+          <div className="grid gap-3 border-t border-border p-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] lg:p-5">
+            <div className="rounded-lg bg-background p-4 ring-1 ring-border/70">
+              <h3 className="text-sm font-semibold">Page library readiness</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Checks page presence, homepage route, canvas content, public delivery, readiness coverage, and publish blockers.
+              </p>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn('h-full rounded-full', pageDesignReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                  style={{ width: `${pageDesignReadiness.score}%` }}
+                />
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {pageDesignReadiness.checks.map((check) => (
+                  <PageReadinessCheck key={check.label} {...check} />
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-background p-4 ring-1 ring-border/70">
+              <div className="flex items-center gap-2">
+                <Layout className="size-4 text-primary" />
+                <h3 className="text-sm font-semibold">Page workflow</h3>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {pageDesignReadiness.workflow.map((step, index) => (
+                  <PageWorkflowStep key={step.label} index={index + 1} {...step} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </details>
+
+      </section>
+
+      <details
+        className="group mb-6 overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+        data-testid="pages-starter-library"
+        data-disclosure="advanced-page-workflows"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Plus className="size-4" />
-              New Page
-            </Link>
-          </div>
-        </div>
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate">Create a page for this site</span>
+              <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+                Starters, connected workflows, and handoff shortcuts stay here when needed.
+              </span>
+            </span>
+          </span>
+          <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">
+            Show advanced
+          </span>
+          <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">
+            Hide advanced
+          </span>
+        </summary>
 
-        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="text-sm font-semibold">Page library readiness</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Checks page presence, homepage route, canvas content, public delivery, readiness coverage, and publish blockers.
-            </p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn('h-full rounded-full', pageDesignReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
-                style={{ width: `${pageDesignReadiness.score}%` }}
-              />
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {pageDesignReadiness.checks.map((check) => (
-                <PageReadinessCheck key={check.label} {...check} />
-              ))}
-            </div>
+        <div className="space-y-4 border-t border-border p-4 lg:p-5">
+        <div className="rounded-lg bg-muted/30 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Pages control map</h3>
+            <p className="text-sm text-muted-foreground">Jump directly to the operational area you need.</p>
           </div>
-
-          <div className="rounded-lg border border-border bg-background p-4">
-            <div className="flex items-center gap-2">
-              <Layout className="size-4 text-primary" />
-              <h3 className="text-sm font-semibold">Page workflow</h3>
-            </div>
-            <div className="mt-3 grid gap-2">
-              {pageDesignReadiness.workflow.map((step, index) => (
-                <PageWorkflowStep key={step.label} index={index + 1} {...step} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Pages control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, page health, frontend APIs, library controls, and page records.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          <nav className="mt-3 flex flex-wrap gap-2" aria-label="Pages control map">
             {PAGES_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
                 href={area.href}
+                aria-label={`${area.title}: ${area.detail}`}
                 aria-disabled={isPageLibraryBusy}
                 onClick={(event) => {
                   if (isPageLibraryBusy) event.preventDefault();
                 }}
                 className={cn(
-                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  'inline-flex min-h-11 items-center rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:border-primary/40 hover:bg-primary/5',
                   isPageLibraryBusy && 'pointer-events-none opacity-60',
                 )}
               >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                {area.title}
               </a>
             ))}
-          </div>
+          </nav>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Plus className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Create a page for this site</h3>
-              </div>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Every starter opens the same visual editor, keeps the active site context, and seeds the canvas only when that helps the user move faster.
-              </p>
-            </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              {activeSite?.name || activeSiteId}
+        <details className="mt-4 rounded-lg border border-border bg-muted/30 p-4" data-testid="pages-starter-drawer">
+          <summary className="cursor-pointer list-none rounded-md outline-none transition hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
+            <span className="flex flex-wrap items-center justify-between gap-3">
+              <span className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Plus className="size-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">Create a page for this site</span>
+                  <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                    Open the starter catalog only when you need a guided scaffold; the primary New Page action starts a clean editable page.
+                  </span>
+                </span>
+              </span>
+              <span className="rounded-md bg-card px-2 py-1 text-xs font-semibold text-muted-foreground">
+                Show {PAGE_CREATION_SHORTCUTS.length} starters
+              </span>
             </span>
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {PAGE_CREATION_SHORTCUTS.map((shortcut) => {
-              const ShortcutIcon = shortcut.icon;
+          </summary>
 
-              return (
-                <Link
-                  key={shortcut.key}
-                  to="/pages/new"
-	                  search={getCreatePageSearch(shortcut.key)}
-	                  aria-disabled={isPageLibraryBusy || !canEditPages}
-	                  className={cn(
-	                    'group min-h-32 rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring',
-	                    (isPageLibraryBusy || !canEditPages) && 'pointer-events-none opacity-60',
-	                  )}
-	                  title={!canEditPages ? editPermissionTitle : undefined}
-                  data-testid={`pages-create-${shortcut.key}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
-                      <ShortcutIcon className="size-4" />
-                    </span>
-                    <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                      {shortcut.badge}
+          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(220px,0.32fr)_minmax(0,1fr)]">
+            <div className="rounded-lg bg-card p-4">
+              <div className="text-sm font-semibold">Starter groups</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Pick the closest starter, then refine it in the same visual editor. Nothing here is a separate builder mode.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 xl:flex-col">
+                {pageStarterGroups.map((group) => (
+                  <a
+                    key={group.id}
+                    href={`#pages-starter-${group.id}`}
+                    className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <span>{group.title}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{group.shortcuts.length}</span>
+                  </a>
+                ))}
+              </div>
+              <div className="mt-4 rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                {PAGE_CREATION_SHORTCUTS.length} starters · {activeSite?.name || activeSiteId}
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-card p-2">
+              <div className="max-h-[34rem] space-y-3 overflow-y-auto overscroll-contain pr-1" data-testid="pages-starter-scroll-region">
+                {pageStarterGroups.map((group) => (
+                  <section
+                    key={group.id}
+                    id={`pages-starter-${group.id}`}
+                    className="scroll-mt-24 rounded-lg bg-background p-3 ring-1 ring-border/70"
+                  >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">{group.title}</h4>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">{group.detail}</p>
+                    </div>
+                    <span className="rounded-md bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                      {group.shortcuts.length}
                     </span>
                   </div>
-                  <div className="mt-3 text-sm font-semibold text-foreground">{shortcut.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{shortcut.detail}</div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+                    {group.shortcuts.map((shortcut) => {
+                      const ShortcutIcon = shortcut.icon;
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
+                      return (
+                        <Link
+                          key={shortcut.key}
+                          to="/pages/new"
+                          search={getCreatePageSearch(shortcut.key)}
+                          aria-disabled={createPageLinkDisabled}
+                          aria-describedby={createPageActionStatusId}
+                          className={cn(
+                            'group flex min-h-16 items-start gap-3 rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/50 hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-ring active:scale-[0.99]',
+                            createPageLinkDisabled && 'pointer-events-none opacity-60',
+                          )}
+                          title={createPageActionDisabledReason || undefined}
+                          data-action-state={createPageActionDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={createPageActionStatus}
+                          data-disabled-reason={createPageActionDisabledReason || undefined}
+                          data-target-site-id={activeSiteId}
+                          data-testid={`pages-create-${shortcut.key}`}
+                        >
+                          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+                            <ShortcutIcon className="size-4" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-semibold text-foreground">{shortcut.title}</span>
+                              <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                {shortcut.badge}
+                              </span>
+                            </span>
+                            <span className="mt-1 block text-xs leading-5 text-muted-foreground">{shortcut.detail}</span>
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                  </section>
+                ))}
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <div className="rounded-lg bg-muted/30 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -2754,40 +3354,44 @@ function PagesListView() {
               {PAGE_WORKFLOW_SURFACES.length} surfaces
             </span>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-7">
+          <div className="mt-4 flex flex-wrap gap-2">
             {PAGE_WORKFLOW_SURFACES.map((surface) => (
               <Link
                 key={surface.key}
                 to={surface.route}
                 search={surface.route === '/settings' ? undefined : { siteId: activeSiteId }}
                 aria-disabled={isPageLibraryBusy}
+                aria-label={`${surface.title}: ${surface.detail}`}
                 className={cn(
-                  'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                  'inline-flex min-h-11 items-center rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:border-primary/40 hover:bg-primary/5',
                   isPageLibraryBusy && 'pointer-events-none opacity-60',
                 )}
               >
-                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                {surface.title}
               </Link>
             ))}
           </div>
         </div>
-      </section>
+        </div>
+      </details>
 
       <div className="mb-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div id="pages-health" className="grid gap-3 scroll-mt-24 md:grid-cols-5">
           {[
-            { label: 'All', value: pageMetrics.total, onSelect: () => setPageStatusFilter('all'), active: statusFilter === 'all' && healthFilter === 'all' },
-            { label: 'Published', value: pageMetrics.published, onSelect: () => setPageStatusFilter('published'), active: statusFilter === 'published' && healthFilter === 'all' },
-            { label: 'Draft', value: pageMetrics.draft, onSelect: () => setPageStatusFilter('draft'), active: statusFilter === 'draft' && healthFilter === 'all' },
-            { label: 'Blocked', value: pageMetrics.blocked, onSelect: showBlockedPages, active: healthFilter === 'blocked' },
-            { label: 'Routes', value: pageMetrics.routeConflicts, onSelect: showRouteConflicts, active: healthFilter === 'route-conflicts' },
+            { key: 'all', label: 'All', value: pageMetrics.total, ariaLabel: `Show all ${pageMetrics.total} pages`, onSelect: () => setPageStatusFilter('all'), active: statusFilter === 'all' && healthFilter === 'all' },
+            { key: 'published', label: 'Published', value: pageMetrics.published, ariaLabel: `Show ${pageMetrics.published} published pages`, onSelect: () => setPageStatusFilter('published'), active: statusFilter === 'published' && healthFilter === 'all' },
+            { key: 'draft', label: 'Draft', value: pageMetrics.draft, ariaLabel: `Show ${pageMetrics.draft} draft pages`, onSelect: () => setPageStatusFilter('draft'), active: statusFilter === 'draft' && healthFilter === 'all' },
+            { key: 'blocked', label: 'Blocked', value: pageMetrics.blocked, ariaLabel: `Show ${pageMetrics.blocked} blocked pages`, onSelect: showBlockedPages, active: healthFilter === 'blocked' },
+            { key: 'routes', label: 'Routes', value: pageMetrics.routeConflicts, ariaLabel: `Show ${pageMetrics.routeConflicts} route conflict pages`, onSelect: showRouteConflicts, active: healthFilter === 'route-conflicts' },
           ].map((metric) => (
             <button
-              key={metric.label}
+              key={metric.key}
               type="button"
               onClick={metric.onSelect}
               disabled={isPageLibraryBusy}
+              aria-pressed={metric.active}
+              aria-label={metric.ariaLabel}
+              data-testid={`pages-metric-filter-${metric.key}`}
               className={cn(
                 'rounded-lg border border-border bg-card px-4 py-3 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60',
                 metric.active && 'border-primary bg-primary/5',
@@ -2830,7 +3434,33 @@ function PagesListView() {
         </div>
       </div>
 
-      <section id="pages-api" className="mb-6 rounded-lg border border-border bg-card scroll-mt-24">
+      <details
+        id="pages-api"
+        className="group mb-6 overflow-hidden rounded-lg border border-border bg-card scroll-mt-24"
+        data-testid="pages-api-contract"
+        data-disclosure="page-api-contract"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Code2 className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate">Page API contract</span>
+              <span className="mt-0.5 block truncate text-xs font-normal text-muted-foreground">
+                Public render, resolve, preview, readiness, and frontend handoff details.
+              </span>
+            </span>
+          </span>
+          <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">
+            Show details
+          </span>
+          <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">
+            Hide details
+          </span>
+        </summary>
+
+        <div className="border-t border-border">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <div className="flex items-center gap-2">
@@ -2885,7 +3515,14 @@ function PagesListView() {
             <PageApiStat label="Blocked" value={`${pageMetrics.blocked}`} />
           </div>
 
-          <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+          <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="pages-api-details">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <span>API, readiness, and frontend handoff details</span>
+              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+            </summary>
+            <div className="border-t border-border p-4">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
             <div className="rounded-lg border border-border bg-background p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -3130,19 +3767,48 @@ function PagesListView() {
               ))}
             </div>
           </div>
+            </div>
+          </details>
         </div>
-      </section>
+        </div>
+      </details>
 
       {hasPages && (
-        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
-          <span className="text-sm font-medium">
-            {selectedPages.length} selected{hiddenSelectedCount > 0 ? `, ${hiddenSelectedCount} not visible` : ''}
+        <div
+          className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3"
+          role="group"
+          aria-label="Bulk page actions"
+          aria-describedby={`${bulkSelectionStatusId} ${bulkActionStatusId}`}
+          data-testid="pages-bulk-toolbar"
+          data-action-state={bulkActionReady ? 'ready' : 'blocked'}
+          data-action-status={bulkGroupActionStatus}
+          data-selected-count={selectedPages.length}
+          data-visible-selected-count={visibleSelectedCount}
+          data-hidden-selected-count={hiddenSelectedCount}
+          data-filtered-selected-count={selectedFilteredPages.length}
+          data-filtered-total-count={filteredPages.length}
+          data-bulk-action={bulkAction || 'none'}
+          data-bulk-action-ready={bulkActionReady ? 'true' : 'false'}
+        >
+          <span
+            id={bulkSelectionStatusId}
+            className="text-sm font-medium"
+            aria-live="polite"
+            data-testid="pages-bulk-selection-status"
+          >
+            {bulkSelectionStatus}
           </span>
           <button
             type="button"
             onClick={() => setPageSelection(data, selectedTablePages.length !== data.length)}
-	            disabled={data.length === 0 || isPageLibraryBusy || !canRunAnyBulkAction}
-	            title={!canRunAnyBulkAction ? bulkPermissionTitle : undefined}
+            disabled={Boolean(selectVisibleDisabledReason)}
+            title={selectVisibleDisabledReason || undefined}
+            aria-label={selectedTablePages.length === data.length && data.length > 0 ? 'Clear visible page selection' : 'Select visible pages'}
+            aria-describedby={bulkActionStatusId}
+            data-action-state={selectVisibleDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={selectVisibleDisabledReason || bulkSelectionStatus}
+            data-disabled-reason={selectVisibleDisabledReason || undefined}
+            data-testid="pages-bulk-select-visible"
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {selectedTablePages.length === data.length && data.length > 0 ? 'Clear visible' : 'Select visible'}
@@ -3151,9 +3817,14 @@ function PagesListView() {
             <button
               type="button"
               onClick={() => setPageSelection(filteredPages, !allFilteredPagesSelected)}
-              disabled={filteredPages.length === 0 || isPageLibraryBusy || !canRunAnyBulkAction}
-              title={!canRunAnyBulkAction ? bulkPermissionTitle : 'Select every page matching the current search, status, and readiness filters'}
+              disabled={Boolean(selectFilteredDisabledReason)}
+              title={selectFilteredDisabledReason || 'Select every page matching the current search, status, and readiness filters'}
+              aria-label={allFilteredPagesSelected ? `Clear all ${filteredPages.length} filtered page selections` : `Select all ${filteredPages.length} filtered pages`}
+              aria-describedby={bulkActionStatusId}
               className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              data-action-state={selectFilteredDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={selectFilteredDisabledReason || bulkSelectionStatus}
+              data-disabled-reason={selectFilteredDisabledReason || undefined}
               data-testid="pages-bulk-select-filtered"
               data-selection-mode={filteredSelectionMode}
             >
@@ -3162,13 +3833,20 @@ function PagesListView() {
           )}
           <select
             data-testid="pages-bulk-action-select"
-	            value={bulkAction}
-	            disabled={isPageLibraryBusy || !canRunAnyBulkAction}
-	            title={!canRunAnyBulkAction ? bulkPermissionTitle : undefined}
+            value={bulkAction}
+            disabled={Boolean(bulkActionSelectDisabledReason)}
+            title={bulkActionSelectDisabledReason || undefined}
+            aria-label="Choose bulk page action"
+            aria-describedby={bulkActionStatusId}
+            data-action-state={bulkActionSelectDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={bulkActionSelectDisabledReason || bulkActionStatus}
+            data-disabled-reason={bulkActionSelectDisabledReason || undefined}
             onChange={(event) => {
-              if (isPageLibraryBusy) return;
+              if (isPageBulkControlsBusy) return;
               setBulkAction(event.target.value as typeof bulkAction);
               setPendingBulkPublish(false);
+              setPendingBulkUnpublish(false);
+              setPendingBulkArchive(false);
               setPendingBulkDelete(false);
             }}
             className="min-w-44 rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
@@ -3183,12 +3861,20 @@ function PagesListView() {
             type="button"
             data-testid="pages-bulk-action-apply"
             onClick={() => void handleBulkAction()}
-	            disabled={!bulkAction || selectedPages.length === 0 || isPageLibraryBusy || !selectedBulkActionAllowed || (bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0)}
-	            title={!selectedBulkActionAllowed
-	              ? bulkPermissionTitle
-	              : bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0
-	              ? 'Resolve selected page blockers before publishing.'
-	              : 'Apply selected bulk action'}
+            disabled={Boolean(bulkActionApplyDisabledReason)}
+            aria-disabled={Boolean(bulkActionApplyDisabledReason)}
+            data-bulk-action-ready={bulkActionReady ? 'true' : 'false'}
+            data-bulk-action-status={bulkActionStatus}
+            data-action-state={bulkActionApplyDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={bulkActionStatus}
+            data-disabled-reason={bulkActionApplyDisabledReason || undefined}
+            title={!selectedBulkActionAllowed
+              ? bulkPermissionTitle
+              : bulkAction === 'publish' && selectedKnownPublishBlockers.length > 0
+              ? 'Resolve selected page blockers before publishing.'
+              : 'Apply selected bulk action'}
+            aria-label={bulkAction ? `Apply bulk action: ${bulkActionLabel}` : 'Apply selected bulk action'}
+            aria-describedby={bulkActionStatusId}
             className={cn(
               'rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
               bulkAction === 'delete'
@@ -3198,11 +3884,25 @@ function PagesListView() {
           >
             {isBulkBusy ? bulkBusyLabel : bulkActionLabel}
           </button>
+          <span
+            id={bulkActionStatusId}
+            className="min-w-48 text-xs font-medium leading-5 text-muted-foreground"
+            aria-live="polite"
+            data-testid="pages-bulk-action-status"
+          >
+            {bulkActionStatus}
+          </span>
           {selectedPages.length > 0 && (
             <button
               type="button"
               onClick={() => setSelectedPageIds(new Set())}
-              disabled={isPageLibraryBusy}
+              disabled={Boolean(clearSelectionDisabledReason)}
+              aria-label={`Clear selection for ${selectedPages.length} selected page${selectedPages.length === 1 ? '' : 's'}`}
+              aria-describedby={bulkActionStatusId}
+              data-action-state={clearSelectionDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={clearSelectionDisabledReason || bulkSelectionStatus}
+              data-disabled-reason={clearSelectionDisabledReason || undefined}
+              data-testid="pages-bulk-clear-selection"
               className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
               Clear selection
@@ -3217,7 +3917,13 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => setSelectedPageIds((current) => new Set([...current].filter((pageId) => visiblePageIdSet.has(pageId))))}
-                disabled={isPageLibraryBusy}
+                disabled={Boolean(clearSelectionDisabledReason)}
+                aria-label={`Clear ${hiddenSelectedCount} non-visible selected page${hiddenSelectedCount === 1 ? '' : 's'}`}
+                aria-describedby={bulkActionStatusId}
+                data-action-state={clearSelectionDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={clearSelectionDisabledReason || bulkSelectionStatus}
+                data-disabled-reason={clearSelectionDisabledReason || undefined}
+                data-testid="pages-bulk-clear-non-visible"
                 className="shrink-0 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Clear non-visible
@@ -3246,6 +3952,8 @@ function PagesListView() {
             placeholder="Search pages..."
             value={searchQuery}
             disabled={isPageLibraryBusy}
+            aria-label="Search pages by title, slug, route, or template"
+            data-testid="pages-search-input"
             onChange={(event) => {
               if (isPageLibraryBusy) return;
               const q = event.target.value;
@@ -3264,6 +3972,9 @@ function PagesListView() {
               type="button"
               onClick={() => setPageStatusFilter(status)}
               disabled={isPageLibraryBusy}
+              aria-pressed={statusFilter === status && healthFilter === 'all'}
+              aria-label={`Filter pages by ${status === 'all' ? 'all statuses' : `${status} status`}`}
+              data-testid={`pages-status-filter-${status}`}
               className={cn(
                 'rounded-md px-3 py-1.5 text-sm font-medium capitalize text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60',
                 statusFilter === status && healthFilter === 'all' && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground',
@@ -3275,6 +3986,7 @@ function PagesListView() {
         </div>
         <select
           aria-label="Filter pages by library readiness"
+          data-testid="pages-health-filter-select"
           value={healthFilter}
           disabled={isPageLibraryBusy}
           onChange={(event) => {
@@ -3300,10 +4012,11 @@ function PagesListView() {
         <button
           type="button"
 	          onClick={() => void refreshPages(activeSiteId)}
-	          disabled={isPageLibraryBusy || !canViewPages}
+	          disabled={isPageRefreshBusy || !canViewPages}
 	          title={!canViewPages ? viewPermissionTitle : undefined}
           className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-          aria-label="Refresh pages"
+          aria-label="Refresh page table"
+          data-testid="pages-filter-refresh"
         >
           Refresh
         </button>
@@ -3312,6 +4025,8 @@ function PagesListView() {
             type="button"
             onClick={clearPageFilters}
             disabled={isPageLibraryBusy}
+            aria-label="Clear page search and filters"
+            data-testid="pages-clear-filters"
             className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             Clear filters
@@ -3323,7 +4038,7 @@ function PagesListView() {
         <DataGrid
           columns={columns}
           data={data}
-          loading={isLoading}
+          loading={isBlockingInitialPageLoad}
           interactionDisabled={isPageLibraryBusy}
           sortConfig={sortConfig}
           onSort={(key) => {
@@ -3359,6 +4074,8 @@ function PagesListView() {
                       type="button"
                       onClick={clearPageFilters}
                       disabled={isPageLibraryBusy}
+                      aria-label="Clear page search and filters from empty state"
+                      data-testid="pages-empty-clear-filters"
                       className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Clear Filters
@@ -3366,14 +4083,19 @@ function PagesListView() {
                   )}
                   <Link
                     to="/pages/new"
-	                    search={createPageSearch}
-	                    aria-disabled={isPageLibraryBusy || !canEditPages}
-	                    data-testid="pages-empty-create"
-	                    className={cn(
-	                      'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
-	                      (isPageLibraryBusy || !canEditPages) && 'pointer-events-none opacity-60',
-	                    )}
-	                    title={!canEditPages ? editPermissionTitle : undefined}
+                    search={createPageSearch}
+                    aria-disabled={createPageLinkDisabled}
+                    aria-describedby={createPageActionStatusId}
+                    data-testid="pages-empty-create"
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90',
+                      createPageLinkDisabled && 'pointer-events-none opacity-60',
+                    )}
+                    title={createPageActionDisabledReason || undefined}
+                    data-action-state={createPageActionDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={createPageActionStatus}
+                    data-disabled-reason={createPageActionDisabledReason || undefined}
+                    data-target-site-id={activeSiteId}
                     aria-label={hasPages ? 'Create page after clearing filters' : 'Create page for active site'}
                   >
                     <Plus className="w-4 h-4" />
@@ -3397,30 +4119,39 @@ function PagesListView() {
         const deliveryStatus = getPagePublishDeliveryStatus(pendingPublishPage, readiness, routeDiagnostic);
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="pages-publish-modal">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pages-publish-confirm-title"
+            aria-describedby="pages-publish-confirm-description pages-publish-confirm-impact"
+            data-testid="pages-publish-modal"
+          >
             <div className="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
                   <CheckCircle2 className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-lg font-semibold text-foreground">Publish {pendingPublishPage.title}?</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <h2 id="pages-publish-confirm-title" className="text-lg font-semibold text-foreground">Publish {pendingPublishPage.title}?</h2>
+                  <p id="pages-publish-confirm-description" className="mt-1 text-sm text-muted-foreground">
                     Review the route, readiness, and frontend delivery endpoints before this page becomes public.
                   </p>
                 </div>
               </div>
 
-              <PagePublishReviewDetails
-                page={pendingPublishPage}
-                readiness={readiness}
-                routeDiagnostic={routeDiagnostic}
-                deliveryStatus={deliveryStatus}
-                publicUrl={publicPageUrl(pendingPublishPage)}
-                renderUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`}
-                resolveUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`}
-                previewEndpoint={`${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/preview`}
-              />
+              <div id="pages-publish-confirm-impact">
+                <PagePublishReviewDetails
+                  page={pendingPublishPage}
+                  readiness={readiness}
+                  routeDiagnostic={routeDiagnostic}
+                  deliveryStatus={deliveryStatus}
+                  publicUrl={publicPageUrl(pendingPublishPage)}
+                  renderUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/render?path=${encodedPath}`}
+                  resolveUrl={`${publicBaseUrl}/api/sites/${encodedSiteId}/resolve?path=${encodedPath}`}
+                  previewEndpoint={`${adminBaseUrl}/sites/${encodedSiteId}/pages/${encodedPageId}/preview`}
+                />
+              </div>
 
               <div className="mt-5 flex flex-wrap justify-end gap-2">
                 <button
@@ -3430,6 +4161,8 @@ function PagesListView() {
 	                  }}
 	                  disabled={isPageLibraryBusy || !canPublishPages}
 	                  title={!canPublishPages ? publishPermissionTitle : undefined}
+                  aria-label={`Preview ${pendingPublishPage.title} before publishing`}
+                  data-testid="pages-publish-preview-button"
                   className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Preview first
@@ -3437,7 +4170,8 @@ function PagesListView() {
                 <button
                   type="button"
                   onClick={() => setPendingPublishPage(null)}
-                  disabled={isPageLibraryBusy}
+                  disabled={isPageLibraryBusy || mutatingPageId === pendingPublishPage.id}
+                  aria-label={`Cancel publishing ${pendingPublishPage.title}`}
                   data-testid="pages-publish-cancel"
                   className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -3446,8 +4180,9 @@ function PagesListView() {
                 <button
                   type="button"
 	                  onClick={() => void handlePublishPage(pendingPublishPage)}
-	                  disabled={isPageLibraryBusy || !canPublishPages || deliveryStatus === 'blocked'}
+	                  disabled={isPageLibraryBusy || mutatingPageId === pendingPublishPage.id || !canPublishPages || deliveryStatus === 'blocked'}
 	                  title={!canPublishPages ? publishPermissionTitle : undefined}
+                  aria-label={`Confirm publishing ${pendingPublishPage.title}`}
                   data-testid="pages-publish-confirm"
                   className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -3460,23 +4195,30 @@ function PagesListView() {
       })()}
 
       {pendingBulkPublish && selectedPages.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="pages-bulk-publish-modal">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pages-bulk-publish-confirm-title"
+          aria-describedby="pages-bulk-publish-confirm-description pages-bulk-publish-confirm-impact"
+          data-testid="pages-bulk-publish-modal"
+        >
           <div className="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-emerald-50 p-2 text-emerald-700">
                 <CheckCircle2 className="h-5 w-5" />
               </span>
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold text-foreground">
+                <h2 id="pages-bulk-publish-confirm-title" className="text-lg font-semibold text-foreground">
                   Publish {selectedPages.length} selected page{selectedPages.length === 1 ? '' : 's'}?
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p id="pages-bulk-publish-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   Backy will run readiness again before publishing and skip the publish if a selected page becomes blocked.
                 </p>
               </div>
             </div>
 
-            <div className="mt-4 max-h-72 space-y-2 overflow-auto rounded-lg border border-border bg-background p-3">
+            <div id="pages-bulk-publish-confirm-impact" className="mt-4 max-h-72 space-y-2 overflow-auto rounded-lg border border-border bg-background p-3">
               {selectedPages.slice(0, 8).map((page) => {
                 const routeDiagnostic = pageRouteDiagnostics[page.id];
                 const readiness = readinessMap[page.id];
@@ -3510,7 +4252,9 @@ function PagesListView() {
               <button
                 type="button"
                 onClick={() => setPendingBulkPublish(false)}
-                disabled={isPageLibraryBusy}
+                disabled={isPageLibraryBusy || isBulkBusy}
+                aria-label={`Cancel publishing ${selectedPages.length} selected page${selectedPages.length === 1 ? '' : 's'}`}
+                data-testid="pages-bulk-publish-cancel-button"
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -3518,8 +4262,10 @@ function PagesListView() {
               <button
                 type="button"
 	                onClick={() => void handleBulkAction()}
-	                disabled={isPageLibraryBusy || !canPublishPages}
+	                disabled={isPageLibraryBusy || isBulkBusy || !canPublishPages}
 	                title={!canPublishPages ? publishPermissionTitle : undefined}
+                aria-label={`Confirm publishing ${selectedPages.length} selected page${selectedPages.length === 1 ? '' : 's'}`}
+                data-testid="pages-bulk-publish-confirm-button"
                 className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isBulkBusy ? 'Publishing...' : `Publish ${selectedPages.length} page${selectedPages.length === 1 ? '' : 's'}`}
@@ -3529,28 +4275,365 @@ function PagesListView() {
         </div>
       )}
 
+      {pendingBulkUnpublish && selectedPages.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pages-bulk-unpublish-confirm-title"
+          aria-describedby="pages-bulk-unpublish-confirm-description pages-bulk-unpublish-confirm-impact"
+          data-testid="pages-bulk-unpublish-modal"
+        >
+          <div className="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-sky-50 p-2 text-sky-700">
+                <EyeOff className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="pages-bulk-unpublish-confirm-title" className="text-lg font-semibold text-foreground">
+                  Unpublish {selectedUnpublishablePages.length} selected page{selectedUnpublishablePages.length === 1 ? '' : 's'}?
+                </h2>
+                <p id="pages-bulk-unpublish-confirm-description" className="mt-1 text-sm text-muted-foreground">
+                  Backy will remove these pages from public delivery while keeping their editor content and revisions available.
+                </p>
+              </div>
+            </div>
+
+            <div id="pages-bulk-unpublish-confirm-impact" className="mt-4 max-h-72 space-y-2 overflow-auto rounded-lg border border-border bg-background p-3">
+              {selectedUnpublishablePages.slice(0, 8).map((page) => (
+                <div key={page.id} className="grid gap-2 rounded-lg border border-border bg-card px-3 py-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-foreground">{page.title}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{pagePublicPath(page)}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={page.status} />
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs text-sky-900">
+                      Public delivery disabled after confirm
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {selectedUnpublishablePages.length > 8 && (
+                <div className="px-3 py-2 text-xs text-muted-foreground">
+                  {selectedUnpublishablePages.length - 8} more selected page{selectedUnpublishablePages.length - 8 === 1 ? '' : 's'} will be included.
+                </div>
+              )}
+              {selectedUnpublishablePages.length < selectedPages.length && (
+                <div className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  {selectedPages.length - selectedUnpublishablePages.length} selected draft or archived page{selectedPages.length - selectedUnpublishablePages.length === 1 ? '' : 's'} will be skipped.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkUnpublish(false)}
+                disabled={isPageLibraryBusy || isBulkBusy}
+                aria-label={`Cancel unpublishing ${selectedUnpublishablePages.length} selected page${selectedUnpublishablePages.length === 1 ? '' : 's'}`}
+                data-testid="pages-bulk-unpublish-cancel-button"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkAction()}
+                disabled={isPageLibraryBusy || isBulkBusy || !canEditPages || !canPublishPages || selectedUnpublishablePages.length === 0}
+                title={!canEditPages ? editPermissionTitle : !canPublishPages ? publishPermissionTitle : undefined}
+                aria-label={`Confirm unpublishing ${selectedUnpublishablePages.length} selected page${selectedUnpublishablePages.length === 1 ? '' : 's'}`}
+                data-testid="pages-bulk-unpublish-confirm-button"
+                className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isBulkBusy ? 'Unpublishing...' : `Unpublish ${selectedUnpublishablePages.length} page${selectedUnpublishablePages.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingBulkArchive && selectedPages.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pages-bulk-archive-confirm-title"
+          aria-describedby="pages-bulk-archive-confirm-description pages-bulk-archive-confirm-impact"
+          data-testid="pages-bulk-archive-modal"
+        >
+          <div className="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
+                <Archive className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="pages-bulk-archive-confirm-title" className="text-lg font-semibold text-foreground">
+                  Archive {selectedArchivablePages.length} selected page{selectedArchivablePages.length === 1 ? '' : 's'}?
+                </h2>
+                <p id="pages-bulk-archive-confirm-description" className="mt-1 text-sm text-muted-foreground">
+                  Backy will move these pages out of active authoring and public delivery while keeping editor content and revisions available.
+                </p>
+              </div>
+            </div>
+
+            <div id="pages-bulk-archive-confirm-impact" className="mt-4 max-h-72 space-y-2 overflow-auto rounded-lg border border-border bg-background p-3">
+              {selectedArchivablePages.slice(0, 8).map((page) => (
+                <div key={page.id} className="grid gap-2 rounded-lg border border-border bg-card px-3 py-2 md:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-foreground">{page.title}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{pagePublicPath(page)}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={page.status} />
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-900">
+                      Moved to archive after confirm
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {selectedArchivablePages.length > 8 && (
+                <div className="px-3 py-2 text-xs text-muted-foreground">
+                  {selectedArchivablePages.length - 8} more selected page{selectedArchivablePages.length - 8 === 1 ? '' : 's'} will be included.
+                </div>
+              )}
+              {selectedArchivablePages.length < selectedPages.length && (
+                <div className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  {selectedPages.length - selectedArchivablePages.length} selected archived page{selectedPages.length - selectedArchivablePages.length === 1 ? '' : 's'} will be skipped.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingBulkArchive(false)}
+                disabled={isPageLibraryBusy || isBulkBusy}
+                aria-label={`Cancel archiving ${selectedArchivablePages.length} selected page${selectedArchivablePages.length === 1 ? '' : 's'}`}
+                data-testid="pages-bulk-archive-cancel-button"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkAction()}
+                disabled={isPageLibraryBusy || isBulkBusy || !canEditPages || selectedArchivablePages.length === 0}
+                title={!canEditPages ? editPermissionTitle : undefined}
+                aria-label={`Confirm archiving ${selectedArchivablePages.length} selected page${selectedArchivablePages.length === 1 ? '' : 's'}`}
+                data-testid="pages-bulk-archive-confirm-button"
+                className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isBulkBusy ? 'Archiving...' : `Archive ${selectedArchivablePages.length} page${selectedArchivablePages.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingUnpublishPage && (() => {
+        const pagePath = pagePublicPath(pendingUnpublishPage);
+        const pageSiteId = pendingUnpublishPage.siteId || activeSiteId;
+        const encodedSiteId = encodeURIComponent(pageSiteId);
+        const encodedPath = encodeURIComponent(pagePath);
+        const encodedPageId = encodeURIComponent(pendingUnpublishPage.id);
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pages-unpublish-confirm-title"
+            aria-describedby="pages-unpublish-confirm-description pages-unpublish-confirm-impact"
+            data-testid="pages-unpublish-modal"
+          >
+            <div className="w-full max-w-2xl rounded-lg border border-border bg-card p-5 shadow-xl">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-sky-50 p-2 text-sky-700">
+                  <EyeOff className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h2 id="pages-unpublish-confirm-title" className="text-lg font-semibold text-foreground">Unpublish {pendingUnpublishPage.title}?</h2>
+                  <p id="pages-unpublish-confirm-description" className="mt-1 text-sm text-muted-foreground">
+                    This removes the page from public delivery while keeping it editable in Backy.
+                  </p>
+                </div>
+              </div>
+
+              <div id="pages-unpublish-confirm-impact" className="mt-4 grid gap-2 rounded-lg border border-border bg-background p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Route</span>
+                  <span className="font-mono text-xs text-foreground">{pagePath}</span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Public page</span>
+                  <span className="truncate font-mono text-xs text-foreground">{publicPageUrl(pendingUnpublishPage)}</span>
+                </div>
+                <div className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                  Custom frontends using the public page, render, resolve, or preview handoff should treat this page as draft after unpublish.
+                </div>
+                <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
+                  <span className="min-w-0 break-all">Render API: {publicBaseUrl}/api/sites/{encodedSiteId}/render?path={encodedPath}</span>
+                  <span className="min-w-0 break-all">Resolve API: {publicBaseUrl}/api/sites/{encodedSiteId}/resolve?path={encodedPath}</span>
+                  <span className="min-w-0 break-all">Preview: {adminBaseUrl}/sites/{encodedSiteId}/pages/{encodedPageId}/preview</span>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handlePreviewPage(pendingUnpublishPage);
+                  }}
+                  disabled={isPageLibraryBusy || !canPublishPages}
+                  title={!canPublishPages ? publishPermissionTitle : undefined}
+                  aria-label={`Preview ${pendingUnpublishPage.title} before unpublishing`}
+                  data-testid="pages-unpublish-preview-button"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Preview first
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingUnpublishPage(null)}
+                  disabled={isPageLibraryBusy || mutatingPageId === pendingUnpublishPage.id}
+                  aria-label={`Cancel unpublishing ${pendingUnpublishPage.title}`}
+                  data-testid="pages-unpublish-cancel"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleUnpublishPage(pendingUnpublishPage)}
+                  disabled={isPageLibraryBusy || mutatingPageId === pendingUnpublishPage.id || !canEditPages || !canPublishPages}
+                  title={!canEditPages ? editPermissionTitle : !canPublishPages ? publishPermissionTitle : undefined}
+                  aria-label={`Confirm unpublishing ${pendingUnpublishPage.title}`}
+                  data-testid="pages-unpublish-confirm"
+                  className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {mutatingPageId === pendingUnpublishPage.id ? 'Unpublishing...' : 'Unpublish page'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {pendingArchivePage && (() => {
+        const pagePath = pagePublicPath(pendingArchivePage);
+        const wasPublished = pendingArchivePage.status === 'published';
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pages-archive-confirm-title"
+            aria-describedby="pages-archive-confirm-description pages-archive-confirm-impact"
+            data-testid="pages-archive-modal"
+          >
+            <div className="w-full max-w-xl rounded-lg border border-border bg-card p-5 shadow-xl">
+              <div className="flex items-start gap-3">
+                <span className="rounded-lg bg-amber-50 p-2 text-amber-700">
+                  <Archive className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <h2 id="pages-archive-confirm-title" className="text-lg font-semibold text-foreground">Archive {pendingArchivePage.title}?</h2>
+                  <p id="pages-archive-confirm-description" className="mt-1 text-sm text-muted-foreground">
+                    Archive keeps the page in Backy for later editing, but removes it from active authoring and public delivery workflows.
+                  </p>
+                </div>
+              </div>
+
+              <div id="pages-archive-confirm-impact" className="mt-4 grid gap-2 rounded-lg border border-border bg-background p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Route</span>
+                  <span className="font-mono text-xs text-foreground">{pagePath}</span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Current status</span>
+                  <StatusBadge status={pendingArchivePage.status} />
+                </div>
+                <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {wasPublished
+                    ? 'Published delivery, navigation, render, and resolve consumers should treat this page as archived after confirmation.'
+                    : 'Draft/scheduled delivery stays private, and the page moves out of the active authoring set after confirmation.'}
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handlePreviewPage(pendingArchivePage);
+                  }}
+                  disabled={isPageLibraryBusy || !canPublishPages}
+                  title={!canPublishPages ? publishPermissionTitle : undefined}
+                  aria-label={`Preview ${pendingArchivePage.title} before archiving`}
+                  data-testid="pages-archive-preview-button"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Preview first
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingArchivePage(null)}
+                  disabled={isPageLibraryBusy || mutatingPageId === pendingArchivePage.id}
+                  aria-label={`Cancel archiving ${pendingArchivePage.title}`}
+                  data-testid="pages-archive-cancel"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleArchivePage(pendingArchivePage)}
+                  disabled={isPageLibraryBusy || mutatingPageId === pendingArchivePage.id || !canEditPages}
+                  title={!canEditPages ? editPermissionTitle : undefined}
+                  aria-label={`Confirm archiving ${pendingArchivePage.title}`}
+                  data-testid="pages-archive-confirm"
+                  className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {mutatingPageId === pendingArchivePage.id ? 'Archiving...' : 'Archive page'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {pendingDeletePage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pages-delete-confirm-title"
+          aria-describedby="pages-delete-confirm-description pages-delete-confirm-impact"
+          data-testid="pages-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeletePage.title}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="pages-delete-confirm-title" className="text-lg font-semibold text-foreground">Delete {pendingDeletePage.title}?</h2>
+                <p id="pages-delete-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   This removes the page from the backend and the public API. Archive it instead if you only want to hide it.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id="pages-delete-confirm-impact" className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Route: <span className="font-medium text-foreground">{pagePublicPath(pendingDeletePage)}</span>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setPendingDeletePage(null)}
-                disabled={isPageLibraryBusy}
+                disabled={isPageLibraryBusy || mutatingPageId === pendingDeletePage.id}
+                aria-label={`Cancel deleting ${pendingDeletePage.title}`}
+                data-testid="pages-delete-cancel-button"
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -3558,8 +4641,10 @@ function PagesListView() {
               <button
                 type="button"
 	                onClick={() => void handleDeletePage(pendingDeletePage)}
-	                disabled={isPageLibraryBusy || !canDeletePages}
+	                disabled={isPageLibraryBusy || mutatingPageId === pendingDeletePage.id || !canDeletePages}
 	                title={!canDeletePages ? deletePermissionTitle : undefined}
+                aria-label={`Confirm deleting ${pendingDeletePage.title}`}
+                data-testid="pages-delete-confirm-button"
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {mutatingPageId === pendingDeletePage.id ? 'Deleting...' : 'Delete page'}
@@ -3570,26 +4655,41 @@ function PagesListView() {
       )}
 
       {pendingBulkDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pages-bulk-delete-confirm-title"
+          aria-describedby="pages-bulk-delete-confirm-description pages-bulk-delete-confirm-impact"
+          data-testid="pages-bulk-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">
+                <h2 id="pages-bulk-delete-confirm-title" className="text-lg font-semibold text-foreground">
                   Delete {selectedPages.length} selected page{selectedPages.length === 1 ? '' : 's'}?
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p id="pages-bulk-delete-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   Selected pages will be removed from the site and from frontend API delivery.
                 </p>
               </div>
+            </div>
+            <div id="pages-bulk-delete-confirm-impact" className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Selected: <span className="font-medium text-foreground">{selectedPages.length}</span>
+              {hiddenSelectedCount > 0 ? (
+                <span> · {hiddenSelectedCount} not visible in the current table filter</span>
+              ) : null}
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setPendingBulkDelete(false)}
-                disabled={isPageLibraryBusy}
+                disabled={isPageLibraryBusy || isBulkBusy}
+                aria-label={`Cancel deleting ${selectedPages.length} selected page${selectedPages.length === 1 ? '' : 's'}`}
+                data-testid="pages-bulk-delete-cancel-button"
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -3597,8 +4697,10 @@ function PagesListView() {
               <button
                 type="button"
 	                onClick={() => void handleBulkAction()}
-	                disabled={isPageLibraryBusy || !canDeletePages}
+	                disabled={isPageLibraryBusy || isBulkBusy || !canDeletePages}
 	                title={!canDeletePages ? deletePermissionTitle : undefined}
+                aria-label={`Confirm deleting ${selectedPages.length} selected page${selectedPages.length === 1 ? '' : 's'}`}
+                data-testid="pages-bulk-delete-confirm-button"
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isBulkBusy ? 'Deleting...' : 'Delete pages'}
@@ -3722,7 +4824,11 @@ function PageRevisionCell({
   activeSiteId: string;
 }) {
   if (isLoading && !summary) {
-    return <span className="text-xs text-muted-foreground">Checking revisions...</span>;
+    return (
+      <div className="min-w-48 space-y-1 text-xs text-muted-foreground" data-testid={`pages-revisions-${page.id}`}>
+        Checking revisions...
+      </div>
+    );
   }
 
   const count = summary?.count ?? 0;
@@ -3836,6 +4942,7 @@ function PageDeliveryCell({
           isRefreshing={isRefreshingHealth}
           onRefresh={onRefreshHealth}
           pageId={page.id}
+          pageTitle={page.title}
         />
       )}
       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -3864,12 +4971,14 @@ function PageDeliveryHealthSummary({
   isRefreshing,
   onRefresh,
   pageId,
+  pageTitle,
 }: {
   health: PageDeliveryHealth | undefined;
   history: PageDeliveryHealth[];
   isRefreshing: boolean;
   onRefresh: () => void;
   pageId: string;
+  pageTitle: string;
 }) {
   const effectiveHealth = health || {
     status: 'checking' as const,
@@ -3898,7 +5007,7 @@ function PageDeliveryHealthSummary({
           disabled={isRefreshing}
           className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
           data-testid={`pages-delivery-refresh-${pageId}`}
-          aria-label="Refresh delivery health"
+          aria-label={`Refresh delivery health for ${pageTitle}`}
         >
           <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
           Refresh
@@ -4022,7 +5131,7 @@ function PageReadinessCheck({ label, detail, ready }: { label: string; detail: s
   const Icon = ready ? CheckCircle2 : AlertTriangle;
 
   return (
-    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2">
+    <div className="flex min-w-0 items-start gap-2 rounded-lg bg-card/80 px-3 py-2 ring-1 ring-border/70">
       <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', ready ? 'text-emerald-600' : 'text-amber-600')} />
       <div className="min-w-0">
         <div className="text-xs font-semibold text-foreground">{label}</div>
@@ -4034,8 +5143,8 @@ function PageReadinessCheck({ label, detail, ready }: { label: string; detail: s
 
 function PageWorkflowStep({ index, label, detail }: { index: number; label: string; detail: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-border bg-card px-3 py-2">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-xs font-semibold text-primary">
+    <div className="flex items-start gap-3 rounded-lg bg-card/80 px-3 py-2 ring-1 ring-border/70">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 font-mono text-xs font-semibold text-primary">
         {index}
       </span>
       <div className="min-w-0">
@@ -4085,10 +5194,10 @@ const getPublicBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && isLocalAdminDevHost()) {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
 
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()))
     .replace(/\/api\/admin$/, '')
     .replace(/\/api$/, '')
     .replace(/\/$/, '');
@@ -4105,10 +5214,10 @@ const getAdminBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && isLocalAdminDevHost()) {
-    return 'http://localhost:3001/api/admin';
+    return `${getLocalBackendOrigin()}/api/admin`;
   }
 
-  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin());
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
 };
 
@@ -4316,10 +5425,41 @@ const getParentPageTitle = (page: Page, pageMap: Map<string, Page>): string => (
   page.parentId ? pageMap.get(page.parentId)?.title || pageMetaString(page, 'parentPageTitle') : ''
 );
 
-const loadPageRevisionSummaries = async (siteId: string, targetPages: Page[]): Promise<Record<string, ContentRevisionSummary>> => {
+const isAbortError = (error: unknown): boolean => (
+  error instanceof Error && error.name === 'AbortError'
+);
+
+const getPageRevisionSummaryWithTimeout = async (
+  siteId: string,
+  pageId: string,
+): Promise<ContentRevisionSummary> => {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+    }, PAGE_REVISION_SUMMARY_TIMEOUT_MS);
+    return await getPageRevisionSummary(siteId, pageId, { signal: controller.signal });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`Revision summary request timed out after ${PAGE_REVISION_SUMMARY_TIMEOUT_MS}ms`);
+    }
+    throw error;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
+const loadPageRevisionSummaries = async (
+  siteId: string,
+  targetPages: Array<Pick<Page, 'id' | 'siteId'>>,
+): Promise<Record<string, ContentRevisionSummary>> => {
   const results = await Promise.allSettled(
     targetPages.map(async (page) => {
-      const summary = await getPageRevisionSummary(page.siteId || siteId, page.id);
+      const summary = await getPageRevisionSummaryWithTimeout(page.siteId || siteId, page.id);
       return [page.id, summary] as const;
     }),
   );
@@ -4329,6 +5469,50 @@ const loadPageRevisionSummaries = async (siteId: string, targetPages: Page[]): P
       .filter((result): result is PromiseFulfilledResult<readonly [string, ContentRevisionSummary]> => result.status === 'fulfilled')
       .map((result) => result.value),
   );
+};
+
+const sleep = (durationMs: number) => new Promise((resolve) => {
+  setTimeout(resolve, durationMs);
+});
+
+const getPageReadinessPreflight = async (siteId: string, pageId: string): Promise<PageReadiness | null> => {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+    }, PAGE_READINESS_PREFLIGHT_TIMEOUT_MS);
+    return await getPageReadiness(siteId, pageId, { signal: controller.signal });
+  } catch {
+    return null;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
+const loadPageRevisionSummariesWithRetry = async (
+  siteId: string,
+  targetPages: Array<Pick<Page, 'id' | 'siteId'>>,
+): Promise<Record<string, ContentRevisionSummary>> => {
+  let pendingPages = targetPages;
+  const summaries: Record<string, ContentRevisionSummary> = {};
+
+  for (let attempt = 0; attempt < PAGE_REVISION_SUMMARY_MAX_ATTEMPTS && pendingPages.length > 0; attempt += 1) {
+    const attemptSummaries = await loadPageRevisionSummaries(siteId, pendingPages);
+    Object.assign(summaries, attemptSummaries);
+
+    const resolvedPageIds = new Set(Object.keys(attemptSummaries));
+    pendingPages = pendingPages.filter((page) => !resolvedPageIds.has(page.id));
+
+    if (pendingPages.length > 0 && attempt < PAGE_REVISION_SUMMARY_MAX_ATTEMPTS - 1) {
+      await sleep(PAGE_REVISION_SUMMARY_RETRY_DELAY_MS);
+    }
+  }
+
+  return summaries;
 };
 
 const refreshPageRevisionSummary = async (
@@ -4490,6 +5674,8 @@ const getBulkActionLabel = (
   count: number,
   isConfirmingDelete: boolean,
   isConfirmingPublish: boolean,
+  isConfirmingUnpublish: boolean,
+  isConfirmingArchive: boolean,
 ): string => {
   const pageLabel = `${count} page${count === 1 ? '' : 's'}`;
 
@@ -4502,11 +5688,19 @@ const getBulkActionLabel = (
   }
 
   if (action === 'unpublish') {
-    return count > 0 ? `Unpublish ${pageLabel}` : 'Unpublish selected';
+    if (isConfirmingUnpublish) {
+      return count > 0 ? `Unpublish ${pageLabel}` : 'Unpublish selected';
+    }
+
+    return count > 0 ? `Review unpublish for ${pageLabel}` : 'Unpublish selected';
   }
 
   if (action === 'archive') {
-    return count > 0 ? `Archive ${pageLabel}` : 'Archive selected';
+    if (isConfirmingArchive) {
+      return count > 0 ? `Archive ${pageLabel}` : 'Archive selected';
+    }
+
+    return count > 0 ? `Review archive for ${pageLabel}` : 'Archive selected';
   }
 
   if (action === 'delete') {

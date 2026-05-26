@@ -54,6 +54,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
 
 type CommentStatusFilter = CommentModerationStatus | 'all';
@@ -108,6 +109,8 @@ const normalizedSearchString = (value: unknown): string | undefined => {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
 };
+
+const safeActionId = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '-');
 
 export const Route = createFileRoute('/comments')({
   validateSearch: (search: Record<string, unknown>): CommentsSearch => ({
@@ -418,16 +421,23 @@ function CommentsRoute() {
     || retryingDeliveryIds.length > 0
     || Boolean(isReplyingId)
     || Boolean(isMovingId);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', COMMENT_PERMISSION_ROLE_DEFAULTS);
-  const canManageComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.manage', COMMENT_PERMISSION_ROLE_DEFAULTS);
-  const canConfigureComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.configure', COMMENT_PERMISSION_ROLE_DEFAULTS);
-  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const canUseCommentRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseCommentRoleDefaults;
+  const isCommentPermissionAllowed = (key: CommentPermissionKey) => (
+    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, COMMENT_PERMISSION_ROLE_DEFAULTS)
+    || (canUseCommentRoleDefaults && Boolean(currentAdmin && COMMENT_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canViewComments = isCommentPermissionAllowed('comments.view');
+  const canManageComments = isCommentPermissionAllowed('comments.manage');
+  const canConfigureComments = isCommentPermissionAllowed('comments.configure');
+  const canExportActivity = isCommentPermissionAllowed('activity.export');
   const viewPermissionTitle = canViewComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.view', COMMENT_PERMISSION_ROLE_DEFAULTS);
   const managePermissionTitle = canManageComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.manage', COMMENT_PERMISSION_ROLE_DEFAULTS);
   const configurePermissionTitle = canConfigureComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.configure', COMMENT_PERMISSION_ROLE_DEFAULTS);
   const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', COMMENT_PERMISSION_ROLE_DEFAULTS);
-  const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy || isPermissionMatrixPending;
+  const isCommentPolicyBusy = isSavingPolicy;
+  const isCommentsBusy = isLoading || isCommentMutationBusy;
+  const isCommentPolicyDisabled = isCommentsBusy || isCommentPolicyBusy || !canConfigureComments;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -665,9 +675,51 @@ function CommentsRoute() {
     isCommentsBusy ||
     !canManageComments ||
     (bulkSafetyRequiresReason && !moderationReasonText);
-  const bulkDestructiveActionTitle = bulkSafetyRequiresReason && !moderationReasonText
-    ? 'Add a moderation reason before rejecting, marking spam, or blocking a large/cross-filter selection.'
-    : managePermissionTitle;
+  const commentsBulkActionStatusId = 'comments-bulk-action-status';
+  const selectedCommentActionLabel = `${selectedCommentIds.length} selected comment${selectedCommentIds.length === 1 ? '' : 's'}`;
+  const visibleCommentActionLabel = `${filteredComments.length} visible comment${filteredComments.length === 1 ? '' : 's'}`;
+  const commentsBulkBusyDisabledReason = isCommentsBusy
+    ? 'Comment moderation is busy.'
+    : '';
+  const commentsBulkManageDisabledReason = !canManageComments
+    ? managePermissionTitle || 'Your account cannot manage comments.'
+    : '';
+  const commentsBulkExportDisabledReason = filteredComments.length === 0
+    ? 'No visible comments to export.'
+    : commentsBulkBusyDisabledReason || (!canExportActivity
+      ? activityPermissionTitle || 'Your account cannot export comment activity.'
+      : '');
+  const commentsBulkSelectionDisabledReason = filteredComments.length === 0
+    ? 'No visible comments to select.'
+    : commentsBulkBusyDisabledReason || commentsBulkManageDisabledReason;
+  const commentsBulkClearDisabledReason = !hasSelection
+    ? 'No selected comments to clear.'
+    : commentsBulkBusyDisabledReason;
+  const commentsBulkApproveDisabledReason = !hasSelection
+    ? 'Select one or more comments first.'
+    : commentsBulkBusyDisabledReason || commentsBulkManageDisabledReason;
+  const commentsBulkDestructiveDisabledReason = !hasSelection
+    ? 'Select one or more comments first.'
+    : commentsBulkBusyDisabledReason ||
+      commentsBulkManageDisabledReason ||
+      (bulkSafetyRequiresReason && !moderationReasonText
+        ? 'Add a moderation reason before rejecting, marking spam, or blocking a large/cross-filter selection.'
+        : '');
+  const commentsBulkResolveReportsDisabledReason = selectedReportedIds.length === 0
+    ? hasSelection
+      ? 'Selected comments have no unresolved reports.'
+      : 'Select a reported comment first.'
+    : commentsBulkBusyDisabledReason || commentsBulkManageDisabledReason;
+  const commentsBulkActionStatus = [
+    commentsBulkExportDisabledReason ? `Export CSV unavailable: ${commentsBulkExportDisabledReason}` : `Export CSV available for ${visibleCommentActionLabel}.`,
+    commentsBulkSelectionDisabledReason ? `Select visible unavailable: ${commentsBulkSelectionDisabledReason}` : `Select visible available for ${visibleCommentActionLabel}.`,
+    commentsBulkClearDisabledReason ? `Clear selection unavailable: ${commentsBulkClearDisabledReason}` : `Clear selection available for ${selectedCommentActionLabel}.`,
+    commentsBulkApproveDisabledReason ? `Approve selected unavailable: ${commentsBulkApproveDisabledReason}` : `Approve selected available for ${selectedCommentActionLabel}.`,
+    commentsBulkDestructiveDisabledReason ? `Reject selected unavailable: ${commentsBulkDestructiveDisabledReason}` : `Reject selected available for ${selectedCommentActionLabel}.`,
+    commentsBulkDestructiveDisabledReason ? `Spam selected unavailable: ${commentsBulkDestructiveDisabledReason}` : `Spam selected available for ${selectedCommentActionLabel}.`,
+    commentsBulkDestructiveDisabledReason ? `Block selected unavailable: ${commentsBulkDestructiveDisabledReason}` : `Block selected available for ${selectedCommentActionLabel}.`,
+    commentsBulkResolveReportsDisabledReason ? `Resolve reports unavailable: ${commentsBulkResolveReportsDisabledReason}` : `Resolve reports available for ${selectedReportedIds.length} reported comment${selectedReportedIds.length === 1 ? '' : 's'}.`,
+  ].join(' ');
   const moderationReadiness = useMemo(() => {
     const reviewComplete = metrics.pending === 0;
     const safetyClean = metrics.flagged === 0;
@@ -1405,6 +1457,19 @@ function CommentsRoute() {
     }
   };
 
+  useEffect(() => {
+    if (!pendingDeleteComment) return;
+
+    const handleCommentDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || updatingIds.includes(pendingDeleteComment.id)) return;
+      event.preventDefault();
+      setPendingDeleteComment(null);
+    };
+
+    document.addEventListener('keydown', handleCommentDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleCommentDeleteDialogKeyDown, true);
+  }, [pendingDeleteComment, updatingIds]);
+
   const handleDeleteBlocklistEntries = async (ids: string[]) => {
     if (ids.length === 0 || isCommentsBusy) return;
     if (!canManageComments) {
@@ -1450,7 +1515,7 @@ function CommentsRoute() {
   };
 
   const applyCommentPolicyPreset = (preset: CommentPolicyPreset) => {
-    if (isCommentsBusy || !canConfigureComments) return;
+    if (isCommentPolicyDisabled) return;
     setCommentPolicyDraft((current) => ({
       ...current,
       ...preset.policy,
@@ -1459,7 +1524,7 @@ function CommentsRoute() {
   };
 
   const saveCommentPolicy = async () => {
-    if (isCommentsBusy || !activeSiteId) return;
+    if (isCommentsBusy || isCommentPolicyBusy || !activeSiteId) return;
     if (!canConfigureComments) {
       setError(configurePermissionTitle || 'Your account cannot configure comment policy.');
       setNotice(null);
@@ -2007,53 +2072,60 @@ function CommentsRoute() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Comments control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, moderation health, API handoff, queue review, and bulk decisions.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
-            {COMMENT_CONTROL_AREAS.map((area) => (
-              <a
-                key={area.title}
-                href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-              >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <ShieldAlert className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Connected discussion workflows</h3>
-              </div>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Public comments need page/blog targets, identity rules, moderation authority, and runtime policy to work as a controlled frontend feature.
-              </p>
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="comments-control-map-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>Comments control map</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show map</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide map</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="comments-control-map">
+            <p className="text-sm text-muted-foreground">Jump to site scope, moderation health, API handoff, queue review, and bulk decisions.</p>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+              {COMMENT_CONTROL_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
             </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          </div>
+        </details>
+
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="comments-connected-workflows-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex items-center gap-2">
+              <ShieldAlert className="size-4 text-primary" />
+              Connected discussion workflows
+            </span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">
               {COMMENT_WORKFLOW_SURFACES.length} surfaces
             </span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide workflows</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="comments-connected-workflows">
+            <p className="max-w-3xl text-sm text-muted-foreground">
+              Public comments need page/blog targets, identity rules, moderation authority, and runtime policy to work as a controlled frontend feature.
+            </p>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {COMMENT_WORKFLOW_SURFACES.map((surface) => (
+                <button
+                  key={surface.key}
+                  type="button"
+                  onClick={() => openCommentWorkflowSurface(surface)}
+                  disabled={isCommentsBusy}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-            {COMMENT_WORKFLOW_SURFACES.map((surface) => (
-              <button
-                key={surface.key}
-                type="button"
-                onClick={() => openCommentWorkflowSurface(surface)}
-                disabled={isCommentsBusy}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+        </details>
       </section>
 
       <div id="comments-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
@@ -2103,19 +2175,19 @@ function CommentsRoute() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
-              disabled={isCommentsBusy || !commentPolicyDirty || !canConfigureComments}
+              disabled={isCommentPolicyDisabled || !commentPolicyDirty}
               title={configurePermissionTitle}
               onClick={() => setCommentPolicyDraft(savedCommentPolicy)}
             >
               Reset policy
             </Button>
             <Button
-              disabled={isCommentsBusy || !commentPolicyDirty || !canConfigureComments}
+              disabled={isCommentPolicyDisabled || !commentPolicyDirty}
               title={configurePermissionTitle}
               onClick={() => void saveCommentPolicy()}
               iconStart={<ShieldAlert className="size-4" />}
             >
-              Save policy
+              {isCommentPolicyBusy ? 'Saving...' : 'Save policy'}
             </Button>
           </div>
         </div>
@@ -2126,7 +2198,7 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.enabled}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ enabled: event.target.checked })}
               />
@@ -2136,7 +2208,7 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.allowGuests}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ allowGuests: event.target.checked })}
               />
@@ -2146,7 +2218,7 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.requireName}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ requireName: event.target.checked })}
               />
@@ -2156,7 +2228,7 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.requireEmail}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ requireEmail: event.target.checked })}
               />
@@ -2166,7 +2238,7 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.allowReplies}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ allowReplies: event.target.checked })}
               />
@@ -2176,7 +2248,7 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.enableReports}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ enableReports: event.target.checked })}
               />
@@ -2186,7 +2258,7 @@ function CommentsRoute() {
               <input
                 type="checkbox"
                 checked={commentPolicyDraft.enableCaptcha}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ enableCaptcha: event.target.checked })}
               />
@@ -2199,7 +2271,7 @@ function CommentsRoute() {
               Default moderation
               <select
                 value={commentPolicyDraft.moderationMode}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ moderationMode: event.target.value as CommentPolicyDraft['moderationMode'] })}
                 className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
@@ -2213,7 +2285,7 @@ function CommentsRoute() {
               Public sort
               <select
                 value={commentPolicyDraft.sort}
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onChange={(event) => patchCommentPolicyDraft({ sort: event.target.value as CommentPolicyDraft['sort'] })}
                 className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
@@ -2231,7 +2303,7 @@ function CommentsRoute() {
                   onChange={(event) => patchCommentPolicyDraft({ captchaProvider: event.target.value as CommentPolicyDraft['captchaProvider'] })}
                   className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
                   aria-label="Comment captcha provider"
-                  disabled={isCommentsBusy || !canConfigureComments || !commentPolicyDraft.enableCaptcha}
+                  disabled={isCommentPolicyDisabled || !commentPolicyDraft.enableCaptcha}
                   title={configurePermissionTitle}
                 >
                   <option value="mock">Mock</option>
@@ -2247,7 +2319,7 @@ function CommentsRoute() {
                   onChange={(event) => patchCommentPolicyDraft({ captchaSiteKey: event.target.value })}
                   className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground disabled:opacity-60"
                   aria-label="Comment captcha site key"
-                  disabled={isCommentsBusy || !canConfigureComments || !commentPolicyDraft.enableCaptcha}
+                  disabled={isCommentPolicyDisabled || !commentPolicyDraft.enableCaptcha}
                   title={configurePermissionTitle}
                   placeholder="Public site key"
                 />
@@ -2261,7 +2333,7 @@ function CommentsRoute() {
             Closed message
             <input
               value={commentPolicyDraft.closedMessage}
-              disabled={isCommentsBusy || !canConfigureComments}
+              disabled={isCommentPolicyDisabled}
               title={configurePermissionTitle}
               onChange={(event) => patchCommentPolicyDraft({ closedMessage: event.target.value })}
               className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
@@ -2272,7 +2344,7 @@ function CommentsRoute() {
             Blocked terms
             <textarea
               value={commentPolicyBlockedTermsText}
-              disabled={isCommentsBusy || !canConfigureComments}
+              disabled={isCommentPolicyDisabled}
               title={configurePermissionTitle}
               onChange={(event) => handleBlockedTermsChange(event.target.value)}
               rows={3}
@@ -2306,7 +2378,7 @@ function CommentsRoute() {
               <button
                 key={preset.key}
                 type="button"
-                disabled={isCommentsBusy || !canConfigureComments}
+                disabled={isCommentPolicyDisabled}
                 title={configurePermissionTitle}
                 onClick={() => applyCommentPolicyPreset(preset)}
                 className="rounded-lg border border-border bg-background px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
@@ -2330,216 +2402,245 @@ function CommentsRoute() {
         <Metric label="Flagged" value={metrics.flagged} icon={<Flag className="size-4" />} />
       </div>
 
-      <Panel id="comments-analytics" className="mb-6 scroll-mt-24" data-testid="comments-analytics-panel">
-        <PanelHeader
-          title="Comment analytics"
-          description={commentAnalytics ? `${commentAnalytics.totals.comments} comments in the last ${commentAnalytics.windowDays} days` : 'Private analytics endpoint for comment moderation signals'}
-          icon={<Flag className="size-4" />}
-          action={
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={isCommentsBusy}
-              onClick={() => void copyCommentApiText(moderationAnalyticsUrl, 'Comment analytics URL')}
-              iconStart={<Copy className="size-4" />}
-            >
-              Copy analytics
-            </Button>
-          }
-        />
-        <PanelContent>
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Code2 className="size-4" />
-                Analytics API
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Custom admin dashboards can use this private endpoint for queue totals, report reasons, thread load, and target-level moderation trends.
-              </p>
-              <div className="mt-4">
-                <ApiSnippet label="Comment analytics" value={moderationAnalyticsUrl} />
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <MetaTile label="30-day comments" value={`${commentAnalytics?.totals.comments ?? metrics.total}`} />
-              <MetaTile label="Reported" value={`${commentAnalytics?.totals.reported ?? metrics.reported}`} />
-              <MetaTile label="Threaded" value={`${commentAnalytics?.threads.withReplies ?? threadSummaries.filter((thread) => thread.replies > 0).length}`} />
-              <MetaTile label="Pending replies" value={`${commentAnalytics?.threads.pendingReplies ?? threadSummaries.reduce((total, thread) => total + Math.min(thread.pending, thread.replies), 0)}`} />
-              <div className="rounded-lg border border-border bg-background px-3 py-3 sm:col-span-2">
-                <div className="text-xs font-medium text-muted-foreground">Top report reasons</div>
-                <div className="mt-1 text-sm font-semibold">{formatReportReasons(commentAnalytics)}</div>
-              </div>
-              <div className="rounded-lg border border-border bg-background px-3 py-3 sm:col-span-2">
-                <div className="text-xs font-medium text-muted-foreground">Busiest target</div>
-                <div className="mt-1 truncate text-sm font-semibold">
-                  {formatAnalyticsTarget(commentAnalytics, targetByKey)}
-                </div>
-              </div>
-            </div>
-          </div>
-        </PanelContent>
-      </Panel>
-
-      <Panel id="comments-delivery" className="mb-6 scroll-mt-24" data-testid="comments-delivery-panel">
-        <PanelHeader
-          title="Comment delivery activity"
-          description="Submission, report, moderation, reply, and thread-change events for custom admin handoffs."
-          icon={<RefreshCw className="size-4" />}
-          action={
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={isCommentsBusy || !canManageComments}
-              title={managePermissionTitle}
-              onClick={() => void refreshCommentDeliveryEvents()}
-              iconStart={<RefreshCw className="size-4" />}
-              data-testid="comments-delivery-refresh"
-            >
-              Refresh activity
-            </Button>
-          }
-        />
-        <PanelContent>
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Code2 className="size-4" />
-                Events API
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Custom admin dashboards can poll comment events to show submission intake, reports, moderation decisions, and thread updates.
-              </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <MetaTile label="Activity events" value={`${deliveryMetrics.total}`} />
-                <MetaTile label="Submissions" value={`${deliveryMetrics.submitted}`} />
-                <MetaTile label="Moderation" value={`${deliveryMetrics.moderated}`} />
-                <MetaTile label="Reports" value={`${deliveryMetrics.reported}`} />
-              </div>
-              {commentDeliveryError ? (
-                <div className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  {commentDeliveryError}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="rounded-lg border border-border bg-background p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">Recent comment handoffs</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Newest events from the site events API filtered to comment activity.
-                  </div>
-                </div>
-                <span className={cn(
-                  'rounded-full px-2.5 py-1 text-xs font-semibold',
-                  deliveryMetrics.failed > 0 ? 'bg-destructive/10 text-destructive' : 'bg-emerald-50 text-emerald-700',
-                )}
+      <details
+        id="comments-evidence"
+        className="group mb-6 overflow-hidden rounded-lg border border-border bg-card shadow-sm scroll-mt-24"
+        data-testid="comments-evidence-details"
+        data-default-collapsed="true"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex min-w-0 items-center gap-3">
+            <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Code2 className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block">Comment evidence and API diagnostics</span>
+              <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
+                Analytics, delivery events, audit logs, and private moderation API handoff.
+              </span>
+            </span>
+          </span>
+          <span className="flex flex-shrink-0 items-center gap-2">
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+              {deliveryMetrics.total} events · {auditMetrics.total} audits
+            </span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide</span>
+          </span>
+        </summary>
+        <div className="grid gap-4 border-t border-border bg-background/40 p-4" data-testid="comments-evidence-panels">
+          <Panel id="comments-analytics" className="scroll-mt-24" data-testid="comments-analytics-panel">
+            <PanelHeader
+              title="Comment analytics"
+              description={commentAnalytics ? `${commentAnalytics.totals.comments} comments in the last ${commentAnalytics.windowDays} days` : 'Private analytics endpoint for comment moderation signals'}
+              icon={<Flag className="size-4" />}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isCommentsBusy}
+                  onClick={() => void copyCommentApiText(moderationAnalyticsUrl, 'Comment analytics URL')}
+                  iconStart={<Copy className="size-4" />}
                 >
-                  {deliveryMetrics.failed} failed
-                </span>
-              </div>
-              {commentDeliveryEvents.length === 0 ? (
-                <div className="mt-4">
-                  <EmptyState
-                    icon={MessageSquare}
-                    title="No comment delivery activity yet"
-                    description="Comment notification, webhook, retry, and handoff events will appear here after moderation activity."
-                  />
-                </div>
-              ) : (
-                <div className="mt-4 grid gap-3" data-testid="comments-delivery-list">
-                  {commentDeliveryEvents.slice(0, 8).map((event) => (
-                    <CommentDeliveryEventCard
-                      key={event.id}
-                      event={event}
-                      isRetrying={retryingDeliveryIds.includes(event.id)}
-                      canManageComments={canManageComments}
-                      disabledReason={managePermissionTitle}
-                      onRetry={handleRetryCommentDelivery}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </PanelContent>
-      </Panel>
-
-      <Panel id="comments-audit" className="mb-6 scroll-mt-24" data-testid="comments-audit-panel">
-        <PanelHeader
-          title="Comment audit trail"
-          description="Admin policy, moderation, retry, thread, and blocklist actions with request-id correlation."
-          icon={<ShieldAlert className="size-4" />}
-          action={
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={isCommentsBusy || !canExportActivity}
-              title={activityPermissionTitle}
-              onClick={() => void refreshCommentAuditLogs()}
-              iconStart={<RefreshCw className="size-4" />}
-              data-testid="comments-audit-refresh"
-            >
-              Refresh audit
-            </Button>
-          }
-        />
-        <PanelContent>
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Code2 className="size-4" />
-                Admin audit API
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Custom admin dashboards can read the same private audit log to prove who changed comment policy, moderation state, delivery retries, or author blocks.
-              </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <MetaTile label="Audit events" value={`${auditMetrics.total}`} />
-                <MetaTile label="Policy" value={`${auditMetrics.policy}`} />
-                <MetaTile label="Moderation" value={`${auditMetrics.moderation}`} />
-                <MetaTile label="Operations" value={`${auditMetrics.operations}`} />
-              </div>
-              {commentAuditError ? (
-                <div className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  {commentAuditError}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="rounded-lg border border-border bg-background p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-foreground">Recent moderation audit</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Newest admin audit entries scoped to comment policy and moderation workflows.
+                  Copy analytics
+                </Button>
+              }
+            />
+            <PanelContent>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <Code2 className="size-4" />
+                    Analytics API
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Custom admin dashboards can use this private endpoint for queue totals, report reasons, thread load, and target-level moderation trends.
+                  </p>
+                  <div className="mt-4">
+                    <ApiSnippet label="Comment analytics" value={moderationAnalyticsUrl} />
                   </div>
                 </div>
-                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                  {auditMetrics.total} total
-                </span>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <MetaTile label="30-day comments" value={`${commentAnalytics?.totals.comments ?? metrics.total}`} />
+                  <MetaTile label="Reported" value={`${commentAnalytics?.totals.reported ?? metrics.reported}`} />
+                  <MetaTile label="Threaded" value={`${commentAnalytics?.threads.withReplies ?? threadSummaries.filter((thread) => thread.replies > 0).length}`} />
+                  <MetaTile label="Pending replies" value={`${commentAnalytics?.threads.pendingReplies ?? threadSummaries.reduce((total, thread) => total + Math.min(thread.pending, thread.replies), 0)}`} />
+                  <div className="rounded-lg border border-border bg-background px-3 py-3 sm:col-span-2">
+                    <div className="text-xs font-medium text-muted-foreground">Top report reasons</div>
+                    <div className="mt-1 text-sm font-semibold">{formatReportReasons(commentAnalytics)}</div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background px-3 py-3 sm:col-span-2">
+                    <div className="text-xs font-medium text-muted-foreground">Busiest target</div>
+                    <div className="mt-1 truncate text-sm font-semibold">
+                      {formatAnalyticsTarget(commentAnalytics, targetByKey)}
+                    </div>
+                  </div>
+                </div>
               </div>
-              {commentAuditLogs.length === 0 ? (
-                <div className="mt-4">
-                  <EmptyState
-                    icon={ShieldAlert}
-                    title="No comment audit entries yet"
-                    description="Policy updates, moderation decisions, thread changes, retries, and blocklist actions will appear here."
-                  />
+            </PanelContent>
+          </Panel>
+
+          <Panel id="comments-delivery" className="scroll-mt-24" data-testid="comments-delivery-panel">
+            <PanelHeader
+              title="Comment delivery activity"
+              description="Submission, report, moderation, reply, and thread-change events for custom admin handoffs."
+              icon={<RefreshCw className="size-4" />}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isCommentsBusy || !canManageComments}
+                  title={managePermissionTitle}
+                  onClick={() => void refreshCommentDeliveryEvents()}
+                  iconStart={<RefreshCw className="size-4" />}
+                  data-testid="comments-delivery-refresh"
+                >
+                  Refresh activity
+                </Button>
+              }
+            />
+            <PanelContent>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <Code2 className="size-4" />
+                    Events API
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Custom admin dashboards can poll comment events to show submission intake, reports, moderation decisions, and thread updates.
+                  </p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <MetaTile label="Activity events" value={`${deliveryMetrics.total}`} />
+                    <MetaTile label="Submissions" value={`${deliveryMetrics.submitted}`} />
+                    <MetaTile label="Moderation" value={`${deliveryMetrics.moderated}`} />
+                    <MetaTile label="Reports" value={`${deliveryMetrics.reported}`} />
+                  </div>
+                  {commentDeliveryError ? (
+                    <div className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {commentDeliveryError}
+                    </div>
+                  ) : null}
                 </div>
-              ) : (
-                <div className="mt-4 grid gap-3" data-testid="comments-audit-list">
-                  {commentAuditLogs.slice(0, 8).map((log) => (
-                    <CommentAuditLogCard key={log.id} log={log} />
-                  ))}
+
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Recent comment handoffs</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Newest events from the site events API filtered to comment activity.
+                      </div>
+                    </div>
+                    <span className={cn(
+                      'rounded-full px-2.5 py-1 text-xs font-semibold',
+                      deliveryMetrics.failed > 0 ? 'bg-destructive/10 text-destructive' : 'bg-emerald-50 text-emerald-700',
+                    )}
+                    >
+                      {deliveryMetrics.failed} failed
+                    </span>
+                  </div>
+                  {commentDeliveryEvents.length === 0 ? (
+                    <div className="mt-4">
+                      <EmptyState
+                        icon={MessageSquare}
+                        title="No comment delivery activity yet"
+                        description="Comment notification, webhook, retry, and handoff events will appear here after moderation activity."
+                      />
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-3" data-testid="comments-delivery-list">
+                      {commentDeliveryEvents.slice(0, 8).map((event) => (
+                        <CommentDeliveryEventCard
+                          key={event.id}
+                          event={event}
+                          isRetrying={retryingDeliveryIds.includes(event.id)}
+                          canManageComments={canManageComments}
+                          disabledReason={managePermissionTitle}
+                          onRetry={handleRetryCommentDelivery}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-        </PanelContent>
-      </Panel>
+              </div>
+            </PanelContent>
+          </Panel>
+
+          <Panel id="comments-audit" className="scroll-mt-24" data-testid="comments-audit-panel">
+            <PanelHeader
+              title="Comment audit trail"
+              description="Admin policy, moderation, retry, thread, and blocklist actions with request-id correlation."
+              icon={<ShieldAlert className="size-4" />}
+              action={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isCommentsBusy || !canExportActivity}
+                  title={activityPermissionTitle}
+                  onClick={() => void refreshCommentAuditLogs()}
+                  iconStart={<RefreshCw className="size-4" />}
+                  data-testid="comments-audit-refresh"
+                >
+                  Refresh audit
+                </Button>
+              }
+            />
+            <PanelContent>
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <Code2 className="size-4" />
+                    Admin audit API
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Custom admin dashboards can read the same private audit log to prove who changed comment policy, moderation state, delivery retries, or author blocks.
+                  </p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <MetaTile label="Audit events" value={`${auditMetrics.total}`} />
+                    <MetaTile label="Policy" value={`${auditMetrics.policy}`} />
+                    <MetaTile label="Moderation" value={`${auditMetrics.moderation}`} />
+                    <MetaTile label="Operations" value={`${auditMetrics.operations}`} />
+                  </div>
+                  {commentAuditError ? (
+                    <div className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {commentAuditError}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Recent moderation audit</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Newest admin audit entries scoped to comment policy and moderation workflows.
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                      {auditMetrics.total} total
+                    </span>
+                  </div>
+                  {commentAuditLogs.length === 0 ? (
+                    <div className="mt-4">
+                      <EmptyState
+                        icon={ShieldAlert}
+                        title="No comment audit entries yet"
+                        description="Policy updates, moderation decisions, thread changes, retries, and blocklist actions will appear here."
+                      />
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-3" data-testid="comments-audit-list">
+                      {commentAuditLogs.slice(0, 8).map((log) => (
+                        <CommentAuditLogCard key={log.id} log={log} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </PanelContent>
+          </Panel>
+        </div>
+      </details>
 
       <Panel id="comments-threads" className="mb-6 scroll-mt-24" data-testid="comments-thread-panel">
         <PanelHeader
@@ -2757,35 +2858,97 @@ function CommentsRoute() {
           description={`${filteredComments.length}/${comments.length} visible comments`}
           icon={<MessageSquare className="size-4" />}
           action={
-            <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label="Selected comment bulk actions"
+              aria-describedby={commentsBulkActionStatusId}
+              data-testid="comments-bulk-action-group"
+              data-action-status={commentsBulkActionStatus}
+            >
+              <span id={commentsBulkActionStatusId} className="sr-only" data-testid="comments-bulk-action-status" aria-live="polite">
+                {commentsBulkActionStatus}
+              </span>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={filteredComments.length === 0 || isCommentsBusy || !canExportActivity}
-                title={activityPermissionTitle}
+                disabled={Boolean(commentsBulkExportDisabledReason)}
+                title={commentsBulkExportDisabledReason || undefined}
+                aria-describedby={commentsBulkActionStatusId}
                 onClick={handleExportComments}
+                data-action-state={commentsBulkExportDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsBulkActionStatus}
+                data-disabled-reason={commentsBulkExportDisabledReason || undefined}
                 iconStart={<Download className="size-4" />}
               >
                 Export CSV
               </Button>
-              <Button size="sm" variant="outline" disabled={!hasSelection || isCommentsBusy || !canManageComments} title={managePermissionTitle} onClick={() => void handleModerate(selectedCommentIds, 'approved')} iconStart={<CheckCircle2 className="size-4" />}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={Boolean(commentsBulkApproveDisabledReason)}
+                title={commentsBulkApproveDisabledReason || undefined}
+                aria-describedby={commentsBulkActionStatusId}
+                onClick={() => void handleModerate(selectedCommentIds, 'approved')}
+                data-action-state={commentsBulkApproveDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsBulkActionStatus}
+                data-disabled-reason={commentsBulkApproveDisabledReason || undefined}
+                iconStart={<CheckCircle2 className="size-4" />}
+              >
                 Approve
               </Button>
-              <Button size="sm" variant="outline" disabled={bulkDestructiveActionDisabled} title={bulkDestructiveActionTitle} onClick={() => void handleModerate(selectedCommentIds, 'rejected', { rejectionReason: rejectReason })} iconStart={<XCircle className="size-4" />}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={Boolean(commentsBulkDestructiveDisabledReason)}
+                title={commentsBulkDestructiveDisabledReason || undefined}
+                aria-describedby={commentsBulkActionStatusId}
+                onClick={() => void handleModerate(selectedCommentIds, 'rejected', { rejectionReason: rejectReason })}
+                data-action-state={commentsBulkDestructiveDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsBulkActionStatus}
+                data-disabled-reason={commentsBulkDestructiveDisabledReason || undefined}
+                iconStart={<XCircle className="size-4" />}
+              >
                 Reject
               </Button>
-              <Button size="sm" variant="outline" disabled={bulkDestructiveActionDisabled} title={bulkDestructiveActionTitle} onClick={() => void handleModerate(selectedCommentIds, 'spam', { rejectionReason: spamReason })} iconStart={<Trash2 className="size-4" />}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={Boolean(commentsBulkDestructiveDisabledReason)}
+                title={commentsBulkDestructiveDisabledReason || undefined}
+                aria-describedby={commentsBulkActionStatusId}
+                onClick={() => void handleModerate(selectedCommentIds, 'spam', { rejectionReason: spamReason })}
+                data-action-state={commentsBulkDestructiveDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsBulkActionStatus}
+                data-disabled-reason={commentsBulkDestructiveDisabledReason || undefined}
+                iconStart={<Trash2 className="size-4" />}
+              >
                 Spam
               </Button>
-              <Button size="sm" variant="outline" disabled={bulkDestructiveActionDisabled} title={bulkDestructiveActionTitle} onClick={() => void handleModerate(selectedCommentIds, 'blocked', { blockReason })} iconStart={<ShieldAlert className="size-4" />}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={Boolean(commentsBulkDestructiveDisabledReason)}
+                title={commentsBulkDestructiveDisabledReason || undefined}
+                aria-describedby={commentsBulkActionStatusId}
+                onClick={() => void handleModerate(selectedCommentIds, 'blocked', { blockReason })}
+                data-action-state={commentsBulkDestructiveDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsBulkActionStatus}
+                data-disabled-reason={commentsBulkDestructiveDisabledReason || undefined}
+                iconStart={<ShieldAlert className="size-4" />}
+              >
                 Block
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                disabled={selectedReportedIds.length === 0 || isCommentsBusy || !canManageComments}
-                title={managePermissionTitle}
+                disabled={Boolean(commentsBulkResolveReportsDisabledReason)}
+                title={commentsBulkResolveReportsDisabledReason || undefined}
+                aria-describedby={commentsBulkActionStatusId}
                 onClick={() => void handleClearReports(selectedReportedIds)}
+                data-action-state={commentsBulkResolveReportsDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsBulkActionStatus}
+                data-disabled-reason={commentsBulkResolveReportsDisabledReason || undefined}
                 iconStart={<Flag className="size-4" />}
               >
                 Resolve reports
@@ -3107,11 +3270,15 @@ function CommentsRoute() {
                   <input
                     type="checkbox"
                     checked={allVisibleSelected}
-                    disabled={isCommentsBusy || !canManageComments}
-                    title={managePermissionTitle}
+                    disabled={Boolean(commentsBulkSelectionDisabledReason)}
+                    title={commentsBulkSelectionDisabledReason || undefined}
                     onChange={toggleVisibleSelection}
                     className="size-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
                     aria-label="Select visible comments"
+                    aria-describedby={commentsBulkActionStatusId}
+                    data-action-state={commentsBulkSelectionDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={commentsBulkActionStatus}
+                    data-disabled-reason={commentsBulkSelectionDisabledReason || undefined}
                   />
                   Select visible comments
                 </label>
@@ -3126,8 +3293,12 @@ function CommentsRoute() {
                     type="button"
                     size="sm"
                     variant="ghost"
-                    disabled={isCommentsBusy}
+                    disabled={Boolean(commentsBulkClearDisabledReason)}
                     onClick={() => setSelectedIds([])}
+                    aria-describedby={commentsBulkActionStatusId}
+                    data-action-state={commentsBulkClearDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={commentsBulkActionStatus}
+                    data-disabled-reason={commentsBulkClearDisabledReason || undefined}
                     data-testid="comments-bulk-clear-selection"
                   >
                     Clear
@@ -3194,20 +3365,27 @@ function CommentsRoute() {
         </PanelContent>
       </Panel>
       {pendingDeleteComment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="comments-delete-confirm-dialog">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="comments-delete-confirm-title"
+          aria-describedby="comments-delete-confirm-description comments-delete-confirm-impact"
+          data-testid="comments-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete comment?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="comments-delete-confirm-title" className="text-lg font-semibold text-foreground">Delete comment?</h2>
+                <p id="comments-delete-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   This permanently removes the comment from Backy. Mark it spam or rejected if you need to keep moderation history.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id="comments-delete-confirm-impact" className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Author: <span className="font-medium text-foreground">{pendingDeleteComment.authorName || pendingDeleteComment.authorEmail || 'Anonymous'}</span>
               <div className="mt-1">
                 Comment ID: <span className="font-mono font-medium text-foreground">{pendingDeleteComment.id}</span>
@@ -3223,6 +3401,8 @@ function CommentsRoute() {
                 variant="outline"
                 onClick={() => setPendingDeleteComment(null)}
                 disabled={isCommentsBusy}
+                data-testid="comments-delete-cancel-button"
+                aria-label={`Cancel deleting comment from ${pendingDeleteComment.authorName || pendingDeleteComment.authorEmail || 'Anonymous'}`}
               >
                 Cancel
               </Button>
@@ -3232,6 +3412,7 @@ function CommentsRoute() {
                 disabled={isCommentsBusy || !canManageComments}
                 title={!canManageComments ? managePermissionTitle : undefined}
                 data-testid="comments-delete-confirm-button"
+                aria-label={`Confirm deleting comment from ${pendingDeleteComment.authorName || pendingDeleteComment.authorEmail || 'Anonymous'}`}
               >
                 {updatingIds.includes(pendingDeleteComment.id) ? 'Deleting...' : 'Delete comment'}
               </Button>
@@ -3657,6 +3838,28 @@ function CommentCard({
   const reports = comment.reportReasons?.length ? comment.reportReasons.join(', ') : null;
   const hasReports = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
   const isReply = Boolean(comment.parentId);
+  const commentActionLabel = comment.authorName || comment.authorEmail || 'Anonymous';
+  const commentActionStatusId = `comments-action-status-${safeActionId(comment.id)}`;
+  const baseDisabledReason = disabled ? (disabledReason || 'Comment actions are temporarily unavailable.') : null;
+  const approveDisabledReason = baseDisabledReason || (comment.status === 'approved' ? 'This comment is already approved.' : null);
+  const rejectDisabledReason = baseDisabledReason || (comment.status === 'rejected' ? 'This comment is already rejected.' : null);
+  const spamDisabledReason = baseDisabledReason || (comment.status === 'spam' ? 'This comment is already marked as spam.' : null);
+  const blockDisabledReason = baseDisabledReason || (comment.status === 'blocked' ? 'This comment is already blocked.' : null);
+  const deleteDisabledReason = baseDisabledReason;
+  const resolveReportsDisabledReason = baseDisabledReason;
+  const replyDisabledReason = baseDisabledReason || (!canReply ? 'Replies are disabled for this comment target.' : null);
+  const moveDisabledReason = baseDisabledReason || (parentOptions.length === 0 ? 'No other parent comments are available for this reply.' : null);
+  const actionStatusItems = [
+    `Approve ${approveDisabledReason ? `unavailable: ${approveDisabledReason}` : 'available'}`,
+    `Reject ${rejectDisabledReason ? `unavailable: ${rejectDisabledReason}` : 'available'}`,
+    `Spam ${spamDisabledReason ? `unavailable: ${spamDisabledReason}` : 'available'}`,
+    `Block ${blockDisabledReason ? `unavailable: ${blockDisabledReason}` : 'available'}`,
+    `Delete ${deleteDisabledReason ? `unavailable: ${deleteDisabledReason}` : 'available'}`,
+    hasReports ? `Resolve reports ${resolveReportsDisabledReason ? `unavailable: ${resolveReportsDisabledReason}` : 'available'}` : null,
+    `Reply ${replyDisabledReason ? `unavailable: ${replyDisabledReason}` : 'available'}`,
+    isReply ? `Move reply ${moveDisabledReason ? `unavailable: ${moveDisabledReason}` : 'available'}` : null,
+  ].filter(Boolean);
+  const commentActionStatus = `${actionStatusItems.join('. ')}.`;
 
   return (
     <article className={cn('rounded-lg border bg-background p-4 transition-colors', selected ? 'border-primary ring-2 ring-primary/10' : 'border-border')} data-testid="comment-card">
@@ -3732,14 +3935,32 @@ function CommentCard({
           {comment.blockReason ? <div>Block: {comment.blockReason}</div> : null}
         </div>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div
+        className="mt-4 flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label={`Actions for ${commentActionLabel}`}
+        aria-describedby={commentActionStatusId}
+        data-testid="comments-action-group"
+        data-comment-id={comment.id}
+        data-action-status={commentActionStatus}
+      >
+        <span
+          id={commentActionStatusId}
+          className="sr-only"
+          data-testid="comments-action-status"
+        >
+          {commentActionStatus}
+        </span>
         <Button
           size="sm"
           onClick={onApprove}
-          disabled={disabled || comment.status === 'approved'}
-          title={disabledReason}
+          disabled={Boolean(approveDisabledReason)}
+          title={approveDisabledReason || undefined}
+          aria-describedby={commentActionStatusId}
+          data-action-state={approveDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={approveDisabledReason || undefined}
           iconStart={<CheckCircle2 className="size-4" />}
-          aria-label={`Approve comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+          aria-label={`Approve comment from ${commentActionLabel}`}
         >
           Approve
         </Button>
@@ -3747,10 +3968,13 @@ function CommentCard({
           size="sm"
           variant="outline"
           onClick={onReject}
-          disabled={disabled || comment.status === 'rejected'}
-          title={disabledReason}
+          disabled={Boolean(rejectDisabledReason)}
+          title={rejectDisabledReason || undefined}
+          aria-describedby={commentActionStatusId}
+          data-action-state={rejectDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={rejectDisabledReason || undefined}
           iconStart={<XCircle className="size-4" />}
-          aria-label={`Reject comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+          aria-label={`Reject comment from ${commentActionLabel}`}
         >
           Reject
         </Button>
@@ -3758,10 +3982,13 @@ function CommentCard({
           size="sm"
           variant="outline"
           onClick={onSpam}
-          disabled={disabled || comment.status === 'spam'}
-          title={disabledReason}
+          disabled={Boolean(spamDisabledReason)}
+          title={spamDisabledReason || undefined}
+          aria-describedby={commentActionStatusId}
+          data-action-state={spamDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={spamDisabledReason || undefined}
           iconStart={<Trash2 className="size-4" />}
-          aria-label={`Mark comment from ${comment.authorName || comment.authorEmail || 'Anonymous'} as spam`}
+          aria-label={`Mark comment from ${commentActionLabel} as spam`}
         >
           Spam
         </Button>
@@ -3769,10 +3996,13 @@ function CommentCard({
           size="sm"
           variant="danger"
           onClick={onBlock}
-          disabled={disabled || comment.status === 'blocked'}
-          title={disabledReason}
+          disabled={Boolean(blockDisabledReason)}
+          title={blockDisabledReason || undefined}
+          aria-describedby={commentActionStatusId}
+          data-action-state={blockDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={blockDisabledReason || undefined}
           iconStart={<CircleSlash className="size-4" />}
-          aria-label={`Block comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+          aria-label={`Block comment from ${commentActionLabel}`}
         >
           Block
         </Button>
@@ -3780,10 +4010,13 @@ function CommentCard({
           size="sm"
           variant="danger"
           onClick={onDelete}
-          disabled={disabled}
-          title={disabledReason}
+          disabled={Boolean(deleteDisabledReason)}
+          title={deleteDisabledReason || undefined}
+          aria-describedby={commentActionStatusId}
+          data-action-state={deleteDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={deleteDisabledReason || undefined}
           iconStart={<Trash2 className="size-4" />}
-          aria-label={`Delete comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+          aria-label={`Delete comment from ${commentActionLabel}`}
           data-testid="comments-delete-comment"
         >
           Delete
@@ -3793,10 +4026,13 @@ function CommentCard({
             size="sm"
             variant="outline"
             onClick={onClearReports}
-            disabled={disabled}
-            title={disabledReason}
+            disabled={Boolean(resolveReportsDisabledReason)}
+            title={resolveReportsDisabledReason || undefined}
+            aria-describedby={commentActionStatusId}
+            data-action-state={resolveReportsDisabledReason ? 'blocked' : 'ready'}
+            data-disabled-reason={resolveReportsDisabledReason || undefined}
             iconStart={<Flag className="size-4" />}
-            aria-label={`Resolve reports for comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+            aria-label={`Resolve reports for comment from ${commentActionLabel}`}
           >
             Resolve reports
           </Button>
@@ -3805,10 +4041,13 @@ function CommentCard({
           size="sm"
           variant="outline"
           onClick={onOpenReply}
-          disabled={disabled || !canReply}
-          title={disabledReason}
+          disabled={Boolean(replyDisabledReason)}
+          title={replyDisabledReason || undefined}
+          aria-describedby={commentActionStatusId}
+          data-action-state={replyDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={replyDisabledReason || undefined}
           iconStart={<MessageSquare className="size-4" />}
-          aria-label={`Reply to comment from ${comment.authorName || comment.authorEmail || 'Anonymous'}`}
+          aria-label={`Reply to comment from ${commentActionLabel}`}
           data-testid="comments-reply-open"
         >
           Reply
@@ -3818,10 +4057,13 @@ function CommentCard({
             size="sm"
             variant="outline"
             onClick={onOpenMove}
-            disabled={disabled || parentOptions.length === 0}
-            title={disabledReason}
+            disabled={Boolean(moveDisabledReason)}
+            title={moveDisabledReason || undefined}
+            aria-describedby={commentActionStatusId}
+            data-action-state={moveDisabledReason ? 'blocked' : 'ready'}
+            data-disabled-reason={moveDisabledReason || undefined}
             iconStart={<GitBranch className="size-4" />}
-            aria-label={`Move reply from ${comment.authorName || comment.authorEmail || 'Anonymous'} to another parent`}
+            aria-label={`Move reply from ${commentActionLabel} to another parent`}
             data-testid="comments-move-open"
           >
             Move reply
@@ -3997,10 +4239,10 @@ const getPublicBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
 
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()))
     .replace(/\/api\/admin$/, '')
     .replace(/\/api$/, '')
     .replace(/\/$/, '');

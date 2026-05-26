@@ -62,17 +62,70 @@ const assertCommentsRouteSourceContract = () => {
     'Comments policy panel must expose guarded operator anti-abuse presets',
   );
   assert(
-    source.includes('const COMMENT_LARGE_SCOPE_SELECTION_THRESHOLD') &&
+    source.includes('data-testid="comments-control-map-details"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('data-testid="comments-control-map"') &&
+      source.includes('COMMENT_CONTROL_AREAS.map((area) =>') &&
+      source.includes('data-testid="comments-connected-workflows-details"') &&
+      source.includes('data-testid="comments-connected-workflows"') &&
+      source.includes('COMMENT_WORKFLOW_SURFACES.map((surface) =>'),
+    'Comments command center must keep low-frequency control maps behind default-collapsed progressive disclosure',
+  );
+  assert(
+    source.includes('data-testid="comments-evidence-details"') &&
+      source.includes('data-testid="comments-evidence-panels"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Comment evidence and API diagnostics') &&
+      source.includes('Analytics, delivery events, audit logs, and private moderation API handoff.'),
+    'Comments diagnostics must live behind a default-collapsed evidence/API disclosure instead of lengthening the default moderation flow',
+  );
+  assert(
+      source.includes('const COMMENT_LARGE_SCOPE_SELECTION_THRESHOLD') &&
       source.includes('const bulkSafetyRequiresReason = hasSelection') &&
       source.includes('const bulkDestructiveActionDisabled = !hasSelection') &&
       source.includes('data-testid="comments-bulk-safety-review"') &&
       source.includes('data-testid="comments-bulk-safety-reason-required"') &&
-      source.includes('title={bulkDestructiveActionTitle}') &&
-      source.includes("disabled={bulkDestructiveActionDisabled}"),
+      source.includes("const commentsBulkActionStatusId = 'comments-bulk-action-status';") &&
+      source.includes('const commentsBulkDestructiveDisabledReason = !hasSelection') &&
+      source.includes('const commentsBulkActionStatus = [') &&
+      source.includes('data-testid="comments-bulk-action-group"') &&
+      source.includes('data-testid="comments-bulk-action-status"') &&
+      source.includes('data-action-status={commentsBulkActionStatus}') &&
+      source.includes("data-action-state={commentsBulkApproveDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes("data-disabled-reason={commentsBulkDestructiveDisabledReason || undefined}") &&
+      source.includes('disabled={Boolean(commentsBulkDestructiveDisabledReason)}'),
     'Comments moderation queue must guard destructive bulk actions with large-scope/cross-filter safety review',
   );
   assert(
+    source.includes('const safeActionId = (value: string)') &&
+      source.includes('const commentActionStatusId = `comments-action-status-${safeActionId(comment.id)}`') &&
+      source.includes('data-testid="comments-action-group"') &&
+      source.includes('data-testid="comments-action-status"') &&
+      source.includes('data-action-status={commentActionStatus}') &&
+      source.includes("data-action-state={approveDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes("data-action-state={deleteDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes("data-disabled-reason={replyDisabledReason || undefined}"),
+    'Comments cards must expose named action groups, hidden status summaries, and ready/blocked metadata for moderation actions',
+  );
+  assert(
     source.includes('const loadCommentPermissions = useCallback(() => {') &&
+      source.includes('const canUseCommentRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseCommentRoleDefaults;') &&
+      source.includes('const isCommentPermissionAllowed = (key: CommentPermissionKey) => (') &&
+      source.includes("const canViewComments = isCommentPermissionAllowed('comments.view');") &&
+      source.includes("const canManageComments = isCommentPermissionAllowed('comments.manage');") &&
+      source.includes("const canConfigureComments = isCommentPermissionAllowed('comments.configure');") &&
+      source.includes("const canExportActivity = isCommentPermissionAllowed('activity.export');") &&
+      source.includes('const isCommentPolicyBusy = isSavingPolicy;') &&
+      source.includes('const isCommentsBusy = isLoading || isCommentMutationBusy;') &&
+      source.includes('const isCommentPolicyDisabled = isCommentsBusy || isCommentPolicyBusy || !canConfigureComments;') &&
+      source.includes('if (isCommentsBusy || isCommentPolicyBusy || !activeSiteId) return;') &&
+      source.includes('disabled={isCommentPolicyDisabled || !commentPolicyDirty}') &&
+      source.includes("isCommentPolicyBusy ? 'Saving...' : 'Save policy'") &&
+      source.includes('disabled={isCommentPolicyDisabled}') &&
+      !source.includes('const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy;') &&
+      !source.includes('const canViewComments = !isPermissionMatrixPending') &&
+      !source.includes('const isCommentsBusy = isLoading || isCommentMutationBusy || isSavingPolicy || isPermissionMatrixPending;') &&
       source.includes('data-testid="comments-permission-state"') &&
       source.includes('data-testid="comments-rbac-permission-state"') &&
       source.includes('Comment permissions could not be verified') &&
@@ -80,7 +133,7 @@ const assertCommentsRouteSourceContract = () => {
       source.includes('Retry permissions') &&
       source.includes('to="/users"') &&
       source.includes('Review users'),
-    'Comments permission states must expose retryable permission recovery and user-access handoff',
+    'Comments permission states must expose retryable permission recovery, user-access handoff, and scoped comment-policy save busy state',
   );
   assert(
     source.includes('const [replySubmitted, setReplySubmitted] = useState(false);') &&
@@ -94,6 +147,22 @@ const assertCommentsRouteSourceContract = () => {
     'Comments official reply composer must keep Add reply reachable and expose inline reply-content validation',
   );
   assert(!source.includes('disabled={disabled || isSubmittingReply || !replyDraft.content.trim()}'), 'Comments reply submit must not hide empty-content validation behind a disabled state');
+  assert(
+    source.includes('const handleCommentDeleteDialogKeyDown = (event: KeyboardEvent) => {') &&
+      source.includes("if (event.key !== 'Escape' || updatingIds.includes(pendingDeleteComment.id)) return;") &&
+      source.includes("document.addEventListener('keydown', handleCommentDeleteDialogKeyDown, true)") &&
+      source.includes('role="dialog"') &&
+      source.includes('aria-modal="true"') &&
+      source.includes('aria-labelledby="comments-delete-confirm-title"') &&
+      source.includes('aria-describedby="comments-delete-confirm-description comments-delete-confirm-impact"') &&
+      source.includes('id="comments-delete-confirm-title"') &&
+      source.includes('id="comments-delete-confirm-description"') &&
+      source.includes('id="comments-delete-confirm-impact"') &&
+      source.includes('data-testid="comments-delete-cancel-button"') &&
+      source.includes('aria-label={`Cancel deleting comment from ${pendingDeleteComment.authorName || pendingDeleteComment.authorEmail ||') &&
+      source.includes('aria-label={`Confirm deleting comment from ${pendingDeleteComment.authorName || pendingDeleteComment.authorEmail ||'),
+    'Comments delete confirmation must expose accessible dialog semantics, labelled impact copy, explicit actions, and Escape recovery.',
+  );
 };
 
 const requestApi = async (endpoint, options = {}) => {
@@ -188,7 +257,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_COMMENTS_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -880,6 +950,111 @@ const navigateToComments = async (client, expectedAuthors) => {
   return null;
 };
 
+const assertCommentDeleteDialogRecovery = async (client, authorName) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const authorName = ${JSON.stringify(authorName)};
+      const card = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => (
+        (candidate.textContent || '').includes(authorName)
+      ));
+      if (!(card instanceof HTMLElement)) {
+        return { ok: false, reason: 'comment-card-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+      }
+      const deleteButton = card.querySelector('[data-testid="comments-delete-comment"]');
+      if (!(deleteButton instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'delete-button-missing', buttons: Array.from(card.querySelectorAll('button')).map((button) => button.getAttribute('aria-label') || button.textContent || '') };
+      }
+      if (deleteButton.disabled) {
+        return { ok: false, reason: 'delete-button-disabled' };
+      }
+      deleteButton.click();
+      const dialog = document.querySelector('[data-testid="comments-delete-confirm-dialog"]');
+      const cancelButton = document.querySelector('[data-testid="comments-delete-cancel-button"]');
+      const confirmButton = document.querySelector('[data-testid="comments-delete-confirm-button"]');
+      if (!(dialog instanceof HTMLElement) || !(cancelButton instanceof HTMLButtonElement) || !(confirmButton instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'delete-dialog-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+      }
+      const semantics = {
+        role: dialog.getAttribute('role') || '',
+        modal: dialog.getAttribute('aria-modal') || '',
+        labelledBy: dialog.getAttribute('aria-labelledby') || '',
+        describedBy: dialog.getAttribute('aria-describedby') || '',
+        hasTitle: Boolean(document.querySelector('#comments-delete-confirm-title')),
+        hasDescription: Boolean(document.querySelector('#comments-delete-confirm-description')),
+        hasImpact: Boolean(document.querySelector('#comments-delete-confirm-impact')),
+        cancelLabel: cancelButton.getAttribute('aria-label') || '',
+        confirmLabel: confirmButton.getAttribute('aria-label') || '',
+      };
+      if (
+        semantics.role !== 'dialog' ||
+        semantics.modal !== 'true' ||
+        semantics.labelledBy !== 'comments-delete-confirm-title' ||
+        !semantics.describedBy.includes('comments-delete-confirm-description') ||
+        !semantics.describedBy.includes('comments-delete-confirm-impact') ||
+        !semantics.hasTitle ||
+        !semantics.hasDescription ||
+        !semantics.hasImpact ||
+        !semantics.cancelLabel.startsWith('Cancel deleting comment from') ||
+        !semantics.confirmLabel.startsWith('Confirm deleting comment from')
+      ) {
+        return { ok: false, reason: 'delete-dialog-semantics', semantics };
+      }
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return { ok: true, phase: 'opened-and-escaped', semantics };
+    })()`);
+
+    if (result.ok) {
+      for (let closeAttempt = 0; closeAttempt < 20; closeAttempt += 1) {
+        const closedState = await evaluate(client, `(() => ({
+          closed: !document.querySelector('[data-testid="comments-delete-confirm-dialog"]'),
+          body: document.body?.innerText?.slice(0, 500) || '',
+        }))()`);
+        if (closedState.closed) break;
+        if (closeAttempt === 19) {
+          throw new Error(`Comments delete confirmation did not close on Escape: ${JSON.stringify(closedState)}`);
+        }
+        await sleep(100);
+      }
+
+      for (let reopenAttempt = 0; reopenAttempt < 30; reopenAttempt += 1) {
+        const reopenState = await evaluate(client, `(() => {
+          const authorName = ${JSON.stringify(authorName)};
+          const card = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => (
+            (candidate.textContent || '').includes(authorName)
+          ));
+          const deleteButton = card?.querySelector('[data-testid="comments-delete-comment"]');
+          if (!(deleteButton instanceof HTMLButtonElement)) {
+            return { ok: false, reason: 'delete-button-missing-after-escape', body: document.body?.innerText?.slice(0, 800) || '' };
+          }
+          if (deleteButton.disabled) return { ok: false, reason: 'delete-button-disabled-after-escape' };
+          deleteButton.click();
+          const dialog = document.querySelector('[data-testid="comments-delete-confirm-dialog"]');
+          const cancelButton = document.querySelector('[data-testid="comments-delete-cancel-button"]');
+          if (!(dialog instanceof HTMLElement) || !(cancelButton instanceof HTMLButtonElement)) {
+            return { ok: false, reason: 'dialog-reopen-failed', body: document.body?.innerText?.slice(0, 800) || '' };
+          }
+          cancelButton.click();
+          return { ok: true };
+        })()`);
+        if (reopenState.ok) return result.semantics;
+        if (reopenAttempt === 29) {
+          throw new Error(`Unable to reopen/cancel comments delete confirmation after Escape: ${JSON.stringify(reopenState)}`);
+        }
+        await sleep(150);
+      }
+      return result.semantics;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Comments delete confirmation recovery was not wired: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const assertCommentsFilterRouteSearch = async (client, targetId) => {
   const routeUrl = new URL(`${ADMIN_BASE_URL}/comments`);
   routeUrl.searchParams.set('siteId', SITE_ID);
@@ -1034,6 +1209,222 @@ const focusCommentInUi = async (client, { requestId, authorName, targetId }) => 
       throw new Error(`Unable to focus comment ${requestId}: ${JSON.stringify(state)}`);
     }
 
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertCommentActionStatusInUi = async (client, { authorName, requestId, expectedStatus, readyActions }) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const card = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => {
+        const text = candidate.textContent || '';
+        return text.includes(${JSON.stringify(authorName)}) && text.includes(${JSON.stringify(requestId)});
+      });
+      if (!card) return { ok: false, reason: 'card-missing', body: document.body?.innerText?.slice(0, 900) || '' };
+      const group = card.querySelector('[data-testid="comments-action-group"]');
+      const status = group?.querySelector('[data-testid="comments-action-status"]');
+      const buttons = Array.from(group?.querySelectorAll('button') || []).map((button) => ({
+        text: normalize(button.textContent),
+        label: button.getAttribute('aria-label') || '',
+        describedBy: button.getAttribute('aria-describedby') || '',
+        state: button.getAttribute('data-action-state') || '',
+        disabledReason: button.getAttribute('data-disabled-reason') || '',
+        disabled: button.disabled,
+      }));
+      const statusId = status?.id || '';
+      const expectedReady = ${JSON.stringify(readyActions)};
+      const missingReady = expectedReady.filter((label) => !buttons.some((button) => button.text === label && button.state === 'ready' && !button.disabled));
+      return {
+        ok: Boolean(group) &&
+          group.getAttribute('role') === 'group' &&
+          (group.getAttribute('aria-label') || '').includes(${JSON.stringify(authorName)}) &&
+          group.getAttribute('aria-describedby') === statusId &&
+          statusId.length > 0 &&
+          normalize(status?.textContent) === ${JSON.stringify(expectedStatus)} &&
+          normalize(group.getAttribute('data-action-status')) === ${JSON.stringify(expectedStatus)} &&
+          buttons.length >= expectedReady.length &&
+          buttons.every((button) => button.describedBy === statusId) &&
+          missingReady.length === 0,
+        reason: 'action-status-mismatch',
+        role: group?.getAttribute('role') || null,
+        label: group?.getAttribute('aria-label') || null,
+        describedBy: group?.getAttribute('aria-describedby') || null,
+        statusId,
+        statusText: normalize(status?.textContent),
+        groupStatus: normalize(group?.getAttribute('data-action-status')),
+        buttons,
+        missingReady,
+      };
+    })()`);
+
+    if (result.ok) {
+      return result;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Comment action status contract failed for ${authorName}: ${JSON.stringify(result)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertCommentsBulkActionStatusInUi = async (client, { authorName, requestId }) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const group = document.querySelector('[data-testid="comments-bulk-action-group"]');
+      const status = document.querySelector('[data-testid="comments-bulk-action-status"]');
+      const statusId = status?.id || '';
+      const buttons = Array.from(group?.querySelectorAll('button') || []).map((button) => ({
+        text: normalize(button.textContent),
+        describedBy: button.getAttribute('aria-describedby') || '',
+        state: button.getAttribute('data-action-state') || '',
+        disabledReason: button.getAttribute('data-disabled-reason') || '',
+        disabled: button.disabled,
+      }));
+      const selectVisible = document.querySelector('input[aria-label="Select visible comments"]');
+      return {
+        ok: Boolean(group) &&
+          group.getAttribute('role') === 'group' &&
+          group.getAttribute('aria-label') === 'Selected comment bulk actions' &&
+          group.getAttribute('aria-describedby') === statusId &&
+          statusId === 'comments-bulk-action-status' &&
+          normalize(status?.textContent).includes('Approve selected unavailable: Select one or more comments first.') &&
+          normalize(group.getAttribute('data-action-status')) === normalize(status?.textContent) &&
+          buttons.some((button) => button.text === 'Approve' && button.state === 'blocked' && button.disabledReason === 'Select one or more comments first.' && button.disabled) &&
+          buttons.some((button) => button.text === 'Reject' && button.state === 'blocked' && button.disabledReason === 'Select one or more comments first.' && button.disabled) &&
+          buttons.every((button) => button.describedBy === statusId) &&
+          selectVisible instanceof HTMLInputElement &&
+          selectVisible.getAttribute('aria-describedby') === statusId &&
+          selectVisible.getAttribute('data-action-state') === 'ready' &&
+          selectVisible.getAttribute('data-action-status') === normalize(status?.textContent),
+        reason: 'initial-bulk-status-mismatch',
+        role: group?.getAttribute('role') || null,
+        label: group?.getAttribute('aria-label') || null,
+        describedBy: group?.getAttribute('aria-describedby') || null,
+        statusId,
+        statusText: normalize(status?.textContent),
+        groupStatus: normalize(group?.getAttribute('data-action-status')),
+        buttons,
+        selectVisible: selectVisible instanceof HTMLInputElement ? {
+          describedBy: selectVisible.getAttribute('aria-describedby') || '',
+          state: selectVisible.getAttribute('data-action-state') || '',
+          disabledReason: selectVisible.getAttribute('data-disabled-reason') || '',
+          disabled: selectVisible.disabled,
+        } : null,
+      };
+    })()`);
+
+    if (result.ok) break;
+    if (attempt === 79) {
+      throw new Error(`Comments bulk initial action status contract failed: ${JSON.stringify(result)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const card = Array.from(document.querySelectorAll('[data-testid="comment-card"]')).find((candidate) => {
+        const text = candidate.textContent || '';
+        return text.includes(${JSON.stringify(authorName)}) && text.includes(${JSON.stringify(requestId)});
+      });
+      const checkbox = card?.querySelector('input[type="checkbox"]');
+      if (!(checkbox instanceof HTMLInputElement)) {
+        return { ok: false, reason: 'comment-checkbox-missing', body: document.body?.innerText?.slice(0, 900) || '' };
+      }
+      if (!checkbox.checked) checkbox.click();
+      const group = document.querySelector('[data-testid="comments-bulk-action-group"]');
+      const status = document.querySelector('[data-testid="comments-bulk-action-status"]');
+      const statusText = normalize(status?.textContent);
+      const statusId = status?.id || '';
+      const clear = document.querySelector('[data-testid="comments-bulk-clear-selection"]');
+      const buttons = Array.from(group?.querySelectorAll('button') || []).map((button) => ({
+        text: normalize(button.textContent),
+        describedBy: button.getAttribute('aria-describedby') || '',
+        state: button.getAttribute('data-action-state') || '',
+        disabledReason: button.getAttribute('data-disabled-reason') || '',
+        disabled: button.disabled,
+      }));
+      const clearState = clear instanceof HTMLButtonElement ? {
+        text: normalize(clear.textContent),
+        describedBy: clear.getAttribute('aria-describedby') || '',
+        state: clear.getAttribute('data-action-state') || '',
+        disabledReason: clear.getAttribute('data-disabled-reason') || '',
+        disabled: clear.disabled,
+      } : null;
+      return {
+        ok: statusText.includes('Clear selection available for 1 selected comment.') &&
+          statusText.includes('Approve selected available for 1 selected comment.') &&
+          statusText.includes('Reject selected available for 1 selected comment.') &&
+          statusText.includes('Resolve reports unavailable: Selected comments have no unresolved reports.') &&
+          normalize(group?.getAttribute('data-action-status')) === statusText &&
+          clearState?.describedBy === statusId &&
+          clearState?.state === 'ready' &&
+          clearState?.disabled === false &&
+          buttons.some((button) => button.text === 'Approve' && button.state === 'ready' && !button.disabled) &&
+          buttons.some((button) => button.text === 'Reject' && button.state === 'ready' && !button.disabled) &&
+          buttons.some((button) => button.text === 'Spam' && button.state === 'ready' && !button.disabled) &&
+          buttons.some((button) => button.text === 'Block' && button.state === 'ready' && !button.disabled) &&
+          buttons.some((button) => button.text === 'Resolve reports' && button.state === 'blocked' && button.disabledReason === 'Selected comments have no unresolved reports.' && button.disabled) &&
+          buttons.every((button) => button.describedBy === statusId),
+        reason: 'selected-bulk-status-mismatch',
+        statusText,
+        groupStatus: normalize(group?.getAttribute('data-action-status')),
+        buttons,
+        clearState,
+      };
+    })()`);
+
+    if (result.ok) break;
+    if (attempt === 79) {
+      throw new Error(`Comments bulk selected action status contract failed: ${JSON.stringify(result)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const clear = document.querySelector('[data-testid="comments-bulk-clear-selection"]');
+      if (!(clear instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'clear-button-missing', body: document.body?.innerText?.slice(0, 900) || '' };
+      }
+      if (clear.disabled) return { ok: false, reason: 'clear-button-disabled', text: normalize(clear.textContent) };
+      clear.click();
+      return { ok: true };
+    })()`);
+
+    if (result.ok) break;
+    if (attempt === 79) {
+      throw new Error(`Unable to clear comment bulk selection: ${JSON.stringify(result)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const status = document.querySelector('[data-testid="comments-bulk-action-status"]');
+      const summary = document.querySelector('[data-testid="comments-bulk-selection-summary"]');
+      return {
+        ok: normalize(summary?.textContent) === 'none selected' &&
+          normalize(status?.textContent).includes('Approve selected unavailable: Select one or more comments first.'),
+        summary: normalize(summary?.textContent),
+        statusText: normalize(status?.textContent),
+      };
+    })()`);
+
+    if (result.ok) return result;
+    if (attempt === 79) {
+      throw new Error(`Comments bulk selection did not clear: ${JSON.stringify(result)}`);
+    }
     await sleep(250);
   }
 
@@ -1209,6 +1600,18 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
+    hasControlMapDetails: Boolean(document.querySelector('[data-testid="comments-control-map-details"]')),
+    controlMapDefaultCollapsed: document.querySelector('[data-testid="comments-control-map-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    controlMapOpen: document.querySelector('[data-testid="comments-control-map-details"]')?.hasAttribute('open') || false,
+    hasControlMap: Boolean(document.querySelector('[data-testid="comments-control-map"]')),
+    hasConnectedWorkflowsDetails: Boolean(document.querySelector('[data-testid="comments-connected-workflows-details"]')),
+    connectedWorkflowsDefaultCollapsed: document.querySelector('[data-testid="comments-connected-workflows-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    connectedWorkflowsOpen: document.querySelector('[data-testid="comments-connected-workflows-details"]')?.hasAttribute('open') || false,
+    hasConnectedWorkflows: Boolean(document.querySelector('[data-testid="comments-connected-workflows"]')),
+    hasEvidenceDetails: Boolean(document.querySelector('[data-testid="comments-evidence-details"]')),
+    evidenceDefaultCollapsed: document.querySelector('[data-testid="comments-evidence-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    evidenceOpen: document.querySelector('[data-testid="comments-evidence-details"]')?.hasAttribute('open') || false,
+    hasEvidencePanels: Boolean(document.querySelector('[data-testid="comments-evidence-panels"]')),
     hasAnalytics: Boolean(document.querySelector('[data-testid="comments-analytics-panel"]')),
     hasDelivery: Boolean(document.querySelector('[data-testid="comments-delivery-panel"]')),
     hasAudit: Boolean(document.querySelector('[data-testid="comments-audit-panel"]')),
@@ -1216,9 +1619,12 @@ const assertLayout = async (client) => {
     hasBlocklist: Boolean(document.querySelector('[data-testid="comments-blocklist-panel"]')),
     hasQueue: document.body?.innerText?.includes('Moderation Queue') || false,
     hasApi: document.body?.innerText?.includes('Comment moderation API') || false,
-    hasBulk: document.body?.innerText?.includes('Bulk decisions') || false,
+    hasBulk: Boolean(document.querySelector('[data-testid="comments-control-map"] a[href="#comments-actions"]')),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Comments page has horizontal overflow: ${JSON.stringify(layout)}`);
+  assert(layout.hasControlMapDetails && layout.controlMapDefaultCollapsed && !layout.controlMapOpen && layout.hasControlMap, `Comments control map should start collapsed but remain available: ${JSON.stringify(layout)}`);
+  assert(layout.hasConnectedWorkflowsDetails && layout.connectedWorkflowsDefaultCollapsed && !layout.connectedWorkflowsOpen && layout.hasConnectedWorkflows, `Comments connected workflows should start collapsed but remain available: ${JSON.stringify(layout)}`);
+  assert(layout.hasEvidenceDetails && layout.evidenceDefaultCollapsed && !layout.evidenceOpen && layout.hasEvidencePanels, `Comments evidence/API diagnostics should start collapsed but remain available: ${JSON.stringify(layout)}`);
   assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasDelivery && layout.hasAudit && layout.hasThreadPanel && layout.hasBlocklist && layout.hasQueue && layout.hasApi && layout.hasBulk, `Comments page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
@@ -1483,10 +1889,84 @@ const cleanup = async ({ client, childProcess, userDataDir, pageId }) => {
   }
 };
 
+const runCommentDeleteDialogSmoke = async () => {
+  let client;
+  let childProcess;
+  let userDataDir;
+  let page;
+  const suffix = Date.now().toString(36);
+  const authorName = `Comments Delete Dialog ${suffix}`;
+  const requestId = `comments-delete-dialog-${suffix}`;
+
+  try {
+    await cleanupSmokeBlocklistResidue();
+    page = await createPage();
+    await patchSiteCommentPolicy({
+      enabled: true,
+      moderationMode: 'manual',
+      allowGuests: true,
+      requireName: true,
+      requireEmail: false,
+      allowReplies: true,
+      enableReports: true,
+      enableCaptcha: false,
+      captchaProvider: 'mock',
+      captchaSiteKey: '',
+      blockedTerms: [],
+      closedMessage: 'Comments are closed for this site.',
+      sort: 'newest',
+    });
+    const comment = await submitComment({
+      pageId: page.id,
+      authorName,
+      authorEmail: `comments-delete-dialog-${suffix}@example.com`,
+      content: 'Temporary comment for delete-dialog recovery coverage.',
+      requestId,
+    });
+
+    ({ childProcess, userDataDir } = launchChrome());
+    const target = await waitForCdp();
+    client = connectCdp(target.webSocketDebuggerUrl);
+    await client.opened;
+    await client.send('Runtime.enable');
+    await client.send('Page.enable');
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      width: 1680,
+      height: 1180,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await seedBrowserSessionCookie(client);
+    await client.send('Page.addScriptToEvaluateOnNewDocument', { source: getAuthStorageScript() });
+
+    await navigateToComments(client, [authorName]);
+    const semantics = await assertCommentDeleteDialogRecovery(client, authorName);
+    const comments = await listComments(requestId);
+    assert(comments.some((item) => item.id === comment.id), 'Comment disappeared after Escape/cancel delete-dialog recovery.');
+
+    console.log(JSON.stringify({
+      ok: true,
+      guard: 'comments-delete-dialog',
+      siteId: SITE_ID,
+      pageId: page.id,
+      commentId: comment.id,
+      semantics,
+    }, null, 2));
+  } finally {
+    await cleanup({ client, childProcess, userDataDir, pageId: page?.id });
+  }
+};
+
 const main = async () => {
   assertCommentsRouteSourceContract();
   if (process.env.BACKY_COMMENTS_SOURCE_ONLY === '1') {
     console.log(JSON.stringify({ ok: true, guard: 'comments-source' }));
+    return;
+  }
+
+  await loginAdminApi();
+  if (process.env.BACKY_COMMENTS_DELETE_DIALOG_SMOKE === '1') {
+    await runCommentDeleteDialogSmoke();
     return;
   }
 
@@ -1502,7 +1982,6 @@ const main = async () => {
   let restoredNotifications = false;
 
   try {
-    await loginAdminApi();
     await assertCommentsPermissionOverridesAreEnforced();
     webhookReceiver = await startCommentWebhookReceiver({ failFirstKind: 'comment-reported' });
     const currentSettings = await getAdminSettings();
@@ -1776,6 +2255,16 @@ const main = async () => {
     assert(reportDisabled.status === 403, `Reports-disabled policy should reject with 403: ${JSON.stringify(reportDisabled)}`);
 
     await focusCommentInUi(client, { requestId: approveRequestId, authorName: 'Comments Smoke Approve', targetId: page.id });
+    await assertCommentsBulkActionStatusInUi(client, {
+      authorName: 'Comments Smoke Approve',
+      requestId: approveRequestId,
+    });
+    await assertCommentActionStatusInUi(client, {
+      authorName: 'Comments Smoke Approve',
+      requestId: approveRequestId,
+      expectedStatus: 'Approve available. Reject available. Spam available. Block available. Delete available. Reply available.',
+      readyActions: ['Approve', 'Reject', 'Spam', 'Block', 'Delete', 'Reply'],
+    });
     await moderateCommentInUi(client, 'Comments Smoke Approve', 'approved');
     const approved = await waitForCommentStatus(approveComment.id, approveRequestId, 'approved');
     assert(approved.reviewedBy, `Approved comment did not record reviewer: ${JSON.stringify(approved)}`);
@@ -1786,6 +2275,12 @@ const main = async () => {
     assert(rejected.rejectionReason === 'Rejected by comments smoke.', `Reject reason did not persist: ${JSON.stringify(rejected)}`);
 
     await focusCommentInUi(client, { requestId: reportRequestId, authorName: 'Comments Smoke Report', targetId: page.id });
+    await assertCommentActionStatusInUi(client, {
+      authorName: 'Comments Smoke Report',
+      requestId: reportRequestId,
+      expectedStatus: 'Approve available. Reject available. Spam available. Block available. Delete available. Resolve reports available. Reply available.',
+      readyActions: ['Approve', 'Reject', 'Spam', 'Block', 'Delete', 'Resolve reports', 'Reply'],
+    });
     await resolveReportsInUi(client, 'Comments Smoke Report', reportRequestId);
     const resolvedReport = await waitForCommentReports(reportedComment.id, reportRequestId, 0);
     assert(!resolvedReport.reportReasons?.length, `Report reasons were not cleared: ${JSON.stringify(resolvedReport)}`);

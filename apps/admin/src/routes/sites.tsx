@@ -49,6 +49,7 @@ import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteRouteSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
 
 interface SitesSearch {
@@ -491,10 +492,10 @@ const getApiBaseUrl = (kind: 'public' | 'admin'): string => {
   ).trim();
 
   if (!envBase && typeof window !== 'undefined' && window.location.port === '5173') {
-    return kind === 'admin' ? 'http://localhost:3001/api/admin' : 'http://localhost:3001/api';
+    return kind === 'admin' ? `${getLocalBackendOrigin()}/api/admin` : `${getLocalBackendOrigin()}/api`;
   }
 
-  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin());
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api${kind === 'admin' ? '/admin' : ''}`;
 };
 
@@ -627,7 +628,7 @@ function SitesListView() {
   const [pageCoverageFilter, setPageCoverageFilter] = useState<SitePageCoverageFilter>('all');
   const [updatingSiteId, setUpdatingSiteId] = useState<string | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
-  const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
+  const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [platformSettings, setPlatformSettings] = useState<SiteSettingsInput | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -636,13 +637,18 @@ function SitesListView() {
   const [auditError, setAuditError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Site | null>(null);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.view');
-  const canCreateSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.create');
-  const canConfigureSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.configure');
-  const canDeleteSites = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'sites.delete');
-  const canManageBilling = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'settings.billing');
-  const canExportActivity = !isPermissionMatrixPending && isSitePermissionAllowed(permissionMatrix, currentAdmin, 'activity.export');
+  const canUseSiteRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSiteRoleDefaults;
+  const isSitesPermissionAllowed = (key: SitePermissionKey) => (
+    isSitePermissionAllowed(permissionMatrix, currentAdmin, key)
+    || (canUseSiteRoleDefaults && Boolean(currentAdmin && SITE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canViewSites = isSitesPermissionAllowed('sites.view');
+  const canCreateSites = isSitesPermissionAllowed('sites.create');
+  const canConfigureSites = isSitesPermissionAllowed('sites.configure');
+  const canDeleteSites = isSitesPermissionAllowed('sites.delete');
+  const canManageBilling = isSitesPermissionAllowed('settings.billing');
+  const canExportActivity = isSitesPermissionAllowed('activity.export');
   const viewPermissionTitle = canViewSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.view');
   const createPermissionTitle = canCreateSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.create');
   const configurePermissionTitle = canConfigureSites ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'sites.configure');
@@ -650,7 +656,16 @@ function SitesListView() {
   const billingPermissionTitle = canManageBilling ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'settings.billing');
   const activityPermissionTitle = canExportActivity ? undefined : sitePermissionReason(permissionMatrix, currentAdmin, 'activity.export');
   const isSiteMutationBusy = updatingSiteId !== null;
-  const isSitesBusy = isLoading || isSiteMutationBusy || isPermissionMatrixPending;
+  const isSitesBusy = isLoading || isSiteMutationBusy;
+  const createSiteActionStatusId = 'sites-create-action-status';
+  const createSiteActionDisabledReason = isSitesBusy
+    ? 'Sites are loading or another site action is running.'
+    : !canCreateSites
+      ? createPermissionTitle || 'Your account cannot create sites.'
+      : '';
+  const createSiteActionStatus = createSiteActionDisabledReason
+    ? `New site unavailable: ${createSiteActionDisabledReason}`
+    : 'New site available.';
   const publicApiBase = useMemo(() => getApiBaseUrl('public'), []);
   const adminApiBase = useMemo(() => getApiBaseUrl('admin'), []);
 
@@ -1240,78 +1255,147 @@ function SitesListView() {
     {
       key: 'actions',
       label: '',
-      render: (site) => (
-        <div className="flex items-center justify-end gap-2">
-          <a
-            href={getPublicPreviewHref(site)}
-            target="_blank"
-            rel="noreferrer"
-            aria-disabled={isSitesBusy}
-            onClick={(event) => {
-              if (isSitesBusy) {
-                event.preventDefault();
-              }
-            }}
-            className={cn(
-              'rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring',
-              isSitesBusy && 'pointer-events-none cursor-not-allowed opacity-50',
-            )}
-            aria-label={`Preview ${site.name}`}
-            title="Preview site"
+      render: (site) => {
+        const siteActionStatusId = `sites-actions-status-${site.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+        const siteActionBusyReason = isSitesBusy
+          ? 'Site actions are temporarily unavailable while Backy updates sites.'
+          : '';
+        const previewDisabledReason = siteActionBusyReason;
+        const manageDisabledReason = siteActionBusyReason;
+        const duplicateDisabledReason = siteActionBusyReason || (!canCreateSites
+          ? createPermissionTitle || 'Your account cannot create sites.'
+          : '');
+        const archiveDisabledReason = siteActionBusyReason || (!canDeleteSites
+          ? deletePermissionTitle || 'Your account cannot archive sites.'
+          : site.status === 'archived'
+            ? 'This site is already archived.'
+            : '');
+        const deleteDisabledReason = siteActionBusyReason || (!canDeleteSites
+          ? deletePermissionTitle || 'Your account cannot delete sites.'
+          : '');
+        const siteActionStatus = [
+          previewDisabledReason ? `Preview unavailable: ${previewDisabledReason}` : 'Preview available.',
+          manageDisabledReason ? `Manage unavailable: ${manageDisabledReason}` : 'Manage available.',
+          duplicateDisabledReason ? `Duplicate unavailable: ${duplicateDisabledReason}` : 'Duplicate available.',
+          archiveDisabledReason ? `Archive unavailable: ${archiveDisabledReason}` : 'Archive available.',
+          deleteDisabledReason ? `Delete unavailable: ${deleteDisabledReason}` : 'Delete available.',
+        ].join(' ');
+
+        return (
+          <div
+            className="flex items-center justify-end gap-2"
+            role="group"
+            aria-label={`Actions for ${site.name}`}
+            aria-describedby={siteActionStatusId}
+            data-testid={`sites-actions-${site.id}`}
+            data-action-status={siteActionStatus}
           >
-            <Eye className="h-4 w-4" />
-          </a>
-          <button
-            type="button"
-            onClick={() => {
-              if (!isSitesBusy) {
-                void navigate({ to: '/sites/$siteId', params: { siteId: site.id } });
-              }
-            }}
-            disabled={isSitesBusy}
-            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={`Manage ${site.name}`}
-            title="Manage site"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleDuplicateSite(site)}
-            disabled={isSitesBusy || !canCreateSites}
-            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={`Duplicate ${site.name}`}
-            title={canCreateSites ? 'Duplicate site' : createPermissionTitle}
-          >
-            <Copy className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleArchiveSite(site)}
-            disabled={isSitesBusy || !canDeleteSites || site.status === 'archived'}
-            className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={`Archive ${site.name}`}
-            title={canDeleteSites ? 'Archive site' : deletePermissionTitle}
-          >
-            <Archive className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!isSitesBusy) {
-                setDeleteConfirmationText('');
-                setPendingDelete(site);
-              }
-            }}
-            disabled={isSitesBusy || !canDeleteSites}
-            className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label={`Delete ${site.name}`}
-            title={canDeleteSites ? 'Delete site' : deletePermissionTitle}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      ),
+            <span id={siteActionStatusId} className="sr-only" data-testid={`sites-actions-status-${site.id}`} aria-live="polite">
+              {siteActionStatus}
+            </span>
+            <a
+              href={getPublicPreviewHref(site)}
+              target="_blank"
+              rel="noreferrer"
+              aria-disabled={Boolean(previewDisabledReason)}
+              aria-describedby={siteActionStatusId}
+              data-testid={`sites-preview-${site.id}`}
+              data-action-state={previewDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={previewDisabledReason || undefined}
+              onClick={(event) => {
+                if (previewDisabledReason) {
+                  event.preventDefault();
+                }
+              }}
+              className={cn(
+                'rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring',
+                previewDisabledReason && 'pointer-events-none cursor-not-allowed opacity-50',
+              )}
+              aria-label={`Preview ${site.name}`}
+              title={previewDisabledReason || 'Preview site'}
+            >
+              <Eye className="h-4 w-4" />
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                if (!manageDisabledReason) {
+                  void navigate({ to: '/sites/$siteId', params: { siteId: site.id } });
+                }
+              }}
+              disabled={Boolean(manageDisabledReason)}
+              aria-disabled={Boolean(manageDisabledReason)}
+              aria-describedby={siteActionStatusId}
+              data-testid={`sites-manage-${site.id}`}
+              data-action-state={manageDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={manageDisabledReason || undefined}
+              className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`Manage ${site.name}`}
+              title={manageDisabledReason || 'Manage site'}
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!duplicateDisabledReason) {
+                  void handleDuplicateSite(site);
+                }
+              }}
+              disabled={Boolean(duplicateDisabledReason)}
+              aria-disabled={Boolean(duplicateDisabledReason)}
+              aria-describedby={siteActionStatusId}
+              data-testid={`sites-duplicate-${site.id}`}
+              data-action-state={duplicateDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={duplicateDisabledReason || undefined}
+              className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`Duplicate ${site.name}`}
+              title={duplicateDisabledReason || 'Duplicate site'}
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!archiveDisabledReason) {
+                  void handleArchiveSite(site);
+                }
+              }}
+              disabled={Boolean(archiveDisabledReason)}
+              aria-disabled={Boolean(archiveDisabledReason)}
+              aria-describedby={siteActionStatusId}
+              data-testid={`sites-archive-${site.id}`}
+              data-action-state={archiveDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={archiveDisabledReason || undefined}
+              className="rounded-lg border border-border p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`Archive ${site.name}`}
+              title={archiveDisabledReason || 'Archive site'}
+            >
+              <Archive className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!deleteDisabledReason) {
+                  setDeleteConfirmationText('');
+                  setPendingDelete(site);
+                }
+              }}
+              disabled={Boolean(deleteDisabledReason)}
+              aria-disabled={Boolean(deleteDisabledReason)}
+              aria-describedby={siteActionStatusId}
+              data-testid={`sites-delete-${site.id}`}
+              data-action-state={deleteDisabledReason ? 'blocked' : 'ready'}
+              data-disabled-reason={deleteDisabledReason || undefined}
+              className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`Delete ${site.name}`}
+              title={deleteDisabledReason || 'Delete site'}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -1487,7 +1571,11 @@ function SitesListView() {
           type="button"
           onClick={openNewSite}
           disabled={isSitesBusy || !canCreateSites}
-          title={createPermissionTitle}
+          title={createSiteActionDisabledReason || undefined}
+          aria-describedby={createSiteActionStatusId}
+          data-action-state={createSiteActionDisabledReason ? 'blocked' : 'ready'}
+          data-action-status={createSiteActionStatus}
+          data-disabled-reason={createSiteActionDisabledReason || undefined}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Plus className="h-4 w-4" />
@@ -1496,6 +1584,9 @@ function SitesListView() {
       }
       className="w-full"
     >
+      <span id={createSiteActionStatusId} className="sr-only" data-testid="sites-create-action-status" aria-live="polite">
+        {createSiteActionStatus}
+      </span>
       <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="sites-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -1527,7 +1618,11 @@ function SitesListView() {
               type="button"
               onClick={openNewSite}
               disabled={isSitesBusy || !canCreateSites}
-              title={createPermissionTitle}
+              title={createSiteActionDisabledReason || undefined}
+              aria-describedby={createSiteActionStatusId}
+              data-action-state={createSiteActionDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={createSiteActionStatus}
+              data-disabled-reason={createSiteActionDisabledReason || undefined}
               className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus className="size-4" />
@@ -1536,23 +1631,34 @@ function SitesListView() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="sites-rbac-scope">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+        <details
+          className="mt-4 rounded-lg border border-border bg-background"
+          data-testid="sites-rbac-scope"
+          data-default-collapsed="true"
+        >
+          <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-lg px-4 py-3 transition hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring [&::-webkit-details-marker]:hidden">
             <div>
               <h3 className="text-sm font-semibold">Workspace RBAC scope</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Effective role {permissionMatrix?.role || currentAdmin?.role || 'unknown'} controls site creation, configuration, destructive actions, and activity visibility.
               </p>
+              {(canUseSiteRoleDefaults || isPermissionMatrixPending) && (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="sites-permission-sync-state">
+                  {canUseSiteRoleDefaults
+                    ? 'Using role defaults while detailed site permissions sync.'
+                    : 'Loading detailed site permissions before enabling role-specific controls.'}
+                </p>
+              )}
             </div>
             <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
               {permissionMatrix ? `${permissionMatrix.summary.allowed}/${permissionMatrix.summary.total} allowed` : 'role defaults'}
             </span>
-          </div>
+          </summary>
           {permissionError && (
             <div
               role="alert"
               data-testid="sites-permission-state"
-              className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              className="mx-4 mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="flex gap-2">
@@ -1574,7 +1680,7 @@ function SitesListView() {
               </div>
             </div>
           )}
-          <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-2 px-4 pb-4 pt-3 md:grid-cols-2 xl:grid-cols-6">
             {([
               ['sites.view', 'View sites', canViewSites, viewPermissionTitle],
               ['sites.create', 'Create sites', canCreateSites, createPermissionTitle],
@@ -1598,7 +1704,7 @@ function SitesListView() {
               </div>
             ))}
           </div>
-        </div>
+        </details>
 
         <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
           <div className="rounded-lg border border-border bg-background p-4">
@@ -1632,10 +1738,16 @@ function SitesListView() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Sites control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to health, frontend APIs, feature systems, library controls, and site records.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+        <details
+          className="mt-4 rounded-lg border border-border bg-background"
+          data-testid="sites-control-map"
+          data-default-collapsed="true"
+        >
+          <summary className="cursor-pointer list-none rounded-lg px-4 py-3 transition hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring [&::-webkit-details-marker]:hidden">
+            <h3 className="text-sm font-semibold">Sites control map</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Jump to health, frontend APIs, feature systems, library controls, and site records.</p>
+          </summary>
+          <div className="grid gap-2 px-4 pb-4 pt-2 md:grid-cols-2 xl:grid-cols-6">
             {SITE_LIST_CONTROL_AREAS.map((area) => (
               <a
                 key={area.title}
@@ -1647,7 +1759,7 @@ function SitesListView() {
               </a>
             ))}
           </div>
-        </div>
+        </details>
       </section>
 
       <div id="sites-health" className="grid gap-3 scroll-mt-24 md:grid-cols-2 xl:grid-cols-4">
@@ -1667,6 +1779,32 @@ function SitesListView() {
         ))}
       </div>
 
+      <details
+        className="group overflow-hidden rounded-lg border border-border bg-card shadow-sm scroll-mt-24"
+        data-testid="sites-delivery-operations-details"
+        data-default-collapsed="true"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex min-w-0 items-center gap-3">
+            <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Server className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block">Delivery, deployment, and quota operations</span>
+              <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
+                DNS verification, Vercel handoffs, plan usage, and provider-adjacent site operations.
+              </span>
+            </span>
+          </span>
+          <span className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+              {selectedApiSite ? getDisplayDomain(selectedApiSite) : 'No site selected'}
+            </span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show operations</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide operations</span>
+          </span>
+        </summary>
+        <div className="grid gap-4 border-t border-border bg-background/40 p-4" data-testid="sites-delivery-operations-panels">
       <Panel id="sites-domain-verification" className="scroll-mt-24" data-testid="sites-domain-verification">
         <PanelHeader
           title="Domain verification"
@@ -2053,6 +2191,9 @@ function SitesListView() {
         </PanelContent>
       </Panel>
 
+        </div>
+      </details>
+
       <Panel id="sites-api" className="scroll-mt-24">
         <PanelHeader
           title="Site frontend API"
@@ -2259,7 +2400,34 @@ function SitesListView() {
         </PanelContent>
       </Panel>
 
-      <Panel id="sites-audit" className="scroll-mt-24" data-testid="sites-audit-panel">
+      <details
+        id="sites-audit"
+        className="group overflow-hidden rounded-lg border border-border bg-card shadow-sm scroll-mt-24"
+        data-testid="sites-audit-details"
+        data-default-collapsed="true"
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex min-w-0 items-center gap-3">
+            <span className="flex size-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Activity className="size-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block">Site audit trail</span>
+              <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">
+                Request-id-backed create, update, archive, duplicate, and delete evidence.
+              </span>
+            </span>
+          </span>
+          <span className="flex flex-shrink-0 items-center gap-2">
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+              {siteAuditLogs.length} loaded
+            </span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show audit</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide audit</span>
+          </span>
+        </summary>
+        <div className="border-t border-border bg-background/40 p-4" data-testid="sites-audit-disclosure-panel">
+      <Panel className="scroll-mt-24" data-testid="sites-audit-panel">
         <PanelHeader
           title="Site audit trail"
           description="Request-id-backed create, update, archive, duplicate, and delete events for site workspaces."
@@ -2326,6 +2494,8 @@ function SitesListView() {
           </div>
         </PanelContent>
       </Panel>
+        </div>
+      </details>
 
       <div id="sites-controls" className="rounded-lg border border-border bg-card p-4 shadow-sm scroll-mt-24">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -2510,7 +2680,11 @@ function SitesListView() {
                     type="button"
                     onClick={openNewSite}
                     disabled={isSitesBusy || !canCreateSites}
-                    title={createPermissionTitle}
+                    title={createSiteActionDisabledReason || undefined}
+                    aria-describedby={createSiteActionStatusId}
+                    data-action-state={createSiteActionDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={createSiteActionStatus}
+                    data-disabled-reason={createSiteActionDisabledReason || undefined}
                     className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Plus className="h-4 w-4" />

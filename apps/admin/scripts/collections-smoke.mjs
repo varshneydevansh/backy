@@ -33,6 +33,67 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('data-testid="collections-permission-state"') && source.includes('Collection permissions could not be verified'), 'Collections route must expose a labelled permission error state');
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Collections permission error state must link to user access management');
   assert(source.includes('data-testid="collections-rbac-permission-state"') && source.includes('aria-label="Retry loading collection permissions"'), 'Collections permission contract must expose a retryable permission error state');
+  assert(
+    source.includes('const canUseCollectionRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseCollectionRoleDefaults;') &&
+      source.includes('return COLLECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);') &&
+      source.includes("const canViewCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');") &&
+      source.includes("const canEditCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit');") &&
+      source.includes("const canExportCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export');") &&
+      source.includes("const canDeleteCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete');") &&
+      source.includes("const canViewMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);") &&
+      source.includes("const canCreateMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);") &&
+      source.includes('data-testid="collections-permission-sync-state"') &&
+      source.includes('const pending = isPermissionMatrixPending;') &&
+      !source.includes('const canViewCollections = !isPermissionMatrixPending') &&
+      !source.includes('const canViewMedia = !isPermissionMatrixPending') &&
+      !source.includes('const pending = isPermissionsLoading && !permissionMatrix;'),
+    'Collections route must keep role-default collection and media workflows usable while permission details hydrate',
+  );
+  assert(
+    source.includes('data-testid="collections-control-map-details"') &&
+      source.includes('data-testid="collections-control-map"') &&
+      source.includes('data-testid="collections-connected-workflows-details"') &&
+      source.includes('data-testid="collections-connected-workflows"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Show map') &&
+      source.includes('Hide map') &&
+      source.includes('Show workflows') &&
+      source.includes('Hide workflows') &&
+      source.includes('Keep page, media, commerce, form, site, and API shortcuts available without stretching the schema workspace.'),
+    'Collections command center must keep low-frequency maps and workflow shortcuts behind collapsed disclosures.',
+  );
+  assert(
+    source.includes('data-testid="collections-audit-details"') &&
+      source.includes('data-testid="collections-audit-panel"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Permission keys plus request-id-backed schema and record activity evidence.') &&
+      source.includes('Show activity') &&
+      source.includes('Hide activity'),
+    'Collections audit and permission evidence must live behind a default-collapsed disclosure instead of stretching the default schema workspace.',
+  );
+  assert(
+    source.includes("const collectionActionStatusId = 'collections-collection-action-status';") &&
+      source.includes('const backupImportDisabledReason = isLoading') &&
+      source.includes('const newCollectionActionStatus = newCollectionDisabledReason') &&
+      source.includes('const backupImportActionStatus = backupImportDisabledReason') &&
+      source.includes('const collectionActionStatus = `${newCollectionActionStatus} ${backupImportActionStatus}`;') &&
+      source.includes('data-testid="collections-collection-action-status"') &&
+      source.includes('data-action-status={newCollectionActionStatus}') &&
+      source.includes('data-action-status={backupImportActionStatus}') &&
+      source.includes('data-action-state={actionState(newCollectionDisabledReason || \'\')}') &&
+      source.includes('data-action-state={actionState(backupImportDisabledReason)}') &&
+      source.includes('data-disabled-reason={newCollectionDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={backupImportDisabledReason || undefined}') &&
+      source.includes('data-target-site-id={activeSiteId}') &&
+      source.includes('disabled={Boolean(backupImportDisabledReason)}') &&
+      source.includes('data-testid="collections-new-collection-button"') &&
+      source.includes('data-testid="collections-library-new-collection-button"') &&
+      source.includes('data-testid="collections-empty-new-collection-button"') &&
+      source.includes('data-testid="collections-import-backup"') &&
+      source.includes('data-testid="collections-import-backup-input"'),
+    'Collections primary schema actions must expose shared ready/blocked status metadata for New collection and JSON backup import entry points.',
+  );
   assert(source.includes('title="No collection activity yet"'), 'Collections audit panel must keep the empty activity title visible');
   assert(source.includes('Collection schema changes, record edits, imports, exports, and deletes will appear here for audit review.'), 'Collections audit empty state must explain which actions populate activity');
   assert(source.includes('title="No outgoing relationships"'), 'Collections relationship browser must keep the outgoing empty-state title visible');
@@ -44,9 +105,9 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('title="No item template capture history"'), 'Collections item template history must use a shared empty-state title');
   assert(source.includes('Capture an item canvas to create rollback-ready versions for generated collection detail pages.'), 'Collections item template history empty state must explain the capture workflow');
   assert(
-    source.includes('customJS?: string;') &&
+      source.includes('customJS?: string;') &&
       source.includes('themeTokenRefs?: Record<string, string>;') &&
-      source.includes('animations?: unknown[];') &&
+      source.includes('animations?: unknown[] | Record<string, unknown>;') &&
       source.includes('contentDocument?: Record<string, unknown>;') &&
       source.includes('authoredDynamicTemplateDesignStateSummary') &&
       source.includes('Design state') &&
@@ -68,6 +129,18 @@ const assertCollectionsRouteSourceContract = () => {
       source.includes('data-testid="collections-record-bulk-clear-selection"') &&
       source.includes('outside this view'),
     'Collections record bulk toolbar must load/select every matching record and summarize hidden selected records before bulk mutations',
+  );
+  assert(
+    source.includes('const actionState = (disabledReason: string) =>') &&
+      source.includes('const recordBulkActionStatusId =') &&
+      source.includes('data-testid="collections-record-bulk-action-status"') &&
+      source.includes('data-action-status={recordBulkActionStatus}') &&
+      source.includes('data-action-state={actionState(recordBulkEditDisabledReason)}') &&
+      source.includes('data-action-state={actionState(recordBulkClearDisabledReason)}') &&
+      source.includes('data-action-state={actionState(recordBulkDeleteDisabledReason)}') &&
+      source.includes('data-testid="collections-record-bulk-delete"') &&
+      source.includes('data-disabled-reason={recordBulkDeleteDisabledReason || undefined}'),
+    'Collections record bulk toolbar must expose action-status, ready/blocked states, and disabled reasons for selected-record mutations',
   );
   assert(
     source.includes('const [recordFormSubmitted, setRecordFormSubmitted] = useState(false);') &&
@@ -171,7 +244,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_COLLECTIONS_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -534,37 +608,49 @@ const createRecord = async ({ collectionId, slug, title }) => {
 };
 
 const selectRecordForEdit = async (client, recordSlug) => {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const selected = await evaluate(client, `(() => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const params = new URLSearchParams(window.location.search);
+      const slugInput = document.querySelector('#collections-record-slug');
+      const editor = document.querySelector('[data-testid="collections-record-editor"]');
+      const editState = {
+        hasEditMode: editor?.textContent?.includes('Edit record') || false,
+        slugValue: slugInput instanceof HTMLInputElement ? slugInput.value : null,
+        recordId: params.get('recordId'),
+      };
+      if (editState.hasEditMode && editState.slugValue === ${JSON.stringify(recordSlug)} && editState.recordId) {
+        return { ok: true, settled: true, ...editState };
+      }
       const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
         (candidate.textContent || '').trim() === ${JSON.stringify(recordSlug)}
       ));
       if (!(button instanceof HTMLButtonElement)) {
-        return { ok: false, reason: 'record-row-button-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+        return {
+          ok: false,
+          reason: 'record-row-button-missing',
+          ...editState,
+          body: document.body?.innerText?.slice(0, 1000) || '',
+        };
       }
-      if (button.disabled) return { ok: false, reason: 'record-row-button-disabled' };
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'record-row-button-disabled',
+          ...editState,
+          buttonText: button.textContent || '',
+        };
+      }
+      button.scrollIntoView({ block: 'center' });
       button.click();
-      return { ok: true };
-    })()`);
-    if (selected.ok) break;
-    if (attempt === 39) {
-      throw new Error(`Unable to select collection record for edit: ${JSON.stringify(selected)}`);
-    }
-    await sleep(250);
-  }
-
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const state = await evaluate(client, `(() => {
-      const params = new URLSearchParams(window.location.search);
-      const slugInput = document.querySelector('#collections-record-slug');
       return {
-        hasEditMode: document.querySelector('[data-testid="collections-record-editor"]')?.textContent?.includes('Edit record') || false,
-        slugValue: slugInput instanceof HTMLInputElement ? slugInput.value : null,
-        recordId: params.get('recordId'),
+        ok: false,
+        clicked: true,
+        ...editState,
+        buttonText: button.textContent || '',
       };
     })()`);
-    if (state.hasEditMode && state.slugValue === recordSlug && state.recordId) return state;
-    if (attempt === 39) {
+    if (state.ok && state.settled) return state;
+    if (attempt === 79) {
       throw new Error(`Collection record edit state did not settle: ${JSON.stringify(state)}`);
     }
     await sleep(250);
@@ -851,6 +937,12 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
     const authoringText = document.querySelector('[data-testid="collections-authoring-shortcuts"]')?.textContent || '';
     const listTemplateHistoryText = document.querySelector('[data-testid="collections-list-template-history"]')?.textContent || '';
     const itemTemplateHistoryText = document.querySelector('[data-testid="collections-item-template-history"]')?.textContent || '';
+    const controlMapDetails = document.querySelector('[data-testid="collections-control-map-details"]');
+    const connectedWorkflowsDetails = document.querySelector('[data-testid="collections-connected-workflows-details"]');
+    const auditDetails = document.querySelector('[data-testid="collections-audit-details"]');
+    const controlMapText = controlMapDetails?.textContent || '';
+    const connectedWorkflowsText = connectedWorkflowsDetails?.textContent || '';
+    const auditText = auditDetails?.textContent || '';
     const dynamicTemplateChecks = {
       hasControls: Boolean(document.querySelector('[data-testid="collections-dynamic-template-controls"]')),
       hasFrontendControl: Boolean(document.querySelector('[data-testid="collections-frontend-template-control"]')),
@@ -873,6 +965,25 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       scrollWidth: document.documentElement.scrollWidth,
       path: window.location.pathname,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="collections-command-center"]')),
+      controlMapCollapsed: controlMapDetails instanceof HTMLDetailsElement &&
+        controlMapDetails.open === false &&
+        controlMapDetails.getAttribute('data-default-collapsed') === 'true',
+      connectedWorkflowsCollapsed: connectedWorkflowsDetails instanceof HTMLDetailsElement &&
+        connectedWorkflowsDetails.open === false &&
+        connectedWorkflowsDetails.getAttribute('data-default-collapsed') === 'true',
+      auditCollapsed: auditDetails instanceof HTMLDetailsElement &&
+        auditDetails.open === false &&
+        auditDetails.getAttribute('data-default-collapsed') === 'true',
+      hasControlMap: Boolean(document.querySelector('[data-testid="collections-control-map"]')) &&
+        controlMapText.includes('Collections control map') &&
+        controlMapText.includes('Show map') &&
+        controlMapText.includes('API delivery') &&
+        controlMapText.includes('record operations'),
+      hasConnectedWorkflows: Boolean(document.querySelector('[data-testid="collections-connected-workflows"]')) &&
+        connectedWorkflowsText.includes('Connected data workflows') &&
+        connectedWorkflowsText.includes('Show workflows') &&
+        connectedWorkflowsText.includes('commerce objects') &&
+        connectedWorkflowsText.includes('runtime API delivery'),
       hasTemplates: Boolean(document.querySelector('[data-testid="collections-templates"]')),
       hasFrontendTemplates: Boolean(document.querySelector('[data-testid="collections-frontend-template-options"]')) &&
         Boolean(document.querySelector(${JSON.stringify(`[data-testid="collections-frontend-template-${FRONTEND_COLLECTION_TEMPLATE_ID}"]`)})) &&
@@ -886,6 +997,30 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         Boolean(document.querySelector('[data-testid="collections-export-backup"]')) &&
         Boolean(document.querySelector('[data-testid="collections-import-backup"]')) &&
         Boolean(document.querySelector('[data-testid="collections-import-backup-input"]')),
+      collectionActionStatus: (() => {
+        const status = document.querySelector('[data-testid="collections-collection-action-status"]');
+        const header = document.querySelector('[data-testid="collections-new-collection-button"]');
+        const library = document.querySelector('[data-testid="collections-library-new-collection-button"]');
+        const backup = document.querySelector('[data-testid="collections-import-backup"]');
+        const backupInput = document.querySelector('[data-testid="collections-import-backup-input"]');
+        return {
+          statusId: status?.id || '',
+          statusText: (status?.textContent || '').replace(/\\s+/g, ' ').trim(),
+          headerDescribedBy: header?.getAttribute('aria-describedby') || '',
+          headerStatus: header?.getAttribute('data-action-status') || '',
+          headerState: header?.getAttribute('data-action-state') || '',
+          headerTargetSite: header?.getAttribute('data-target-site-id') || '',
+          libraryDescribedBy: library?.getAttribute('aria-describedby') || '',
+          libraryStatus: library?.getAttribute('data-action-status') || '',
+          libraryState: library?.getAttribute('data-action-state') || '',
+          backupDescribedBy: backup?.getAttribute('aria-describedby') || '',
+          backupStatus: backup?.getAttribute('data-action-status') || '',
+          backupState: backup?.getAttribute('data-action-state') || '',
+          backupTargetSite: backup?.getAttribute('data-target-site-id') || '',
+          backupInputState: backupInput?.getAttribute('data-action-state') || '',
+          backupInputDisabled: backupInput instanceof HTMLInputElement ? backupInput.disabled : null,
+        };
+      })(),
       hasFrontendContract: body.includes('Dynamic data frontend contract') && body.includes('Frontend wiring'),
       hasBindingContract: Boolean(document.querySelector('[data-testid="collections-binding-contract"]')) &&
         body.includes('Editor data-binding contract') &&
@@ -934,11 +1069,12 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       hasAuditPanel: Boolean(document.querySelector('[data-testid="collections-audit-panel"]')) &&
         Boolean(document.querySelector('[data-testid="collections-permission-contract"]')) &&
         Boolean(document.querySelector('[data-testid="collections-audit-list"]')) &&
-        body.includes('Collections access and activity') &&
-        body.includes('collections.view') &&
-        body.includes('collections.edit') &&
-        body.includes('Collection created') &&
-        body.includes('Collection record created'),
+        auditText.includes('Collections access and activity') &&
+        auditText.includes('Show activity') &&
+        auditText.includes('collections.view') &&
+        auditText.includes('collections.edit') &&
+        auditText.includes('Collection created') &&
+        auditText.includes('Collection record created'),
       hasBuilder: body.includes('Schema builder') && body.includes('Public read') && body.includes('Visitor create'),
       hasRecords: body.includes('Records') && body.includes('Import CSV') && body.includes('Export CSV') && body.includes('New record'),
       hasCollection: body.includes(${JSON.stringify(collectionName)}) && body.includes(${JSON.stringify(`/${collectionSlug}`)}),
@@ -956,6 +1092,11 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
     assert(layout.scrollWidth <= layout.width + 8, `Collections page has horizontal overflow: ${JSON.stringify(layout)}`);
     const layoutReady = layout.path === '/collections' &&
       layout.hasCommandCenter &&
+      layout.controlMapCollapsed &&
+      layout.connectedWorkflowsCollapsed &&
+      layout.auditCollapsed &&
+      layout.hasControlMap &&
+      layout.hasConnectedWorkflows &&
       layout.hasTemplates &&
       layout.hasFrontendTemplates &&
       layout.hasApiContract &&
@@ -971,7 +1112,23 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       layout.hasRecord &&
       layout.hasFieldControls &&
       layout.hasSelectionControl;
-    if (layoutReady) {
+    const collectionActionReady = layout.collectionActionStatus.statusId === 'collections-collection-action-status' &&
+      layout.collectionActionStatus.statusText.includes('New collection available') &&
+      layout.collectionActionStatus.statusText.includes('Import JSON available') &&
+      layout.collectionActionStatus.headerDescribedBy.includes(layout.collectionActionStatus.statusId) &&
+      layout.collectionActionStatus.headerStatus.includes('New collection available') &&
+      layout.collectionActionStatus.headerState === 'ready' &&
+      layout.collectionActionStatus.headerTargetSite === SITE_ID &&
+      layout.collectionActionStatus.libraryDescribedBy.includes(layout.collectionActionStatus.statusId) &&
+      layout.collectionActionStatus.libraryStatus === layout.collectionActionStatus.headerStatus &&
+      layout.collectionActionStatus.libraryState === 'ready' &&
+      layout.collectionActionStatus.backupDescribedBy === layout.collectionActionStatus.statusId &&
+      layout.collectionActionStatus.backupStatus.includes('Import JSON available') &&
+      layout.collectionActionStatus.backupState === 'ready' &&
+      layout.collectionActionStatus.backupTargetSite === SITE_ID &&
+      layout.collectionActionStatus.backupInputState === 'ready' &&
+      layout.collectionActionStatus.backupInputDisabled === false;
+    if (layoutReady && collectionActionReady) {
       return layout;
     }
     await sleep(250);
@@ -1052,8 +1209,38 @@ const assertCollectionBackupControls = async (client, collectionId) => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const importState = await evaluate(client, `(() => {
       const input = document.querySelector('[data-testid="collections-import-backup-input"]');
+      const button = document.querySelector('[data-testid="collections-import-backup"]');
+      const status = document.querySelector('[data-testid="collections-collection-action-status"]');
       if (!(input instanceof HTMLInputElement)) {
         return { ok: false, reason: 'backup-import-input-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      const actionState = {
+        statusId: status?.id || '',
+        statusText: (status?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        inputDescribedBy: input.getAttribute('aria-describedby') || '',
+        inputStatus: input.getAttribute('data-action-status') || '',
+        inputState: input.getAttribute('data-action-state') || '',
+        buttonDescribedBy: button?.getAttribute('aria-describedby') || '',
+        buttonStatus: button?.getAttribute('data-action-status') || '',
+        buttonState: button?.getAttribute('data-action-state') || '',
+        disabledReason: button?.getAttribute('data-disabled-reason') || '',
+        targetSiteId: button?.getAttribute('data-target-site-id') || '',
+      };
+      if (
+        !(status instanceof HTMLElement) ||
+        !(button instanceof HTMLButtonElement) ||
+        actionState.statusId !== 'collections-collection-action-status' ||
+        actionState.inputDescribedBy !== actionState.statusId ||
+        actionState.buttonDescribedBy !== actionState.statusId ||
+        !actionState.statusText.includes(actionState.buttonStatus) ||
+        actionState.buttonStatus !== actionState.inputStatus ||
+        !actionState.buttonStatus.includes('Import JSON available') ||
+        actionState.buttonState !== 'ready' ||
+        actionState.inputState !== 'ready' ||
+        actionState.disabledReason !== '' ||
+        actionState.targetSiteId !== ${JSON.stringify(SITE_ID)}
+      ) {
+        return { ok: false, reason: 'backup-import-action-status', actionState };
       }
       if (input.disabled) return { ok: false, reason: 'backup-import-input-disabled' };
       const file = new File([${JSON.stringify(JSON.stringify(backup))}], 'collections-smoke-backup.json', { type: 'application/json' });
@@ -1090,19 +1277,45 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const clicked = await evaluate(client, `(() => {
       const button = document.querySelector(${JSON.stringify(`[data-testid="${testId}"]`)});
+      const status = document.querySelector('[data-testid="collections-collection-action-status"]');
       if (!(button instanceof HTMLButtonElement)) {
         return { ok: false, reason: 'new-collection-button-missing' };
+      }
+      const actionState = {
+        statusId: status?.id || '',
+        statusText: (status?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        describedBy: button.getAttribute('aria-describedby') || '',
+        dataStatus: button.getAttribute('data-action-status') || '',
+        dataState: button.getAttribute('data-action-state') || '',
+        disabledReason: button.getAttribute('data-disabled-reason') || '',
+        targetSiteId: button.getAttribute('data-target-site-id') || '',
+      };
+      if (
+        !(status instanceof HTMLElement) ||
+        actionState.statusId !== 'collections-collection-action-status' ||
+        !actionState.describedBy.includes(actionState.statusId) ||
+        !actionState.statusText.includes(actionState.dataStatus) ||
+        !(
+          actionState.dataStatus.includes('New collection available') ||
+          actionState.dataStatus.includes('New collection draft is open')
+        ) ||
+        actionState.dataState !== 'ready' ||
+        actionState.disabledReason !== '' ||
+        actionState.targetSiteId !== ${JSON.stringify(SITE_ID)}
+      ) {
+        return { ok: false, reason: 'new-collection-action-status', actionState };
       }
       if (button.disabled) {
         return {
           ok: false,
           reason: 'new-collection-button-disabled',
           title: button.getAttribute('title') || '',
+          actionState,
           body: document.body?.innerText?.slice(0, 1200) || '',
         };
       }
       button.click();
-      return { ok: true };
+      return { ok: true, actionState };
     })()`);
     if (clicked.ok) break;
     if (attempt === 119) {
@@ -1174,6 +1387,9 @@ const assertNewCollectionButtonReset = async (client, testId = 'collections-new-
         button.click();
         return { ok: true };
       })()`);
+      if (!clickedOpenDraft.ok && clickedOpenDraft.reason === 'new-collection-button-missing') {
+        return;
+      }
       assert(clickedOpenDraft.ok, `Unable to click already-open New collection draft button: ${JSON.stringify(clickedOpenDraft)}`);
 
       for (let alreadyOpenAttempt = 0; alreadyOpenAttempt < 40; alreadyOpenAttempt += 1) {
@@ -1519,6 +1735,35 @@ const assertCollectionRecordMediaFieldsThroughUi = async (client, collectionId, 
     await sleep(150);
   }
 
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const heroField = document.querySelector('[data-testid="collections-record-field-hero_image"]');
+      const galleryField = document.querySelector('[data-testid="collections-record-field-gallery_files"]');
+      return {
+        modalOpen: Boolean(document.querySelector('[data-testid="media-library-modal"]')),
+        heroValue: heroField instanceof HTMLInputElement ? heroField.value : null,
+        galleryValue: galleryField instanceof HTMLTextAreaElement ? galleryField.value : null,
+        error: document.querySelector('[data-testid="collections-error"]')?.textContent || '',
+        saveDisabled: document.querySelector('[data-testid="collections-record-save-button"]')?.disabled ?? null,
+      };
+    })()`);
+    const gallery = String(state.galleryValue || '').split(/[\\n,]/).map((item) => item.trim()).filter(Boolean);
+    if (
+      !state.modalOpen &&
+      state.heroValue === 'media-demo-hero' &&
+      gallery.length === 2 &&
+      gallery.includes('media-demo-hero') &&
+      gallery.includes('media-demo-logo') &&
+      state.saveDisabled === false
+    ) {
+      break;
+    }
+    if (attempt === 39) {
+      throw new Error(`Media-backed collection record form did not settle before save: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
   const clickedSave = await evaluate(client, `(() => {
     const form = document.querySelector('#collections-record-editor');
     const button = form?.querySelector('button[type="submit"]');
@@ -1545,7 +1790,14 @@ const assertCollectionRecordMediaFieldsThroughUi = async (client, collectionId, 
   }
 
   const record = await fetchRecordBySlug(collectionId, recordSlug);
-  throw new Error(`Media-backed collection record values did not persist: ${JSON.stringify(record).slice(0, 1000)}`);
+  const pageState = await evaluate(client, `(() => ({
+    notice: document.querySelector('[data-testid="collections-success-notice"]')?.textContent || '',
+    error: document.querySelector('[data-testid="collections-error"]')?.textContent || '',
+    validation: Array.from(document.querySelectorAll('[data-testid="collections-validation-detail"]')).map((node) => node.textContent || ''),
+    heroValue: document.querySelector('[data-testid="collections-record-field-hero_image"]')?.value || '',
+    galleryValue: document.querySelector('[data-testid="collections-record-field-gallery_files"]')?.value || '',
+  }))()`);
+  throw new Error(`Media-backed collection record values did not persist: ${JSON.stringify({ record, pageState }).slice(0, 1200)}`);
 };
 
 const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => {
@@ -1690,6 +1942,18 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
       createMode.dispatchEvent(new Event('change', { bubbles: true }));
       setNativeValue(updateMode, 'selected');
       updateMode.dispatchEvent(new Event('change', { bubbles: true }));
+      if (createTitleField.disabled || createCategoryField.disabled || createSummaryField.disabled || summaryField.disabled) {
+        return {
+          ok: false,
+          reason: 'field-controls-awaiting-mode',
+          createMode: createMode.value,
+          updateMode: updateMode.value,
+          createTitleDisabled: createTitleField.disabled,
+          createCategoryDisabled: createCategoryField.disabled,
+          createSummaryDisabled: createSummaryField.disabled,
+          summaryDisabled: summaryField.disabled,
+        };
+      }
       [createTitleField, createCategoryField, createSummaryField].forEach((field) => {
         if (!field.checked) field.click();
       });
@@ -1725,6 +1989,7 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const state = await evaluate(client, `(() => ({
+      body: document.body?.innerText || '',
       updateChecked: document.querySelector('[data-testid="collections-public-update-toggle"] input')?.checked || false,
       deleteChecked: document.querySelector('[data-testid="collections-public-delete-toggle"] input')?.checked || false,
       tokenValue: document.querySelector('[data-testid="collections-visitor-write-token"]')?.value || '',
@@ -1744,7 +2009,10 @@ const configureVisitorMutationPolicyThroughUi = async (client, collectionId, tok
       state.createTitleChecked &&
       state.createCategoryChecked &&
       state.createSummaryChecked &&
-      state.summaryChecked
+      state.summaryChecked &&
+      state.body.includes('3 fields writable from public POST') &&
+      state.body.includes('Token configured for enabled public mutation routes.') &&
+      state.body.includes('1 fields writable from public PATCH')
     ) {
       break;
     }
@@ -2289,6 +2557,58 @@ const publishRecordThroughUi = async (client, recordSlug) => {
     await sleep(250);
   }
 
+  const bulkActionStatus = await evaluate(client, `(() => {
+    const toolbar = document.querySelector('[data-testid="collections-record-bulk-toolbar"]');
+    const status = document.querySelector('[data-testid="collections-record-bulk-action-status"]');
+    const publish = document.querySelector('[data-testid="collections-record-bulk-publish"]');
+    const draft = document.querySelector('[data-testid="collections-record-bulk-draft"]');
+    const archive = document.querySelector('[data-testid="collections-record-bulk-archive"]');
+    const clear = document.querySelector('[data-testid="collections-record-bulk-clear-selection"]');
+    const del = document.querySelector('[data-testid="collections-record-bulk-delete"]');
+    return {
+      role: toolbar?.getAttribute('role') || '',
+      label: toolbar?.getAttribute('aria-label') || '',
+      describedBy: toolbar?.getAttribute('aria-describedby') || '',
+      statusId: status?.id || '',
+      statusText: status?.textContent?.trim() || '',
+      dataStatus: toolbar?.getAttribute('data-action-status') || '',
+      publishState: publish?.getAttribute('data-action-state') || '',
+      draftState: draft?.getAttribute('data-action-state') || '',
+      archiveState: archive?.getAttribute('data-action-state') || '',
+      clearState: clear?.getAttribute('data-action-state') || '',
+      deleteState: del?.getAttribute('data-action-state') || '',
+      publishReason: publish?.getAttribute('data-disabled-reason') || '',
+      deleteReason: del?.getAttribute('data-disabled-reason') || '',
+      publishDescribedBy: publish?.getAttribute('aria-describedby') || '',
+      deleteDescribedBy: del?.getAttribute('aria-describedby') || '',
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    };
+  })()`);
+  assert(bulkActionStatus.role === 'group', `Collection bulk toolbar must expose an action group: ${JSON.stringify(bulkActionStatus)}`);
+  assert(bulkActionStatus.label === 'Selected collection record actions', `Collection bulk toolbar has the wrong accessible label: ${JSON.stringify(bulkActionStatus)}`);
+  assert(bulkActionStatus.describedBy && bulkActionStatus.describedBy === bulkActionStatus.statusId, `Collection bulk toolbar must reference its hidden action status: ${JSON.stringify(bulkActionStatus)}`);
+  assert(bulkActionStatus.dataStatus === bulkActionStatus.statusText, `Collection bulk toolbar data status must mirror hidden text: ${JSON.stringify(bulkActionStatus)}`);
+  assert(
+    bulkActionStatus.statusText.includes('Publish selected available for 1 selected record.') &&
+      bulkActionStatus.statusText.includes('Draft selected available for 1 selected record.') &&
+      bulkActionStatus.statusText.includes('Archive selected available for 1 selected record.') &&
+      bulkActionStatus.statusText.includes('Clear selection available for 1 selected record.') &&
+      bulkActionStatus.statusText.includes('Delete selected available for 1 selected record.'),
+    `Collection bulk toolbar status did not explain ready actions: ${JSON.stringify(bulkActionStatus)}`,
+  );
+  assert(
+    bulkActionStatus.publishState === 'ready' &&
+      bulkActionStatus.draftState === 'ready' &&
+      bulkActionStatus.archiveState === 'ready' &&
+      bulkActionStatus.clearState === 'ready' &&
+      bulkActionStatus.deleteState === 'ready' &&
+      !bulkActionStatus.publishReason &&
+      !bulkActionStatus.deleteReason &&
+      bulkActionStatus.publishDescribedBy === bulkActionStatus.statusId &&
+      bulkActionStatus.deleteDescribedBy === bulkActionStatus.statusId,
+    `Collection bulk toolbar action states are wrong: ${JSON.stringify(bulkActionStatus)}`,
+  );
+
   const clicked = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="collections-record-bulk-publish"]');
     if (!(button instanceof HTMLButtonElement)) {
@@ -2306,15 +2626,22 @@ const publishRecordThroughUi = async (client, recordSlug) => {
   assert(clicked.ok, `Unable to publish selected collection record: ${JSON.stringify(clicked)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const state = await evaluate(client, `(() => ({
-      ready: document.body?.innerText?.includes('records moved to published') ||
-        document.body?.innerText?.includes('1 records moved to published') ||
-        false,
-      hasPublishedBadge: document.body?.innerText?.includes('Published') || false,
-      hasRecordAudit: document.body?.innerText?.includes('Collection record bulk-updated') &&
-        document.body?.innerText?.includes('bulk updateStatus'),
-      body: document.body?.innerText?.slice(0, 1000) || '',
-    }))()`);
+    const state = await evaluate(client, `(() => {
+      const details = document.querySelector('[data-testid="collections-audit-details"]');
+      if (details instanceof HTMLDetailsElement) details.open = true;
+      const body = document.body?.innerText || '';
+      const auditText = details?.textContent || '';
+      return {
+        ready: body.includes('records moved to published') ||
+          body.includes('1 records moved to published') ||
+          false,
+        hasPublishedBadge: body.includes('Published') || false,
+        hasRecordAudit: auditText.includes('Collection record bulk-updated') &&
+          auditText.includes('bulk updateStatus'),
+        body: body.slice(0, 1000),
+        auditText: auditText.slice(0, 1000),
+      };
+    })()`);
     if ((state.ready || state.hasPublishedBadge) && state.hasRecordAudit) {
       return state;
     }

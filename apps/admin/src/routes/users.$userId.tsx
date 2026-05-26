@@ -265,36 +265,21 @@ function EditUserPage() {
     role: 'editor',
     status: 'invited',
   });
-  const isCurrentAdminPermissionMatrixPending = isLoadingCurrentAdminPermissions && !currentAdminPermissionMatrix;
-  const canViewUsers = !isCurrentAdminPermissionMatrixPending && isAdminPermissionAllowed(
-    currentAdminPermissionMatrix,
-    currentAdmin,
-    'users.view',
-    USER_DETAIL_PERMISSION_ROLE_DEFAULTS,
+  const canUseCurrentAdminRoleDefaults = isLoadingCurrentAdminPermissions && !currentAdminPermissionMatrix && Boolean(currentAdmin);
+  const isCurrentAdminPermissionMatrixPending = isLoadingCurrentAdminPermissions && !currentAdminPermissionMatrix && !canUseCurrentAdminRoleDefaults;
+  const isUserDetailPermissionAllowed = (key: UserDetailPermissionKey) => (
+    isAdminPermissionAllowed(currentAdminPermissionMatrix, currentAdmin, key, USER_DETAIL_PERMISSION_ROLE_DEFAULTS)
+    || (canUseCurrentAdminRoleDefaults && Boolean(currentAdmin && USER_DETAIL_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
   );
-  const canManageUsers = !isCurrentAdminPermissionMatrixPending && isAdminPermissionAllowed(
-    currentAdminPermissionMatrix,
-    currentAdmin,
-    'users.manage',
-    USER_DETAIL_PERMISSION_ROLE_DEFAULTS,
-  );
-  const canDeleteUsers = !isCurrentAdminPermissionMatrixPending && isAdminPermissionAllowed(
-    currentAdminPermissionMatrix,
-    currentAdmin,
-    'users.delete',
-    USER_DETAIL_PERMISSION_ROLE_DEFAULTS,
-  );
-  const canExportActivity = !isCurrentAdminPermissionMatrixPending && isAdminPermissionAllowed(
-    currentAdminPermissionMatrix,
-    currentAdmin,
-    'activity.export',
-    USER_DETAIL_PERMISSION_ROLE_DEFAULTS,
-  );
+  const canViewUsers = isUserDetailPermissionAllowed('users.view');
+  const canManageUsers = isUserDetailPermissionAllowed('users.manage');
+  const canDeleteUsers = isUserDetailPermissionAllowed('users.delete');
+  const canExportActivity = isUserDetailPermissionAllowed('activity.export');
   const viewPermissionTitle = canViewUsers ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'users.view', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
   const managePermissionTitle = canManageUsers ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'users.manage', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
   const deletePermissionTitle = canDeleteUsers ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'users.delete', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
   const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(currentAdminPermissionMatrix, currentAdmin, 'activity.export', USER_DETAIL_PERMISSION_ROLE_DEFAULTS);
-  const isUserDetailBusy = isLoadingUser || isLoading || isCurrentAdminPermissionMatrixPending;
+  const isUserDetailBusy = isLoadingUser || isLoading;
   const selectedUserAuditLog = useMemo(
     () => userAuditLogs.find((log) => log.id === selectedUserAuditLogId) || userAuditLogs[0] || null,
     [selectedUserAuditLogId, userAuditLogs],

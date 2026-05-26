@@ -8,6 +8,20 @@ import path from 'node:path';
 
 const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
 const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+const normalizeBrowserApiBaseUrl = () => {
+  try {
+    const adminUrl = new URL(ADMIN_BASE_URL);
+    const apiUrl = new URL(API_BASE_URL);
+    const localHosts = new Set(['localhost', '127.0.0.1']);
+    if (localHosts.has(adminUrl.hostname) && localHosts.has(apiUrl.hostname)) {
+      apiUrl.hostname = adminUrl.hostname;
+    }
+    return apiUrl.toString().replace(/\/$/, '');
+  } catch {
+    return API_BASE_URL.replace(/\/$/, '');
+  }
+};
+const BROWSER_API_BASE_URL = normalizeBrowserApiBaseUrl();
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_SETTINGS_CDP_PORT || 9376);
 const SCREENSHOT_PATH = process.env.BACKY_SETTINGS_SCREENSHOT || path.join(os.tmpdir(), 'backy-settings-smoke.png');
@@ -53,10 +67,18 @@ const assertSettingsSourceContracts = () => {
     'data-testid="settings-site-scope-default-locale"',
     'data-testid="settings-site-scope-locale-strategy"',
     'data-testid="settings-site-scope-locales"',
+    'data-testid="settings-site-scope-details"',
+    'Show site controls',
+    'Per-site SEO, analytics, localization, comment-policy, API scope, and audit controls',
     'data-testid="settings-site-scope-frontend-database-certification"',
     'data-testid="settings-permission-state"',
     'data-testid="settings-rbac-permission-state"',
+    'data-testid="settings-permission-sync-state"',
     'Settings permissions could not be verified',
+    'const canUseSettingsRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(',
+    'const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSettingsRoleDefaults;',
+    "SETTINGS_PERMISSION_ROLE_DEFAULTS['settings.view'].includes(currentUser.role)",
+    'Using owner/admin role defaults while detailed settings permissions sync.',
     'role="alert"',
     'to="/users"',
     'Review users',
@@ -116,7 +138,30 @@ const assertSettingsSourceContracts = () => {
 	    'adminSignedUrl',
 	    'Copy media handoff',
 	    'Copy design impact',
+    'data-testid="settings-header-secondary-actions"',
+    'data-testid="settings-header-copy-handoff"',
+    'data-testid="settings-header-download-json"',
+    'data-testid="settings-header-discard"',
+    'data-testid="settings-header-save"',
+    'const SETTINGS_WORKBAR_SECTIONS = [',
+    'data-testid="settings-sticky-workbar"',
+    'data-testid="settings-sticky-active-tab"',
+    'data-testid="settings-sticky-section-nav"',
+    'data-testid="settings-sticky-previous-tab"',
+    'data-testid="settings-sticky-next-tab"',
+    'data-testid="settings-sticky-discard"',
+    'data-testid="settings-sticky-save"',
+    'saveButtonDisabled',
+    'saveButtonLabel',
+    'activeSettingsStatusLabel',
+    'activeSettingsHelperText',
+    'More settings actions',
     'data-testid="settings-release-certification-runbook"',
+    'const RUNTIME_CARD_DETAIL_LIMIT = 6',
+    'runtimeCardTestIdForTitle',
+    'data-visible-detail-count={visibleDetails.length}',
+    'data-testid={`${runtimeCardTestId}-extra-details`}',
+    'Show {extraDetails.length} provider rows',
     '.github/workflows/backy-release-certification.yml',
     'npm run test:release-certification-preflight-contract',
     'certify_database',
@@ -130,6 +175,7 @@ const assertSettingsSourceContracts = () => {
     "label: 'Custom frontend CORS origins'",
     "{ label: 'public api', provider: 'publicApi' }",
     'data-testid="settings-frontend-database-certification"',
+    'data-testid="settings-frontend-database-certification-details"',
     'data-testid="settings-frontend-database-certification-copy-button"',
     'data-testid="settings-frontend-database-certification-download-button"',
     'data-testid="settings-frontend-database-certification-evidence"',
@@ -172,6 +218,9 @@ const assertSettingsSourceContracts = () => {
     'ci:settings-provider-certification',
     'ci:commerce-provider-certification',
     'data-testid="settings-provider-certification"',
+    'data-testid="settings-provider-certification-details"',
+    'data-testid="settings-provider-certification-readiness-summary"',
+    'data-testid="settings-provider-certification-required-secret-families"',
     'data-testid="settings-provider-runtime-evidence"',
     'data-testid="settings-provider-certification-evidence"',
     'data-testid="settings-provider-certification-evidence-packet"',
@@ -198,8 +247,19 @@ const assertSettingsSourceContracts = () => {
     'siteScopedSettingsApi',
     'settingsCertificationEvidencePacket',
     'settingsCertificationEvidencePacketText',
+    'settingsCertificationReadinessItems',
+    'settingsCertificationRuntimeGapDetail',
+    'SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV',
+    'SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT',
     'backy.settings-provider-certification-evidence.v1',
     'backy.settings-provider-certification-evidence-packet.v1',
+    'Certification readiness summary',
+    'Artifact output',
+    'Gate command',
+    'Required site selector',
+    'BACKY_SETTINGS_CERTIFICATION_OUTPUT',
+    'artifacts/backy-settings-provider-certification.json',
+    'Secret boundary: no provider credential values are stored in Settings metadata.',
     'Redacted operator attachment manifest',
     'Copy evidence packet',
     'targetInputs: SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs',
@@ -277,6 +337,7 @@ const assertSettingsSourceContracts = () => {
     '<option value="weekly">Weekly digest</option>',
     'releaseCertification',
     'data-testid="settings-launch-readiness"',
+    'data-testid="settings-launch-readiness-details"',
     'data-testid="settings-launch-readiness-copy-button"',
     'data-testid="settings-launch-readiness-action-plan"',
     'settingsLaunchReadiness',
@@ -300,6 +361,7 @@ const assertSettingsSourceContracts = () => {
     'includesSecretValues: false',
     "copySettingsHandoffText(settingsLaunchReadinessText, 'Settings launch readiness handoff')",
     'data-testid="settings-backy-completion-status"',
+    'data-testid="settings-backy-completion-status-details"',
     'data-testid="settings-backy-completion-status-copy-button"',
     'data-testid="settings-backy-completion-status-action-plan"',
     'data-testid="settings-backy-completion-status-gates"',
@@ -308,15 +370,32 @@ const assertSettingsSourceContracts = () => {
     'settings-backy-completion-status-runbook-copy-${runbook.key}',
     'settingsBackyCompletionStatus',
     'settingsBackyCompletionStatusText',
+    'type BackyCompletionEvidenceArtifact',
+    'type BackyCompletionArtifactVerifier',
     'type BackyCompletionSurfaceRunbook',
     'surfaceRunbooks',
     'completionStatus.surfaceRunbooks',
     'BACKY_COMPLETION_AUDIT',
     'BACKY_COMPLETION_SURFACES',
+    'SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS',
+    'COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS',
+    'SETTINGS_COMPLETION_ARTIFACT_VERIFIER',
+    'COMMERCE_COMPLETION_ARTIFACT_VERIFIER',
+    'evidenceArtifacts: SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS',
+    'artifactVerifier: SETTINGS_COMPLETION_ARTIFACT_VERIFIER',
+    'evidenceArtifacts: COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS',
+    'artifactVerifier: COMMERCE_COMPLETION_ARTIFACT_VERIFIER',
     'certifiedGates',
     "schemaVersion: 'backy.completion-status.v1'",
     'backy.commerce-provider-certification-evidence-packet.v1',
     'backy.order-provider-certification-evidence-packet.v1',
+    'backy.settings-provider-certification-artifact.v1',
+    'backy.commerce-provider-certification-artifact.v1',
+    'backy-settings-provider-certification-evidence',
+    'backy-commerce-provider-certification-evidence',
+    'data-default-collapsed="true"',
+    'settings-backy-completion-status-runbook-artifacts-${runbook.key}',
+    'settings-backy-completion-status-runbook-verifier-${runbook.key}',
     'products-provider-certification-evidence-packet',
     'orders-provider-certification-evidence-packet',
     'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
@@ -339,8 +418,45 @@ const assertSettingsSourceContracts = () => {
     'Settings notification webhook test must stay reachable for inline URL validation',
   );
   assert(
-    /disabled=\{!canManageApiKeys \|\| issuingServiceKey\}[\s\S]{0,250}data-testid="settings-admin-service-key-issue"/.test(settingsRoute),
+    !settingsRoute.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;'),
+    'Settings route must not treat owner/admin role-default access as permission-hydration pending',
+  );
+  assert(
+    /data-testid="settings-sticky-workbar"[\s\S]{0,7000}data-testid="settings-sticky-save"/.test(settingsRoute) &&
+      /data-testid="settings-sticky-workbar"[\s\S]{0,7000}data-testid="settings-sticky-section-nav"/.test(settingsRoute),
+    'Settings workbar must keep tab navigation and save controls reachable while the page scrolls',
+  );
+  assert(
+    settingsRoute.includes('data-testid="settings-command-maps"') &&
+      settingsRoute.includes('data-default-collapsed="true"') &&
+      settingsRoute.includes('Ownership, controls, and frontend API maps') &&
+      settingsRoute.includes('Show maps') &&
+      settingsRoute.includes('data-testid="settings-platform-ownership-map"'),
+    'Settings command center must keep ownership/control/API reference maps in collapsed progressive disclosure',
+  );
+  assert(
+    /disabled=\{Boolean\(issueServiceKeyDisabledReason\)\}[\s\S]{0,400}data-testid="settings-admin-service-key-issue"/.test(settingsRoute) &&
+      settingsRoute.includes('const issueServiceKeyDisabledReason = manageKeysDisabledReason || (issuingServiceKey'),
     'Settings service-key issue action must stay reachable for inline label validation',
+  );
+  assert(
+    settingsRoute.includes("const securityActionStatusId = 'settings-security-actions-status';") &&
+      settingsRoute.includes('data-testid="settings-security-action-group"') &&
+      settingsRoute.includes('data-testid="settings-security-action-status"') &&
+      settingsRoute.includes('data-action-status={securityActionStatus}') &&
+      settingsRoute.includes('aria-label="Security settings actions"') &&
+      settingsRoute.includes('aria-describedby={securityActionStatusId}') &&
+      settingsRoute.includes('Order actions are temporarily unavailable while Backy updates order data') === false &&
+      settingsRoute.includes('Rotate session') &&
+      settingsRoute.includes('Regenerate public API key') &&
+      settingsRoute.includes('Issue service key') &&
+      settingsRoute.includes('Revoke service keys') &&
+      settingsRoute.includes('data-testid={`settings-api-key-copy-${item.scope}`}') &&
+      settingsRoute.includes('data-testid={`settings-api-key-regenerate-${item.scope}`}') &&
+      settingsRoute.includes('data-testid="settings-admin-service-key-issued-copy"') &&
+      settingsRoute.includes("data-action-state={issueServiceKeyDisabledReason ? 'blocked' : 'ready'}") &&
+      settingsRoute.includes('data-disabled-reason={revokeDisabledReason || undefined}'),
+    'Settings security actions must expose a named status group with ready/blocked metadata for session, API-key, and service-key controls',
   );
   assert(!settingsRoute.includes('disabled={disabled || deliveryLoading || !value.webhookUrl?.trim()}'), 'Settings webhook test must not hide blank URL validation behind a disabled state');
   assert(!settingsRoute.includes('disabled={!canManageApiKeys || issuingServiceKey || !serviceKeyLabel.trim()}'), 'Settings service-key issue must not hide blank label validation behind a disabled state');
@@ -485,7 +601,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_SETTINGS_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -505,6 +622,40 @@ const readSettings = async (sessionToken = apiAdminSessionToken) => {
   });
   assert(payload.data?.settings, 'Settings API returned no settings payload');
   return payload.data.settings;
+};
+
+const listSites = async () => {
+  const payload = await requestApi('/api/admin/sites?includeUnpublished=true');
+  return payload.data?.sites || payload.sites || [];
+};
+
+const temporarilyAllowSettingsSmokeSiteQuota = async (extraSites = 1) => {
+  const settings = await readSettings();
+  const sites = await listSites();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentSiteLimit = Number(originalCommerce.siteLimit || 0);
+  const requiredSiteLimit = sites.length + extraSites;
+
+  if (originalCommerce.overageMode !== 'block' || currentSiteLimit >= requiredSiteLimit) {
+    return false;
+  }
+
+  await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      integrations: {
+        ...originalIntegrations,
+        commerce: {
+          ...originalCommerce,
+          siteLimit: requiredSiteLimit,
+          overageMode: 'warn',
+        },
+      },
+    }),
+  });
+
+  return true;
 };
 
 const createSite = async (input) => {
@@ -813,6 +964,44 @@ const waitForCdp = async () => {
   throw new Error(`Chrome DevTools did not start on port ${PORT}`);
 };
 
+const isUsablePageTarget = (target) => {
+  if (!target || target.type !== 'page' || !target.webSocketDebuggerUrl) return false;
+  const url = target.url || '';
+  return !(
+    url.startsWith('chrome://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('chrome-error://') ||
+    url.startsWith('chrome-extension://')
+  );
+};
+
+const getTargetScore = (target) => {
+  const url = target.url || '';
+  if (url.startsWith(ADMIN_BASE_URL)) return 0;
+  if (url === 'about:blank') return 1;
+  if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return 2;
+  if (url.startsWith('http://') || url.startsWith('https://')) return 3;
+  return 4;
+};
+
+const selectUsablePageTarget = (targets) => (
+  [...targets]
+    .filter(isUsablePageTarget)
+    .sort((left, right) => getTargetScore(left) - getTargetScore(right))[0]
+);
+
+const waitForUsablePageTarget = async () => {
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    const targets = await waitForCdp();
+    const target = selectUsablePageTarget(targets);
+    if (target) return target;
+    await sleep(100);
+  }
+
+  const targets = await fetchJson('/json/list').catch(() => []);
+  throw new Error(`No usable Chrome page target found on port ${PORT}: ${JSON.stringify(targets).slice(0, 1000)}`);
+};
+
 const connectCdp = (webSocketDebuggerUrl) => {
   const socket = new WebSocket(webSocketDebuggerUrl);
   let id = 0;
@@ -890,7 +1079,7 @@ const seedBrowserSessionCookie = async (client, sessionToken) => {
   await client.send('Network.setCookie', {
     name: 'backy_admin_session',
     value: sessionToken,
-    url: API_BASE_URL,
+    url: BROWSER_API_BASE_URL,
     path: '/',
     httpOnly: true,
     sameSite: 'Lax',
@@ -930,14 +1119,28 @@ const navigateToSettings = async (client) => {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => ({
       ready: Boolean(document.querySelector('[data-testid="settings-command-center"]')),
+      commandMapsCollapsed: document.querySelector('[data-testid="settings-command-maps"]') instanceof HTMLDetailsElement &&
+        document.querySelector('[data-testid="settings-command-maps"]')?.open === false,
+      siteScopeDetailsCollapsed: document.querySelector('[data-testid="settings-site-scope-details"]') instanceof HTMLDetailsElement &&
+        document.querySelector('[data-testid="settings-site-scope-details"]')?.open === false,
+      siteScopeDetailsDefaultCollapsed: document.querySelector('[data-testid="settings-site-scope-details"]')?.getAttribute('data-default-collapsed') === 'true',
+      siteScopeDetailsSummary: document.querySelector('[data-testid="settings-site-scope-details"]')?.textContent || '',
       ownershipMap: Boolean(document.querySelector('[data-testid="settings-platform-ownership-map"]')),
       launchReadiness: Boolean(document.querySelector('[data-testid="settings-launch-readiness"]')),
+      launchReadinessDetailsCollapsed: document.querySelector('[data-testid="settings-launch-readiness-details"]')?.tagName === 'DETAILS' &&
+        document.querySelector('[data-testid="settings-launch-readiness-details"]')?.getAttribute('data-default-collapsed') === 'true' &&
+        document.querySelector('[data-testid="settings-launch-readiness-details"]')?.hasAttribute('open') === false,
       launchReadinessCopy: Boolean(document.querySelector('[data-testid="settings-launch-readiness-copy-button"]')),
       launchReadinessActionPlan: Boolean(document.querySelector('[data-testid="settings-launch-readiness-action-plan"]')),
       launchReadinessText: document.querySelector('[data-testid="settings-launch-readiness"]')?.textContent || '',
-      hasBackyOwner: document.body?.innerText?.includes('Backy in-house') || false,
-      hasSupabaseOwner: document.body?.innerText?.includes('Supabase connection') || false,
-      hasVercelOwner: document.body?.innerText?.includes('Vercel connection') || false,
+      workbar: Boolean(document.querySelector('[data-testid="settings-sticky-workbar"]')),
+      workbarActiveTab: document.querySelector('[data-testid="settings-sticky-active-tab"]')?.textContent || '',
+      workbarSectionNav: Boolean(document.querySelector('[data-testid="settings-sticky-section-nav"]')),
+      workbarSave: Boolean(document.querySelector('[data-testid="settings-sticky-save"]')),
+      workbarNext: Boolean(document.querySelector('[data-testid="settings-sticky-next-tab"]')),
+      hasBackyOwner: document.querySelector('[data-testid="settings-platform-ownership-map"]')?.textContent?.includes('Backy in-house') || false,
+      hasSupabaseOwner: document.querySelector('[data-testid="settings-platform-ownership-map"]')?.textContent?.includes('Supabase connection') || false,
+      hasVercelOwner: document.querySelector('[data-testid="settings-platform-ownership-map"]')?.textContent?.includes('Vercel connection') || false,
       tabs: Boolean(document.querySelector('#settings-tabs')),
       title: document.body?.innerText?.includes('Settings command center') || false,
       handoff: document.body?.innerText?.includes('Copy handoff') || false,
@@ -950,8 +1153,14 @@ const navigateToSettings = async (client) => {
 
     if (
       state.ready &&
+      state.commandMapsCollapsed &&
+      state.siteScopeDetailsCollapsed &&
+      state.siteScopeDetailsDefaultCollapsed &&
+      state.siteScopeDetailsSummary.includes('Show site controls') &&
+      state.siteScopeDetailsSummary.includes('Per-site SEO') &&
       state.ownershipMap &&
       state.launchReadiness &&
+      state.launchReadinessDetailsCollapsed &&
       state.launchReadinessCopy &&
       state.launchReadinessActionPlan &&
       state.launchReadinessText.includes('backy.settings-launch-readiness.v1') &&
@@ -959,6 +1168,11 @@ const navigateToSettings = async (client) => {
       state.launchReadinessText.includes('Copy launch JSON') &&
       state.launchReadinessText.includes('Database gate') &&
       state.launchReadinessText.includes('Provider gate') &&
+      state.workbar &&
+      state.workbarActiveTab.includes('General') &&
+      state.workbarSectionNav &&
+      state.workbarSave &&
+      state.workbarNext &&
       state.hasBackyOwner &&
       state.hasSupabaseOwner &&
       state.hasVercelOwner &&
@@ -1207,6 +1421,10 @@ const selectSiteScopeSite = async (client, siteId) => {
   let result = null;
   for (let attempt = 0; attempt < 120; attempt += 1) {
     result = await evaluate(client, `(() => {
+      const details = document.querySelector('[data-testid="settings-site-scope-details"]');
+      if (details instanceof HTMLDetailsElement && !details.open) {
+        details.open = true;
+      }
       const select = document.querySelector('[data-testid="settings-site-scope-site"]');
       if (!(select instanceof HTMLSelectElement)) {
         return { ok: false, reason: 'select-not-found' };
@@ -1362,6 +1580,26 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
       publicKeyStatus: document.querySelector('[data-testid="settings-api-key-status-public"]')?.textContent?.trim() || '',
       hasRotationButton: Boolean(document.querySelector('[data-testid="settings-api-key-regenerate-public"]')),
       publicButtonDisabled: document.querySelector('[data-testid="settings-api-key-regenerate-public"]')?.disabled ?? true,
+      actionGroupRole: document.querySelector('[data-testid="settings-security-action-group"]')?.getAttribute('role') || '',
+      actionGroupLabel: document.querySelector('[data-testid="settings-security-action-group"]')?.getAttribute('aria-label') || '',
+      actionStatusId: document.querySelector('[data-testid="settings-security-action-status"]')?.id || '',
+      actionStatusText: (document.querySelector('[data-testid="settings-security-action-status"]')?.textContent || '').replace(/\\s+/g, ' ').trim(),
+      actionGroupStatus: document.querySelector('[data-testid="settings-security-action-group"]')?.getAttribute('data-action-status') || '',
+      publicCopyState: document.querySelector('[data-testid="settings-api-key-copy-public"]')?.getAttribute('data-action-state') || '',
+      adminCopyState: document.querySelector('[data-testid="settings-api-key-copy-admin"]')?.getAttribute('data-action-state') || '',
+      publicRegenerateState: document.querySelector('[data-testid="settings-api-key-regenerate-public"]')?.getAttribute('data-action-state') || '',
+      adminRegenerateState: document.querySelector('[data-testid="settings-api-key-regenerate-admin"]')?.getAttribute('data-action-state') || '',
+      allRegenerateState: document.querySelector('[data-testid="settings-api-key-regenerate-all"]')?.getAttribute('data-action-state') || '',
+      issueServiceKeyState: document.querySelector('[data-testid="settings-admin-service-key-issue"]')?.getAttribute('data-action-state') || '',
+      describedByReady: [
+        'settings-session-rotate',
+        'settings-api-key-copy-public',
+        'settings-api-key-copy-admin',
+        'settings-api-key-regenerate-public',
+        'settings-api-key-regenerate-admin',
+        'settings-api-key-regenerate-all',
+        'settings-admin-service-key-issue',
+      ].every((testId) => document.querySelector('[data-testid="' + testId + '"]')?.getAttribute('aria-describedby') === (document.querySelector('[data-testid="settings-security-action-status"]')?.id || '')),
       hiddenAdminKey: document.body?.innerText?.includes('Hidden without settings.manageKeys') || false,
       body: document.body?.innerText?.slice(0, 1000) || '',
     }))()`);
@@ -1371,6 +1609,20 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
       securityState.publicKeyStatus === 'Active' &&
       securityState.hasRotationButton &&
       !securityState.publicButtonDisabled &&
+      securityState.actionGroupRole === 'group' &&
+      securityState.actionGroupLabel === 'Security settings actions' &&
+      securityState.actionStatusId === 'settings-security-actions-status' &&
+      securityState.actionGroupStatus === securityState.actionStatusText &&
+      securityState.actionStatusText.includes('Rotate session available.') &&
+      securityState.actionStatusText.includes('Regenerate public API key available.') &&
+      securityState.actionStatusText.includes('Issue service key available.') &&
+      securityState.publicCopyState === 'ready' &&
+      securityState.adminCopyState === 'ready' &&
+      securityState.publicRegenerateState === 'ready' &&
+      securityState.adminRegenerateState === 'ready' &&
+      securityState.allRegenerateState === 'ready' &&
+      securityState.issueServiceKeyState === 'ready' &&
+      securityState.describedByReady &&
       !securityState.hiddenAdminKey
     ) {
       break;
@@ -1392,16 +1644,22 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   await waitForText(client, 'Copy this key now');
   const issuedServiceKeyState = await evaluate(client, `(() => {
     const panel = document.querySelector('[data-testid="settings-admin-service-key-issued"]');
+    const copyButton = document.querySelector('[data-testid="settings-admin-service-key-issued-copy"]');
     const text = panel?.innerText || '';
     const match = text.match(/sk_srv_[a-z0-9]+/i);
     return {
       rawKey: match?.[0] || '',
       text,
       hasHashNotice: text.includes('stores only the hash'),
+      copyState: copyButton?.getAttribute('data-action-state') || '',
+      copyDescribedBy: copyButton?.getAttribute('aria-describedby') || '',
     };
   })()`);
   assert(
-    issuedServiceKeyState.rawKey && issuedServiceKeyState.hasHashNotice,
+    issuedServiceKeyState.rawKey &&
+      issuedServiceKeyState.hasHashNotice &&
+      issuedServiceKeyState.copyState === 'ready' &&
+      issuedServiceKeyState.copyDescribedBy === 'settings-security-actions-status',
     `Issued service key was not rendered once with hash notice: ${JSON.stringify(issuedServiceKeyState).slice(0, 1000)}`,
   );
 
@@ -1540,14 +1798,15 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   assert(
     rotatedSessionState.hasPanel &&
       rotatedSessionState.hasNotice &&
-      !rotatedSessionState.token &&
+      rotatedSessionState.token &&
+      rotatedSessionState.token !== beforeSessionToken &&
       rotatedSessionState.issuedAt &&
       rotatedSessionState.expiresAt &&
       rotatedSessionState.authMode === 'local-demo',
     `Current session did not rotate through Settings UI: ${JSON.stringify(rotatedSessionState)}`,
   );
   const rotatedSessionPayload = await evaluate(client, `(async () => {
-    const response = await fetch(${JSON.stringify(`${API_BASE_URL}/api/admin/auth/session`)}, {
+    const response = await fetch(${JSON.stringify(`${BROWSER_API_BASE_URL}/api/admin/auth/session`)}, {
       credentials: 'include',
     });
     const payload = await response.json().catch(() => ({}));
@@ -1558,7 +1817,9 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
     };
   })()`);
   assert(
-    rotatedSessionPayload.ok && rotatedSessionPayload.payload?.data?.session?.token,
+    rotatedSessionPayload.ok &&
+      rotatedSessionPayload.payload?.data?.session?.token &&
+      rotatedSessionPayload.payload.data.session.token === rotatedSessionState.token,
     `Rotated cookie session was not readable through auth/session: ${rotatedSessionPayload.status} ${JSON.stringify(rotatedSessionPayload.payload).slice(0, 500)}`,
   );
   ownerSession.session = {
@@ -1968,6 +2229,8 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     const providerCommandText = document.querySelector('[data-testid="settings-provider-certification-command"]')?.textContent || '';
     const completionStatusText = document.querySelector('[data-testid="settings-backy-completion-status"]')?.textContent || '';
     const completionRunbooksText = document.querySelector('[data-testid="settings-backy-completion-status-runbooks"]')?.textContent || '';
+    const commerceRuntimeCard = document.querySelector('[data-testid="settings-runtime-card-commerce-runtime"]');
+    const commerceRuntimeExtraDetails = document.querySelector('[data-testid="settings-runtime-card-commerce-runtime-extra-details"]');
     return {
     search: window.location.search,
     text: document.querySelector('#settings-tab-content')?.textContent?.slice(0, 500) || '',
@@ -1976,6 +2239,14 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasMediaScannerRuntime: document.body?.innerText?.includes('Media scanner runtime') || false,
     hasNotificationRuntime: document.body?.innerText?.includes('Notification runtime') || false,
     hasCommerceRuntime: document.body?.innerText?.includes('Commerce runtime') || false,
+    hasCommerceRuntimeProgressiveDetails: Boolean(commerceRuntimeCard) &&
+      commerceRuntimeCard?.getAttribute('data-collapsible') === 'true' &&
+      Number(commerceRuntimeCard?.getAttribute('data-detail-count') || '0') > Number(commerceRuntimeCard?.getAttribute('data-visible-detail-count') || '0') &&
+      commerceRuntimeExtraDetails instanceof HTMLDetailsElement &&
+      commerceRuntimeExtraDetails.open === false &&
+      commerceRuntimeExtraDetails.getAttribute('data-default-collapsed') === 'true' &&
+      (commerceRuntimeExtraDetails.textContent || '').includes('Show') &&
+      (commerceRuntimeExtraDetails.textContent || '').includes('Stripe API key'),
     hasInteractiveComponentRuntime: document.body?.innerText?.includes('Interactive component runtime') || false,
     hasCommerceWebhookSecretEnv: document.body?.innerText?.includes('Commerce webhook signing secret') || false,
     hasNotificationHttpEndpointEnv: document.body?.innerText?.includes('HTTP delivery endpoint') && document.body?.innerText?.includes('BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL'),
@@ -2018,6 +2289,9 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       completionStatusText.includes('backy.completion-status.v1') &&
       completionStatusText.includes('data.contract.completionStatus') &&
       completionStatusText.includes('x-backy-completion-status'),
+    hasBackyCompletionStatusDetailsCollapsed: document.querySelector('[data-testid="settings-backy-completion-status-details"]')?.tagName === 'DETAILS' &&
+      document.querySelector('[data-testid="settings-backy-completion-status-details"]')?.getAttribute('data-default-collapsed') === 'true' &&
+      document.querySelector('[data-testid="settings-backy-completion-status-details"]')?.hasAttribute('open') === false,
     hasBackyCompletionStatusCopyButton: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-copy-button"]')),
     hasBackyCompletionStatusActionPlan: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-action-plan"]')) &&
       completionStatusText.includes('npm run test:partial-gate-preflights') &&
@@ -2027,11 +2301,19 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       completionStatusText.includes('Settings live provider certification') &&
       completionStatusText.includes('Commerce live provider certification'),
     hasBackyCompletionStatusRunbooks: Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbooks"]')) &&
+      document.querySelector('[data-testid="settings-backy-completion-status-runbooks"]')?.getAttribute('data-default-collapsed') === 'true' &&
+      document.querySelector('[data-testid="settings-backy-completion-status-runbooks"]')?.tagName === 'DETAILS' &&
       completionRunbooksText.includes('Partial surface runbooks') &&
       completionRunbooksText.includes('completionStatus.surfaceRunbooks') &&
       completionRunbooksText.includes('backy.settings-provider-certification-evidence-packet.v1') &&
       completionRunbooksText.includes('backy.commerce-provider-certification-evidence-packet.v1') &&
       completionRunbooksText.includes('backy.order-provider-certification-evidence-packet.v1') &&
+      completionRunbooksText.includes('backy.settings-provider-certification-artifact.v1') &&
+      completionRunbooksText.includes('backy.commerce-provider-certification-artifact.v1') &&
+      completionRunbooksText.includes('backy-settings-provider-certification-evidence') &&
+      completionRunbooksText.includes('backy-commerce-provider-certification-evidence') &&
+      completionRunbooksText.includes('Artifact verifier') &&
+      completionRunbooksText.includes('npm run doctor:release-certification') &&
       completionRunbooksText.includes('/api/admin/settings data.settings.providerCertification.operatorEvidencePacket') &&
       completionRunbooksText.includes('/api/admin/sites/{siteId}/commerce/products/{productId}/provider-sync') &&
       completionRunbooksText.includes('/api/admin/sites/{siteId}/commerce/orders/analytics') &&
@@ -2047,7 +2329,26 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-copy-settings-admin-apis"]')) &&
       Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-copy-products"]')) &&
       Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-copy-orders"]')),
+    hasBackyCompletionStatusRunbookArtifactBlocks:
+      Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-artifacts-settings"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-artifacts-products"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-verifier-settings"]')) &&
+      Boolean(document.querySelector('[data-testid="settings-backy-completion-status-runbook-verifier-orders"]')),
     hasProviderCertificationMatrix: Boolean(document.querySelector('[data-testid="settings-provider-certification"]')),
+    hasProviderCertificationDetailsCollapsed: document.querySelector('[data-testid="settings-provider-certification-details"]')?.tagName === 'DETAILS' &&
+      document.querySelector('[data-testid="settings-provider-certification-details"]')?.getAttribute('data-default-collapsed') === 'true' &&
+      document.querySelector('[data-testid="settings-provider-certification-details"]')?.hasAttribute('open') === false,
+    hasProviderCertificationReadinessSummary: Boolean(document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Certification readiness summary') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Selected families') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Runtime inputs') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Scenario coverage') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Artifact output') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('BACKY_SETTINGS_CERTIFICATION_OUTPUT') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('artifacts/backy-settings-provider-certification.json') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Gate command') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Required site selector') || false) &&
+      (document.querySelector('[data-testid="settings-provider-certification-readiness-summary"]')?.textContent?.includes('Secret boundary: no provider credential values are stored in Settings metadata.') || false),
     hasProviderRuntimeEvidence: Boolean(document.querySelector('[data-testid="settings-provider-runtime-evidence"]')),
     hasProviderRuntimeEvidenceCopy: document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Runtime provider evidence') && document.querySelector('[data-testid="settings-provider-runtime-evidence"]')?.textContent?.includes('Public API/CORS') || false,
     hasProviderCertificationEvidence: Boolean(document.querySelector('[data-testid="settings-provider-certification-evidence"]')) &&
@@ -2108,6 +2409,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     infrastructureState.hasMediaScannerRuntime &&
     infrastructureState.hasNotificationRuntime &&
     infrastructureState.hasCommerceRuntime &&
+    infrastructureState.hasCommerceRuntimeProgressiveDetails &&
     infrastructureState.hasInteractiveComponentRuntime &&
     infrastructureState.hasCommerceWebhookSecretEnv &&
     infrastructureState.hasNotificationHttpEndpointEnv &&
@@ -2155,12 +2457,15 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationSettingsGate &&
       infrastructureState.hasReleaseCertificationCommerceGate &&
       infrastructureState.hasBackyCompletionStatus &&
+      infrastructureState.hasBackyCompletionStatusDetailsCollapsed &&
       infrastructureState.hasBackyCompletionStatusCopyButton &&
       infrastructureState.hasBackyCompletionStatusActionPlan &&
       infrastructureState.hasBackyCompletionStatusGates &&
       infrastructureState.hasBackyCompletionStatusRunbooks &&
       infrastructureState.hasBackyCompletionStatusRunbookCopyButtons &&
+      infrastructureState.hasBackyCompletionStatusRunbookArtifactBlocks &&
       infrastructureState.hasProviderCertificationMatrix &&
+      infrastructureState.hasProviderCertificationDetailsCollapsed &&
       infrastructureState.hasProviderCertificationDownloadButton &&
       infrastructureState.hasProviderCertificationCopyButton &&
       infrastructureState.hasProviderCertificationCommandBuilder &&
@@ -2173,6 +2478,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasProviderCertificationSettings &&
       infrastructureState.hasProviderCertificationCommerce &&
       infrastructureState.hasProviderCertificationFamilies &&
+      infrastructureState.hasProviderCertificationReadinessSummary &&
       infrastructureState.hasProviderRuntimeEvidence &&
       infrastructureState.hasProviderRuntimeEvidenceCopy &&
       infrastructureState.hasProviderCertificationEvidence &&
@@ -2373,6 +2679,9 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       hasSiteSettingsPatch: text.includes('PATCH') && text.includes('/sites/:siteId/settings'),
       hasScopedDescription: text.includes('site-scoped Settings envelope') || text.includes('site-owned Settings sections'),
       hasFrontendDatabaseCertification: Boolean(document.querySelector('[data-testid="settings-frontend-database-certification"]')),
+      hasFrontendDatabaseDetailsCollapsed: document.querySelector('[data-testid="settings-frontend-database-certification-details"]')?.tagName === 'DETAILS' &&
+        document.querySelector('[data-testid="settings-frontend-database-certification-details"]')?.getAttribute('data-default-collapsed') === 'true' &&
+        document.querySelector('[data-testid="settings-frontend-database-certification-details"]')?.hasAttribute('open') === false,
       hasFrontendDatabaseEvidence: Boolean(document.querySelector('[data-testid="settings-frontend-database-certification-evidence"]')),
       hasFrontendDatabaseCommandBuilder: Boolean(document.querySelector('[data-testid="settings-frontend-database-certification-command-builder"]')),
       hasFrontendDatabaseEnvCopyButton: Boolean(document.querySelector('[data-testid="settings-frontend-database-certification-env-copy-button"]')),
@@ -2402,6 +2711,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       deliveryApiState.hasSiteSettingsPatch &&
       deliveryApiState.hasScopedDescription &&
       deliveryApiState.hasFrontendDatabaseCertification &&
+      deliveryApiState.hasFrontendDatabaseDetailsCollapsed &&
       deliveryApiState.hasFrontendDatabaseEvidence &&
       deliveryApiState.hasFrontendDatabaseCommandBuilder &&
       deliveryApiState.hasFrontendDatabaseEnvCopyButton &&
@@ -2421,10 +2731,21 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasAuditTrail: document.body?.innerText?.includes('Audit') || document.body?.innerText?.includes('audit'),
     hasCommandCenter: Boolean(document.querySelector('[data-testid="settings-command-center"]')),
     hasLaunchReadiness: Boolean(document.querySelector('[data-testid="settings-launch-readiness"]')),
+    hasStickyWorkbar: Boolean(document.querySelector('[data-testid="settings-sticky-workbar"]')),
+    hasStickySectionNav: Boolean(document.querySelector('[data-testid="settings-sticky-section-nav"]')),
+    hasStickySave: Boolean(document.querySelector('[data-testid="settings-sticky-save"]')),
+    stickyActiveTab: document.querySelector('[data-testid="settings-sticky-active-tab"]')?.textContent || '',
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Settings page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(layout.hasAuditTrail, `Security tab did not expose audit trail text: ${JSON.stringify(layout)}`);
   assert(layout.hasLaunchReadiness, `Settings command center did not retain launch readiness panel: ${JSON.stringify(layout)}`);
+  assert(
+    layout.hasStickyWorkbar &&
+      layout.hasStickySectionNav &&
+      layout.hasStickySave &&
+      layout.stickyActiveTab.includes('Delivery'),
+    `Settings sticky workbar was not visible after moving through tabs: ${JSON.stringify(layout)}`,
+  );
 
   return {
     initial,
@@ -3224,6 +3545,7 @@ const main = async () => {
   const webhookCapture = await createWebhookCaptureServer();
 
   try {
+    await temporarilyAllowSettingsSmokeSiteQuota(1);
     const siteScopeSite = await createSite({
       name: `Settings Scope ${suffix}`,
       slug: `settings-scope-${suffix}`,
@@ -3241,8 +3563,7 @@ const main = async () => {
     ownerSession = await acceptInviteToken((await createInviteToken(owner.id)).token);
     ownerOriginalSettings = await readSettings(ownerSession.session.token);
 
-    await waitForCdp();
-    const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
+    const page = await waitForUsablePageTarget();
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
 
     client = connectCdp(page.webSocketDebuggerUrl);

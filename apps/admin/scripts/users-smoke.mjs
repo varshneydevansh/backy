@@ -17,7 +17,7 @@ const getSmokeMfaCode = () => (
   process.env.BACKY_USERS_SMOKE_MFA_CODE ||
   process.env.BACKY_ADMIN_MFA_CODE ||
   process.env.BACKY_ADMIN_2FA_CODE ||
-  ''
+  'backy-dev-mfa'
 );
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,14 +45,74 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       !source.includes('Supabase/Auth integration is complete'),
     'Users membership panel must not expose stale future-work copy for current member-page workflows.',
   );
-  assert(
-    source.includes('data-testid="users-access-workflows-panel"') &&
+	  assert(
+	    source.includes('data-testid="users-access-workflows-panel"') &&
       source.includes('data-testid="users-access-open-detail"') &&
+      source.includes('data-testid={`users-open-detail-${user.id}`}') &&
+      source.includes('data-testid={`users-edit-detail-${user.id}`}') &&
+      source.includes('data-user-full-name={user.fullName}') &&
+      source.includes('query?: string;') &&
+      source.includes('query: normalizedUsersSearchString(search.query)') &&
+      source.includes("initialSearch: routeSearch.query || ''") &&
+      source.includes("const routeQueryRef = useRef('')") &&
+      source.includes('routeQueryRef.current === routeQuery') &&
+      source.includes('rollback.restoredUserIds.includes(user.id)') &&
+      source.includes('query: restoredUsers[0].email') &&
       source.includes('data-testid="users-access-invite"') &&
       source.includes('data-testid="users-access-delivery-settings"') &&
       source.includes('data-testid="users-access-teams"') &&
       source.includes('data-testid="users-access-permissions"'),
-    'Users route must expose actionable access workflow controls instead of a static backlog list.',
+	    'Users route must expose actionable access workflow controls, route-backed directory search, and stable user detail buttons instead of a static backlog list.',
+	  );
+  assert(
+    source.includes('const userActionStatusId = `users-actions-status-${user.id.replace') &&
+      source.includes('data-testid={`users-actions-${user.id}`}') &&
+      source.includes('data-testid={`users-actions-status-${user.id}`}') &&
+      source.includes('data-action-status={userActionStatus}') &&
+      source.includes('aria-label={`Actions for ${user.fullName}`}') &&
+      source.includes('aria-describedby={userActionStatusId}') &&
+      source.includes('Edit available.') &&
+      source.includes('Remove available.') &&
+      source.includes('You cannot remove your own signed-in account from this directory.') &&
+      source.includes('data-action-state={editDisabledReason ?') &&
+      source.includes('data-action-state={removeDisabledReason ?') &&
+      source.includes('data-disabled-reason={editDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={removeDisabledReason || undefined}') &&
+      source.includes('data-testid={`users-remove-${user.id}`}'),
+    'Users row actions must expose a named action-status group with ready/blocked state metadata.',
+  );
+  assert(
+    source.includes('data-testid="users-control-map-details"') &&
+      source.includes('data-testid="users-control-map"') &&
+      source.includes('data-testid="users-api-details"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Show map') &&
+      source.includes('Hide map') &&
+      source.includes('Show API') &&
+      source.includes('Hide API') &&
+      source.includes('Jump links for access health, API contracts, directory controls, people, and role permissions.'),
+    'Users command center must keep the low-frequency control map and API handoff packet behind default-collapsed progressive disclosure',
+  );
+	  assert(
+	    source.includes("const canViewUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', USER_PERMISSION_ROLE_DEFAULTS);") &&
+      source.includes("const canCreateUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.create', USER_PERMISSION_ROLE_DEFAULTS);") &&
+      source.includes("const canManageUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.manage', USER_PERMISSION_ROLE_DEFAULTS);") &&
+      source.includes('const isUsersBusy = isLoading || isUserMutationBusy;') &&
+      source.includes('const userInviteActionDisabled = isUserMutationBusy || !canCreateUsers;') &&
+      source.includes("const userImportActionDisabled = isUserMutationBusy || !canCreateUsers || (importMode === 'upsert' && !canManageUsers);") &&
+      source.includes('disabled={userInviteActionDisabled}') &&
+      source.includes('disabled={userImportActionDisabled}') &&
+      source.includes('disabled={userImportModeDisabled}') &&
+      source.includes('if (isUserMutationBusy) return;') &&
+      !source.includes('const canViewUsers = !isPermissionMatrixPending') &&
+      !source.includes('const canCreateUsers = !isPermissionMatrixPending') &&
+      !source.includes('if (isPermissionMatrixPending) return;'),
+    'Users invite/import controls must use role-default permission access while matrices hydrate and must not disable account creation entry points during directory loading.',
+  );
+  assert(
+    createSource.includes('query: created.user.email') &&
+      createSource.includes('createdInvite.email || formData.email.trim().toLowerCase()'),
+    'User invite success must return to the directory with the created account focused by search query.',
   );
   assert(
     source.includes("template: 'member-login'") &&
@@ -111,17 +171,64 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
     'Users bulk toolbar must summarize selected actionable users outside the current table view',
   );
   assert(
+    source.includes("const usersBulkActionStatusId = 'users-bulk-action-status';") &&
+      source.includes('const usersBulkActionStatus = [') &&
+      source.includes('const usersBulkGroupActionState = selectedActionableUsers.length === 0') &&
+      source.includes('role="group"') &&
+      source.includes('aria-label="Selected user bulk actions"') &&
+      source.includes('data-testid="users-bulk-actions"') &&
+      source.includes('data-testid="users-bulk-action-status"') &&
+      source.includes('data-action-state={usersBulkGroupActionState}') &&
+      source.includes('data-action-status={usersBulkActionStatus}') &&
+      source.includes('data-selected-count={selectedActionableUsers.length}') &&
+      source.includes('data-testid="users-bulk-select-visible"') &&
+      source.includes('data-testid="users-bulk-status-select"') &&
+      source.includes('data-testid="users-bulk-apply-status"') &&
+      source.includes('data-testid="users-bulk-delete"') &&
+      source.includes("data-action-state={usersBulkStatusDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes('data-disabled-reason={usersBulkDeleteActionDisabledReason || undefined}'),
+    'Users bulk actions must expose a named shared status group, selected-count metadata, stable hooks, and ready/blocked reasons for status and delete actions.',
+  );
+  assert(
     createSource.includes('const loadUserInvitePermissions = useCallback(() => {') &&
+      createSource.includes('const canUseUserInviteRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      createSource.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseUserInviteRoleDefaults;') &&
+      createSource.includes('const isUserInvitePermissionAllowed = (key: UserInvitePermissionKey) => (') &&
+      createSource.includes("const canCreateUsers = isUserInvitePermissionAllowed('users.create');") &&
+      createSource.includes('const isInviteBusy = isLoading;') &&
+      createSource.includes('const inviteSubmitActionStatusId =') &&
+      createSource.includes('data-testid="user-invite-submit-action-status"') &&
+      createSource.includes('noValidate') &&
+      createSource.includes('data-action-state={inviteSubmitActionState}') &&
+      createSource.includes('data-action-status={inviteSubmitActionStatus}') &&
+      createSource.includes('data-disabled-reason={inviteSubmitDisabledReason || undefined}') &&
+      createSource.includes('data-target-email={formData.email.trim().toLowerCase() || undefined}') &&
+      createSource.includes('data-target-role={formData.role}') &&
+      createSource.includes('data-target-status={formData.status}') &&
+      createSource.includes('disabled={isInviteBusy || !canCreateUsers}') &&
+      !createSource.includes('disabled={isInviteBusy || !canSubmit || !canCreateUsers}') &&
+      !createSource.includes('const canCreateUsers = !isPermissionMatrixPending') &&
+      !createSource.includes('const isInviteBusy = isLoading || isPermissionMatrixPending;') &&
       createSource.includes('data-testid="user-invite-permission-state"') &&
       createSource.includes('User invite permissions need attention') &&
       createSource.includes('aria-label="Retry loading user invite permissions"') &&
       createSource.includes('Retry permissions') &&
       createSource.includes('to="/users"') &&
       createSource.includes('Review users'),
-    'User invite permission state must expose retryable permission recovery and user-access handoff',
+    'User invite permission state and submit actions must expose retryable permission recovery plus shared ready/blocked submit metadata',
   );
   assert(
     detailSource.includes('const loadCurrentAdminUserPermissions = useCallback(() => {') &&
+      detailSource.includes('const canUseCurrentAdminRoleDefaults = isLoadingCurrentAdminPermissions && !currentAdminPermissionMatrix && Boolean(currentAdmin);') &&
+      detailSource.includes('const isCurrentAdminPermissionMatrixPending = isLoadingCurrentAdminPermissions && !currentAdminPermissionMatrix && !canUseCurrentAdminRoleDefaults;') &&
+      detailSource.includes('const isUserDetailPermissionAllowed = (key: UserDetailPermissionKey) => (') &&
+      detailSource.includes("const canViewUsers = isUserDetailPermissionAllowed('users.view');") &&
+      detailSource.includes("const canManageUsers = isUserDetailPermissionAllowed('users.manage');") &&
+      detailSource.includes("const canDeleteUsers = isUserDetailPermissionAllowed('users.delete');") &&
+      detailSource.includes("const canExportActivity = isUserDetailPermissionAllowed('activity.export');") &&
+      detailSource.includes('const isUserDetailBusy = isLoadingUser || isLoading;') &&
+      !detailSource.includes('const canViewUsers = !isCurrentAdminPermissionMatrixPending') &&
+      !detailSource.includes('const isUserDetailBusy = isLoadingUser || isLoading || isCurrentAdminPermissionMatrixPending;') &&
       detailSource.includes('data-testid="user-detail-permission-state"') &&
       detailSource.includes('data-testid="user-detail-rbac-permission-state"') &&
       detailSource.includes('data-testid="user-detail-matrix-permission-state"') &&
@@ -132,7 +239,7 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       detailSource.includes('Retry permissions') &&
       detailSource.includes('to="/users"') &&
       detailSource.includes('Review users'),
-    'User detail permission states must expose retryable permission recovery and user-access handoff',
+    'User detail permission states must expose retryable permission recovery and role-default interaction while backend permission details hydrate',
   );
 };
 
@@ -823,16 +930,74 @@ const navigateToInvite = (client) => navigate(
   'Invite page',
 );
 
-const navigateToUsers = (client, expectedText = 'Users command center') => navigate(
-  client,
-  `${ADMIN_BASE_URL}/users?siteId=${encodeURIComponent(SITE_ID)}`,
-  `(() => ({
-    ready: Boolean(document.querySelector('[data-testid="users-command-center"]')) &&
-      document.body?.innerText?.includes(${JSON.stringify(expectedText)}),
-    body: document.body?.innerText?.slice(0, 800) || '',
-  }))()`,
-  'Users page',
-);
+const navigateToUsers = (client, expectedText = 'Users command center') => {
+  const params = new URLSearchParams({ siteId: SITE_ID });
+  if (expectedText !== 'Users command center') {
+    params.set('query', expectedText);
+  }
+
+  return navigate(
+    client,
+    `${ADMIN_BASE_URL}/users?${params.toString()}`,
+    `(() => ({
+      ready: Boolean(document.querySelector('[data-testid="users-command-center"]')) &&
+        document.body?.innerText?.includes(${JSON.stringify(expectedText)}),
+      body: document.body?.innerText?.slice(0, 800) || '',
+    }))()`,
+    'Users page',
+  );
+};
+
+const assertInviteSubmitActionStatus = async (client, expectation) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const status = document.querySelector('[data-testid="user-invite-submit-action-status"]');
+      const statusId = status?.id || '';
+      const primarySubmit = document.querySelector('[data-testid="user-invite-submit-primary"]');
+      const footerSubmit = document.querySelector('[data-testid="user-invite-submit-footer"]');
+      const action = (button) => button instanceof HTMLButtonElement ? {
+        describedBy: button.getAttribute('aria-describedby') || '',
+        state: button.getAttribute('data-action-state') || '',
+        actionStatus: button.getAttribute('data-action-status') || '',
+        disabledReason: button.getAttribute('data-disabled-reason') || '',
+        targetEmail: button.getAttribute('data-target-email') || '',
+        targetRole: button.getAttribute('data-target-role') || '',
+        targetStatus: button.getAttribute('data-target-status') || '',
+        disabled: button.disabled,
+      } : null;
+      return {
+        statusId,
+        statusText: status?.textContent || '',
+        primary: action(primarySubmit),
+        footer: action(footerSubmit),
+        body: document.body?.innerText?.slice(0, 1200) || '',
+      };
+    })()`);
+    const actions = [state.primary, state.footer].filter(Boolean);
+    const matches = state.statusId &&
+      state.statusText.includes(expectation.statusIncludes) &&
+      actions.length === 2 &&
+      actions.every((action) => (
+        action.describedBy === state.statusId &&
+        action.state === expectation.state &&
+        action.actionStatus === state.statusText &&
+        action.disabled === expectation.disabled &&
+        (!expectation.disabledReasonIncludes || action.disabledReason.includes(expectation.disabledReasonIncludes)) &&
+        (!expectation.targetEmail || action.targetEmail === expectation.targetEmail) &&
+        (!expectation.targetRole || action.targetRole === expectation.targetRole) &&
+        (!expectation.targetStatus || action.targetStatus === expectation.targetStatus)
+      ));
+    if (matches) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`Invite submit action status did not match: ${JSON.stringify({ state, expectation })}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
 
 const fillInviteForm = async (client, { fullName, email }) => {
   let result = null;
@@ -871,8 +1036,28 @@ const fillInviteForm = async (client, { fullName, email }) => {
       const form = document.querySelector('[data-testid="user-invite-form"]');
       const payloadPreview = document.querySelector('[data-testid="user-invite-payload-preview"]');
       const payload = JSON.parse(payloadPreview?.textContent || '{}');
+      const submitStatus = document.querySelector('[data-testid="user-invite-submit-action-status"]');
+      const submitStatusId = submitStatus?.id || '';
       const primarySubmit = document.querySelector('[data-testid="user-invite-submit-primary"]');
       const footerSubmit = document.querySelector('[data-testid="user-invite-submit-footer"]');
+      const primaryAction = primarySubmit instanceof HTMLButtonElement ? {
+        describedBy: primarySubmit.getAttribute('aria-describedby') || '',
+        state: primarySubmit.getAttribute('data-action-state') || '',
+        actionStatus: primarySubmit.getAttribute('data-action-status') || '',
+        reason: primarySubmit.getAttribute('data-disabled-reason') || '',
+        targetEmail: primarySubmit.getAttribute('data-target-email') || '',
+        targetRole: primarySubmit.getAttribute('data-target-role') || '',
+        targetStatus: primarySubmit.getAttribute('data-target-status') || '',
+      } : null;
+      const footerAction = footerSubmit instanceof HTMLButtonElement ? {
+        describedBy: footerSubmit.getAttribute('aria-describedby') || '',
+        state: footerSubmit.getAttribute('data-action-state') || '',
+        actionStatus: footerSubmit.getAttribute('data-action-status') || '',
+        reason: footerSubmit.getAttribute('data-disabled-reason') || '',
+        targetEmail: footerSubmit.getAttribute('data-target-email') || '',
+        targetRole: footerSubmit.getAttribute('data-target-role') || '',
+        targetStatus: footerSubmit.getAttribute('data-target-status') || '',
+      } : null;
       return {
         ok: nameInput.value === ${JSON.stringify(fullName)} &&
           emailInput.value === ${JSON.stringify(email)} &&
@@ -886,14 +1071,30 @@ const fillInviteForm = async (client, { fullName, email }) => {
           payload.createInvite === true &&
           primarySubmit instanceof HTMLButtonElement &&
           primarySubmit.disabled === false &&
+          primaryAction?.describedBy === submitStatusId &&
+          primaryAction?.state === 'ready' &&
+          primaryAction?.actionStatus === submitStatus?.textContent &&
+          primaryAction?.targetEmail === ${JSON.stringify(email.toLowerCase())} &&
+          primaryAction?.targetRole === 'admin' &&
+          primaryAction?.targetStatus === 'invited' &&
           footerSubmit instanceof HTMLButtonElement &&
-          footerSubmit.disabled === false,
+          footerSubmit.disabled === false &&
+          footerAction?.describedBy === submitStatusId &&
+          footerAction?.state === 'ready' &&
+          footerAction?.actionStatus === submitStatus?.textContent &&
+          footerAction?.targetEmail === ${JSON.stringify(email.toLowerCase())} &&
+          footerAction?.targetRole === 'admin' &&
+          footerAction?.targetStatus === 'invited',
         name: nameInput.value,
         email: emailInput.value,
         canSubmit: form?.getAttribute('data-can-submit') || '',
         selectedRole: form?.getAttribute('data-selected-role') || '',
         selectedStatus: form?.getAttribute('data-selected-status') || '',
         payload,
+        submitStatusText: submitStatus?.textContent || '',
+        submitStatusId,
+        primaryAction,
+        footerAction,
         primaryDisabled: primarySubmit instanceof HTMLButtonElement ? primarySubmit.disabled : null,
         footerDisabled: footerSubmit instanceof HTMLButtonElement ? footerSubmit.disabled : null,
       };
@@ -963,19 +1164,106 @@ const submitInviteFormAndAssertLink = async (client, email) => {
   return null;
 };
 
+const setUsersDirectorySearch = async (client, query) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const commandCenter = document.querySelector('[data-testid="users-command-center"]');
+      const input = document.querySelector('input[aria-label="Search users"]');
+      const roleSelect = document.querySelector('select[aria-label="Filter users by role"]');
+      const reviewSelect = document.querySelector('select[aria-label="Filter users by access review"]');
+      const statusSelect = document.querySelector('select[aria-label="Filter users by status"]');
+
+      if (!commandCenter || !(input instanceof HTMLInputElement)) {
+        return {
+          ok: false,
+          reason: 'users-search-not-ready',
+          path: window.location.pathname,
+          body: document.body?.innerText?.slice(0, 800) || '',
+        };
+      }
+      if (input.disabled || roleSelect?.disabled || reviewSelect?.disabled || statusSelect?.disabled) {
+        return {
+          ok: false,
+          reason: 'users-search-disabled',
+          path: window.location.pathname,
+          query: input.value,
+          body: document.body?.innerText?.slice(0, 800) || '',
+        };
+      }
+
+      const setInputValue = (element, value) => {
+        const previousValue = element.value;
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        descriptor?.set?.call(element, value);
+        element._valueTracker?.setValue(previousValue);
+        element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const setSelectValue = (element, value) => {
+        if (!(element instanceof HTMLSelectElement) || element.value === value) return;
+        const descriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+        descriptor?.set?.call(element, value);
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+
+      setSelectValue(roleSelect, 'all');
+      setSelectValue(reviewSelect, 'all');
+      setSelectValue(statusSelect, 'all');
+      if (input.value !== ${JSON.stringify(query)}) {
+        setInputValue(input, ${JSON.stringify(query)});
+      }
+
+      return {
+        ok: true,
+        query: input.value,
+        role: roleSelect instanceof HTMLSelectElement ? roleSelect.value : '',
+        review: reviewSelect instanceof HTMLSelectElement ? reviewSelect.value : '',
+        status: statusSelect instanceof HTMLSelectElement ? statusSelect.value : '',
+      };
+    })()`);
+    if (result.ok) return result;
+    if (attempt === 79) {
+      throw new Error(`Unable to set users directory search to ${query}: ${JSON.stringify(result)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const waitForUsersPageUser = async (client, email) => {
+  let searchedDirectory = false;
+
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const state = await evaluate(client, `(() => ({
-      ready: Boolean(document.querySelector('[data-testid="users-command-center"]')),
-      hasUser: document.body?.innerText?.includes(${JSON.stringify(email)}) || false,
-      path: window.location.pathname,
-      body: document.body?.innerText?.slice(0, 900) || '',
-    }))()`);
+    const state = await evaluate(client, `(() => {
+      const target = ${JSON.stringify(email)};
+      const rows = Array.from(document.querySelectorAll('tbody tr')).map((row) => row.textContent || '');
+      const detailButtons = Array.from(document.querySelectorAll('[data-testid^="users-open-detail-"], [data-testid^="users-edit-detail-"]')).map((button) => ({
+        ariaLabel: button.getAttribute('aria-label') || '',
+        userFullName: button.getAttribute('data-user-full-name') || '',
+        text: button.textContent || '',
+      }));
+      return {
+        ready: Boolean(document.querySelector('[data-testid="users-command-center"]')),
+        hasUser: rows.some((row) => row.includes(target)) ||
+          detailButtons.some((button) => button.ariaLabel.includes(target) || button.userFullName === target || button.text.includes(target)),
+        path: window.location.pathname,
+        query: document.querySelector('input[aria-label="Search users"]')?.value || '',
+        rows: rows.slice(0, 12),
+        detailButtons: detailButtons.slice(0, 12),
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
     if (state.ready && state.hasUser && state.path === '/users') {
       return state;
     }
+    if (state.ready && state.path === '/users' && !state.hasUser && !searchedDirectory) {
+      await setUsersDirectorySearch(client, email);
+      searchedDirectory = true;
+    }
     if (attempt === 119) {
-      throw new Error(`Users page did not show invited user: ${JSON.stringify(state)}`);
+      throw new Error(`Users page did not show target user ${email}: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -984,11 +1272,18 @@ const waitForUsersPageUser = async (client, email) => {
 };
 
 const waitForUsersSelfProtection = async (client) => {
+  await setUsersDirectorySearch(client, 'admin@backy.io');
+  let lastState = null;
+
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {
       const roleSelect = document.querySelector('select[aria-label="Change role for Admin User"]');
       const statusSelect = document.querySelector('select[aria-label="Change status for Admin User"]');
       const removeButton = document.querySelector('button[aria-label="Self removal locked for Admin User"]');
+      const actionGroup = document.querySelector('[aria-label="Actions for Admin User"]');
+      const actionStatus = actionGroup?.querySelector('[data-testid^="users-actions-status-"]');
+      const actionStatusId = actionStatus?.id || '';
+      const actionStatusText = (actionStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
       return {
         hasYouPill: document.body?.innerText?.includes('You') || false,
         hasRoleLock: document.body?.innerText?.includes('Self role locked') || false,
@@ -996,16 +1291,42 @@ const waitForUsersSelfProtection = async (client) => {
         roleDisabled: roleSelect instanceof HTMLSelectElement && roleSelect.disabled,
         statusDisabled: statusSelect instanceof HTMLSelectElement && statusSelect.disabled,
         removeDisabled: removeButton instanceof HTMLButtonElement && removeButton.disabled,
+        actionGroupRole: actionGroup?.getAttribute('role') || '',
+        actionGroupDescribedBy: actionGroup?.getAttribute('aria-describedby') || '',
+        actionGroupStatus: actionGroup?.getAttribute('data-action-status') || '',
+        actionStatusId,
+        actionStatusText,
+        removeState: removeButton?.getAttribute('data-action-state') || '',
+        removeReason: removeButton?.getAttribute('data-disabled-reason') || '',
+        removeDescribedBy: removeButton?.getAttribute('aria-describedby') || '',
+        query: document.querySelector('input[aria-label="Search users"]')?.value || '',
+        rows: Array.from(document.querySelectorAll('tbody tr')).map((row) => row.textContent || '').slice(0, 10),
         body: document.body?.innerText?.slice(0, 1600) || '',
       };
     })()`);
-    if (state.hasYouPill && state.hasRoleLock && state.hasStatusLock && state.roleDisabled && state.statusDisabled && state.removeDisabled) {
+    lastState = state;
+    if (
+      state.hasYouPill &&
+      state.hasRoleLock &&
+      state.hasStatusLock &&
+      state.roleDisabled &&
+      state.statusDisabled &&
+      state.removeDisabled &&
+      state.actionGroupRole === 'group' &&
+      state.actionGroupDescribedBy === state.actionStatusId &&
+      state.actionGroupStatus === state.actionStatusText &&
+      state.actionStatusText.includes('Edit available.') &&
+      state.actionStatusText.includes('Remove unavailable: You cannot remove your own signed-in account from this directory.') &&
+      state.removeState === 'blocked' &&
+      state.removeReason === 'You cannot remove your own signed-in account from this directory.' &&
+      state.removeDescribedBy === state.actionStatusId
+    ) {
       return state;
     }
     await sleep(250);
   }
 
-  throw new Error('Users self-protection controls did not render for Admin User');
+  throw new Error(`Users self-protection controls did not render for Admin User: ${JSON.stringify(lastState)}`);
 };
 
 const setDirectoryUserSelect = async (client, fullName, labelPrefix, value) => {
@@ -1040,14 +1361,31 @@ const setDirectoryUserSelect = async (client, fullName, labelPrefix, value) => {
 };
 
 const openUserDetail = async (client, fullName) => {
+  const locationState = await evaluate(client, `(() => ({ path: window.location.pathname }))()`);
+  if (locationState.path === '/users') {
+    await waitForUsersPageUser(client, fullName);
+  }
+
   const result = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-      (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Edit ${fullName}`)}
-    ));
+    const expectedEditLabel = ${JSON.stringify(`Edit ${fullName}`)};
+    const expectedOpenLabel = ${JSON.stringify(`Open ${fullName}`)};
+    const button = Array.from(document.querySelectorAll('button')).find((candidate) => {
+      const ariaLabel = candidate.getAttribute('aria-label') || '';
+      const userFullName = candidate.getAttribute('data-user-full-name') || '';
+      const testId = candidate.getAttribute('data-testid') || '';
+      return ariaLabel === expectedEditLabel ||
+        ariaLabel === expectedOpenLabel ||
+        (userFullName === ${JSON.stringify(fullName)} && (testId.startsWith('users-edit-detail-') || testId.startsWith('users-open-detail-')));
+    });
     if (!(button instanceof HTMLButtonElement)) {
       return {
         ok: false,
-        buttons: Array.from(document.querySelectorAll('button')).map((candidate) => candidate.getAttribute('aria-label') || candidate.textContent || '').slice(0, 80),
+        buttons: Array.from(document.querySelectorAll('button')).map((candidate) => ({
+          ariaLabel: candidate.getAttribute('aria-label') || '',
+          text: (candidate.textContent || '').trim(),
+          testId: candidate.getAttribute('data-testid') || '',
+          userFullName: candidate.getAttribute('data-user-full-name') || '',
+        })).slice(0, 80),
       };
     }
     if (button.disabled) return { ok: false, reason: 'button-disabled' };
@@ -1616,6 +1954,51 @@ const transferOwnershipFromDetail = async (client, fullName) => {
 
 const removeUserFromDirectory = async (client, fullName) => {
   await waitForUsersPageUser(client, fullName);
+  const actionStatusState = await evaluate(client, `(() => {
+    const actionGroup = document.querySelector(${JSON.stringify(`[aria-label="Actions for ${fullName}"]`)});
+    const actionStatus = actionGroup?.querySelector('[data-testid^="users-actions-status-"]');
+    const editButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Edit ${fullName}`)}
+    ));
+    const removeButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Remove ${fullName}`)}
+    ));
+    const actionStatusId = actionStatus?.id || '';
+    const actionStatusText = (actionStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+    return {
+      hasGroup: actionGroup instanceof HTMLElement,
+      groupRole: actionGroup?.getAttribute('role') || '',
+      groupLabel: actionGroup?.getAttribute('aria-label') || '',
+      groupDescribedBy: actionGroup?.getAttribute('aria-describedby') || '',
+      groupStatus: actionGroup?.getAttribute('data-action-status') || '',
+      statusId: actionStatusId,
+      statusText: actionStatusText,
+      editState: editButton?.getAttribute('data-action-state') || '',
+      editReason: editButton?.getAttribute('data-disabled-reason') || '',
+      editDescribedBy: editButton?.getAttribute('aria-describedby') || '',
+      removeState: removeButton?.getAttribute('data-action-state') || '',
+      removeReason: removeButton?.getAttribute('data-disabled-reason') || '',
+      removeDescribedBy: removeButton?.getAttribute('aria-describedby') || '',
+      removeDisabled: removeButton instanceof HTMLButtonElement && removeButton.disabled,
+    };
+  })()`);
+  assert(
+    actionStatusState.hasGroup &&
+      actionStatusState.groupRole === 'group' &&
+      actionStatusState.groupLabel === `Actions for ${fullName}` &&
+      actionStatusState.groupDescribedBy === actionStatusState.statusId &&
+      actionStatusState.groupStatus === actionStatusState.statusText &&
+      actionStatusState.statusText.includes('Edit available.') &&
+      actionStatusState.statusText.includes('Remove available.') &&
+      actionStatusState.editState === 'ready' &&
+      actionStatusState.editReason === '' &&
+      actionStatusState.editDescribedBy === actionStatusState.statusId &&
+      actionStatusState.removeState === 'ready' &&
+      actionStatusState.removeReason === '' &&
+      actionStatusState.removeDescribedBy === actionStatusState.statusId &&
+      actionStatusState.removeDisabled === false,
+    `Users row action status is incomplete for ${fullName}: ${JSON.stringify(actionStatusState)}`,
+  );
   const openDeleteDialog = async () => evaluate(client, `(() => {
     const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
       (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Remove ${fullName}`)}
@@ -1734,11 +2117,108 @@ const assertUserDetailDeleteDialogEscape = async (client, fullName) => {
 
 const setUsersBulkStatus = async (client, fullNames, status) => {
   await navigateToUsers(client);
-  for (const fullName of fullNames) {
-    await waitForUsersPageUser(client, fullName);
+  const commonSearchToken = fullNames.length > 1
+    ? (fullNames[0].split(/\s+/)
+      .filter((token) => token.length > 2 && fullNames.every((name) => name.includes(token)))
+      .sort((left, right) => right.length - left.length)[0] || fullNames[0])
+    : fullNames[0];
+  await setUsersDirectorySearch(client, commonSearchToken);
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const rows = Array.from(document.querySelectorAll('tbody tr')).map((row) => row.textContent || '');
+      const names = ${JSON.stringify(fullNames)};
+      return {
+        ready: names.every((name) => rows.some((row) => row.includes(name))),
+        rows: rows.slice(0, 20),
+        query: document.querySelector('input[aria-label="Search users"]')?.value || '',
+      };
+    })()`);
+    if (state.ready) {
+      break;
+    }
+    if (attempt === 79) {
+      throw new Error(`Bulk users were not visible together: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
   }
 
-  const result = await evaluate(client, `(() => {
+  const clearExistingSelection = await evaluate(client, `(() => {
+    const clear = document.querySelector('[data-testid="users-bulk-clear-selection"]');
+    if (clear instanceof HTMLButtonElement && !clear.disabled) {
+      clear.click();
+      return { cleared: true };
+    }
+    return { cleared: false };
+  })()`);
+  if (clearExistingSelection.cleared) {
+    await sleep(250);
+  }
+
+  const noSelection = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="users-bulk-actions"]');
+    const status = document.querySelector('[data-testid="users-bulk-action-status"]');
+    const summary = document.querySelector('[data-testid="users-bulk-selection-summary"]');
+    const statusText = (status?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const statusId = status?.id || '';
+    const summaryId = summary?.id || '';
+    const readControl = (testId) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      return {
+        testId,
+        found: control instanceof HTMLElement,
+        state: control?.getAttribute('data-action-state') || '',
+        actionStatus: control?.getAttribute('data-action-status') || '',
+        disabledReason: control?.getAttribute('data-disabled-reason') || '',
+        describedBy: control?.getAttribute('aria-describedby') || '',
+        disabled: control instanceof HTMLButtonElement || control instanceof HTMLSelectElement || control instanceof HTMLInputElement ? control.disabled : null,
+      };
+    };
+    return {
+      role: panel?.getAttribute('role') || '',
+      label: panel?.getAttribute('aria-label') || '',
+      describedBy: panel?.getAttribute('aria-describedby') || '',
+      actionState: panel?.getAttribute('data-action-state') || '',
+      actionStatus: panel?.getAttribute('data-action-status') || '',
+      selectedCount: panel?.getAttribute('data-selected-count') || '',
+      visibleSelectedCount: panel?.getAttribute('data-visible-selected-count') || '',
+      hiddenSelectedCount: panel?.getAttribute('data-hidden-selected-count') || '',
+      statusId,
+      statusText,
+      summaryId,
+      summaryText: (summary?.textContent || '').replace(/\\s+/g, ' ').trim(),
+      selectVisible: readControl('users-bulk-select-visible'),
+      statusSelect: readControl('users-bulk-status-select'),
+      applyStatus: readControl('users-bulk-apply-status'),
+      deleteSelected: readControl('users-bulk-delete'),
+    };
+  })()`);
+  assert(
+    noSelection.role === 'group' &&
+      noSelection.label === 'Selected user bulk actions' &&
+      noSelection.describedBy.includes(noSelection.summaryId) &&
+      noSelection.describedBy.includes(noSelection.statusId) &&
+      noSelection.actionState === 'blocked' &&
+      noSelection.actionStatus === noSelection.statusText &&
+      noSelection.selectedCount === '0' &&
+      noSelection.visibleSelectedCount === '0' &&
+      noSelection.hiddenSelectedCount === '0' &&
+      noSelection.summaryText.startsWith('0 selected') &&
+      noSelection.statusText.includes('Select visible available for') &&
+      noSelection.statusText.includes('Bulk status unavailable: Select one or more non-current users first.') &&
+      noSelection.statusText.includes('Apply status unavailable: Select one or more non-current users first.') &&
+      noSelection.statusText.includes('Delete selected unavailable: Select one or more non-current users first.') &&
+      noSelection.selectVisible.state === 'ready' &&
+      noSelection.statusSelect.state === 'blocked' &&
+      noSelection.applyStatus.state === 'blocked' &&
+      noSelection.deleteSelected.state === 'blocked' &&
+      noSelection.statusSelect.disabledReason === 'Select one or more non-current users first.' &&
+      noSelection.applyStatus.disabledReason === 'Select one or more non-current users first.' &&
+      noSelection.deleteSelected.disabledReason === 'Select one or more non-current users first.',
+    `Users bulk no-selection action status drifted: ${JSON.stringify(noSelection)}`,
+  );
+
+  const selectResult = await evaluate(client, `(() => {
     const names = ${JSON.stringify(fullNames)};
     for (const name of names) {
       const row = Array.from(document.querySelectorAll('tbody tr')).find((candidate) => (
@@ -1755,18 +2235,95 @@ const setUsersBulkStatus = async (client, fullNames, status) => {
         checkbox.click();
       }
     }
+    return { ok: true };
+  })()`);
+  assert(selectResult.ok, `Unable to select users for bulk action: ${JSON.stringify(selectResult)}`);
+  await sleep(250);
 
+  let selectedState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    selectedState = await evaluate(client, `(() => {
     const panel = document.querySelector('[data-testid="users-bulk-actions"]');
-    const select = panel?.querySelector('select[aria-label="Bulk status"]');
+      const status = document.querySelector('[data-testid="users-bulk-action-status"]');
+      const summary = document.querySelector('[data-testid="users-bulk-selection-summary"]');
+      const statusText = (status?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const statusId = status?.id || '';
+      const readControl = (testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          testId,
+          found: control instanceof HTMLElement,
+          state: control?.getAttribute('data-action-state') || '',
+          actionStatus: control?.getAttribute('data-action-status') || '',
+          disabledReason: control?.getAttribute('data-disabled-reason') || '',
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          disabled: control instanceof HTMLButtonElement || control instanceof HTMLSelectElement || control instanceof HTMLInputElement ? control.disabled : null,
+        };
+      };
+      return {
+        role: panel?.getAttribute('role') || '',
+        label: panel?.getAttribute('aria-label') || '',
+        actionState: panel?.getAttribute('data-action-state') || '',
+        actionStatus: panel?.getAttribute('data-action-status') || '',
+        selectedCount: panel?.getAttribute('data-selected-count') || '',
+        visibleSelectedCount: panel?.getAttribute('data-visible-selected-count') || '',
+        hiddenSelectedCount: panel?.getAttribute('data-hidden-selected-count') || '',
+        statusId,
+        statusText,
+        summaryText: (summary?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        selectVisible: readControl('users-bulk-select-visible'),
+        statusSelect: readControl('users-bulk-status-select'),
+        applyStatus: readControl('users-bulk-apply-status'),
+        deleteSelected: readControl('users-bulk-delete'),
+        clearSelection: readControl('users-bulk-clear-selection'),
+      };
+  })()`);
+    if (
+      selectedState.actionState === 'ready' &&
+      selectedState.selectedCount === String(fullNames.length) &&
+      selectedState.statusText.includes(`Bulk status available for ${fullNames.length} selected non-current user`) &&
+      selectedState.statusSelect.state === 'ready' &&
+      selectedState.applyStatus.state === 'ready' &&
+      selectedState.deleteSelected.state === 'ready' &&
+      selectedState.clearSelection.state === 'ready'
+    ) {
+      break;
+    }
+    await sleep(250);
+  }
+  assert(
+    selectedState?.role === 'group' &&
+      selectedState.label === 'Selected user bulk actions' &&
+      selectedState.actionState === 'ready' &&
+      selectedState.actionStatus === selectedState.statusText &&
+      selectedState.selectedCount === String(fullNames.length) &&
+      selectedState.visibleSelectedCount === String(fullNames.length) &&
+      selectedState.hiddenSelectedCount === '0' &&
+      selectedState.summaryText.includes(`${fullNames.length} selected`) &&
+      selectedState.statusText.includes(`Apply status available for ${fullNames.length} selected non-current user`) &&
+      selectedState.statusText.includes(`Delete selected available for ${fullNames.length} selected non-current user`) &&
+      selectedState.statusText.includes(`Clear selection available for ${fullNames.length} selected non-current user`) &&
+      [selectedState.statusSelect, selectedState.applyStatus, selectedState.deleteSelected, selectedState.clearSelection].every((control) => (
+        control.found &&
+        control.state === 'ready' &&
+        control.actionStatus === selectedState.statusText &&
+        control.disabledReason === '' &&
+        control.describedBy === selectedState.statusId &&
+        control.disabled === false
+      )),
+    `Users bulk selected action status drifted: ${JSON.stringify(selectedState)}`,
+  );
+
+  const result = await evaluate(client, `(() => {
+    const panel = document.querySelector('[data-testid="users-bulk-actions"]');
+    const select = panel?.querySelector('[data-testid="users-bulk-status-select"]');
     if (!(select instanceof HTMLSelectElement)) {
       return { ok: false, reason: 'bulk-select-missing' };
     }
     select.value = ${JSON.stringify(status)};
     select.dispatchEvent(new Event('change', { bubbles: true }));
 
-    const button = Array.from(panel?.querySelectorAll('button') || []).find((candidate) => (
-      (candidate.textContent || '').includes('Apply status')
-    ));
+    const button = panel?.querySelector('[data-testid="users-bulk-apply-status"]');
     if (!(button instanceof HTMLButtonElement)) {
       return { ok: false, reason: 'apply-button-missing', panel: panel?.textContent?.slice(0, 500) || '' };
     }
@@ -1825,6 +2382,7 @@ const importUsersThroughUi = async (client, csvPath, expectedName, options = {})
   } = options;
   await navigateToUsers(client);
   await waitForUsersImportReady(client);
+  await setUsersDirectorySearch(client, dryRun ? '' : expectedName);
 
   const markResult = await evaluate(client, `(() => {
     const modeSelect = document.querySelector('select[aria-label="User import duplicate handling"]');
@@ -1960,6 +2518,15 @@ const assertLayout = async (client, expectedName) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="users-command-center"]')),
+    controlMapCollapsed: document.querySelector('[data-testid="users-control-map-details"]') instanceof HTMLDetailsElement &&
+      document.querySelector('[data-testid="users-control-map-details"]')?.open === false &&
+      document.querySelector('[data-testid="users-control-map-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    apiDetailsCollapsed: document.querySelector('[data-testid="users-api-details"]') instanceof HTMLDetailsElement &&
+      document.querySelector('[data-testid="users-api-details"]')?.open === false &&
+      document.querySelector('[data-testid="users-api-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    hasControlMap: Boolean(document.querySelector('[data-testid="users-control-map"]')) &&
+      (document.querySelector('[data-testid="users-control-map-details"]')?.textContent || '').includes('Users control map') &&
+      (document.querySelector('[data-testid="users-control-map-details"]')?.textContent || '').includes('Show map'),
     hasDirectory: document.body?.innerText?.includes('People directory') || document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
     hasApi: document.body?.innerText?.includes('User access API') || false,
     hasMembership: document.body?.innerText?.includes('Membership registration') || false,
@@ -1975,7 +2542,7 @@ const assertLayout = async (client, expectedName) => {
     hasActivity: document.body?.innerText?.includes('Access activity') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Users page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.hasDirectory && layout.hasApi && layout.hasMembership && layout.hasMemberAuthBoundary && layout.hasMemberAccessHandoff && layout.hasActivity, `Users page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandCenter && layout.controlMapCollapsed && layout.apiDetailsCollapsed && layout.hasControlMap && layout.hasDirectory && layout.hasApi && layout.hasMembership && layout.hasMemberAuthBoundary && layout.hasMemberAccessHandoff && layout.hasActivity, `Users page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
 
@@ -2190,7 +2757,22 @@ const main = async () => {
     await signInAdmin(client);
 
     await navigateToInvite(client);
+    await assertInviteSubmitActionStatus(client, {
+      state: 'blocked',
+      disabled: false,
+      statusIncludes: 'Send invite needs a full name and a valid email address.',
+      targetRole: 'editor',
+      targetStatus: 'invited',
+    });
     await fillInviteForm(client, { fullName: previewFullName, email: previewEmail });
+    await assertInviteSubmitActionStatus(client, {
+      state: 'ready',
+      disabled: false,
+      statusIncludes: `Send invite available for ${previewEmail}.`,
+      targetEmail: previewEmail,
+      targetRole: 'admin',
+      targetStatus: 'invited',
+    });
     await submitInviteFormAndAssertLink(client, previewEmail);
     const previewInviteUser = await waitForUser(previewEmail, (user) => (
       user.fullName === previewFullName && user.status === 'invited'

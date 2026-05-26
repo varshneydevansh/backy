@@ -97,22 +97,27 @@ function NewUserPage() {
     role: 'editor' as UserRole,
     status: 'invited' as UserStatus,
   });
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canCreateUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(
-    permissionMatrix,
-    currentAdmin,
-    'users.create',
-    USER_INVITE_PERMISSION_ROLE_DEFAULTS,
+  const canUseUserInviteRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseUserInviteRoleDefaults;
+  const isUserInvitePermissionAllowed = (key: UserInvitePermissionKey) => (
+    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, USER_INVITE_PERMISSION_ROLE_DEFAULTS)
+    || (canUseUserInviteRoleDefaults && Boolean(currentAdmin && USER_INVITE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
   );
+  const canCreateUsers = isUserInvitePermissionAllowed('users.create');
   const createPermissionTitle = canCreateUsers
     ? undefined
     : adminPermissionReason(permissionMatrix, currentAdmin, 'users.create', USER_INVITE_PERMISSION_ROLE_DEFAULTS);
-  const isInviteBusy = isLoading || isPermissionMatrixPending;
+  const isInviteBusy = isLoading;
   const usersListUrl = useMemo(() => `${getAdminApiBase()}/users`, []);
   const usersRouteSearch = useMemo(
     () => (search.siteId ? { siteId: search.siteId } : undefined),
     [search.siteId],
   );
+  const getUsersReturnSearch = useCallback((query?: string, notice?: string) => ({
+    ...(usersRouteSearch || {}),
+    ...(query ? { query } : {}),
+    ...(notice ? { notice } : {}),
+  }), [usersRouteSearch]);
 
   const selectedRole = useMemo(
     () => ROLE_OPTIONS.find((role) => role.value === formData.role) || ROLE_OPTIONS[2],
@@ -127,9 +132,22 @@ function NewUserPage() {
     [formData.status],
   );
   const canSubmit = formData.fullName.trim().length > 1 && isValidEmail(formData.email);
+  const submitActionLabel = formData.status === 'invited' ? 'Send invite' : 'Create user';
   const submitLabel = formData.status === 'invited'
     ? (isLoading ? 'Sending invite...' : 'Send invite')
     : (isLoading ? 'Creating user...' : 'Create user');
+  const inviteSubmitActionStatusId = 'user-invite-submit-action-status';
+  const inviteSubmitDisabledReason = isInviteBusy
+    ? 'Invite creation is already running.'
+    : !canCreateUsers
+      ? createPermissionTitle || 'Your account cannot invite or create users.'
+      : '';
+  const inviteSubmitActionState = inviteSubmitDisabledReason || !canSubmit ? 'blocked' : 'ready';
+  const inviteSubmitActionStatus = inviteSubmitDisabledReason
+    ? `${submitActionLabel} unavailable: ${inviteSubmitDisabledReason}`
+    : !canSubmit
+      ? `${submitActionLabel} needs a full name and a valid email address.`
+      : `${submitActionLabel} available for ${formData.email.trim().toLowerCase()}.`;
   const inviteReadiness = useMemo(() => {
     const checks = [
       {
@@ -340,6 +358,7 @@ function NewUserPage() {
         to: '/users',
         search: {
           ...(usersRouteSearch || {}),
+          query: created.user.email,
           notice: `${created.user.fullName} was created.`,
         },
       });
@@ -416,7 +435,15 @@ function NewUserPage() {
           type="button"
           onClick={() => {
             if (!isInviteBusy) {
-              navigate({ to: '/users', search: usersRouteSearch });
+              navigate({
+                to: '/users',
+                search: createdInvite
+                  ? getUsersReturnSearch(
+                    createdInvite.email || formData.email.trim().toLowerCase(),
+                    `${formData.fullName.trim() || createdInvite.email || 'Invited user'} was created.`,
+                  )
+                  : usersRouteSearch,
+              });
             }
           }}
           disabled={isInviteBusy}
@@ -430,12 +457,16 @@ function NewUserPage() {
     >
       <form
         onSubmit={handleSubmit}
+        noValidate
         className="space-y-6"
         data-testid="user-invite-form"
         data-can-submit={canSubmit ? 'true' : 'false'}
         data-selected-role={formData.role}
         data-selected-status={formData.status}
       >
+        <span id={inviteSubmitActionStatusId} className="sr-only" data-testid="user-invite-submit-action-status" aria-live="polite">
+          {inviteSubmitActionStatus}
+        </span>
         <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="user-invite-command-center">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
@@ -476,8 +507,15 @@ function NewUserPage() {
               <Button
                 type="submit"
                 variant="primary"
-                disabled={isInviteBusy || !canSubmit || !canCreateUsers}
-                title={!canCreateUsers ? createPermissionTitle : undefined}
+                disabled={isInviteBusy || !canCreateUsers}
+                title={inviteSubmitDisabledReason || undefined}
+                aria-describedby={inviteSubmitActionStatusId}
+                data-action-state={inviteSubmitActionState}
+                data-action-status={inviteSubmitActionStatus}
+                data-disabled-reason={inviteSubmitDisabledReason || undefined}
+                data-target-email={formData.email.trim().toLowerCase() || undefined}
+                data-target-role={formData.role}
+                data-target-status={formData.status}
                 iconStart={<UserPlus className="size-4" />}
                 data-testid="user-invite-submit-primary"
               >
@@ -517,7 +555,13 @@ function NewUserPage() {
                   </Button>
                   <Button
                     type="button"
-                    onClick={() => navigate({ to: '/users', search: usersRouteSearch })}
+                    onClick={() => navigate({
+                      to: '/users',
+                      search: getUsersReturnSearch(
+                        createdInvite.email || formData.email.trim().toLowerCase(),
+                        `${formData.fullName.trim() || createdInvite.email || 'Invited user'} was created.`,
+                      ),
+                    })}
                     iconStart={<ArrowLeft className="size-4" />}
                   >
                     Back to users
@@ -841,7 +885,15 @@ function NewUserPage() {
             <button
               type="submit"
               data-testid="user-invite-submit-footer"
-              disabled={isInviteBusy || !canSubmit}
+              disabled={isInviteBusy || !canCreateUsers}
+              title={inviteSubmitDisabledReason || undefined}
+              aria-describedby={inviteSubmitActionStatusId}
+              data-action-state={inviteSubmitActionState}
+              data-action-status={inviteSubmitActionStatus}
+              data-disabled-reason={inviteSubmitDisabledReason || undefined}
+              data-target-email={formData.email.trim().toLowerCase() || undefined}
+              data-target-role={formData.role}
+              data-target-status={formData.status}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               <UserPlus className="h-4 w-4" />

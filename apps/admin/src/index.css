@@ -95,11 +95,16 @@
     font-family: Geist, Aptos, ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
     font-variant-numeric: tabular-nums;
+    text-rendering: optimizeLegibility;
+    accent-color: hsl(var(--primary));
     background-image:
-      linear-gradient(hsl(214 24% 88% / 0.45) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(214 24% 88% / 0.35) 1px, transparent 1px);
-    background-size: 44px 44px;
+      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(210 28% 96%) 100%);
     background-attachment: fixed;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.16);
+    color: hsl(var(--foreground));
   }
 
   code,
@@ -136,12 +141,12 @@
 
   /* Gradient text */
   .gradient-text {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-foreground;
   }
 
   /* Card hover effect */
   .card-hover {
-    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0;
   }
 
   /* Animated spinner */

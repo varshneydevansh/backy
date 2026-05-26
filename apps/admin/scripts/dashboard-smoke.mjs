@@ -11,6 +11,7 @@ const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Co
 const PORT = Number(process.env.BACKY_DASHBOARD_CDP_PORT || 9385);
 const SCREENSHOT_PATH = process.env.BACKY_DASHBOARD_SCREENSHOT || path.join(os.tmpdir(), 'backy-dashboard-smoke.png');
 const MOBILE_SCREENSHOT_PATH = process.env.BACKY_DASHBOARD_MOBILE_SCREENSHOT || path.join(os.tmpdir(), 'backy-dashboard-smoke-mobile.png');
+const COMMAND_ACTION_STATUS_SMOKE = process.env.BACKY_DASHBOARD_COMMAND_ACTION_STATUS_SMOKE === '1';
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -39,9 +40,36 @@ const assertDashboardSourceContracts = () => {
     'Run the infrastructure check to reveal missing runtime fields for Supabase, storage, database persistence, and Vercel deployment.',
     'title="No backend activity yet"',
     'title="No publish blockers found"',
+    'search={getDashboardRouteSearch(issue.to)}',
+    '{canEditPages && (',
+    '{canViewCommerce && (',
+    '{canViewForms && (',
+    '{canViewUsers && (',
+    'data-testid="dashboard-platform-details"',
+    'Backend platform health and workflow',
+    'detail: `${platformReadiness.readyCount}/${platformReadiness.total} checks`',
+    'data-testid="dashboard-focus-lane"',
+    'Start here',
+    'Your current role has read-only dashboard access.',
+    'const dashboardCommandActionStatusId =',
+    'data-testid="dashboard-command-actions"',
+    'data-testid="dashboard-command-actions-status"',
+    'data-testid="dashboard-command-refresh"',
+    'data-testid="dashboard-command-copy-handoff"',
+    'data-testid="dashboard-command-download-handoff"',
+    'data-action-state={dashboardCommandActionState}',
+    'data-disabled-reason={dashboardCommandDisabledReason || undefined}',
+    'data-testid="dashboard-control-map-details"',
+    'aria-label={`${area.title}: ${area.detail}`}',
+    'data-dashboard-disclosure="workspace-context"',
+    'data-testid="dashboard-module-map-details"',
   ]) {
     assert(source.includes(snippet), `Dashboard handoff contract is missing ${snippet}`);
   }
+  assert(
+    !source.includes('setInfrastructureDiagnostics([]);'),
+    'Dashboard refresh/hydration must not clear completed infrastructure diagnostics after the check succeeds.',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -102,7 +130,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_DASHBOARD_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -144,11 +173,37 @@ const fetchJson = async (endpoint) => {
   return response.json();
 };
 
+const isUsablePageTarget = (target) => {
+  if (!target || target.type !== 'page' || !target.webSocketDebuggerUrl) return false;
+  const url = target.url || '';
+  return !(
+    url.startsWith('chrome://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('chrome-error://') ||
+    url.startsWith('chrome-extension://')
+  );
+};
+
+const getTargetScore = (target) => {
+  const url = target.url || '';
+  if (url.startsWith(ADMIN_BASE_URL)) return 0;
+  if (url === 'about:blank') return 1;
+  if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return 2;
+  if (url.startsWith('http://') || url.startsWith('https://')) return 3;
+  return 4;
+};
+
+const selectUsablePageTarget = (targets) => (
+  [...targets]
+    .filter(isUsablePageTarget)
+    .sort((left, right) => getTargetScore(left) - getTargetScore(right))[0]
+);
+
 const waitForCdp = async () => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
       const pages = await fetchJson('/json/list');
-      const page = pages.find((target) => target.type === 'page' && target.webSocketDebuggerUrl);
+      const page = selectUsablePageTarget(pages);
       if (page) {
         return page;
       }
@@ -454,6 +509,22 @@ const runDashboardInfrastructureCheck = async (client) => {
           text.includes('Vercel deployment'),
         disabled: button instanceof HTMLButtonElement ? button.disabled : null,
         text: text.slice(0, 1200),
+        body: document.body?.innerText?.slice(0, 2200) || '',
+        buttons: Array.from(document.querySelectorAll('button')).map((candidate) => ({
+          ariaLabel: candidate.getAttribute('aria-label') || '',
+          disabled: candidate instanceof HTMLButtonElement ? candidate.disabled : null,
+          text: (candidate.textContent || '').trim().slice(0, 90),
+        })).slice(0, 80),
+        settingsRequests: performance.getEntriesByType('resource')
+          .filter((entry) => entry.name.includes('/api/admin/settings'))
+          .slice(-8)
+          .map((entry) => ({
+            name: entry.name,
+            initiatorType: entry.initiatorType,
+            duration: Math.round(entry.duration),
+            transferSize: entry.transferSize,
+          })),
+        authStorage: (localStorage.getItem('backy-auth-storage') || '').slice(0, 220),
       };
     })()`);
     if (state.ready && state.disabled === false) {
@@ -517,6 +588,9 @@ const assertDashboardLayout = async (client, siteName) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="dashboard-command-center"]')),
+    hasFocusLane: Boolean(document.querySelector('[data-testid="dashboard-focus-lane"]')) &&
+      document.querySelector('[data-testid="dashboard-focus-lane"]')?.textContent?.includes('Start here') &&
+      document.querySelector('[data-testid="dashboard-focus-lane"]')?.textContent?.includes('New page'),
     hasSiteSelector: Boolean(document.querySelector('#dashboard-active-site')),
     hasSite: Array.from(document.querySelectorAll('#dashboard-active-site option')).some((option) => option.textContent?.includes(${JSON.stringify(siteName)})),
     hasStats: Boolean(document.querySelector('#dashboard-stats')),
@@ -525,9 +599,23 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Create a workspace site') &&
       document.body?.innerText?.includes('Connect APIs and infrastructure'),
     hasRbacScope: Boolean(document.querySelector('[data-testid="dashboard-rbac-scope"]')) &&
-      document.body?.innerText?.includes('Workspace RBAC scope') &&
-      document.body?.innerText?.includes('Settings') &&
-      document.body?.innerText?.includes('Users'),
+      document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Workspace RBAC scope') &&
+      document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Settings') &&
+      document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Users'),
+    compactCommandCenter: {
+      platformDetailsOpen: document.querySelector('[data-testid="dashboard-platform-details"]') instanceof HTMLDetailsElement
+        ? document.querySelector('[data-testid="dashboard-platform-details"]').open
+        : null,
+      controlMapOpen: document.querySelector('[data-testid="dashboard-control-map-details"]') instanceof HTMLDetailsElement
+        ? document.querySelector('[data-testid="dashboard-control-map-details"]').open
+        : null,
+      rbacScopeOpen: document.querySelector('[data-testid="dashboard-rbac-scope"]') instanceof HTMLDetailsElement
+        ? document.querySelector('[data-testid="dashboard-rbac-scope"]').open
+        : null,
+      moduleMapOpen: document.querySelector('[data-testid="dashboard-module-map-details"]') instanceof HTMLDetailsElement
+        ? document.querySelector('[data-testid="dashboard-module-map-details"]').open
+        : null,
+    },
     hasDeploymentHistory: Boolean(document.querySelector('[data-testid="dashboard-deployment-history"]')) &&
       document.body?.innerText?.includes('Deployment execution and history') &&
       document.body?.innerText?.includes('Run deployment preflight') &&
@@ -581,6 +669,7 @@ const assertDashboardLayout = async (client, siteName) => {
   assert(layout.scrollWidth <= layout.width + 8, `Dashboard has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.hasCommandCenter &&
+      layout.hasFocusLane &&
       layout.hasSiteSelector &&
       layout.hasSite &&
       layout.hasStats &&
@@ -604,7 +693,72 @@ const assertDashboardLayout = async (client, siteName) => {
       layout.hasLaunchWorkflows,
     `Dashboard missing expected regions: ${JSON.stringify(layout)}`,
   );
+  assert(
+    layout.compactCommandCenter.platformDetailsOpen === false &&
+      layout.compactCommandCenter.controlMapOpen === false &&
+      layout.compactCommandCenter.rbacScopeOpen === false &&
+      layout.compactCommandCenter.moduleMapOpen === false,
+    `Dashboard command center disclosures should start collapsed: ${JSON.stringify(layout.compactCommandCenter)}`,
+  );
   return layout;
+};
+
+const assertDashboardCommandActionStatus = async (client) => {
+  let state = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const group = document.querySelector('[data-testid="dashboard-command-actions"]');
+      const status = document.querySelector('[data-testid="dashboard-command-actions-status"]');
+      const readButton = (testId) => {
+        const button = document.querySelector(\`[data-testid="\${testId}"]\`);
+        return {
+          found: Boolean(button),
+          label: button?.getAttribute('aria-label') || '',
+          describedBy: button?.getAttribute('aria-describedby') || '',
+          state: button?.getAttribute('data-action-state') || '',
+          disabledReason: button?.getAttribute('data-disabled-reason') || '',
+          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+          text: button?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        };
+      };
+      return {
+        role: group?.getAttribute('role') || '',
+        label: group?.getAttribute('aria-label') || '',
+        describedBy: group?.getAttribute('aria-describedby') || '',
+        actionState: group?.getAttribute('data-action-state') || '',
+        statusId: status?.id || '',
+        statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        statusData: group?.getAttribute('data-action-status') || '',
+        refresh: readButton('dashboard-command-refresh'),
+        copy: readButton('dashboard-command-copy-handoff'),
+        download: readButton('dashboard-command-download-handoff'),
+      };
+    })()`);
+    if (state.actionState === 'ready') {
+      break;
+    }
+    if (attempt < 99) {
+      await sleep(150);
+    }
+  }
+
+  assert(state.role === 'group' && state.label === 'Dashboard command actions', `Dashboard command actions must be a named group: ${JSON.stringify(state)}`);
+  assert(state.describedBy === state.statusId, `Dashboard command action group must be described by its status: ${JSON.stringify(state)}`);
+  assert(state.statusData === state.statusText, `Dashboard command action status data must mirror hidden copy: ${JSON.stringify(state)}`);
+  assert(
+    state.statusText === 'Refresh data available. Copy handoff available. Download JSON available.' &&
+      state.actionState === 'ready',
+    `Dashboard command actions should summarize ready state: ${JSON.stringify(state)}`,
+  );
+  for (const [key, button] of Object.entries({ refresh: state.refresh, copy: state.copy, download: state.download })) {
+    assert(button.found, `Dashboard ${key} command action was not found: ${JSON.stringify(state)}`);
+    assert(button.describedBy === state.statusId, `Dashboard ${key} command action must reference the shared status: ${JSON.stringify(state)}`);
+    assert(button.state === 'ready' && button.disabled === false && button.disabledReason === '', `Dashboard ${key} command action should be ready: ${JSON.stringify(state)}`);
+  }
+  assert(state.refresh.label === 'Refresh dashboard command center data', `Dashboard refresh command label drifted: ${JSON.stringify(state)}`);
+  assert(state.copy.label === 'Copy dashboard frontend handoff', `Dashboard copy command label drifted: ${JSON.stringify(state)}`);
+  assert(state.download.label === 'Download dashboard frontend handoff JSON', `Dashboard download command label drifted: ${JSON.stringify(state)}`);
+  return state;
 };
 
 const assertDashboardVisualState = async (client, label, screenshotPath, siteName) => {
@@ -618,6 +772,7 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
     const bodyText = document.body?.innerText || '';
     const regionSelectors = [
       ['commandCenter', '[data-testid="dashboard-command-center"]'],
+      ['focusLane', '[data-testid="dashboard-focus-lane"]'],
       ['stats', '#dashboard-stats'],
       ['rbacScope', '[data-testid="dashboard-rbac-scope"]'],
       ['onboarding', '[data-testid="dashboard-onboarding-state"]'],
@@ -667,6 +822,20 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
     const missingRegions = Object.entries(regions)
       .filter(([, region]) => !region.visible)
       .map(([key, region]) => ({ key, ...region }));
+    const compactCommandCenter = {
+      platformDetailsOpen: document.querySelector('[data-testid="dashboard-platform-details"]') instanceof HTMLDetailsElement
+        ? document.querySelector('[data-testid="dashboard-platform-details"]').open
+        : null,
+      controlMapOpen: document.querySelector('[data-testid="dashboard-control-map-details"]') instanceof HTMLDetailsElement
+        ? document.querySelector('[data-testid="dashboard-control-map-details"]').open
+        : null,
+      rbacScopeOpen: document.querySelector('[data-testid="dashboard-rbac-scope"]') instanceof HTMLDetailsElement
+        ? document.querySelector('[data-testid="dashboard-rbac-scope"]').open
+        : null,
+      moduleMapOpen: document.querySelector('[data-testid="dashboard-module-map-details"]') instanceof HTMLDetailsElement
+        ? document.querySelector('[data-testid="dashboard-module-map-details"]').open
+        : null,
+    };
 
     return {
       label: ${JSON.stringify(label)},
@@ -688,6 +857,7 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
       hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
       regions,
       missingRegions,
+      compactCommandCenter,
       controls: controls.slice(0, 80),
       visibleTinyControls,
       body: bodyText.slice(0, 4000),
@@ -700,6 +870,13 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
   assert(state.hasPreflightRun, `${label} dashboard deployment preflight history was not visually represented: ${JSON.stringify(state)}`);
   assert(state.hasInfrastructureRun, `${label} dashboard infrastructure diagnostics were not visually represented: ${JSON.stringify(state)}`);
   assert(state.hasWorkflowLinks && state.hasApiHandoff, `${label} dashboard workflow/API handoff regions were incomplete: ${JSON.stringify(state)}`);
+  assert(
+    state.compactCommandCenter.platformDetailsOpen === false &&
+      state.compactCommandCenter.controlMapOpen === false &&
+      state.compactCommandCenter.rbacScopeOpen === false &&
+      state.compactCommandCenter.moduleMapOpen === false,
+    `${label} dashboard command center disclosures should remain collapsed by default: ${JSON.stringify(state.compactCommandCenter)}`,
+  );
   assert(state.visibleTinyControls.length === 0, `${label} dashboard has visibly undersized controls: ${JSON.stringify(state)}`);
   assert(!state.hasFrameworkOverlay, `${label} dashboard rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
 
@@ -750,6 +927,7 @@ const assertDashboardRbacFiltering = async (client, viewerUser, siteName, preloa
         hasUsersEndpoint: apiText.includes('/users'),
         hasApiSetupAction: workflowText.includes('API setup'),
         hasNewSiteAction: workflowText.includes('New site'),
+        hasMemberAccessAction: workflowText.includes('Member access'),
         hasUsersModule: moduleText.includes('Users and roles'),
         hasInfrastructureModule: moduleText.includes('Infrastructure'),
         hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
@@ -762,6 +940,7 @@ const assertDashboardRbacFiltering = async (client, viewerUser, siteName, preloa
       assert(state.rbacText.includes('Settings') && state.rbacText.includes('Hidden'), `Viewer dashboard did not hide settings in RBAC panel: ${JSON.stringify(state)}`);
       assert(!state.hasSettingsEndpoint && !state.hasUsersEndpoint, `Viewer dashboard leaked privileged admin endpoints: ${JSON.stringify(state)}`);
       assert(!state.hasApiSetupAction && !state.hasNewSiteAction, `Viewer dashboard showed privileged creation/settings actions: ${JSON.stringify(state)}`);
+      assert(!state.hasMemberAccessAction, `Viewer dashboard showed privileged member access action: ${JSON.stringify(state)}`);
       assert(!state.hasUsersModule && !state.hasInfrastructureModule, `Viewer dashboard showed privileged module cards: ${JSON.stringify(state)}`);
       assert(state.deploymentDisabled === true && state.infrastructureDisabled === true, `Viewer dashboard did not disable settings-backed checks: ${JSON.stringify(state)}`);
       assert(!state.hasFrameworkOverlay, `Viewer dashboard rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
@@ -801,6 +980,409 @@ const assertDashboardLinks = async (client) => {
   })()`);
   assert(links.ok, `Dashboard missing expected navigation links: ${JSON.stringify(links)}`);
   return links;
+};
+
+const assertDashboardSidebarNavigation = async (client) => {
+  let initial = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    initial = await evaluate(client, `(() => {
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const workspace = document.querySelector('[data-nav-section="workspace"]');
+      const content = document.querySelector('[data-nav-section="content"]');
+      const contentToggle = document.querySelector('[data-testid="admin-sidebar-section-toggle-content"]');
+      const densityControls = document.querySelector('[data-testid="admin-sidebar-density-controls"]');
+      const activeOnlyButton = document.querySelector('[data-testid="admin-sidebar-collapse-inactive-sections"]');
+      const expandAllButton = document.querySelector('[data-testid="admin-sidebar-expand-all-sections"]');
+      const filterInput = document.querySelector('[data-testid="admin-sidebar-filter-input"]');
+      return {
+        ready: Boolean(sidebar) &&
+          sidebar?.getAttribute('data-nav-ready') === 'true' &&
+          Boolean(workspace) &&
+          Boolean(content) &&
+          contentToggle instanceof HTMLButtonElement &&
+          densityControls instanceof HTMLElement &&
+          filterInput instanceof HTMLInputElement &&
+          activeOnlyButton instanceof HTMLButtonElement &&
+          expandAllButton instanceof HTMLButtonElement,
+        collapsed: sidebar?.getAttribute('data-collapsed') || '',
+        activeSection: sidebar?.getAttribute('data-active-nav-section') || '',
+        sectionCount: Number(sidebar?.getAttribute('data-nav-section-count') || 0),
+        expandedCount: Number(sidebar?.getAttribute('data-expanded-section-count') || 0),
+        collapsedCount: Number(sidebar?.getAttribute('data-collapsed-section-count') || 0),
+        densityExpandedCount: Number(densityControls?.getAttribute('data-expanded-section-count') || 0),
+        densitySectionCount: Number(densityControls?.getAttribute('data-section-count') || 0),
+        densityActiveSection: densityControls?.getAttribute('data-active-section') || '',
+        densityFiltered: densityControls?.getAttribute('data-filtered') || '',
+        renderedItemCount: Number(sidebar?.getAttribute('data-rendered-nav-item-count') || 0),
+        workspaceExpanded: workspace?.getAttribute('data-nav-section-expanded') || '',
+        contentExpanded: content?.getAttribute('data-nav-section-expanded') || '',
+        contentAriaExpanded: contentToggle instanceof HTMLButtonElement ? contentToggle.getAttribute('aria-expanded') : '',
+        hasDensityControls: densityControls instanceof HTMLElement,
+        hasFilterInput: filterInput instanceof HTMLInputElement,
+        hasActiveOnlyButton: activeOnlyButton instanceof HTMLButtonElement,
+        hasExpandAllButton: expandAllButton instanceof HTMLButtonElement,
+        hasPagesLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-pages"]')),
+        storage: localStorage.getItem('backy:admin-sidebar-section-state') || '',
+      };
+    })()`);
+    if (initial.ready) break;
+    await sleep(150);
+  }
+
+  assert(initial?.ready, `Dashboard sidebar did not become ready: ${JSON.stringify(initial)}`);
+  assert(initial.collapsed === 'false', `Dashboard sidebar should be expanded on dashboard: ${JSON.stringify(initial)}`);
+  assert(initial.activeSection === 'workspace', `Dashboard sidebar should keep workspace active: ${JSON.stringify(initial)}`);
+  assert(initial.sectionCount >= 5, `Dashboard sidebar lost primary navigation groups: ${JSON.stringify(initial)}`);
+  assert(initial.expandedCount >= 1 && initial.collapsedCount >= 1, `Dashboard sidebar should start grouped, not fully expanded: ${JSON.stringify(initial)}`);
+  assert(
+    initial.hasDensityControls &&
+      initial.hasActiveOnlyButton &&
+      initial.hasExpandAllButton &&
+      initial.hasFilterInput &&
+      initial.densityExpandedCount === initial.expandedCount &&
+      initial.densitySectionCount === initial.sectionCount &&
+      initial.densityFiltered === 'false' &&
+      initial.renderedItemCount > 0 &&
+      initial.densityActiveSection === initial.activeSection,
+    `Dashboard sidebar density controls did not mirror grouped state: ${JSON.stringify(initial)}`,
+  );
+  assert(initial.workspaceExpanded === 'true', `Dashboard sidebar should keep the active workspace group open: ${JSON.stringify(initial)}`);
+  assert(initial.contentExpanded === 'false' && initial.contentAriaExpanded === 'false', `Dashboard content group should start collapsed to reduce sidebar length: ${JSON.stringify(initial)}`);
+  assert(!initial.hasPagesLink, `Dashboard content links should not render until the content group is opened: ${JSON.stringify(initial)}`);
+
+  const typedFilter = await evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="admin-sidebar-filter-input"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'filter-input-missing' };
+    }
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    valueSetter?.call(input, 'media');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return { ok: true };
+  })()`);
+  assert(typedFilter.ok, `Unable to type into dashboard sidebar filter: ${JSON.stringify(typedFilter)}`);
+
+  let filteredNav = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    filteredNav = await evaluate(client, `(() => {
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const densityControls = document.querySelector('[data-testid="admin-sidebar-density-controls"]');
+      const content = document.querySelector('[data-nav-section="content"]');
+      return {
+        filtered: sidebar?.getAttribute('data-nav-filtered') || '',
+        densityFiltered: densityControls?.getAttribute('data-filtered') || '',
+        renderedSections: Number(sidebar?.getAttribute('data-rendered-nav-section-count') || 0),
+        renderedItems: Number(sidebar?.getAttribute('data-rendered-nav-item-count') || 0),
+        contentExpanded: content?.getAttribute('data-nav-section-expanded') || '',
+        hasMediaLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-media"]')),
+        hasPagesLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-pages"]')),
+        hasFilterClear: Boolean(document.querySelector('[data-testid="admin-sidebar-filter-clear"]')),
+        emptyVisible: Boolean(document.querySelector('[data-testid="admin-sidebar-filter-empty"]')),
+      };
+    })()`);
+    if (filteredNav.filtered === 'true' && filteredNav.hasMediaLink && filteredNav.renderedItems === 1) break;
+    await sleep(100);
+  }
+  assert(
+    filteredNav?.filtered === 'true' &&
+      filteredNav.densityFiltered === 'true' &&
+      filteredNav.renderedSections === 1 &&
+      filteredNav.renderedItems === 1 &&
+      filteredNav.contentExpanded === 'true' &&
+      filteredNav.hasMediaLink &&
+      !filteredNav.hasPagesLink &&
+      filteredNav.hasFilterClear &&
+      !filteredNav.emptyVisible,
+    `Dashboard sidebar filter did not shorten expanded navigation to the matching tool: ${JSON.stringify(filteredNav)}`,
+  );
+
+  const clearedFilter = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="admin-sidebar-filter-clear"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'filter-clear-missing' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clearedFilter.ok, `Unable to clear dashboard sidebar filter: ${JSON.stringify(clearedFilter)}`);
+
+  let clearedNav = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    clearedNav = await evaluate(client, `(() => {
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const content = document.querySelector('[data-nav-section="content"]');
+      return {
+        filtered: sidebar?.getAttribute('data-nav-filtered') || '',
+        renderedItems: Number(sidebar?.getAttribute('data-rendered-nav-item-count') || 0),
+        navItems: Number(sidebar?.getAttribute('data-nav-item-count') || 0),
+        contentExpanded: content?.getAttribute('data-nav-section-expanded') || '',
+        hasPagesLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-pages"]')),
+      };
+    })()`);
+    if (clearedNav.filtered === 'false' && clearedNav.renderedItems === clearedNav.navItems) break;
+    await sleep(100);
+  }
+  assert(
+    clearedNav?.filtered === 'false' &&
+      clearedNav.renderedItems === clearedNav.navItems &&
+      clearedNav.contentExpanded === 'false' &&
+      !clearedNav.hasPagesLink,
+    `Dashboard sidebar filter did not clear back to grouped navigation: ${JSON.stringify(clearedNav)}`,
+  );
+
+  const clickedExpandAll = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="admin-sidebar-expand-all-sections"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'expand-all-missing' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickedExpandAll.ok, `Unable to expand all dashboard sidebar sections: ${JSON.stringify(clickedExpandAll)}`);
+
+  let allExpanded = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    allExpanded = await evaluate(client, `(() => {
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const densityControls = document.querySelector('[data-testid="admin-sidebar-density-controls"]');
+      return {
+        expandedCount: Number(sidebar?.getAttribute('data-expanded-section-count') || 0),
+        collapsedCount: Number(sidebar?.getAttribute('data-collapsed-section-count') || 0),
+        sectionCount: Number(sidebar?.getAttribute('data-nav-section-count') || 0),
+        densityExpandedCount: Number(densityControls?.getAttribute('data-expanded-section-count') || 0),
+        hasSettingsLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-settings"]')),
+        storage: localStorage.getItem('backy:admin-sidebar-section-state') || '',
+      };
+    })()`);
+    if (allExpanded.expandedCount === allExpanded.sectionCount && allExpanded.hasSettingsLink) break;
+    await sleep(100);
+  }
+  assert(
+    allExpanded?.expandedCount === allExpanded.sectionCount &&
+      allExpanded.collapsedCount === 0 &&
+      allExpanded.densityExpandedCount === allExpanded.expandedCount &&
+      allExpanded.hasSettingsLink &&
+      allExpanded.storage.includes('platform'),
+    `Dashboard sidebar expand-all control did not open every group: ${JSON.stringify(allExpanded)}`,
+  );
+
+  const clickedActiveOnly = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="admin-sidebar-collapse-inactive-sections"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'active-only-missing' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickedActiveOnly.ok, `Unable to collapse inactive dashboard sidebar sections: ${JSON.stringify(clickedActiveOnly)}`);
+
+  let activeOnly = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    activeOnly = await evaluate(client, `(() => {
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const workspace = document.querySelector('[data-nav-section="workspace"]');
+      const content = document.querySelector('[data-nav-section="content"]');
+      const densityControls = document.querySelector('[data-testid="admin-sidebar-density-controls"]');
+      return {
+        expandedCount: Number(sidebar?.getAttribute('data-expanded-section-count') || 0),
+        collapsedCount: Number(sidebar?.getAttribute('data-collapsed-section-count') || 0),
+        activeSection: sidebar?.getAttribute('data-active-nav-section') || '',
+        densityExpandedCount: Number(densityControls?.getAttribute('data-expanded-section-count') || 0),
+        workspaceExpanded: workspace?.getAttribute('data-nav-section-expanded') || '',
+        contentExpanded: content?.getAttribute('data-nav-section-expanded') || '',
+        hasPagesLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-pages"]')),
+        storage: localStorage.getItem('backy:admin-sidebar-section-state') || '',
+      };
+    })()`);
+    if (activeOnly.workspaceExpanded === 'true' && activeOnly.contentExpanded === 'false' && !activeOnly.hasPagesLink) break;
+    await sleep(100);
+  }
+  assert(
+    activeOnly?.activeSection === 'workspace' &&
+      activeOnly.expandedCount === 1 &&
+      activeOnly.densityExpandedCount === 1 &&
+      activeOnly.workspaceExpanded === 'true' &&
+      activeOnly.contentExpanded === 'false' &&
+      !activeOnly.hasPagesLink &&
+      !activeOnly.storage.includes('content'),
+    `Dashboard sidebar active-only control did not shorten the navigation: ${JSON.stringify(activeOnly)}`,
+  );
+
+  const clickedOpen = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="admin-sidebar-section-toggle-content"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'content-toggle-missing' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickedOpen.ok, `Unable to open dashboard sidebar content group: ${JSON.stringify(clickedOpen)}`);
+
+  let opened = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    opened = await evaluate(client, `(() => {
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const content = document.querySelector('[data-nav-section="content"]');
+      const contentToggle = document.querySelector('[data-testid="admin-sidebar-section-toggle-content"]');
+      return {
+        expandedCount: Number(sidebar?.getAttribute('data-expanded-section-count') || 0),
+        collapsedCount: Number(sidebar?.getAttribute('data-collapsed-section-count') || 0),
+        contentExpanded: content?.getAttribute('data-nav-section-expanded') || '',
+        contentAriaExpanded: contentToggle instanceof HTMLButtonElement ? contentToggle.getAttribute('aria-expanded') : '',
+        hasPagesLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-pages"]')),
+        hasBlogLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-blog"]')),
+        storage: localStorage.getItem('backy:admin-sidebar-section-state') || '',
+      };
+    })()`);
+    if (opened.contentExpanded === 'true' && opened.hasPagesLink && opened.hasBlogLink) break;
+    await sleep(100);
+  }
+  assert(
+    opened?.contentExpanded === 'true' &&
+      opened.contentAriaExpanded === 'true' &&
+      opened.hasPagesLink &&
+      opened.hasBlogLink &&
+      opened.storage.includes('content'),
+    `Dashboard sidebar content group did not open and persist: ${JSON.stringify(opened)}`,
+  );
+
+  const clickedClose = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="admin-sidebar-section-toggle-content"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'content-toggle-missing' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickedClose.ok, `Unable to close dashboard sidebar content group: ${JSON.stringify(clickedClose)}`);
+
+  let closed = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    closed = await evaluate(client, `(() => {
+      const content = document.querySelector('[data-nav-section="content"]');
+      const contentToggle = document.querySelector('[data-testid="admin-sidebar-section-toggle-content"]');
+      return {
+        contentExpanded: content?.getAttribute('data-nav-section-expanded') || '',
+        contentAriaExpanded: contentToggle instanceof HTMLButtonElement ? contentToggle.getAttribute('aria-expanded') : '',
+        hasPagesLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-pages"]')),
+        storage: localStorage.getItem('backy:admin-sidebar-section-state') || '',
+      };
+    })()`);
+    if (closed.contentExpanded === 'false' && !closed.hasPagesLink) break;
+    await sleep(100);
+  }
+  assert(
+    closed?.contentExpanded === 'false' &&
+      closed.contentAriaExpanded === 'false' &&
+      !closed.hasPagesLink &&
+      !closed.storage.includes('content'),
+    `Dashboard sidebar content group did not close cleanly: ${JSON.stringify(closed)}`,
+  );
+
+  const clickedCollapse = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="admin-sidebar-toggle"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'toggle-missing' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickedCollapse.ok, `Unable to collapse dashboard sidebar: ${JSON.stringify(clickedCollapse)}`);
+
+  let collapsedRail = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    collapsedRail = await evaluate(client, `(() => {
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const pagesLink = document.querySelector('[data-testid="admin-sidebar-link-pages"]');
+      const tooltip = document.querySelector('[data-testid="admin-sidebar-rail-tooltip"]');
+      const sidebarRect = sidebar instanceof HTMLElement ? sidebar.getBoundingClientRect() : null;
+      return {
+        collapsed: sidebar?.getAttribute('data-collapsed') || '',
+        sidebarWidth: sidebarRect?.width || 0,
+        navReady: sidebar?.getAttribute('data-nav-ready') || '',
+        permissionSource: sidebar?.getAttribute('data-permission-source') || '',
+        hasPagesLink: pagesLink instanceof HTMLAnchorElement,
+        tooltipVisible: tooltip instanceof HTMLElement,
+      };
+    })()`);
+    if (collapsedRail.collapsed === 'true' && collapsedRail.sidebarWidth <= 90 && collapsedRail.hasPagesLink) break;
+    await sleep(100);
+  }
+  assert(
+    collapsedRail?.collapsed === 'true' &&
+      collapsedRail.sidebarWidth <= 90 &&
+      collapsedRail.navReady === 'true' &&
+      collapsedRail.hasPagesLink,
+    `Collapsed dashboard sidebar rail did not expose all section links: ${JSON.stringify(collapsedRail)}`,
+  );
+
+  const railTarget = await evaluate(client, `(() => {
+    const pagesLink = document.querySelector('[data-testid="admin-sidebar-link-pages"]');
+    if (!(pagesLink instanceof HTMLAnchorElement)) {
+      return { ok: false, reason: 'pages-link-missing' };
+    }
+    const rect = pagesLink.getBoundingClientRect();
+    return {
+      ok: true,
+      x: Math.round(rect.left + rect.width / 2),
+      y: Math.round(rect.top + rect.height / 2),
+      width: rect.width,
+      height: rect.height,
+    };
+  })()`);
+  assert(railTarget.ok, `Unable to locate collapsed dashboard sidebar item: ${JSON.stringify(railTarget)}`);
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: railTarget.x,
+    y: railTarget.y,
+  });
+
+  const focusedRailItem = await evaluate(client, `(() => {
+    const pagesLink = document.querySelector('[data-testid="admin-sidebar-link-pages"]');
+    if (!(pagesLink instanceof HTMLAnchorElement)) {
+      return { ok: false, reason: 'pages-link-missing' };
+    }
+    pagesLink.focus();
+    return { ok: true, activeTestId: document.activeElement?.getAttribute('data-testid') || '' };
+  })()`);
+  assert(focusedRailItem.ok, `Unable to focus collapsed dashboard sidebar item: ${JSON.stringify(focusedRailItem)}`);
+
+  let railTooltip = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    railTooltip = await evaluate(client, `(() => {
+      const tooltip = document.querySelector('[data-testid="admin-sidebar-rail-tooltip"]');
+      const rect = tooltip instanceof HTMLElement ? tooltip.getBoundingClientRect() : null;
+      return {
+        visible: tooltip instanceof HTMLElement,
+        item: tooltip?.getAttribute('data-tooltip-item') || '',
+        route: tooltip?.getAttribute('data-tooltip-route') || '',
+        left: rect?.left || 0,
+        text: tooltip?.textContent || '',
+      };
+    })()`);
+    if (railTooltip.visible && railTooltip.item === 'pages') break;
+    await sleep(100);
+  }
+  assert(
+    railTooltip?.visible &&
+      railTooltip.item === 'pages' &&
+      railTooltip.route === '/pages' &&
+      railTooltip.left > 64 &&
+      railTooltip.text.includes('Pages'),
+    `Collapsed dashboard sidebar rail tooltip did not render outside the clipped nav scroll area: ${JSON.stringify({ railTarget, focusedRailItem, railTooltip })}`,
+  );
+
+  const clickedExpand = await evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="admin-sidebar-toggle"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'toggle-missing' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+  assert(clickedExpand.ok, `Unable to re-expand dashboard sidebar after rail tooltip check: ${JSON.stringify(clickedExpand)}`);
+
+  return { initial, opened, closed, collapsedRail, railTooltip };
 };
 
 const launchChrome = () => {
@@ -860,6 +1442,12 @@ const cleanup = async ({ client, childProcess, userDataDir, siteId, userId }) =>
 };
 
 const main = async () => {
+  if (process.env.BACKY_DASHBOARD_SOURCE_ONLY === '1') {
+    assertDashboardSourceContracts();
+    console.log(JSON.stringify({ ok: true, mode: 'source-only' }, null, 2));
+    return;
+  }
+
   let client;
   let childProcess;
   let userDataDir;
@@ -904,7 +1492,19 @@ const main = async () => {
     await waitForDashboardSite(client, siteName);
     await selectDashboardSite(client, siteId);
     await assertDashboardLayout(client, siteName);
+    const commandActionStatus = await assertDashboardCommandActionStatus(client);
+    if (COMMAND_ACTION_STATUS_SMOKE) {
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'dashboard-command-action-status',
+        siteName,
+        slug,
+        commandActionStatus,
+      }, null, 2));
+      return;
+    }
     await assertDashboardLinks(client);
+    await assertDashboardSidebarNavigation(client);
     await clickDashboardRefresh(client);
     await runDashboardDeploymentPreflight(client);
     await runDashboardInfrastructureCheck(client);

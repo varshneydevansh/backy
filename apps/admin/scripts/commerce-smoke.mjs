@@ -922,6 +922,10 @@ const assertProductsApiContractsSource = () => {
     new URL("../src/routes/products.tsx", import.meta.url),
     "utf8",
   );
+  const ordersSource = fs.readFileSync(
+    new URL("../src/routes/orders.tsx", import.meta.url),
+    "utf8",
+  );
   const providerSyncSource = fs.readFileSync(
     new URL(
       "../../public/src/app/api/admin/sites/[siteId]/commerce/products/[productId]/provider-sync/route.ts",
@@ -1006,6 +1010,77 @@ const assertProductsApiContractsSource = () => {
     "Products route must expose a labelled permission error state",
   );
   assert(
+    source.includes("const canUseProductRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);") &&
+      source.includes("const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseProductRoleDefaults;") &&
+      source.includes("const isProductPermissionAllowed = (key: ProductPermissionKey) => (") &&
+      source.includes("const canViewCommerce = isProductPermissionAllowed('commerce.view');") &&
+      source.includes("const canEditCommerce = isProductPermissionAllowed('commerce.edit');") &&
+      source.includes("const canConfigureCommerce = isProductPermissionAllowed('commerce.configure');") &&
+      source.includes("const canDeleteCommerce = isProductPermissionAllowed('commerce.delete');") &&
+      source.includes("const canViewCollections = isProductPermissionAllowed('collections.view');") &&
+      source.includes("const canEditCollections = isProductPermissionAllowed('collections.edit');") &&
+      source.includes("const canExportCollections = isProductPermissionAllowed('collections.export');") &&
+      source.includes("const canDeleteCollections = isProductPermissionAllowed('collections.delete');") &&
+      source.includes("const canViewMedia = isProductPermissionAllowed('media.view');") &&
+      source.includes("const canCreateMedia = isProductPermissionAllowed('media.create');") &&
+      source.includes("const canEditPages = isProductPermissionAllowed('pages.edit');") &&
+      source.includes("const isProductsAccessBusy = isProductsBusy;") &&
+      source.includes("const isProductPageTemplateActionDisabled = !canEditPages;") &&
+      source.includes('data-testid="products-permission-sync-state"') &&
+      !source.includes("const canViewCommerce = !isPermissionMatrixPending") &&
+      !source.includes("const isProductsAccessBusy = isProductsBusy || isPermissionMatrixPending;") &&
+      !source.includes("const isProductPageTemplateActionDisabled = isPermissionMatrixPending || !canEditPages;"),
+    "Products route must keep role-default commerce workflows usable while permission details hydrate",
+  );
+  assert(
+    source.includes('data-testid="products-command-secondary-actions"') &&
+      source.includes('data-testid="products-readiness-details"') &&
+      source.includes('data-testid="products-control-map"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes("Catalog readiness, workflow, and navigation") &&
+      source.includes('data-testid="products-command-copy-manifest"') &&
+      source.includes('data-testid="products-command-download-json"') &&
+      source.includes('data-testid="products-command-export-csv"') &&
+      source.includes('data-testid="products-command-csv-template"') &&
+      source.includes('data-testid="products-command-import-csv"') &&
+      source.includes('data-testid="products-command-storefront-page"') &&
+      source.includes('aria-label="More catalog actions"') &&
+      source.indexOf('New product') < source.indexOf('data-testid="products-command-secondary-actions"'),
+    "Products command center must keep New product primary while grouping secondary catalog and readiness actions",
+  );
+  assert(
+    source.includes('const productActionStatusId = `products-actions-status-${product.id}`;') &&
+      source.includes('data-testid="products-product-card"') &&
+      source.includes('data-testid="products-action-group"') &&
+      source.includes('data-testid="products-action-status"') &&
+      source.includes('data-action-status={productActionStatus}') &&
+      source.includes('aria-label={`Actions for ${title}`}') &&
+      source.includes('aria-describedby={productActionStatusId}') &&
+      source.includes('data-testid="products-edit-product"') &&
+      source.includes('data-testid="products-publish-product"') &&
+      source.includes('data-testid="products-archive-product"') &&
+      source.includes('data-testid="products-delete-product"') &&
+      source.includes("data-action-state={publishDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes("data-disabled-reason={deleteProductDisabledReason || undefined}") &&
+      source.includes("Product actions are temporarily unavailable while Backy updates catalog data") &&
+      source.includes("This product is already published") &&
+      source.includes("This product is already archived"),
+    "Products product cards must expose named action groups, status summaries, and explicit action-state metadata",
+  );
+  assert(
+    ordersSource.includes('data-testid="orders-command-secondary-actions"') &&
+      ordersSource.includes('data-testid="orders-command-copy-manifest"') &&
+      ordersSource.includes('data-testid="orders-command-download-json"') &&
+      ordersSource.includes('data-testid="orders-command-export-csv"') &&
+      ordersSource.includes('data-testid="orders-command-csv-template"') &&
+      ordersSource.includes('data-testid="orders-command-import-csv"') &&
+      ordersSource.includes('data-testid="orders-command-products"') &&
+      ordersSource.includes('data-testid="orders-command-storefront-page"') &&
+      ordersSource.includes('aria-label="More order actions"') &&
+      ordersSource.indexOf('New order') < ordersSource.indexOf('data-testid="orders-command-secondary-actions"'),
+    "Orders command center must keep New order primary while grouping secondary order actions",
+  );
+  assert(
     source.includes('to="/users"') &&
       source.includes("Review users") &&
       source.includes('aria-label="Retry loading product permissions"'),
@@ -1032,6 +1107,13 @@ const assertProductsApiContractsSource = () => {
   assert(
     source.includes("Customer profiles are created automatically from checkout intake and stay in the private customers collection."),
     "Products customer profiles empty state must explain checkout intake and private storage",
+  );
+  assert(
+    source.includes("const hydratedCustomerProfileIdRef = useRef<string | null>(null);") &&
+      source.includes("if (hydratedCustomerProfileIdRef.current === selectedProfileId) return;") &&
+      source.includes("hydratedCustomerProfileIdRef.current = updated.id;") &&
+      source.includes("setCustomerProfileDraft(customerProfileToDraft(updated));"),
+    "Products customer profile editor must not wipe in-progress edits during background profile refreshes",
   );
   assert(
     source.includes("const PRODUCT_GALLERY_IMAGE_LIMIT = 12;") &&
@@ -1084,7 +1166,7 @@ const assertProductsApiContractsSource = () => {
       source.includes("const productTitleInlineError = productFormSubmitted && !formState.title.trim()") &&
       source.includes("const productSkuInlineError = productFormSubmitted && !formState.sku.trim()") &&
       source.includes("setError('Fix product identity fields before saving.')") &&
-      source.includes("<form onSubmit={saveProduct} noValidate>") &&
+      source.includes("<form onSubmit={saveProduct} noValidate") &&
       source.includes('data-testid="products-title-input"') &&
       source.includes('aria-describedby={productTitleInlineError ?') &&
       source.includes('data-testid="products-title-error"') &&
@@ -1094,6 +1176,23 @@ const assertProductsApiContractsSource = () => {
       source.includes("disabled={isProductsAccessBusy || !canEditProducts}") &&
       !source.includes("disabled={isProductsAccessBusy || !canEditProducts || Boolean(scheduledProductDateError)}"),
     "Products editor must expose inline title/SKU/schedule validation instead of silently disabling the save action",
+  );
+  assert(
+    source.includes("const PRODUCT_EDITOR_SECTIONS = [") &&
+      source.includes("xl:max-h-[calc(100vh-2rem)]") &&
+      source.includes('data-testid="products-editor-panel"') &&
+      source.includes('data-testid="products-editor-sticky-actions"') &&
+      source.includes('data-testid="products-editor-sticky-save"') &&
+      source.includes('data-testid="products-editor-section-nav"') &&
+      source.includes('aria-label="Product editor sections"') &&
+      source.includes('id="products-editor-identity"') &&
+      source.includes('id="products-editor-variants"') &&
+      source.includes('id="products-editor-fulfillment"') &&
+      source.includes('id="products-editor-subscriptions"') &&
+      source.includes('id="products-editor-provider-sync"') &&
+      source.includes('id="products-editor-media"') &&
+      source.includes('id="products-editor-publishing"'),
+    "Products editor must stay constrained with sticky save actions and section shortcuts so the side pane remains operable",
   );
   assert(
     source.includes("apiContracts: PRODUCT_API_CONTRACTS.map"),
@@ -1129,6 +1228,8 @@ const assertProductsApiContractsSource = () => {
       frontendDesignContractSource.includes("frontendDesignThemeTokenRefs") &&
       frontendDesignContractSource.includes("frontendDesignAnimations") &&
       frontendDesignContractSource.includes("frontendDesignMetadata") &&
+      source.includes('data-testid="products-frontend-template-options"') &&
+      source.includes("Show templates") &&
       source.includes('data-testid="products-frontend-template-design-readiness"') &&
       source.includes("const designValues = buildFrontendProductTemplateValues(template, frontendDesign);") &&
       source.includes("const designReadiness = buildProductDesignReadiness(designValues);") &&
@@ -1151,8 +1252,11 @@ const assertProductsApiContractsSource = () => {
     "Products digital delivery must persist stable media bindings for downloadable files and catalog readiness",
   );
   assert(
-    source.includes('data-testid="products-api-contracts"'),
-    "Products page must render API response contracts for custom frontends",
+    source.includes('data-testid="products-storefront-api-details"') &&
+      source.includes('data-disclosure="products-storefront-api-handoff"') &&
+      source.includes('Storefront API and provider handoff') &&
+      source.includes('data-testid="products-api-contracts"'),
+    "Products page must keep API response contracts available behind a compact storefront/provider disclosure for custom frontends",
   );
   assert(
     source.includes('data-testid="products-provider-certification"'),
@@ -1267,12 +1371,30 @@ const assertProductsApiContractsSource = () => {
     "Products page must render non-secret provider certification scenario evidence",
   );
   assert(
-    source.includes('data-testid="products-provider-certification-evidence-packet"') &&
+      source.includes('data-testid="products-provider-certification-evidence-packet"') &&
       source.includes('data-testid="products-provider-certification-evidence-packet-copy-button"') &&
+      source.includes('data-testid="products-provider-certification-readiness-summary"') &&
+      source.includes('data-testid="products-provider-certification-next-action"') &&
       source.includes("providerCertificationEvidencePacket") &&
       source.includes("providerCertificationEvidencePacketText") &&
+      source.includes("operatorNextAction") &&
+      source.includes("providerCertificationReadinessItems") &&
+      source.includes("providerCertificationRuntimeGapDetail") &&
+      source.includes("PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV") &&
+      source.includes("PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT") &&
       source.includes("operatorEvidencePacket: providerCertificationEvidencePacket") &&
       source.includes("backy.commerce-provider-certification-evidence-packet.v1") &&
+      source.includes("Product certification readiness summary") &&
+      source.includes("Runtime credentials") &&
+      source.includes("Scenario coverage") &&
+      source.includes("Artifact output") &&
+      source.includes("Gate command") &&
+      source.includes("Required site selector") &&
+      source.includes("Next operator action") &&
+      source.includes("Configure live provider credentials") &&
+      source.includes("BACKY_COMMERCE_CERTIFICATION_OUTPUT") &&
+      source.includes("artifacts/backy-commerce-provider-certification.json") &&
+      source.includes("Secret boundary: no commerce provider credentials, customer payloads, private order payloads, or webhook bodies are copied.") &&
       source.includes("Copy evidence packet") &&
       source.includes("Redacted operator attachment manifest") &&
       source.includes("targetInputs: PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE.targetInputs") &&
@@ -1289,6 +1411,13 @@ const assertProductsApiContractsSource = () => {
       source.includes("const visibleIds = new Set(filteredProductIds)") &&
       source.includes("filteredProductIds.filter((productId) => !current.includes(productId))") &&
       source.includes('data-testid="products-bulk-toolbar"') &&
+      source.includes("const productsBulkActionStatusId = 'products-bulk-action-status';") &&
+      source.includes('const productsBulkActionStatus = [') &&
+      source.includes('data-testid="products-bulk-action-status"') &&
+      source.includes('aria-label="Selected product bulk actions"') &&
+      source.includes('data-action-status={productsBulkActionStatus}') &&
+      source.includes("data-action-state={productsBulkStatusDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes("data-disabled-reason={productsBulkDeleteDisabledReason || undefined}") &&
       source.includes('data-testid="products-bulk-selection-summary"') &&
       source.includes('data-testid="products-bulk-delete-modal"') &&
       source.includes("Select all visible products") &&
@@ -1316,12 +1445,14 @@ const assertProductsApiContractsSource = () => {
     source.includes('data-testid="products-provider-certification-download-button"') &&
       source.includes('data-testid="products-provider-certification-copy-button"') &&
       source.includes('data-testid="products-provider-certification-command-copy-button"') &&
+      source.includes('data-testid="products-provider-certification-operator-details"') &&
       source.includes('data-testid="products-provider-certification-command-builder"') &&
       source.includes('data-testid="products-provider-certification-env-copy-button"') &&
       source.includes('data-testid="products-provider-certification-env-template"') &&
       source.includes('data-testid="products-provider-certification-env-template-body"') &&
       source.includes('data-testid="products-provider-certification-command-builder-copy-button"') &&
       source.includes('data-testid="products-provider-certification-site-target"') &&
+      source.includes('data-testid="products-provider-certification-readiness-summary"') &&
       source.includes("providerCertificationHandoffText") &&
       source.includes("providerCertificationEnvTemplate") &&
       source.includes("catalogEvidence") &&
@@ -1385,6 +1516,11 @@ const assertProductsApiContractsSource = () => {
     "credentialed provider readiness check output",
     "Copy CI command",
     "Required inputs",
+    "Product certification readiness summary",
+    "Runtime credentials",
+    "Artifact output",
+    "BACKY_COMMERCE_CERTIFICATION_OUTPUT",
+    "artifacts/backy-commerce-provider-certification.json",
   ]) {
     assert(
       source.includes(providerLabel),
@@ -2707,7 +2843,8 @@ const loginAdminApi = async () => {
   const smokeMfaCode =
     process.env.BACKY_COMMERCE_SMOKE_MFA_CODE ||
     process.env.BACKY_ADMIN_MFA_CODE ||
-    process.env.BACKY_ADMIN_2FA_CODE;
+    process.env.BACKY_ADMIN_2FA_CODE ||
+    "backy-dev-mfa";
   if (!response.ok && payload.error?.code === "MFA_REQUIRED" && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -3557,6 +3694,53 @@ const assertProductBillingLimitEnforced = async (productCollection, suffix) => {
       integrations: originalIntegrations,
     });
   }
+};
+
+const temporarilyAllowProductSeedQuota = async (productCollection, extraProducts = 4) => {
+  assert(
+    productCollection?.id,
+    "Products collection is required to lift product seed quota.",
+  );
+  const site = await getSite();
+  const settings = await getSettings();
+  const existingProducts = await listAllCollectionRecords(productCollection.id);
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentProductLimit = Number(originalLimits.products || 0);
+  const nextProductLimit = Math.max(
+    currentProductLimit,
+    existingProducts.length + extraProducts,
+  );
+
+  await patchSettingsFromSnapshot({
+    ...settings,
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        overageMode: "allow",
+      },
+    },
+  });
+  await patchSite({
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          products: nextProductLimit,
+        },
+      },
+    },
+  });
+
+  return {
+    siteSettings: originalSiteSettings,
+  };
 };
 
 const currentMonthStartMs = () => {
@@ -5339,6 +5523,8 @@ const assertProductProviderSync = async ({
   );
   assert(
     providerCertification.operatorEvidencePacket?.schemaVersion === "backy.commerce-provider-certification-evidence-packet.v1" &&
+      providerCertification.operatorEvidencePacket.operatorNextAction?.command?.includes("ci:commerce-provider-certification") &&
+      providerCertification.operatorEvidencePacket.operatorNextAction?.artifactEnv === "BACKY_COMMERCE_CERTIFICATION_OUTPUT" &&
       providerCertification.operatorEvidencePacket.operatorArtifacts?.some((artifact) => artifact.key === "payment-checkout") &&
       providerCertification.operatorEvidencePacket.operatorArtifacts?.some((artifact) => artifact.key === "catalog-sync") &&
       providerCertification.operatorEvidencePacket.scenarioAttachments?.some((scenario) => scenario.key === "provider-catalog-sync") &&
@@ -7655,6 +7841,159 @@ const assertProductCsvImport = async ({ productCollection, suffix }) => {
   return record;
 };
 
+const assertProductBulkActionStatus = async (client) => {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const state = await evaluate(
+      client,
+      `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const clear = document.querySelector('[data-testid="products-bulk-clear-selection"]');
+      if (clear instanceof HTMLButtonElement && !clear.disabled) {
+        clear.click();
+        return { ok: false, reason: 'cleared-existing-selection' };
+      }
+      const status = document.querySelector('[data-testid="products-bulk-action-status"]');
+      const selectVisible = document.querySelector('input[aria-label="Select all visible products"]');
+      const statusText = normalize(status?.textContent);
+      return {
+        ok: status?.id === 'products-bulk-action-status' &&
+          statusText.includes('Select visible available for') &&
+          statusText.includes('Publish selected unavailable: Select one or more loaded products first.') &&
+          selectVisible instanceof HTMLInputElement &&
+          selectVisible.getAttribute('aria-describedby') === 'products-bulk-action-status' &&
+          selectVisible.getAttribute('data-action-state') === 'ready' &&
+          selectVisible.getAttribute('data-action-status') === statusText &&
+          !selectVisible.disabled,
+        reason: 'initial-bulk-status-mismatch',
+        statusId: status?.id || '',
+        statusText,
+        selectVisible: selectVisible instanceof HTMLInputElement ? {
+          describedBy: selectVisible.getAttribute('aria-describedby') || '',
+          state: selectVisible.getAttribute('data-action-state') || '',
+          disabledReason: selectVisible.getAttribute('data-disabled-reason') || '',
+          disabled: selectVisible.disabled,
+        } : null,
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`,
+    );
+    if (state.ok) break;
+    if (attempt === 59) {
+      throw new Error(`Products bulk initial action status contract failed: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(
+      client,
+      `(() => {
+      const card = document.querySelector('[data-testid="products-product-card"]');
+      const checkbox = card?.querySelector('input[type="checkbox"]');
+      if (!(checkbox instanceof HTMLInputElement)) {
+        return { ok: false, reason: 'product-checkbox-missing', body: document.body?.innerText?.slice(0, 900) || '' };
+      }
+      if (!checkbox.checked) checkbox.click();
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const group = document.querySelector('[data-testid="products-bulk-toolbar"]');
+      const status = document.querySelector('[data-testid="products-bulk-action-status"]');
+      const statusText = normalize(status?.textContent);
+      const statusId = status?.id || '';
+      const summary = document.querySelector('[data-testid="products-bulk-selection-summary"]');
+      const controls = [
+        'products-bulk-publish',
+        'products-bulk-draft',
+        'products-bulk-archive',
+        'products-bulk-export',
+        'products-bulk-clear-selection',
+        'products-bulk-delete',
+      ].map((testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          testId,
+          text: normalize(control?.textContent),
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          state: control?.getAttribute('data-action-state') || '',
+          disabledReason: control?.getAttribute('data-disabled-reason') || '',
+          disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        };
+      });
+      return {
+        ok: group?.getAttribute('role') === 'group' &&
+          group?.getAttribute('aria-label') === 'Selected product bulk actions' &&
+          group?.getAttribute('aria-describedby') === statusId &&
+          normalize(group?.getAttribute('data-action-status')) === statusText &&
+          normalize(summary?.textContent) === '1 selected product' &&
+          statusText.includes('Publish selected available for 1 selected product.') &&
+          statusText.includes('Draft selected available for 1 selected product.') &&
+          statusText.includes('Archive selected available for 1 selected product.') &&
+          statusText.includes('Export selected available for 1 selected product.') &&
+          statusText.includes('Clear selection available for 1 selected product.') &&
+          statusText.includes('Delete selected available for 1 selected product.') &&
+          controls.every((control) => control.describedBy === statusId) &&
+          controls.every((control) => control.state === 'ready') &&
+          controls.every((control) => control.disabled === false) &&
+          controls.every((control) => control.disabledReason === ''),
+        reason: 'selected-bulk-status-mismatch',
+        statusText,
+        groupRole: group?.getAttribute('role') || '',
+        groupLabel: group?.getAttribute('aria-label') || '',
+        groupDescribedBy: group?.getAttribute('aria-describedby') || '',
+        groupStatus: normalize(group?.getAttribute('data-action-status')),
+        summary: normalize(summary?.textContent),
+        controls,
+      };
+    })()`,
+    );
+    if (state.ok) break;
+    if (attempt === 79) {
+      throw new Error(`Products bulk selected action status contract failed: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const state = await evaluate(
+      client,
+      `(() => {
+      const clear = document.querySelector('[data-testid="products-bulk-clear-selection"]');
+      if (!(clear instanceof HTMLButtonElement)) return { ok: false, reason: 'clear-missing' };
+      if (clear.disabled) return { ok: false, reason: 'clear-disabled' };
+      clear.click();
+      return { ok: true };
+    })()`,
+    );
+    if (state.ok) break;
+    if (attempt === 59) {
+      throw new Error(`Unable to clear products bulk selection: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const state = await evaluate(
+      client,
+      `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const status = document.querySelector('[data-testid="products-bulk-action-status"]');
+      return {
+        ok: !document.querySelector('[data-testid="products-bulk-toolbar"]') &&
+          normalize(status?.textContent).includes('Publish selected unavailable: Select one or more loaded products first.'),
+        statusText: normalize(status?.textContent),
+        hasToolbar: Boolean(document.querySelector('[data-testid="products-bulk-toolbar"]')),
+      };
+    })()`,
+    );
+    if (state.ok) return state;
+    if (attempt === 59) {
+      throw new Error(`Products bulk selection did not clear: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const assertProductsLayout = async (client) => {
   await clickByText(client, "Refresh", { exact: true }).catch(() => null);
   await waitUntilIdle(client, "/products refresh before layout assertion");
@@ -7692,27 +8031,67 @@ const assertProductsLayout = async (client) => {
       const backendCommerceAnalyticsText = backendCommerceAnalytics?.textContent || '';
       const productAutomation = document.querySelector('[data-testid="products-notification-automation"]');
       const productAutomationText = productAutomation?.textContent || '';
-      const providerReconciliation = document.querySelector('[data-testid="products-provider-reconciliation"]');
-      const providerReconciliationText = providerReconciliation?.textContent || '';
-      const providerCertification = document.querySelector('[data-testid="products-provider-certification"]');
-      const providerCertificationText = providerCertification?.textContent || '';
+	      const providerReconciliation = document.querySelector('[data-testid="products-provider-reconciliation"]');
+	      const providerReconciliationText = providerReconciliation?.textContent || '';
+	      const providerCertification = document.querySelector('[data-testid="products-provider-certification"]');
+	      const providerCertificationText = providerCertification?.textContent || '';
+	      const productsStorefrontApiDetails = document.querySelector('[data-testid="products-storefront-api-details"]');
+	      const productsStorefrontApiText = productsStorefrontApiDetails?.textContent || '';
+	      const productsApiContracts = document.querySelector('[data-testid="products-api-contracts"]');
+	      const commerceAnalytics = document.querySelector('[data-testid="products-commerce-analytics"]');
+	      const commerceAnalyticsText = commerceAnalytics?.textContent || '';
+	      const customerProfileManager = document.querySelector('[data-testid="products-customer-profile-manager"]');
+	      const customerProfileManagerText = customerProfileManager?.textContent || '';
+	      const customerProfileSelector = document.querySelector('[aria-label="Customer profile"]');
+	      const pageBindingContract = document.querySelector('[data-testid="products-page-binding-contract"]');
+	      const pageBindingContractText = pageBindingContract?.textContent || '';
+	      const productPageTemplates = document.querySelector('[data-testid="products-page-templates"]');
+	      const productPageTemplatesText = productPageTemplates?.textContent || '';
       const productLaunchReadiness = document.querySelector('[data-testid="products-launch-readiness"]');
-      const productLaunchReadinessText = productLaunchReadiness?.textContent || '';
-      return {
-        width: window.innerWidth,
-        scrollWidth: document.documentElement.scrollWidth,
-        hasCommandCenter: Boolean(document.querySelector('[data-testid="products-command-center"]')),
-        hasApiPanel: document.body?.innerText?.includes('Storefront API') || false,
-        hasApiContracts: Boolean(document.querySelector('[data-testid="products-api-contracts"]')) &&
-          document.body?.innerText?.includes('Product API response contracts') &&
-          document.body?.innerText?.includes('backy.commerce-product-sync.v1') &&
-          document.body?.innerText?.includes('backy.product-subscription-lifecycle.v1') &&
-          document.body?.innerText?.includes('backy.product-subscription-action.v1') &&
-          document.body?.innerText?.includes('backy.interaction-event.v1'),
-        hasCommerceAnalytics: Boolean(document.querySelector('[data-testid="products-commerce-analytics"]')) &&
-          document.body?.innerText?.includes('Commerce analytics and customer profiles') &&
-          document.body?.innerText?.includes('Paid revenue') &&
-          document.body?.innerText?.includes('Customer profiles'),
+	      const productLaunchReadinessText = productLaunchReadiness?.textContent || '';
+	      const productsReadinessDetails = document.querySelector('[data-testid="products-readiness-details"]');
+	      const productsControlMap = document.querySelector('[data-testid="products-control-map"]');
+	      const frontendTemplateOptions = document.querySelector('[data-testid="products-frontend-template-options"]');
+	      const providerCertificationOperatorDetails = document.querySelector('[data-testid="products-provider-certification-operator-details"]');
+        const productEditorPanel = document.querySelector('[data-testid="products-editor-panel"]');
+        const productEditorPanelClass = productEditorPanel?.getAttribute('class') || '';
+        const productEditorSectionNav = document.querySelector('[data-testid="products-editor-section-nav"]');
+        const productEditorLinks = Array.from(productEditorSectionNav?.querySelectorAll('a') || []).map((link) => link.getAttribute('href'));
+        const productCard = document.querySelector('[data-testid="products-product-card"]');
+        const productActionGroup = productCard?.querySelector('[data-testid="products-action-group"]');
+        const productActionStatus = productCard?.querySelector('[data-testid="products-action-status"]');
+        const productActionStatusText = (productActionStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+        const productActionStatusId = productActionStatus?.id || '';
+        const productActionGroupStatus = productActionGroup?.getAttribute('data-action-status') || '';
+        const productActionGroupLabel = productActionGroup?.getAttribute('aria-label') || '';
+        const productEditAction = productCard?.querySelector('[data-testid="products-edit-product"]');
+        const productPublishAction = productCard?.querySelector('[data-testid="products-publish-product"]');
+        const productArchiveAction = productCard?.querySelector('[data-testid="products-archive-product"]');
+        const productDeleteAction = productCard?.querySelector('[data-testid="products-delete-product"]');
+        const productActions = [productEditAction, productPublishAction, productArchiveAction, productDeleteAction];
+        const productActionStates = productActions.map((action) => action?.getAttribute('data-action-state') || '');
+        const productActionDescriptions = productActions.map((action) => action?.getAttribute('aria-describedby') || '');
+        const productActionDisabledReasons = productActions.map((action) => action?.getAttribute('data-disabled-reason') || '');
+	      return {
+	        width: window.innerWidth,
+	        scrollWidth: document.documentElement.scrollWidth,
+	        hasCommandCenter: Boolean(document.querySelector('[data-testid="products-command-center"]')),
+	        readinessDetailsCollapsed: productsReadinessDetails instanceof HTMLDetailsElement && productsReadinessDetails.open === false,
+	        controlMapCollapsed: productsControlMap instanceof HTMLDetailsElement && productsControlMap.open === false,
+	        frontendTemplateOptionsCollapsed: frontendTemplateOptions instanceof HTMLDetailsElement && frontendTemplateOptions.open === false,
+	        storefrontApiDetailsCollapsed: productsStorefrontApiDetails instanceof HTMLDetailsElement && productsStorefrontApiDetails.open === false,
+	        providerCertificationOperatorDetailsCollapsed: providerCertificationOperatorDetails instanceof HTMLDetailsElement && providerCertificationOperatorDetails.open === false,
+	        hasApiPanel: Boolean(productsStorefrontApiDetails) && (document.body?.innerText?.includes('Storefront API and provider handoff') || false),
+        hasApiContracts: Boolean(productsApiContracts) &&
+          productsStorefrontApiText.includes('Product API response contracts') &&
+          productsStorefrontApiText.includes('backy.commerce-product-sync.v1') &&
+          productsStorefrontApiText.includes('backy.product-subscription-lifecycle.v1') &&
+          productsStorefrontApiText.includes('backy.product-subscription-action.v1') &&
+          productsStorefrontApiText.includes('backy.interaction-event.v1'),
+        hasCommerceAnalytics: Boolean(commerceAnalytics) &&
+          commerceAnalyticsText.includes('Commerce analytics and customer profiles') &&
+          commerceAnalyticsText.includes('Paid revenue') &&
+          commerceAnalyticsText.includes('Customer profiles'),
         hasBackendCommerceAnalytics: Boolean(backendCommerceAnalytics) &&
           backendCommerceAnalyticsText.includes('Backend order analytics') &&
           backendCommerceAnalyticsText.includes('Payment attention') &&
@@ -7733,9 +8112,15 @@ const assertProductsLayout = async (client) => {
           productAutomationText.includes('product.low_stock') &&
           productAutomationText.includes('4 in stock'),
         productAutomationText,
-        hasCustomerProfileManager: Boolean(document.querySelector('[data-testid="products-customer-profile-manager"]')) &&
-          document.body?.innerText?.includes('Manage profile') &&
-          document.body?.innerText?.includes('Save profile'),
+        hasCustomerProfileManager: (
+          Boolean(customerProfileManager) &&
+          customerProfileManagerText.includes('Manage profile') &&
+          customerProfileManagerText.includes('Save profile')
+        ) || (
+          customerProfileSelector instanceof HTMLSelectElement &&
+          commerceAnalyticsText.includes('Top customer profiles') &&
+          commerceAnalyticsText.includes('Customer profile')
+        ),
         hasSubscriptionMetadata: Boolean(document.querySelector('[data-testid="products-subscription-metadata"]')) &&
           document.body?.innerText?.includes('Subscription metadata') &&
           document.body?.innerText?.includes('Trial days'),
@@ -7794,11 +8179,21 @@ const assertProductsLayout = async (client) => {
           Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder-copy-button"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-site-target"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-readiness-summary"]')) &&
+          Boolean(document.querySelector('[data-testid="products-provider-certification-next-action"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-payment-toggle"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-tax-provider-select"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-command"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-evidence"]')) &&
           providerCertificationText.includes('Live provider certification') &&
+          providerCertificationText.includes('Product certification readiness summary') &&
+          providerCertificationText.includes('Runtime credentials') &&
+          providerCertificationText.includes('Artifact output') &&
+          providerCertificationText.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT') &&
+          providerCertificationText.includes('artifacts/backy-commerce-provider-certification.json') &&
+          providerCertificationText.includes('Required site selector') &&
+          providerCertificationText.includes('Next operator action') &&
+          providerCertificationText.includes('Configure live provider credentials') &&
           providerCertificationText.includes('Provider certification command builder') &&
           providerCertificationText.includes('Product provider certification evidence') &&
           providerCertificationText.includes('backy.product-provider-certification-evidence.v1') &&
@@ -7811,21 +8206,57 @@ const assertProductsLayout = async (client) => {
           providerCertificationText.includes('BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED') &&
           providerCertificationText.includes('Download provider JSON'),
         providerCertificationText,
-        hasPageBindingContract: Boolean(document.querySelector('[data-testid="products-page-binding-contract"]')) &&
-          document.body?.innerText?.includes('Page and editor binding contract') &&
-          document.body?.innerText?.includes('Product card blocks') &&
-          document.body?.innerText?.includes('Cart and order intake'),
-        hasProductPageTemplates: Boolean(document.querySelector('[data-testid="products-page-templates"]')) &&
-          Boolean(document.querySelector('[data-testid="products-page-template-list"]')) &&
-          Boolean(document.querySelector('[data-testid="products-page-template-item"]')) &&
-          Boolean(document.querySelector('[data-testid="products-page-template-featured-collection"]')) &&
-          Boolean(document.querySelector('[data-testid="products-page-template-product-launch"]')) &&
-          document.body?.innerText?.includes('Product page templates') &&
-          document.body?.innerText?.includes('Featured collection') &&
-          document.body?.innerText?.includes('Product launch') &&
-          document.body?.innerText?.includes('Route model'),
+        hasPageBindingContract: Boolean(pageBindingContract) &&
+          pageBindingContractText.includes('Page and editor binding contract') &&
+          pageBindingContractText.includes('Product card blocks') &&
+          pageBindingContractText.includes('Cart and order intake'),
+        hasProductPageTemplates: Boolean(productPageTemplates) &&
+          Boolean(productPageTemplates.querySelector('[data-testid="products-page-template-list"]')) &&
+          Boolean(productPageTemplates.querySelector('[data-testid="products-page-template-item"]')) &&
+          Boolean(productPageTemplates.querySelector('[data-testid="products-page-template-featured-collection"]')) &&
+          Boolean(productPageTemplates.querySelector('[data-testid="products-page-template-product-launch"]')) &&
+          productPageTemplatesText.includes('Product page templates') &&
+          productPageTemplatesText.includes('Featured collection') &&
+          productPageTemplatesText.includes('Product launch') &&
+          productPageTemplatesText.includes('Route model'),
         hasEditor: document.body?.innerText?.includes('New product') || document.body?.innerText?.includes('Edit product') || false,
-        hasImportControls: document.body?.innerText?.includes('Import CSV') && document.body?.innerText?.includes('CSV template'),
+        hasEditorActionBar: Boolean(productEditorPanel) &&
+          productEditorPanelClass.includes('xl:max-h-[calc(100vh-2rem)]') &&
+          productEditorPanelClass.includes('xl:overflow-y-auto') &&
+          Boolean(document.querySelector('[data-testid="products-editor-sticky-actions"]')) &&
+          Boolean(document.querySelector('[data-testid="products-editor-sticky-save"]')) &&
+          Boolean(document.querySelector('[data-testid="products-editor-sticky-clear"]')) &&
+          Boolean(productEditorSectionNav) &&
+          [
+            '#products-editor-identity',
+            '#products-editor-variants',
+            '#products-editor-fulfillment',
+            '#products-editor-subscriptions',
+            '#products-editor-provider-sync',
+            '#products-editor-media',
+            '#products-editor-publishing',
+          ].every((href) => productEditorLinks.includes(href)),
+        hasProductActionStatus: Boolean(productCard) &&
+          productActionGroup?.getAttribute('role') === 'group' &&
+          productActionGroupLabel.startsWith('Actions for ') &&
+          productActionGroup?.getAttribute('aria-describedby') === productActionStatusId &&
+          productActionStatusId.startsWith('products-actions-status-') &&
+          productActionGroupStatus === productActionStatusText &&
+          productActionStatusText.includes('Edit ') &&
+          productActionStatusText.includes('Publish ') &&
+          productActionStatusText.includes('Archive ') &&
+          productActionStatusText.includes('Delete ') &&
+          productActions.every(Boolean) &&
+          productActionDescriptions.every((description) => description === productActionStatusId) &&
+          productActionStates.every((state) => state === 'ready' || state === 'blocked') &&
+          productActionStates.some((state) => state === 'ready') &&
+          productActionDisabledReasons.every((reason, index) => productActionStates[index] === 'blocked' ? Boolean(reason) : reason === ''),
+        productActionGroupLabel,
+        productActionStatusText,
+        productActionStates,
+        productActionDisabledReasons,
+        hasImportControls: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').includes('Import CSV')) &&
+          Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').includes('CSV template')),
       };
     })()`,
     );
@@ -7835,6 +8266,7 @@ const assertProductsLayout = async (client) => {
       layout.hasBackendCommerceAnalytics &&
       layout.hasSubscriptionLifecycle &&
       layout.hasProductLaunchReadiness &&
+      layout.hasProductActionStatus &&
       layout.hasProviderReconciliation
     ) {
       break;
@@ -7846,9 +8278,14 @@ const assertProductsLayout = async (client) => {
     layout.scrollWidth <= layout.width + 8,
     `Products page has horizontal overflow: ${JSON.stringify(layout)}`,
   );
-  assert(
-    layout.hasCommandCenter &&
-      layout.hasApiPanel &&
+	  assert(
+	      layout.hasCommandCenter &&
+	      layout.readinessDetailsCollapsed &&
+	      layout.controlMapCollapsed &&
+	      layout.frontendTemplateOptionsCollapsed &&
+	      layout.storefrontApiDetailsCollapsed &&
+	      layout.providerCertificationOperatorDetailsCollapsed &&
+	      layout.hasApiPanel &&
       layout.hasApiContracts &&
       layout.hasCommerceAnalytics &&
       layout.hasBackendCommerceAnalytics &&
@@ -7864,9 +8301,12 @@ const assertProductsLayout = async (client) => {
       layout.hasPageBindingContract &&
       layout.hasProductPageTemplates &&
       layout.hasEditor &&
+      layout.hasEditorActionBar &&
+      layout.hasProductActionStatus &&
       layout.hasImportControls,
     `Products page missing expected regions: ${JSON.stringify(layout)}`,
   );
+  await assertProductBulkActionStatus(client);
   return layout;
 };
 
@@ -8241,6 +8681,7 @@ const main = async () => {
   let frontendTemplateProduct = null;
   let frontendCatalogProduct = null;
   let managedCustomerProfile = null;
+  let productSeedQuotaRestore = null;
 
   try {
     commerceProviderMock = await startCommerceProviderMock();
@@ -8281,6 +8722,10 @@ const main = async () => {
       "Products collection was not available after UI setup",
     );
     await assertProductBillingLimitEnforced(finalProductCollection, suffix);
+    productSeedQuotaRestore = await temporarilyAllowProductSeedQuota(
+      finalProductCollection,
+      4,
+    );
     await deleteExistingFrontendTemplateProducts(finalProductCollection);
     await clickFrontendTemplateCreateProduct(client);
     frontendTemplateProduct = await waitForFrontendTemplateProduct(
@@ -8600,13 +9045,23 @@ const main = async () => {
         );
       });
     }
-    await patchFrontendDesign(originalFrontendDesign).catch((error) => {
-      console.warn(
-        "Unable to restore original frontend design contract:",
-        error instanceof Error ? error.message : error,
-      );
-    });
-    await patchSettingsFromSnapshot(originalSettings).catch((error) => {
+	    await patchFrontendDesign(originalFrontendDesign).catch((error) => {
+	      console.warn(
+	        "Unable to restore original frontend design contract:",
+	        error instanceof Error ? error.message : error,
+	      );
+	    });
+	    if (productSeedQuotaRestore?.siteSettings) {
+	      await patchSite({ settings: productSeedQuotaRestore.siteSettings }).catch(
+	        (error) => {
+	          console.warn(
+	            "Unable to restore product seed quota settings:",
+	            error instanceof Error ? error.message : error,
+	          );
+	        },
+	      );
+	    }
+	    await patchSettingsFromSnapshot(originalSettings).catch((error) => {
       console.warn(
         "Unable to restore original settings:",
         error instanceof Error ? error.message : error,

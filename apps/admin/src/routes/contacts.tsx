@@ -323,16 +323,21 @@ function ContactsRoute() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const contactImportInputRef = useRef<HTMLInputElement | null>(null);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
-  const canManageForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.manage', CONTACTS_PERMISSION_ROLE_DEFAULTS);
-  const canExportForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.export', CONTACTS_PERMISSION_ROLE_DEFAULTS);
-  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', CONTACTS_PERMISSION_ROLE_DEFAULTS);
-  const canViewUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
-  const canCreateUsers = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.create', CONTACTS_PERMISSION_ROLE_DEFAULTS);
-  const canEditCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit', CONTACTS_PERMISSION_ROLE_DEFAULTS);
-  const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', CONTACTS_PERMISSION_ROLE_DEFAULTS);
-  const canViewSettings = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'settings.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
+  const canUseContactRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseContactRoleDefaults;
+  const isContactPermissionAllowed = (key: ContactsPermissionKey) => (
+    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, CONTACTS_PERMISSION_ROLE_DEFAULTS)
+    || (canUseContactRoleDefaults && Boolean(currentAdmin && CONTACTS_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canViewForms = isContactPermissionAllowed('forms.view');
+  const canManageForms = isContactPermissionAllowed('forms.manage');
+  const canExportForms = isContactPermissionAllowed('forms.export');
+  const canExportActivity = isContactPermissionAllowed('activity.export');
+  const canViewUsers = isContactPermissionAllowed('users.view');
+  const canCreateUsers = isContactPermissionAllowed('users.create');
+  const canEditCollections = isContactPermissionAllowed('collections.edit');
+  const canEditPages = isContactPermissionAllowed('pages.edit');
+  const canViewSettings = isContactPermissionAllowed('settings.view');
   const viewPermissionTitle = canViewForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
   const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', CONTACTS_PERMISSION_ROLE_DEFAULTS);
   const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', CONTACTS_PERMISSION_ROLE_DEFAULTS);
@@ -343,11 +348,11 @@ function ContactsRoute() {
   const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', CONTACTS_PERMISSION_ROLE_DEFAULTS);
   const settingsViewPermissionTitle = canViewSettings ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'settings.view', CONTACTS_PERMISSION_ROLE_DEFAULTS);
   const isContactMutationBusy = updatingId !== null;
-  const isContactsBusy = isLoading || isContactMutationBusy || isPermissionMatrixPending;
+  const isContactsBusy = isLoading || isContactMutationBusy;
   const contactViewDisabled = isContactsBusy || !canViewForms;
   const contactMutationDisabled = isContactsBusy || !canManageForms;
   const contactExportDisabled = isContactsBusy || !canExportForms;
-  const contactAuditDisabled = isLoadingContactAudit || isPermissionMatrixPending || !canExportActivity;
+  const contactAuditDisabled = isLoadingContactAudit || !canExportActivity;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -386,6 +391,26 @@ function ContactsRoute() {
   const contactImportUrl = apiForm
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(apiForm.id)}/contacts/import?upsertByEmail=true`
     : '';
+  const contactsCreateActionStatusId = 'contacts-create-action-status';
+  const contactsCreateBusyDisabledReason = isContactsBusy
+    ? 'Contact creation and import are temporarily unavailable while Backy updates contacts.'
+    : '';
+  const contactsCreateManageDisabledReason = !canManageForms
+    ? managePermissionTitle || 'Your account cannot manage contacts.'
+    : '';
+  const contactsCreateFormDisabledReason = !apiForm
+    ? 'Select one source form before creating or importing contacts.'
+    : '';
+  const contactsCreateTemplateDisabledReason = contactsCreateBusyDisabledReason || contactsCreateManageDisabledReason;
+  const contactsCreateMutationDisabledReason = contactsCreateTemplateDisabledReason || contactsCreateFormDisabledReason;
+  const contactsCreateActionStatusFor = (label: string, disabledReason = contactsCreateMutationDisabledReason) => (
+    disabledReason
+      ? `${label} unavailable: ${disabledReason}`
+      : `${label} available for ${activeSiteId}.`
+  );
+  const contactsCreateActionStatus = contactsCreateActionStatusFor('Save contact');
+  const contactsImportCsvActionStatus = contactsCreateActionStatusFor('Import CSV');
+  const contactsImportTemplateActionStatus = contactsCreateActionStatusFor('CSV template', contactsCreateTemplateDisabledReason);
   const contactSegmentsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-segments${apiForm ? `?formId=${encodeURIComponent(apiForm.id)}` : ''}`;
   const contactListsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-lists`;
   const allContacts = useMemo(
@@ -470,6 +495,54 @@ function ContactsRoute() {
     return emails.length === 1 && selectedContacts.length > 1 ? emails[0] : '';
   }, [selectedContacts]);
   const canMergeSelectedContacts = Boolean(selectedMergeEmail);
+  const contactsBulkSelectionStatusId = 'contacts-bulk-selection-status';
+  const contactsBulkActionStatusId = 'contacts-bulk-action-status';
+  const contactsBulkBusyReason = isContactsBusy
+    ? 'Contact data is loading or a contact action is running.'
+    : '';
+  const contactsBulkManageReason = !canManageForms
+    ? managePermissionTitle || 'Your account cannot manage contacts.'
+    : '';
+  const contactsBulkExportReason = !canExportForms
+    ? exportPermissionTitle || 'Your account cannot export contacts.'
+    : '';
+  const contactsBulkNoSelectionReason = selectedContacts.length === 0
+    ? 'Select one or more contacts first.'
+    : '';
+  const contactsBulkMutationDisabledReason = contactsBulkBusyReason
+    || contactsBulkManageReason
+    || contactsBulkNoSelectionReason;
+  const contactsBulkExportDisabledReason = contactsBulkBusyReason
+    || contactsBulkManageReason
+    || contactsBulkExportReason
+    || contactsBulkNoSelectionReason;
+  const contactsBulkMergeDisabledReason = contactsBulkBusyReason
+    || contactsBulkManageReason
+    || contactsBulkNoSelectionReason
+    || (!canMergeSelectedContacts ? 'Select two or more contacts with the same email to merge duplicates.' : '');
+  const contactsBulkSelectionStatus = selectedContacts.length === 0
+    ? `No contacts selected. ${filteredContacts.length} visible contact${filteredContacts.length === 1 ? '' : 's'} in this view.`
+    : `${selectedContacts.length} contact${selectedContacts.length === 1 ? '' : 's'} selected. ${selectedVisibleContacts.length} visible in this view.${hiddenSelectedContactCount > 0 ? ` ${hiddenSelectedContactCount} selected outside this view.` : ''}`;
+  const contactsBulkActionStatus = [
+    contactsBulkExportDisabledReason ? `Export evidence unavailable: ${contactsBulkExportDisabledReason}` : 'Export evidence available.',
+    contactsBulkMutationDisabledReason ? `Apply retention unavailable: ${contactsBulkMutationDisabledReason}` : 'Apply retention available.',
+    contactsBulkMutationDisabledReason ? `Sync selected unavailable: ${contactsBulkMutationDisabledReason}` : 'Sync selected available.',
+    contactsBulkMutationDisabledReason ? `Apply lifecycle unavailable: ${contactsBulkMutationDisabledReason}` : `Apply lifecycle available for ${bulkContactStatus}.`,
+    contactsBulkMergeDisabledReason ? `Merge duplicates unavailable: ${contactsBulkMergeDisabledReason}` : `Merge duplicates available for ${selectedMergeEmail}.`,
+  ].join(' ');
+  const contactsBulkHasReadyAction = !contactsBulkExportDisabledReason
+    || !contactsBulkMutationDisabledReason
+    || !contactsBulkMergeDisabledReason;
+  const contactsBulkHasBlockedAction = Boolean(
+    contactsBulkExportDisabledReason
+    || contactsBulkMutationDisabledReason
+    || contactsBulkMergeDisabledReason,
+  );
+  const contactsBulkActionState = contactsBulkHasReadyAction && contactsBulkHasBlockedAction
+    ? 'mixed'
+    : contactsBulkHasReadyAction
+      ? 'ready'
+      : 'blocked';
   const allVisibleContactsSelected = filteredContacts.length > 0
     && filteredContacts.every((contact) => selectedContactSet.has(contact.id));
   const exportSourceKeys = useMemo(() => (
@@ -1170,6 +1243,19 @@ function ContactsRoute() {
       setUpdatingId(null);
     }
   };
+
+  useEffect(() => {
+    if (!pendingDeleteContact) return;
+
+    const handleContactDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || updatingId === `delete-contact-${pendingDeleteContact.id}`) return;
+      event.preventDefault();
+      setPendingDeleteContact(null);
+    };
+
+    document.addEventListener('keydown', handleContactDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleContactDeleteDialogKeyDown, true);
+  }, [pendingDeleteContact, updatingId]);
 
   const toggleContactSelection = (contactId: string, selected: boolean) => {
     if (isContactsBusy) return;
@@ -2139,6 +2225,10 @@ function ContactsRoute() {
         </div>
       )}
 
+      <span id={contactsCreateActionStatusId} className="sr-only" data-testid="contacts-create-action-status" aria-live="polite">
+        {contactsCreateActionStatus}
+      </span>
+
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="contacts-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -2178,15 +2268,31 @@ function ContactsRoute() {
             >
               Export CSV
             </Button>
-            <Button variant="outline" onClick={downloadContactImportTemplate} disabled={contactMutationDisabled} title={!canManageForms ? managePermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
+            <Button
+              variant="outline"
+              onClick={downloadContactImportTemplate}
+              disabled={contactMutationDisabled}
+              title={contactsCreateTemplateDisabledReason || undefined}
+              aria-describedby={contactsCreateActionStatusId}
+              iconStart={<FileText className="size-4" />}
+              data-action-state={contactsCreateTemplateDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={contactsImportTemplateActionStatus}
+              data-disabled-reason={contactsCreateTemplateDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
+            >
               CSV template
             </Button>
             <Button
               variant="outline"
               onClick={() => contactImportInputRef.current?.click()}
               disabled={!apiForm || contactMutationDisabled}
-              title={!canManageForms ? managePermissionTitle : undefined}
+              title={contactsCreateMutationDisabledReason || undefined}
+              aria-describedby={contactsCreateActionStatusId}
               iconStart={<Upload className="size-4" />}
+              data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={contactsImportCsvActionStatus}
+              data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
               data-testid="contacts-import-csv"
             >
               Import CSV
@@ -2229,119 +2335,157 @@ function ContactsRoute() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Contacts control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, health metrics, API handoff, inbox review, and lifecycle controls.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {CONTACT_CONTROL_AREAS.map((area) => (
-              <a
-                key={area.title}
-                href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-              >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-              </a>
-            ))}
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="contacts-control-map-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Contacts control map</span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                Jump links for site scope, health metrics, API handoff, inbox review, and lifecycle controls.
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show map</span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide map</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="contacts-control-map">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              {CONTACT_CONTROL_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
+        </details>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="contacts-connected-workflows-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <FileText className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Connected lead workflows</h3>
-              </div>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Connected lead workflows
+              </span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                Keep capture pages, form definitions, member handoff, and runtime infrastructure available without stretching the daily inbox.
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">
+              Show workflows
+            </span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide workflows</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="contacts-connected-workflows">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="max-w-3xl text-sm text-muted-foreground">
                 Contacts are useful only when capture pages, form definitions, member handoff, and runtime infrastructure are connected.
               </p>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {CONTACT_WORKFLOW_SURFACES.length} surfaces
+              </span>
             </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              {CONTACT_WORKFLOW_SURFACES.length} surfaces
-            </span>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              {CONTACT_WORKFLOW_SURFACES.map((surface) => (
+                <button
+                  key={surface.key}
+                  type="button"
+                  onClick={() => openContactWorkflowSurface(surface)}
+                  disabled={contactWorkflowSurfaceDisabled(surface)}
+                  title={contactWorkflowSurfaceTitle(surface)}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {CONTACT_WORKFLOW_SURFACES.map((surface) => (
-              <button
-                key={surface.key}
-                type="button"
-                onClick={() => openContactWorkflowSurface(surface)}
-                disabled={contactWorkflowSurfaceDisabled(surface)}
-                title={contactWorkflowSurfaceTitle(surface)}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+        </details>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="contacts-promotion-contract">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="contacts-promotion-contract-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <UserPlus className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Lead promotion contract</h3>
-              </div>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Contacts sit between public forms and private systems: qualify leads, merge duplicates, then promote them into Users for workspace access, Contacts for follow-up, or Collections for member/profile data.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={openUsersWorkspace} disabled={isContactsBusy || !canViewUsers} title={!canViewUsers ? usersViewPermissionTitle : undefined} iconStart={<UserCheck className="size-4" />}>
-                Users
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => openLeadCapturePage('registration')} disabled={isContactsBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<UserPlus className="size-4" />}>
-                Registration page
-              </Button>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-            {CONTACT_PROMOTION_REQUIREMENTS.map((requirement, index) => (
-              <div key={requirement.key} className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
-                    {index + 1}
-                  </span>
-                  <div className="text-sm font-semibold text-foreground">{requirement.title}</div>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">{requirement.detail}</p>
-              </div>
-            ))}
-          </div>
-          <div data-testid="contacts-member-capture-handoff" className="mt-4 rounded-lg border border-border bg-card p-3">
+                Lead promotion and member capture
+              </span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                Promotion rules, Users handoff, registration pages, and custom frontend member-capture contracts.
+              </span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">
+              Show promotion
+            </span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide promotion</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="contacts-promotion-contract">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-foreground">Member capture handoff</div>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {CONTACT_MEMBER_CAPTURE_HANDOFF_SCHEMA_VERSION} gives custom frontends the registration APIs, contact review endpoints, bindings, promotion actions, provider gate, and privacy boundary for member lead capture.
+                <div className="flex items-center gap-2">
+                  <UserPlus className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Lead promotion contract</h3>
+                </div>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Contacts sit between public forms and private systems: qualify leads, merge duplicates, then promote them into Users for workspace access, Contacts for follow-up, or Collections for member/profile data.
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void copyContactApiText(contactMemberCaptureHandoffText, 'Member capture handoff')}
-                disabled={contactViewDisabled}
-                title={!canViewForms ? viewPermissionTitle : undefined}
-                iconStart={<Copy className="size-3.5" />}
-              >
-                Copy member handoff
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={openUsersWorkspace} disabled={isContactsBusy || !canViewUsers} title={!canViewUsers ? usersViewPermissionTitle : undefined} iconStart={<UserCheck className="size-4" />}>
+                  Users
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => openLeadCapturePage('registration')} disabled={isContactsBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<UserPlus className="size-4" />}>
+                  Registration page
+                </Button>
+              </div>
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              <MetaTile label="Bindings" value={`${CONTACT_MEMBER_CAPTURE_BINDINGS.length}`} />
-              <MetaTile label="Actions" value={`${CONTACT_MEMBER_CAPTURE_ACTIONS.length}`} />
-              <MetaTile label="Provider gate" value={contactMemberCaptureHandoff.providerGate.status} />
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {CONTACT_PROMOTION_REQUIREMENTS.map((requirement, index) => (
+                <div key={requirement.key} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[11px] font-semibold text-primary">
+                      {index + 1}
+                    </span>
+                    <div className="text-sm font-semibold text-foreground">{requirement.title}</div>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">{requirement.detail}</p>
+                </div>
+              ))}
             </div>
-            <div className="mt-3 grid gap-2 lg:grid-cols-3">
-              <ApiSnippet label="Registration definition" value={contactMemberCaptureHandoff.publicApis.registrationDefinition} />
-              <ApiSnippet label="Registration submit" value={contactMemberCaptureHandoff.publicApis.registrationSubmit} />
-              <ApiSnippet label="Users/Auth handoff" value={contactMemberCaptureHandoff.providerGate.userHandoffRoute} />
+            <div data-testid="contacts-member-capture-handoff" className="mt-4 rounded-lg border border-border bg-card p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">Member capture handoff</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {CONTACT_MEMBER_CAPTURE_HANDOFF_SCHEMA_VERSION} gives custom frontends the registration APIs, contact review endpoints, bindings, promotion actions, provider gate, and privacy boundary for member lead capture.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void copyContactApiText(contactMemberCaptureHandoffText, 'Member capture handoff')}
+                  disabled={contactViewDisabled}
+                  title={!canViewForms ? viewPermissionTitle : undefined}
+                  iconStart={<Copy className="size-3.5" />}
+                >
+                  Copy member handoff
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <MetaTile label="Bindings" value={`${CONTACT_MEMBER_CAPTURE_BINDINGS.length}`} />
+                <MetaTile label="Actions" value={`${CONTACT_MEMBER_CAPTURE_ACTIONS.length}`} />
+                <MetaTile label="Provider gate" value={contactMemberCaptureHandoff.providerGate.status} />
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                <ApiSnippet label="Registration definition" value={contactMemberCaptureHandoff.publicApis.registrationDefinition} />
+                <ApiSnippet label="Registration submit" value={contactMemberCaptureHandoff.publicApis.registrationSubmit} />
+                <ApiSnippet label="Users/Auth handoff" value={contactMemberCaptureHandoff.providerGate.userHandoffRoute} />
+              </div>
             </div>
           </div>
-        </div>
+        </details>
       </section>
 
       <div id="contacts-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
@@ -2597,8 +2741,13 @@ function ContactsRoute() {
                 variant="outline"
                 onClick={() => contactImportInputRef.current?.click()}
                 disabled={!apiForm || contactMutationDisabled}
-                title={!canManageForms ? managePermissionTitle : undefined}
+                title={contactsCreateMutationDisabledReason || undefined}
+                aria-describedby={contactsCreateActionStatusId}
                 iconStart={<Upload className="size-4" />}
+                data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={contactsImportCsvActionStatus}
+                data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
               >
                 Import CSV
               </Button>
@@ -2754,8 +2903,13 @@ function ContactsRoute() {
                   variant="outline"
                   onClick={downloadContactImportTemplate}
                   disabled={contactMutationDisabled}
-                  title={!canManageForms ? managePermissionTitle : undefined}
+                  title={contactsCreateTemplateDisabledReason || undefined}
+                  aria-describedby={contactsCreateActionStatusId}
                   iconStart={<FileText className="size-4" />}
+                  data-action-state={contactsCreateTemplateDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsImportTemplateActionStatus}
+                  data-disabled-reason={contactsCreateTemplateDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   data-testid="contacts-import-template"
                 >
                   CSV template
@@ -2764,8 +2918,13 @@ function ContactsRoute() {
                   variant="outline"
                   onClick={() => contactImportInputRef.current?.click()}
                   disabled={!apiForm || contactMutationDisabled}
-                  title={!canManageForms ? managePermissionTitle : undefined}
+                  title={contactsCreateMutationDisabledReason || undefined}
+                  aria-describedby={contactsCreateActionStatusId}
                   iconStart={<Upload className="size-4" />}
+                  data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsImportCsvActionStatus}
+                  data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                 >
                   Import CSV
                 </Button>
@@ -2835,9 +2994,15 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   disabled={!apiForm || contactMutationDisabled}
-                  title={!canManageForms ? managePermissionTitle : undefined}
+                  title={contactsCreateMutationDisabledReason || undefined}
+                  aria-describedby={contactsCreateActionStatusId}
                   onClick={() => void handleCreateContact()}
                   iconStart={<UserPlus className="size-4" />}
+                  data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsCreateActionStatus}
+                  data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid="contacts-save-contact"
                 >
                   Save contact
                 </Button>
@@ -2929,7 +3094,18 @@ function ContactsRoute() {
             )}
           </div>
 
-          <div className="mb-4 rounded-lg border border-border bg-card p-4" data-testid="contacts-bulk-actions">
+          <div
+            className="mb-4 rounded-lg border border-border bg-card p-4"
+            role="group"
+            aria-label="Selected contact bulk actions"
+            aria-describedby={`${contactsBulkSelectionStatusId} ${contactsBulkActionStatusId}`}
+            data-testid="contacts-bulk-actions"
+            data-action-status={contactsBulkActionStatus}
+            data-action-state={contactsBulkActionState}
+            data-selected-count={selectedContacts.length}
+            data-visible-selected-count={selectedVisibleContacts.length}
+            data-hidden-selected-count={hiddenSelectedContactCount}
+          >
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex flex-wrap items-center gap-3">
                 <label className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
@@ -2940,16 +3116,24 @@ function ContactsRoute() {
                     onChange={(event) => toggleVisibleContactSelection(event.target.checked)}
                     className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Select visible contacts"
+                    aria-describedby={`${contactsBulkSelectionStatusId} ${contactsBulkActionStatusId}`}
+                    data-testid="contacts-select-visible"
                   />
                   Select visible
                 </label>
                 <span
+                  id={contactsBulkSelectionStatusId}
                   className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground"
                   data-testid="contacts-bulk-selection-summary"
                 >
-                  {selectedContacts.length} selected
-                  {selectedVisibleContacts.length !== selectedContacts.length ? ` · ${selectedVisibleContacts.length} visible` : ''}
-                  {hiddenSelectedContactCount > 0 ? ` · ${hiddenSelectedContactCount} outside this view` : ''}
+                  {contactsBulkSelectionStatus}
+                </span>
+                <span
+                  id={contactsBulkActionStatusId}
+                  className="sr-only"
+                  data-testid="contacts-bulk-action-status"
+                >
+                  {contactsBulkActionStatus}
                 </span>
                 <span className={cn(
                   'rounded-md px-2 py-1 text-xs font-semibold',
@@ -2964,6 +3148,8 @@ function ContactsRoute() {
                     variant="ghost"
                     size="sm"
                     disabled={contactViewDisabled}
+                    aria-describedby={`${contactsBulkSelectionStatusId} ${contactsBulkActionStatusId}`}
+                    data-testid="contacts-bulk-clear-selection"
                     onClick={() => setSelectedContactIds([])}
                   >
                     Clear
@@ -2982,14 +3168,18 @@ function ContactsRoute() {
                     onChange={(event) => setContactRetentionDays(event.target.value)}
                     className="min-h-10 w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Contact consent retention days"
+                    aria-describedby={contactsBulkActionStatusId}
                     data-testid="contacts-retention-days"
                   />
                 </label>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={isContactsBusy || selectedContacts.length === 0 || !canManageForms || !canExportForms}
-                  title={!canManageForms ? managePermissionTitle : !canExportForms ? exportPermissionTitle : undefined}
+                  disabled={Boolean(contactsBulkExportDisabledReason)}
+                  title={contactsBulkExportDisabledReason || undefined}
+                  aria-describedby={contactsBulkActionStatusId}
+                  data-action-state={contactsBulkExportDisabledReason ? 'blocked' : 'ready'}
+                  data-disabled-reason={contactsBulkExportDisabledReason || undefined}
                   onClick={() => void handleContactRetention(true)}
                   iconStart={<Download className="size-4" />}
                   data-testid="contacts-retention-export"
@@ -2999,8 +3189,11 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={contactMutationDisabled || selectedContacts.length === 0}
-                  title={!canManageForms ? managePermissionTitle : undefined}
+                  disabled={Boolean(contactsBulkMutationDisabledReason)}
+                  title={contactsBulkMutationDisabledReason || undefined}
+                  aria-describedby={contactsBulkActionStatusId}
+                  data-action-state={contactsBulkMutationDisabledReason ? 'blocked' : 'ready'}
+                  data-disabled-reason={contactsBulkMutationDisabledReason || undefined}
                   onClick={() => void handleContactRetention(false)}
                   iconStart={<ShieldCheck className="size-4" />}
                   data-testid="contacts-retention-apply"
@@ -3017,7 +3210,9 @@ function ContactsRoute() {
                     className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Contact sync webhook URL"
                     aria-invalid={Boolean(contactSyncTargetInlineError)}
-                    aria-describedby={contactSyncTargetInlineError ? 'contacts-sync-webhook-url-error' : undefined}
+                    aria-describedby={contactSyncTargetInlineError ? `contacts-sync-webhook-url-error ${contactsBulkActionStatusId}` : contactsBulkActionStatusId}
+                    data-action-state={contactsBulkMutationDisabledReason ? 'blocked' : 'ready'}
+                    data-disabled-reason={contactsBulkMutationDisabledReason || undefined}
                     data-testid="contacts-sync-webhook-url"
                   />
                   {contactSyncTargetInlineError && (
@@ -3029,8 +3224,11 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={contactMutationDisabled || selectedContacts.length === 0}
-                  title={!canManageForms ? managePermissionTitle : undefined}
+                  disabled={Boolean(contactsBulkMutationDisabledReason)}
+                  title={contactsBulkMutationDisabledReason || undefined}
+                  aria-describedby={contactsBulkActionStatusId}
+                  data-action-state={contactsBulkMutationDisabledReason ? 'blocked' : 'ready'}
+                  data-disabled-reason={contactsBulkMutationDisabledReason || undefined}
                   onClick={() => void handleSyncSelectedContacts()}
                   iconStart={<Upload className="size-4" />}
                   data-testid="contacts-sync-webhook"
@@ -3039,10 +3237,14 @@ function ContactsRoute() {
                 </Button>
                 <select
                   value={bulkContactStatus}
-                  disabled={contactMutationDisabled || selectedContacts.length === 0}
+                  disabled={Boolean(contactsBulkMutationDisabledReason)}
                   onChange={(event) => setBulkContactStatus(event.target.value as ContactStatus)}
                   className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="Bulk contact lifecycle status"
+                  aria-describedby={contactsBulkActionStatusId}
+                  data-action-state={contactsBulkMutationDisabledReason ? 'blocked' : 'ready'}
+                  data-disabled-reason={contactsBulkMutationDisabledReason || undefined}
+                  data-testid="contacts-bulk-status-select"
                 >
                   {CONTACT_STATUS_FILTERS.filter((status): status is ContactStatus => status !== 'all').map((status) => (
                     <option key={status} value={status}>{status}</option>
@@ -3051,18 +3253,25 @@ function ContactsRoute() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={contactMutationDisabled || selectedContacts.length === 0}
-                  title={!canManageForms ? managePermissionTitle : undefined}
+                  disabled={Boolean(contactsBulkMutationDisabledReason)}
+                  title={contactsBulkMutationDisabledReason || undefined}
+                  aria-describedby={contactsBulkActionStatusId}
+                  data-action-state={contactsBulkMutationDisabledReason ? 'blocked' : 'ready'}
+                  data-disabled-reason={contactsBulkMutationDisabledReason || undefined}
                   onClick={() => void handleBulkContactStatus()}
                   iconStart={<CheckCircle2 className="size-4" />}
+                  data-testid="contacts-bulk-apply-lifecycle"
                 >
                   Apply lifecycle
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={contactMutationDisabled || !canMergeSelectedContacts}
-                  title={!canManageForms ? managePermissionTitle : undefined}
+                  disabled={Boolean(contactsBulkMergeDisabledReason)}
+                  title={contactsBulkMergeDisabledReason || undefined}
+                  aria-describedby={contactsBulkActionStatusId}
+                  data-action-state={contactsBulkMergeDisabledReason ? 'blocked' : 'ready'}
+                  data-disabled-reason={contactsBulkMergeDisabledReason || undefined}
                   onClick={() => void handleMergeSelectedContacts()}
                   iconStart={<GitMerge className="size-4" />}
                   data-testid="contacts-merge-duplicates"
@@ -3144,20 +3353,27 @@ function ContactsRoute() {
         </PanelContent>
       </Panel>
       {pendingDeleteContact && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="contacts-delete-confirm-dialog">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="contacts-delete-confirm-title"
+          aria-describedby="contacts-delete-confirm-description contacts-delete-confirm-impact"
+          data-testid="contacts-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeleteContact.name || pendingDeleteContact.email || 'contact'}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="contacts-delete-confirm-title" className="text-lg font-semibold text-foreground">Delete {pendingDeleteContact.name || pendingDeleteContact.email || 'contact'}?</h2>
+                <p id="contacts-delete-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   This permanently removes the contact from Backy. Archive it instead if you still need lead history.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id="contacts-delete-confirm-impact" className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Contact ID: <span className="font-mono font-medium text-foreground">{pendingDeleteContact.id}</span>
               {pendingDeleteContact.email ? (
                 <div className="mt-1">
@@ -3170,6 +3386,8 @@ function ContactsRoute() {
                 variant="outline"
                 onClick={() => setPendingDeleteContact(null)}
                 disabled={isContactsBusy}
+                data-testid="contacts-delete-cancel-button"
+                aria-label={`Cancel deleting ${pendingDeleteContact.name || pendingDeleteContact.email || pendingDeleteContact.id}`}
               >
                 Cancel
               </Button>
@@ -3179,6 +3397,7 @@ function ContactsRoute() {
                 disabled={isContactsBusy || !canManageForms}
                 title={!canManageForms ? managePermissionTitle : undefined}
                 data-testid="contacts-delete-confirm-button"
+                aria-label={`Confirm deleting ${pendingDeleteContact.name || pendingDeleteContact.email || pendingDeleteContact.id}`}
               >
                 {updatingId === `delete-contact-${pendingDeleteContact.id}` ? 'Deleting...' : 'Delete contact'}
               </Button>
@@ -3385,8 +3604,35 @@ function ContactCard({
   const customerPromotion = getContactCustomerPromotion(contact);
   const submittedValues = Object.entries(contact.sourceValues || {})
     .filter(([key]) => key !== CONTACT_PROMOTION_SOURCE_KEY && key !== CONTACT_CUSTOMER_PROMOTION_SOURCE_KEY);
-  const canPromoteToUser = Boolean(contact.email && contact.status === 'qualified' && !promotion?.userId);
-  const canPromoteToCustomer = Boolean(contact.email && contact.status === 'qualified' && !customerPromotion?.recordId);
+  const contactActionLabel = contact.name || contact.email || contact.id;
+  const contactActionStatusId = `contacts-actions-status-${contact.id}`;
+  const contactBusyReason = disabled
+    ? 'Contact actions are temporarily unavailable while Backy updates contacts.'
+    : null;
+  const contactedDisabledReason = contactBusyReason || (contact.status === 'contacted' ? 'This contact is already marked contacted.' : null);
+  const qualifiedDisabledReason = contactBusyReason || (contact.status === 'qualified' ? 'This contact is already marked qualified.' : null);
+  const newDisabledReason = contactBusyReason || (contact.status === 'new' ? 'This contact is already marked new.' : null);
+  const archiveDisabledReason = contactBusyReason || (contact.status === 'archived' ? 'This contact is already archived.' : null);
+  const deleteDisabledReason = contactBusyReason;
+  const promoteUserDisabledReason = contactBusyReason
+    || (promoteUserDisabled ? promoteUserTitle || 'Your account cannot promote contacts to users.' : null)
+    || (!contact.email ? 'Add an email before promoting this contact to a user.' : null)
+    || (contact.status !== 'qualified' ? 'Mark this contact as qualified before promoting to a user.' : null)
+    || (promotion?.userId ? 'This contact has already been promoted to a user.' : null);
+  const promoteCustomerDisabledReason = contactBusyReason
+    || (promoteCustomerDisabled ? promoteCustomerTitle || 'Your account cannot promote contacts to customers.' : null)
+    || (!contact.email ? 'Add an email before promoting this contact to a customer.' : null)
+    || (contact.status !== 'qualified' ? 'Mark this contact as qualified before promoting to a customer.' : null)
+    || (customerPromotion?.recordId ? 'This contact has already been promoted to a customer.' : null);
+  const contactActionStatus = [
+    contactedDisabledReason ? `Contacted unavailable: ${contactedDisabledReason}` : 'Contacted available.',
+    qualifiedDisabledReason ? `Qualified unavailable: ${qualifiedDisabledReason}` : 'Qualified available.',
+    promoteUserDisabledReason ? `Promote user unavailable: ${promoteUserDisabledReason}` : 'Promote user available.',
+    promoteCustomerDisabledReason ? `Promote customer unavailable: ${promoteCustomerDisabledReason}` : 'Promote customer available.',
+    newDisabledReason ? `New unavailable: ${newDisabledReason}` : 'New available.',
+    archiveDisabledReason ? `Archive unavailable: ${archiveDisabledReason}` : 'Archive available.',
+    deleteDisabledReason ? `Delete unavailable: ${deleteDisabledReason}` : 'Delete available.',
+  ].join(' ');
 
   return (
     <article
@@ -3600,13 +3846,33 @@ function ContactCard({
         </div>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div
+        className="mt-4 flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label={`Actions for ${contactActionLabel}`}
+        aria-describedby={contactActionStatusId}
+        data-testid="contacts-action-group"
+        data-contact-id={contact.id}
+        data-action-status={contactActionStatus}
+      >
+        <span
+          id={contactActionStatusId}
+          className="sr-only"
+          data-testid="contacts-action-status"
+        >
+          {contactActionStatus}
+        </span>
         <Button
           size="sm"
           onClick={() => onStatus('contacted')}
-          disabled={disabled || contact.status === 'contacted'}
+          disabled={Boolean(contactedDisabledReason)}
+          title={contactedDisabledReason || undefined}
+          aria-describedby={contactActionStatusId}
+          data-action-state={contactedDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={contactedDisabledReason || undefined}
           iconStart={<Mail className="size-4" />}
-          aria-label={`Mark ${contact.name || contact.email || contact.id} as contacted`}
+          aria-label={`Mark ${contactActionLabel} as contacted`}
+          data-testid="contacts-mark-contacted"
         >
           Contacted
         </Button>
@@ -3614,9 +3880,14 @@ function ContactCard({
           size="sm"
           variant="outline"
           onClick={() => onStatus('qualified')}
-          disabled={disabled || contact.status === 'qualified'}
+          disabled={Boolean(qualifiedDisabledReason)}
+          title={qualifiedDisabledReason || undefined}
+          aria-describedby={contactActionStatusId}
+          data-action-state={qualifiedDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={qualifiedDisabledReason || undefined}
           iconStart={<CheckCircle2 className="size-4" />}
-          aria-label={`Mark ${contact.name || contact.email || contact.id} as qualified`}
+          aria-label={`Mark ${contactActionLabel} as qualified`}
+          data-testid="contacts-mark-qualified"
         >
           Qualified
         </Button>
@@ -3624,10 +3895,13 @@ function ContactCard({
           size="sm"
           variant="outline"
           onClick={onPromoteUser}
-          disabled={disabled || promoteUserDisabled || !canPromoteToUser}
-          title={promoteUserTitle}
+          disabled={Boolean(promoteUserDisabledReason)}
+          title={promoteUserDisabledReason || undefined}
+          aria-describedby={contactActionStatusId}
+          data-action-state={promoteUserDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={promoteUserDisabledReason || undefined}
           iconStart={<UserPlus className="size-4" />}
-          aria-label={`Promote ${contact.name || contact.email || contact.id} to user`}
+          aria-label={`Promote ${contactActionLabel} to user`}
           data-testid="contacts-promote-user"
         >
           Promote user
@@ -3636,10 +3910,13 @@ function ContactCard({
           size="sm"
           variant="outline"
           onClick={onPromoteCustomer}
-          disabled={disabled || promoteCustomerDisabled || !canPromoteToCustomer}
-          title={promoteCustomerTitle}
+          disabled={Boolean(promoteCustomerDisabledReason)}
+          title={promoteCustomerDisabledReason || undefined}
+          aria-describedby={contactActionStatusId}
+          data-action-state={promoteCustomerDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={promoteCustomerDisabledReason || undefined}
           iconStart={<UserCheck className="size-4" />}
-          aria-label={`Promote ${contact.name || contact.email || contact.id} to customer`}
+          aria-label={`Promote ${contactActionLabel} to customer`}
           data-testid="contacts-promote-customer"
         >
           Promote customer
@@ -3648,9 +3925,14 @@ function ContactCard({
           size="sm"
           variant="outline"
           onClick={() => onStatus('new')}
-          disabled={disabled || contact.status === 'new'}
+          disabled={Boolean(newDisabledReason)}
+          title={newDisabledReason || undefined}
+          aria-describedby={contactActionStatusId}
+          data-action-state={newDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={newDisabledReason || undefined}
           iconStart={<Contact className="size-4" />}
-          aria-label={`Mark ${contact.name || contact.email || contact.id} as new`}
+          aria-label={`Mark ${contactActionLabel} as new`}
+          data-testid="contacts-mark-new"
         >
           New
         </Button>
@@ -3658,9 +3940,14 @@ function ContactCard({
           size="sm"
           variant="danger"
           onClick={() => onStatus('archived')}
-          disabled={disabled || contact.status === 'archived'}
+          disabled={Boolean(archiveDisabledReason)}
+          title={archiveDisabledReason || undefined}
+          aria-describedby={contactActionStatusId}
+          data-action-state={archiveDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={archiveDisabledReason || undefined}
           iconStart={<Archive className="size-4" />}
-          aria-label={`Archive ${contact.name || contact.email || contact.id}`}
+          aria-label={`Archive ${contactActionLabel}`}
+          data-testid="contacts-archive-contact"
         >
           Archive
         </Button>
@@ -3668,9 +3955,13 @@ function ContactCard({
           size="sm"
           variant="danger"
           onClick={onDelete}
-          disabled={disabled}
+          disabled={Boolean(deleteDisabledReason)}
+          title={deleteDisabledReason || undefined}
+          aria-describedby={contactActionStatusId}
+          data-action-state={deleteDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={deleteDisabledReason || undefined}
           iconStart={<Trash2 className="size-4" />}
-          aria-label={`Delete ${contact.name || contact.email || contact.id}`}
+          aria-label={`Delete ${contactActionLabel}`}
           data-testid="contacts-delete-contact"
         >
           Delete

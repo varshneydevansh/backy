@@ -140,6 +140,8 @@ const BLOG_EDITOR_CONTROL_AREAS = [
     },
 ] as const;
 
+const BLOG_EDITOR_STATUS_OPTIONS: ContentStatus[] = ['draft', 'published', 'scheduled', 'archived'];
+
 type BlogEditorPermissionKey =
     | 'pages.view'
     | 'pages.edit'
@@ -710,15 +712,15 @@ function EditBlogPostPage() {
     const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
     const [permissionError, setPermissionError] = useState<string | null>(null);
     const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-    const canViewBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
-    const canEditBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
-    const canPublishBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
-    const canDeleteBlog = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
-    const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
-    const canCreateMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
-    const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
-    const canViewComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
-    const canManageComments = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.manage', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canViewBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canEditBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canPublishBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canDeleteBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.delete', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canViewMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canCreateMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canViewCollections = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canViewComments = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canManageComments = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.manage', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const viewBlogPermissionTitle = canViewBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const editBlogPermissionTitle = canEditBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const publishBlogPermissionTitle = canPublishBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
@@ -808,8 +810,6 @@ function EditBlogPostPage() {
         const localFallbackPost = storePost;
 
         const loadPost = async () => {
-            if (isPermissionMatrixPending) return;
-
             if (!canViewBlog) {
                 setIsLoadingPost(false);
                 setLoadError(viewBlogDeniedMessage);
@@ -873,14 +873,12 @@ function EditBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId, canViewBlog, isPermissionMatrixPending, postId, storePost, storePostId, updatePost, viewBlogDeniedMessage]);
+    }, [activeSiteId, canViewBlog, postId, storePost, storePostId, updatePost, viewBlogDeniedMessage]);
 
     useEffect(() => {
         let cancelled = false;
 
         const loadTaxonomy = async () => {
-            if (isPermissionMatrixPending) return;
-
             if (!canViewBlog) {
                 setAuthors([]);
                 setCategories([]);
@@ -912,7 +910,7 @@ function EditBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId, canViewBlog, isPermissionMatrixPending]);
+    }, [activeSiteId, canViewBlog]);
 
     useEffect(() => {
         if (!post) {
@@ -924,8 +922,6 @@ function EditBlogPostPage() {
         let cancelled = false;
 
         const loadExistingPosts = async () => {
-            if (isPermissionMatrixPending) return;
-
             if (!canViewBlog) {
                 setExistingBlogPosts([]);
                 setRouteCheckError(viewBlogDeniedMessage);
@@ -960,7 +956,7 @@ function EditBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId, canViewBlog, isPermissionMatrixPending, post, routeCheckRetry, viewBlogDeniedMessage]);
+    }, [activeSiteId, canViewBlog, post, routeCheckRetry, viewBlogDeniedMessage]);
 
     // Canvas State (Content Body)
     const {
@@ -1167,10 +1163,9 @@ function EditBlogPostPage() {
         setPostReadiness(null);
         return;
       }
-      if (isPermissionMatrixPending) return;
 
       void loadPostReadiness();
-    }, [isPermissionMatrixPending, loadPostReadiness, post]);
+    }, [loadPostReadiness, post]);
 
     useEffect(() => {
       if (!post) {
@@ -1178,10 +1173,9 @@ function EditBlogPostPage() {
         setPostCommentCount(0);
         return;
       }
-      if (isPermissionMatrixPending) return;
 
       void loadPostComments();
-    }, [isPermissionMatrixPending, loadPostComments, post]);
+    }, [loadPostComments, post]);
 
     useEffect(() => {
         setIsWorkspaceFocus(routeSearch.focus === 'canvas');
@@ -1191,7 +1185,6 @@ function EditBlogPostPage() {
         if (!post) {
             return;
         }
-        if (isPermissionMatrixPending) return;
         if (!canViewBlog) {
             setRevisions([]);
             return;
@@ -1217,7 +1210,7 @@ function EditBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId, canViewBlog, isPermissionMatrixPending, post, postId]);
+    }, [activeSiteId, canViewBlog, post, postId]);
 
     if (isLoadingPost && !post) {
         return (
@@ -1288,7 +1281,7 @@ function EditBlogPostPage() {
             return;
         }
 
-        if (editorActionBusy) return;
+        if (saveActionBusy) return;
 
         setIsLoading(true);
         setSaveWarning(null);
@@ -1644,7 +1637,7 @@ function EditBlogPostPage() {
     };
 
     const setWorkspaceFocusRoute = (focused: boolean) => {
-        if (isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending) return;
+        if (isLoadingPost || isLoading || isWorkflowBusy) return;
 
         setIsWorkspaceFocus(focused);
         navigate({
@@ -1662,10 +1655,13 @@ function EditBlogPostPage() {
     const publicPath = `/blog/${normalizedSlug || 'post-slug'}`;
     const normalizedCanonicalPath = normalizeCanonicalPath(canonicalPath || publicPath);
     const canonicalValid = normalizedCanonicalPath.startsWith('/');
+    const savedRouteSlug = slugify(post.slug || '');
+    const routeSettingsChanged = normalizedSlug !== savedRouteSlug;
     const routeConflict = normalizedSlug
         ? existingBlogPosts.find((existingPost) => existingPost.id !== postId && slugify(existingPost.slug) === normalizedSlug) || null
         : null;
     const routeBlocked = isCheckingRoutes || Boolean(routeCheckError) || Boolean(routeConflict);
+    const routeSaveBlocked = Boolean(routeConflict) || (routeSettingsChanged && (isCheckingRoutes || Boolean(routeCheckError)));
     const routeAvailability = routeCheckError
         ? { status: 'unverified' as const, message: routeCheckError }
         : routeConflict
@@ -1781,13 +1777,14 @@ function EditBlogPostPage() {
     const localReadyCount = localReadinessChecks.filter((check) => check.complete).length;
     const canSave = title.trim().length > 0
         && normalizedSlug.length > 0
-        && !routeBlocked
+        && !routeSaveBlocked
         && canonicalValid
         && ((status !== 'published' && status !== 'scheduled') || interactivePublishReady)
         && hasFutureSchedule;
-    const workspaceFocusDisabled = isLoadingPost || isLoading || isWorkflowBusy || isPermissionMatrixPending;
+    const workspaceFocusDisabled = isLoadingPost || isLoading || isWorkflowBusy;
     const editorBusy = workspaceFocusDisabled;
     const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading || isCheckingRoutes;
+    const saveActionBusy = editorBusy || isPreviewBusy || readinessLoading;
     const editorFormDisabled = editorBusy || !canEditBlog || isUsingLocalPostCopy;
     const submitLabel = status === 'published' ? 'Save published post' : status === 'scheduled' ? 'Schedule changes' : status === 'archived' ? 'Save archived post' : 'Save draft';
     const routeBlockedReason = routeCheckError
@@ -1797,6 +1794,13 @@ function EditBlogPostPage() {
             : isCheckingRoutes
                 ? 'Backy is still checking route availability. Wait for the route check before publishing.'
                 : null;
+    const routeSaveBlockedReason = routeConflict
+        ? `The ${publicPath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`
+        : routeSettingsChanged && routeCheckError
+            ? 'Backy could not verify existing blog routes for this site. Retry the route check before saving.'
+            : routeSettingsChanged && isCheckingRoutes
+                ? 'Checking existing blog routes before saving.'
+                : null;
     const saveDisabledReason = !canEditBlog
         ? editBlogDeniedMessage
         : isUsingLocalPostCopy
@@ -1805,7 +1809,7 @@ function EditBlogPostPage() {
                 ? publishBlogDeniedMessage
                 : !canSave
                     ? scheduleValidationMessage
-                        || routeBlockedReason
+                        || routeSaveBlockedReason
                         || (!canonicalValid ? 'Use a canonical path that starts with / before saving.' : null)
                         || (!interactivePublishReady ? interactivePublishDisabledReason : null)
                         || (!title.trim() ? 'Add a title before saving.' : null)
@@ -1841,6 +1845,235 @@ function EditBlogPostPage() {
             : editorHasUnsavedChanges
                 ? 'Save this post before generating a preview.'
                 : null;
+    const blogEditorBusyReason = editorActionBusy
+        ? 'Wait for the current blog editor workflow to finish.'
+        : '';
+    const blogEditorFormDisabledReason = editorBusy
+        ? blogEditorBusyReason
+        : !canEditBlog
+            ? editBlogPermissionTitle || editBlogDeniedMessage
+            : isUsingLocalPostCopy
+                ? localPostCopyDisabledMessage
+                : '';
+    const blogEditorBackDisabledReason = editorBusy
+        ? 'Wait for the current blog editor workflow before returning to Blog.'
+        : '';
+    const blogEditorBackActionStatus = blogEditorBackDisabledReason
+        ? `Back to Blog unavailable: ${blogEditorBackDisabledReason}`
+        : `Back to Blog available for ${activeSiteId}.`;
+    const blogEditorFocusDisabledReason = workspaceFocusDisabled
+        ? isLoadingPost
+            ? 'Wait for the post to finish loading before changing canvas focus.'
+            : 'Wait for the current blog workflow before changing canvas focus.'
+        : '';
+    const blogEditorFocusActionStatus = blogEditorFocusDisabledReason
+        ? `Canvas focus toggle unavailable: ${blogEditorFocusDisabledReason}`
+        : isWorkspaceFocus
+            ? 'Show blog panels available.'
+            : 'Focus canvas available.';
+    const blogEditorHandoffDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : !canViewBlog
+            ? viewBlogPermissionTitle || viewBlogDeniedMessage
+            : '';
+    const blogEditorHandoffActionStatus = blogEditorHandoffDisabledReason
+        ? `Blog editor handoff unavailable: ${blogEditorHandoffDisabledReason}`
+        : 'Blog editor handoff ready for custom frontend sync.';
+    const blogEditorSaveDisabledReason = saveActionBusy
+        ? 'Wait for the current save, preview, or readiness workflow to finish.'
+        : saveDisabledReason || '';
+    const blogEditorSaveActionStatus = blogEditorSaveDisabledReason
+        ? `Save unavailable: ${blogEditorSaveDisabledReason}`
+        : `${submitLabel} available.`;
+    const blogEditorPreviewDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : previewWorkflowDisabledReason || '';
+    const blogEditorPreviewActionStatus = blogEditorPreviewDisabledReason
+        ? `Preview unavailable: ${blogEditorPreviewDisabledReason}`
+        : 'Preview available for this blog post.';
+    const blogEditorReadinessDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : !canViewBlog
+            ? viewBlogPermissionTitle || viewBlogDeniedMessage
+            : '';
+    const blogEditorReadinessActionStatus = blogEditorReadinessDisabledReason
+        ? `Readiness refresh unavailable: ${blogEditorReadinessDisabledReason}`
+        : 'Readiness refresh available.';
+    const blogEditorPublishDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : publishWorkflowDisabledReason || '';
+    const blogEditorPublishActionStatus = blogEditorPublishDisabledReason
+        ? `Publish unavailable: ${blogEditorPublishDisabledReason}`
+        : 'Publish available for this blog post.';
+    const blogEditorArchiveDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : archiveWorkflowDisabledReason || '';
+    const blogEditorArchiveActionStatus = blogEditorArchiveDisabledReason
+        ? `Archive unavailable: ${blogEditorArchiveDisabledReason}`
+        : 'Archive available for this blog post.';
+    const blogEditorPublishImpactDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : !canViewBlog
+            ? viewBlogPermissionTitle || viewBlogDeniedMessage
+            : '';
+    const blogEditorPublishImpactActionStatus = blogEditorPublishImpactDisabledReason
+        ? `Publish impact copy unavailable: ${blogEditorPublishImpactDisabledReason}`
+        : 'Publish impact copy available.';
+    const blogEditorDiscardDisabledReason = editorBusy
+        ? 'Wait for the current blog editor workflow before discarding local navigation.'
+        : '';
+    const blogEditorDiscardActionStatus = blogEditorDiscardDisabledReason
+        ? `Discard unavailable: ${blogEditorDiscardDisabledReason}`
+        : 'Discard available. Return to Blog without saving local editor changes.';
+    const blogEditorDeleteDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : isUsingLocalPostCopy
+            ? localPostCopyDisabledMessage
+            : !canDeleteBlog
+                ? deleteBlogPermissionTitle || deleteBlogDeniedMessage
+                : '';
+    const blogEditorDeleteActionStatus = blogEditorDeleteDisabledReason
+        ? `Delete unavailable: ${blogEditorDeleteDisabledReason}`
+        : 'Delete post available. Confirmation is required.';
+    const blogEditorDeleteCancelDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : '';
+    const blogEditorDeleteCancelActionStatus = blogEditorDeleteCancelDisabledReason
+        ? `Cancel delete unavailable: ${blogEditorDeleteCancelDisabledReason}`
+        : 'Cancel delete available.';
+    const blogEditorMediaSelectDisabledReason = editorBusy
+        ? blogEditorBusyReason
+        : isUsingLocalPostCopy
+            ? localPostCopyDisabledMessage
+            : !canEditBlog
+                ? editBlogPermissionTitle || editBlogDeniedMessage
+                : !canViewMedia
+                    ? viewMediaPermissionTitle || viewMediaDeniedMessage
+                    : '';
+    const blogEditorMediaSelectActionStatus = blogEditorMediaSelectDisabledReason
+        ? `Featured image selection unavailable: ${blogEditorMediaSelectDisabledReason}`
+        : `${featuredImageId ? 'Replace' : 'Select'} featured image available.`;
+    const blogEditorMediaClearDisabledReason = editorFormDisabled
+        ? blogEditorFormDisabledReason
+        : !featuredImageId
+            ? 'Select a featured image before clearing it.'
+            : '';
+    const blogEditorMediaClearActionStatus = blogEditorMediaClearDisabledReason
+        ? `Clear featured image unavailable: ${blogEditorMediaClearDisabledReason}`
+        : 'Clear featured image available.';
+    const blogEditorCommentsBusyReason = commentsBusy
+        ? isCommentsLoading
+            ? 'Wait for comments to finish loading.'
+            : 'Wait for the current comment moderation workflow to finish.'
+        : '';
+    const blogEditorCommentsRefreshDisabledReason = blogEditorCommentsBusyReason
+        || (!canViewComments ? commentsViewPermissionTitle || 'Your account needs comments.view to refresh post comments.' : '');
+    const blogEditorCommentsRefreshActionStatus = blogEditorCommentsRefreshDisabledReason
+        ? `Comments refresh unavailable: ${blogEditorCommentsRefreshDisabledReason}`
+        : 'Comments refresh available.';
+    const blogEditorCommentsOpenQueueDisabledReason = editorBusy
+        ? blogEditorBusyReason
+        : !canViewComments
+            ? commentsViewPermissionTitle || 'Your account needs comments.view to open the comment queue.'
+            : '';
+    const blogEditorCommentsOpenQueueActionStatus = blogEditorCommentsOpenQueueDisabledReason
+        ? `Open full comment queue unavailable: ${blogEditorCommentsOpenQueueDisabledReason}`
+        : 'Open full comment queue available.';
+    const blogEditorCommentsApiDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : !canViewBlog
+            ? viewBlogPermissionTitle || viewBlogDeniedMessage
+            : '';
+    const blogEditorCommentsApiActionStatus = blogEditorCommentsApiDisabledReason
+        ? `Copy comments API unavailable: ${blogEditorCommentsApiDisabledReason}`
+        : 'Copy comments API available.';
+    const blogEditorCommentsManageDisabledReason = blogEditorCommentsBusyReason
+        || (!canManageComments ? commentsManagePermissionTitle || manageCommentsDeniedMessage : '');
+    const blogEditorCommentsApprovePendingActionStatus = blogEditorCommentsManageDisabledReason
+        ? `Approve pending comments unavailable: ${blogEditorCommentsManageDisabledReason}`
+        : `${pendingPostCommentIds.length} pending comment${pendingPostCommentIds.length === 1 ? '' : 's'} can be approved.`;
+    const blogEditorCommentsRejectPendingActionStatus = blogEditorCommentsManageDisabledReason
+        ? `Reject pending comments unavailable: ${blogEditorCommentsManageDisabledReason}`
+        : `${pendingPostCommentIds.length} pending comment${pendingPostCommentIds.length === 1 ? '' : 's'} can be rejected.`;
+    const blogEditorRevisionGraphDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : '';
+    const blogEditorRevisionGraphCopyActionStatus = blogEditorRevisionGraphDisabledReason
+        ? `Copy revision graph unavailable: ${blogEditorRevisionGraphDisabledReason}`
+        : 'Copy revision graph available.';
+    const blogEditorRevisionGraphToggleActionStatus = blogEditorRevisionGraphDisabledReason
+        ? `Revision timeline toggle unavailable: ${blogEditorRevisionGraphDisabledReason}`
+        : isRevisionTimelineExpanded
+            ? 'Show latest revisions available.'
+            : `Show all ${revisions.length} revisions available.`;
+    const blogEditorRestoreDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : isUsingLocalPostCopy
+            ? localPostCopyDisabledMessage
+            : editorHasUnsavedChanges
+                ? 'Save or discard local changes before restoring a revision.'
+                : !canEditBlog
+                    ? editBlogPermissionTitle || editBlogDeniedMessage
+                    : '';
+    const blogEditorRestoreActionStatus = blogEditorRestoreDisabledReason
+        ? `Restore revision unavailable: ${blogEditorRestoreDisabledReason}`
+        : 'Restore revision available. Confirmation is required.';
+    const blogEditorRestoreCancelDisabledReason = editorActionBusy
+        ? blogEditorBusyReason
+        : '';
+    const blogEditorRestoreCancelActionStatus = blogEditorRestoreCancelDisabledReason
+        ? `Cancel restore unavailable: ${blogEditorRestoreCancelDisabledReason}`
+        : 'Cancel restore available.';
+    const blogEditorTaxonomyDisabledReason = editorFormDisabled
+        ? blogEditorFormDisabledReason
+        : '';
+    const blogEditorAuthorActionStatus = blogEditorTaxonomyDisabledReason
+        ? `Author selection unavailable: ${blogEditorTaxonomyDisabledReason}`
+        : `Author selection available. Current author is ${selectedAuthor?.name || selectedAuthorId}.`;
+    const blogEditorTaxonomyActionStatus = blogEditorTaxonomyDisabledReason
+        ? `Taxonomy selection unavailable: ${blogEditorTaxonomyDisabledReason}`
+        : `${selectedCategoryIds.length} categor${selectedCategoryIds.length === 1 ? 'y' : 'ies'} and ${selectedTagIds.length} tag${selectedTagIds.length === 1 ? '' : 's'} selected.`;
+    const getBlogEditorStatusDisabledReason = (nextStatus: ContentStatus) => {
+        if (blogEditorFormDisabledReason) return blogEditorFormDisabledReason;
+        if ((nextStatus === 'published' || nextStatus === 'scheduled') && !canPublishBlog) {
+            return publishBlogPermissionTitle || publishBlogDeniedMessage;
+        }
+        return '';
+    };
+    const getBlogEditorStatusActionState = (nextStatus: ContentStatus) => {
+        const disabledReason = getBlogEditorStatusDisabledReason(nextStatus);
+        if (disabledReason) return editorBusy ? 'busy' : 'blocked';
+        return status === nextStatus ? 'selected' : 'ready';
+    };
+    const getBlogEditorStatusActionStatus = (nextStatus: ContentStatus) => {
+        const disabledReason = getBlogEditorStatusDisabledReason(nextStatus);
+        if (disabledReason) return `Status ${nextStatus} unavailable: ${disabledReason}`;
+        return status === nextStatus
+            ? `Status ${nextStatus} selected.`
+            : `Set status to ${nextStatus} available.`;
+    };
+    const blogEditorCommandActionStatusId = 'blog-editor-command-action-status';
+    const blogEditorCommandActionStatus = [
+        blogEditorHandoffActionStatus,
+        blogEditorSaveActionStatus,
+        blogEditorPreviewActionStatus,
+        blogEditorReadinessActionStatus,
+        blogEditorPublishActionStatus,
+        blogEditorArchiveActionStatus,
+        blogEditorPublishImpactActionStatus,
+        blogEditorDiscardActionStatus,
+        blogEditorDeleteActionStatus,
+        blogEditorMediaSelectActionStatus,
+        blogEditorMediaClearActionStatus,
+        blogEditorCommentsRefreshActionStatus,
+        blogEditorCommentsOpenQueueActionStatus,
+        blogEditorCommentsApiActionStatus,
+        blogEditorRevisionGraphCopyActionStatus,
+        blogEditorRevisionGraphToggleActionStatus,
+        blogEditorRestoreActionStatus,
+        blogEditorAuthorActionStatus,
+        blogEditorTaxonomyActionStatus,
+    ].join(' ');
     const backendReadinessDetail = postReadiness
         ? `${postReadiness.score}% ${postReadiness.statusLabel.replace('-', ' ')}.`
         : readinessError || 'Run readiness before publishing.';
@@ -2384,9 +2617,16 @@ function EditBlogPostPage() {
             title={
                 <div className="flex items-center gap-4">
                     <button
+                        type="button"
                         onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })}
                         disabled={editorBusy}
                         className="rounded-lg border border-border bg-background p-2 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Back to blog"
+                        aria-describedby={blogEditorCommandActionStatusId}
+                        data-testid="blog-editor-back-to-blog"
+                        data-action-state={blogEditorBackDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={blogEditorBackActionStatus}
+                        data-disabled-reason={blogEditorBackDisabledReason || undefined}
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
@@ -2399,7 +2639,7 @@ function EditBlogPostPage() {
                     ? 'h-[calc(100vh-1rem)] overflow-hidden lg:h-[calc(100vh-1.5rem)]'
                     : undefined,
             )}
-            contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : undefined}
+            contentClassName={isWorkspaceFocus ? 'h-full min-h-0' : 'flex flex-col gap-5'}
             hideHeader={isWorkspaceFocus}
             action={
                 <Button
@@ -2408,12 +2648,20 @@ function EditBlogPostPage() {
                     onClick={() => setWorkspaceFocusRoute(!isWorkspaceFocus)}
                     disabled={workspaceFocusDisabled}
                     iconStart={isWorkspaceFocus ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                    aria-describedby={blogEditorCommandActionStatusId}
+                    data-testid="blog-editor-focus-toggle"
+                    data-action-state={blogEditorFocusDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={blogEditorFocusActionStatus}
+                    data-disabled-reason={blogEditorFocusDisabledReason || undefined}
                 >
                     {isWorkspaceFocus ? 'Show blog panels' : 'Focus canvas'}
                 </Button>
             }
         >
-            <div className={cn('w-full', isWorkspaceFocus ? 'h-full min-h-0 overflow-hidden pb-0' : 'pb-24')}>
+            <div className={cn(
+                'w-full',
+                isWorkspaceFocus ? 'h-full min-h-0 overflow-hidden pb-0' : 'flex flex-col gap-5 pb-24',
+            )}>
                 {(loadError || saveWarning || routeCheckError) && (
                     <Notice tone="warning" className="mb-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2457,16 +2705,16 @@ function EditBlogPostPage() {
                         )}
                     </Notice>
                 )}
-                {permissionError && (
+                {(permissionError || isPermissionMatrixPending) && (
                     <Notice
                         tone="warning"
-                        title="Blog editor permissions could not be verified"
+                        title={isPermissionMatrixPending ? 'Syncing blog editor permissions' : 'Blog editor permissions could not be verified'}
                         className="mb-4"
-                        role="alert"
+                        role={permissionError ? 'alert' : 'status'}
                         data-testid="blog-editor-permission-state"
                     >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <span>{permissionError}</span>
+                            <span>{isPermissionMatrixPending ? 'Role-default access keeps the editor usable while backend permission details load.' : permissionError}</span>
                             <div className="flex shrink-0 flex-wrap items-center gap-2">
                                 <Button
                                     type="button"
@@ -2496,7 +2744,17 @@ function EditBlogPostPage() {
                 )}
 
                 {!isWorkspaceFocus && (
-                <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="blog-editor-command-center">
+                <section
+                    className="order-2 rounded-lg border border-border bg-card p-5 shadow-sm"
+                    data-testid="blog-editor-command-center"
+                    data-default-editor-order="after-canvas"
+                    aria-describedby={blogEditorCommandActionStatusId}
+                    data-action-state={editorActionBusy ? 'busy' : 'ready'}
+                    data-action-status={blogEditorCommandActionStatus}
+                >
+                    <span id={blogEditorCommandActionStatusId} className="sr-only" data-testid="blog-editor-command-action-status" aria-live="polite">
+                        {blogEditorCommandActionStatus}
+                    </span>
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div>
                             <div className="flex flex-wrap items-center gap-2">
@@ -2520,8 +2778,13 @@ function EditBlogPostPage() {
                                 variant="outline"
                                 onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
                                 disabled={editorActionBusy || !canViewBlog}
-                                title={viewBlogPermissionTitle}
+                                title={blogEditorHandoffDisabledReason || undefined}
                                 iconStart={<Copy className="size-4" />}
+                                aria-describedby={blogEditorCommandActionStatusId}
+                                data-testid="blog-editor-copy-handoff"
+                                data-action-state={blogEditorHandoffDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                data-action-status={blogEditorHandoffActionStatus}
+                                data-disabled-reason={blogEditorHandoffDisabledReason || undefined}
                             >
                                 Copy handoff
                             </Button>
@@ -2530,18 +2793,28 @@ function EditBlogPostPage() {
                                 variant="outline"
                                 onClick={downloadEditorHandoff}
                                 disabled={editorActionBusy || !canViewBlog}
-                                title={viewBlogPermissionTitle}
+                                title={blogEditorHandoffDisabledReason || undefined}
                                 iconStart={<Download className="size-4" />}
+                                aria-describedby={blogEditorCommandActionStatusId}
+                                data-testid="blog-editor-download-handoff"
+                                data-action-state={blogEditorHandoffDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                data-action-status={blogEditorHandoffActionStatus}
+                                data-disabled-reason={blogEditorHandoffDisabledReason || undefined}
                             >
                                 Download JSON
                             </Button>
                             <Button
                                 type="submit"
                                 form="blog-editor-form"
-                                disabled={editorActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
-                                title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : !canEditBlog ? editBlogPermissionTitle : (status === 'published' || status === 'scheduled') ? publishBlogPermissionTitle : undefined}
+                                disabled={saveActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
+                                title={blogEditorSaveDisabledReason || undefined}
                                 variant="primary"
                                 iconStart={<Save className="size-4" />}
+                                aria-describedby={blogEditorCommandActionStatusId}
+                                data-testid="blog-editor-save"
+                                data-action-state={blogEditorSaveDisabledReason ? saveActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                data-action-status={blogEditorSaveActionStatus}
+                                data-disabled-reason={blogEditorSaveDisabledReason || undefined}
                             >
                                 {isLoading ? 'Saving...' : submitLabel}
                             </Button>
@@ -2550,8 +2823,13 @@ function EditBlogPostPage() {
                                 variant="outline"
                                 onClick={() => void generatePreview()}
                                 disabled={editorActionBusy || isUsingLocalPostCopy || !canPublishBlog}
-                                title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : publishBlogPermissionTitle}
+                                title={blogEditorPreviewDisabledReason || undefined}
                                 iconStart={<Eye className="size-4" />}
+                                aria-describedby={blogEditorCommandActionStatusId}
+                                data-testid="blog-editor-preview"
+                                data-action-state={blogEditorPreviewDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                data-action-status={blogEditorPreviewActionStatus}
+                                data-disabled-reason={blogEditorPreviewDisabledReason || undefined}
                             >
                                 Preview
                             </Button>
@@ -2560,8 +2838,13 @@ function EditBlogPostPage() {
                                 variant="outline"
                                 onClick={() => void refreshPostReadiness()}
                                 disabled={editorActionBusy || !canViewBlog}
-                                title={viewBlogPermissionTitle}
+                                title={blogEditorReadinessDisabledReason || undefined}
                                 iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
+                                aria-describedby={blogEditorCommandActionStatusId}
+                                data-testid="blog-editor-refresh-readiness"
+                                data-action-state={blogEditorReadinessDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                data-action-status={blogEditorReadinessActionStatus}
+                                data-disabled-reason={blogEditorReadinessDisabledReason || undefined}
                             >
                                 Refresh readiness
                             </Button>
@@ -2645,27 +2928,37 @@ function EditBlogPostPage() {
                                 <BlogEditorMetaTile label="Bindings" value={`${frontendDesignTemplate.bindingHints.length} hint${frontendDesignTemplate.bindingHints.length === 1 ? '' : 's'}`} />
                             </div>
                         </div>
-                        <div className="mt-4 flex flex-wrap items-center gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => void copyEditorHandoffText(adminBlogPostUrl, 'Blog editor API URL')}
-                                disabled={editorActionBusy || !canViewBlog}
-                                title={viewBlogPermissionTitle}
-                                iconStart={<Copy className="size-4" />}
-                            >
-                                Copy API URL
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
-                                disabled={editorActionBusy || !canViewBlog}
-                                title={viewBlogPermissionTitle}
-                                iconStart={<Copy className="size-4" />}
-                            >
-                                Copy handoff
-                            </Button>
+                                <div className="mt-4 flex flex-wrap items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => void copyEditorHandoffText(adminBlogPostUrl, 'Blog editor API URL')}
+                                        disabled={editorActionBusy || !canViewBlog}
+                                        title={blogEditorHandoffDisabledReason || undefined}
+                                        iconStart={<Copy className="size-4" />}
+                                        aria-describedby={blogEditorCommandActionStatusId}
+                                        data-testid="blog-editor-copy-api-url"
+                                        data-action-state={blogEditorHandoffDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                        data-action-status={blogEditorHandoffActionStatus}
+                                        data-disabled-reason={blogEditorHandoffDisabledReason || undefined}
+                                    >
+                                        Copy API URL
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
+                                        disabled={editorActionBusy || !canViewBlog}
+                                        title={blogEditorHandoffDisabledReason || undefined}
+                                        iconStart={<Copy className="size-4" />}
+                                        aria-describedby={blogEditorCommandActionStatusId}
+                                        data-testid="blog-editor-control-map-copy-handoff"
+                                        data-action-state={blogEditorHandoffDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                        data-action-status={blogEditorHandoffActionStatus}
+                                        data-disabled-reason={blogEditorHandoffDisabledReason || undefined}
+                                    >
+                                        Copy handoff
+                                    </Button>
                         </div>
                     </div>
                 </section>
@@ -2677,13 +2970,18 @@ function EditBlogPostPage() {
                     className={cn(
                         'grid gap-5',
                         isWorkspaceFocus && 'h-full min-h-0',
+                        !isWorkspaceFocus && 'order-1',
                         !isWorkspaceFocus && '[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px] [@media(min-width:2200px)]:items-start',
                     )}
                     data-testid="blog-editor-workspace-grid"
+                    data-default-editor-order={isWorkspaceFocus ? 'focused-canvas' : 'canvas-first'}
                 >
-                    <div className={cn('min-w-0 space-y-6', isWorkspaceFocus && 'h-full min-h-0 space-y-0')}>
+                    <div className={cn(
+                        'min-w-0',
+                        isWorkspaceFocus ? 'h-full min-h-0 space-y-0' : 'flex flex-col gap-6',
+                    )}>
                         {!isWorkspaceFocus && (
-                        <Panel id="blog-editor-draft" className="overflow-hidden scroll-mt-24">
+                        <Panel id="blog-editor-draft" className="order-2 overflow-hidden scroll-mt-24">
                             <PanelHeader
                                 title="Editorial draft"
                                 description="Title, canonical URL, and list/SEO summary."
@@ -2767,7 +3065,7 @@ function EditBlogPostPage() {
                         )}
 
                         {!isWorkspaceFocus && (
-                        <Panel id="blog-editor-seo" className="overflow-hidden scroll-mt-24">
+                        <Panel id="blog-editor-seo" className="order-3 overflow-hidden scroll-mt-24">
                             <PanelHeader
                                 title="SEO and discovery"
                                 description="Search metadata, canonical path, Open Graph image, and robots controls for hosted pages and external frontends."
@@ -2884,9 +3182,17 @@ function EditBlogPostPage() {
                         </Panel>
                         )}
 
-                        <div id="blog-editor-canvas" className={cn('min-w-0 scroll-mt-24', isWorkspaceFocus && 'h-full min-h-0')} data-testid="blog-editor-canvas-shell">
+                        <div
+                            id="blog-editor-canvas"
+                            className={cn(
+                                'min-w-0 scroll-mt-24',
+                                isWorkspaceFocus ? 'h-full min-h-0' : 'order-1',
+                            )}
+                            data-testid="blog-editor-canvas-shell"
+                            data-default-editor-order={isWorkspaceFocus ? 'focused-canvas' : 'canvas-first'}
+                        >
                             <EditorWorkspaceFrame
-                                title="Post design canvas"
+                                title={isWorkspaceFocus ? 'Post canvas' : 'Post design canvas'}
                                 description={isWorkspaceFocus
                                     ? 'Focused article design workspace with the same component, layer, media, grouping, and data-binding controls used by pages.'
                                     : 'Design the public post page with the same component, layer, media, grouping, and data-binding controls used by pages.'}
@@ -2897,12 +3203,6 @@ function EditBlogPostPage() {
                                         </span>
                                         <span className="rounded bg-muted px-2 py-1">
                                             {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
-                                        </span>
-                                        <span className="rounded bg-muted px-2 py-1">
-                                            Cmd/Ctrl+G grouping
-                                        </span>
-                                        <span className="rounded bg-muted px-2 py-1">
-                                            Cmd/Ctrl+A siblings
                                         </span>
                                         {hasFrontendDesignTemplate && (
                                             <span className="rounded bg-teal-50 px-2 py-1 font-medium text-teal-700">
@@ -2921,9 +3221,13 @@ function EditBlogPostPage() {
                                         <Button
                                             type="submit"
                                             form="blog-editor-form"
-                                            disabled={editorActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
+                                            disabled={saveActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
                                             size="sm"
                                             iconStart={<Save className="size-4" />}
+                                            data-testid="blog-editor-canvas-save"
+                                            data-action-state={blogEditorSaveDisabledReason ? saveActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorSaveActionStatus}
+                                            data-disabled-reason={blogEditorSaveDisabledReason || undefined}
                                         >
                                             {isLoading ? 'Saving...' : submitLabel}
                                         </Button>
@@ -2934,11 +3238,48 @@ function EditBlogPostPage() {
                                             onClick={() => setWorkspaceFocusRoute(false)}
                                             disabled={workspaceFocusDisabled}
                                             iconStart={<Minimize2 className="size-4" />}
+                                            data-testid="blog-editor-focus-banner-show-panels"
+                                            data-action-state={blogEditorFocusDisabledReason ? 'blocked' : 'ready'}
+                                            data-action-status={blogEditorFocusActionStatus}
+                                            data-disabled-reason={blogEditorFocusDisabledReason || undefined}
                                         >
                                             Show panels
                                         </Button>
                                     </>
-                                ) : undefined}
+                                ) : (
+                                    <>
+                                        <Button
+                                            type="submit"
+                                            form="blog-editor-form"
+                                            disabled={saveActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
+                                            title={blogEditorSaveDisabledReason || undefined}
+                                            size="sm"
+                                            iconStart={<Save className="size-4" />}
+                                            data-testid="blog-editor-canvas-save"
+                                            data-action-state={blogEditorSaveDisabledReason ? saveActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorSaveActionStatus}
+                                            data-disabled-reason={blogEditorSaveDisabledReason || undefined}
+                                        >
+                                            {isLoading ? 'Saving...' : submitLabel}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => void generatePreview()}
+                                            disabled={editorActionBusy || isUsingLocalPostCopy || !canPublishBlog}
+                                            title={blogEditorPreviewDisabledReason || undefined}
+                                            iconStart={<Eye className="size-4" />}
+                                            data-testid="blog-editor-canvas-preview"
+                                            data-action-state={blogEditorPreviewDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorPreviewActionStatus}
+                                            data-disabled-reason={blogEditorPreviewDisabledReason || undefined}
+                                        >
+                                            Preview
+                                        </Button>
+                                    </>
+                                )}
+                                density={isWorkspaceFocus ? 'compact' : 'default'}
                                 data-testid={isWorkspaceFocus ? 'blog-editor-focus-banner' : undefined}
                                 className={cn(
                                     'relative',
@@ -2953,6 +3294,7 @@ function EditBlogPostPage() {
                                     initialSettings={dummySettings}
                                     initialSize={canvasSize}
                                     initialSelectedElementId={routeSearch.elementId}
+                                    initialCanvasFocusMode={isWorkspaceFocus}
                                     theme={selectedSite?.theme}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
@@ -3007,35 +3349,46 @@ function EditBlogPostPage() {
                             />
                             <PanelContent className="space-y-4">
                                 <div className="grid grid-cols-4 gap-1 rounded-lg border border-border bg-muted p-1">
-                                    {(['draft', 'published', 'scheduled', 'archived'] as const).map((nextStatus) => (
-                                        <button
-                                            key={nextStatus}
-                                            type="button"
-                                            onClick={() => {
-                                                if (!canEditBlog || (nextStatus === 'published' || nextStatus === 'scheduled') && !canPublishBlog) {
-                                                    setSaveWarning(!canEditBlog ? editBlogDeniedMessage : publishBlogDeniedMessage);
-                                                    setWorkflowNotice(null);
-                                                    return;
-                                                }
+                                    {BLOG_EDITOR_STATUS_OPTIONS.map((nextStatus) => {
+                                        const statusDisabledReason = getBlogEditorStatusDisabledReason(nextStatus);
+                                        const statusActionStatus = getBlogEditorStatusActionStatus(nextStatus);
 
-                                                clearEditorFeedback();
-                                                setStatus(nextStatus);
-                                                if (nextStatus !== 'scheduled') {
-                                                    setScheduledAt(null);
-                                                }
-                                            }}
-                                            disabled={editorFormDisabled || ((nextStatus === 'published' || nextStatus === 'scheduled') && !canPublishBlog)}
-                                            title={(nextStatus === 'published' || nextStatus === 'scheduled') ? publishBlogPermissionTitle : editBlogPermissionTitle}
-                                            className={cn(
-                                                'rounded-md px-2 py-2 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
-                                                status === nextStatus
-                                                    ? 'bg-background text-foreground shadow-sm'
-                                                    : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
-                                            )}
-                                        >
-                                            {nextStatus}
-                                        </button>
-                                    ))}
+                                        return (
+                                            <button
+                                                key={nextStatus}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (!canEditBlog || (nextStatus === 'published' || nextStatus === 'scheduled') && !canPublishBlog) {
+                                                        setSaveWarning(!canEditBlog ? editBlogDeniedMessage : publishBlogDeniedMessage);
+                                                        setWorkflowNotice(null);
+                                                        return;
+                                                    }
+
+                                                    clearEditorFeedback();
+                                                    setStatus(nextStatus);
+                                                    if (nextStatus !== 'scheduled') {
+                                                        setScheduledAt(null);
+                                                    }
+                                                }}
+                                                disabled={Boolean(statusDisabledReason)}
+                                                title={statusDisabledReason || `Set status to ${nextStatus}`}
+                                                aria-pressed={status === nextStatus}
+                                                aria-describedby={blogEditorCommandActionStatusId}
+                                                data-testid={`blog-editor-status-${nextStatus}`}
+                                                data-action-state={getBlogEditorStatusActionState(nextStatus)}
+                                                data-action-status={statusActionStatus}
+                                                data-disabled-reason={statusDisabledReason || undefined}
+                                                className={cn(
+                                                    'rounded-md px-2 py-2 text-xs font-medium capitalize transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                                                    status === nextStatus
+                                                        ? 'bg-background text-foreground shadow-sm'
+                                                        : 'text-muted-foreground hover:bg-background/60 hover:text-foreground',
+                                                )}
+                                            >
+                                                {nextStatus}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
 
                                 {status === 'scheduled' && (
@@ -3086,7 +3439,12 @@ function EditBlogPostPage() {
                                                 type="button"
                                                 onClick={() => void refreshPostReadiness()}
                                                 disabled={editorActionBusy || !canViewBlog}
-                                                title={viewBlogPermissionTitle || 'Refresh readiness'}
+                                                title={blogEditorReadinessDisabledReason || 'Refresh readiness'}
+                                                aria-describedby={blogEditorCommandActionStatusId}
+                                                data-testid="blog-editor-publish-panel-refresh-readiness"
+                                                data-action-state={blogEditorReadinessDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                                data-action-status={blogEditorReadinessActionStatus}
+                                                data-disabled-reason={blogEditorReadinessDisabledReason || undefined}
                                                 className="rounded-lg border border-current/20 p-1.5 hover:bg-white/40 disabled:cursor-not-allowed disabled:opacity-50"
                                             >
                                                 <RefreshCw className={cn('h-3.5 w-3.5', readinessLoading && 'animate-spin')} />
@@ -3125,11 +3483,15 @@ function EditBlogPostPage() {
 	                                            type="button"
 	                                            size="sm"
 	                                            variant="ghost"
-	                                            disabled={editorActionBusy || !canViewBlog}
-	                                            title={viewBlogPermissionTitle}
-	                                            onClick={() => void copyEditorHandoffText(blogPublishImpactText, 'Blog publish impact')}
-	                                            data-testid="blog-editor-copy-publish-impact"
-	                                        >
+                                            disabled={editorActionBusy || !canViewBlog}
+                                            title={blogEditorPublishImpactDisabledReason || undefined}
+                                            onClick={() => void copyEditorHandoffText(blogPublishImpactText, 'Blog publish impact')}
+                                            data-testid="blog-editor-copy-publish-impact"
+                                            aria-describedby={blogEditorCommandActionStatusId}
+                                            data-action-state={blogEditorPublishImpactDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorPublishImpactActionStatus}
+                                            data-disabled-reason={blogEditorPublishImpactDisabledReason || undefined}
+                                        >
 	                                            Copy impact
 	                                        </Button>
 	                                    </div>
@@ -3175,7 +3537,19 @@ function EditBlogPostPage() {
                                 )}
 
                                 <div className="grid gap-2">
-                                    <Button type="submit" disabled={editorActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)} variant="primary" iconStart={<Save className="size-4" />} className="w-full">
+                                    <Button
+                                        type="submit"
+                                        disabled={saveActionBusy || isUsingLocalPostCopy || !canSave || !canEditBlog || ((status === 'published' || status === 'scheduled') && !canPublishBlog)}
+                                        title={blogEditorSaveDisabledReason || undefined}
+                                        variant="primary"
+                                        iconStart={<Save className="size-4" />}
+                                        className="w-full"
+                                        aria-describedby={blogEditorCommandActionStatusId}
+                                        data-testid="blog-editor-publish-panel-save"
+                                        data-action-state={blogEditorSaveDisabledReason ? saveActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                        data-action-status={blogEditorSaveActionStatus}
+                                        data-disabled-reason={blogEditorSaveDisabledReason || undefined}
+                                    >
                                         {isLoading ? 'Saving...' : submitLabel}
                                     </Button>
                                     <div className="grid grid-cols-2 gap-2">
@@ -3184,7 +3558,12 @@ function EditBlogPostPage() {
                                             disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canPublishBlog}
                                             variant="outline"
                                             iconStart={<Eye className="size-4" />}
-                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save this post before generating a preview.' : undefined}
+                                            title={blogEditorPreviewDisabledReason || undefined}
+                                            aria-describedby={blogEditorCommandActionStatusId}
+                                            data-testid="blog-editor-publish-panel-preview"
+                                            data-action-state={blogEditorPreviewDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorPreviewActionStatus}
+                                            data-disabled-reason={blogEditorPreviewDisabledReason || undefined}
                                         >
                                             Preview
                                         </Button>
@@ -3193,7 +3572,12 @@ function EditBlogPostPage() {
                                             disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || readinessBlocked || routeBlocked || !interactivePublishReady || status === 'published' || !canPublishBlog}
                                             variant="secondary"
                                             iconStart={<CheckCircle2 className="size-4" />}
-                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save this post before publishing.' : routeBlocked ? 'Verify route availability before publishing' : interactivePublishDisabledReason || (readinessBlocked ? 'Resolve post readiness errors before publishing' : 'Publish post')}
+                                            title={blogEditorPublishDisabledReason || 'Publish post'}
+                                            aria-describedby={blogEditorCommandActionStatusId}
+                                            data-testid="blog-editor-publish"
+                                            data-action-state={blogEditorPublishDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorPublishActionStatus}
+                                            data-disabled-reason={blogEditorPublishDisabledReason || undefined}
                                         >
                                             Publish
                                         </Button>
@@ -3204,15 +3588,44 @@ function EditBlogPostPage() {
                                             disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || status === 'archived' || !canEditBlog}
                                             variant="outline"
                                             iconStart={<Archive className="size-4" />}
-                                            title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before archiving.' : undefined}
+                                            title={blogEditorArchiveDisabledReason || 'Archive post'}
+                                            aria-describedby={blogEditorCommandActionStatusId}
+                                            data-testid="blog-editor-archive"
+                                            data-action-state={blogEditorArchiveDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorArchiveActionStatus}
+                                            data-disabled-reason={blogEditorArchiveDisabledReason || undefined}
                                         >
                                             Archive
                                         </Button>
-                                        <Button onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })} disabled={editorBusy} variant="outline">
+                                        <Button
+                                            type="button"
+                                            onClick={() => navigate({ to: '/blog', search: { siteId: activeSiteId } })}
+                                            disabled={editorBusy}
+                                            title={blogEditorDiscardDisabledReason || 'Return to Blog'}
+                                            variant="outline"
+                                            aria-describedby={blogEditorCommandActionStatusId}
+                                            data-testid="blog-editor-discard"
+                                            data-action-state={blogEditorDiscardDisabledReason ? 'busy' : 'ready'}
+                                            data-action-status={blogEditorDiscardActionStatus}
+                                            data-disabled-reason={blogEditorDiscardDisabledReason || undefined}
+                                        >
                                             Discard
                                         </Button>
                                     </div>
-                                    <Button onClick={() => setShowDeleteConfirm(true)} disabled={editorActionBusy || isUsingLocalPostCopy || !canDeleteBlog} variant="danger" iconStart={<Trash2 className="size-4" />} className="w-full">
+                                    <Button
+                                        type="button"
+                                        onClick={() => setShowDeleteConfirm(true)}
+                                        disabled={editorActionBusy || isUsingLocalPostCopy || !canDeleteBlog}
+                                        title={blogEditorDeleteDisabledReason || 'Delete post'}
+                                        variant="danger"
+                                        iconStart={<Trash2 className="size-4" />}
+                                        className="w-full"
+                                        aria-describedby={blogEditorCommandActionStatusId}
+                                        data-testid="blog-editor-delete"
+                                        data-action-state={blogEditorDeleteDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                        data-action-status={blogEditorDeleteActionStatus}
+                                        data-disabled-reason={blogEditorDeleteDisabledReason || undefined}
+                                    >
                                         Delete post
                                     </Button>
                                 </div>
@@ -3277,13 +3690,18 @@ function EditBlogPostPage() {
                                                 return;
                                             }
                                             setIsFeaturedMediaOpen(true);
-                                        }}
-                                        disabled={editorBusy || isUsingLocalPostCopy || !canEditBlog || !canViewMedia}
-                                        title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : viewMediaPermissionTitle || editBlogPermissionTitle}
-                                        iconStart={<ImageIcon className="size-4" />}
-                                    >
-                                        {featuredImageId ? 'Replace image' : 'Select image'}
-                                    </Button>
+	                                        }}
+	                                        disabled={editorBusy || isUsingLocalPostCopy || !canEditBlog || !canViewMedia}
+	                                        title={blogEditorMediaSelectDisabledReason || undefined}
+	                                        iconStart={<ImageIcon className="size-4" />}
+	                                        aria-describedby={blogEditorCommandActionStatusId}
+	                                        data-testid="blog-editor-select-featured-image"
+	                                        data-action-state={blogEditorMediaSelectDisabledReason ? editorBusy ? 'busy' : 'blocked' : 'ready'}
+	                                        data-action-status={blogEditorMediaSelectActionStatus}
+	                                        data-disabled-reason={blogEditorMediaSelectDisabledReason || undefined}
+	                                    >
+	                                        {featuredImageId ? 'Replace image' : 'Select image'}
+	                                    </Button>
                                     <Button
                                         type="button"
                                         variant="outline"
@@ -3291,13 +3709,18 @@ function EditBlogPostPage() {
                                             if (!canEditBlog) return;
                                             clearEditorFeedback();
                                             setFeaturedImageId(null);
-                                        }}
-                                        disabled={editorFormDisabled || !featuredImageId}
-                                        title={editBlogPermissionTitle}
-                                        iconStart={<X className="size-4" />}
-                                    >
-                                        Clear image
-                                    </Button>
+	                                        }}
+	                                        disabled={editorFormDisabled || !featuredImageId}
+	                                        title={blogEditorMediaClearDisabledReason || undefined}
+	                                        iconStart={<X className="size-4" />}
+	                                        aria-describedby={blogEditorCommandActionStatusId}
+	                                        data-testid="blog-editor-clear-featured-image"
+	                                        data-action-state={blogEditorMediaClearDisabledReason ? editorBusy ? 'busy' : 'blocked' : 'ready'}
+	                                        data-action-status={blogEditorMediaClearActionStatus}
+	                                        data-disabled-reason={blogEditorMediaClearDisabledReason || undefined}
+	                                    >
+	                                        Clear image
+	                                    </Button>
                                 </div>
                                 {featuredImageId && (
                                     <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
@@ -3317,13 +3740,18 @@ function EditBlogPostPage() {
                                         type="button"
                                         size="sm"
                                         variant="outline"
-                                        onClick={() => void loadPostComments()}
-                                        disabled={commentsBusy || !canViewComments}
-                                        title={commentsViewPermissionTitle}
-                                        iconStart={<RefreshCw className={cn('size-3.5', isCommentsLoading && 'animate-spin')} />}
-                                    >
-                                        Refresh
-                                    </Button>
+	                                        onClick={() => void loadPostComments()}
+	                                        disabled={commentsBusy || !canViewComments}
+	                                        title={blogEditorCommentsRefreshDisabledReason || undefined}
+	                                        iconStart={<RefreshCw className={cn('size-3.5', isCommentsLoading && 'animate-spin')} />}
+	                                        aria-describedby={blogEditorCommandActionStatusId}
+	                                        data-testid="blog-editor-refresh-comments"
+	                                        data-action-state={blogEditorCommentsRefreshDisabledReason ? commentsBusy ? 'busy' : 'blocked' : 'ready'}
+	                                        data-action-status={blogEditorCommentsRefreshActionStatus}
+	                                        data-disabled-reason={blogEditorCommentsRefreshDisabledReason || undefined}
+	                                    >
+	                                        Refresh
+	                                    </Button>
                                 }
                             />
                             <PanelContent className="space-y-4">
@@ -3340,27 +3768,37 @@ function EditBlogPostPage() {
                                 </div>
                                 {pendingPostCommentIds.length > 0 && (
                                     <div className="grid gap-2 sm:grid-cols-2">
+	                                        <Button
+	                                            type="button"
+	                                            size="sm"
+	                                            onClick={() => void moderatePostComments(pendingPostCommentIds, 'approved')}
+	                                            disabled={commentsBusy || !canManageComments}
+	                                            title={blogEditorCommentsManageDisabledReason || 'Approve pending comments'}
+	                                            iconStart={<CheckCircle2 className="size-4" />}
+	                                            aria-describedby={blogEditorCommandActionStatusId}
+	                                            data-testid="blog-editor-approve-pending-comments"
+	                                            data-action-state={blogEditorCommentsManageDisabledReason ? commentsBusy ? 'busy' : 'blocked' : 'ready'}
+	                                            data-action-status={blogEditorCommentsApprovePendingActionStatus}
+	                                            data-disabled-reason={blogEditorCommentsManageDisabledReason || undefined}
+	                                        >
+	                                            Approve pending
+	                                        </Button>
                                         <Button
                                             type="button"
                                             size="sm"
-                                            onClick={() => void moderatePostComments(pendingPostCommentIds, 'approved')}
-                                            disabled={commentsBusy || !canManageComments}
-                                            title={commentsManagePermissionTitle}
-                                            iconStart={<CheckCircle2 className="size-4" />}
-                                        >
-                                            Approve pending
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => void moderatePostComments(pendingPostCommentIds, 'rejected', 'Rejected from blog post editor.')}
-                                            disabled={commentsBusy || !canManageComments}
-                                            title={commentsManagePermissionTitle}
-                                            iconStart={<XCircle className="size-4" />}
-                                        >
-                                            Reject pending
-                                        </Button>
+	                                            variant="outline"
+	                                            onClick={() => void moderatePostComments(pendingPostCommentIds, 'rejected', 'Rejected from blog post editor.')}
+	                                            disabled={commentsBusy || !canManageComments}
+	                                            title={blogEditorCommentsManageDisabledReason || 'Reject pending comments'}
+	                                            iconStart={<XCircle className="size-4" />}
+	                                            aria-describedby={blogEditorCommandActionStatusId}
+	                                            data-testid="blog-editor-reject-pending-comments"
+	                                            data-action-state={blogEditorCommentsManageDisabledReason ? commentsBusy ? 'busy' : 'blocked' : 'ready'}
+	                                            data-action-status={blogEditorCommentsRejectPendingActionStatus}
+	                                            data-disabled-reason={blogEditorCommentsManageDisabledReason || undefined}
+	                                        >
+	                                            Reject pending
+	                                        </Button>
                                     </div>
                                 )}
                                 <div className="grid gap-2">
@@ -3377,34 +3815,48 @@ function EditBlogPostPage() {
                                     ) : postComments.slice(0, 4).map((comment) => (
                                         <BlogCommentModerationItem
                                             key={comment.id}
-                                            comment={comment}
-                                            busy={commentsBusy || updatingCommentIds.includes(comment.id) || !canManageComments}
-                                            onApprove={() => void moderatePostComments([comment.id], 'approved')}
-                                            onReject={() => void moderatePostComments([comment.id], 'rejected', 'Rejected from blog post editor.')}
-                                        />
+	                                            comment={comment}
+	                                            busy={commentsBusy || updatingCommentIds.includes(comment.id) || !canManageComments}
+	                                            busyReason={updatingCommentIds.includes(comment.id)
+	                                                ? 'Wait for this comment moderation update to finish.'
+	                                                : blogEditorCommentsManageDisabledReason}
+	                                            actionStatusId={blogEditorCommandActionStatusId}
+	                                            onApprove={() => void moderatePostComments([comment.id], 'approved')}
+	                                            onReject={() => void moderatePostComments([comment.id], 'rejected', 'Rejected from blog post editor.')}
+	                                        />
                                     ))}
                                 </div>
                                 <div className="grid gap-2">
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={() => navigate({ to: '/comments', search: { siteId: activeSiteId, targetType: 'post', targetId: post.id } })}
-                                        disabled={editorBusy || !canViewComments}
-                                        title={commentsViewPermissionTitle}
-                                        iconStart={<ExternalLink className="size-4" />}
-                                        className="w-full"
-                                    >
-                                        Open full queue
-                                    </Button>
+	                                        onClick={() => navigate({ to: '/comments', search: { siteId: activeSiteId, targetType: 'post', targetId: post.id } })}
+	                                        disabled={editorBusy || !canViewComments}
+	                                        title={blogEditorCommentsOpenQueueDisabledReason || undefined}
+	                                        iconStart={<ExternalLink className="size-4" />}
+	                                        className="w-full"
+	                                        aria-describedby={blogEditorCommandActionStatusId}
+	                                        data-testid="blog-editor-open-comments-queue"
+	                                        data-action-state={blogEditorCommentsOpenQueueDisabledReason ? editorBusy ? 'busy' : 'blocked' : 'ready'}
+	                                        data-action-status={blogEditorCommentsOpenQueueActionStatus}
+	                                        data-disabled-reason={blogEditorCommentsOpenQueueDisabledReason || undefined}
+	                                    >
+	                                        Open full queue
+	                                    </Button>
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={() => void copyEditorHandoffText(moderationCommentsUrl, 'Post comments moderation URL')}
-                                        disabled={editorActionBusy || !canViewBlog}
-                                        title={viewBlogPermissionTitle}
-                                        iconStart={<Copy className="size-4" />}
-                                        className="w-full"
-                                    >
+	                                        onClick={() => void copyEditorHandoffText(moderationCommentsUrl, 'Post comments moderation URL')}
+	                                        disabled={editorActionBusy || !canViewBlog}
+	                                        title={blogEditorCommentsApiDisabledReason || undefined}
+	                                        iconStart={<Copy className="size-4" />}
+	                                        className="w-full"
+	                                        aria-describedby={blogEditorCommandActionStatusId}
+	                                        data-testid="blog-editor-copy-comments-api"
+	                                        data-action-state={blogEditorCommentsApiDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+	                                        data-action-status={blogEditorCommentsApiActionStatus}
+	                                        data-disabled-reason={blogEditorCommentsApiDisabledReason || undefined}
+	                                    >
                                         Copy comments API
                                     </Button>
                                 </div>
@@ -3497,24 +3949,34 @@ function EditBlogPostPage() {
                                 <div className="grid gap-2">
                                     <Button
                                         type="button"
-                                        onClick={() => void copyEditorHandoffText(publicRenderUrl, 'Blog public render URL')}
-                                        disabled={editorActionBusy || !canViewBlog}
-                                        title={viewBlogPermissionTitle}
-                                        variant="outline"
-                                        iconStart={<Copy className="size-4" />}
-                                        className="w-full"
-                                    >
-                                        Copy public URL
-                                    </Button>
+	                                        onClick={() => void copyEditorHandoffText(publicRenderUrl, 'Blog public render URL')}
+	                                        disabled={editorActionBusy || !canViewBlog}
+	                                        title={blogEditorHandoffDisabledReason || undefined}
+	                                        variant="outline"
+	                                        iconStart={<Copy className="size-4" />}
+	                                        className="w-full"
+	                                        aria-describedby={blogEditorCommandActionStatusId}
+	                                        data-testid="blog-editor-copy-public-url"
+	                                        data-action-state={blogEditorHandoffDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+	                                        data-action-status={blogEditorHandoffActionStatus}
+	                                        data-disabled-reason={blogEditorHandoffDisabledReason || undefined}
+	                                    >
+	                                        Copy public URL
+	                                    </Button>
                                     <Button
                                         type="button"
-                                        onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
-                                        disabled={editorActionBusy || !canViewBlog}
-                                        title={viewBlogPermissionTitle}
-                                        variant="outline"
-                                        iconStart={<Copy className="size-4" />}
-                                        className="w-full"
-                                    >
+	                                        onClick={() => void copyEditorHandoffText(editorHandoffText, 'Blog editor handoff manifest')}
+	                                        disabled={editorActionBusy || !canViewBlog}
+	                                        title={blogEditorHandoffDisabledReason || undefined}
+	                                        variant="outline"
+	                                        iconStart={<Copy className="size-4" />}
+	                                        className="w-full"
+	                                        aria-describedby={blogEditorCommandActionStatusId}
+	                                        data-testid="blog-editor-handoff-panel-copy-handoff"
+	                                        data-action-state={blogEditorHandoffDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+	                                        data-action-status={blogEditorHandoffActionStatus}
+	                                        data-disabled-reason={blogEditorHandoffDisabledReason || undefined}
+	                                    >
                                         Copy handoff
                                     </Button>
                                 </div>
@@ -3524,16 +3986,21 @@ function EditBlogPostPage() {
                         <Panel id="blog-editor-taxonomy" className="scroll-mt-24">
                             <PanelHeader title="Author" icon={<UserRound className="size-4" />} />
                             <PanelContent className="space-y-2">
-                                <select
-                                    value={selectedAuthorId}
-                                    onChange={(event) => {
-                                        clearEditorFeedback();
-                                        setSelectedAuthorId(event.target.value);
-                                    }}
-                                    disabled={editorFormDisabled}
-                                    title={editBlogPermissionTitle}
-                                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                                >
+	                                <select
+	                                    value={selectedAuthorId}
+	                                    onChange={(event) => {
+	                                        clearEditorFeedback();
+	                                        setSelectedAuthorId(event.target.value);
+	                                    }}
+	                                    disabled={editorFormDisabled}
+	                                    title={blogEditorTaxonomyDisabledReason || 'Choose blog author'}
+	                                    aria-describedby={blogEditorCommandActionStatusId}
+	                                    data-testid="blog-editor-author-select"
+	                                    data-action-state={blogEditorTaxonomyDisabledReason ? editorBusy ? 'busy' : 'blocked' : 'ready'}
+	                                    data-action-status={blogEditorAuthorActionStatus}
+	                                    data-disabled-reason={blogEditorTaxonomyDisabledReason || undefined}
+	                                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+	                                >
                                     {authors.length === 0 ? (
                                         <option value={selectedAuthorId}>{selectedAuthorId}</option>
                                     ) : authors.map((author) => (
@@ -3555,19 +4022,25 @@ function EditBlogPostPage() {
                                 <TaxonomyPicker
                                     title="Categories"
                                     emptyLabel="No categories yet."
-                                    items={categories}
-                                    selectedIds={selectedCategoryIds}
-                                    onToggle={(id) => toggleSelection(id, selectedCategoryIds, setSelectedCategoryIds)}
-                                    disabled={editorFormDisabled}
-                                />
-                                <TaxonomyPicker
-                                    title="Tags"
+	                                    items={categories}
+	                                    selectedIds={selectedCategoryIds}
+	                                    onToggle={(id) => toggleSelection(id, selectedCategoryIds, setSelectedCategoryIds)}
+	                                    disabled={editorFormDisabled}
+	                                    disabledReason={blogEditorTaxonomyDisabledReason}
+	                                    actionStatusId={blogEditorCommandActionStatusId}
+	                                    kind="category"
+	                                />
+	                                <TaxonomyPicker
+	                                    title="Tags"
                                     emptyLabel="No tags yet."
-                                    items={tags}
-                                    selectedIds={selectedTagIds}
-                                    onToggle={(id) => toggleSelection(id, selectedTagIds, setSelectedTagIds)}
-                                    disabled={editorFormDisabled}
-                                />
+	                                    items={tags}
+	                                    selectedIds={selectedTagIds}
+	                                    onToggle={(id) => toggleSelection(id, selectedTagIds, setSelectedTagIds)}
+	                                    disabled={editorFormDisabled}
+	                                    disabledReason={blogEditorTaxonomyDisabledReason}
+	                                    actionStatusId={blogEditorCommandActionStatusId}
+	                                    kind="tag"
+	                                />
                             </PanelContent>
                         </Panel>
 
@@ -3589,24 +4062,34 @@ function EditBlogPostPage() {
                                                     <span> · {revisions.length} saved node{revisions.length === 1 ? '' : 's'} across {blogRevisionBranchGraph.branchCount} branch{blogRevisionBranchGraph.branchCount === 1 ? '' : 'es'}</span>
                                                 </div>
                                                 <div className="flex flex-wrap items-center gap-1">
-                                                    <button
-                                                        type="button"
-                                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
-                                                        onClick={() => void copyEditorHandoffText(blogRevisionBranchGraphText, 'Blog revision branch graph')}
-                                                        disabled={editorActionBusy}
-                                                        data-testid="blog-editor-copy-revision-branch-graph"
-                                                    >
+	                                                    <button
+	                                                        type="button"
+	                                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
+	                                                        onClick={() => void copyEditorHandoffText(blogRevisionBranchGraphText, 'Blog revision branch graph')}
+	                                                        disabled={editorActionBusy}
+	                                                        title={blogEditorRevisionGraphDisabledReason || 'Copy revision branch graph'}
+	                                                        aria-describedby={blogEditorCommandActionStatusId}
+	                                                        data-testid="blog-editor-copy-revision-branch-graph"
+	                                                        data-action-state={blogEditorRevisionGraphDisabledReason ? 'busy' : 'ready'}
+	                                                        data-action-status={blogEditorRevisionGraphCopyActionStatus}
+	                                                        data-disabled-reason={blogEditorRevisionGraphDisabledReason || undefined}
+	                                                    >
                                                         <Copy className="size-3.5" />
                                                         Copy graph
                                                     </button>
                                                     {revisions.length > BLOG_REVISION_COLLAPSED_COUNT ? (
                                                         <button
                                                             type="button"
-                                                            className="rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
-                                                            onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
-                                                            disabled={editorActionBusy}
-                                                            data-testid="blog-editor-toggle-revision-graph"
-                                                        >
+	                                                            className="rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
+	                                                            onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
+	                                                            disabled={editorActionBusy}
+	                                                            title={blogEditorRevisionGraphDisabledReason || (isRevisionTimelineExpanded ? 'Show latest revisions' : `Show all ${revisions.length} revisions`)}
+	                                                            aria-describedby={blogEditorCommandActionStatusId}
+	                                                            data-testid="blog-editor-toggle-revision-graph"
+	                                                            data-action-state={blogEditorRevisionGraphDisabledReason ? 'busy' : 'ready'}
+	                                                            data-action-status={blogEditorRevisionGraphToggleActionStatus}
+	                                                            data-disabled-reason={blogEditorRevisionGraphDisabledReason || undefined}
+	                                                        >
                                                             {isRevisionTimelineExpanded ? 'Show latest' : `Show all ${revisions.length}`}
                                                         </button>
                                                     ) : null}
@@ -3805,10 +4288,15 @@ function EditBlogPostPage() {
                                                                 <button
                                                                     type="button"
                                                                     className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                                                    onClick={() => expandRevisionTimelineTo(revisionGraphNode.olderId || revision.id)}
-                                                                    disabled={editorActionBusy}
-                                                                    data-testid={`blog-editor-revision-older-${revision.id}`}
-                                                                >
+	                                                            onClick={() => expandRevisionTimelineTo(revisionGraphNode.olderId || revision.id)}
+	                                                            disabled={editorActionBusy}
+	                                                            title={blogEditorRevisionGraphDisabledReason || `Show older revision ${revisionGraphNode.olderId || revision.id}`}
+	                                                            aria-describedby={blogEditorCommandActionStatusId}
+	                                                            data-testid={`blog-editor-revision-older-${revision.id}`}
+	                                                            data-action-state={blogEditorRevisionGraphDisabledReason ? 'busy' : 'ready'}
+	                                                            data-action-status={blogEditorRevisionGraphDisabledReason ? `Older revision unavailable: ${blogEditorRevisionGraphDisabledReason}` : 'Older revision navigation available.'}
+	                                                            data-disabled-reason={blogEditorRevisionGraphDisabledReason || undefined}
+	                                                        >
                                                                     Older
                                                                 </button>
                                                             ) : null}
@@ -3817,19 +4305,29 @@ function EditBlogPostPage() {
                                                                 disabled={editorActionBusy}
                                                                 onClick={() => void copyBlogRevisionCompare(revision)}
                                                                 className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                                                title="Copy revision comparison"
-                                                                aria-label={`Copy comparison for revision ${revision.id}`}
-                                                                data-testid={`blog-editor-copy-revision-compare-${revision.id}`}
-                                                            >
+	                                                                title="Copy revision comparison"
+	                                                                aria-label={`Copy comparison for revision ${revision.id}`}
+	                                                                aria-describedby={blogEditorCommandActionStatusId}
+	                                                                data-testid={`blog-editor-copy-revision-compare-${revision.id}`}
+	                                                                data-action-state={blogEditorRevisionGraphDisabledReason ? 'busy' : 'ready'}
+	                                                                data-action-status={blogEditorRevisionGraphDisabledReason ? `Copy revision comparison unavailable: ${blogEditorRevisionGraphDisabledReason}` : 'Copy revision comparison available.'}
+	                                                                data-disabled-reason={blogEditorRevisionGraphDisabledReason || undefined}
+	                                                            >
                                                                 <Copy className="h-4 w-4" />
                                                             </button>
                                                             <button
                                                                 type="button"
                                                                 disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
-                                                                onClick={() => setPendingRestoreRevision(revision)}
-                                                                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                                                                title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : 'Restore revision'}
-                                                            >
+	                                                                onClick={() => setPendingRestoreRevision(revision)}
+	                                                                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+	                                                                title={blogEditorRestoreDisabledReason || 'Restore revision'}
+	                                                                aria-label={`Restore revision ${revision.id}`}
+	                                                                aria-describedby={blogEditorCommandActionStatusId}
+	                                                                data-testid={`blog-editor-restore-revision-${revision.id}`}
+	                                                                data-action-state={blogEditorRestoreDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+	                                                                data-action-status={blogEditorRestoreActionStatus}
+	                                                                data-disabled-reason={blogEditorRestoreDisabledReason || undefined}
+	                                                            >
                                                                 <RotateCcw className="w-4 h-4" />
                                                             </button>
                                                         </div>
@@ -4018,23 +4516,32 @@ function EditBlogPostPage() {
                                 </div>
                             ) : null}
                             <div className="mt-5 flex justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setPendingRestoreRevision(null)}
-                                    disabled={editorActionBusy}
-                                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-                                    data-testid="blog-editor-cancel-restore"
-                                >
+	                                <button
+	                                    type="button"
+	                                    onClick={() => setPendingRestoreRevision(null)}
+	                                    disabled={editorActionBusy}
+	                                    title={blogEditorRestoreCancelDisabledReason || 'Cancel restore'}
+	                                    aria-describedby={blogEditorCommandActionStatusId}
+	                                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+	                                    data-testid="blog-editor-cancel-restore"
+	                                    data-action-state={blogEditorRestoreCancelDisabledReason ? 'busy' : 'ready'}
+	                                    data-action-status={blogEditorRestoreCancelActionStatus}
+	                                    data-disabled-reason={blogEditorRestoreCancelDisabledReason || undefined}
+	                                >
                                     Cancel
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => void restoreRevision(pendingRestoreRevision)}
-                                    disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
-                                    className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                    title={isUsingLocalPostCopy ? localPostCopyDisabledMessage : editorHasUnsavedChanges ? 'Save or discard local changes before restoring a revision.' : undefined}
-                                    data-testid="blog-editor-confirm-restore"
-                                >
+	                                    onClick={() => void restoreRevision(pendingRestoreRevision)}
+	                                    disabled={editorActionBusy || isUsingLocalPostCopy || editorHasUnsavedChanges || !canEditBlog}
+	                                    className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+	                                    title={blogEditorRestoreDisabledReason || 'Confirm restore revision'}
+	                                    aria-describedby={blogEditorCommandActionStatusId}
+	                                    data-testid="blog-editor-confirm-restore"
+	                                    data-action-state={blogEditorRestoreDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+	                                    data-action-status={blogEditorRestoreActionStatus}
+	                                    data-disabled-reason={blogEditorRestoreDisabledReason || undefined}
+	                                >
                                     {isWorkflowBusy ? 'Restoring...' : 'Restore revision'}
                                 </button>
                             </div>
@@ -4043,7 +4550,7 @@ function EditBlogPostPage() {
                 )}
 
                 {showDeleteConfirm && post && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="blog-editor-delete-confirm">
                         <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
                             <div className="flex items-start gap-3">
                                 <span className="rounded-lg bg-red-50 p-2 text-red-600">
@@ -4064,6 +4571,12 @@ function EditBlogPostPage() {
                                     type="button"
                                     onClick={() => setShowDeleteConfirm(false)}
                                     disabled={editorActionBusy}
+                                    title={blogEditorDeleteCancelDisabledReason || 'Cancel delete'}
+                                    aria-describedby={blogEditorCommandActionStatusId}
+                                    data-testid="blog-editor-cancel-delete"
+                                    data-action-state={blogEditorDeleteCancelDisabledReason ? 'busy' : 'ready'}
+                                    data-action-status={blogEditorDeleteCancelActionStatus}
+                                    data-disabled-reason={blogEditorDeleteCancelDisabledReason || undefined}
                                     className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     Cancel
@@ -4072,6 +4585,12 @@ function EditBlogPostPage() {
                                     type="button"
                                     onClick={() => void handleDelete()}
                                     disabled={editorActionBusy || isUsingLocalPostCopy || !canDeleteBlog}
+                                    title={blogEditorDeleteDisabledReason || 'Confirm delete post'}
+                                    aria-describedby={blogEditorCommandActionStatusId}
+                                    data-testid="blog-editor-confirm-delete"
+                                    data-action-state={blogEditorDeleteDisabledReason ? editorActionBusy ? 'busy' : 'blocked' : 'ready'}
+                                    data-action-status={blogEditorDeleteActionStatus}
+                                    data-disabled-reason={blogEditorDeleteDisabledReason || undefined}
                                     className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {isWorkflowBusy ? 'Deleting...' : 'Delete post'}
@@ -4148,15 +4667,35 @@ function BlogEditorWorkflowStep({ index, label, detail }: { index: number; label
 function BlogCommentModerationItem({
     comment,
     busy,
+    busyReason,
+    actionStatusId,
     onApprove,
     onReject,
 }: {
     comment: AdminComment;
     busy: boolean;
+    busyReason: string;
+    actionStatusId: string;
     onApprove: () => void;
     onReject: () => void;
 }) {
     const reported = (comment.reportCount || 0) > 0 || Boolean(comment.reportReasons?.length);
+    const approveDisabledReason = busy
+        ? busyReason || 'Wait for the current comment moderation workflow to finish.'
+        : comment.status === 'approved'
+            ? 'Comment is already approved.'
+            : '';
+    const rejectDisabledReason = busy
+        ? busyReason || 'Wait for the current comment moderation workflow to finish.'
+        : comment.status === 'rejected'
+            ? 'Comment is already rejected.'
+            : '';
+    const approveActionStatus = approveDisabledReason
+        ? `Approve comment unavailable: ${approveDisabledReason}`
+        : 'Approve comment available.';
+    const rejectActionStatus = rejectDisabledReason
+        ? `Reject comment unavailable: ${rejectDisabledReason}`
+        : 'Reject comment available.';
 
     return (
         <article className="rounded-lg border border-border bg-background px-3 py-3">
@@ -4195,6 +4734,12 @@ function BlogCommentModerationItem({
                     size="sm"
                     onClick={onApprove}
                     disabled={busy || comment.status === 'approved'}
+                    title={approveDisabledReason || 'Approve comment'}
+                    aria-describedby={actionStatusId}
+                    data-testid={`blog-editor-approve-comment-${comment.id}`}
+                    data-action-state={approveDisabledReason ? busy ? 'busy' : 'blocked' : 'ready'}
+                    data-action-status={approveActionStatus}
+                    data-disabled-reason={approveDisabledReason || undefined}
                     iconStart={<CheckCircle2 className="size-4" />}
                 >
                     Approve
@@ -4205,6 +4750,12 @@ function BlogCommentModerationItem({
                     variant="outline"
                     onClick={onReject}
                     disabled={busy || comment.status === 'rejected'}
+                    title={rejectDisabledReason || 'Reject comment'}
+                    aria-describedby={actionStatusId}
+                    data-testid={`blog-editor-reject-comment-${comment.id}`}
+                    data-action-state={rejectDisabledReason ? busy ? 'busy' : 'blocked' : 'ready'}
+                    data-action-status={rejectActionStatus}
+                    data-disabled-reason={rejectDisabledReason || undefined}
                     iconStart={<XCircle className="size-4" />}
                 >
                     Reject
@@ -4224,13 +4775,16 @@ function commentStatusType(status: CommentModerationStatus) {
 interface TaxonomyPickerProps {
     title: string;
     emptyLabel: string;
+    kind: 'category' | 'tag';
     items: Array<BlogCategory | BlogTag>;
     selectedIds: string[];
     onToggle: (id: string) => void;
     disabled?: boolean;
+    disabledReason?: string;
+    actionStatusId: string;
 }
 
-function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle, disabled = false }: TaxonomyPickerProps) {
+function TaxonomyPicker({ title, emptyLabel, kind, items, selectedIds, onToggle, disabled = false, disabledReason = '', actionStatusId }: TaxonomyPickerProps) {
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
@@ -4242,12 +4796,24 @@ function TaxonomyPicker({ title, emptyLabel, items, selectedIds, onToggle, disab
                     <span className="text-sm text-muted-foreground">{emptyLabel}</span>
                 ) : items.map((item) => {
                     const selected = selectedIds.includes(item.id);
+                    const actionStatus = disabledReason
+                        ? `${title} ${item.name} unavailable: ${disabledReason}`
+                        : selected
+                            ? `${title} ${item.name} selected.`
+                            : `${title} ${item.name} available.`;
                     return (
                         <button
                             key={item.id}
                             type="button"
                             onClick={() => onToggle(item.id)}
                             disabled={disabled}
+                            title={disabledReason || (selected ? `Remove ${item.name}` : `Select ${item.name}`)}
+                            aria-pressed={selected}
+                            aria-describedby={actionStatusId}
+                            data-testid={`blog-editor-taxonomy-${kind}-${item.id}`}
+                            data-action-state={disabledReason ? 'blocked' : selected ? 'selected' : 'ready'}
+                            data-action-status={actionStatus}
+                            data-disabled-reason={disabledReason || undefined}
                             className={cn(
                                 'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                                 selected

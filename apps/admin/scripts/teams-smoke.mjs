@@ -26,6 +26,14 @@ const assertTeamsRouteSourceContract = () => {
   assert(source.includes('assigning members, roles, sites, and workspace ownership'), 'Teams empty state must explain what the first team unlocks');
   assert(source.includes('title="No team activity yet"'), 'Teams audit panel must keep the empty activity title visible');
   assert(source.includes('Team creation, member invites, role changes, and workspace ownership updates will appear here.'), 'Teams audit empty state must explain which actions populate activity');
+  assert(
+    source.includes('data-testid="teams-audit-panel"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Show activity') &&
+      source.includes('Hide activity') &&
+      source.includes('Audit log evidence for selected team changes. Required permission: activity.export.'),
+    'Teams route must keep low-frequency team audit evidence behind a default-collapsed activity disclosure.',
+  );
   assert(!source.includes('window.confirm') && !componentSource.includes('window.confirm'), 'Teams surfaces must not use browser confirm dialogs for account/workspace mutations');
   assert(
     componentSource.includes('aria-labelledby="teams-delete-team-title"') &&
@@ -61,6 +69,55 @@ const assertTeamsRouteSourceContract = () => {
       componentSource.includes('Fix team fields before saving.') &&
       componentSource.includes('Fix invitation fields before sending.'),
     'Teams create/edit/invite forms must use source-guarded inline validation instead of browser-only required fields.',
+  );
+  assert(
+    source.includes('const canUseTeamRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseTeamRoleDefaults;') &&
+      source.includes('const isTeamPermissionAllowed = (key: TeamPermissionKey) => (') &&
+      source.includes("const canViewTeams = isTeamPermissionAllowed('users.view');") &&
+      source.includes("const canManageTeams = isTeamPermissionAllowed('users.manage');") &&
+      source.includes("const canExportActivity = isTeamPermissionAllowed('activity.export');") &&
+      source.includes('const isTeamsBusy = isLoading || isRefreshing;') &&
+      source.includes('const isTeamAuditDisabled = isLoadingTeamAudit || !canExportActivity || !currentTeamId;') &&
+      !source.includes('const canViewTeams = !isPermissionMatrixPending') &&
+      !source.includes('const isTeamsBusy = isLoading || isRefreshing || isPermissionMatrixPending;') &&
+      !source.includes('const isTeamAuditDisabled = isLoadingTeamAudit || isPermissionMatrixPending'),
+    'Teams permission state must keep owner/admin role-default workflows usable while backend permission details hydrate.',
+  );
+  assert(
+    componentSource.includes('data-testid="teams-workspace-sites-details"') &&
+      componentSource.includes('data-testid="teams-workspace-sites-panel"') &&
+      componentSource.includes('data-default-collapsed="true"') &&
+      componentSource.includes('Show sites') &&
+      componentSource.includes('Create teams, assign members, and keep workspace ownership tied to the right site portfolio.') &&
+      componentSource.includes("width: '100%'") &&
+      componentSource.includes("maxWidth: 'none'") &&
+      !componentSource.includes('+ Create Team'),
+    'Teams management UI must use the current app shell width and keep low-frequency workspace-site ownership details collapsed by default.',
+  );
+  assert(
+    componentSource.includes('data-testid="teams-create-actions"') &&
+      componentSource.includes('data-testid="teams-create-action-status"') &&
+      componentSource.includes('data-testid="teams-current-actions"') &&
+      componentSource.includes('data-testid="teams-current-actions-status"') &&
+      componentSource.includes('data-testid="teams-invite-actions"') &&
+      componentSource.includes('data-testid="teams-invite-action-status"') &&
+      componentSource.includes('data-testid="teams-invite-submit-action-status"') &&
+      componentSource.includes("const inviteSubmitStatusId = 'teams-invite-submit-action-status';") &&
+      componentSource.includes('data-action-state={inviteSubmitActionState}') &&
+      componentSource.includes('data-action-status={inviteSubmitActionStatus}') &&
+      componentSource.includes('data-disabled-reason={inviteSubmitDisabledReason || undefined}') &&
+      componentSource.includes('data-target-email={normalizedEmail || undefined}') &&
+      componentSource.includes('data-target-role={role}') &&
+      componentSource.includes('data-testid={`teams-member-actions-${member.id}`}') &&
+      componentSource.includes('data-testid={`teams-member-actions-status-${member.id}`}') &&
+      componentSource.includes('data-action-status={currentTeamActionStatus}') &&
+      componentSource.includes('data-action-state={actionState(teamDeleteDisabledReason)}') &&
+      componentSource.includes('data-disabled-reason={removeDisabledReason || undefined}') &&
+      componentSource.includes('aria-live="polite"') &&
+      componentSource.includes('Role change unavailable:') &&
+      componentSource.includes('Remove unavailable:'),
+    'Teams action clusters and invite modal submit must expose named status summaries, action-state metadata, targets, and disabled reasons for team/member controls.',
   );
 };
 
@@ -142,7 +199,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_TEAMS_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -485,14 +543,19 @@ const waitForTeamAuditPanel = async (client, expectedLabels, description) => wai
   client,
   `(() => {
     const panel = document.querySelector('[data-testid="teams-audit-panel"]');
+    if (panel instanceof HTMLDetailsElement && !panel.open) {
+      panel.open = true;
+    }
     const text = panel?.innerText || '';
     const expectedLabels = ${JSON.stringify(expectedLabels)};
     return {
       ready: Boolean(panel) &&
         text.includes('Team activity') &&
         text.includes('activity.export') &&
+        text.includes('Hide activity') &&
         text.includes('Request') &&
         expectedLabels.every((label) => text.includes(label)),
+      panelOpen: panel instanceof HTMLDetailsElement ? panel.open : null,
       text: text.slice(0, 1600),
     };
   })()`,
@@ -840,13 +903,65 @@ const main = async () => {
       client,
       `(() => {
         const body = document.body?.innerText || '';
+        const siteDetails = document.querySelector('[data-testid="teams-workspace-sites-details"]');
+        const siteText = siteDetails?.textContent || '';
+        const createButton = document.querySelector('[data-testid="teams-create-button"]');
+        const createStatus = document.querySelector('[data-testid="teams-create-action-status"]');
+        const currentActions = document.querySelector('[data-testid="teams-current-actions"]');
+        const currentStatus = document.querySelector('[data-testid="teams-current-actions-status"]');
+        const editButton = document.querySelector('[data-testid="teams-edit-button"]');
+        const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        const inviteActions = document.querySelector('[data-testid="teams-invite-actions"]');
+        const inviteStatus = document.querySelector('[data-testid="teams-invite-action-status"]');
+        const inviteButton = document.querySelector('[data-testid="teams-invite-button"]');
+        const auditPanel = document.querySelector('[data-testid="teams-audit-panel"]');
+        const auditText = auditPanel?.textContent || '';
         return {
           ready: body.includes(${JSON.stringify(teamName)}) &&
             body.includes('/smoke-team-${suffix}') &&
             body.includes('Team created.') &&
-            body.includes('Workspace Sites') &&
-            body.includes('No sites are currently owned by this team.'),
+            siteDetails instanceof HTMLDetailsElement &&
+            siteDetails.open === false &&
+            siteDetails.getAttribute('data-default-collapsed') === 'true' &&
+            siteText.includes('Workspace Sites') &&
+            siteText.includes('Show sites') &&
+            siteText.includes('No sites are currently owned by this team.') &&
+            auditPanel instanceof HTMLDetailsElement &&
+            auditPanel.open === false &&
+            auditPanel.getAttribute('data-default-collapsed') === 'true' &&
+            auditText.includes('Team activity') &&
+            auditText.includes('Show activity') &&
+            auditText.includes('activity.export') &&
+            createButton instanceof HTMLButtonElement &&
+            createButton.getAttribute('aria-describedby') === 'teams-create-action-status' &&
+            createButton.getAttribute('data-action-state') === 'ready' &&
+            createStatus?.textContent?.includes('Create team available.') &&
+            currentActions?.getAttribute('role') === 'group' &&
+            currentActions?.getAttribute('aria-label') === ${JSON.stringify(`Actions for ${teamName}`)} &&
+            currentActions?.getAttribute('aria-describedby') === 'teams-current-actions-status' &&
+            currentActions?.getAttribute('data-action-status')?.includes('Edit available.') &&
+            currentActions?.getAttribute('data-action-status')?.includes('Delete available.') &&
+            currentStatus?.textContent?.includes('Edit available. Delete available.') &&
+            editButton instanceof HTMLButtonElement &&
+            editButton.getAttribute('aria-describedby') === 'teams-current-actions-status' &&
+            editButton.getAttribute('data-action-state') === 'ready' &&
+            deleteButton instanceof HTMLButtonElement &&
+            deleteButton.getAttribute('aria-describedby') === 'teams-current-actions-status' &&
+            deleteButton.getAttribute('data-action-state') === 'ready' &&
+            inviteActions?.getAttribute('role') === 'group' &&
+            inviteStatus?.textContent?.includes('Invite member available.') &&
+            inviteButton instanceof HTMLButtonElement &&
+            inviteButton.getAttribute('aria-describedby') === 'teams-invite-action-status' &&
+            inviteButton.getAttribute('data-action-state') === 'ready',
           body: body.slice(0, 900),
+          siteText: siteText.slice(0, 900),
+          createStatus: createStatus?.textContent || '',
+          currentActionStatus: currentActions?.getAttribute('data-action-status') || '',
+          currentStatus: currentStatus?.textContent || '',
+          inviteStatus: inviteStatus?.textContent || '',
+          siteDetailsOpen: siteDetails instanceof HTMLDetailsElement ? siteDetails.open : null,
+          auditPanelOpen: auditPanel instanceof HTMLDetailsElement ? auditPanel.open : null,
+          auditText: auditText.slice(0, 900),
         };
       })()`,
       'Created team visible',
@@ -870,16 +985,34 @@ const main = async () => {
       `(() => {
         const body = document.body?.innerText || '';
         const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        const currentActions = document.querySelector('[data-testid="teams-current-actions"]');
+        const currentStatus = document.querySelector('[data-testid="teams-current-actions-status"]');
+        const siteDetails = document.querySelector('[data-testid="teams-workspace-sites-details"]');
+        const siteText = siteDetails?.textContent || '';
         return {
-          ready: body.includes(${JSON.stringify(ownedSite.name)}) &&
-            body.includes('Workspace Sites') &&
-            body.includes('1 total') &&
+          ready: siteDetails instanceof HTMLDetailsElement &&
+            siteDetails.open === false &&
+            siteDetails.getAttribute('data-default-collapsed') === 'true' &&
+            siteText.includes(${JSON.stringify(ownedSite.name)}) &&
+            siteText.includes('Workspace Sites') &&
+            siteText.includes('1 total') &&
             deleteButton instanceof HTMLButtonElement &&
             deleteButton.disabled === true &&
-            deleteButton.title.includes('Move or delete'),
+            deleteButton.title.includes('Move or delete') &&
+            deleteButton.getAttribute('aria-describedby') === 'teams-current-actions-status' &&
+            deleteButton.getAttribute('data-action-state') === 'blocked' &&
+            deleteButton.getAttribute('data-disabled-reason')?.includes('Move or delete') &&
+            currentActions?.getAttribute('data-action-status')?.includes('Delete unavailable: Move or delete') &&
+            currentStatus?.textContent?.includes('Delete unavailable: Move or delete'),
           body: body.slice(0, 1400),
+          siteText: siteText.slice(0, 1400),
+          siteDetailsOpen: siteDetails instanceof HTMLDetailsElement ? siteDetails.open : null,
           deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
           deleteTitle: deleteButton instanceof HTMLButtonElement ? deleteButton.title : null,
+          deleteState: deleteButton instanceof HTMLButtonElement ? deleteButton.getAttribute('data-action-state') : null,
+          deleteReason: deleteButton instanceof HTMLButtonElement ? deleteButton.getAttribute('data-disabled-reason') : null,
+          currentActionStatus: currentActions?.getAttribute('data-action-status') || '',
+          currentStatus: currentStatus?.textContent || '',
         };
       })()`,
       'Team workspace site ownership panel',
@@ -892,12 +1025,18 @@ const main = async () => {
       `(() => {
         const body = document.body?.innerText || '';
         const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        const siteDetails = document.querySelector('[data-testid="teams-workspace-sites-details"]');
+        const siteText = siteDetails?.textContent || '';
         return {
           ready: body.includes(${JSON.stringify(teamName)}) &&
-            body.includes('No sites are currently owned by this team.') &&
+            siteDetails instanceof HTMLDetailsElement &&
+            siteDetails.open === false &&
+            siteText.includes('No sites are currently owned by this team.') &&
             deleteButton instanceof HTMLButtonElement &&
             deleteButton.disabled === false,
           body: body.slice(0, 1400),
+          siteText: siteText.slice(0, 1400),
+          siteDetailsOpen: siteDetails instanceof HTMLDetailsElement ? siteDetails.open : null,
           deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
         };
       })()`,
@@ -925,8 +1064,52 @@ const main = async () => {
     await waitForTeamAuditPanel(client, ['Team created', 'Team updated'], 'Team update audit panel');
 
     await clickSelector(client, '[data-testid="teams-invite-button"]');
+    await waitForState(
+      client,
+      `(() => {
+        const status = document.querySelector('[data-testid="teams-invite-submit-action-status"]');
+        const submit = document.querySelector('[data-testid="teams-invite-submit"]');
+        return {
+          ready: submit instanceof HTMLButtonElement &&
+            submit.disabled === false &&
+            submit.getAttribute('aria-describedby') === 'teams-invite-submit-action-status' &&
+            submit.getAttribute('data-action-state') === 'blocked' &&
+            submit.getAttribute('data-action-status') === status?.textContent &&
+            submit.getAttribute('data-target-role') === 'editor' &&
+            status?.textContent?.includes('Send invite needs a valid email address.'),
+          statusText: status?.textContent || '',
+          buttonState: submit instanceof HTMLButtonElement ? submit.getAttribute('data-action-state') : null,
+          targetRole: submit instanceof HTMLButtonElement ? submit.getAttribute('data-target-role') : null,
+          body: document.body?.innerText?.slice(0, 900) || '',
+        };
+      })()`,
+      'Invite modal initial action status',
+    );
     await setInputValue(client, '[data-testid="teams-invite-email-input"]', inviteEmail);
     await setSelectValue(client, '[data-testid="teams-invite-role-select"]', 'viewer');
+    await waitForState(
+      client,
+      `(() => {
+        const status = document.querySelector('[data-testid="teams-invite-submit-action-status"]');
+        const submit = document.querySelector('[data-testid="teams-invite-submit"]');
+        return {
+          ready: submit instanceof HTMLButtonElement &&
+            submit.disabled === false &&
+            submit.getAttribute('aria-describedby') === 'teams-invite-submit-action-status' &&
+            submit.getAttribute('data-action-state') === 'ready' &&
+            submit.getAttribute('data-action-status') === status?.textContent &&
+            submit.getAttribute('data-target-email') === ${JSON.stringify(inviteEmail)} &&
+            submit.getAttribute('data-target-role') === 'viewer' &&
+            status?.textContent?.includes(${JSON.stringify(`Send invite available for ${inviteEmail} as viewer.`)}),
+          statusText: status?.textContent || '',
+          actionStatus: submit instanceof HTMLButtonElement ? submit.getAttribute('data-action-status') : null,
+          targetEmail: submit instanceof HTMLButtonElement ? submit.getAttribute('data-target-email') : null,
+          targetRole: submit instanceof HTMLButtonElement ? submit.getAttribute('data-target-role') : null,
+          body: document.body?.innerText?.slice(0, 900) || '',
+        };
+      })()`,
+      'Invite modal ready action status',
+    );
     await clickSelector(client, '[data-testid="teams-invite-submit"]');
     await waitForState(
       client,
@@ -950,6 +1133,34 @@ const main = async () => {
       team.members.some((member) => member.email === inviteEmail && member.role === 'viewer')
     )).then((team) => team.members.find((member) => member.email === inviteEmail));
     if (invitedMember?.userId) temporaryUserIds.push(invitedMember.userId);
+    await waitForState(
+      client,
+      `(() => {
+        const group = document.querySelector('[data-testid="teams-member-actions-${invitedMember.id}"]');
+        const status = document.querySelector('[data-testid="teams-member-actions-status-${invitedMember.id}"]');
+        const roleSelect = document.querySelector('[data-testid="teams-member-role-${invitedMember.id}"]');
+        const removeButton = document.querySelector('[data-testid="teams-member-remove-${invitedMember.id}"]');
+        return {
+          ready: group?.getAttribute('role') === 'group' &&
+            group?.getAttribute('aria-describedby') === 'teams-member-actions-status-${invitedMember.id}' &&
+            group?.getAttribute('data-action-status')?.includes('Role change available.') &&
+            group?.getAttribute('data-action-status')?.includes('Remove available.') &&
+            status?.textContent?.includes('Role change available. Remove available.') &&
+            roleSelect instanceof HTMLSelectElement &&
+            roleSelect.getAttribute('aria-describedby') === 'teams-member-actions-status-${invitedMember.id}' &&
+            roleSelect.getAttribute('data-action-state') === 'ready' &&
+            removeButton instanceof HTMLButtonElement &&
+            removeButton.getAttribute('aria-describedby') === 'teams-member-actions-status-${invitedMember.id}' &&
+            removeButton.getAttribute('data-action-state') === 'ready',
+          groupLabel: group?.getAttribute('aria-label') || '',
+          groupStatus: group?.getAttribute('data-action-status') || '',
+          status: status?.textContent || '',
+          roleState: roleSelect instanceof HTMLElement ? roleSelect.getAttribute('data-action-state') : null,
+          removeState: removeButton instanceof HTMLElement ? removeButton.getAttribute('data-action-state') : null,
+        };
+      })()`,
+      'Team member action semantics',
+    );
     await setSelectValue(client, `[data-testid="teams-member-role-${invitedMember.id}"]`, 'editor');
     await waitForTeam(editedSlug, (team) => (
       team.members.some((member) => member.email === inviteEmail && member.role === 'editor')
@@ -1047,10 +1258,13 @@ const main = async () => {
         const editButton = document.querySelector('[data-testid="teams-edit-button"]');
         const inviteButton = document.querySelector('[data-testid="teams-invite-button"]');
         const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        const siteDetails = document.querySelector('[data-testid="teams-workspace-sites-details"]');
+        const siteText = siteDetails?.textContent || '';
         const auditPanel = document.querySelector('[data-testid="teams-audit-panel"]');
         const auditRefresh = auditPanel ? Array.from(auditPanel.querySelectorAll('button')).find((button) => (
           (button.textContent || '').includes('Refresh audit')
         )) : null;
+        const auditText = auditPanel?.textContent || '';
         return {
           ready: window.location.pathname === '/teams' &&
             body.includes('Team Management') &&
@@ -1062,11 +1276,22 @@ const main = async () => {
             (!(inviteButton instanceof HTMLButtonElement) || inviteButton.disabled === false) &&
             deleteButton instanceof HTMLButtonElement &&
             (deleteButton.disabled === false || deleteButton.title.includes('Move or delete')) &&
-            body.includes('Workspace Sites') &&
+            siteDetails instanceof HTMLDetailsElement &&
+            siteDetails.open === false &&
+            siteText.includes('Workspace Sites') &&
+            auditPanel instanceof HTMLDetailsElement &&
+            auditPanel.open === false &&
+            auditPanel.getAttribute('data-default-collapsed') === 'true' &&
+            auditText.includes('Show activity') &&
+            auditText.includes('activity.export') &&
             auditRefresh instanceof HTMLButtonElement &&
             auditRefresh.disabled === false,
           path: window.location.pathname,
           body: body.slice(0, 1600),
+          siteText: siteText.slice(0, 1200),
+          siteDetailsOpen: siteDetails instanceof HTMLDetailsElement ? siteDetails.open : null,
+          auditPanelOpen: auditPanel instanceof HTMLDetailsElement ? auditPanel.open : null,
+          auditText: auditText.slice(0, 900),
           createDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
           editDisabled: editButton instanceof HTMLButtonElement ? editButton.disabled : null,
           inviteDisabled: inviteButton instanceof HTMLButtonElement ? inviteButton.disabled : null,
@@ -1181,18 +1406,30 @@ const main = async () => {
         const editButton = document.querySelector('[data-testid="teams-edit-button"]');
         const inviteButton = document.querySelector('[data-testid="teams-invite-button"]');
         const deleteButton = document.querySelector('[data-testid="teams-delete-button"]');
+        const createStatus = document.querySelector('[data-testid="teams-create-action-status"]');
+        const currentActions = document.querySelector('[data-testid="teams-current-actions"]');
+        const currentStatus = document.querySelector('[data-testid="teams-current-actions-status"]');
+        const inviteStatus = document.querySelector('[data-testid="teams-invite-action-status"]');
         const auditPanel = document.querySelector('[data-testid="teams-audit-panel"]');
         const auditRefresh = auditPanel ? Array.from(auditPanel.querySelectorAll('button')).find((button) => (
           (button.textContent || '').includes('Refresh audit')
         )) : null;
+        const auditText = auditPanel?.textContent || '';
         const roleSelects = Array.from(document.querySelectorAll('[data-testid^="teams-member-role-"]'));
         const removeButtons = Array.from(document.querySelectorAll('[data-testid^="teams-member-remove-"]'));
+        const memberGroups = Array.from(document.querySelectorAll('[data-testid^="teams-member-actions-"]')).filter((element) => (
+          !element.getAttribute('data-testid')?.startsWith('teams-member-actions-status-')
+        ));
         return {
           ready: window.location.pathname === '/teams' &&
             body.includes('Team Management') &&
             body.includes('Team activity') &&
             body.includes('activity.export') &&
             body.includes('Explicit override denies this capability.') &&
+            auditPanel instanceof HTMLDetailsElement &&
+            auditPanel.open === false &&
+            auditPanel.getAttribute('data-default-collapsed') === 'true' &&
+            auditText.includes('Show activity') &&
             createButton instanceof HTMLButtonElement &&
             createButton.disabled === true &&
             (!(editButton instanceof HTMLButtonElement) || editButton.disabled === true) &&
@@ -1200,9 +1437,27 @@ const main = async () => {
             (!(deleteButton instanceof HTMLButtonElement) || deleteButton.disabled === true) &&
             (!(auditRefresh instanceof HTMLButtonElement) || auditRefresh.disabled === true) &&
             roleSelects.every((select) => select.disabled === true) &&
-            removeButtons.every((button) => button.disabled === true),
+            removeButtons.every((button) => button.disabled === true) &&
+            createButton.getAttribute('aria-describedby') === 'teams-create-action-status' &&
+            createButton.getAttribute('data-action-state') === 'blocked' &&
+            createStatus?.textContent?.includes('Create team unavailable: Explicit override denies this capability.') &&
+            (!(currentActions instanceof HTMLElement) || currentActions.getAttribute('data-action-status')?.includes('Edit unavailable: Explicit override denies this capability.')) &&
+            (!(currentStatus instanceof HTMLElement) || (
+              currentStatus.textContent?.includes('Delete unavailable: Explicit override denies this capability.') ||
+              currentStatus.textContent?.includes('Delete unavailable: Move or delete this team\\'s sites before deleting the team.')
+            )) &&
+            (!(inviteStatus instanceof HTMLElement) || inviteStatus.textContent?.includes('Invite member unavailable: Explicit override denies this capability.')) &&
+            roleSelects.every((select) => select.getAttribute('data-action-state') === 'blocked') &&
+            removeButtons.every((button) => button.getAttribute('data-action-state') === 'blocked') &&
+            memberGroups.every((group) => group.getAttribute('data-action-status')?.includes('Explicit override denies this capability.')),
           path: window.location.pathname,
           body: body.slice(0, 1600),
+          createStatus: createStatus?.textContent || '',
+          currentActionStatus: currentActions?.getAttribute('data-action-status') || '',
+          currentStatus: currentStatus?.textContent || '',
+          inviteStatus: inviteStatus?.textContent || '',
+          auditPanelOpen: auditPanel instanceof HTMLDetailsElement ? auditPanel.open : null,
+          auditText: auditText.slice(0, 900),
           createDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
           editDisabled: editButton instanceof HTMLButtonElement ? editButton.disabled : null,
           inviteDisabled: inviteButton instanceof HTMLButtonElement ? inviteButton.disabled : null,
@@ -1210,6 +1465,9 @@ const main = async () => {
           auditRefreshDisabled: auditRefresh instanceof HTMLButtonElement ? auditRefresh.disabled : null,
           roleDisabled: roleSelects.map((select) => select.disabled),
           removeDisabled: removeButtons.map((button) => button.disabled),
+          roleStates: roleSelects.map((select) => select.getAttribute('data-action-state')),
+          removeStates: removeButtons.map((button) => button.getAttribute('data-action-state')),
+          memberStatuses: memberGroups.map((group) => group.getAttribute('data-action-status')),
         };
       })()`,
       'Read-only Teams permission pass',

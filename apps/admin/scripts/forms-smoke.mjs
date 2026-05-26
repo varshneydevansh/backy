@@ -41,6 +41,22 @@ const assertFormsPersistenceCertificationSource = () => {
   const publicOpenApiRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url), 'utf8');
   const frontendDesignContractSource = fs.readFileSync(new URL('../../public/src/lib/frontendDesignContract.ts', import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
+  assert(
+    source.includes('data-testid="forms-persistence-certification-details"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Daily form work keeps the readiness summary, handoff copy, CI command, and download actions visible.'),
+    'Forms persistence certification operator details must be collapsed by default',
+  );
+  assert(
+    source.includes('data-testid="forms-control-map-details"') &&
+      source.includes('data-testid="forms-control-map"') &&
+      source.includes('FORM_CONTROL_AREAS.map((area) =>') &&
+      source.includes('data-testid="forms-frontend-contract-details"') &&
+      source.includes('data-testid="forms-frontend-contract-systems"') &&
+      source.includes('FORM_FRONTEND_SYSTEMS.map((system) =>') &&
+      source.includes('data-default-collapsed="true"'),
+    'Forms command center must keep low-frequency control maps and frontend-system details collapsed by default',
+  );
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
   assert(source.includes('scenarioEvidence'), 'Forms persistence handoff must expose scenario-level database evidence metadata');
   assert(
@@ -86,7 +102,25 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Forms route must use the shared EmptyState component');
   assert(source.includes('data-testid="forms-error-state"') && source.includes('Forms workspace needs attention'), 'Forms route must expose a labelled backend error state');
   assert(source.includes('aria-label="Retry loading forms"') && source.includes('Clear form filters'), 'Forms backend error state must expose retry and filter recovery actions');
-  assert(source.includes('data-testid="forms-permission-state"') && source.includes('Form permissions could not be verified'), 'Forms route must expose a labelled permission error state');
+  assert(
+    source.includes('const canUseFormsRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseFormsRoleDefaults;') &&
+      source.includes('const isFormsPermissionAllowed = (key: FormsPermissionKey) => (') &&
+      source.includes("const canViewForms = isFormsPermissionAllowed('forms.view');") &&
+      source.includes("const canCreateForms = isFormsPermissionAllowed('forms.create');") &&
+      source.includes("const canEditForms = isFormsPermissionAllowed('forms.edit');") &&
+      source.includes("const canManageForms = isFormsPermissionAllowed('forms.manage');") &&
+      source.includes("const canExportForms = isFormsPermissionAllowed('forms.export');") &&
+      source.includes("const canDeleteForms = isFormsPermissionAllowed('forms.delete');") &&
+      source.includes("const canViewCollections = isFormsPermissionAllowed('collections.view');") &&
+      source.includes("const canExportActivity = isFormsPermissionAllowed('activity.export');") &&
+      source.includes('const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId);') &&
+      !source.includes('const canViewForms = !isPermissionMatrixPending') &&
+      !source.includes('const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId) || isPermissionMatrixPending;') &&
+      source.includes('data-testid="forms-permission-state"') &&
+      source.includes('Form permissions could not be verified'),
+    'Forms route must expose a labelled permission error state and keep role-default workflows usable while permission details hydrate',
+  );
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Forms permission error state must link to user access management');
   assert(!source.includes('Users/Auth roadmap'), 'Forms route must not send registration/account work to stale Users/Auth roadmap copy');
   assert(!source.includes('Authenticated member accounts remain a separate Users/Auth milestone'), 'Forms route must not render stale member-account milestone copy');
@@ -97,6 +131,7 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('FORM_ACCOUNT_REGISTRATION_ACTIONS') &&
       source.includes('frontendHandoff: formsAccountRegistrationHandoff') &&
       source.includes('formsAccountRegistrationHandoffText') &&
+      source.includes('data-testid="forms-account-registration-handoff-details"') &&
       source.includes('data-testid="forms-account-registration-handoff"') &&
       source.includes('data-testid="forms-account-registration-handoff-copy-button"') &&
       source.includes('Users/Auth provider handoff') &&
@@ -125,25 +160,80 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('Submission, moderation, and collection-routing metrics appear after forms receive traffic.'), 'Forms analytics empty state must explain what will populate metrics');
   assert(source.includes('title="No lead segments yet"'), 'Forms lead analytics panel must keep the no-segments empty-state title visible');
   assert(source.includes('title="No saved lead lists yet"'), 'Forms saved lead lists panel must keep the no-lists empty-state title visible');
+  assert(
+    source.includes("const formsCreateActionStatusId = 'forms-create-action-status';") &&
+      source.includes('formsCreateDisabledReason') &&
+      source.includes("const formsCreateActionStatus = formCreateActionStatus('New blank form');") &&
+      source.includes('data-testid="forms-create-action-status"') &&
+      source.includes('data-action-status={formsCreateActionStatus}') &&
+      source.includes('data-action-state={formsCreateDisabledReason ?') &&
+      source.includes('data-disabled-reason={formsCreateDisabledReason || undefined}') &&
+      source.includes('data-target-site-id={activeSiteId}') &&
+      source.includes('aria-describedby={formsCreateActionStatusId}') &&
+      source.includes('createFrontendTemplateActionStatus') &&
+      source.includes('createTemplateActionStatus'),
+    'Forms primary create actions must expose a shared action-status contract with ready/blocked state and target-site metadata.',
+  );
   assert(source.includes('title="No forms match this library view"'), 'Forms library filter empty state must keep the shared title visible');
   assert(source.includes('Change the search, source, state, destination, or readiness filters to broaden the form library.'), 'Forms library filter empty state must explain filter recovery');
   assert(source.includes('title="No consent fields detected"'), 'Forms consent export panel must keep the no-consent-fields empty-state title visible');
   assert(source.includes('title="No submissions match this view"'), 'Forms submission inbox filter empty state must keep the shared title visible');
   assert(source.includes('Change the submission search or status filter to review more entries for this form.'), 'Forms submission filter empty state must explain filter recovery');
   assert(
-    source.includes('const selectedSubmissionSet = useMemo') &&
+      source.includes('const selectedSubmissionSet = useMemo') &&
+      source.includes("const formsSubmissionBulkActionStatusId = 'forms-submission-bulk-action-status';") &&
       source.includes('const hiddenSelectedSubmissionCount = Math.max') &&
+      source.includes('const formsSubmissionBulkStatusDisabledReason = (status: FormSubmissionStatus)') &&
       source.includes('toggleVisibleSubmissionSelection') &&
       source.includes('handleBulkSubmissionStatus') &&
       source.includes('data-testid="forms-submission-bulk-toolbar"') &&
       source.includes('data-testid="forms-submission-bulk-selection-summary"') &&
+      source.includes('data-testid="forms-submission-bulk-action-status"') &&
+      source.includes('data-testid="forms-submission-bulk-select-visible"') &&
       source.includes('data-testid="forms-submission-bulk-clear-selection"') &&
       source.includes('data-testid="forms-submission-bulk-approve"') &&
+      source.includes('data-action-status={formsSubmissionBulkActionStatus}') &&
+      source.includes('data-action-state={formsSubmissionBulkActionState}') &&
+      source.includes('data-disabled-reason={formsSubmissionBulkStatusDisabledReason') &&
       source.includes('outside this view'),
-    'Forms submission inbox must expose selected-submission bulk moderation with visible/outside-view summaries',
+    'Forms submission inbox must expose selected-submission bulk moderation with visible/outside-view summaries, shared action status, and ready/blocked reasons',
   );
   assert(source.includes('cloneForm,') && source.includes('handleCloneSelectedForm') && source.includes('data-testid="form-clone-button"'), 'Forms page must expose a selected-form clone action');
   assert(source.includes('setIsCloningForm(true)') && source.includes("isActive: false") && source.includes('cloned as an inactive form.'), 'Forms clone action must create inactive clones with busy and notice states');
+  assert(
+    source.includes('const selectedFormActionStatusId = selectedForm') &&
+      source.includes('data-testid="forms-selected-action-group"') &&
+      source.includes('data-testid="forms-selected-action-status"') &&
+      source.includes('data-action-status={selectedFormActionStatus}') &&
+      source.includes('aria-label={`Actions for ${selectedForm.title || selectedForm.name}`}') &&
+      source.includes('aria-describedby={selectedFormActionStatusId}') &&
+      source.includes('Open source page available.') &&
+      source.includes('Open source blog post available.') &&
+      source.includes('Clone available.') &&
+      source.includes('Delete available.') &&
+      source.includes('data-testid="form-page-link"') &&
+      source.includes('data-testid="form-blog-link"') &&
+      source.includes('data-action-state={selectedFormCloneDisabledReason ?') &&
+      source.includes('data-action-state={selectedFormDeleteDisabledReason ?') &&
+      source.includes('data-disabled-reason={selectedFormCloneDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={selectedFormDeleteDisabledReason || undefined}'),
+    'Forms selected-form actions must expose a named action-status group with ready/blocked state metadata.',
+  );
+  assert(
+    source.includes('const handleDeleteDialogKeydown = (event: KeyboardEvent) => {') &&
+      source.includes("if (event.key !== 'Escape' || isDeletingFormId) return;") &&
+      source.includes("window.addEventListener('keydown', handleDeleteDialogKeydown)") &&
+      source.includes('role="dialog"') &&
+      source.includes('aria-modal="true"') &&
+      source.includes('aria-labelledby="form-delete-confirm-title"') &&
+      source.includes('aria-describedby="form-delete-confirm-description form-delete-confirm-impact"') &&
+      source.includes('id="form-delete-confirm-title"') &&
+      source.includes('id="form-delete-confirm-description"') &&
+      source.includes('id="form-delete-confirm-impact"') &&
+      source.includes('data-testid="form-delete-cancel-button"') &&
+      source.includes('aria-label={`Cancel deleting ${pendingDeleteForm.title || pendingDeleteForm.name}`}'),
+    'Forms delete confirmation must expose accessible dialog semantics, labelled impact copy, a cancel hook, and Escape recovery.',
+  );
   assert(
     reviewRouteSource.includes("import { PATCH } from '../route'") &&
       reviewRouteSource.includes('export async function POST') &&
@@ -197,6 +287,7 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(
     source.includes('patchFormDraftFieldType') &&
       source.includes('applyFormFieldTypeDefaults') &&
+      source.includes('formFieldTypeRequiresOptions') &&
       source.includes("type === 'select' || type === 'radio'") &&
       source.includes("['Option one', 'Option two']") &&
       source.includes('validationTypesForFieldType') &&
@@ -628,7 +719,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_FORMS_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -915,6 +1007,29 @@ const createCaptchaSmokeForm = async () => {
   return form;
 };
 
+const createDeleteDialogSmokeForm = async () => {
+  const suffix = Date.now().toString(36);
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `delete-dialog-smoke-${suffix}`,
+      title: 'Delete dialog smoke',
+      description: 'Temporary form for delete confirmation recovery coverage.',
+      audience: 'public',
+      isActive: false,
+      moderationMode: 'manual',
+      enableHoneypot: true,
+      fields: [
+        { key: 'email', label: 'Email', type: 'email', required: true },
+        { key: 'message', label: 'Message', type: 'textarea', required: false },
+      ],
+    }),
+  });
+  const form = payload.data?.form || payload.form;
+  assert(form?.id, `Delete-dialog smoke form was not created: ${JSON.stringify(payload).slice(0, 500)}`);
+  return form;
+};
+
 const assertFormCreateFieldSanitization = async () => {
   const suffix = Date.now().toString(36);
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms`, {
@@ -1175,8 +1290,10 @@ const evaluate = async (client, expression) => {
   return result.result.value;
 };
 
-const navigateToForms = async (client) => {
-  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/forms?siteId=${encodeURIComponent(SITE_ID)}` });
+const navigateToForms = async (client, options = {}) => {
+  const formIdQuery = options.formId ? `&formId=${encodeURIComponent(options.formId)}` : '';
+  const expectedText = options.expectedText || 'Registration';
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/forms?siteId=${encodeURIComponent(SITE_ID)}${formIdQuery}` });
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const state = await evaluate(client, `(() => ({
@@ -1184,11 +1301,12 @@ const navigateToForms = async (client) => {
       analytics: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')),
       audit: Boolean(document.querySelector('[data-testid="forms-audit-panel"]')),
       templates: document.body?.innerText?.includes('Form templates') || false,
+      expectedText: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
       registration: document.body?.innerText?.includes('Registration') || false,
       body: document.body?.innerText?.slice(0, 500) || '',
     }))()`);
 
-    if (state.ready && state.analytics && state.audit && state.templates && state.registration) {
+    if (state.ready && state.analytics && state.audit && state.templates && state.expectedText) {
       return state;
     }
 
@@ -1466,10 +1584,47 @@ const assertFormActionsWired = async (client) => {
       if (deleteButton.disabled) {
         return { ok: false, reason: 'delete-button-disabled', text: deleteButton.textContent || '' };
       }
+      const actionGroup = document.querySelector('[data-testid="forms-selected-action-group"]');
+      const actionStatus = document.querySelector('[data-testid="forms-selected-action-status"]');
+      const actionStatusId = actionStatus?.id || '';
+      const actionStatusText = (actionStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const actionGroupStatus = actionGroup?.getAttribute('data-action-status') || '';
+      const actionState = {
+        groupRole: actionGroup?.getAttribute('role') || '',
+        groupLabel: actionGroup?.getAttribute('aria-label') || '',
+        groupDescribedBy: actionGroup?.getAttribute('aria-describedby') || '',
+        statusId: actionStatusId,
+        statusText: actionStatusText,
+        groupStatus: actionGroupStatus,
+        cloneState: cloneButton.getAttribute('data-action-state') || '',
+        cloneReason: cloneButton.getAttribute('data-disabled-reason') || '',
+        cloneDescribedBy: cloneButton.getAttribute('aria-describedby') || '',
+        deleteState: deleteButton.getAttribute('data-action-state') || '',
+        deleteReason: deleteButton.getAttribute('data-disabled-reason') || '',
+        deleteDescribedBy: deleteButton.getAttribute('aria-describedby') || '',
+      };
+      if (
+        !(actionGroup instanceof HTMLElement) ||
+        !(actionStatus instanceof HTMLElement) ||
+        actionState.groupRole !== 'group' ||
+        !actionState.groupLabel.startsWith('Actions for ') ||
+        actionState.groupDescribedBy !== actionStatusId ||
+        actionState.statusText !== actionState.groupStatus ||
+        !actionState.statusText.includes('Clone available.') ||
+        !actionState.statusText.includes('Delete available.') ||
+        actionState.cloneState !== 'ready' ||
+        actionState.cloneReason !== '' ||
+        actionState.cloneDescribedBy !== actionStatusId ||
+        actionState.deleteState !== 'ready' ||
+        actionState.deleteReason !== '' ||
+        actionState.deleteDescribedBy !== actionStatusId
+      ) {
+        return { ok: false, reason: 'selected-action-status', actionState };
+      }
       deleteButton.click();
       const dialog = document.querySelector('[data-testid="form-delete-confirm-dialog"]');
       const confirmButton = document.querySelector('[data-testid="form-delete-confirm-button"]');
-      const cancelButton = Array.from(dialog?.querySelectorAll('button') || []).find((button) => (button.textContent || '').trim() === 'Cancel');
+      const cancelButton = document.querySelector('[data-testid="form-delete-cancel-button"]');
       if (!(dialog instanceof HTMLElement) || !(confirmButton instanceof HTMLButtonElement) || !(cancelButton instanceof HTMLButtonElement)) {
         return {
           ok: false,
@@ -1477,11 +1632,68 @@ const assertFormActionsWired = async (client) => {
           body: document.body?.innerText?.slice(0, 800) || '',
         };
       }
-      cancelButton.click();
-      return { ok: true };
+      const semantics = {
+        role: dialog.getAttribute('role') || '',
+        modal: dialog.getAttribute('aria-modal') || '',
+        labelledBy: dialog.getAttribute('aria-labelledby') || '',
+        describedBy: dialog.getAttribute('aria-describedby') || '',
+        hasTitle: Boolean(document.querySelector('#form-delete-confirm-title')),
+        hasDescription: Boolean(document.querySelector('#form-delete-confirm-description')),
+        hasImpact: Boolean(document.querySelector('#form-delete-confirm-impact')),
+      };
+      if (
+        semantics.role !== 'dialog' ||
+        semantics.modal !== 'true' ||
+        semantics.labelledBy !== 'form-delete-confirm-title' ||
+        !semantics.describedBy.includes('form-delete-confirm-description') ||
+        !semantics.describedBy.includes('form-delete-confirm-impact') ||
+        !semantics.hasTitle ||
+        !semantics.hasDescription ||
+        !semantics.hasImpact
+      ) {
+        return { ok: false, reason: 'delete-dialog-semantics', semantics };
+      }
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return { ok: true, phase: 'opened-and-escaped', semantics };
     })()`);
 
-    if (result.ok) return;
+    if (result.ok) {
+      for (let closeAttempt = 0; closeAttempt < 20; closeAttempt += 1) {
+        const closedState = await evaluate(client, `(() => ({
+          closed: !document.querySelector('[data-testid="form-delete-confirm-dialog"]'),
+          body: document.body?.innerText?.slice(0, 500) || '',
+        }))()`);
+        if (closedState.closed) break;
+        if (closeAttempt === 19) {
+          throw new Error(`Form delete confirmation did not close on Escape: ${JSON.stringify(closedState)}`);
+        }
+        await sleep(100);
+      }
+
+      for (let reopenAttempt = 0; reopenAttempt < 30; reopenAttempt += 1) {
+        const reopenState = await evaluate(client, `(() => {
+          const deleteButton = document.querySelector('[data-testid="form-delete-button"]');
+          if (!(deleteButton instanceof HTMLButtonElement)) {
+            return { ok: false, reason: 'delete-button-missing-after-escape', body: document.body?.innerText?.slice(0, 800) || '' };
+          }
+          if (deleteButton.disabled) return { ok: false, reason: 'delete-button-disabled-after-escape' };
+          deleteButton.click();
+          const dialog = document.querySelector('[data-testid="form-delete-confirm-dialog"]');
+          const cancelButton = document.querySelector('[data-testid="form-delete-cancel-button"]');
+          if (!(dialog instanceof HTMLElement) || !(cancelButton instanceof HTMLButtonElement)) {
+            return { ok: false, reason: 'dialog-reopen-failed', body: document.body?.innerText?.slice(0, 800) || '' };
+          }
+          cancelButton.click();
+          return { ok: true };
+        })()`);
+        if (reopenState.ok) return;
+        if (reopenAttempt === 29) {
+          throw new Error(`Unable to reopen/cancel form delete confirmation after Escape: ${JSON.stringify(reopenState)}`);
+        }
+        await sleep(150);
+      }
+      return;
+    }
 
     if (attempt === 79) {
       throw new Error(`Form selected actions were not wired: ${JSON.stringify(result)}`);
@@ -1796,6 +2008,12 @@ const editFormBuilderInUi = async (client, formId, collectionId, webhookUrl) => 
     const saved = await evaluate(client, `(() => ({
       notice: document.body?.innerText?.includes('Form settings and fields saved.') || false,
       body: document.body?.innerText?.slice(0, 700) || '',
+      inlineErrors: Array.from(document.querySelectorAll('[data-testid$="-error"]'))
+        .map((element) => ({
+          testId: element.getAttribute('data-testid') || '',
+          text: (element.textContent || '').replace(/\\s+/g, ' ').trim(),
+        }))
+        .filter((item) => item.text),
     }))()`);
     const form = await getAdminForm(formId);
     const editedTitle = form?.title === 'Registration edited';
@@ -2466,21 +2684,114 @@ const approveSubmissionInUi = async (client, formId, submissionId) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const result = await evaluate(client, `(() => {
       const submissionId = ${JSON.stringify(submissionId)};
-      const card = Array.from(document.querySelectorAll('[aria-label^="Approve submission"], div')).find((candidate) => (
+      const card = Array.from(document.querySelectorAll('[aria-label^="Select submission"], div')).find((candidate) => (
         (candidate.textContent || '').includes(submissionId)
       ));
-      const approve = Array.from(document.querySelectorAll('button')).find((button) => (
-        (button.getAttribute('aria-label') || '') === 'Approve submission ' + submissionId
-      ));
-      if (approve instanceof HTMLButtonElement && !approve.disabled) {
-        approve.click();
-        return { ok: true, clicked: true };
+      const toolbar = document.querySelector('[data-testid="forms-submission-bulk-toolbar"]');
+      const status = document.querySelector('[data-testid="forms-submission-bulk-action-status"]');
+      const selectionSummary = document.querySelector('[data-testid="forms-submission-bulk-selection-summary"]');
+      const checkbox = document.querySelector('input[aria-label="Select submission ' + submissionId + '"]');
+      const approve = document.querySelector('[data-testid="forms-submission-bulk-approve"]');
+      const reject = document.querySelector('[data-testid="forms-submission-bulk-reject"]');
+      const spam = document.querySelector('[data-testid="forms-submission-bulk-spam"]');
+      if (
+        !(toolbar instanceof HTMLElement) ||
+        !(status instanceof HTMLElement) ||
+        !(selectionSummary instanceof HTMLElement) ||
+        !(checkbox instanceof HTMLInputElement) ||
+        !(approve instanceof HTMLButtonElement) ||
+        !(reject instanceof HTMLButtonElement) ||
+        !(spam instanceof HTMLButtonElement)
+      ) {
+        return {
+          ok: false,
+          reason: 'bulk-controls-missing',
+          hasSubmission: Boolean(card),
+          body: document.body?.innerText?.slice(0, 900) || '',
+        };
       }
-      return {
-        ok: false,
-        hasSubmission: Boolean(card),
-        buttons: Array.from(document.querySelectorAll('button')).map((button) => button.getAttribute('aria-label') || button.textContent || '').slice(-20),
+
+      const statusId = status.id || '';
+      const initial = {
+        role: toolbar.getAttribute('role') || '',
+        label: toolbar.getAttribute('aria-label') || '',
+        describedBy: toolbar.getAttribute('aria-describedby') || '',
+        statusId,
+        statusText: (status.textContent || '').replace(/\\s+/g, ' ').trim(),
+        statusData: toolbar.getAttribute('data-action-status') || '',
+        actionState: toolbar.getAttribute('data-action-state') || '',
+        selectedCount: toolbar.getAttribute('data-selected-count') || '',
+        visibleSelectedCount: toolbar.getAttribute('data-visible-selected-count') || '',
+        hiddenSelectedCount: toolbar.getAttribute('data-hidden-selected-count') || '',
+        selectionSummary: (selectionSummary.textContent || '').replace(/\\s+/g, ' ').trim(),
+        approveState: approve.getAttribute('data-action-state') || '',
+        approveReason: approve.getAttribute('data-disabled-reason') || '',
+        approveDescribedBy: approve.getAttribute('aria-describedby') || '',
+        rejectState: reject.getAttribute('data-action-state') || '',
+        spamState: spam.getAttribute('data-action-state') || '',
       };
+
+      if (!checkbox.checked) {
+        if (
+          initial.role !== 'group' ||
+          initial.label !== 'Selected submission bulk actions' ||
+          !initial.describedBy.includes(statusId) ||
+          initial.statusText !== initial.statusData ||
+          initial.actionState !== 'blocked' ||
+          initial.selectedCount !== '0' ||
+          initial.visibleSelectedCount !== '0' ||
+          !initial.selectionSummary.startsWith('0 selected') ||
+          initial.approveState !== 'blocked' ||
+          !initial.approveReason.includes('Select one or more loaded submissions first') ||
+          initial.approveDescribedBy !== statusId
+        ) {
+          return { ok: false, reason: 'initial-bulk-status', initial };
+        }
+        checkbox.click();
+        return { ok: false, clickedSelection: true, initial };
+      }
+
+      const clear = document.querySelector('[data-testid="forms-submission-bulk-clear-selection"]');
+      const selected = {
+        statusText: (status.textContent || '').replace(/\\s+/g, ' ').trim(),
+        statusData: toolbar.getAttribute('data-action-status') || '',
+        actionState: toolbar.getAttribute('data-action-state') || '',
+        selectedCount: toolbar.getAttribute('data-selected-count') || '',
+        visibleSelectedCount: toolbar.getAttribute('data-visible-selected-count') || '',
+        hiddenSelectedCount: toolbar.getAttribute('data-hidden-selected-count') || '',
+        selectionSummary: (selectionSummary.textContent || '').replace(/\\s+/g, ' ').trim(),
+        approveState: approve.getAttribute('data-action-state') || '',
+        approveReason: approve.getAttribute('data-disabled-reason') || '',
+        approveDescribedBy: approve.getAttribute('aria-describedby') || '',
+        rejectState: reject.getAttribute('data-action-state') || '',
+        rejectDescribedBy: reject.getAttribute('aria-describedby') || '',
+        spamState: spam.getAttribute('data-action-state') || '',
+        spamDescribedBy: spam.getAttribute('aria-describedby') || '',
+        clearState: clear?.getAttribute('data-action-state') || '',
+        clearDescribedBy: clear?.getAttribute('aria-describedby') || '',
+      };
+      if (
+        selected.statusText !== selected.statusData ||
+        selected.actionState !== 'ready' ||
+        selected.selectedCount !== '1' ||
+        selected.visibleSelectedCount !== '1' ||
+        !selected.selectionSummary.startsWith('1 selected') ||
+        !selected.statusText.includes('1 selected submission') ||
+        selected.approveState !== 'ready' ||
+        selected.approveReason !== '' ||
+        selected.approveDescribedBy !== statusId ||
+        selected.rejectState !== 'ready' ||
+        selected.rejectDescribedBy !== statusId ||
+        selected.spamState !== 'ready' ||
+        selected.spamDescribedBy !== statusId ||
+        selected.clearState !== 'ready' ||
+        selected.clearDescribedBy !== statusId
+      ) {
+        return { ok: false, reason: 'selected-bulk-status', selected };
+      }
+
+      approve.click();
+      return { ok: true, clicked: 'bulk-approve', selected };
     })()`);
 
     if (result.ok) {
@@ -2506,11 +2817,88 @@ const approveSubmissionInUi = async (client, formId, submissionId) => {
   throw new Error(`Submission ${submissionId} was not approved after UI action`);
 };
 
+const assertCreateActionsReady = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const createStatus = document.querySelector('[data-testid="forms-create-action-status"]');
+      const createStatusId = createStatus?.id || '';
+      const createStatusText = (createStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const commandCreate = document.querySelector('[data-testid="forms-create-blank-button"]');
+      const templateCreate = document.querySelector('[data-testid="forms-template-create-blank-button"]');
+      const frontendCreate = document.querySelector('[data-testid="forms-frontend-template-${FRONTEND_FORM_TEMPLATE_ID}"]');
+      const createButtons = [commandCreate, templateCreate, frontendCreate];
+      const contracts = createButtons.map((button) => ({
+        exists: button instanceof HTMLButtonElement,
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        describedBy: button instanceof HTMLElement ? button.getAttribute('aria-describedby') || '' : '',
+        actionState: button instanceof HTMLElement ? button.getAttribute('data-action-state') || '' : '',
+        actionStatus: button instanceof HTMLElement ? button.getAttribute('data-action-status') || '' : '',
+        disabledReason: button instanceof HTMLElement ? button.getAttribute('data-disabled-reason') || '' : '',
+        targetSiteId: button instanceof HTMLElement ? button.getAttribute('data-target-site-id') || '' : '',
+      }));
+      return {
+        ready: createStatus instanceof HTMLElement &&
+          createStatusId === 'forms-create-action-status' &&
+          createStatusText.includes('New blank form available for ${SITE_ID}.') &&
+          contracts.every((contract) => (
+            contract.exists &&
+            contract.disabled === false &&
+            contract.describedBy === createStatusId &&
+            contract.actionState === 'ready' &&
+            contract.disabledReason === '' &&
+            contract.targetSiteId === '${SITE_ID}' &&
+            contract.actionStatus.includes('available for ${SITE_ID}.')
+          )),
+        statusText: createStatusText,
+        contracts,
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+
+    if (state.ready) return state;
+    if (attempt === 79) throw new Error(`Forms create actions did not become ready: ${JSON.stringify(state)}`);
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const assertLayout = async (client) => {
   const layout = await evaluate(client, `(() => {
     const bodyText = document.body?.innerText || '';
+    const accountContractPanel = document.querySelector('[data-testid="forms-account-contract"]');
+    const accountHandoffDetails = document.querySelector('[data-testid="forms-account-registration-handoff-details"]');
+    const accountHandoffText = accountContractPanel?.textContent || '';
+    const persistencePanel = document.querySelector('[data-testid="forms-persistence-certification"]');
+    const persistenceDetails = document.querySelector('[data-testid="forms-persistence-certification-details"]');
+    const persistenceText = persistencePanel?.textContent || '';
+    const controlMapDetails = document.querySelector('[data-testid="forms-control-map-details"]');
+    const frontendContractDetails = document.querySelector('[data-testid="forms-frontend-contract-details"]');
+    const createStatus = document.querySelector('[data-testid="forms-create-action-status"]');
+    const createStatusId = createStatus?.id || '';
+    const createStatusText = (createStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const commandCreate = document.querySelector('[data-testid="forms-create-blank-button"]');
+    const templateCreate = document.querySelector('[data-testid="forms-template-create-blank-button"]');
+    const frontendCreate = document.querySelector('[data-testid="forms-frontend-template-${FRONTEND_FORM_TEMPLATE_ID}"]');
+    const createButtons = [commandCreate, templateCreate, frontendCreate];
+    const createButtonContracts = createButtons.map((button) => ({
+      exists: button instanceof HTMLButtonElement,
+      disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+      describedBy: button instanceof HTMLElement ? button.getAttribute('aria-describedby') || '' : '',
+      actionState: button instanceof HTMLElement ? button.getAttribute('data-action-state') || '' : '',
+      actionStatus: button instanceof HTMLElement ? button.getAttribute('data-action-status') || '' : '',
+      disabledReason: button instanceof HTMLElement ? button.getAttribute('data-disabled-reason') || '' : '',
+      targetSiteId: button instanceof HTMLElement ? button.getAttribute('data-target-site-id') || '' : '',
+    }));
+    const isCollapsedDetails = (element) => (
+      element instanceof HTMLDetailsElement &&
+      element.open === false &&
+      element.getAttribute('data-default-collapsed') === 'true'
+    );
     const persistenceCertification = {
-      panel: Boolean(document.querySelector('[data-testid="forms-persistence-certification"]')),
+      panel: Boolean(persistencePanel),
+      details: Boolean(persistenceDetails),
+      detailsCollapsed: isCollapsedDetails(persistenceDetails),
       runtimeEvidence: Boolean(document.querySelector('[data-testid="forms-persistence-runtime-evidence"]')),
       scenarioEvidence: Boolean(document.querySelector('[data-testid="forms-persistence-scenario-evidence"]')),
       commandBuilder: Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder"]')),
@@ -2519,22 +2907,22 @@ const assertLayout = async (client) => {
       envTemplateBody: Boolean(document.querySelector('[data-testid="forms-postgres-certification-env-template-body"]')),
       commandCopyButton: Boolean(document.querySelector('[data-testid="forms-postgres-certification-command-builder-copy-button"]')),
       requiredInputs: Boolean(document.querySelector('[data-testid="forms-postgres-certification-required-inputs"]')),
-      title: bodyText.includes('Persistence certification'),
-      runtimeEvidenceText: bodyText.includes('Runtime evidence'),
-      scenarioEvidenceText: bodyText.includes('Persistence scenario evidence'),
-      scenarioSchema: bodyText.includes('backy.forms-persistence-scenario-evidence.v1'),
-      envTemplateSchema: bodyText.includes('backy.forms-postgres-certification-env-template.v1'),
-      publicSubmissionScenario: bodyText.includes('Public submission intake'),
-      collectionRoutingScenario: bodyText.includes('Collection routing'),
-      commandBuilderText: bodyText.includes('Postgres certification command builder'),
-      envTemplateText: bodyText.includes('Env template') || bodyText.includes('ENV TEMPLATE'),
-      copyEnvTemplateText: bodyText.includes('Copy env template'),
-      databaseUrlPlaceholder: bodyText.includes('BACKY_DATABASE_URL=<disposable-postgres-url>'),
-      disposableConfirmation: bodyText.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'),
-      releaseDoctorEnv: bodyText.includes('BACKY_RELEASE_CERTIFY_DATABASE'),
-      targetGuardHost: bodyText.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'),
-      secretBoundary: bodyText.includes('Database URLs and credentials are never returned'),
-      formsPostgresGate: bodyText.includes('test:forms-postgres'),
+      title: persistenceText.includes('Persistence certification'),
+      runtimeEvidenceText: persistenceText.includes('Runtime evidence'),
+      scenarioEvidenceText: persistenceText.includes('Persistence scenario evidence'),
+      scenarioSchema: persistenceText.includes('backy.forms-persistence-scenario-evidence.v1'),
+      envTemplateSchema: persistenceText.includes('backy.forms-postgres-certification-env-template.v1'),
+      publicSubmissionScenario: persistenceText.includes('Public submission intake'),
+      collectionRoutingScenario: persistenceText.includes('Collection routing'),
+      commandBuilderText: persistenceText.includes('Postgres certification command builder'),
+      envTemplateText: persistenceText.includes('Env template') || persistenceText.includes('ENV TEMPLATE'),
+      copyEnvTemplateText: persistenceText.includes('Copy env template'),
+      databaseUrlPlaceholder: persistenceText.includes('BACKY_DATABASE_URL=<disposable-postgres-url>'),
+      disposableConfirmation: persistenceText.includes('BACKY_DATABASE_DISPOSABLE_CONFIRMED=true'),
+      releaseDoctorEnv: persistenceText.includes('BACKY_RELEASE_CERTIFY_DATABASE'),
+      targetGuardHost: persistenceText.includes('BACKY_DATABASE_CERTIFICATION_EXPECTED_HOST'),
+      secretBoundary: persistenceText.includes('Database URLs and credentials are never returned'),
+      formsPostgresGate: persistenceText.includes('test:forms-postgres'),
       downloadButton: Boolean(document.querySelector('[data-testid="forms-persistence-certification-download-button"]')),
       copyButton: Boolean(document.querySelector('[data-testid="forms-persistence-certification-copy-button"]')),
       downloadButtonText: bodyText.includes('Download DB JSON'),
@@ -2543,18 +2931,44 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="forms-command-center"]')),
+    createActionStatus: {
+      exists: createStatus instanceof HTMLElement,
+      statusId: createStatusId,
+      statusText: createStatusText,
+      statusExplainsState: createStatusText.includes('New blank form available for ${SITE_ID}.') || createStatusText.includes('New blank form unavailable:'),
+      contracts: createButtonContracts,
+      allConsistent: createButtonContracts.every((contract) => (
+        contract.exists &&
+        contract.describedBy === createStatusId &&
+        contract.actionState === (contract.disabled ? 'blocked' : 'ready') &&
+        (contract.disabled ? contract.disabledReason.length > 0 : contract.disabledReason === '') &&
+        contract.targetSiteId === '${SITE_ID}' &&
+        (
+          contract.disabled
+            ? contract.actionStatus.includes('unavailable:')
+            : contract.actionStatus.includes('available for ${SITE_ID}.')
+        )
+      )),
+    },
+    hasControlMap: isCollapsedDetails(controlMapDetails) &&
+      Boolean(document.querySelector('[data-testid="forms-control-map"]')) &&
+      Boolean(document.querySelector('[data-testid="forms-control-map"] a[href="#forms-inbox"]')),
+    hasFrontendContractSystems: isCollapsedDetails(frontendContractDetails) &&
+      Boolean(document.querySelector('[data-testid="forms-frontend-contract-systems"]')) &&
+      (document.querySelector('[data-testid="forms-frontend-contract-systems"]')?.textContent || '').includes('Dynamic form definition'),
     hasAnalytics: Boolean(document.querySelector('[data-testid="forms-analytics-panel"]')) &&
       bodyText.includes('Submission analytics'),
     hasAudit: Boolean(document.querySelector('[data-testid="forms-audit-panel"]')) &&
       bodyText.includes('Forms activity'),
-    hasAccountContract: Boolean(document.querySelector('[data-testid="forms-account-contract"]')) &&
+    hasAccountContract: Boolean(accountContractPanel) &&
+      isCollapsedDetails(accountHandoffDetails) &&
       Boolean(document.querySelector('[data-testid="forms-account-registration-handoff"]')) &&
       Boolean(document.querySelector('[data-testid="forms-account-registration-handoff-copy-button"]')) &&
       bodyText.includes('Registration/account handoff') &&
       bodyText.includes('Create registration form') &&
-      bodyText.includes('backy.form-account-registration-handoff.v1') &&
+      accountHandoffText.includes('backy.form-account-registration-handoff.v1') &&
       bodyText.includes('Copy account handoff') &&
-      bodyText.includes('Users/Auth handoff'),
+      accountHandoffText.includes('Users/Auth handoff'),
     persistenceCertification,
     hasPersistenceCertification: Object.values(persistenceCertification).every(Boolean),
     hasLaunchReadiness: Boolean(document.querySelector('[data-testid="forms-launch-readiness"]')) &&
@@ -2576,6 +2990,8 @@ const assertLayout = async (client) => {
   };
   })()`);
   assert(layout.scrollWidth <= layout.width + 8, `Forms page has horizontal overflow: ${JSON.stringify(layout)}`);
+  assert(layout.hasControlMap && layout.hasFrontendContractSystems, `Forms command center collapsed maps are missing or open by default: ${JSON.stringify(layout)}`);
+  assert(layout.createActionStatus.exists && layout.createActionStatus.statusExplainsState && layout.createActionStatus.allConsistent, `Forms create action status contract is missing or inconsistent: ${JSON.stringify(layout.createActionStatus)}`);
   assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasPersistenceCertification && layout.hasLaunchReadiness && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };
@@ -2620,6 +3036,36 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
   fs.rmSync(userDataDir, { recursive: true, force: true });
 };
 
+const runDeleteDialogSmoke = async () => {
+  const form = await createDeleteDialogSmokeForm();
+  const { childProcess, userDataDir } = launchChrome();
+  let client;
+
+  try {
+    await waitForCdp();
+    const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
+    assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
+
+    client = connectCdp(page.webSocketDebuggerUrl);
+    await client.opened;
+    await client.send('Runtime.enable');
+    await client.send('Page.enable');
+    await client.send('DOM.enable');
+    await client.send('Log.enable');
+    await seedBrowserSessionCookie(client, apiAdminSessionToken);
+    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: authStorageScript(apiAdminSessionToken),
+    });
+
+    await navigateToForms(client, { formId: form.id, expectedText: form.title });
+    await assertFormActionsWired(client);
+    console.log(JSON.stringify({ ok: true, mode: 'delete-dialog', route: 'forms', formId: form.id }, null, 2));
+  } finally {
+    await deleteForm(form.id).catch(() => {});
+    await cleanupBrowser({ client, childProcess, userDataDir });
+  }
+};
+
 const main = async () => {
   assertFormsPersistenceCertificationSource();
   if (process.env.BACKY_FORMS_SOURCE_ONLY === '1') {
@@ -2628,6 +3074,11 @@ const main = async () => {
   }
 
   await loginAdminApi();
+  if (process.env.BACKY_FORMS_DELETE_DIALOG_SMOKE === '1') {
+    await runDeleteDialogSmoke();
+    return;
+  }
+
   const suffix = Date.now().toString(36);
   await assertFormsPermissionOverridesAreEnforced();
   await assertFormCreateFieldSanitization();
@@ -2673,6 +3124,7 @@ const main = async () => {
     });
 
     await navigateToForms(client);
+    await assertCreateActionsReady(client);
     await clickBlankCreateForm(client);
     const blankCreated = await waitForBlankStandaloneForm(client, beforeIds);
     blankCreatedFormId = blankCreated.form.id;

@@ -77,6 +77,18 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('data-testid="media-operation-action-plan"') && source.includes('operationActionPlan: mediaOperationActionPlan'), 'Media command center must render and export the operation action plan');
   assert(source.includes("schemaVersion: 'backy.media-attribution-handoff.v1'") && source.includes('attributionHandoff: mediaAttributionHandoff'), 'Media handoff manifest must export the attribution handoff schema');
   assert(source.includes('data-testid="media-attribution-handoff"') && source.includes('copyMediaAttributionHandoff') && source.includes('Copy attribution'), 'Media command center must render and copy a dedicated attribution handoff');
+  assert(
+    source.includes('data-testid="media-operation-action-plan-details"') &&
+      source.includes('data-testid="media-attribution-handoff-details"') &&
+      source.includes('data-testid="media-control-map-details"') &&
+      source.includes('data-testid="media-connected-workflows-details"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Show plan') &&
+      source.includes('Show attribution') &&
+      source.includes('Show map') &&
+      source.includes('Show workflows'),
+    'Media command center must keep low-frequency operator handoffs and maps collapsed by default',
+  );
   assert(source.includes("schemaVersion: 'backy.media-storage-provider-certification.v1'") && source.includes('storageProviderCertification: mediaStorageProviderCertificationHandoff'), 'Media handoff manifest must export the storage-provider certification schema');
   assert(
     source.includes('data-testid="media-storage-provider-certification"') &&
@@ -92,13 +104,23 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('Quota data will appear after the media API responds with workspace storage usage and limits.'), 'Media runtime quota empty state must explain API-backed usage data');
   assert(
     source.includes('const loadMediaPermissions = useCallback(() => {') &&
+      source.includes('const canUseMediaRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseMediaRoleDefaults;') &&
+      source.includes("const canViewMedia = isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');") &&
+      source.includes("const canConfigureMediaStorage = isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.configure');") &&
+      source.includes('const isMediaLibraryBusy = isLoading || isMediaMutationBusy;') &&
+      source.includes('return MEDIA_ACCESS_RULES') &&
+      source.includes('?.roles.includes(currentAdmin.role as MediaAdminRole) ?? false;') &&
+      !source.includes('const canViewMedia = !isPermissionMatrixPending') &&
+      !source.includes('const isMediaLibraryBusy = isLoading || isMediaMutationBusy || isPermissionMatrixPending;') &&
       source.includes('data-testid="media-permission-state"') &&
+      source.includes('Your account needs media.view to load the media library.') &&
       source.includes('Media permissions could not be verified') &&
       source.includes('aria-label="Retry loading media permissions"') &&
       source.includes('Retry permissions') &&
       source.includes('to="/users"') &&
       source.includes('Review users'),
-    'Media workspace permission alert must expose retryable permission recovery and user-access handoff',
+    'Media workspace permission alert must expose retryable permission recovery, role-default hydration fallback, and user-access handoff',
   );
   assert(source.includes('title="No runtime storage data yet"'), 'Media runtime storage panel must keep the shared empty-state title visible');
   assert(source.includes('Runtime storage data appears when admin settings report the current upload provider, bucket, path, and public URL.'), 'Media runtime storage empty state must explain provider metadata');
@@ -120,6 +142,23 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('aria-label={`Confirm deleting ${pendingDeleteAsset.name}`}') && source.includes('aria-label={`Cancel deleting ${pendingDeleteAsset.name}`}'), 'Media asset delete confirmation actions must have explicit labels');
   assert(source.includes('aria-label={`Confirm deleting folder ${pendingDeleteFolder.name}`}') && source.includes('aria-label={`Cancel deleting folder ${pendingDeleteFolder.name}`}'), 'Media folder delete confirmation actions must have explicit labels');
   assert(source.includes('aria-label={`Confirm deleting ${selectedMediaAssets.length} selected media asset') && source.includes('aria-label="Cancel deleting selected media"'), 'Media bulk delete confirmation actions must have explicit labels');
+  assert(
+    source.includes('const selectedAssetActionStatusId = selectedAsset') &&
+      source.includes('data-testid="media-selected-action-group"') &&
+      source.includes('data-testid="media-selected-action-status"') &&
+      source.includes('data-action-status={selectedAssetActionStatus}') &&
+      source.includes('aria-label={`Actions for ${selectedAsset.name}`}') &&
+      source.includes('aria-describedby={selectedAssetActionStatusId}') &&
+      source.includes('Delete available.') &&
+      source.includes('Save details available.') &&
+      source.includes('data-testid="media-selected-delete-button"') &&
+      source.includes('data-testid="media-selected-save-button"') &&
+      source.includes('data-action-state={selectedAssetDeleteDisabledReason ?') &&
+      source.includes('data-action-state={selectedAssetSaveDisabledReason ?') &&
+      source.includes('data-disabled-reason={selectedAssetDeleteDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={selectedAssetSaveDisabledReason || undefined}'),
+    'Media selected asset actions must expose a named action-status group with ready/blocked state metadata.',
+  );
   assert(
     source.includes('const [folderCreateSubmitted, setFolderCreateSubmitted] = useState(false);') &&
       source.includes('const [folderRenameSubmitted, setFolderRenameSubmitted] = useState(false);') &&
@@ -144,6 +183,28 @@ const assertMediaRouteSourceContract = () => {
   assert(source.includes('hover:bg-red-50 hover:text-red-600 focus-ring') && source.includes('text-red-600 hover:bg-red-50 focus-ring'), 'Media destructive icon controls must keep visible focus rings');
   assert(source.includes("value: 'all'") && source.includes("label: 'All files'") && source.includes('if (mode === \'all\') return true;'), 'Media upload mode controls must keep an unrestricted All files intake mode.');
   assert(source.includes('Backy accepts any file and classifies known formats for editor, API, and delivery workflows.'), 'Media upload intake rules must explain arbitrary file support.');
+  assert(
+    source.includes("const uploadActionStatusId = 'media-upload-action-status';") &&
+      source.includes('const uploadActionDisabledReason = isUploading') &&
+      source.includes('const uploadActionState = isUploading ?') &&
+      source.includes('const uploadActionStatus = isUploading') &&
+      source.includes('const isUploadActionDisabled = Boolean(uploadActionDisabledReason);') &&
+      source.includes('data-testid="media-upload-action-status"') &&
+      source.includes('data-testid="media-header-upload-trigger"') &&
+      source.includes('data-testid="media-command-upload-trigger"') &&
+      source.includes('data-testid="media-upload-dropzone"') &&
+      source.includes('data-action-status={uploadActionStatus}') &&
+      source.includes('data-action-state={uploadActionState}') &&
+      source.includes('data-disabled-reason={uploadActionDisabledReason || undefined}') &&
+      source.includes('data-target-site-id={siteId}') &&
+      source.includes('data-upload-mode={uploadMode}') &&
+      source.includes('data-upload-mode-active={uploadMode === mode.value ? \'true\' : \'false\'}') &&
+      source.includes('disabled={isUploadActionDisabled}') &&
+      !source.includes('disabled={isMediaMutationBusy || !canCreateMedia}') &&
+      source.includes('const currentFiles = useStore.getState().media;') &&
+      source.includes('setMedia(['),
+    'Media primary upload controls must expose shared action-status metadata and stay scoped to upload/permission blocking instead of unrelated media mutations.',
+  );
   assert(
     source.includes("const MEDIA_FILE_FILTER_TYPES = new Set<MediaAsset['type']>(['file', 'other'])") &&
       source.includes("if (filter === 'file') return MEDIA_FILE_FILTER_TYPES.has(mediaType)") &&
@@ -189,24 +250,71 @@ const assertMediaRouteSourceContract = () => {
 	  );
   assert(
     source.includes('const mediaMatchesCurrentFilters = useCallback') &&
+      source.includes("const mediaBulkSelectionStatusId = 'media-bulk-selection-status';") &&
+      source.includes("const mediaBulkActionStatusId = 'media-bulk-action-status';") &&
+      source.includes('const mediaBulkSelectionStatus = selectedMediaAssets.length === 0') &&
+      source.includes('const mediaBulkActionStatus = !canBulkSelectMedia') &&
+      source.includes('const mediaBulkGroupActionStatus = `${mediaBulkSelectionStatus} ${mediaBulkActionStatus}`') &&
       source.includes('const handleLoadAndSelectMatchingMedia = async () =>') &&
       source.includes("await loadLibrary({ mode: 'all' })") &&
       source.includes('loaded.filter(mediaMatchesCurrentFilters).map((file) => file.id)') &&
+      source.includes('data-testid="media-bulk-toolbar"') &&
+      source.includes('aria-label="Media bulk actions"') &&
+      source.includes('aria-describedby={`${mediaBulkSelectionStatusId} ${mediaBulkActionStatusId}`}') &&
+      source.includes('data-testid="media-bulk-selection-status"') &&
+      source.includes('data-testid="media-bulk-action-status"') &&
+      source.includes('data-action-state={mediaBulkGroupActionState}') &&
+      source.includes('data-action-status={mediaBulkGroupActionStatus}') &&
+      source.includes("data-bulk-change-ready={mediaBulkUpdateReady ? 'true' : 'false'}") &&
+      source.includes("data-bulk-delete-ready={mediaBulkDeleteReady ? 'true' : 'false'}") &&
       source.includes('data-testid="media-bulk-load-select-matching"') &&
+      source.includes('data-action-status={mediaBulkLoadMatchingDisabledReason || mediaBulkSelectionStatus}') &&
+      source.includes('data-testid="media-bulk-clear-selection"') &&
+      source.includes('data-testid="media-bulk-clear-hidden-selection"') &&
+      source.includes('data-testid="media-bulk-visibility-select"') &&
+      source.includes('data-testid="media-bulk-folder-select"') &&
+      source.includes('data-testid="media-bulk-safety-select"') &&
+      source.includes('data-testid="media-bulk-apply-changes"') &&
+      source.includes('data-testid="media-bulk-delete-selected"') &&
+      source.includes('data-testid="media-bulk-tag-action-select"') &&
+      source.includes('data-testid="media-bulk-tags-control"') &&
       source.includes('Load and select matching'),
-    'Media bulk management must load and select every matching asset before applying cross-library folder, tag, safety, or delete actions.',
+    'Media bulk management must load and select every matching asset and expose shared action-state/status metadata before applying cross-library folder, tag, safety, or delete actions.',
   );
   assert(modalSource.includes('listMediaLibrary') && modalSource.includes("pageId: targetScope === 'page' ? targetId : undefined") && modalSource.includes("postId: targetScope === 'post' ? targetId : undefined"), 'Editor media picker must keep loading scoped media through the admin media API');
   assert(modalSource.includes('scope: targetScope') && modalSource.includes('scopeTargetId: targetId || null'), 'Editor media uploads must keep persisting page/post scope metadata');
   assert(
     modalSource.includes('const [newFolderSubmitted, setNewFolderSubmitted] = useState(false);') &&
+      modalSource.includes("const mediaLibraryActionStatusId = 'media-library-action-status';") &&
+      modalSource.includes("const createFolderActionStatusId = 'media-library-create-folder-action-status';") &&
+      modalSource.includes('const createFolderActionState = createFolderDisabledReason') &&
+      modalSource.includes('const createFolderActionStatus = createFolderDisabledReason') &&
+      modalSource.includes('const mediaLibraryActionStatus = isUploading') &&
       modalSource.includes('const newFolderInlineError = useMemo') &&
       modalSource.includes('data-testid="media-library-create-folder-name-error"') &&
+      modalSource.includes('data-testid="media-library-create-folder-action-status"') &&
+      modalSource.includes('data-testid="media-library-action-status"') &&
       modalSource.includes('aria-invalid={Boolean(newFolderInlineError)}') &&
+      modalSource.includes('aria-describedby={createFolderDescribedBy}') &&
+      modalSource.includes('data-action-state={createFolderActionState}') &&
+      modalSource.includes('data-action-status={createFolderActionStatus}') &&
+      modalSource.includes('data-target-folder-name={newFolderTrimmedName}') &&
       modalSource.includes("setError('Fix media folder fields before creating.')") &&
-      /disabled=\{isUploading \|\| isCreatingFolder \|\| !canCreate\}[\s\S]{0,180}data-testid="media-library-create-folder"/.test(modalSource) &&
+      /disabled=\{isUploading \|\| isCreatingFolder \|\| !canCreate\}[\s\S]{0,420}data-testid="media-library-create-folder"/.test(modalSource) &&
       !modalSource.includes('disabled={isUploading || isCreatingFolder || !newFolderName.trim() || !canCreate}'),
-    'Editor media picker folder creation must keep Create reachable and render inline validation for organized media folders.',
+    'Editor media picker folder creation must keep Create reachable and expose inline validation plus action-state/status metadata for organized media folders.',
+  );
+  assert(
+    modalSource.includes('data-action-state={getTabActionState(tab)}') &&
+      modalSource.includes('data-action-status={getTabActionStatus(tab)}') &&
+      modalSource.includes('data-disabled-reason={getTabDisabledReason(tab) || undefined}') &&
+      modalSource.includes('const itemSelectActionState = isSelecting') &&
+      modalSource.includes('const itemSelectActionStatus = isSelecting') &&
+      modalSource.includes('data-action-state={itemSelectActionState}') &&
+      modalSource.includes('data-action-status={itemSelectActionStatus}') &&
+      modalSource.includes('data-disabled-reason={itemSelectDisabledReason || undefined}') &&
+      modalSource.includes('aria-describedby={mediaLibraryActionStatusId}'),
+    'Editor media picker tab and item insertion actions must expose ready, blocked, and busy state metadata instead of relying on title-only controls.',
   );
   assert(
     modalSource.includes("const FILE_BUCKET_MEDIA_TYPES = new Set<MediaAsset['type']>(['file', 'other'])") &&
@@ -281,7 +389,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_MEDIA_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -1223,6 +1332,18 @@ const assertMediaLayout = async (client, expectedText) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="media-library-command-center"]')),
+    operationDetailsCollapsed: document.querySelector('[data-testid="media-operation-action-plan-details"]') instanceof HTMLDetailsElement &&
+      document.querySelector('[data-testid="media-operation-action-plan-details"]')?.open === false &&
+      document.querySelector('[data-testid="media-operation-action-plan-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    attributionDetailsCollapsed: document.querySelector('[data-testid="media-attribution-handoff-details"]') instanceof HTMLDetailsElement &&
+      document.querySelector('[data-testid="media-attribution-handoff-details"]')?.open === false &&
+      document.querySelector('[data-testid="media-attribution-handoff-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    controlMapDetailsCollapsed: document.querySelector('[data-testid="media-control-map-details"]') instanceof HTMLDetailsElement &&
+      document.querySelector('[data-testid="media-control-map-details"]')?.open === false &&
+      document.querySelector('[data-testid="media-control-map-details"]')?.getAttribute('data-default-collapsed') === 'true',
+    connectedWorkflowsDetailsCollapsed: document.querySelector('[data-testid="media-connected-workflows-details"]') instanceof HTMLDetailsElement &&
+      document.querySelector('[data-testid="media-connected-workflows-details"]')?.open === false &&
+      document.querySelector('[data-testid="media-connected-workflows-details"]')?.getAttribute('data-default-collapsed') === 'true',
     hasDropzone: Boolean(document.querySelector('[data-testid="media-upload-dropzone"]')),
     hasIntakeRules: Boolean(document.querySelector('[data-testid="media-upload-intake-rules"]')) &&
       ['Images', 'Video/audio', 'Documents', 'Fonts', 'Other files'].every((label) => document.body?.innerText?.includes(label)),
@@ -1242,11 +1363,11 @@ const assertMediaLayout = async (client, expectedText) => {
       document.body?.innerText?.includes('BACKY_SETTINGS_CERTIFY_STORAGE_PROVIDER') &&
       Boolean(document.querySelector('[aria-label="Copy media storage provider certification handoff"]')),
     hasOperationActionPlan: Boolean(document.querySelector('[data-testid="media-operation-action-plan"]')) &&
-      document.body?.innerText?.includes('Media operation action plan') &&
-      document.body?.innerText?.includes('backy.media-operation-action-plan.v1'),
+      (document.querySelector('[data-testid="media-operation-action-plan-details"]')?.textContent || '').includes('Media operation action plan') &&
+      (document.querySelector('[data-testid="media-operation-action-plan-details"]')?.textContent || '').includes('backy.media-operation-action-plan.v1'),
     hasAttributionHandoff: Boolean(document.querySelector('[data-testid="media-attribution-handoff"]')) &&
-      document.body?.innerText?.includes('Attribution handoff') &&
-      document.body?.innerText?.includes('backy.media-attribution-handoff.v1') &&
+      (document.querySelector('[data-testid="media-attribution-handoff-details"]')?.textContent || '').includes('Attribution handoff') &&
+      (document.querySelector('[data-testid="media-attribution-handoff-details"]')?.textContent || '').includes('backy.media-attribution-handoff.v1') &&
       Boolean(document.querySelector('[aria-label="Copy media attribution handoff"]')),
     hasScannerRuntime: Boolean(document.querySelector('[data-testid="media-scanner-runtime"]')) &&
       document.body?.innerText?.includes('Upload scanner'),
@@ -1262,13 +1383,54 @@ const assertMediaLayout = async (client, expectedText) => {
     hasProviderDelivery: document.body?.innerText?.includes('Provider delivery') || false,
     hasProviderRoi: Boolean(document.querySelector('[data-testid="media-provider-roi"]')) &&
       document.body?.innerText?.includes('Provider ROI'),
+    uploadActionStatus: (() => {
+      const status = document.querySelector('[data-testid="media-upload-action-status"]');
+      const header = document.querySelector('[data-testid="media-header-upload-trigger"]');
+      const command = document.querySelector('[data-testid="media-command-upload-trigger"]');
+      const dropzone = document.querySelector('[data-testid="media-upload-dropzone"]');
+      const input = document.querySelector('[data-testid="media-upload-input"]');
+      const allMode = document.querySelector('[data-testid="media-upload-mode-all"]');
+      return {
+        statusId: status?.id || '',
+        statusText: (status?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        headerDescribedBy: header?.getAttribute('aria-describedby') || '',
+        commandDescribedBy: command?.getAttribute('aria-describedby') || '',
+        dropzoneDescribedBy: dropzone?.getAttribute('aria-describedby') || '',
+        inputDescribedBy: input?.getAttribute('aria-describedby') || '',
+        dropzoneStatus: dropzone?.getAttribute('data-action-status') || '',
+        dropzoneState: dropzone?.getAttribute('data-action-state') || '',
+        dropzoneTargetSite: dropzone?.getAttribute('data-target-site-id') || '',
+        dropzoneMode: dropzone?.getAttribute('data-upload-mode') || '',
+        inputState: input?.getAttribute('data-action-state') || '',
+        inputDisabled: input instanceof HTMLInputElement ? input.disabled : null,
+        allModeState: allMode?.getAttribute('data-action-state') || '',
+        allModeActive: allMode?.getAttribute('data-upload-mode-active') || '',
+        allModePressed: allMode?.getAttribute('aria-pressed') || '',
+      };
+    })(),
     hasAsset: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
     hasSearch: Boolean(document.querySelector('input[aria-label="Search media"]')),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasStorageProviderCertification && layout.hasOperationActionPlan && layout.hasAttributionHandoff && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.operationDetailsCollapsed && layout.attributionDetailsCollapsed && layout.controlMapDetailsCollapsed && layout.connectedWorkflowsDetailsCollapsed && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasStorageProviderCertification && layout.hasOperationActionPlan && layout.hasAttributionHandoff && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.uploadActionStatus.statusId === 'media-upload-action-status' &&
+      layout.uploadActionStatus.statusText.includes('Upload available for') &&
+      layout.uploadActionStatus.headerDescribedBy === layout.uploadActionStatus.statusId &&
+      layout.uploadActionStatus.commandDescribedBy === layout.uploadActionStatus.statusId &&
+      layout.uploadActionStatus.dropzoneDescribedBy === layout.uploadActionStatus.statusId &&
+      layout.uploadActionStatus.inputDescribedBy === layout.uploadActionStatus.statusId &&
+      layout.uploadActionStatus.dropzoneStatus === layout.uploadActionStatus.statusText &&
+      layout.uploadActionStatus.dropzoneState === 'ready' &&
+      layout.uploadActionStatus.dropzoneTargetSite === SITE_ID &&
+      layout.uploadActionStatus.inputState === 'ready' &&
+      layout.uploadActionStatus.inputDisabled === false &&
+      layout.uploadActionStatus.allModeState === 'ready' &&
+      layout.uploadActionStatus.allModePressed === layout.uploadActionStatus.allModeActive,
+    `Media upload action status is incomplete: ${JSON.stringify(layout.uploadActionStatus)}`,
   );
   return layout;
 };
@@ -2000,6 +2162,47 @@ const clickDetailsButton = async (client, text) => {
 };
 
 const saveDetails = async (client) => {
+  const actionStatus = await evaluate(client, `(() => {
+    const group = document.querySelector('[data-testid="media-selected-action-group"]');
+    const status = document.querySelector('[data-testid="media-selected-action-status"]');
+    const deleteButton = document.querySelector('[data-testid="media-selected-delete-button"]');
+    const saveButton = document.querySelector('[data-testid="media-selected-save-button"]');
+    const statusId = status?.id || '';
+    const statusText = (status?.textContent || '').replace(/\\s+/g, ' ').trim();
+    return {
+      hasGroup: group instanceof HTMLElement,
+      groupRole: group?.getAttribute('role') || '',
+      groupLabel: group?.getAttribute('aria-label') || '',
+      groupDescribedBy: group?.getAttribute('aria-describedby') || '',
+      groupStatus: group?.getAttribute('data-action-status') || '',
+      statusId,
+      statusText,
+      deleteState: deleteButton?.getAttribute('data-action-state') || '',
+      deleteReason: deleteButton?.getAttribute('data-disabled-reason') || '',
+      deleteDescribedBy: deleteButton?.getAttribute('aria-describedby') || '',
+      saveState: saveButton?.getAttribute('data-action-state') || '',
+      saveReason: saveButton?.getAttribute('data-disabled-reason') || '',
+      saveDescribedBy: saveButton?.getAttribute('aria-describedby') || '',
+      body: document.querySelector('[data-testid="media-details-dialog"]')?.textContent?.slice(0, 1200) || '',
+    };
+  })()`);
+  assert(
+    actionStatus.hasGroup &&
+      actionStatus.groupRole === 'group' &&
+      actionStatus.groupLabel.startsWith('Actions for ') &&
+      actionStatus.groupDescribedBy === actionStatus.statusId &&
+      actionStatus.groupStatus === actionStatus.statusText &&
+      actionStatus.statusText.includes('Delete available.') &&
+      actionStatus.statusText.includes('Save details available.') &&
+      actionStatus.deleteState === 'ready' &&
+      actionStatus.deleteReason === '' &&
+      actionStatus.deleteDescribedBy === actionStatus.statusId &&
+      actionStatus.saveState === 'ready' &&
+      actionStatus.saveReason === '' &&
+      actionStatus.saveDescribedBy === actionStatus.statusId,
+    `Media selected asset action status is incomplete: ${JSON.stringify(actionStatus)}`,
+  );
+
   await clickDetailsButton(client, 'Save details');
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -2398,6 +2601,95 @@ const setBulkTags = async (client, tags) => {
   return null;
 };
 
+const waitForMediaBulkActionState = async (client, label, expectedSelectedCount = null) => {
+  let state = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const toolbar = document.querySelector('[data-testid="media-bulk-toolbar"]');
+      const selectionStatus = document.querySelector('[data-testid="media-bulk-selection-status"]');
+      const actionStatus = document.querySelector('[data-testid="media-bulk-action-status"]');
+      const addVisible = document.querySelector('[data-testid="media-bulk-add-visible-button"]');
+      const loadMatching = document.querySelector('[data-testid="media-bulk-load-select-matching"]');
+      const clearSelection = document.querySelector('[data-testid="media-bulk-clear-selection"]');
+      const clearHidden = document.querySelector('[data-testid="media-bulk-clear-hidden-selection"]');
+      const visibility = document.querySelector('[data-testid="media-bulk-visibility-select"]');
+      const folder = document.querySelector('[data-testid="media-bulk-folder-select"]');
+      const safety = document.querySelector('[data-testid="media-bulk-safety-select"]');
+      const tagAction = document.querySelector('[data-testid="media-bulk-tag-action-select"]');
+      const tagsControl = document.querySelector('[data-testid="media-bulk-tags-control"]');
+      const apply = document.querySelector('[data-testid="media-bulk-apply-changes"]');
+      const deleteButton = document.querySelector('[data-testid="media-bulk-delete-selected"]');
+      const attr = (node, name) => node?.getAttribute(name) || '';
+      return {
+        ready: Boolean(toolbar),
+        selectedCount: Number(attr(toolbar, 'data-selected-count') || 0),
+        visibleSelectedCount: Number(attr(toolbar, 'data-visible-selected-count') || 0),
+        hiddenSelectedCount: Number(attr(toolbar, 'data-hidden-selected-count') || 0),
+        visibleAssetCount: Number(attr(toolbar, 'data-visible-asset-count') || 0),
+        matchingAssetCount: Number(attr(toolbar, 'data-matching-asset-count') || 0),
+        bulkChangeReady: attr(toolbar, 'data-bulk-change-ready'),
+        bulkDeleteReady: attr(toolbar, 'data-bulk-delete-ready'),
+        groupLabel: attr(toolbar, 'aria-label'),
+        groupDescribedBy: attr(toolbar, 'aria-describedby'),
+        groupState: attr(toolbar, 'data-action-state'),
+        groupStatus: attr(toolbar, 'data-action-status'),
+        selectionStatusId: selectionStatus?.id || '',
+        selectionStatusLive: attr(selectionStatus, 'aria-live'),
+        selectionStatusText: selectionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        actionStatusId: actionStatus?.id || '',
+        actionStatusLive: attr(actionStatus, 'aria-live'),
+        actionStatusText: actionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        addVisibleState: attr(addVisible, 'data-action-state'),
+        addVisibleStatus: attr(addVisible, 'data-action-status'),
+        addVisibleReason: attr(addVisible, 'data-disabled-reason'),
+        addVisibleDisabled: addVisible instanceof HTMLButtonElement ? addVisible.disabled : null,
+        loadMatchingState: attr(loadMatching, 'data-action-state'),
+        loadMatchingStatus: attr(loadMatching, 'data-action-status'),
+        loadMatchingReason: attr(loadMatching, 'data-disabled-reason'),
+        clearSelectionPresent: Boolean(clearSelection),
+        clearSelectionState: attr(clearSelection, 'data-action-state'),
+        clearSelectionStatus: attr(clearSelection, 'data-action-status'),
+        clearSelectionReason: attr(clearSelection, 'data-disabled-reason'),
+        clearHiddenPresent: Boolean(clearHidden),
+        clearHiddenState: attr(clearHidden, 'data-action-state'),
+        clearHiddenStatus: attr(clearHidden, 'data-action-status'),
+        visibilityState: attr(visibility, 'data-action-state'),
+        visibilityStatus: attr(visibility, 'data-action-status'),
+        folderState: attr(folder, 'data-action-state'),
+        folderStatus: attr(folder, 'data-action-status'),
+        safetyState: attr(safety, 'data-action-state'),
+        safetyStatus: attr(safety, 'data-action-status'),
+        tagActionState: attr(tagAction, 'data-action-state'),
+        tagActionStatus: attr(tagAction, 'data-action-status'),
+        tagsControlState: attr(tagsControl, 'data-action-state'),
+        tagsControlStatus: attr(tagsControl, 'data-action-status'),
+        tagsControlReason: attr(tagsControl, 'data-disabled-reason'),
+        applyState: attr(apply, 'data-action-state'),
+        applyStatus: attr(apply, 'data-action-status'),
+        applyReason: attr(apply, 'data-disabled-reason'),
+        applyDisabled: apply instanceof HTMLButtonElement ? apply.disabled : null,
+        deleteState: attr(deleteButton, 'data-action-state'),
+        deleteStatus: attr(deleteButton, 'data-action-status'),
+        deleteReason: attr(deleteButton, 'data-disabled-reason'),
+        deleteDisabled: deleteButton instanceof HTMLButtonElement ? deleteButton.disabled : null,
+        body: document.body?.innerText?.slice(0, 1800) || '',
+      };
+    })()`);
+
+    const selectedMatches = expectedSelectedCount === null || state.selectedCount === expectedSelectedCount;
+    const controlsSettled = !state.actionStatusText.includes('temporarily unavailable');
+    if (state.ready && selectedMatches && controlsSettled) {
+      return state;
+    }
+    if (attempt === 99) {
+      throw new Error(`Media bulk action state did not reach ${label}: ${JSON.stringify(state)}`);
+    }
+    await sleep(150);
+  }
+
+  return state;
+};
+
 const selectVisibleMedia = async (client) => {
   let result;
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -2430,9 +2722,7 @@ const selectVisibleMedia = async (client) => {
 
 const applyBulkChanges = async (client) => {
   const result = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-      (candidate.textContent || '').includes('Apply changes') || (candidate.textContent || '').includes('Applying...')
-    ));
+    const button = document.querySelector('[data-testid="media-bulk-apply-changes"]');
     if (!(button instanceof HTMLButtonElement)) {
       return { ok: false, reason: 'button-not-found' };
     }
@@ -2465,6 +2755,15 @@ const waitForBulkNotice = async (client, expectedText) => {
 const selectSingleAssetForBulk = async (client, assetName) => {
   await navigateToMedia(client, assetName);
   await waitForMediaPageAsset(client, assetName);
+  const initialBulkState = await waitForMediaBulkActionState(client, 'initial media bulk state', 0);
+  assert(initialBulkState.groupLabel === 'Media bulk actions', `Media bulk group must stay named: ${JSON.stringify(initialBulkState)}`);
+  assert(initialBulkState.groupDescribedBy === `${initialBulkState.selectionStatusId} ${initialBulkState.actionStatusId}`, `Media bulk group must be described by selection and action status: ${JSON.stringify(initialBulkState)}`);
+  assert(initialBulkState.selectionStatusLive === 'polite' && initialBulkState.actionStatusLive === 'polite', `Media bulk statuses must be polite live regions: ${JSON.stringify(initialBulkState)}`);
+  assert(initialBulkState.groupState === 'blocked' && initialBulkState.actionStatusText === 'Select one or more media assets to enable bulk changes or deletion.', `Media bulk initial state must explain no-selection blocker: ${JSON.stringify(initialBulkState)}`);
+  assert(initialBulkState.addVisibleState === 'ready' && initialBulkState.addVisibleStatus === initialBulkState.selectionStatusText, `Media Add visible must expose ready selection status: ${JSON.stringify(initialBulkState)}`);
+  assert(initialBulkState.loadMatchingState === 'ready' && initialBulkState.loadMatchingStatus === initialBulkState.selectionStatusText, `Media Load and select matching must expose ready selection status: ${JSON.stringify(initialBulkState)}`);
+  assert(initialBulkState.applyState === 'blocked' && initialBulkState.applyReason === 'Select one or more media assets before applying changes.', `Media Apply changes must expose no-selection disabled reason: ${JSON.stringify(initialBulkState)}`);
+  assert(initialBulkState.deleteState === 'blocked' && initialBulkState.deleteReason === 'Select one or more media assets before deleting.', `Media Delete selected must expose no-selection disabled reason: ${JSON.stringify(initialBulkState)}`);
   await selectVisibleMedia(client);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -2472,14 +2771,20 @@ const selectSingleAssetForBulk = async (client, assetName) => {
       selected: document.body?.innerText?.includes('1 selected') || false,
       body: document.body?.innerText?.slice(0, 1400) || '',
     }))()`);
-    if (state.selected) return state;
+    if (state.selected) break;
     if (attempt === 79) {
       throw new Error(`Bulk selection did not select ${assetName}: ${JSON.stringify(state)}`);
     }
     await sleep(100);
   }
 
-  return null;
+  const selectedBulkState = await waitForMediaBulkActionState(client, 'selected media bulk state', 1);
+  assert(selectedBulkState.groupState === 'ready' && selectedBulkState.selectionStatusText.includes('1 media asset selected'), `Media bulk selected state must expose selected count: ${JSON.stringify(selectedBulkState)}`);
+  assert(selectedBulkState.bulkDeleteReady === 'true' && selectedBulkState.bulkChangeReady === 'false', `Media bulk selected state must distinguish delete-ready from change-ready: ${JSON.stringify(selectedBulkState)}`);
+  assert(selectedBulkState.clearSelectionState === 'ready' && selectedBulkState.clearSelectionStatus === selectedBulkState.selectionStatusText, `Media Clear selection must expose ready status after selection: ${JSON.stringify(selectedBulkState)}`);
+  assert(selectedBulkState.applyState === 'blocked' && selectedBulkState.applyReason === 'Choose a folder, visibility, safety, or tag change before applying.', `Media Apply changes must explain missing change after selection: ${JSON.stringify(selectedBulkState)}`);
+  assert(selectedBulkState.deleteState === 'ready' && selectedBulkState.deleteStatus === selectedBulkState.actionStatusText, `Media Delete selected must expose ready status after selection: ${JSON.stringify(selectedBulkState)}`);
+  return selectedBulkState;
 };
 
 const applySingleAssetBulkUpdate = async (client, assetName, options = {}) => {
@@ -2493,16 +2798,20 @@ const applySingleAssetBulkUpdate = async (client, assetName, options = {}) => {
       await setBulkTags(client, options.tags);
     }
   }
+  const readyBulkState = await waitForMediaBulkActionState(client, 'media bulk apply-ready state', 1);
+  assert(readyBulkState.groupState === 'ready' && readyBulkState.applyState === 'ready' && readyBulkState.applyDisabled === false, `Media bulk Apply changes must expose ready action metadata before update: ${JSON.stringify(readyBulkState)}`);
+  assert(readyBulkState.bulkChangeReady === 'true' && readyBulkState.bulkDeleteReady === 'true', `Media bulk apply-ready state must expose both change and delete readiness: ${JSON.stringify(readyBulkState)}`);
+  assert(readyBulkState.actionStatusText === 'Ready to apply changes to 1 selected media asset.', `Media bulk apply-ready status must name the selected count: ${JSON.stringify(readyBulkState)}`);
   await applyBulkChanges(client);
   await waitForBulkNotice(client, 'Updated 1 asset');
 };
 
 const deleteSingleAssetThroughBulk = async (client, assetName) => {
   await selectSingleAssetForBulk(client, assetName);
+  const readyDeleteState = await waitForMediaBulkActionState(client, 'media bulk delete-ready state', 1);
+  assert(readyDeleteState.deleteState === 'ready' && readyDeleteState.deleteDisabled === false && readyDeleteState.deleteStatus === readyDeleteState.actionStatusText, `Media bulk Delete selected must expose ready action metadata before confirmation: ${JSON.stringify(readyDeleteState)}`);
   const openResult = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-      (candidate.textContent || '').includes('Delete selected')
-    ));
+    const button = document.querySelector('[data-testid="media-bulk-delete-selected"]');
     if (!(button instanceof HTMLButtonElement)) {
       return { ok: false, reason: 'button-not-found' };
     }

@@ -165,6 +165,7 @@ interface AppState {
     deleteSite: (id: string) => void;
 
     setPages: (pages: Page[]) => void;
+    setPagesForSite: (siteIdentifiers: string[], pages: Page[]) => void;
     addPage: (page: Omit<Page, 'id' | 'lastUpdated'>) => void;
     deletePage: (id: string) => void;
 
@@ -354,6 +355,17 @@ export const useStore = create<AppState>()(
 
             // Page Actions
             setPages: (pages) => set({ pages }),
+            setPagesForSite: (siteIdentifiers, pages) => set((state) => {
+                const siteIdSet = new Set(siteIdentifiers.filter(Boolean));
+                const incomingPageIds = new Set(pages.map((page) => page.id));
+
+                return {
+                    pages: [
+                        ...state.pages.filter((page) => !siteIdSet.has(page.siteId) && !incomingPageIds.has(page.id)),
+                        ...pages,
+                    ],
+                };
+            }),
 
             addPage: (page) => set((state) => ({
                 pages: [{

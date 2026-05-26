@@ -57,6 +57,7 @@ import {
 import { getDefaultMediaSiteId, listMedia } from '@/lib/mediaApi';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -980,10 +981,10 @@ const getPublicBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && isLocalAdminHost()) {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
 
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()))
     .replace(/\/api\/admin$/, '')
     .replace(/\/api$/, '')
     .replace(/\/$/, '');
@@ -1000,10 +1001,10 @@ const getAdminBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && isLocalAdminHost()) {
-    return 'http://localhost:3001/api/admin';
+    return `${getLocalBackendOrigin()}/api/admin`;
   }
 
-  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+  const base = envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin());
   return `${base.replace(/\/api\/admin$/, '').replace(/\/api$/, '').replace(/\/$/, '')}/api/admin`;
 };
 
@@ -1037,19 +1038,51 @@ function Index() {
   const [isCheckingInfrastructure, setIsCheckingInfrastructure] = useState(false);
   const [deploymentRuns, setDeploymentRuns] = useState<DashboardDeploymentRun[]>([]);
   const [isRunningDeployment, setIsRunningDeployment] = useState(false);
-  const isDashboardBusy = isLoading || isCheckingInfrastructure || isRunningDeployment;
+  const [isHydratingDashboard, setIsHydratingDashboard] = useState(false);
+  const isDashboardBusy = isLoading || isHydratingDashboard || isCheckingInfrastructure || isRunningDeployment;
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
+    setIsHydratingDashboard(true);
     setError(null);
 
     try {
-      const matrix = user?.id
-        ? await getUserPermissions(user.id).catch((permissionsError) => {
+      const permissionsRequest = user?.id
+        ? getUserPermissions(user.id).catch((permissionsError) => {
             setPermissionError(permissionsError instanceof Error ? permissionsError.message : 'Unable to load dashboard permissions.');
             return null;
           })
-        : null;
+        : Promise.resolve(null);
+
+      const canUseDashboardFromRole = isDashboardPermissionAllowed(null, user, 'dashboard.view');
+      const canViewSitesFromRole = isDashboardPermissionAllowed(null, user, 'sites.view');
+
+      if (!canUseDashboardFromRole) {
+        throw new Error('Your account does not have dashboard.view permission.');
+      }
+
+      const sites = canViewSitesFromRole ? await listSites() : [];
+      setDashboard((current) => ({
+        ...emptyDashboardData(),
+        sites,
+        pages: current.source === 'backend' ? current.pages : [],
+        posts: current.source === 'backend' ? current.posts : [],
+        users: current.source === 'backend' ? current.users : [],
+        media: current.source === 'backend' ? current.media : [],
+        collections: current.source === 'backend' ? current.collections : [],
+        forms: current.source === 'backend' ? current.forms : [],
+        contacts: current.source === 'backend' ? current.contacts : 0,
+        comments: current.source === 'backend' ? current.comments : 0,
+        pendingComments: current.source === 'backend' ? current.pendingComments : 0,
+        commerce: current.source === 'backend' ? current.commerce : emptyCommerceMetrics(),
+        moderation: current.source === 'backend' ? current.moderation : emptyModerationMetrics(),
+        settings: current.source === 'backend' ? current.settings : undefined,
+        auditLogs: current.source === 'backend' ? current.auditLogs : [],
+        readiness: current.source === 'backend' ? current.readiness : [],
+        source: 'backend',
+      }));
+
+      const matrix = await permissionsRequest;
       setPermissionMatrix(matrix);
       if (matrix) {
         setPermissionError(null);
@@ -1071,20 +1104,13 @@ function Index() {
         throw new Error('Your account does not have dashboard.view permission.');
       }
 
-      const [sites, users, settings, auditResult] = await Promise.all([
-        canViewSites ? listSites() : Promise.resolve([] as Site[]),
-        canViewUsers ? listUsers().catch(() => [] as User[]) : Promise.resolve([] as User[]),
-        canViewSettings ? getSettings().catch(() => undefined) : Promise.resolve(undefined),
-        canExportActivity
-          ? listAdminAuditLogs({ limit: 8 }).catch(() => ({ logs: [], pagination: { total: 0, limit: 8, offset: 0, hasMore: false } }))
-          : Promise.resolve({ logs: [], pagination: { total: 0, limit: 8, offset: 0, hasMore: false } }),
-      ]);
+      const settings = canViewSettings ? await getSettings().catch(() => undefined) : undefined;
       setDashboard((current) => ({
         ...emptyDashboardData(),
         sites,
         pages: current.source === 'backend' ? current.pages : [],
         posts: current.source === 'backend' ? current.posts : [],
-        users,
+        users: current.source === 'backend' ? current.users : [],
         media: current.source === 'backend' ? current.media : [],
         collections: current.source === 'backend' ? current.collections : [],
         forms: current.source === 'backend' ? current.forms : [],
@@ -1094,8 +1120,21 @@ function Index() {
         commerce: current.source === 'backend' ? current.commerce : emptyCommerceMetrics(),
         moderation: current.source === 'backend' ? current.moderation : emptyModerationMetrics(),
         settings,
-        auditLogs: auditResult.logs,
+        auditLogs: current.source === 'backend' ? current.auditLogs : [],
         readiness: current.source === 'backend' ? current.readiness : [],
+        source: 'backend',
+      }));
+      setIsLoading(false);
+      const [users, auditResult] = await Promise.all([
+        canViewUsers ? listUsers().catch(() => [] as User[]) : Promise.resolve([] as User[]),
+        canExportActivity
+          ? listAdminAuditLogs({ limit: 8 }).catch(() => ({ logs: [], pagination: { total: 0, limit: 8, offset: 0, hasMore: false } }))
+          : Promise.resolve({ logs: [], pagination: { total: 0, limit: 8, offset: 0, hasMore: false } }),
+      ]);
+      setDashboard((current) => ({
+        ...current,
+        users,
+        auditLogs: auditResult.logs,
         source: 'backend',
       }));
       const selectedSiteIdentifier = search.siteId || selectedSiteId || sites[0]?.publicSiteId || sites[0]?.id || '';
@@ -1149,7 +1188,6 @@ function Index() {
         readiness: readinessBySite.filter((item): item is SiteReadiness => Boolean(item)),
         source: 'backend',
       });
-      setInfrastructureDiagnostics([]);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : 'Unable to load backend dashboard data';
       setError(message);
@@ -1170,9 +1208,9 @@ function Index() {
         auditLogs: fallbackAuditLogs(fallbackStore.sites, fallbackStore.pages, fallbackStore.posts),
         source: 'fallback',
       });
-      setInfrastructureDiagnostics([]);
     } finally {
       setIsLoading(false);
+      setIsHydratingDashboard(false);
     }
   }, [fallbackStore.media, fallbackStore.pages, fallbackStore.posts, fallbackStore.sites, fallbackStore.users, user]);
 
@@ -2162,6 +2200,14 @@ function Index() {
                 ? canViewCommerce
                 : true
   ));
+  const dashboardCommandActionStatusId = 'dashboard-command-actions-status';
+  const dashboardCommandDisabledReason = isDashboardBusy
+    ? 'Dashboard data is refreshing.'
+    : '';
+  const dashboardCommandActionState = dashboardCommandDisabledReason ? 'blocked' : 'ready';
+  const dashboardCommandActionStatus = dashboardCommandDisabledReason
+    ? `Refresh data unavailable: ${dashboardCommandDisabledReason} Copy handoff unavailable: ${dashboardCommandDisabledReason} Download JSON unavailable: ${dashboardCommandDisabledReason}`
+    : 'Refresh data available. Copy handoff available. Download JSON available.';
 
   return (
     <PageShell
@@ -2190,9 +2236,9 @@ function Index() {
           </div>
         )}
 
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="dashboard-command-center">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div>
+        <section className="rounded-lg border border-border bg-card shadow-sm" data-testid="dashboard-command-center">
+          <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-5">
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-semibold text-foreground">Dashboard command center</h2>
                 <span className={cn(
@@ -2215,11 +2261,32 @@ function Index() {
                 Start builder workflows, inspect backend readiness, switch the active API site, and export the frontend handoff payload from one workspace.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end"
+              role="group"
+              aria-label="Dashboard command actions"
+              aria-describedby={dashboardCommandActionStatusId}
+              data-testid="dashboard-command-actions"
+              data-action-status={dashboardCommandActionStatus}
+              data-action-state={dashboardCommandActionState}
+            >
+              <span
+                id={dashboardCommandActionStatusId}
+                className="sr-only"
+                data-testid="dashboard-command-actions-status"
+              >
+                {dashboardCommandActionStatus}
+              </span>
               <button
                 type="button"
                 onClick={() => void loadDashboard()}
                 disabled={isDashboardBusy}
+                aria-label="Refresh dashboard command center data"
+                aria-describedby={dashboardCommandActionStatusId}
+                data-testid="dashboard-command-refresh"
+                data-action-state={dashboardCommandActionState}
+                data-disabled-reason={dashboardCommandDisabledReason || undefined}
+                title={dashboardCommandDisabledReason || 'Refresh dashboard data'}
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isDashboardBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
@@ -2229,6 +2296,12 @@ function Index() {
                 type="button"
                 onClick={() => void copyDashboardText(frontendHandoffText, 'Frontend handoff manifest')}
                 disabled={isDashboardBusy}
+                aria-label="Copy dashboard frontend handoff"
+                aria-describedby={dashboardCommandActionStatusId}
+                data-testid="dashboard-command-copy-handoff"
+                data-action-state={dashboardCommandActionState}
+                data-disabled-reason={dashboardCommandDisabledReason || undefined}
+                title={dashboardCommandDisabledReason || 'Copy frontend handoff manifest'}
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Copy className="size-4" />
@@ -2238,6 +2311,12 @@ function Index() {
                 type="button"
                 onClick={downloadFrontendHandoff}
                 disabled={isDashboardBusy}
+                aria-label="Download dashboard frontend handoff JSON"
+                aria-describedby={dashboardCommandActionStatusId}
+                data-testid="dashboard-command-download-handoff"
+                data-action-state={dashboardCommandActionState}
+                data-disabled-reason={dashboardCommandDisabledReason || undefined}
+                title={dashboardCommandDisabledReason || 'Download frontend handoff JSON'}
                 className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Download className="size-4" />
@@ -2246,157 +2325,239 @@ function Index() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
-            <div className="rounded-lg border border-border bg-background p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold">Backend platform health</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Tracks the backend capabilities a Wix-style editor and custom frontend handoff need.
-                  </p>
+          <div className="grid gap-3 border-t border-border bg-background/55 p-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: 'Sites', value: dashboard.sites.length, detail: `${publishedSites} published` },
+              { label: 'Pages', value: dashboard.pages.length, detail: `${draftPages} drafts` },
+              { label: 'Posts', value: dashboard.posts.length, detail: `${draftPosts} drafts` },
+              { label: 'Readiness', value: `${platformReadiness.score}%`, detail: `${platformReadiness.readyCount}/${platformReadiness.total} checks` },
+            ].map((metric) => (
+              <div key={metric.label} className="rounded-lg border border-border bg-card px-3 py-2.5">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{metric.label}</div>
+                <div className="mt-1 flex items-end justify-between gap-3">
+                  <span className="font-mono text-xl font-semibold text-foreground">{metric.value}</span>
+                  <span className="truncate text-xs text-muted-foreground">{metric.detail}</span>
                 </div>
-                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  {platformReadiness.readyCount}/{platformReadiness.total} checks
-                </span>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={cn('h-full rounded-full', platformReadiness.score >= 80 ? 'bg-success' : 'bg-warning')}
-                  style={{ width: `${platformReadiness.score}%` }}
-                />
-              </div>
-              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {platformReadiness.checks.slice(0, 6).map((check) => (
-                  <DashboardReadinessCheck key={check.label} {...check} search={getDashboardRouteSearch(check.to)} />
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-border bg-background p-4">
-              <div className="flex items-center gap-2">
-                <Code2 className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Operating workflow</h3>
-              </div>
-              <div className="mt-3 grid gap-2">
-                {platformReadiness.workflow.map((step, index) => (
-                  <DashboardWorkflowStep key={step.label} index={index + 1} {...step} />
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
 
-          <div className="mt-4 rounded-lg border border-border bg-background p-4">
-            <h3 className="text-sm font-semibold">Dashboard control map</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Jump to the live site scope, totals, readiness, creation workflows, attention queue, and API handoff.</p>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-              {DASHBOARD_CONTROL_AREAS.map((area) => (
-                <a
-                  key={area.title}
-                  href={area.href}
-                  aria-disabled={isDashboardBusy}
-                  onClick={(event) => {
-                    if (isDashboardBusy) event.preventDefault();
-                  }}
-                  className={cn(
-                    'rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5',
-                    isDashboardBusy && 'pointer-events-none opacity-60',
-                  )}
-                >
-                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-                </a>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="dashboard-rbac-scope">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="border-t border-border bg-background p-4 lg:p-5" data-testid="dashboard-focus-lane">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h3 className="text-sm font-semibold">Workspace RBAC scope</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Dashboard data, creation actions, admin endpoints, settings, users, and activity panels are filtered by the signed-in account.
+                <h3 className="text-sm font-semibold">Start here</h3>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  Open the workflows people use every day; deeper readiness and API maps stay available below.
                 </p>
               </div>
-              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize text-muted-foreground">
-                {rbacSummary.role} · {rbacSummary.source}
+              <span className="w-fit rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {activeSite?.name || activeSiteId}
               </span>
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-4">
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Permissions</div>
-                <div className="mt-1 text-sm font-medium">
-                  {rbacSummary.allowed === null ? 'Unavailable' : `${rbacSummary.allowed}/${rbacSummary.total} allowed`}
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+              {dashboardWorkflowActions.length > 0 ? dashboardWorkflowActions.map((action) => (
+                <Link
+                  key={action.label}
+                  to={action.to}
+                  search={getDashboardRouteSearch(action.to)}
+                  className="group flex min-h-20 items-center gap-3 rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+                    <action.icon className="size-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-foreground">{action.label}</span>
+                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{action.detail}</span>
+                  </span>
+                </Link>
+              )) : (
+                <p className="rounded-lg border border-border bg-card px-3 py-3 text-sm text-muted-foreground sm:col-span-2 xl:col-span-6">
+                  Your current role has read-only dashboard access.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <details className="group border-t border-border" data-testid="dashboard-platform-details">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+              <span>Backend platform health and workflow</span>
+              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+            </summary>
+            <div className="grid gap-3 border-t border-border p-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)] lg:p-5">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Backend platform health</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Tracks the backend capabilities a Wix-style editor and custom frontend handoff need.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    {platformReadiness.readyCount}/{platformReadiness.total} checks
+                  </span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn('h-full rounded-full', platformReadiness.score >= 80 ? 'bg-success' : 'bg-warning')}
+                    style={{ width: `${platformReadiness.score}%` }}
+                  />
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {platformReadiness.checks.slice(0, 6).map((check) => (
+                    <DashboardReadinessCheck key={check.label} {...check} search={getDashboardRouteSearch(check.to)} />
+                  ))}
                 </div>
               </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Users</div>
-                <div className={cn('mt-1 text-sm font-medium', canViewUsers ? 'text-success' : 'text-muted-foreground')}>
-                  {canViewUsers ? 'Visible' : 'Hidden'}
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-center gap-2">
+                  <Code2 className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Operating workflow</h3>
                 </div>
-              </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Settings</div>
-                <div className={cn('mt-1 text-sm font-medium', canViewSettings ? 'text-success' : 'text-muted-foreground')}>
-                  {canViewSettings ? 'Visible' : 'Hidden'}
-                </div>
-              </div>
-              <div className="rounded-md border border-border bg-card px-3 py-2">
-                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Activity</div>
-                <div className={cn('mt-1 text-sm font-medium', canExportActivity ? 'text-success' : 'text-muted-foreground')}>
-                  {canExportActivity ? 'Visible' : 'Hidden'}
+                <div className="mt-3 grid gap-2">
+                  {platformReadiness.workflow.map((step, index) => (
+                    <DashboardWorkflowStep key={step.label} index={index + 1} {...step} />
+                  ))}
                 </div>
               </div>
             </div>
-            {permissionError && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Permission matrix unavailable; privileged dashboard shortcuts are disabled. {permissionError}
-              </p>
-            )}
-          </div>
+          </details>
 
-          <div className="mt-4 rounded-lg border border-border bg-background p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold">Backy module map</h3>
-                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                  The dashboard now names the control surfaces Backy already has and the parity areas still queued for Wix, Webflow, Squarespace, and WordPress-style coverage.
-                </p>
+          <details className="group border-t border-border bg-background/55" data-testid="dashboard-control-map-details">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+              <span>Dashboard control map</span>
+              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show shortcuts</span>
+              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide shortcuts</span>
+            </summary>
+            <div className="border-t border-border p-4 lg:p-5">
+              <p className="text-sm text-muted-foreground">Jump directly to the dashboard area you need.</p>
+              <nav className="mt-3 flex flex-wrap gap-2" aria-label="Dashboard control map">
+                {DASHBOARD_CONTROL_AREAS.map((area) => (
+                  <a
+                    key={area.title}
+                    href={area.href}
+                    aria-label={`${area.title}: ${area.detail}`}
+                    aria-disabled={isDashboardBusy}
+                    onClick={(event) => {
+                      if (isDashboardBusy) event.preventDefault();
+                    }}
+                    className={cn(
+                      'inline-flex min-h-11 items-center rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium transition hover:border-primary/40 hover:bg-primary/5',
+                      isDashboardBusy && 'pointer-events-none opacity-60',
+                    )}
+                  >
+                    {area.title}
+                  </a>
+                ))}
+              </nav>
+            </div>
+          </details>
+
+          <details
+            className="group border-t border-border bg-background"
+            data-testid="dashboard-rbac-scope"
+            data-dashboard-disclosure="workspace-context"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+              <span>Workspace access and RBAC</span>
+              <span className="flex flex-wrap items-center justify-end gap-2">
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize text-muted-foreground">
+                  {rbacSummary.role} · {rbacSummary.source}
+                </span>
+                <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show access</span>
+                <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide access</span>
+              </span>
+            </summary>
+            <div className="border-t border-border p-4 lg:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold">Workspace RBAC scope</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Dashboard data, creation actions, admin endpoints, settings, users, and activity panels are filtered by the signed-in account.
+                  </p>
+                </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize text-muted-foreground">
+                {rbacSummary.role} · {rbacSummary.source}
+                </span>
               </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-4">
+                <div className="rounded-md border border-border bg-card px-3 py-2">
+                  <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Permissions</div>
+                  <div className="mt-1 text-sm font-medium">
+                    {rbacSummary.allowed === null ? 'Unavailable' : `${rbacSummary.allowed}/${rbacSummary.total} allowed`}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border bg-card px-3 py-2">
+                  <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Users</div>
+                  <div className={cn('mt-1 text-sm font-medium', canViewUsers ? 'text-success' : 'text-muted-foreground')}>
+                    {canViewUsers ? 'Visible' : 'Hidden'}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border bg-card px-3 py-2">
+                  <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Settings</div>
+                  <div className={cn('mt-1 text-sm font-medium', canViewSettings ? 'text-success' : 'text-muted-foreground')}>
+                    {canViewSettings ? 'Visible' : 'Hidden'}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border bg-card px-3 py-2">
+                  <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Activity</div>
+                  <div className={cn('mt-1 text-sm font-medium', canExportActivity ? 'text-success' : 'text-muted-foreground')}>
+                    {canExportActivity ? 'Visible' : 'Hidden'}
+                  </div>
+                </div>
+              </div>
+              {permissionError && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Permission matrix unavailable; privileged dashboard shortcuts are disabled. {permissionError}
+                </p>
+              )}
+            </div>
+          </details>
+
+          <details className="group border-t border-border" data-testid="dashboard-module-map-details">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:px-5 [&::-webkit-details-marker]:hidden">
+              <span>Backy module map</span>
               <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
                 {visibleDashboardModules.filter((module) => module.status === 'Available').length} available · {visibleDashboardModules.filter((module) => module.status === 'Next').length} next
               </span>
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {visibleDashboardModules.map((module) => (
-                <Link
-                  key={module.title}
-                  to={module.href}
-                  search={getDashboardRouteSearch(module.href)}
-                  className="group rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-foreground">{module.title}</div>
-                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{module.detail}</div>
+            </summary>
+            <div className="border-t border-border p-4 lg:p-5">
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                The dashboard names the control surfaces Backy already has and the parity areas still queued for Wix, Webflow, Squarespace, and WordPress-style coverage.
+              </p>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {visibleDashboardModules.map((module) => (
+                  <Link
+                    key={module.title}
+                    to={module.href}
+                    search={getDashboardRouteSearch(module.href)}
+                    className="group rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground">{module.title}</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">{module.detail}</div>
+                      </div>
+                      <span
+                        className={cn(
+                          'shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold',
+                          module.status === 'Available'
+                            ? 'bg-success/10 text-success'
+                            : 'bg-warning/10 text-warning',
+                        )}
+                      >
+                        {module.status}
+                      </span>
                     </div>
-                    <span
-                      className={cn(
-                        'shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold',
-                        module.status === 'Available'
-                          ? 'bg-success/10 text-success'
-                          : 'bg-warning/10 text-warning',
-                      )}
-                    >
-                      {module.status}
-                    </span>
-                  </div>
-                  <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
-                    Open surface <ArrowRight className="size-3" />
-                  </div>
-                </Link>
-              ))}
+                    <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                      Open surface <ArrowRight className="size-3" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
+          </details>
         </section>
 
         <section
@@ -2686,7 +2847,11 @@ function Index() {
               </option>
             ))}
           </select>
-          {isLoading && <span className="text-muted-foreground">Updating dashboard data...</span>}
+          {(isLoading || isHydratingDashboard) && (
+            <span className="text-muted-foreground">
+              {isLoading ? 'Updating dashboard data...' : 'Finishing dashboard data...'}
+            </span>
+          )}
         </div>
 
         <div id="dashboard-stats" className="grid grid-cols-1 gap-4 scroll-mt-24 sm:grid-cols-2 xl:grid-cols-5">
@@ -3470,70 +3635,82 @@ function Index() {
                   </span>
                 </div>
                 <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <Link
-                    to="/pages/new"
-                    search={{ siteId: activeSiteId, template: 'registration' }}
-                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">Registration page</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Seed member/signup capture that hands off to Forms and Users.</div>
-                  </Link>
-                  <Link
-                    to="/pages/new"
-                    search={{ siteId: activeSiteId, template: 'contact' }}
-                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">Contact page</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Create an editable inquiry page connected to Backy form capture.</div>
-                  </Link>
-                  <Link
-                    to="/pages/new"
-                    search={{ siteId: activeSiteId, template: 'storefront' }}
-                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">Storefront page</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Start a public shop surface for products, cart handoff, and checkout intake.</div>
-                  </Link>
-                  <Link
-                    to="/pages/new"
-                    search={{ siteId: activeSiteId, template: 'blog-index' }}
-                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">Blog index page</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Seed a post list page with taxonomy, feeds, and article route handoff.</div>
-                  </Link>
-                  <Link
-                    to="/products"
-                    search={{ siteId: activeSiteId }}
-                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">Product catalog</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Manage pricing, inventory, product media, delivery, and storefront API data.</div>
-                  </Link>
-                  <Link
-                    to="/orders"
-                    search={{ siteId: activeSiteId }}
-                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">Order queue</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Review checkout intake, payment state, fulfillment, refunds, and support notes.</div>
-                  </Link>
-                  <Link
-                    to="/forms"
-                    search={{ siteId: activeSiteId }}
-                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">Form builder</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Configure registration, contact, lead, and custom submission workflows.</div>
-                  </Link>
-                  <Link
-                    to="/users"
-                    search={{ siteId: activeSiteId }}
-                    className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
-                  >
-                    <div className="text-sm font-semibold text-foreground">Member access</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">Manage roles, invites, registration handoff, and auth/provider readiness.</div>
-                  </Link>
+                  {canEditPages && (
+                    <>
+                      <Link
+                        to="/pages/new"
+                        search={{ siteId: activeSiteId, template: 'registration' }}
+                        className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">Registration page</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">Seed member/signup capture that hands off to Forms and Users.</div>
+                      </Link>
+                      <Link
+                        to="/pages/new"
+                        search={{ siteId: activeSiteId, template: 'contact' }}
+                        className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">Contact page</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">Create an editable inquiry page connected to Backy form capture.</div>
+                      </Link>
+                      <Link
+                        to="/pages/new"
+                        search={{ siteId: activeSiteId, template: 'storefront' }}
+                        className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">Storefront page</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">Start a public shop surface for products, cart handoff, and checkout intake.</div>
+                      </Link>
+                      <Link
+                        to="/pages/new"
+                        search={{ siteId: activeSiteId, template: 'blog-index' }}
+                        className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">Blog index page</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">Seed a post list page with taxonomy, feeds, and article route handoff.</div>
+                      </Link>
+                    </>
+                  )}
+                  {canViewCommerce && (
+                    <>
+                      <Link
+                        to="/products"
+                        search={{ siteId: activeSiteId }}
+                        className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">Product catalog</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">Manage pricing, inventory, product media, delivery, and storefront API data.</div>
+                      </Link>
+                      <Link
+                        to="/orders"
+                        search={{ siteId: activeSiteId }}
+                        className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                      >
+                        <div className="text-sm font-semibold text-foreground">Order queue</div>
+                        <div className="mt-1 text-xs leading-5 text-muted-foreground">Review checkout intake, payment state, fulfillment, refunds, and support notes.</div>
+                      </Link>
+                    </>
+                  )}
+                  {canViewForms && (
+                    <Link
+                      to="/forms"
+                      search={{ siteId: activeSiteId }}
+                      className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                    >
+                      <div className="text-sm font-semibold text-foreground">Form builder</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">Configure registration, contact, lead, and custom submission workflows.</div>
+                    </Link>
+                  )}
+                  {canViewUsers && (
+                    <Link
+                      to="/users"
+                      search={{ siteId: activeSiteId }}
+                      className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
+                    >
+                      <div className="text-sm font-semibold text-foreground">Member access</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">Manage roles, invites, registration handoff, and auth/provider readiness.</div>
+                    </Link>
+                  )}
                 </div>
               </div>
             </section>
@@ -3603,6 +3780,7 @@ function Index() {
                     <Link
                       key={issue.id}
                       to={issue.to}
+                      search={getDashboardRouteSearch(issue.to)}
                       className={cn('block rounded-lg border px-3 py-3 text-sm transition-colors hover:bg-accent/40', issueTone[issue.severity])}
                     >
                       <div className="flex items-start justify-between gap-3">

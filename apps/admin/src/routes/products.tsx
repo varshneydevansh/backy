@@ -12,6 +12,7 @@ import {
   ExternalLink,
   FileText,
   Image as ImageIcon,
+  MoreHorizontal,
   Package,
   Pause,
   Play,
@@ -70,6 +71,7 @@ import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
 import type { SiteSettings } from '@backy-cms/core';
 
@@ -109,6 +111,16 @@ const PRODUCT_CONTROL_AREAS = [
     detail: 'Pricing, SKU, media, delivery, tax, stock, SEO, and status controls.',
     href: '#products-editor',
   },
+] as const;
+
+const PRODUCT_EDITOR_SECTIONS = [
+  { id: 'products-editor-identity', label: 'Basics' },
+  { id: 'products-editor-variants', label: 'Variants' },
+  { id: 'products-editor-fulfillment', label: 'Fulfillment' },
+  { id: 'products-editor-subscriptions', label: 'Subscriptions' },
+  { id: 'products-editor-provider-sync', label: 'Provider sync' },
+  { id: 'products-editor-media', label: 'Media' },
+  { id: 'products-editor-publishing', label: 'Publishing' },
 ] as const;
 
 const PRODUCT_API_CONTRACTS = [
@@ -261,6 +273,8 @@ const PRODUCT_PROVIDER_CERTIFICATION_GROUPS = [
 ] as const;
 
 const PRODUCT_PROVIDER_CERTIFICATION_OPERATOR_GATE = 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification';
+const PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV = 'BACKY_COMMERCE_CERTIFICATION_OUTPUT';
+const PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-commerce-provider-certification.json';
 const PRODUCT_PROVIDER_CERTIFICATION_PREFLIGHT_GATES = [
   'npm run test:commerce-provider-certification-preflight-contract',
   'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1 npm run doctor:release-certification',
@@ -462,6 +476,16 @@ interface ProductProviderCertificationEvidencePacket {
   generatedAt: string;
   selectedSiteId: string;
   status: ProductProviderCertificationEvidencePacketStatus;
+  operatorNextAction: {
+    status: ProductProviderCertificationEvidencePacketStatus;
+    label: string;
+    detail: string;
+    command: string;
+    missingFamilies: string[];
+    missingScenarios: string[];
+    artifactEnv: typeof PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV;
+    artifactPath: typeof PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT;
+  };
   selectedFamilies: string[];
   selectedProviderAliases: Record<string, string>;
   runtimeReadiness: {
@@ -1671,6 +1695,7 @@ function ProductsRoute() {
   const [productLifecycleActionMessage, setProductLifecycleActionMessage] = useState<string | null>(null);
   const [selectedCustomerProfileId, setSelectedCustomerProfileId] = useState<string | null>(null);
   const [customerProfileDraft, setCustomerProfileDraft] = useState<CustomerProfileDraft>(() => customerProfileToDraft(null));
+  const hydratedCustomerProfileIdRef = useRef<string | null>(null);
   const [productPagination, setProductPagination] = useState<CollectionRecordPagination | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(routeSearch.productId || null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
@@ -1725,18 +1750,23 @@ function ProductsRoute() {
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canEditCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canConfigureCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.configure', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canDeleteCommerce = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'commerce.delete', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canEditCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canExportCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canDeleteCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canViewMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canCreateMedia = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
+  const canUseProductRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseProductRoleDefaults;
+  const isProductPermissionAllowed = (key: ProductPermissionKey) => (
+    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, PRODUCT_PERMISSION_ROLE_DEFAULTS)
+    || (canUseProductRoleDefaults && Boolean(currentAdmin && PRODUCT_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canViewCommerce = isProductPermissionAllowed('commerce.view');
+  const canEditCommerce = isProductPermissionAllowed('commerce.edit');
+  const canConfigureCommerce = isProductPermissionAllowed('commerce.configure');
+  const canDeleteCommerce = isProductPermissionAllowed('commerce.delete');
+  const canViewCollections = isProductPermissionAllowed('collections.view');
+  const canEditCollections = isProductPermissionAllowed('collections.edit');
+  const canExportCollections = isProductPermissionAllowed('collections.export');
+  const canDeleteCollections = isProductPermissionAllowed('collections.delete');
+  const canViewMedia = isProductPermissionAllowed('media.view');
+  const canCreateMedia = isProductPermissionAllowed('media.create');
+  const canEditPages = isProductPermissionAllowed('pages.edit');
   const canViewProducts = canViewCommerce && canViewCollections;
   const canEditProducts = canEditCommerce && canEditCollections;
   const canConfigureProducts = canConfigureCommerce && canEditCollections;
@@ -1767,8 +1797,8 @@ function ProductsRoute() {
   const mediaViewPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.view', PRODUCT_PERMISSION_ROLE_DEFAULTS);
   const mediaCreatePermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.create', PRODUCT_PERMISSION_ROLE_DEFAULTS);
   const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
-  const isProductsAccessBusy = isProductsBusy || isPermissionMatrixPending;
-  const isProductPageTemplateActionDisabled = isPermissionMatrixPending || !canEditPages;
+  const isProductsAccessBusy = isProductsBusy;
+  const isProductPageTemplateActionDisabled = !canEditPages;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -2177,6 +2207,47 @@ function ProductsRoute() {
   );
   const hiddenSelectedProductCount = Math.max(0, selectedLoadedProducts.length - selectedVisibleProducts.length);
   const areAllVisibleProductsSelected = filteredProducts.length > 0 && selectedVisibleProducts.length === filteredProducts.length;
+  const productsBulkActionStatusId = 'products-bulk-action-status';
+  const selectedProductActionLabel = `${selectedLoadedProducts.length} selected product${selectedLoadedProducts.length === 1 ? '' : 's'}`;
+  const visibleProductActionLabel = `${filteredProducts.length} visible product${filteredProducts.length === 1 ? '' : 's'}`;
+  const productsBulkBusyDisabledReason = isProductsAccessBusy ? 'Product catalog is busy.' : '';
+  const productsBulkViewDisabledReason = !canViewProducts
+    ? viewPermissionTitle || 'Your account cannot view products.'
+    : '';
+  const productsBulkEditDisabledReason = !canEditProducts
+    ? editPermissionTitle || 'Your account cannot edit products.'
+    : '';
+  const productsBulkExportPermissionDisabledReason = !canExportProducts
+    ? exportPermissionTitle || 'Your account cannot export products.'
+    : '';
+  const productsBulkDeletePermissionDisabledReason = !canDeleteProducts
+    ? deletePermissionTitle || 'Your account cannot delete products.'
+    : '';
+  const productsBulkSelectionDisabledReason = filteredProducts.length === 0
+    ? 'No visible products to select.'
+    : productsBulkBusyDisabledReason || productsBulkViewDisabledReason;
+  const productsBulkNoSelectionDisabledReason = selectedLoadedProducts.length === 0
+    ? 'Select one or more loaded products first.'
+    : '';
+  const productsBulkStatusDisabledReason = productsBulkNoSelectionDisabledReason ||
+    productsBulkBusyDisabledReason ||
+    productsBulkEditDisabledReason;
+  const productsBulkExportDisabledReason = productsBulkNoSelectionDisabledReason ||
+    productsBulkBusyDisabledReason ||
+    productsBulkExportPermissionDisabledReason;
+  const productsBulkClearDisabledReason = productsBulkNoSelectionDisabledReason || productsBulkBusyDisabledReason;
+  const productsBulkDeleteDisabledReason = productsBulkNoSelectionDisabledReason ||
+    productsBulkBusyDisabledReason ||
+    productsBulkDeletePermissionDisabledReason;
+  const productsBulkActionStatus = [
+    productsBulkSelectionDisabledReason ? `Select visible unavailable: ${productsBulkSelectionDisabledReason}` : `Select visible available for ${visibleProductActionLabel}.`,
+    productsBulkStatusDisabledReason ? `Publish selected unavailable: ${productsBulkStatusDisabledReason}` : `Publish selected available for ${selectedProductActionLabel}.`,
+    productsBulkStatusDisabledReason ? `Draft selected unavailable: ${productsBulkStatusDisabledReason}` : `Draft selected available for ${selectedProductActionLabel}.`,
+    productsBulkStatusDisabledReason ? `Archive selected unavailable: ${productsBulkStatusDisabledReason}` : `Archive selected available for ${selectedProductActionLabel}.`,
+    productsBulkExportDisabledReason ? `Export selected unavailable: ${productsBulkExportDisabledReason}` : `Export selected available for ${selectedProductActionLabel}.`,
+    productsBulkClearDisabledReason ? `Clear selection unavailable: ${productsBulkClearDisabledReason}` : `Clear selection available for ${selectedProductActionLabel}.`,
+    productsBulkDeleteDisabledReason ? `Delete selected unavailable: ${productsBulkDeleteDisabledReason}` : `Delete selected available for ${selectedProductActionLabel}.`,
+  ].join(' ');
   const metrics = useMemo(() => ({
     total: totalProductCount,
     published: products.filter((product) => product.status === 'published').length,
@@ -2771,12 +2842,48 @@ function ProductsRoute() {
         : productProviderCertificationEvidence.status === 'ready'
           ? 'evidence-complete'
           : 'needs-scenario-evidence';
+    const missingScenarios = productProviderCertificationEvidence.coverage.missing;
+    const operatorNextAction = status === 'no-family-selected'
+      ? {
+          label: 'Select live provider families',
+          detail: 'Choose checkout, tax, shipping, discount, catalog sync, subscription, or webhook families before copying the guarded certification command.',
+          command: '# Select at least one commerce provider selector before running certification.',
+        }
+      : status === 'needs-credentials'
+        ? {
+            label: 'Configure live provider credentials',
+            detail: missingSelectedFamilies.length > 0
+              ? `Populate runtime aliases for selected families: ${missingSelectedFamilies.join(', ')}.`
+              : 'Load runtime Settings/CI environment aliases so Backy can prove provider readiness.',
+            command: 'npm run doctor:release-certification && npm run ci:commerce-provider-certification',
+          }
+        : status === 'needs-scenario-evidence'
+          ? {
+              label: 'Attach live scenario evidence',
+              detail: missingScenarios.length > 0
+                ? `Capture redacted evidence for: ${missingScenarios.join(', ')}.`
+                : 'Run the selected live provider scenarios and attach the redacted packet.',
+              command: 'npm run ci:commerce-provider-certification',
+            }
+          : {
+              label: 'Attach certification artifact',
+              detail: `Store the redacted artifact at ${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT} and expose it through ${PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV}.`,
+              command: 'npm run doctor:release-certification',
+            };
 
     return {
       schemaVersion: 'backy.commerce-provider-certification-evidence-packet.v1',
       generatedAt: new Date().toISOString(),
       selectedSiteId: activeSiteId,
       status,
+      operatorNextAction: {
+        status,
+        ...operatorNextAction,
+        missingFamilies: missingSelectedFamilies,
+        missingScenarios,
+        artifactEnv: PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV,
+        artifactPath: PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT,
+      },
       selectedFamilies: selectedArtifacts.map((artifact) => artifact.key),
       selectedProviderAliases: Object.fromEntries(selectedArtifacts.map((artifact) => [
         artifact.key,
@@ -2837,6 +2944,7 @@ function ProductsRoute() {
     activeSiteId,
     productProviderCertificationEvidence.scenarios,
     productProviderCertificationEvidence.status,
+    productProviderCertificationEvidence.coverage.missing,
     providerCertificationCommand,
     providerCertificationCommandOptions.catalogProvider,
     providerCertificationCommandOptions.certifyCatalog,
@@ -2863,6 +2971,50 @@ function ProductsRoute() {
     providerRuntimeEvidence.taxConfigured,
     providerRuntimeEvidence.webhookSecretConfigured,
   ]);
+  const providerCertificationSelectedFamilySummary = providerCertificationEvidencePacket.selectedFamilies.length > 0
+    ? providerCertificationEvidencePacket.selectedFamilies.join(', ')
+    : 'Select checkout, tax, shipping, discount, catalog sync, subscription, or webhook families.';
+  const providerCertificationRuntimeGapDetail = providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.length > 0
+    ? `Selected gaps: ${providerCertificationEvidencePacket.runtimeReadiness.missingSelectedFamilies.join(', ')}`
+    : providerRuntimeEvidence.missingFamilies.length > 0
+      ? `Unconfigured families: ${providerRuntimeEvidence.missingFamilies.slice(0, 5).join(', ')}`
+      : 'No runtime credential gaps detected for commerce families.';
+  const providerCertificationReadinessItems = [
+    {
+      label: 'Selected families',
+      value: String(providerCertificationEvidencePacket.selectedFamilies.length),
+      detail: providerCertificationSelectedFamilySummary,
+    },
+    {
+      label: 'Runtime credentials',
+      value: providerRuntimeEvidence.loaded
+        ? `${providerRuntimeEvidence.configuredFamilies.length}/${providerRuntimeEvidence.configuredFamilies.length + providerRuntimeEvidence.missingFamilies.length} ready`
+        : 'not loaded',
+      detail: providerCertificationRuntimeGapDetail,
+    },
+    {
+      label: 'Scenario coverage',
+      value: `${productProviderCertificationEvidence.coverage.covered}/${productProviderCertificationEvidence.coverage.total}`,
+      detail: productProviderCertificationEvidence.coverage.missing.length > 0
+        ? `Missing: ${productProviderCertificationEvidence.coverage.missing.join(', ')}`
+        : 'All product provider scenarios have evidence hooks.',
+    },
+    {
+      label: 'Artifact output',
+      value: PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV,
+      detail: PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT,
+    },
+    {
+      label: 'Gate command',
+      value: 'ci:commerce-provider-certification',
+      detail: 'Run npm run ci:commerce-provider-certification after live env aliases are populated.',
+    },
+    {
+      label: 'Required site selector',
+      value: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+      detail: activeSiteId,
+    },
+  ];
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -3732,6 +3884,9 @@ function ProductsRoute() {
   }, [activeSiteId, canViewCommerce, selectedProduct?.id]);
 
   useEffect(() => {
+    const selectedProfileId = selectedCustomerProfile?.id || null;
+    if (hydratedCustomerProfileIdRef.current === selectedProfileId) return;
+    hydratedCustomerProfileIdRef.current = selectedProfileId;
     setCustomerProfileDraft(customerProfileToDraft(selectedCustomerProfile));
   }, [selectedCustomerProfile]);
 
@@ -4410,6 +4565,8 @@ function ProductsRoute() {
       setCustomerProfiles((current) => current.map((customer) => (
         customer.id === updated.id ? updated : customer
       )));
+      hydratedCustomerProfileIdRef.current = updated.id;
+      setCustomerProfileDraft(customerProfileToDraft(updated));
       setSelectedCustomerProfileId(updated.id);
       setNotice('Customer profile updated.');
     } catch (saveError) {
@@ -4814,26 +4971,15 @@ function ProductsRoute() {
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
               Control sellable product data for every storefront: schema, pricing, inventory, media, delivery, tax, SEO, publishing, and public API handoff.
             </p>
+            {(canUseProductRoleDefaults || isPermissionMatrixPending) && (
+              <p className="mt-1 text-xs text-muted-foreground" data-testid="products-permission-sync-state">
+                {canUseProductRoleDefaults
+                  ? 'Using role defaults while detailed commerce permissions sync.'
+                  : 'Loading detailed commerce permissions before enabling role-specific controls.'}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => void copyProductHandoff()} disabled={isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
-              Copy manifest
-            </Button>
-            <Button variant="outline" onClick={downloadProductHandoff} disabled={isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
-              Download JSON
-            </Button>
-            <Button variant="outline" onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
-              Export CSV
-            </Button>
-            <Button variant="outline" onClick={downloadProductImportTemplate} disabled={!productCollection || isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
-              CSV template
-            </Button>
-            <Button variant="outline" onClick={() => productImportInputRef.current?.click()} disabled={!productCollection || isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
-              {isImportingProducts ? 'Importing...' : 'Import CSV'}
-            </Button>
-            <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
-              Storefront page
-            </Button>
             {!productCollection ? (
               <Button onClick={() => void createProductsCollection()} disabled={isProductsAccessBusy || !canConfigureProducts} title={!canConfigureProducts ? configurePermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
                 {isSaving ? 'Setting up...' : 'Set up products'}
@@ -4846,85 +4992,191 @@ function ProductsRoute() {
             <Button onClick={() => void loadProducts()} disabled={isProductsAccessBusy || !canViewProducts} title={!canViewProducts ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="rounded-lg border border-border bg-background p-4">
-            <h3 className="text-sm font-semibold">Catalog readiness</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Checks whether product data can be listed, priced, merchandised, published, and consumed by custom storefronts.
-            </p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn('h-full rounded-full', catalogReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
-                style={{ width: `${catalogReadiness.score}%` }}
-              />
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {catalogReadiness.checks.map((check) => (
-                <ProductReadinessCheck key={check.label} {...check} />
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-background p-4">
-            <div className="flex items-center gap-2">
-              <ShoppingBag className="size-4 text-primary" />
-              <h3 className="text-sm font-semibold">Storefront workflow</h3>
-            </div>
-            <div className="mt-3 grid gap-2">
-              {catalogReadiness.workflow.map((step, index) => (
-                <ProductWorkflowStep key={step.label} index={index + 1} {...step} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Product control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, storefront API, catalog health, product grid, and editor controls.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-            {PRODUCT_CONTROL_AREAS.map((area) => (
-              <a
-                key={area.title}
-                href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+            <details className="group relative" data-testid="products-command-secondary-actions">
+              <summary
+                className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+                aria-label="More catalog actions"
               >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-              </a>
-            ))}
+                <MoreHorizontal className="size-4" />
+                More actions
+                <span className="sr-only">Copy manifest, Download JSON, Export CSV, CSV template, Import CSV, and Storefront page</span>
+              </summary>
+              <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56">
+                <button
+                  type="button"
+                  onClick={() => void copyProductHandoff()}
+                  disabled={isProductsAccessBusy || !canExportProducts}
+                  title={!canExportProducts ? exportPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="products-command-copy-manifest"
+                >
+                  <Copy className="size-4" />
+                  Copy manifest
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadProductHandoff}
+                  disabled={isProductsAccessBusy || !canExportProducts}
+                  title={!canExportProducts ? exportPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="products-command-download-json"
+                >
+                  <Download className="size-4" />
+                  Download JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={exportProductsCsv}
+                  disabled={filteredProducts.length === 0 || isProductsAccessBusy || !canExportProducts}
+                  title={!canExportProducts ? exportPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="products-command-export-csv"
+                >
+                  <Download className="size-4" />
+                  Export CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadProductImportTemplate}
+                  disabled={!productCollection || isProductsAccessBusy || !canEditProducts}
+                  title={!canEditProducts ? editPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="products-command-csv-template"
+                >
+                  <FileText className="size-4" />
+                  CSV template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => productImportInputRef.current?.click()}
+                  disabled={!productCollection || isProductsAccessBusy || !canEditProducts}
+                  title={!canEditProducts ? editPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="products-command-import-csv"
+                >
+                  <Upload className="size-4" />
+                  {isImportingProducts ? 'Importing...' : 'Import CSV'}
+                </button>
+                <button
+                  type="button"
+                  onClick={openStorefrontPage}
+                  disabled={isProductsAccessBusy || !canEditPages}
+                  title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                  className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="products-command-storefront-page"
+                >
+                  <Sparkles className="size-4" />
+                  Storefront page
+                </button>
+              </div>
+            </details>
           </div>
         </div>
+
+        <details className="group mt-5 overflow-hidden rounded-lg border border-border bg-background" data-testid="products-readiness-details">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>Catalog readiness, workflow, and navigation</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show details</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+          </summary>
+          <div className="border-t border-border p-4">
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+              <div className="rounded-lg border border-border bg-background p-4">
+                <h3 className="text-sm font-semibold">Catalog readiness</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Checks whether product data can be listed, priced, merchandised, published, and consumed by custom storefronts.
+                </p>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn('h-full rounded-full', catalogReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500')}
+                    style={{ width: `${catalogReadiness.score}%` }}
+                  />
+                </div>
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {catalogReadiness.checks.map((check) => (
+                    <ProductReadinessCheck key={check.label} {...check} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-4">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Storefront workflow</h3>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {catalogReadiness.workflow.map((step, index) => (
+                    <ProductWorkflowStep key={step.label} index={index + 1} {...step} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <details
+              className="group mt-4 overflow-hidden rounded-lg border border-border bg-background"
+              data-default-collapsed="true"
+              data-testid="products-control-map"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">Product control map</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">Jump to site scope, storefront API, catalog health, product grid, and editor controls.</span>
+                </span>
+                <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show map</span>
+                <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide map</span>
+              </summary>
+              <div className="grid gap-2 border-t border-border p-4 md:grid-cols-2 xl:grid-cols-5">
+                {PRODUCT_CONTROL_AREAS.map((area) => (
+                  <a
+                    key={area.title}
+                    href={area.href}
+                    className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                  </a>
+                ))}
+              </div>
+            </details>
+          </div>
+        </details>
 
         {(frontendProductTemplates.length > 0 || frontendDesignLoading || frontendDesignError) && (
-          <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/50 p-4" data-testid="products-frontend-template-options">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Frontend design products</h3>
-                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          <details
+            className="group mt-4 overflow-hidden rounded-lg border border-teal-200 bg-teal-50/50"
+            data-default-collapsed="true"
+            data-testid="products-frontend-template-options"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <span>
+                <span className="block text-sm font-semibold text-foreground">Frontend design products</span>
+                <span className="mt-1 block max-w-3xl text-sm text-muted-foreground">
                   Seed products from the connected frontend contract while preserving source, chrome, tokens, route pattern, and product binding hints for custom storefronts.
-                </p>
-              </div>
-              <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-teal-700">
-                {frontendDesign?.source.label || frontendDesign?.source.type || 'Frontend contract'}
+                </span>
               </span>
-            </div>
-            {frontendDesignLoading ? (
-              <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                <RefreshCw className="size-3.5 animate-spin" />
-                Loading captured product templates...
-              </div>
-            ) : null}
-            {frontendDesignError ? (
-              <div className="mt-3 flex items-center gap-2 text-xs text-destructive">
-                <AlertTriangle className="size-3.5" />
-                {frontendDesignError}
-              </div>
-            ) : null}
-            {frontendProductTemplateBlueprints.length > 0 ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <span className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <span className="rounded-full bg-background px-2.5 py-1 text-xs font-medium text-teal-700">
+                  {frontendDesign?.source.label || frontendDesign?.source.type || 'Frontend contract'}
+                </span>
+                <span className="rounded-md bg-background px-2 py-1 text-xs font-medium text-teal-700 group-open:hidden">Show templates</span>
+                <span className="hidden rounded-md bg-background px-2 py-1 text-xs font-medium text-teal-700 group-open:inline-flex">Hide templates</span>
+              </span>
+            </summary>
+            <div className="border-t border-teal-200 p-4">
+              {frontendDesignLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <RefreshCw className="size-3.5 animate-spin" />
+                  Loading captured product templates...
+                </div>
+              ) : null}
+              {frontendDesignError ? (
+                <div className="flex items-center gap-2 text-xs text-destructive">
+                  <AlertTriangle className="size-3.5" />
+                  {frontendDesignError}
+                </div>
+              ) : null}
+              {frontendProductTemplateBlueprints.length > 0 ? (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {frontendProductTemplateBlueprints.map(({ template, blueprint }) => {
                   const designValues = buildFrontendProductTemplateValues(template, frontendDesign);
                   const values = {
@@ -5032,21 +5284,48 @@ function ProductsRoute() {
                     </div>
                   );
                 })}
-              </div>
-            ) : !frontendDesignLoading && !frontendDesignError ? (
-              <p className="mt-3 text-xs text-muted-foreground">The current frontend contract has no product templates yet.</p>
-            ) : null}
-          </div>
+                </div>
+              ) : !frontendDesignLoading && !frontendDesignError ? (
+                <p className="text-xs text-muted-foreground">The current frontend contract has no product templates yet.</p>
+              ) : null}
+            </div>
+          </details>
         )}
       </section>
 
       {productCollection && (
-        <Panel id="products-api" className="mb-6 scroll-mt-24">
-          <PanelHeader
-            title="Storefront API"
-            description="Use these endpoints from any frontend to list and render sellable products."
-            icon={<Code2 className="size-4" />}
-            action={
+        <details
+          id="products-api"
+          className="group mb-6 scroll-mt-24 overflow-hidden rounded-lg border border-border bg-card"
+          data-testid="products-storefront-api-details"
+          data-disclosure="products-storefront-api-handoff"
+        >
+          <summary className="flex cursor-pointer list-none flex-col gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-row sm:items-center sm:justify-between [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0">
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Code2 className="size-4 text-primary" />
+                Storefront API and provider handoff
+              </span>
+              <span className="mt-1 block max-w-3xl text-sm text-muted-foreground">
+                Expand for product API endpoints, response contracts, storefront page templates, checkout/order intake, and live provider certification runbooks.
+              </span>
+            </span>
+            <span className="flex shrink-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className={cn(
+                'rounded-md px-2 py-1 font-medium',
+                productApiReady ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+              )}
+              >
+                {productApiReady ? 'API ready' : 'Schema needs sync'}
+              </span>
+              <span className="rounded-md bg-muted px-2 py-1">{products.filter((product) => product.status === 'published').length} published</span>
+              <span className="rounded-md bg-muted px-2 py-1">{orderIntakeReady ? 'Order intake ready' : 'Orders need setup'}</span>
+              <span className="rounded-md bg-muted px-2 py-1 group-open:hidden">Show handoff</span>
+              <span className="hidden rounded-md bg-muted px-2 py-1 group-open:inline-flex">Hide handoff</span>
+            </span>
+          </summary>
+          <div className="border-t border-border p-4">
+            <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 {!productApiReady && (
                   <Button
@@ -5093,10 +5372,6 @@ function ProductsRoute() {
                   Open API
                 </a>
               </div>
-            }
-          />
-          <PanelContent>
-            <div className="space-y-3">
               <div className="grid gap-2 lg:grid-cols-2">
                 <ProductApiSnippet label="List products" value={storefrontApiUrl} />
                 <ProductApiSnippet label="Product by slug" value={storefrontProductDetailUrl} />
@@ -5339,39 +5614,98 @@ function ProductsRoute() {
                       <div className="mt-1 text-muted-foreground">Server env only</div>
                     </div>
                   </div>
-                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="products-provider-certification-runbook">
-                    <div className="font-medium text-foreground">Live provider runbook</div>
-                    <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
-                      {providerCertificationSummary.operatorGate}
+                  <div className="mt-3 rounded-md border border-border bg-background p-3 text-xs" data-testid="products-provider-certification-readiness-summary">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-foreground">Product certification readiness summary</div>
+                        <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                          One-screen operator summary for the remaining Products live-provider gate before opening the runbook, env template, and evidence packet.
+                        </p>
+                      </div>
+                      <span className={cn(
+                        'rounded-full px-2.5 py-1 text-[11px] font-semibold',
+                        providerCertificationEvidencePacket.status === 'evidence-complete'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : providerCertificationEvidencePacket.status === 'needs-credentials'
+                            ? 'bg-red-50 text-red-700'
+                            : 'bg-amber-50 text-amber-700',
+                      )}>
+                        {providerCertificationEvidencePacket.status}
+                      </span>
                     </div>
-                    <div className="mt-3 grid gap-2 md:grid-cols-3">
-                      <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preflight gates</div>
-                        <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
-                          {providerCertificationSummary.preflightGates.map((gate) => (
-                            <li key={gate} className="font-mono">{gate}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Provider selectors</div>
-                        <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
-                          {providerCertificationSummary.providerSelectors.map((selector) => (
-                            <li key={selector} className="font-mono">{selector}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidence to attach</div>
-                        <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
-                          {providerCertificationSummary.evidenceExpectations.map((expectation) => (
-                            <li key={expectation}>{expectation}</li>
-                          ))}
-                        </ul>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                      {providerCertificationReadinessItems.map((item) => (
+                        <div key={item.label} className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{item.label}</div>
+                          <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
+                          <div className="mt-1 break-words text-[11px] leading-4 text-muted-foreground">{item.detail}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      <span className="rounded-md border border-border bg-muted/20 px-2 py-1">Secret boundary: no commerce provider credentials, customer payloads, private order payloads, or webhook bodies are copied.</span>
+                      <span className="rounded-md border border-border bg-muted/20 px-2 py-1">Artifact env: <span className="font-mono">{PRODUCT_PROVIDER_CERTIFICATION_OUTPUT_ENV}</span></span>
+                    </div>
+                    <div
+                      className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+                      data-testid="products-provider-certification-next-action"
+                      data-status={providerCertificationEvidencePacket.operatorNextAction.status}
+                    >
+                      <div className="font-semibold">Next operator action</div>
+                      <div className="mt-1 font-medium">{providerCertificationEvidencePacket.operatorNextAction.label}</div>
+                      <p className="mt-1 leading-5">{providerCertificationEvidencePacket.operatorNextAction.detail}</p>
+                      <div className="mt-2 break-words rounded border border-amber-200 bg-background/80 px-2 py-1.5 font-mono text-[11px]">
+                        {providerCertificationEvidencePacket.operatorNextAction.command}
                       </div>
                     </div>
                   </div>
-                  <div className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="products-provider-certification-command-builder">
+                  <details
+                    className="group mt-3 overflow-hidden rounded-md border border-border bg-background text-xs"
+                    data-default-collapsed="true"
+                    data-testid="products-provider-certification-operator-details"
+                  >
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                      <span>
+                        <span className="block font-medium text-foreground">Runbook, command builder, and evidence packet</span>
+                        <span className="mt-1 block leading-5 text-muted-foreground">Open only when certifying live commerce providers or attaching release evidence.</span>
+                      </span>
+                      <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground group-open:hidden">Show details</span>
+                      <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground group-open:inline-flex">Hide details</span>
+                    </summary>
+                    <div className="border-t border-border p-3">
+                      <div className="rounded-md border border-border bg-background px-3 py-2" data-testid="products-provider-certification-runbook">
+                        <div className="font-medium text-foreground">Live provider runbook</div>
+                        <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+                          {providerCertificationSummary.operatorGate}
+                        </div>
+                        <div className="mt-3 grid gap-2 md:grid-cols-3">
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preflight gates</div>
+                            <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                              {providerCertificationSummary.preflightGates.map((gate) => (
+                                <li key={gate} className="font-mono">{gate}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Provider selectors</div>
+                            <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                              {providerCertificationSummary.providerSelectors.map((selector) => (
+                                <li key={selector} className="font-mono">{selector}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidence to attach</div>
+                            <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                              {providerCertificationSummary.evidenceExpectations.map((expectation) => (
+                                <li key={expectation}>{expectation}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="products-provider-certification-command-builder">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <div className="font-medium text-foreground">Provider certification command builder</div>
@@ -5686,7 +6020,7 @@ function ProductsRoute() {
                       </div>
                     </div>
                   </div>
-                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="products-provider-runtime-evidence">
+                      <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="products-provider-runtime-evidence">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <div className="font-medium text-foreground">Runtime provider evidence</div>
@@ -5720,7 +6054,7 @@ function ProductsRoute() {
                       {providerRuntimeEvidence.secretHandling}
                     </div>
                   </div>
-                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="products-provider-certification-evidence">
+                      <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="products-provider-certification-evidence">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <div className="font-medium text-foreground">Product provider certification evidence</div>
@@ -5771,7 +6105,7 @@ function ProductsRoute() {
                       {productProviderCertificationEvidence.secretHandling}
                     </div>
                   </div>
-                  <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="products-provider-certification-evidence-packet">
+                      <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="products-provider-certification-evidence-packet">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <div className="font-medium text-foreground">Certification evidence packet</div>
@@ -5886,31 +6220,33 @@ function ProductsRoute() {
                       {providerCertificationEvidencePacket.secretHandling}
                     </div>
                   </div>
-                  <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {providerCertificationSummary.groups.map((group) => (
-                      <div key={group.family} className="rounded-md border border-border bg-background px-3 py-2 text-xs">
-                        <div className="font-medium text-foreground">{group.family}</div>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {group.providers.map((provider) => (
-                            <span key={`${group.family}-${provider}`} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                              {provider}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs</div>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {group.requiredInputs.map((input) => (
-                              <span key={`${group.family}-${input}`} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                                {input}
-                              </span>
-                            ))}
+                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {providerCertificationSummary.groups.map((group) => (
+                          <div key={group.family} className="rounded-md border border-border bg-background px-3 py-2">
+                            <div className="font-medium text-foreground">{group.family}</div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {group.providers.map((provider) => (
+                                <span key={`${group.family}-${provider}`} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                  {provider}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="mt-2 rounded-md border border-border bg-muted/30 px-2 py-1.5">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs</div>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {group.requiredInputs.map((input) => (
+                                  <span key={`${group.family}-${input}`} className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                    {input}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="mt-2 text-[11px] leading-4 text-muted-foreground">{group.evidence}</div>
                           </div>
-                        </div>
-                        <div className="mt-2 text-[11px] leading-4 text-muted-foreground">{group.evidence}</div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  </details>
                 </div>
               </div>
               <div id="products-commerce-analytics" data-testid="products-commerce-analytics" className="scroll-mt-24 rounded-lg border border-border bg-background p-4">
@@ -6468,8 +6804,8 @@ function ProductsRoute() {
                 </div>
               </div>
             </div>
-          </PanelContent>
-        </Panel>
+          </div>
+        </details>
       )}
 
       <div id="products-site" className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 scroll-mt-24">
@@ -6638,10 +6974,17 @@ function ProductsRoute() {
                     </Button>
                   )}
                 </div>
+                <span id={productsBulkActionStatusId} className="sr-only" data-testid="products-bulk-action-status" aria-live="polite">
+                  {productsBulkActionStatus}
+                </span>
                 {selectedLoadedProducts.length > 0 && (
                   <div
                     className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm"
+                    role="group"
+                    aria-label="Selected product bulk actions"
+                    aria-describedby={productsBulkActionStatusId}
                     data-testid="products-bulk-toolbar"
+                    data-action-status={productsBulkActionStatus}
                   >
                     <div>
                       <div className="font-medium text-foreground" data-testid="products-bulk-selection-summary">
@@ -6661,8 +7004,12 @@ function ProductsRoute() {
                       <Button
                         size="sm"
                         onClick={() => void bulkUpdateProductStatus('published')}
-                        disabled={isProductsAccessBusy || !canEditProducts}
-                        title={!canEditProducts ? editPermissionTitle : undefined}
+                        disabled={Boolean(productsBulkStatusDisabledReason)}
+                        title={productsBulkStatusDisabledReason || undefined}
+                        aria-describedby={productsBulkActionStatusId}
+                        data-action-state={productsBulkStatusDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsBulkActionStatus}
+                        data-disabled-reason={productsBulkStatusDisabledReason || undefined}
                         iconStart={<CheckCircle2 className="size-4" />}
                         data-testid="products-bulk-publish"
                       >
@@ -6672,8 +7019,12 @@ function ProductsRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateProductStatus('draft')}
-                        disabled={isProductsAccessBusy || !canEditProducts}
-                        title={!canEditProducts ? editPermissionTitle : undefined}
+                        disabled={Boolean(productsBulkStatusDisabledReason)}
+                        title={productsBulkStatusDisabledReason || undefined}
+                        aria-describedby={productsBulkActionStatusId}
+                        data-action-state={productsBulkStatusDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsBulkActionStatus}
+                        data-disabled-reason={productsBulkStatusDisabledReason || undefined}
                         iconStart={<Edit3 className="size-4" />}
                         data-testid="products-bulk-draft"
                       >
@@ -6683,8 +7034,12 @@ function ProductsRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void bulkUpdateProductStatus('archived')}
-                        disabled={isProductsAccessBusy || !canEditProducts}
-                        title={!canEditProducts ? editPermissionTitle : undefined}
+                        disabled={Boolean(productsBulkStatusDisabledReason)}
+                        title={productsBulkStatusDisabledReason || undefined}
+                        aria-describedby={productsBulkActionStatusId}
+                        data-action-state={productsBulkStatusDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsBulkActionStatus}
+                        data-disabled-reason={productsBulkStatusDisabledReason || undefined}
                         iconStart={<Archive className="size-4" />}
                         data-testid="products-bulk-archive"
                       >
@@ -6694,8 +7049,12 @@ function ProductsRoute() {
                         size="sm"
                         variant="outline"
                         onClick={exportSelectedProductsCsv}
-                        disabled={isProductsAccessBusy || !canExportProducts}
-                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        disabled={Boolean(productsBulkExportDisabledReason)}
+                        title={productsBulkExportDisabledReason || undefined}
+                        aria-describedby={productsBulkActionStatusId}
+                        data-action-state={productsBulkExportDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsBulkActionStatus}
+                        data-disabled-reason={productsBulkExportDisabledReason || undefined}
                         iconStart={<Download className="size-4" />}
                         data-testid="products-bulk-export"
                       >
@@ -6705,7 +7064,12 @@ function ProductsRoute() {
                         size="sm"
                         variant="outline"
                         onClick={clearProductSelection}
-                        disabled={isProductsAccessBusy}
+                        disabled={Boolean(productsBulkClearDisabledReason)}
+                        title={productsBulkClearDisabledReason || undefined}
+                        aria-describedby={productsBulkActionStatusId}
+                        data-action-state={productsBulkClearDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsBulkActionStatus}
+                        data-disabled-reason={productsBulkClearDisabledReason || undefined}
                         data-testid="products-bulk-clear-selection"
                       >
                         Clear
@@ -6714,8 +7078,12 @@ function ProductsRoute() {
                         size="sm"
                         variant="danger"
                         onClick={() => setPendingBulkDeleteProducts(true)}
-                        disabled={isProductsAccessBusy || !canDeleteProducts}
-                        title={!canDeleteProducts ? deletePermissionTitle : undefined}
+                        disabled={Boolean(productsBulkDeleteDisabledReason)}
+                        title={productsBulkDeleteDisabledReason || undefined}
+                        aria-describedby={productsBulkActionStatusId}
+                        data-action-state={productsBulkDeleteDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsBulkActionStatus}
+                        data-disabled-reason={productsBulkDeleteDisabledReason || undefined}
                         iconStart={<Trash2 className="size-4" />}
                         data-testid="products-bulk-delete"
                       >
@@ -6733,7 +7101,12 @@ function ProductsRoute() {
                           aria-label="Select all visible products"
                           aria-checked={selectedVisibleProducts.length > 0 && !areAllVisibleProductsSelected ? 'mixed' : areAllVisibleProductsSelected}
                           checked={areAllVisibleProductsSelected}
-                          disabled={isProductsAccessBusy || !canViewProducts}
+                          disabled={Boolean(productsBulkSelectionDisabledReason)}
+                          title={productsBulkSelectionDisabledReason || undefined}
+                          aria-describedby={productsBulkActionStatusId}
+                          data-action-state={productsBulkSelectionDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={productsBulkActionStatus}
+                          data-disabled-reason={productsBulkSelectionDisabledReason || undefined}
                           onChange={(event) => setVisibleProductSelection(event.target.checked)}
                           className="size-4 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-60"
                         />
@@ -6802,15 +7175,74 @@ function ProductsRoute() {
             </Panel>
           </div>
 
-          <Panel id="products-editor" className="scroll-mt-24 xl:sticky xl:top-4 xl:self-start">
+          <Panel
+            id="products-editor"
+            data-testid="products-editor-panel"
+            className="scroll-mt-24 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:self-start xl:overflow-y-auto"
+          >
             <PanelHeader
               title={selectedProduct ? 'Edit product' : 'New product'}
               description="Pricing, inventory, public status, and storefront metadata."
               icon={<Package className="size-4" />}
             />
             <PanelContent>
-              <form onSubmit={saveProduct} noValidate>
+              <form onSubmit={saveProduct} noValidate data-testid="products-editor-form">
+                <div
+                  className="sticky top-0 z-10 -mx-5 mb-4 border-y border-border bg-card/95 px-5 py-3 shadow-sm backdrop-blur"
+                  data-testid="products-editor-sticky-actions"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-foreground">
+                        {selectedProduct ? 'Editing product' : 'Create product'}
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {productFormSubmitted && (productIdentityMissing || scheduledProductDateError)
+                          ? 'Fix the highlighted fields before saving.'
+                          : 'Core actions stay available while you move through the editor.'}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={resetForm}
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                        data-testid="products-editor-sticky-clear"
+                      >
+                        Clear
+                      </Button>
+                      <Button
+                        size="sm"
+                        type="submit"
+                        variant="primary"
+                        disabled={isProductsAccessBusy || !canEditProducts}
+                        title={!canEditProducts ? editPermissionTitle : undefined}
+                        iconStart={<Package className="size-4" />}
+                        data-testid="products-editor-sticky-save"
+                      >
+                        {isSaving ? 'Saving...' : selectedProduct ? 'Save Product' : 'Create Product'}
+                      </Button>
+                    </div>
+                  </div>
+                  <nav
+                    aria-label="Product editor sections"
+                    className="mt-3 flex gap-1 overflow-x-auto pb-1"
+                    data-testid="products-editor-section-nav"
+                  >
+                    {PRODUCT_EDITOR_SECTIONS.map((section) => (
+                      <a
+                        key={section.id}
+                        href={`#${section.id}`}
+                        className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground focus-ring"
+                      >
+                        {section.label}
+                      </a>
+                    ))}
+                  </nav>
+                </div>
                 <fieldset disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} className={cn('space-y-4', (isProductsAccessBusy || !canEditProducts) && 'opacity-70')}>
+                <div id="products-editor-identity" className="scroll-mt-28" data-testid="products-editor-identity-section" />
                 <Field label="Title">
                   <input
                     value={formState.title}
@@ -6891,6 +7323,7 @@ function ProductsRoute() {
                     />
                   </Field>
                 </div>
+                <div id="products-editor-variants" className="scroll-mt-28" data-testid="products-editor-variants-section" />
                 <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -7167,6 +7600,7 @@ function ProductsRoute() {
                     />
                   </Field>
                 </div>
+                <div id="products-editor-fulfillment" className="scroll-mt-28" data-testid="products-editor-fulfillment-section" />
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Digital delivery URL">
                     <div className="flex gap-2">
@@ -7223,6 +7657,7 @@ function ProductsRoute() {
                     />
                   </Field>
                 </div>
+                <div id="products-editor-subscriptions" className="scroll-mt-28" data-testid="products-editor-subscriptions-section" />
                 <div className="rounded-lg border border-border bg-muted/40 p-4" data-testid="products-subscription-metadata">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -7667,7 +8102,7 @@ function ProductsRoute() {
                         </div>
                       </div>
                       <div>
-                        <span className="font-medium text-foreground">Design</span>
+                        <span className="font-medium text-foreground">Custom frontend design</span>
                         <div>{formatProductLaunchReadinessStatus(selectedProductStorefrontHandoff.sellabilityImpact.designReadiness.status)} · {selectedProductStorefrontHandoff.sellabilityImpact.designReadiness.counts.elements} elements</div>
                       </div>
                       <div>
@@ -7751,6 +8186,7 @@ function ProductsRoute() {
                     ) : null}
                   </div>
                 </div>
+                <div id="products-editor-provider-sync" className="scroll-mt-28" data-testid="products-editor-provider-sync-section" />
                 <div className="rounded-lg border border-border bg-muted/40 p-4" data-testid="products-provider-sync">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -7854,6 +8290,7 @@ function ProductsRoute() {
                     placeholder="30-day returns, final sale, license refund terms..."
                   />
                 </Field>
+                <div id="products-editor-media" className="scroll-mt-28" data-testid="products-editor-media-section" />
                 <Field label="Image URL">
                   <div className="space-y-3">
                     {formState.imageUrl ? (
@@ -7995,6 +8432,7 @@ function ProductsRoute() {
                     placeholder={formState.title || 'Product title for search previews'}
                   />
                 </Field>
+                <div id="products-editor-publishing" className="scroll-mt-28" data-testid="products-editor-publishing-section" />
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Status">
                     <select
@@ -8316,12 +8754,35 @@ function ProductCard({
   const tags = formatTags(readProductValue(product.values, 'tags')).slice(0, 3);
   const shippingRequired = readProductValue(product.values, 'shippingRequired') !== false;
   const isLowStock = stockState.lowStock;
+  const productActionStatusId = `products-actions-status-${product.id}`;
+  const productBusyReason = disabled
+    ? 'Product actions are temporarily unavailable while Backy updates catalog data'
+    : null;
+  const editDisabledReason = productBusyReason;
+  const publishDisabledReason = productBusyReason || (product.status === 'published'
+    ? 'This product is already published'
+    : null);
+  const archiveDisabledReason = productBusyReason || (product.status === 'archived'
+    ? 'This product is already archived'
+    : null);
+  const deleteProductDisabledReason = productBusyReason || (!canDelete
+    ? deleteDisabledReason || 'Your account cannot delete products'
+    : null);
+  const productActionStatus = [
+    `Edit ${editDisabledReason ? `unavailable: ${editDisabledReason}` : 'available'}.`,
+    `Publish ${publishDisabledReason ? `unavailable: ${publishDisabledReason}` : 'available'}.`,
+    `Archive ${archiveDisabledReason ? `unavailable: ${archiveDisabledReason}` : 'available'}.`,
+    `Delete ${deleteProductDisabledReason ? `unavailable: ${deleteProductDisabledReason}` : 'available'}.`,
+  ].join(' ');
 
   return (
     <article className={cn(
       'rounded-lg border bg-background p-4 transition-colors',
       selected ? 'border-primary ring-2 ring-primary/10' : selectedForBulk ? 'border-primary/50 ring-2 ring-primary/5' : 'border-border',
-    )}>
+    )}
+      data-testid="products-product-card"
+      data-product-id={product.id}
+    >
       <div className="flex items-start gap-3">
         <label className="mt-0.5 inline-flex items-center">
           <input
@@ -8434,11 +8895,77 @@ function ProductCard({
           <div className="truncate text-xs font-medium">{product.updatedAt ? formatDate(product.updatedAt) : 'Now'}</div>
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={onEdit} disabled={disabled} iconStart={<Edit3 className="size-4" />}>Edit</Button>
-        <Button size="sm" variant="outline" onClick={onPublish} disabled={disabled || product.status === 'published'} iconStart={<CheckCircle2 className="size-4" />}>Publish</Button>
-        <Button size="sm" variant="outline" onClick={onArchive} disabled={disabled || product.status === 'archived'} iconStart={<Archive className="size-4" />}>Archive</Button>
-        <Button size="sm" variant="danger" onClick={onDelete} disabled={disabled || !canDelete} title={!canDelete ? deleteDisabledReason : undefined} iconStart={<Trash2 className="size-4" />}>Delete</Button>
+      <div
+        className="mt-4 flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label={`Actions for ${title}`}
+        aria-describedby={productActionStatusId}
+        data-testid="products-action-group"
+        data-product-id={product.id}
+        data-action-status={productActionStatus}
+      >
+        <span id={productActionStatusId} className="sr-only" data-testid="products-action-status">
+          {productActionStatus}
+        </span>
+        <Button
+          size="sm"
+          onClick={onEdit}
+          disabled={Boolean(editDisabledReason)}
+          title={editDisabledReason || undefined}
+          aria-label={`Edit ${title}`}
+          aria-describedby={productActionStatusId}
+          data-testid="products-edit-product"
+          data-action-state={editDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={editDisabledReason || undefined}
+          iconStart={<Edit3 className="size-4" />}
+        >
+          Edit
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onPublish}
+          disabled={Boolean(publishDisabledReason)}
+          title={publishDisabledReason || undefined}
+          aria-label={`Publish ${title}`}
+          aria-describedby={productActionStatusId}
+          data-testid="products-publish-product"
+          data-action-state={publishDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={publishDisabledReason || undefined}
+          iconStart={<CheckCircle2 className="size-4" />}
+        >
+          Publish
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onArchive}
+          disabled={Boolean(archiveDisabledReason)}
+          title={archiveDisabledReason || undefined}
+          aria-label={`Archive ${title}`}
+          aria-describedby={productActionStatusId}
+          data-testid="products-archive-product"
+          data-action-state={archiveDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={archiveDisabledReason || undefined}
+          iconStart={<Archive className="size-4" />}
+        >
+          Archive
+        </Button>
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={onDelete}
+          disabled={Boolean(deleteProductDisabledReason)}
+          title={deleteProductDisabledReason || undefined}
+          aria-label={`Delete ${title}`}
+          aria-describedby={productActionStatusId}
+          data-testid="products-delete-product"
+          data-action-state={deleteProductDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={deleteProductDisabledReason || undefined}
+          iconStart={<Trash2 className="size-4" />}
+        >
+          Delete
+        </Button>
       </div>
     </article>
   );
@@ -8467,10 +8994,10 @@ const getPublicBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && isLocalAdminDevHost()) {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
 
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()))
     .replace(/\/api\/admin$/, '')
     .replace(/\/api$/, '')
     .replace(/\/$/, '');

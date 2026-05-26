@@ -62,6 +62,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
 
 type SubmissionStatusFilter = FormSubmissionStatus | 'all';
@@ -923,22 +924,27 @@ function FormsRoute() {
   const [formsPostgresCommandOptions, setFormsPostgresCommandOptions] = useState<FormsPostgresCertificationCommandOptions>(
     DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS,
   );
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.view', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const canCreateForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.create', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const canEditForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.edit', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const canManageForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const canExportForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const canDeleteForms = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.delete', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const canExportActivity = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export', FORMS_PERMISSION_ROLE_DEFAULTS);
+  const canUseFormsRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseFormsRoleDefaults;
+  const isFormsPermissionAllowed = (key: FormsPermissionKey) => (
+    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, FORMS_PERMISSION_ROLE_DEFAULTS)
+    || (canUseFormsRoleDefaults && Boolean(currentAdmin && FORMS_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canViewForms = isFormsPermissionAllowed('forms.view');
+  const canCreateForms = isFormsPermissionAllowed('forms.create');
+  const canEditForms = isFormsPermissionAllowed('forms.edit');
+  const canManageForms = isFormsPermissionAllowed('forms.manage');
+  const canExportForms = isFormsPermissionAllowed('forms.export');
+  const canDeleteForms = isFormsPermissionAllowed('forms.delete');
+  const canViewCollections = isFormsPermissionAllowed('collections.view');
+  const canExportActivity = isFormsPermissionAllowed('activity.export');
   const viewPermissionTitle = canViewForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.view', FORMS_PERMISSION_ROLE_DEFAULTS);
   const createPermissionTitle = canCreateForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.create', FORMS_PERMISSION_ROLE_DEFAULTS);
   const editPermissionTitle = canEditForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.edit', FORMS_PERMISSION_ROLE_DEFAULTS);
   const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
   const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
   const deletePermissionTitle = canDeleteForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.delete', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId) || isPermissionMatrixPending;
+  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId);
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -948,11 +954,59 @@ function FormsRoute() {
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
+  const formsCreateActionStatusId = 'forms-create-action-status';
+  const formsCreatePermissionDisabledReason = !canCreateForms
+    ? createPermissionTitle || 'Your account cannot create forms.'
+    : '';
+  const formsCreateBusyDisabledReason = isFormsBusy
+    ? 'Form creation is temporarily unavailable while Backy updates forms or submissions.'
+    : '';
+  const formsCreateDisabledReason = formsCreatePermissionDisabledReason || formsCreateBusyDisabledReason;
+  const formCreateActionStatus = (label: string, disabledReason = formsCreateDisabledReason) => (
+    disabledReason
+      ? `${label} unavailable: ${disabledReason}`
+      : `${label} available for ${activeSiteId}.`
+  );
+  const formsCreateActionStatus = formCreateActionStatus('New blank form');
   const selectedForm = useMemo(
     () => forms.find((form) => form.id === selectedFormId) || forms[0] || null,
     [forms, selectedFormId],
   );
   const selectedFormIsStandalone = Boolean(selectedForm && !selectedForm.pageId && !selectedForm.postId);
+  const selectedFormActionStatusId = selectedForm
+    ? `forms-selected-actions-status-${selectedForm.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+    : 'forms-selected-actions-status';
+  const selectedFormActionBusyReason = isFormsBusy
+    ? 'Form actions are temporarily unavailable while Backy updates forms or submissions.'
+    : null;
+  const selectedFormPageDisabledReason = selectedForm?.pageId ? selectedFormActionBusyReason : null;
+  const selectedFormBlogDisabledReason = selectedForm?.postId ? selectedFormActionBusyReason : null;
+  const selectedFormCloneDisabledReason = !selectedForm
+    ? 'Select a form to clone it.'
+    : !canCreateForms
+      ? createPermissionTitle || 'Your account cannot create forms.'
+      : selectedFormActionBusyReason;
+  const selectedFormDeleteDisabledReason = !selectedForm
+    ? 'Select a form to delete it.'
+    : !canDeleteForms
+      ? deletePermissionTitle || 'Your account cannot delete forms.'
+      : selectedFormActionBusyReason;
+  const selectedFormActionStatus = selectedForm
+    ? [
+        selectedForm.pageId
+          ? selectedFormPageDisabledReason
+            ? `Open source page unavailable: ${selectedFormPageDisabledReason}`
+            : 'Open source page available.'
+          : null,
+        selectedForm.postId
+          ? selectedFormBlogDisabledReason
+            ? `Open source blog post unavailable: ${selectedFormBlogDisabledReason}`
+            : 'Open source blog post available.'
+          : null,
+        selectedFormCloneDisabledReason ? `Clone unavailable: ${selectedFormCloneDisabledReason}` : 'Clone available.',
+        selectedFormDeleteDisabledReason ? `Delete unavailable: ${selectedFormDeleteDisabledReason}` : 'Delete available.',
+      ].filter(Boolean).join(' ')
+    : 'Select a form to review form actions.';
   const formDraftDirty = Boolean(selectedForm && formDraft && JSON.stringify(buildFormUpdatePayload(formDraft)) !== JSON.stringify(buildFormUpdatePayload(selectedForm)));
   const writableCollections = useMemo(() => collections.filter((collection) => (
     collection.status === 'published' && collection.permissions.publicCreate
@@ -1185,6 +1239,48 @@ function FormsRoute() {
     filteredSubmissions.filter((submission) => selectedSubmissionSet.has(submission.id))
   ), [filteredSubmissions, selectedSubmissionSet]);
   const hiddenSelectedSubmissionCount = Math.max(0, selectedLoadedSubmissions.length - selectedVisibleSubmissions.length);
+  const formsSubmissionBulkSelectionStatusId = 'forms-submission-bulk-selection-status';
+  const formsSubmissionBulkActionStatusId = 'forms-submission-bulk-action-status';
+  const formsSubmissionBulkBusyReason = isFormsBusy
+    ? 'Submission moderation is temporarily unavailable while Backy updates forms or submissions.'
+    : null;
+  const formsSubmissionBulkSelectionDisabledReason = !selectedForm
+    ? 'Select a form before selecting submissions.'
+    : !canManageForms
+      ? managePermissionTitle || 'Your account cannot review submissions.'
+      : formsSubmissionBulkBusyReason;
+  const formsSubmissionBulkActionDisabledReason = !selectedForm
+    ? 'Select a form before moderating submissions.'
+    : !canManageForms
+      ? managePermissionTitle || 'Your account cannot review submissions.'
+      : formsSubmissionBulkBusyReason
+        || (selectedLoadedSubmissions.length === 0 ? 'Select one or more loaded submissions first.' : null);
+  const formsSubmissionBulkStatusDisabledReason = (status: FormSubmissionStatus) => (
+    formsSubmissionBulkActionDisabledReason
+    || (selectedLoadedSubmissions.every((submission) => submission.status === status)
+      ? `Selected submissions are already ${status}.`
+      : null)
+  );
+  const formsSubmissionBulkClearDisabledReason = selectedSubmissionIds.length === 0
+    ? 'No selected submissions to clear.'
+    : formsSubmissionBulkBusyReason;
+  const formsSubmissionBulkActionState = (['approved', 'rejected', 'spam'] as const).some((status) => (
+    !formsSubmissionBulkStatusDisabledReason(status)
+  )) ? 'ready' : 'blocked';
+  const formsSubmissionBulkActionStatus = [
+    `${selectedLoadedSubmissions.length} selected submission${selectedLoadedSubmissions.length === 1 ? '' : 's'}.`,
+    hiddenSelectedSubmissionCount > 0 ? `${hiddenSelectedSubmissionCount} selected outside this filtered view.` : null,
+    formsSubmissionBulkClearDisabledReason ? `Clear selection unavailable: ${formsSubmissionBulkClearDisabledReason}` : 'Clear selection available.',
+    formsSubmissionBulkStatusDisabledReason('approved')
+      ? `Approve unavailable: ${formsSubmissionBulkStatusDisabledReason('approved')}`
+      : 'Approve available.',
+    formsSubmissionBulkStatusDisabledReason('rejected')
+      ? `Reject unavailable: ${formsSubmissionBulkStatusDisabledReason('rejected')}`
+      : 'Reject available.',
+    formsSubmissionBulkStatusDisabledReason('spam')
+      ? `Spam unavailable: ${formsSubmissionBulkStatusDisabledReason('spam')}`
+      : 'Spam available.',
+  ].filter(Boolean).join(' ');
   const allVisibleSubmissionsSelected = filteredSubmissions.length > 0
     && selectedVisibleSubmissions.length === filteredSubmissions.length;
   const selectedConsentRecords = useMemo(
@@ -2526,6 +2622,19 @@ function FormsRoute() {
     setNotice(null);
   };
 
+  useEffect(() => {
+    if (!pendingDeleteForm) return;
+
+    const handleDeleteDialogKeydown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isDeletingFormId) return;
+      event.preventDefault();
+      setPendingDeleteForm(null);
+    };
+
+    window.addEventListener('keydown', handleDeleteDialogKeydown);
+    return () => window.removeEventListener('keydown', handleDeleteDialogKeydown);
+  }, [isDeletingFormId, pendingDeleteForm]);
+
   const handleCloneSelectedForm = async () => {
     if (isFormsBusy || !selectedForm) return;
     if (!canCreateForms) {
@@ -3300,6 +3409,10 @@ function FormsRoute() {
         </div>
       )}
 
+      <span id={formsCreateActionStatusId} className="sr-only" data-testid="forms-create-action-status" aria-live="polite">
+        {formsCreateActionStatus}
+      </span>
+
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="forms-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -3343,8 +3456,13 @@ function FormsRoute() {
               variant="primary"
               onClick={() => void createBlankStandaloneForm()}
               disabled={isFormsBusy || !canCreateForms}
-              title={!canCreateForms ? createPermissionTitle : undefined}
+              title={formsCreateDisabledReason || undefined}
+              aria-describedby={formsCreateActionStatusId}
               iconStart={<Plus className="size-4" />}
+              data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={formsCreateActionStatus}
+              data-disabled-reason={formsCreateDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
               data-testid="forms-create-blank-button"
             >
               {isCreatingTemplateId === 'blank' ? 'Creating...' : 'New blank form'}
@@ -3387,51 +3505,58 @@ function FormsRoute() {
           </div>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <h3 className="text-sm font-semibold">Forms control map</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Jump to site scope, form health, templates, library, frontend API, and submission review.</p>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-            {FORM_CONTROL_AREAS.map((area) => (
-              <a
-                key={area.title}
-                href={area.href}
-                className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-              >
-                <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Form frontend control contract</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Custom frontends need these systems to render registration, contact, newsletter, product inquiry, file intake, and upload forms from Backy.
-              </p>
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="forms-control-map-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>Forms control map</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show map</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide map</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="forms-control-map">
+            <p className="text-sm text-muted-foreground">Jump to site scope, form health, templates, library, frontend API, and submission review.</p>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-6">
+              {FORM_CONTROL_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
             </div>
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          </div>
+        </details>
+
+        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="forms-frontend-contract-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>Form frontend control contract</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">
               {FORM_FRONTEND_SYSTEMS.length} systems
             </span>
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {FORM_FRONTEND_SYSTEMS.map((system) => (
-              <div key={system.key} className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-foreground">{system.title}</div>
-                    <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide systems</span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="forms-frontend-contract-systems">
+            <p className="text-sm text-muted-foreground">
+              Custom frontends need these systems to render registration, contact, newsletter, product inquiry, file intake, and upload forms from Backy.
+            </p>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {FORM_FRONTEND_SYSTEMS.map((system) => (
+                <div key={system.key} className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">{system.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{system.detail}</div>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                      {system.key}
+                    </span>
                   </div>
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                    {system.key}
-                  </span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        </details>
 
         <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="forms-account-contract">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3458,8 +3583,13 @@ function FormsRoute() {
                 variant="primary"
                 onClick={() => void createFormFromTemplate(REGISTRATION_FORM_TEMPLATE)}
                 disabled={isFormsBusy || !canCreateForms}
-                title={!canCreateForms ? createPermissionTitle : undefined}
+                title={formsCreateDisabledReason || undefined}
+                aria-describedby={formsCreateActionStatusId}
                 iconStart={<FileInput className="size-4" />}
+                data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formCreateActionStatus('Registration form')}
+                data-disabled-reason={formsCreateDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
               >
                 {isCreatingTemplateId === REGISTRATION_FORM_TEMPLATE.id ? 'Creating...' : 'Create registration form'}
               </Button>
@@ -3487,29 +3617,34 @@ function FormsRoute() {
               </div>
             ))}
           </div>
-          <div data-testid="forms-account-registration-handoff" className="mt-4 rounded-lg border border-border bg-card p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+          <details className="mt-4 rounded-lg border border-border bg-card p-3" data-testid="forms-account-registration-handoff-details" data-default-collapsed="true">
+            <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
               <div>
                 <div className="text-sm font-semibold text-foreground">Custom frontend account handoff</div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {FORM_ACCOUNT_REGISTRATION_HANDOFF_SCHEMA_VERSION} packages registration form APIs, page templates, review endpoints, account bindings, provider gates, and privacy limits for member signup flows.
+                  Expand for registration APIs, account bindings, provider gates, and privacy boundaries.
                 </p>
               </div>
               <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
                 {formsAccountRegistrationHandoff.providerGate.status}
               </span>
+            </summary>
+            <div data-testid="forms-account-registration-handoff" className="mt-3 rounded-md border border-border bg-background p-3">
+              <p className="text-xs leading-5 text-muted-foreground">
+                {FORM_ACCOUNT_REGISTRATION_HANDOFF_SCHEMA_VERSION} packages registration form APIs, page templates, review endpoints, account bindings, provider gates, and privacy limits for member signup flows.
+              </p>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <FormMetaTile label="Bindings" value={`${FORM_ACCOUNT_REGISTRATION_BINDINGS.length}`} />
+                <FormMetaTile label="Actions" value={`${FORM_ACCOUNT_REGISTRATION_ACTIONS.length}`} />
+                <FormMetaTile label="Privacy" value={formsAccountRegistrationHandoff.privacy.includesSubmissionValues ? 'values included' : 'values excluded'} />
+              </div>
+              <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                <ApiSnippet label="Registration definition" value={formsAccountRegistrationHandoff.publicApis.registrationDefinition} />
+                <ApiSnippet label="Registration submit" value={formsAccountRegistrationHandoff.publicApis.registrationSubmit} />
+                <ApiSnippet label="Users/Auth handoff" value={formsAccountRegistrationHandoff.providerGate.usersRoute} />
+              </div>
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              <FormMetaTile label="Bindings" value={`${FORM_ACCOUNT_REGISTRATION_BINDINGS.length}`} />
-              <FormMetaTile label="Actions" value={`${FORM_ACCOUNT_REGISTRATION_ACTIONS.length}`} />
-              <FormMetaTile label="Privacy" value={formsAccountRegistrationHandoff.privacy.includesSubmissionValues ? 'values included' : 'values excluded'} />
-            </div>
-            <div className="mt-3 grid gap-2 lg:grid-cols-3">
-              <ApiSnippet label="Registration definition" value={formsAccountRegistrationHandoff.publicApis.registrationDefinition} />
-              <ApiSnippet label="Registration submit" value={formsAccountRegistrationHandoff.publicApis.registrationSubmit} />
-              <ApiSnippet label="Users/Auth handoff" value={formsAccountRegistrationHandoff.providerGate.usersRoute} />
-            </div>
-          </div>
+          </details>
         </div>
 
         <div className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="forms-persistence-certification">
@@ -3588,275 +3723,288 @@ function FormsRoute() {
               Target guards: {formPersistenceCertification.targetGuards.join(', ')}; requires {formPersistenceCertification.requires.slice(0, 2).join(' and ')}.
             </div>
           </div>
-          <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="forms-persistence-certification-runbook">
-            <div className="font-medium text-foreground">Disposable database runbook</div>
-            <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
-              {formPersistenceOperatorGate}
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
+          <details className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="forms-persistence-certification-details" data-default-collapsed="true">
+            <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preflight gates</div>
-                <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
-                  {(formPersistenceCertification.preflightGates || FORM_PERSISTENCE_PREFLIGHT_GATES).map((gate) => (
-                    <li key={gate} className="font-mono">{gate}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidence to attach</div>
-                <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
-                  {(formPersistenceCertification.evidenceExpectations || FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS).map((expectation) => (
-                    <li key={expectation}>{expectation}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 rounded-md border border-border bg-muted/10 p-3 text-xs" data-testid="forms-postgres-certification-command-builder">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="font-medium text-foreground">Postgres certification command builder</div>
-                <p className="mt-1 max-w-3xl text-muted-foreground">
-                  Build the exact command for the disposable Forms database smoke. Database URLs stay in CI secrets or local shell env; this builder only writes aliases and target guards.
+                <div className="font-medium text-foreground">Database runbook, command builder, and evidence</div>
+                <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                  Expand when running the disposable Supabase/Postgres certification. Daily form work keeps the readiness summary, handoff copy, CI command, and download actions visible.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void copyFormApiText(formsPostgresCertificationEnvTemplate, 'Forms Postgres certification env template')}
-                  disabled={isFormsBusy || !canExportForms}
-                  title={!canExportForms ? exportPermissionTitle : undefined}
-                  iconStart={<Copy className="size-4" />}
-                  data-testid="forms-postgres-certification-env-copy-button"
-                >
-                  Copy env template
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void copyFormApiText(formsPostgresCertificationCommand, 'Forms Postgres certification command')}
-                  disabled={isFormsBusy || !canExportForms}
-                  title={!canExportForms ? exportPermissionTitle : undefined}
-                  iconStart={<Copy className="size-4" />}
-                  data-testid="forms-postgres-certification-command-builder-copy-button"
-                >
-                  Copy guarded command
-                </Button>
+              <span className="rounded bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                {formPersistenceCertification.scenarioEvidence.coverage.covered}/{formPersistenceCertification.scenarioEvidence.coverage.total} scenarios
+              </span>
+            </summary>
+            <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="forms-persistence-certification-runbook">
+              <div className="font-medium text-foreground">Disposable database runbook</div>
+              <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+                {formPersistenceOperatorGate}
               </div>
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <label className="text-xs">
-                <span className="font-semibold text-foreground">Database URL alias</span>
-                <select
-                  value={formsPostgresCommandOptions.databaseEnvAlias}
-                  onChange={(event) => updateFormsPostgresCommandOptions({
-                    databaseEnvAlias: event.target.value as FormsPostgresDatabaseEnvAlias,
-                  })}
-                  disabled={isFormsBusy}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-                  data-testid="forms-postgres-certification-database-alias-select"
-                >
-                  {FORMS_POSTGRES_DATABASE_ENV_ALIASES.map((alias) => (
-                    <option key={alias} value={alias}>{alias}</option>
-                  ))}
-                </select>
-                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                  Store the actual Postgres URL outside Backy.
-                </span>
-              </label>
-              <label className="text-xs">
-                <span className="font-semibold text-foreground">Expected host</span>
-                <input
-                  type="text"
-                  value={formsPostgresCommandOptions.expectedHost}
-                  onChange={(event) => updateFormsPostgresCommandOptions({ expectedHost: event.target.value })}
-                  disabled={isFormsBusy}
-                  placeholder="db.example.supabase.co"
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-                  data-testid="forms-postgres-certification-expected-host-input"
-                />
-                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                  Optional guard for the target database host.
-                </span>
-              </label>
-              <label className="text-xs">
-                <span className="font-semibold text-foreground">Expected database</span>
-                <input
-                  type="text"
-                  value={formsPostgresCommandOptions.expectedDatabase}
-                  onChange={(event) => updateFormsPostgresCommandOptions({ expectedDatabase: event.target.value })}
-                  disabled={isFormsBusy}
-                  placeholder="postgres"
-                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-                  data-testid="forms-postgres-certification-expected-database-input"
-                />
-                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-                  Optional guard for the database name in the URL path.
-                </span>
-              </label>
-              <div className="grid gap-2">
-                <label className="flex min-h-[52px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={formsPostgresCommandOptions.disposableConfirmed}
-                    onChange={(event) => updateFormsPostgresCommandOptions({ disposableConfirmed: event.target.checked })}
-                    disabled={isFormsBusy}
-                    className="mt-1 size-4 rounded border-border"
-                    data-testid="forms-postgres-certification-disposable-toggle"
-                  />
-                  <span>
-                    <span className="block font-semibold text-foreground">Disposable confirmed</span>
-                    <span className="mt-1 block font-mono text-[10px] text-muted-foreground">BACKY_DATABASE_DISPOSABLE_CONFIRMED=true</span>
-                  </span>
-                </label>
-                <label className="flex min-h-[52px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={formsPostgresCommandOptions.includeReleaseDoctor}
-                    onChange={(event) => updateFormsPostgresCommandOptions({ includeReleaseDoctor: event.target.checked })}
-                    disabled={isFormsBusy}
-                    className="mt-1 size-4 rounded border-border"
-                    data-testid="forms-postgres-certification-doctor-toggle"
-                  />
-                  <span>
-                    <span className="block font-semibold text-foreground">Run release doctor first</span>
-                    <span className="mt-1 block font-mono text-[10px] text-muted-foreground">npm run doctor:release-certification</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-            <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="forms-postgres-certification-env-template">
-              <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Env template</div>
-                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                    Copy this into CI secrets or a local shell env file, then replace the database URL placeholder with a disposable migrated Supabase/Postgres target before running the guarded command.
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preflight gates</div>
+                  <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                    {(formPersistenceCertification.preflightGates || FORM_PERSISTENCE_PREFLIGHT_GATES).map((gate) => (
+                      <li key={gate} className="font-mono">{gate}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Evidence to attach</div>
+                  <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground">
+                    {(formPersistenceCertification.evidenceExpectations || FORM_PERSISTENCE_EVIDENCE_EXPECTATIONS).map((expectation) => (
+                      <li key={expectation}>{expectation}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="forms-postgres-certification-command-builder">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium text-foreground">Postgres certification command builder</div>
+                  <p className="mt-1 max-w-3xl text-muted-foreground">
+                    Build the exact command for the disposable Forms database smoke. Database URLs stay in CI secrets or local shell env; this builder only writes aliases and target guards.
                   </p>
                 </div>
-                <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                  backy.forms-postgres-certification-env-template.v1
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyFormApiText(formsPostgresCertificationEnvTemplate, 'Forms Postgres certification env template')}
+                    disabled={isFormsBusy || !canExportForms}
+                    title={!canExportForms ? exportPermissionTitle : undefined}
+                    iconStart={<Copy className="size-4" />}
+                    data-testid="forms-postgres-certification-env-copy-button"
+                  >
+                    Copy env template
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyFormApiText(formsPostgresCertificationCommand, 'Forms Postgres certification command')}
+                    disabled={isFormsBusy || !canExportForms}
+                    title={!canExportForms ? exportPermissionTitle : undefined}
+                    iconStart={<Copy className="size-4" />}
+                    data-testid="forms-postgres-certification-command-builder-copy-button"
+                  >
+                    Copy guarded command
+                  </Button>
+                </div>
               </div>
-              <pre
-                className="mt-2 max-h-64 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-[11px] leading-5 text-foreground"
-                data-testid="forms-postgres-certification-env-template-body"
-              >
-                {formsPostgresCertificationEnvTemplate}
-              </pre>
-            </div>
-            <pre className="mt-3 max-h-64 overflow-auto rounded-md border border-border bg-foreground p-3 text-[11px] leading-5 text-background" data-testid="forms-postgres-certification-command">
-              <code>{formsPostgresCertificationCommand}</code>
-            </pre>
-            <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="forms-postgres-certification-required-inputs">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs for this command</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {formsPostgresCertificationRequiredInputs.map((input) => (
-                  <span key={input} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                    {input}
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label className="text-xs">
+                  <span className="font-semibold text-foreground">Database URL alias</span>
+                  <select
+                    value={formsPostgresCommandOptions.databaseEnvAlias}
+                    onChange={(event) => updateFormsPostgresCommandOptions({
+                      databaseEnvAlias: event.target.value as FormsPostgresDatabaseEnvAlias,
+                    })}
+                    disabled={isFormsBusy}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="forms-postgres-certification-database-alias-select"
+                  >
+                    {FORMS_POSTGRES_DATABASE_ENV_ALIASES.map((alias) => (
+                      <option key={alias} value={alias}>{alias}</option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                    Store the actual Postgres URL outside Backy.
                   </span>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 rounded-md border border-border bg-card px-3 py-2 text-xs" data-testid="forms-persistence-runtime-evidence">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="font-medium text-foreground">Runtime evidence</div>
-              <span className={cn(
-                'rounded-full px-2 py-0.5 text-[11px] font-semibold',
-                formPersistenceCertification.runtime?.readyForCertification
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'bg-amber-50 text-amber-700',
-              )}>
-                {formPersistenceCertification.runtime?.readyForCertification ? 'Ready for DB smoke' : 'Needs DB smoke inputs'}
-              </span>
-            </div>
-            <div className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded border border-border bg-background px-2 py-1.5">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Data mode</div>
-                <div className="mt-1 font-mono text-[11px] text-foreground">{formPersistenceCertification.runtime?.dataMode || 'unknown'}</div>
-              </div>
-              <div className="rounded border border-border bg-background px-2 py-1.5">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Database type</div>
-                <div className="mt-1 font-mono text-[11px] text-foreground">{formPersistenceCertification.runtime?.databaseType || 'unknown'}</div>
-              </div>
-              <div className="rounded border border-border bg-background px-2 py-1.5">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">URL alias</div>
-                <div className="mt-1 font-mono text-[11px] text-foreground">
-                  {formPersistenceCertification.runtime?.databaseUrlConfigured
-                    ? formPersistenceCertification.runtime.databaseUrlAlias || 'configured'
-                    : 'missing'}
+                </label>
+                <label className="text-xs">
+                  <span className="font-semibold text-foreground">Expected host</span>
+                  <input
+                    type="text"
+                    value={formsPostgresCommandOptions.expectedHost}
+                    onChange={(event) => updateFormsPostgresCommandOptions({ expectedHost: event.target.value })}
+                    disabled={isFormsBusy}
+                    placeholder="db.example.supabase.co"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="forms-postgres-certification-expected-host-input"
+                  />
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                    Optional guard for the target database host.
+                  </span>
+                </label>
+                <label className="text-xs">
+                  <span className="font-semibold text-foreground">Expected database</span>
+                  <input
+                    type="text"
+                    value={formsPostgresCommandOptions.expectedDatabase}
+                    onChange={(event) => updateFormsPostgresCommandOptions({ expectedDatabase: event.target.value })}
+                    disabled={isFormsBusy}
+                    placeholder="postgres"
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    data-testid="forms-postgres-certification-expected-database-input"
+                  />
+                  <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                    Optional guard for the database name in the URL path.
+                  </span>
+                </label>
+                <div className="grid gap-2">
+                  <label className="flex min-h-[52px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={formsPostgresCommandOptions.disposableConfirmed}
+                      onChange={(event) => updateFormsPostgresCommandOptions({ disposableConfirmed: event.target.checked })}
+                      disabled={isFormsBusy}
+                      className="mt-1 size-4 rounded border-border"
+                      data-testid="forms-postgres-certification-disposable-toggle"
+                    />
+                    <span>
+                      <span className="block font-semibold text-foreground">Disposable confirmed</span>
+                      <span className="mt-1 block font-mono text-[10px] text-muted-foreground">BACKY_DATABASE_DISPOSABLE_CONFIRMED=true</span>
+                    </span>
+                  </label>
+                  <label className="flex min-h-[52px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={formsPostgresCommandOptions.includeReleaseDoctor}
+                      onChange={(event) => updateFormsPostgresCommandOptions({ includeReleaseDoctor: event.target.checked })}
+                      disabled={isFormsBusy}
+                      className="mt-1 size-4 rounded border-border"
+                      data-testid="forms-postgres-certification-doctor-toggle"
+                    />
+                    <span>
+                      <span className="block font-semibold text-foreground">Run release doctor first</span>
+                      <span className="mt-1 block font-mono text-[10px] text-muted-foreground">npm run doctor:release-certification</span>
+                    </span>
+                  </label>
                 </div>
               </div>
-              <div className="rounded border border-border bg-background px-2 py-1.5">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Disposable confirmation</div>
-                <div className="mt-1 font-mono text-[11px] text-foreground">
-                  {formPersistenceCertification.runtime?.disposableConfirmed ? 'confirmed' : 'missing'}
+              <div className="mt-3 rounded-md border border-border bg-background p-3" data-testid="forms-postgres-certification-env-template">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Env template</div>
+                    <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                      Copy this into CI secrets or a local shell env file, then replace the database URL placeholder with a disposable migrated Supabase/Postgres target before running the guarded command.
+                    </p>
+                  </div>
+                  <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                    backy.forms-postgres-certification-env-template.v1
+                  </span>
+                </div>
+                <pre
+                  className="mt-2 max-h-64 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-[11px] leading-5 text-foreground"
+                  data-testid="forms-postgres-certification-env-template-body"
+                >
+                  {formsPostgresCertificationEnvTemplate}
+                </pre>
+              </div>
+              <pre className="mt-3 max-h-64 overflow-auto rounded-md border border-border bg-foreground p-3 text-[11px] leading-5 text-background" data-testid="forms-postgres-certification-command">
+                <code>{formsPostgresCertificationCommand}</code>
+              </pre>
+              <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="forms-postgres-certification-required-inputs">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Required inputs for this command</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {formsPostgresCertificationRequiredInputs.map((input) => (
+                    <span key={input} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {input}
+                    </span>
+                  ))}
                 </div>
               </div>
             </div>
-            {formPersistenceCertification.runtime?.missing?.length ? (
-              <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
-                Missing runtime inputs: {formPersistenceCertification.runtime.missing.join(', ')}
-              </div>
-            ) : null}
-            <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
-              Database URLs and credentials are never returned; this runtime summary exposes alias/configuration state only.
-            </div>
-          </div>
-          <div className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-xs" data-testid="forms-persistence-scenario-evidence">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="font-medium text-foreground">Persistence scenario evidence</div>
-                <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
-                  Tracks the non-secret form data families operators should prove in the disposable Supabase/Postgres smoke before moving Forms out of Partial.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
-                  {formPersistenceCertification.scenarioEvidence.schemaVersion}
-                </span>
+            <div className="mt-3 rounded-md border border-border bg-card px-3 py-2" data-testid="forms-persistence-runtime-evidence">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-medium text-foreground">Runtime evidence</div>
                 <span className={cn(
                   'rounded-full px-2 py-0.5 text-[11px] font-semibold',
-                  formPersistenceCertification.scenarioEvidence.status === 'ready'
+                  formPersistenceCertification.runtime?.readyForCertification
                     ? 'bg-emerald-50 text-emerald-700'
                     : 'bg-amber-50 text-amber-700',
                 )}>
-                  {formPersistenceCertification.scenarioEvidence.coverage.covered}/{formPersistenceCertification.scenarioEvidence.coverage.total} scenarios
+                  {formPersistenceCertification.runtime?.readyForCertification ? 'Ready for DB smoke' : 'Needs DB smoke inputs'}
                 </span>
               </div>
-            </div>
-            <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
-              {formPersistenceCertification.scenarioEvidence.requiredGate}
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {formPersistenceCertification.scenarioEvidence.scenarios.map((scenario) => (
-                <div key={scenario.key} className="rounded-md border border-border bg-card px-3 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-medium text-foreground">{scenario.label}</div>
-                    <span className={cn(
-                      'rounded-full px-2 py-0.5 text-[10px] font-semibold',
-                      scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
-                    )}>
-                      {scenario.status}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    {scenario.evidenceCount} evidence item{scenario.evidenceCount === 1 ? '' : 's'}
-                  </div>
-                  {scenario.status === 'missing' ? (
-                    <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
-                  ) : null}
-                  <div className="mt-1 break-words text-[11px] text-muted-foreground">
-                    Expected: {scenario.expectedEvidence.join(' | ')}
+              <div className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded border border-border bg-background px-2 py-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Data mode</div>
+                  <div className="mt-1 font-mono text-[11px] text-foreground">{formPersistenceCertification.runtime?.dataMode || 'unknown'}</div>
+                </div>
+                <div className="rounded border border-border bg-background px-2 py-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Database type</div>
+                  <div className="mt-1 font-mono text-[11px] text-foreground">{formPersistenceCertification.runtime?.databaseType || 'unknown'}</div>
+                </div>
+                <div className="rounded border border-border bg-background px-2 py-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">URL alias</div>
+                  <div className="mt-1 font-mono text-[11px] text-foreground">
+                    {formPersistenceCertification.runtime?.databaseUrlConfigured
+                      ? formPersistenceCertification.runtime.databaseUrlAlias || 'configured'
+                      : 'missing'}
                   </div>
                 </div>
-              ))}
+                <div className="rounded border border-border bg-background px-2 py-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Disposable confirmation</div>
+                  <div className="mt-1 font-mono text-[11px] text-foreground">
+                    {formPersistenceCertification.runtime?.disposableConfirmed ? 'confirmed' : 'missing'}
+                  </div>
+                </div>
+              </div>
+              {formPersistenceCertification.runtime?.missing?.length ? (
+                <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
+                  Missing runtime inputs: {formPersistenceCertification.runtime.missing.join(', ')}
+                </div>
+              ) : null}
+              <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                Database URLs and credentials are never returned; this runtime summary exposes alias/configuration state only.
+              </div>
             </div>
-            <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
-              {formPersistenceCertification.scenarioEvidence.secretHandling}
+            <div className="mt-3 rounded-md border border-border bg-background px-3 py-2" data-testid="forms-persistence-scenario-evidence">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium text-foreground">Persistence scenario evidence</div>
+                  <p className="mt-1 max-w-3xl leading-5 text-muted-foreground">
+                    Tracks the non-secret form data families operators should prove in the disposable Supabase/Postgres smoke before moving Forms out of Partial.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md border border-border bg-muted/30 px-2 py-1 font-mono text-[11px] text-muted-foreground">
+                    {formPersistenceCertification.scenarioEvidence.schemaVersion}
+                  </span>
+                  <span className={cn(
+                    'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                    formPersistenceCertification.scenarioEvidence.status === 'ready'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-amber-50 text-amber-700',
+                  )}>
+                    {formPersistenceCertification.scenarioEvidence.coverage.covered}/{formPersistenceCertification.scenarioEvidence.coverage.total} scenarios
+                  </span>
+                </div>
+              </div>
+              <div className="mt-2 rounded border border-border bg-muted/30 px-2 py-1.5 font-mono text-[11px] text-foreground">
+                {formPersistenceCertification.scenarioEvidence.requiredGate}
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {formPersistenceCertification.scenarioEvidence.scenarios.map((scenario) => (
+                  <div key={scenario.key} className="rounded-md border border-border bg-card px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-medium text-foreground">{scenario.label}</div>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                        scenario.status === 'covered' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700',
+                      )}>
+                        {scenario.status}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      {scenario.evidenceCount} evidence item{scenario.evidenceCount === 1 ? '' : 's'}
+                    </div>
+                    {scenario.status === 'missing' ? (
+                      <div className="mt-1 text-[11px] text-foreground">{scenario.nextAction}</div>
+                    ) : null}
+                    <div className="mt-1 break-words text-[11px] text-muted-foreground">
+                      Expected: {scenario.expectedEvidence.join(' | ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                {formPersistenceCertification.scenarioEvidence.secretHandling}
+              </div>
             </div>
-          </div>
+          </details>
         </div>
       </section>
 
@@ -4083,8 +4231,13 @@ function FormsRoute() {
                 variant="primary"
                 onClick={() => void createBlankStandaloneForm()}
                 disabled={isFormsBusy || !canCreateForms}
-                title={!canCreateForms ? createPermissionTitle : undefined}
+                title={formsCreateDisabledReason || undefined}
+                aria-describedby={formsCreateActionStatusId}
                 iconStart={<Plus className="size-4" />}
+                data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsCreateActionStatus}
+                data-disabled-reason={formsCreateDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-template-create-blank-button"
               >
                 {isCreatingTemplateId === 'blank' ? 'Creating...' : 'New blank form'}
@@ -4128,6 +4281,10 @@ function FormsRoute() {
                       : collectionBackedTemplateUnavailable
                         ? collectionTargetUnavailableReason || undefined
                         : undefined;
+                    const createFrontendTemplateDisabledReason = formsCreateDisabledReason || (
+                      collectionBackedTemplateUnavailable ? collectionTargetUnavailableReason || 'Template collection routing is unavailable.' : ''
+                    );
+                    const createFrontendTemplateActionStatus = formCreateActionStatus(`${template.name} form`, createFrontendTemplateDisabledReason);
                     const manifestText = JSON.stringify({
                       schemaVersion: 'backy.frontend-form-template.v1',
                       template,
@@ -4181,8 +4338,13 @@ function FormsRoute() {
                             variant="primary"
                             onClick={() => void createFormFromFrontendTemplate(template, blueprint)}
                             disabled={isFormsBusy || !canCreateForms || collectionBackedTemplateUnavailable}
-                            title={createFrontendTemplateTitle}
+                            title={createFrontendTemplateDisabledReason || createFrontendTemplateTitle}
+                            aria-describedby={formsCreateActionStatusId}
                             iconStart={<FileInput className="size-4" />}
+                            data-action-state={createFrontendTemplateDisabledReason ? 'blocked' : 'ready'}
+                            data-action-status={createFrontendTemplateActionStatus}
+                            data-disabled-reason={createFrontendTemplateDisabledReason || undefined}
+                            data-target-site-id={activeSiteId}
                             data-testid={`forms-frontend-template-${template.id}`}
                           >
                             {isCreatingTemplateId === `frontend:${template.id}` ? 'Creating...' : 'Create form'}
@@ -4224,6 +4386,10 @@ function FormsRoute() {
                 : collectionBackedTemplateUnavailable
                   ? collectionTargetUnavailableReason || undefined
                   : undefined;
+              const createTemplateDisabledReason = formsCreateDisabledReason || (
+                collectionBackedTemplateUnavailable ? collectionTargetUnavailableReason || 'Template collection routing is unavailable.' : ''
+              );
+              const createTemplateActionStatus = formCreateActionStatus(`${template.title} form`, createTemplateDisabledReason);
 
               return (
                 <div key={template.id} className="rounded-lg border border-border bg-background p-4">
@@ -4260,8 +4426,13 @@ function FormsRoute() {
                       variant="primary"
                       onClick={() => void createFormFromTemplate(template)}
                       disabled={isFormsBusy || !canCreateForms || collectionBackedTemplateUnavailable}
-                      title={createTemplateTitle}
+                      title={createTemplateDisabledReason || createTemplateTitle}
+                      aria-describedby={formsCreateActionStatusId}
                       iconStart={<FileInput className="size-4" />}
+                      data-action-state={createTemplateDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={createTemplateActionStatus}
+                      data-disabled-reason={createTemplateDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                     >
                       {isCreatingTemplateId === template.id ? 'Creating...' : 'Create form'}
                     </Button>
@@ -4321,8 +4492,13 @@ function FormsRoute() {
                 variant="primary"
                 onClick={() => void createBlankStandaloneForm()}
                 disabled={isFormsBusy || !canCreateForms}
-                title={!canCreateForms ? createPermissionTitle : undefined}
+                title={formsCreateDisabledReason || undefined}
+                aria-describedby={formsCreateActionStatusId}
                 iconStart={<Plus className="size-4" />}
+                data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsCreateActionStatus}
+                data-disabled-reason={formsCreateDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-empty-create-blank-button"
               >
                 New blank form
@@ -4514,16 +4690,36 @@ function FormsRoute() {
                   description={selectedForm.description || selectedForm.id}
                   icon={<FileInput className="size-4" />}
                   action={
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div
+                      className="flex flex-wrap items-center gap-2"
+                      role="group"
+                      aria-label={`Actions for ${selectedForm.title || selectedForm.name}`}
+                      aria-describedby={selectedFormActionStatusId}
+                      data-testid="forms-selected-action-group"
+                      data-action-status={selectedFormActionStatus}
+                    >
+                      <span id={selectedFormActionStatusId} className="sr-only" data-testid="forms-selected-action-status">
+                        {selectedFormActionStatus}
+                      </span>
                       {selectedForm.pageId && (
                         <Link
                           to="/pages/$pageId/edit"
                           params={{ pageId: selectedForm.pageId }}
                           search={activeSiteSearch}
-                          aria-disabled={isFormsBusy}
+                          aria-disabled={Boolean(selectedFormPageDisabledReason)}
+                          aria-describedby={selectedFormActionStatusId}
+                          aria-label={`Open source page for ${selectedForm.title || selectedForm.name}`}
+                          data-action-state={selectedFormPageDisabledReason ? 'blocked' : 'ready'}
+                          data-disabled-reason={selectedFormPageDisabledReason || undefined}
+                          data-testid="form-page-link"
+                          onClick={(event) => {
+                            if (selectedFormPageDisabledReason) {
+                              event.preventDefault();
+                            }
+                          }}
                           className={cn(
                             'inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted',
-                            isFormsBusy && 'pointer-events-none opacity-60',
+                            selectedFormPageDisabledReason && 'pointer-events-none opacity-60',
                           )}
                         >
                           <ExternalLink className="size-4" />
@@ -4535,10 +4731,20 @@ function FormsRoute() {
                           to="/blog/$postId"
                           params={{ postId: selectedForm.postId }}
                           search={activeSiteSearch}
-                          aria-disabled={isFormsBusy}
+                          aria-disabled={Boolean(selectedFormBlogDisabledReason)}
+                          aria-describedby={selectedFormActionStatusId}
+                          aria-label={`Open source blog post for ${selectedForm.title || selectedForm.name}`}
+                          data-action-state={selectedFormBlogDisabledReason ? 'blocked' : 'ready'}
+                          data-disabled-reason={selectedFormBlogDisabledReason || undefined}
+                          data-testid="form-blog-link"
+                          onClick={(event) => {
+                            if (selectedFormBlogDisabledReason) {
+                              event.preventDefault();
+                            }
+                          }}
                           className={cn(
                             'inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted',
-                            isFormsBusy && 'pointer-events-none opacity-60',
+                            selectedFormBlogDisabledReason && 'pointer-events-none opacity-60',
                           )}
                         >
                           <ExternalLink className="size-4" />
@@ -4549,8 +4755,12 @@ function FormsRoute() {
                       <Button
                         variant="outline"
                         onClick={() => void handleCloneSelectedForm()}
-                        disabled={isFormsBusy || !canCreateForms}
-                        title={!canCreateForms ? createPermissionTitle : undefined}
+                        disabled={Boolean(selectedFormCloneDisabledReason)}
+                        title={selectedFormCloneDisabledReason || undefined}
+                        aria-describedby={selectedFormActionStatusId}
+                        aria-label={`Clone ${selectedForm.title || selectedForm.name}`}
+                        data-action-state={selectedFormCloneDisabledReason ? 'blocked' : 'ready'}
+                        data-disabled-reason={selectedFormCloneDisabledReason || undefined}
                         iconStart={<Copy className="size-4" />}
                         data-testid="form-clone-button"
                       >
@@ -4559,8 +4769,12 @@ function FormsRoute() {
                       <Button
                         variant="danger"
                         onClick={requestDeleteSelectedForm}
-                        disabled={isFormsBusy || !canDeleteForms}
-                        title={!canDeleteForms ? deletePermissionTitle : undefined}
+                        disabled={Boolean(selectedFormDeleteDisabledReason)}
+                        title={selectedFormDeleteDisabledReason || undefined}
+                        aria-describedby={selectedFormActionStatusId}
+                        aria-label={`Delete ${selectedForm.title || selectedForm.name}`}
+                        data-action-state={selectedFormDeleteDisabledReason ? 'blocked' : 'ready'}
+                        data-disabled-reason={selectedFormDeleteDisabledReason || undefined}
                         iconStart={<Trash2 className="size-4" />}
                         data-testid="form-delete-button"
                       >
@@ -6079,32 +6293,57 @@ function FormsRoute() {
               />
               <PanelContent>
                 {selectedSubmissions.length > 0 && (
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-3 text-sm" data-testid="forms-submission-bulk-toolbar">
+                  <div
+                    className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 px-3 py-3 text-sm"
+                    role="group"
+                    aria-label="Selected submission bulk actions"
+                    aria-describedby={`${formsSubmissionBulkSelectionStatusId} ${formsSubmissionBulkActionStatusId}`}
+                    data-testid="forms-submission-bulk-toolbar"
+                    data-action-status={formsSubmissionBulkActionStatus}
+                    data-action-state={formsSubmissionBulkActionState}
+                    data-selected-count={selectedLoadedSubmissions.length}
+                    data-visible-selected-count={selectedVisibleSubmissions.length}
+                    data-hidden-selected-count={hiddenSelectedSubmissionCount}
+                  >
                     <div className="flex flex-wrap items-center gap-3">
                       <label className="inline-flex items-center gap-2 font-medium text-foreground">
                         <input
                           type="checkbox"
                           checked={allVisibleSubmissionsSelected}
-                          disabled={isFormsBusy || filteredSubmissions.length === 0 || !canManageForms}
+                          disabled={Boolean(formsSubmissionBulkSelectionDisabledReason) || filteredSubmissions.length === 0}
                           title={!canManageForms ? managePermissionTitle : undefined}
                           onChange={(event) => toggleVisibleSubmissionSelection(event.target.checked)}
                           className="size-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                           aria-label="Select visible submissions"
+                          aria-describedby={formsSubmissionBulkActionStatusId}
+                          data-testid="forms-submission-bulk-select-visible"
+                          data-action-state={formsSubmissionBulkSelectionDisabledReason || filteredSubmissions.length === 0 ? 'blocked' : 'ready'}
+                          data-disabled-reason={formsSubmissionBulkSelectionDisabledReason || (filteredSubmissions.length === 0 ? 'No visible submissions to select.' : undefined)}
                         />
                         Select visible
                       </label>
-                      <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground" data-testid="forms-submission-bulk-selection-summary">
+                      <span
+                        id={formsSubmissionBulkSelectionStatusId}
+                        className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground"
+                        data-testid="forms-submission-bulk-selection-summary"
+                      >
                         {selectedLoadedSubmissions.length} selected
                         {selectedVisibleSubmissions.length !== selectedLoadedSubmissions.length ? ` · ${selectedVisibleSubmissions.length} visible` : ''}
                         {hiddenSelectedSubmissionCount > 0 ? ` · ${hiddenSelectedSubmissionCount} outside this view` : ''}
+                      </span>
+                      <span id={formsSubmissionBulkActionStatusId} className="sr-only" data-testid="forms-submission-bulk-action-status" aria-live="polite">
+                        {formsSubmissionBulkActionStatus}
                       </span>
                       {selectedSubmissionIds.length > 0 && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          disabled={isFormsBusy}
+                          disabled={Boolean(formsSubmissionBulkClearDisabledReason)}
                           onClick={() => setSelectedSubmissionIds([])}
+                          aria-describedby={formsSubmissionBulkActionStatusId}
+                          data-action-state={formsSubmissionBulkClearDisabledReason ? 'blocked' : 'ready'}
+                          data-disabled-reason={formsSubmissionBulkClearDisabledReason || undefined}
                           data-testid="forms-submission-bulk-clear-selection"
                         >
                           Clear
@@ -6115,10 +6354,13 @@ function FormsRoute() {
                       <Button
                         type="button"
                         size="sm"
-                        disabled={isFormsBusy || selectedLoadedSubmissions.length === 0 || !canManageForms}
-                        title={!canManageForms ? managePermissionTitle : undefined}
+                        disabled={Boolean(formsSubmissionBulkStatusDisabledReason('approved'))}
+                        title={formsSubmissionBulkStatusDisabledReason('approved') || undefined}
                         onClick={() => void handleBulkSubmissionStatus('approved')}
                         iconStart={<CheckCircle2 className="size-4" />}
+                        aria-describedby={formsSubmissionBulkActionStatusId}
+                        data-action-state={formsSubmissionBulkStatusDisabledReason('approved') ? 'blocked' : 'ready'}
+                        data-disabled-reason={formsSubmissionBulkStatusDisabledReason('approved') || undefined}
                         data-testid="forms-submission-bulk-approve"
                       >
                         Approve
@@ -6127,9 +6369,12 @@ function FormsRoute() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={isFormsBusy || selectedLoadedSubmissions.length === 0 || !canManageForms}
-                        title={!canManageForms ? managePermissionTitle : undefined}
+                        disabled={Boolean(formsSubmissionBulkStatusDisabledReason('rejected'))}
+                        title={formsSubmissionBulkStatusDisabledReason('rejected') || undefined}
                         onClick={() => void handleBulkSubmissionStatus('rejected')}
+                        aria-describedby={formsSubmissionBulkActionStatusId}
+                        data-action-state={formsSubmissionBulkStatusDisabledReason('rejected') ? 'blocked' : 'ready'}
+                        data-disabled-reason={formsSubmissionBulkStatusDisabledReason('rejected') || undefined}
                         data-testid="forms-submission-bulk-reject"
                       >
                         Reject
@@ -6138,10 +6383,13 @@ function FormsRoute() {
                         type="button"
                         size="sm"
                         variant="danger"
-                        disabled={isFormsBusy || selectedLoadedSubmissions.length === 0 || !canManageForms}
-                        title={!canManageForms ? managePermissionTitle : undefined}
+                        disabled={Boolean(formsSubmissionBulkStatusDisabledReason('spam'))}
+                        title={formsSubmissionBulkStatusDisabledReason('spam') || undefined}
                         onClick={() => void handleBulkSubmissionStatus('spam')}
                         iconStart={<XCircle className="size-4" />}
+                        aria-describedby={formsSubmissionBulkActionStatusId}
+                        data-action-state={formsSubmissionBulkStatusDisabledReason('spam') ? 'blocked' : 'ready'}
+                        data-disabled-reason={formsSubmissionBulkStatusDisabledReason('spam') || undefined}
                         data-testid="forms-submission-bulk-spam"
                       >
                         Spam
@@ -6185,20 +6433,27 @@ function FormsRoute() {
         </div>
       )}
       {pendingDeleteForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="form-delete-confirm-dialog">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="form-delete-confirm-title"
+          aria-describedby="form-delete-confirm-description form-delete-confirm-impact"
+          data-testid="form-delete-confirm-dialog"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete {pendingDeleteForm.title || pendingDeleteForm.name}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id="form-delete-confirm-title" className="text-lg font-semibold text-foreground">Delete {pendingDeleteForm.title || pendingDeleteForm.name}?</h2>
+                <p id="form-delete-confirm-description" className="mt-1 text-sm text-muted-foreground">
                   This removes the form definition, public definition endpoint, and submission intake for this form.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id="form-delete-confirm-impact" className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Form ID: <span className="font-mono font-medium text-foreground">{pendingDeleteForm.id}</span>
               {pendingDeleteForm.pageId || pendingDeleteForm.postId ? (
                 <div className="mt-1 text-amber-700">
@@ -6216,6 +6471,8 @@ function FormsRoute() {
                 variant="outline"
                 onClick={() => setPendingDeleteForm(null)}
                 disabled={Boolean(isDeletingFormId)}
+                data-testid="form-delete-cancel-button"
+                aria-label={`Cancel deleting ${pendingDeleteForm.title || pendingDeleteForm.name}`}
               >
                 Cancel
               </Button>
@@ -7278,6 +7535,10 @@ const formFieldTypeSupportsOptions = (type: FormFieldType): boolean => (
   type === 'select' || type === 'radio' || type === 'checkbox'
 );
 
+const formFieldTypeRequiresOptions = (type: FormFieldType): boolean => (
+  type === 'select' || type === 'radio'
+);
+
 const normalizeFormFieldOptions = (options: string[] | undefined): string[] | undefined => {
   const normalized = (options || []).map((option) => option.trim()).filter(Boolean);
   return normalized.length > 0 ? normalized : undefined;
@@ -7448,7 +7709,7 @@ const buildFormDraftInlineErrors = (
     if (!fieldLabel) {
       addFormDraftInlineError(errors, `${fieldPrefix}-label`, 'Field label is required.');
     }
-    if (formFieldTypeSupportsOptions(fieldType) && !options?.length) {
+    if (formFieldTypeRequiresOptions(fieldType) && !options?.length) {
       addFormDraftInlineError(errors, `${fieldPrefix}-options`, 'Add at least one option for this field type.');
     }
     if (defaultValue && !normalizeFormFieldDefaultValue(defaultValue, fieldType, options)) {
@@ -8249,10 +8510,10 @@ const getPublicBaseUrl = (): string => {
   ).trim();
 
   if (!envBase && isLocalAdminHost()) {
-    return 'http://localhost:3001';
+    return getLocalBackendOrigin();
   }
 
-  return (envBase || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001'))
+  return (envBase || (typeof window !== 'undefined' ? window.location.origin : getLocalBackendOrigin()))
     .replace(/\/api\/admin$/, '')
     .replace(/\/api$/, '')
     .replace(/\/$/, '');

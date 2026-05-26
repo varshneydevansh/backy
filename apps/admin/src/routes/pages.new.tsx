@@ -1203,6 +1203,39 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.datasetMode ? { datasetMode: input.datasetMode } : {}),
 });
 
+const hasMeaningfulPageCreateDraftContent = (
+    formData: PageCreateDraftState,
+    hasUserEditedDraft: boolean,
+) => {
+    if (hasUserEditedDraft) return true;
+
+    const templateDefaults = TEMPLATE_DEFAULTS[formData.template];
+    const expectedSlug = formData.isHomepage ? 'index' : templateDefaults.slug;
+    const expectedNavigationPlacement = DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[formData.template];
+
+    return (
+        formData.title.trim() !== templateDefaults.title
+        || formData.slug.trim() !== expectedSlug
+        || formData.description.trim() !== templateDefaults.description
+        || formData.status !== 'draft'
+        || Boolean(formData.scheduledAt)
+        || formData.isHomepage
+        || formData.parentPageId.trim().length > 0
+        || formData.navigationPlacement !== expectedNavigationPlacement
+        || formData.navigationLabel.trim() !== templateDefaults.title
+        || formData.seoTitle.trim() !== templateDefaults.title
+        || formData.canonicalPath.trim().length > 0
+        || formData.keywords.trim().length > 0
+        || formData.jsonLdText.trim().length > 0
+        || formData.ogImage.trim().length > 0
+        || formData.noIndex
+        || formData.noFollow
+        || formData.designTemplateId.trim().length > 0
+        || formData.collectionId.trim().length > 0
+        || Boolean(formData.datasetMode)
+    );
+};
+
 export const Route = createFileRoute('/pages/new')({
     validateSearch: (search: Record<string, unknown>): NewPageSearch => ({
         siteId: normalizedSearchString(search.siteId),
@@ -1250,6 +1283,7 @@ function NewPageRoute() {
     const [autosavePausedForRecovery, setAutosavePausedForRecovery] = useState(false);
     const [lastAutosavedAt, setLastAutosavedAt] = useState<string | null>(null);
     const [autosaveStatus, setAutosaveStatus] = useState('Autosave ready');
+    const [hasUserEditedDraft, setHasUserEditedDraft] = useState(false);
     const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
     const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
     const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
@@ -1259,14 +1293,13 @@ function NewPageRoute() {
     const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
     const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
     const [permissionError, setPermissionError] = useState<string | null>(null);
-    const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-    const canViewPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canEditPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canPublishPages = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canViewCollections = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canViewSites = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canConfigureSites = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.configure', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
-    const canCreateSites = !isPermissionMatrixPending && isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.create', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canViewPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canEditPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canPublishPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canViewCollections = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canViewSites = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canConfigureSites = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.configure', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
+    const canCreateSites = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'sites.create', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const viewPermissionTitle = canViewPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const editPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const publishPermissionTitle = canPublishPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
@@ -1275,14 +1308,15 @@ function NewPageRoute() {
     const sitesConfigurePermissionTitle = canConfigureSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.configure', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const sitesCreatePermissionTitle = canCreateSites ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'sites.create', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canApplyNavigationPlacement = canViewSites && canConfigureSites;
-    const isPageCreateMutating = isLoading || isPreviewAfterCreateBusy || isPermissionMatrixPending;
-    const isPageCreateBusy = isPageCreateMutating || isCheckingPages;
+    const isPageCreateMutating = isLoading || isPreviewAfterCreateBusy;
+    const isPageCreateBusy = isPageCreateMutating;
+    const isPageCreateStatusBusy = isPageCreateMutating || isCheckingPages;
     const templateSelectionDisabled = isPageCreateMutating;
     const pageCreateBusyState = [
         isLoading ? 'creating' : '',
         isPreviewAfterCreateBusy ? 'previewing' : '',
         isCheckingPages ? 'checking-pages' : '',
-        isPermissionMatrixPending ? 'permissions' : '',
+        isPermissionsLoading ? 'permissions' : '',
     ].filter(Boolean).join(' ') || 'idle';
     const defaultSiteId = sites[0]?.publicSiteId || sites[0]?.id || 'site-demo';
     const requestedSite = search.siteId
@@ -1340,8 +1374,8 @@ function NewPageRoute() {
         collectionId: nextFormData.collectionId,
         datasetMode: nextFormData.datasetMode || undefined,
     });
-    const updatePageDraft = (next: Partial<typeof formData>, options?: { allowDuringRouteCheck?: boolean }) => {
-        const draftLocked = options?.allowDuringRouteCheck ? isPageCreateMutating : isPageCreateBusy;
+    const updatePageDraft = (next: Partial<typeof formData>, options?: { markEdited?: boolean }) => {
+        const draftLocked = isPageCreateMutating;
         if (draftLocked || !canEditPages) return;
 
         const nextFormData = {
@@ -1350,6 +1384,9 @@ function NewPageRoute() {
         };
 
         setFormData(nextFormData);
+        if (options?.markEdited !== false) {
+            setHasUserEditedDraft(true);
+        }
         setError(null);
         setNotice(null);
         navigate({ to: '/pages/new', search: buildRouteSearchFromForm(nextFormData), replace: true });
@@ -1420,7 +1457,6 @@ function NewPageRoute() {
         const siteId = formData.siteId;
 
         if (!siteId) return;
-        if (isPermissionMatrixPending) return;
         if (!canViewPages) {
             setRouteCheckError(null);
             setIsCheckingPages(false);
@@ -1462,14 +1498,13 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [canViewPages, formData.siteId, isPermissionMatrixPending, routeCheckRetry, selectedSite?.id, selectedSite?.publicSiteId, setPages, viewPermissionTitle]);
+    }, [canViewPages, formData.siteId, routeCheckRetry, selectedSite?.id, selectedSite?.publicSiteId, setPages, viewPermissionTitle]);
 
     useEffect(() => {
         let cancelled = false;
         const siteId = formData.siteId;
 
         if (!siteId) return;
-        if (isPermissionMatrixPending) return;
         if (!canViewSites) {
             setFrontendDesign(null);
             setFrontendDesignError(sitesViewPermissionTitle || 'Your account cannot view frontend design templates.');
@@ -1503,7 +1538,7 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [canViewSites, formData.siteId, isPermissionMatrixPending, sitesViewPermissionTitle]);
+    }, [canViewSites, formData.siteId, sitesViewPermissionTitle]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1515,7 +1550,6 @@ function NewPageRoute() {
             setCollectionsLoading(false);
             return;
         }
-        if (isPermissionMatrixPending) return;
         if (!canViewCollections) {
             setCollections([]);
             setCollectionsError(collectionsViewPermissionTitle || 'Your account cannot view collections for dataset page creation.');
@@ -1550,7 +1584,7 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [canViewCollections, collectionsViewPermissionTitle, formData.siteId, isPermissionMatrixPending]);
+    }, [canViewCollections, collectionsViewPermissionTitle, formData.siteId]);
 
     useEffect(() => {
         if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, formData.siteId))) {
@@ -1694,7 +1728,7 @@ function NewPageRoute() {
 
     useEffect(() => {
         if (formData.designTemplateId && frontendDesign && !frontendPageTemplates.some((template) => template.id === formData.designTemplateId)) {
-            updatePageDraft({ designTemplateId: '' });
+            updatePageDraft({ designTemplateId: '' }, { markEdited: false });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.designTemplateId, frontendDesign, frontendPageTemplates]);
@@ -1719,7 +1753,6 @@ function NewPageRoute() {
                 seoTitle: shouldApplyTitle ? nextDefaults.title : formData.seoTitle || formData.title,
                 designTemplateId: '',
             },
-            { allowDuringRouteCheck: true },
         );
     };
     const handleFrontendTemplateChange = (template: SiteFrontendDesignTemplate) => {
@@ -1739,7 +1772,6 @@ function NewPageRoute() {
                 navigationLabel: shouldApplyTitle ? template.name : formData.navigationLabel || formData.title,
                 seoTitle: shouldApplyTitle ? template.name : formData.seoTitle || formData.title,
             },
-            { allowDuringRouteCheck: true },
         );
     };
     const handleDatasetCollectionChange = (collectionId: string) => {
@@ -1781,7 +1813,7 @@ function NewPageRoute() {
     useEffect(() => {
         const parentPageId = formData.parentPageId.trim();
 
-        if (!parentPageId || selectedParentPage || !formData.siteId || isPermissionMatrixPending || !canViewPages) {
+        if (!parentPageId || selectedParentPage || !formData.siteId || !canViewPages) {
             return;
         }
 
@@ -1810,7 +1842,7 @@ function NewPageRoute() {
         return () => {
             cancelled = true;
         };
-    }, [canViewPages, formData.parentPageId, formData.siteId, isPermissionMatrixPending, selectedParentPage, setPages]);
+    }, [canViewPages, formData.parentPageId, formData.siteId, selectedParentPage, setPages]);
     const selectableParentPages = useMemo(
         () => selectedSitePages
             .filter((page) => page.status !== 'archived')
@@ -1826,7 +1858,7 @@ function NewPageRoute() {
         : `/${slugify(formData.slug || formData.title || 'new-page')}`;
     const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
     const titleDerivedSlug = slugify(formData.title || 'new-page');
-    const canSyncSlugFromTitle = !isPageCreateBusy && canEditPages && !formData.isHomepage && Boolean(formData.title.trim()) && formData.slug !== titleDerivedSlug;
+    const canSyncSlugFromTitle = !isPageCreateMutating && canEditPages && !formData.isHomepage && Boolean(formData.title.trim()) && formData.slug !== titleDerivedSlug;
     const normalizedCanonicalPath = normalizeCanonicalPath(formData.canonicalPath || routePreview);
     const canonicalValid = normalizedCanonicalPath.startsWith('/');
     const effectiveSeoTitle = formData.seoTitle.trim() || formData.title.trim();
@@ -1916,9 +1948,9 @@ function NewPageRoute() {
         && formData.title.trim()
         && formData.siteId
         && selectedSite
-        && !isCheckingPages
         && navigationPermissionReady
         && !routeConflict
+        && !isCheckingPages
         && !routeCheckError
         && !isCollectionRouteCheckPending
         && !collectionRouteCheckError
@@ -1931,6 +1963,7 @@ function NewPageRoute() {
     );
     const canSubmit = Boolean(baseCreateReady && publishPermissionReady && hasFutureSchedule);
     const canCreatePreviewDraft = Boolean(baseCreateReady && canPublishPages);
+    const canAttemptCreatePreviewDraft = canEditPages && canPublishPages;
     const submitBlockerMessage = useMemo(() => {
         if (isLoading || canSubmit) return null;
         if (!canEditPages) return editPermissionTitle || 'Your account cannot create pages.';
@@ -1938,7 +1971,7 @@ function NewPageRoute() {
         if (!navigationPermissionReady) return !canViewSites
             ? sitesViewPermissionTitle || 'Your account cannot read site navigation before placing this page in a menu.'
             : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.';
-        if (isCheckingPages) return 'Checking existing routes for this site before creating the page.';
+        if (isCheckingPages) return 'Checking existing page routes for this site before creating the page.';
         if (routeCheckError) return 'Backy could not verify existing routes for this site. Refresh or choose the site again before creating the page.';
         if (isCollectionRouteCheckPending) return 'Checking collection routes for this site before creating the page.';
         if (collectionRouteCheckError) return 'Backy could not verify collection routes for this site. Refresh or choose the site again before creating the page.';
@@ -1954,7 +1987,7 @@ function NewPageRoute() {
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
     }, [canEditPages, canSubmit, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, scheduleValidationMessage, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
-    const submitControlState = canSubmit ? 'ready' : isPageCreateBusy ? 'busy' : 'blocked';
+    const submitControlState = canSubmit ? 'ready' : isPageCreateStatusBusy ? 'busy' : 'blocked';
     const previewDraftBlockerMessage = useMemo(() => {
         if (isPreviewAfterCreateBusy || canCreatePreviewDraft) return null;
         if (!canEditPages) return editPermissionTitle || 'Your account cannot create pages.';
@@ -1962,7 +1995,7 @@ function NewPageRoute() {
         if (!navigationPermissionReady) return !canViewSites
             ? sitesViewPermissionTitle || 'Your account cannot read site navigation before placing this page in a menu.'
             : sitesConfigurePermissionTitle || 'Your account cannot update site navigation for this page.';
-        if (isCheckingPages) return 'Checking existing routes for this site before creating the preview draft.';
+        if (isCheckingPages) return 'Checking existing page routes for this site before creating the preview draft.';
         if (routeCheckError) return 'Backy could not verify existing routes for this site. Refresh or choose the site again before creating the preview draft.';
         if (isCollectionRouteCheckPending) return 'Checking collection routes for this site before creating the preview draft.';
         if (collectionRouteCheckError) return 'Backy could not verify collection routes for this site. Refresh or choose the site again before creating the preview draft.';
@@ -1977,7 +2010,74 @@ function NewPageRoute() {
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this preview draft to navigation.';
         return 'Review the required page basics before creating this preview draft.';
     }, [canCreatePreviewDraft, canEditPages, canPublishPages, canViewSites, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isPreviewAfterCreateBusy, jsonLdResult, jsonLdValid, navigationPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite, sitesConfigurePermissionTitle, sitesViewPermissionTitle]);
-    const previewDraftControlState = canCreatePreviewDraft ? 'ready' : isPageCreateBusy ? 'busy' : 'blocked';
+    const previewDraftControlState = canCreatePreviewDraft ? 'ready' : isPageCreateStatusBusy ? 'busy' : 'blocked';
+    const pageCreateSubmitActionStatusId = 'page-create-submit-action-status';
+    const pageCreatePreviewActionStatusId = 'page-create-preview-action-status';
+    const pageCreateCommandActionStatusId = 'page-create-command-action-status';
+    const pageCreatePermissionActionStatusId = 'page-create-permission-action-status';
+    const pageCreateRecoveryActionStatusId = 'page-create-recovery-action-status';
+    const pageCreateSubmitDisabledReason = isPageCreateBusy
+        ? 'Page creation is already running.'
+        : !canEditPages
+            ? editPermissionTitle || 'Your account cannot create pages.'
+            : '';
+    const pageCreatePreviewDisabledReason = isPageCreateBusy
+        ? 'Page creation is already running.'
+        : !canAttemptCreatePreviewDraft
+            ? !canEditPages
+                ? editPermissionTitle || 'Your account cannot create pages.'
+                : publishPermissionTitle || 'Your account cannot create page preview links.'
+            : '';
+    const pageCreateSubmitActionState = pageCreateSubmitDisabledReason || submitBlockerMessage ? 'blocked' : 'ready';
+    const pageCreatePreviewActionState = pageCreatePreviewDisabledReason || previewDraftBlockerMessage ? 'blocked' : 'ready';
+    const pageCreateSubmitActionStatus = pageCreateSubmitDisabledReason
+        ? `Create page unavailable: ${pageCreateSubmitDisabledReason}`
+        : submitBlockerMessage
+            ? `Create page needs attention: ${submitBlockerMessage}`
+            : `Create page available for ${formData.siteId} at ${routePreview} using ${effectiveTemplateName}.`;
+    const pageCreatePreviewActionStatus = pageCreatePreviewDisabledReason
+        ? `Preview draft unavailable: ${pageCreatePreviewDisabledReason}`
+        : previewDraftBlockerMessage
+            ? `Preview draft needs attention: ${previewDraftBlockerMessage}`
+            : `Preview draft available for ${formData.siteId} at ${routePreview} using ${effectiveTemplateName}.`;
+    const pageCreateSubmitDescribedBy = submitBlockerMessage
+        ? `${pageCreateSubmitActionStatusId} page-create-submit-blocker`
+        : pageCreateSubmitActionStatusId;
+    const pageCreatePreviewDescribedBy = previewDraftBlockerMessage && submitBlockerMessage
+        ? `${pageCreatePreviewActionStatusId} page-create-submit-blocker`
+        : pageCreatePreviewActionStatusId;
+    const pageCreateBackActionState = isPageCreateBusy ? 'busy' : 'ready';
+    const pageCreateBackActionStatus = isPageCreateBusy
+        ? 'Pages list unavailable while page creation is running.'
+        : `Back to Pages available for ${formData.siteId}.`;
+    const pageCreateHandoffActionState = isPageCreateBusy ? 'busy' : canEditPages ? 'ready' : 'blocked';
+    const pageCreateCopyActionStatus = isPageCreateBusy
+        ? 'Copy page creation handoff unavailable while page creation is running.'
+        : !canEditPages
+            ? `Copy page creation handoff unavailable: ${editPermissionTitle || 'Your account cannot prepare page creation handoff data.'}`
+            : `Copy page creation handoff available for ${formData.siteId} at ${routePreview}.`;
+    const pageCreateDownloadActionStatus = isPageCreateBusy
+        ? 'Download page creation handoff unavailable while page creation is running.'
+        : !canEditPages
+            ? `Download page creation handoff unavailable: ${editPermissionTitle || 'Your account cannot download page creation handoff data.'}`
+            : `Download page creation handoff available for ${formData.siteId} at ${routePreview}.`;
+    const pageCreateCancelActionStatus = isPageCreateBusy
+        ? 'Cancel page creation unavailable while page creation is running.'
+        : `Cancel page creation and return to Pages available for ${formData.siteId}.`;
+    const pageCreateRouteRetryActionStatus = isPageCreateMutating
+        ? 'Retry page route check unavailable while page creation is running.'
+        : `Retry page route check available for ${formData.siteId}.`;
+    const pageCreatePermissionRetryActionStatus = isPermissionsLoading
+        ? 'Retry page creation permissions unavailable while permissions are loading.'
+        : 'Retry page creation permissions available.';
+    const pageCreatePermissionReviewActionStatus = 'Review user access for page creation permissions available.';
+    const pageCreateRecoveryActionState = isPageCreateMutating ? 'busy' : 'ready';
+    const pageCreateDiscardRecoveryActionStatus = isPageCreateMutating
+        ? 'Discard recovered page draft unavailable while page creation is running.'
+        : 'Discard recovered page draft available.';
+    const pageCreateRestoreRecoveryActionStatus = isPageCreateBusy
+        ? 'Restore recovered page draft unavailable while page creation is running.'
+        : 'Restore recovered page draft available.';
     const pageCreationReadiness = useMemo(() => {
         const resolvedSlug = formData.isHomepage ? 'index' : slugify(formData.slug || formData.title || 'new-page');
         const hasStarterCanvas = selectedFrontendTemplate ? true : selectedTemplate.sections.length > 0;
@@ -2635,49 +2735,10 @@ function NewPageRoute() {
         }, null, 2),
         [datasetCreationReadiness],
     );
-    const hasAutosaveContent = useMemo(() => (
-        formData.title.trim().length > 0
-        || formData.slug.trim().length > 0
-        || formData.description.trim().length > 0
-        || formData.template !== 'blank'
-        || formData.status !== 'draft'
-        || Boolean(formData.scheduledAt)
-        || formData.isHomepage
-        || formData.parentPageId.trim().length > 0
-        || formData.navigationPlacement !== DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[formData.template]
-        || formData.navigationLabel.trim().length > 0
-        || formData.seoTitle.trim().length > 0
-        || formData.canonicalPath.trim().length > 0
-        || formData.keywords.trim().length > 0
-        || formData.jsonLdText.trim().length > 0
-        || formData.ogImage.trim().length > 0
-        || formData.noIndex
-        || formData.noFollow
-        || formData.designTemplateId.trim().length > 0
-        || formData.collectionId.trim().length > 0
-        || Boolean(formData.datasetMode)
-    ), [
-        formData.canonicalPath,
-        formData.collectionId,
-        formData.datasetMode,
-        formData.description,
-        formData.designTemplateId,
-        formData.isHomepage,
-        formData.keywords,
-        formData.jsonLdText,
-        formData.navigationLabel,
-        formData.navigationPlacement,
-        formData.parentPageId,
-        formData.noFollow,
-        formData.noIndex,
-        formData.ogImage,
-        formData.scheduledAt,
-        formData.seoTitle,
-        formData.slug,
-        formData.status,
-        formData.template,
-        formData.title,
-    ]);
+    const hasAutosaveContent = useMemo(
+        () => hasMeaningfulPageCreateDraftContent(formData, hasUserEditedDraft),
+        [formData, hasUserEditedDraft],
+    );
 
     useEffect(() => {
         if (!hasHydratedAutosave || autosavePausedForRecovery || isLoading || isPreviewAfterCreateBusy) {
@@ -2723,6 +2784,7 @@ function NewPageRoute() {
         setDraftRecovery(null);
         setAutosavePausedForRecovery(false);
         setLastAutosavedAt(null);
+        setHasUserEditedDraft(false);
         setAutosaveStatus('Autosave ready');
     };
 
@@ -2740,6 +2802,7 @@ function NewPageRoute() {
         setDraftRecovery(null);
         setAutosavePausedForRecovery(false);
         setLastAutosavedAt(draftRecovery.savedAt);
+        setHasUserEditedDraft(true);
         setAutosaveStatus('Recovered draft restored');
         setError(null);
         setNotice('Recovered local page draft.');
@@ -2929,6 +2992,7 @@ function NewPageRoute() {
                 params: { pageId: created.id },
                 search: {
                     siteId: formData.siteId,
+                    focus: 'canvas',
                     ...(navigationWarning ? { navWarning: navigationWarning } : {}),
                 },
             });
@@ -2942,6 +3006,7 @@ function NewPageRoute() {
                     params: { pageId: created.id },
                     search: {
                         siteId: formData.siteId,
+                        focus: 'canvas',
                         navWarning: [navigationWarning, previewWarning].filter(Boolean).join(' '),
                     },
                 });
@@ -2989,17 +3054,7 @@ function NewPageRoute() {
         }
 
         if (!canSubmit) {
-            if (routeConflict) {
-                setError(routeConflict.message);
-            } else if (scheduleValidationMessage) {
-                setError(scheduleValidationMessage);
-            } else if (!hasNavigationLabel) {
-                setError('Add a navigation label or choose not to add this page to navigation.');
-            } else if (!jsonLdValid) {
-                setError(jsonLdResult.message);
-            } else {
-                setError('Add a page title and select a site before creating the page.');
-            }
+            setError(submitBlockerMessage || 'Add a page title and select a site before creating the page.');
             setNotice(null);
             return;
         }
@@ -3020,6 +3075,7 @@ function NewPageRoute() {
                 params: { pageId: created.id },
                 search: {
                     siteId: formData.siteId,
+                    focus: 'canvas',
                     ...(navigationWarning ? { navWarning: navigationWarning } : {}),
                 },
             });
@@ -3032,7 +3088,7 @@ function NewPageRoute() {
         }
     };
 
-    if (!isPermissionMatrixPending && !canEditPages) {
+    if (!isPermissionsLoading && !canEditPages) {
         return (
             <PageShell
                 title="Page creation unavailable"
@@ -3043,6 +3099,9 @@ function NewPageRoute() {
                     data-testid="page-create-permission-state"
                     className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
                 >
+                    <span id={pageCreatePermissionActionStatusId} className="sr-only" data-testid="page-create-permission-action-status" aria-live="polite">
+                        {pageCreatePermissionRetryActionStatus} {pageCreatePermissionReviewActionStatus}
+                    </span>
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="flex gap-3">
                             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -3059,6 +3118,11 @@ function NewPageRoute() {
                                 onClick={loadPageCreatePermissions}
                                 disabled={isPermissionsLoading}
                                 aria-label="Retry loading page creation permissions"
+                                aria-describedby={pageCreatePermissionActionStatusId}
+                                data-testid="page-create-permission-retry"
+                                data-action-state={isPermissionsLoading ? 'busy' : 'ready'}
+                                data-action-status={pageCreatePermissionRetryActionStatus}
+                                data-disabled-reason={isPermissionsLoading ? 'Page creation permissions are already loading.' : undefined}
                                 className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 Retry permissions
@@ -3066,6 +3130,10 @@ function NewPageRoute() {
                             <button
                                 type="button"
                                 onClick={() => navigate({ to: '/users' })}
+                                aria-describedby={pageCreatePermissionActionStatusId}
+                                data-testid="page-create-permission-review-users"
+                                data-action-state="ready"
+                                data-action-status={pageCreatePermissionReviewActionStatus}
                                 className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition-colors hover:bg-amber-100 focus-ring"
                             >
                                 Review users
@@ -3089,6 +3157,13 @@ function NewPageRoute() {
                         navigate({ to: '/pages', search: { siteId: formData.siteId } });
                     }}
                     disabled={isPageCreateBusy}
+                    title={pageCreateBackActionStatus}
+                    aria-label="Back to pages"
+                    aria-describedby={pageCreateCommandActionStatusId}
+                    data-testid="page-create-back-to-pages"
+                    data-action-state={pageCreateBackActionState}
+                    data-action-status={pageCreateBackActionStatus}
+                    data-disabled-reason={isPageCreateBusy ? 'Page creation is already running.' : undefined}
                     className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                     <ArrowLeft className="h-4 w-4" />
@@ -3097,6 +3172,9 @@ function NewPageRoute() {
             }
             className="w-full min-w-0"
         >
+            <span id={pageCreateCommandActionStatusId} className="sr-only" data-testid="page-create-command-action-status" aria-live="polite">
+                {pageCreateBackActionStatus} {pageCreateCopyActionStatus} {pageCreateDownloadActionStatus} {pageCreateCancelActionStatus} {pageCreateRouteRetryActionStatus}
+            </span>
             <section
                 className="mb-6 min-w-0 rounded-lg border border-border bg-card p-5 shadow-sm"
                 data-testid="page-creation-command-center"
@@ -3134,9 +3212,35 @@ function NewPageRoute() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         <button
+                            type="submit"
+                            form="page-create-form"
+                            disabled={isPageCreateBusy || !canEditPages}
+                            title={submitBlockerMessage || 'Create page and open the visual editor'}
+                            aria-disabled={isPageCreateBusy || !canEditPages}
+                            aria-describedby={pageCreateSubmitDescribedBy}
+                            data-testid="page-create-primary-submit"
+                            data-state={submitControlState}
+                            data-blocker={submitBlockerMessage || ''}
+                            data-action-state={pageCreateSubmitActionState}
+                            data-action-status={pageCreateSubmitActionStatus}
+                            data-disabled-reason={pageCreateSubmitDisabledReason || undefined}
+                            data-target-site-id={formData.siteId || undefined}
+                            data-target-route={routePreview}
+                            data-target-template={effectiveTemplateName}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <Save className="h-4 w-4" />
+                            {isLoading ? 'Creating...' : isCheckingPages && !canSubmit ? 'Checking routes...' : 'Create page'}
+                        </button>
+                        <button
                             type="button"
                             onClick={() => void copyCreationText(creationHandoffText, 'Page creation handoff manifest')}
                             disabled={isPageCreateBusy}
+                            aria-describedby={pageCreateCommandActionStatusId}
+                            data-testid="page-create-copy-handoff"
+                            data-action-state={pageCreateHandoffActionState}
+                            data-action-status={pageCreateCopyActionStatus}
+                            data-disabled-reason={isPageCreateBusy ? 'Page creation is already running.' : !canEditPages ? editPermissionTitle || 'Your account cannot prepare page creation handoff data.' : undefined}
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Copy className="h-4 w-4" />
@@ -3146,6 +3250,11 @@ function NewPageRoute() {
                             type="button"
                             onClick={downloadCreationHandoff}
                             disabled={isPageCreateBusy}
+                            aria-describedby={pageCreateCommandActionStatusId}
+                            data-testid="page-create-download-handoff"
+                            data-action-state={pageCreateHandoffActionState}
+                            data-action-status={pageCreateDownloadActionStatus}
+                            data-disabled-reason={isPageCreateBusy ? 'Page creation is already running.' : !canEditPages ? editPermissionTitle || 'Your account cannot download page creation handoff data.' : undefined}
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Download className="h-4 w-4" />
@@ -3154,7 +3263,7 @@ function NewPageRoute() {
                         <button
                             type="button"
                             onClick={() => void handleCreatePreview()}
-                            disabled={isPageCreateBusy || !canCreatePreviewDraft}
+                            disabled={isPageCreateBusy || !canAttemptCreatePreviewDraft}
                             title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -3172,7 +3281,7 @@ function NewPageRoute() {
                             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
                             <Globe className="h-4 w-4" />
-                            Create site
+                            Add site
                         </button>
                     </div>
                 </div>
@@ -3219,13 +3328,33 @@ function NewPageRoute() {
                     </div>
                 </div>
 
-                <div className="mt-4 rounded-lg border border-border bg-background p-4">
+                <div className="mt-4 grid gap-2 rounded-lg border border-border bg-background p-3 text-sm sm:grid-cols-3">
                     <div>
-                        <h3 className="text-sm font-semibold">Creation control map</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            Jump through the decisions that make a page routable, editable, and ready for custom frontend APIs.
-                        </p>
+                        <div className="text-xs font-medium text-muted-foreground">Target route</div>
+                        <div className="mt-1 truncate font-semibold text-foreground">{selectedSite?.name || formData.siteId} {routePreview}</div>
                     </div>
+                    <div>
+                        <div className="text-xs font-medium text-muted-foreground">Seed</div>
+                        <div className="mt-1 truncate font-semibold text-foreground">{effectiveTemplateName}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs font-medium text-muted-foreground">Next step</div>
+                        <div className="mt-1 truncate font-semibold text-foreground">Open visual editor</div>
+                    </div>
+                </div>
+
+                <details className="mt-4 rounded-lg border border-border bg-background p-4" data-testid="page-creation-control-map">
+                    <summary className="cursor-pointer list-none rounded-md outline-none transition hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">
+                        <span className="flex flex-wrap items-center justify-between gap-3">
+                            <span>
+                                <span className="block text-sm font-semibold">Creation control map</span>
+                                <span className="mt-1 block text-sm text-muted-foreground">
+                                    Jump through routing, starter design, SEO, and payload sections when you need the full checklist.
+                                </span>
+                            </span>
+                            <span className="rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">Show sections</span>
+                        </span>
+                    </summary>
                     <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                         {PAGE_CREATION_AREAS.map((area) => (
                             <a
@@ -3245,7 +3374,7 @@ function NewPageRoute() {
                             </a>
                         ))}
                     </div>
-                </div>
+                </details>
             </section>
 
             <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -3260,7 +3389,12 @@ function NewPageRoute() {
                                         if (isPageCreateBusy) return;
                                         setRouteCheckRetry((value) => value + 1);
                                     }}
-                                    disabled={isPageCreateBusy}
+                                    disabled={isPageCreateMutating}
+                                    aria-describedby={pageCreateCommandActionStatusId}
+                                    data-testid="page-create-route-check-retry"
+                                    data-action-state={isPageCreateMutating ? 'busy' : 'ready'}
+                                    data-action-status={pageCreateRouteRetryActionStatus}
+                                    data-disabled-reason={isPageCreateMutating ? 'Page creation is already running.' : undefined}
                                     className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     <RefreshCw className={cn('h-3.5 w-3.5', isCheckingPages && 'animate-spin')} />
@@ -3279,6 +3413,9 @@ function NewPageRoute() {
 
                 {draftRecovery && (
                     <div className="xl:col-span-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900" data-testid="page-create-recovery">
+                        <span id={pageCreateRecoveryActionStatusId} className="sr-only" data-testid="page-create-recovery-action-status" aria-live="polite">
+                            {pageCreateDiscardRecoveryActionStatus} {pageCreateRestoreRecoveryActionStatus}
+                        </span>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <span>
                                 Local autosave found a page draft from {new Date(draftRecovery.savedAt).toLocaleString()} for {draftRecovery.formData.siteId}.
@@ -3287,7 +3424,12 @@ function NewPageRoute() {
                                 <button
                                     type="button"
                                     onClick={discardRecoveredDraft}
-                                    disabled={isPageCreateBusy}
+                                    disabled={isPageCreateMutating}
+                                    aria-describedby={pageCreateRecoveryActionStatusId}
+                                    data-testid="page-create-discard-recovery"
+                                    data-action-state={pageCreateRecoveryActionState}
+                                    data-action-status={pageCreateDiscardRecoveryActionStatus}
+                                    data-disabled-reason={isPageCreateMutating ? 'Page creation is already running.' : undefined}
                                     className="inline-flex items-center justify-center rounded-lg border border-sky-300 bg-white px-3 py-2 text-xs font-semibold text-sky-900 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     Discard recovery
@@ -3296,6 +3438,11 @@ function NewPageRoute() {
                                     type="button"
                                     onClick={restoreRecoveredDraft}
                                     disabled={isPageCreateBusy}
+                                    aria-describedby={pageCreateRecoveryActionStatusId}
+                                    data-testid="page-create-restore-recovery"
+                                    data-action-state={isPageCreateBusy ? 'busy' : 'ready'}
+                                    data-action-status={pageCreateRestoreRecoveryActionStatus}
+                                    data-disabled-reason={isPageCreateBusy ? 'Page creation is already running.' : undefined}
                                     className="inline-flex items-center justify-center rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     Restore draft
@@ -3395,7 +3542,7 @@ function NewPageRoute() {
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} noValidate className="min-w-0 space-y-6">
+                <form id="page-create-form" onSubmit={handleSubmit} noValidate className="min-w-0 space-y-6">
                     <div id="page-basics" className="space-y-6 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
@@ -3456,7 +3603,7 @@ function NewPageRoute() {
                                         seoTitle: formData.seoTitle ? formData.seoTitle : e.target.value,
                                     })}
                                     placeholder="About us"
-                                    disabled={isPageCreateBusy}
+                                    disabled={isPageCreateMutating}
                                     aria-invalid={Boolean(pageTitleInlineError)}
                                     aria-describedby={pageTitleInlineError ? 'page-create-title-error' : undefined}
                                     data-testid="page-create-title-input"
@@ -3496,7 +3643,7 @@ function NewPageRoute() {
                                         value={formData.slug}
                                         onChange={(e) => updatePageDraft({ slug: slugify(e.target.value) })}
                                         placeholder="about"
-                                        disabled={isPageCreateBusy || formData.isHomepage}
+                                        disabled={isPageCreateMutating || formData.isHomepage}
                                         className="min-w-0 flex-1 rounded-r-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                                     />
                                 </div>
@@ -3511,19 +3658,19 @@ function NewPageRoute() {
                                 onChange={(e) => updatePageDraft({ description: e.target.value })}
                                 placeholder="Short summary for search previews and frontend route metadata."
                                 rows={3}
-                                disabled={isPageCreateBusy}
+                                disabled={isPageCreateMutating}
                                 className="w-full resize-none rounded-lg border bg-background px-4 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                             />
                         </div>
 
                         <label className={cn(
                             'flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 transition hover:bg-accent',
-                            isPageCreateBusy && 'cursor-not-allowed opacity-70'
+                            isPageCreateMutating && 'cursor-not-allowed opacity-70'
                         )}>
                             <input
                                 type="checkbox"
                                 checked={formData.isHomepage}
-                                disabled={isPageCreateBusy}
+                                disabled={isPageCreateMutating}
                                 onChange={(e) => {
                                     const isHomepage = e.target.checked;
                                     updatePageDraft({
@@ -3938,9 +4085,9 @@ function NewPageRoute() {
                             )}
                         </div>
 
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                             {frontendPageTemplates.length > 0 && (
-                                <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-teal-200 bg-teal-50/60 p-4" data-testid="page-frontend-template-options">
+                                <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-teal-200 bg-teal-50/60 p-4" data-testid="page-frontend-template-options">
                                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <h3 className="text-sm font-semibold text-teal-950">Frontend design templates</h3>
@@ -3952,7 +4099,7 @@ function NewPageRoute() {
                                             {frontendDesign?.source.label || frontendDesign?.source.type || 'Connected design'}
                                         </span>
                                     </div>
-                                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                    <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
                                         {frontendPageTemplates.map((template) => (
                                             <button
                                                 key={template.id}
@@ -3962,12 +4109,12 @@ function NewPageRoute() {
                                                 data-testid={`page-frontend-template-${template.id}`}
                                                 data-active={formData.designTemplateId === template.id}
                                                 className={cn(
-                                                    'rounded-lg border bg-white p-3 text-left transition hover:border-teal-400 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-70',
+                                                    'min-w-0 rounded-lg border bg-white p-3 text-left transition hover:border-teal-400 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-70',
                                                     formData.designTemplateId === template.id ? 'border-teal-600 ring-1 ring-teal-600' : 'border-teal-200',
                                                 )}
                                             >
-                                                <div className="flex items-center justify-between gap-2">
-                                                    <span className="truncate text-sm font-semibold text-foreground">{template.name}</span>
+                                                <div className="flex min-w-0 items-center justify-between gap-2">
+                                                    <span className="min-w-0 truncate text-sm font-semibold text-foreground">{template.name}</span>
                                                     <span className="shrink-0 rounded-md bg-teal-100 px-2 py-1 text-[11px] font-semibold text-teal-800">
                                                         {template.canvasSize ? `${template.canvasSize.width} x ${template.canvasSize.height}` : 'Contract'}
                                                     </span>
@@ -3985,51 +4132,68 @@ function NewPageRoute() {
                                 </div>
                             )}
                             {frontendDesignLoading && (
-                                <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                                <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
                                     Loading frontend design templates...
                                 </div>
                             )}
                             {frontendDesignError && (
-                                <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                                     {frontendDesignError}
                                 </div>
                             )}
-                            {TEMPLATE_OPTIONS.map((tmpl) => (
-                                    <label
-                                        key={tmpl.id}
-                                        className={cn(
-                                            'flex cursor-pointer flex-col rounded-lg border p-3 transition-all hover:shadow-sm',
-                                            formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
-                                            templateSelectionDisabled && 'cursor-not-allowed opacity-70'
-                                        )}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="template"
-                                            value={tmpl.id}
-                                            checked={formData.template === tmpl.id}
-                                            onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
-                                            disabled={templateSelectionDisabled}
-                                            className="sr-only"
-                                        />
-                                        <div className="mb-1 flex items-center gap-2">
-                                            <Layout className={cn(
-                                                'h-4 w-4',
-                                                formData.template === tmpl.id ? 'text-primary' : 'text-muted-foreground'
-                                            )} />
-                                            <span className="font-semibold">{tmpl.name}</span>
-                                        </div>
-                                        <TemplateVisualPreview template={tmpl.id} active={formData.template === tmpl.id} />
-                                        <span className="text-xs leading-5 text-muted-foreground">{tmpl.desc}</span>
-                                        <span className="mt-3 flex flex-wrap gap-1">
-                                            {tmpl.sections.map((section) => (
-                                                <span key={section} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                                                    {section}
+                            <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-border bg-background p-3" data-testid="page-template-library-shell">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-foreground">Starter templates</h3>
+                                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                            Pick a focused starting point, then create the page into the visual editor.
+                                        </p>
+                                    </div>
+                                    <span className="w-fit rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                                        {TEMPLATE_OPTIONS.length} templates
+                                    </span>
+                                </div>
+                                <div className="mt-3 max-h-[34rem] overflow-y-auto pr-1 [scrollbar-gutter:stable]" data-testid="page-template-library-scroll">
+                                    <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                                        {TEMPLATE_OPTIONS.map((tmpl) => (
+                                            <label
+                                                key={tmpl.id}
+                                                className={cn(
+                                                    'min-w-0 cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm',
+                                                    formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
+                                                    templateSelectionDisabled && 'cursor-not-allowed opacity-70'
+                                                )}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="template"
+                                                    value={tmpl.id}
+                                                    checked={formData.template === tmpl.id}
+                                                    onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
+                                                    disabled={templateSelectionDisabled}
+                                                    className="sr-only"
+                                                />
+                                                <div className="mb-1 flex min-w-0 items-center gap-2">
+                                                    <Layout className={cn(
+                                                        'h-4 w-4 shrink-0',
+                                                        formData.template === tmpl.id ? 'text-primary' : 'text-muted-foreground'
+                                                    )} />
+                                                    <span className="min-w-0 truncate font-semibold">{tmpl.name}</span>
+                                                </div>
+                                                <TemplateVisualPreview template={tmpl.id} active={formData.template === tmpl.id} />
+                                                <span className="text-xs leading-5 text-muted-foreground">{tmpl.desc}</span>
+                                                <span className="mt-3 flex flex-wrap gap-1">
+                                                    {tmpl.sections.map((section) => (
+                                                        <span key={section} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                                                            {section}
+                                                        </span>
+                                                    ))}
                                                 </span>
-                                            ))}
-                                        </span>
-                                    </label>
-                            ))}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(240px,0.9fr)]">
@@ -4108,6 +4272,12 @@ function NewPageRoute() {
                     </div>
 
                     <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+                        <span id={pageCreateSubmitActionStatusId} className="sr-only" data-testid="page-create-submit-action-status" aria-live="polite">
+                            {pageCreateSubmitActionStatus}
+                        </span>
+                        <span id={pageCreatePreviewActionStatusId} className="sr-only" data-testid="page-create-preview-action-status" aria-live="polite">
+                            {pageCreatePreviewActionStatus}
+                        </span>
                         {submitBlockerMessage && (
                             <div
                                 id="page-create-submit-blocker"
@@ -4132,6 +4302,12 @@ function NewPageRoute() {
                                     navigate({ to: '/pages', search: { siteId: formData.siteId } });
                                 }}
                                 disabled={isPageCreateBusy}
+                                title={pageCreateCancelActionStatus}
+                                aria-describedby={pageCreateCommandActionStatusId}
+                                data-testid="page-create-cancel"
+                                data-action-state={isPageCreateBusy ? 'busy' : 'ready'}
+                                data-action-status={pageCreateCancelActionStatus}
+                                data-disabled-reason={isPageCreateBusy ? 'Page creation is already running.' : undefined}
                                 className="rounded-lg border px-6 py-2.5 font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 Cancel
@@ -4139,13 +4315,19 @@ function NewPageRoute() {
                             <button
                                 type="button"
                                 onClick={() => void handleCreatePreview()}
-                                disabled={isPageCreateBusy || !canCreatePreviewDraft}
+                                disabled={isPageCreateBusy || !canAttemptCreatePreviewDraft}
                                 title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
-                                aria-disabled={isPageCreateBusy || !canCreatePreviewDraft}
-                                aria-describedby={previewDraftBlockerMessage ? 'page-create-submit-blocker' : undefined}
+                                aria-disabled={isPageCreateBusy || !canAttemptCreatePreviewDraft}
+                                aria-describedby={pageCreatePreviewDescribedBy}
                                 data-testid="page-create-preview-button"
                                 data-state={previewDraftControlState}
                                 data-blocker={previewDraftBlockerMessage || ''}
+                                data-action-state={pageCreatePreviewActionState}
+                                data-action-status={pageCreatePreviewActionStatus}
+                                data-disabled-reason={pageCreatePreviewDisabledReason || undefined}
+                                data-target-site-id={formData.siteId || undefined}
+                                data-target-route={routePreview}
+                                data-target-template={effectiveTemplateName}
                                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-6 py-2.5 font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Eye className="w-4 h-4" />
@@ -4157,11 +4339,17 @@ function NewPageRoute() {
                                 disabled={isPageCreateBusy || !canEditPages}
                                 title={submitBlockerMessage || 'Create page and open the visual editor'}
                                 aria-disabled={isPageCreateBusy || !canEditPages}
-                                aria-describedby={submitBlockerMessage ? 'page-create-submit-blocker' : undefined}
+                                aria-describedby={pageCreateSubmitDescribedBy}
                                 data-state={submitControlState}
                                 data-blocker={submitBlockerMessage || ''}
                                 data-can-submit={String(canSubmit)}
                                 data-can-preview={String(canCreatePreviewDraft)}
+                                data-action-state={pageCreateSubmitActionState}
+                                data-action-status={pageCreateSubmitActionStatus}
+                                data-disabled-reason={pageCreateSubmitDisabledReason || undefined}
+                                data-target-site-id={formData.siteId || undefined}
+                                data-target-route={routePreview}
+                                data-target-template={effectiveTemplateName}
                                 className={cn(
                                     'flex items-center justify-center gap-2 rounded-lg px-6 py-2.5',
                                     'bg-primary text-primary-foreground font-medium',
@@ -4169,13 +4357,77 @@ function NewPageRoute() {
                                 )}
                             >
                                 <Save className="w-4 h-4" />
-                                {isLoading ? 'Creating...' : isCheckingPages ? 'Checking routes...' : 'Create Page'}
+                                {isLoading ? 'Creating...' : isCheckingPages && !canSubmit ? 'Checking routes...' : 'Create Page'}
                             </button>
                         </div>
                     </div>
                 </form>
 
-                <aside className="min-w-0 space-y-4">
+                <aside
+                    className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100dvh-2rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1 xl:[scrollbar-gutter:stable]"
+                    data-testid="page-create-summary-rail"
+                >
+                    <section className="rounded-lg border border-border bg-card p-4 shadow-sm" data-testid="page-create-sticky-actions">
+                        {submitBlockerMessage && (
+                            <div
+                                role="status"
+                                aria-live="polite"
+                                className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
+                            >
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>{submitBlockerMessage}</span>
+                            </div>
+                        )}
+                        <div className="text-sm font-semibold text-foreground">Ready when the route is clean</div>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            Create opens the same visual editor with the selected template, route, metadata, and frontend design handoff.
+                        </p>
+                        <div className="mt-4 grid gap-2">
+                            <button
+                                type="submit"
+                                form="page-create-form"
+                                disabled={isPageCreateBusy || !canEditPages}
+                                title={submitBlockerMessage || 'Create page and open the visual editor'}
+                                aria-disabled={isPageCreateBusy || !canEditPages}
+                                aria-describedby={pageCreateSubmitDescribedBy}
+                                data-testid="page-create-sticky-submit"
+                                data-state={submitControlState}
+                                data-blocker={submitBlockerMessage || ''}
+                                data-action-state={pageCreateSubmitActionState}
+                                data-action-status={pageCreateSubmitActionStatus}
+                                data-disabled-reason={pageCreateSubmitDisabledReason || undefined}
+                                data-target-site-id={formData.siteId || undefined}
+                                data-target-route={routePreview}
+                                data-target-template={effectiveTemplateName}
+                                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <Save className="h-4 w-4" />
+                                {isLoading ? 'Creating...' : isCheckingPages && !canSubmit ? 'Checking routes...' : 'Create page'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleCreatePreview()}
+                                disabled={isPageCreateBusy || !canAttemptCreatePreviewDraft}
+                                title={previewDraftBlockerMessage || 'Create a draft, open a preview link, and continue in the visual editor'}
+                                aria-disabled={isPageCreateBusy || !canAttemptCreatePreviewDraft}
+                                aria-describedby={pageCreatePreviewDescribedBy}
+                                data-testid="page-create-sticky-preview"
+                                data-state={previewDraftControlState}
+                                data-blocker={previewDraftBlockerMessage || ''}
+                                data-action-state={pageCreatePreviewActionState}
+                                data-action-status={pageCreatePreviewActionStatus}
+                                data-disabled-reason={pageCreatePreviewDisabledReason || undefined}
+                                data-target-site-id={formData.siteId || undefined}
+                                data-target-route={routePreview}
+                                data-target-template={effectiveTemplateName}
+                                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <Eye className="h-4 w-4" />
+                                {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
+                            </button>
+                        </div>
+                    </section>
+
                     <section id="page-preview" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
                         <div className="flex items-start gap-3">
                             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
@@ -4337,7 +4589,7 @@ function TemplateVisualPreview({
             data-template={template}
             data-block-count={blocks.length}
             className={cn(
-                'my-3 overflow-hidden rounded-lg border bg-background shadow-sm',
+                'my-3 w-full min-w-0 max-w-full overflow-hidden rounded-lg border bg-background shadow-sm',
                 active ? 'border-primary/50' : 'border-border',
             )}
         >

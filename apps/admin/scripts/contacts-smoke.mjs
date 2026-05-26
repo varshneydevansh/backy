@@ -13,6 +13,7 @@ const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Co
 const PORT = Number(process.env.BACKY_CONTACTS_CDP_PORT || 9380);
 const SYNC_PORT = Number(process.env.BACKY_CONTACTS_SYNC_PORT || 9480);
 const SCREENSHOT_PATH = process.env.BACKY_CONTACTS_SCREENSHOT || path.join(os.tmpdir(), 'backy-contacts-smoke.png');
+const BULK_ACTION_STATUS_SMOKE = process.env.BACKY_CONTACTS_BULK_ACTION_STATUS_SMOKE === '1';
 let apiAdminSessionToken = '';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -60,13 +61,63 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
   );
   assert(
     source.includes('const loadContactPermissions = useCallback(() => {') &&
+      source.includes('const canUseContactRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseContactRoleDefaults;') &&
+      source.includes('const isContactPermissionAllowed = (key: ContactsPermissionKey) => (') &&
+      source.includes("const canViewForms = isContactPermissionAllowed('forms.view');") &&
+      source.includes("const canManageForms = isContactPermissionAllowed('forms.manage');") &&
+      source.includes("const canExportForms = isContactPermissionAllowed('forms.export');") &&
+      source.includes("const canExportActivity = isContactPermissionAllowed('activity.export');") &&
+      source.includes("const canViewUsers = isContactPermissionAllowed('users.view');") &&
+      source.includes("const canCreateUsers = isContactPermissionAllowed('users.create');") &&
+      source.includes("const canEditCollections = isContactPermissionAllowed('collections.edit');") &&
+      source.includes("const canEditPages = isContactPermissionAllowed('pages.edit');") &&
+      source.includes("const canViewSettings = isContactPermissionAllowed('settings.view');") &&
+      source.includes('const isContactsBusy = isLoading || isContactMutationBusy;') &&
+      source.includes('const contactAuditDisabled = isLoadingContactAudit || !canExportActivity;') &&
+      !source.includes('const canViewForms = !isPermissionMatrixPending') &&
+      !source.includes('const isContactsBusy = isLoading || isContactMutationBusy || isPermissionMatrixPending;') &&
       source.includes('data-testid="contacts-permission-state"') &&
       source.includes('Contact permissions could not be verified') &&
       source.includes('aria-label="Retry loading contact permissions"') &&
       source.includes('Retry permissions') &&
       source.includes('to="/users"') &&
       source.includes('Review users'),
-    'Contacts permission state must expose retryable permission recovery and user-access handoff',
+    'Contacts permission state must expose retryable permission recovery and keep role-default workflows usable while permission details hydrate',
+  );
+  assert(
+    source.includes('data-testid="contacts-control-map-details"') &&
+      source.includes('data-testid="contacts-control-map"') &&
+      source.includes('data-testid="contacts-connected-workflows-details"') &&
+      source.includes('data-testid="contacts-connected-workflows"') &&
+      source.includes('data-testid="contacts-promotion-contract-details"') &&
+      source.includes('data-testid="contacts-promotion-contract"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Show map') &&
+      source.includes('Hide map') &&
+      source.includes('Show workflows') &&
+      source.includes('Hide workflows') &&
+      source.includes('Show promotion') &&
+      source.includes('Hide promotion') &&
+      source.includes('Keep capture pages, form definitions, member handoff, and runtime infrastructure available without stretching the daily inbox.') &&
+      source.includes('Promotion rules, Users handoff, registration pages, and custom frontend member-capture contracts.'),
+    'Contacts command center must keep low-frequency maps, workflows, and member-capture contracts behind collapsed disclosures.',
+  );
+  assert(
+    source.includes("const contactsCreateActionStatusId = 'contacts-create-action-status';") &&
+      source.includes('contactsCreateMutationDisabledReason') &&
+      source.includes("const contactsCreateActionStatus = contactsCreateActionStatusFor('Save contact');") &&
+      source.includes("const contactsImportCsvActionStatus = contactsCreateActionStatusFor('Import CSV');") &&
+      source.includes("const contactsImportTemplateActionStatus = contactsCreateActionStatusFor('CSV template', contactsCreateTemplateDisabledReason);") &&
+      source.includes('data-testid="contacts-create-action-status"') &&
+      source.includes('data-testid="contacts-save-contact"') &&
+      source.includes('data-action-status={contactsCreateActionStatus}') &&
+      source.includes('data-action-status={contactsImportCsvActionStatus}') &&
+      source.includes('data-action-status={contactsImportTemplateActionStatus}') &&
+      source.includes('aria-describedby={contactsCreateActionStatusId}') &&
+      source.includes('data-disabled-reason={contactsCreateMutationDisabledReason || undefined}') &&
+      source.includes('data-target-site-id={activeSiteId}'),
+    'Contacts primary create/import actions must expose a shared action-status contract with ready/blocked state and target-site metadata.',
   );
   assert(
     source.includes('const [savedListSubmitted, setSavedListSubmitted] = useState(false);') &&
@@ -84,12 +135,62 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
       source.includes('const contactSyncTargetInlineError = contactSyncSubmitted') &&
       source.includes('data-testid="contacts-sync-webhook-url-error"') &&
       source.includes('aria-invalid={Boolean(contactSyncTargetInlineError)}') &&
-      source.includes("aria-describedby={contactSyncTargetInlineError ? 'contacts-sync-webhook-url-error' : undefined}") &&
-      /disabled=\{contactMutationDisabled \|\| selectedContacts\.length === 0\}[\s\S]{0,350}data-testid="contacts-sync-webhook"/.test(source),
+      source.includes("aria-describedby={contactSyncTargetInlineError ? `contacts-sync-webhook-url-error ${contactsBulkActionStatusId}` : contactsBulkActionStatusId}") &&
+      /disabled=\{Boolean\(contactsBulkMutationDisabledReason\)\}[\s\S]{0,500}data-testid="contacts-sync-webhook"/.test(source),
     'Contacts sync webhook action must keep selected-contact sync reachable and expose inline webhook URL validation',
   );
   assert(!source.includes('disabled={contactMutationDisabled || !savedListName.trim()}'), 'Contacts saved-list Save must not hide blank-name validation behind a disabled state');
   assert(!source.includes('disabled={contactMutationDisabled || selectedContacts.length === 0 || !contactSyncTarget.trim()}'), 'Contacts sync action must not hide webhook URL validation behind a disabled state');
+  assert(
+    source.includes('const handleContactDeleteDialogKeyDown = (event: KeyboardEvent) => {') &&
+      source.includes("if (event.key !== 'Escape' || updatingId === `delete-contact-${pendingDeleteContact.id}`) return;") &&
+      source.includes("document.addEventListener('keydown', handleContactDeleteDialogKeyDown, true)") &&
+      source.includes('role="dialog"') &&
+      source.includes('aria-modal="true"') &&
+      source.includes('aria-labelledby="contacts-delete-confirm-title"') &&
+      source.includes('aria-describedby="contacts-delete-confirm-description contacts-delete-confirm-impact"') &&
+      source.includes('id="contacts-delete-confirm-title"') &&
+      source.includes('id="contacts-delete-confirm-description"') &&
+      source.includes('id="contacts-delete-confirm-impact"') &&
+      source.includes('data-testid="contacts-delete-cancel-button"') &&
+      source.includes('aria-label={`Cancel deleting ${pendingDeleteContact.name || pendingDeleteContact.email || pendingDeleteContact.id}`}') &&
+      source.includes('aria-label={`Confirm deleting ${pendingDeleteContact.name || pendingDeleteContact.email || pendingDeleteContact.id}`}'),
+    'Contacts delete confirmation must expose accessible dialog semantics, labelled impact copy, explicit actions, and Escape recovery.',
+  );
+  assert(
+    source.includes('const contactActionStatusId = `contacts-actions-status-${contact.id}`;') &&
+      source.includes('const contactActionStatus = [') &&
+      source.includes('role="group"') &&
+      source.includes('aria-label={`Actions for ${contactActionLabel}`}') &&
+      source.includes('aria-describedby={contactActionStatusId}') &&
+      source.includes('data-testid="contacts-action-group"') &&
+      source.includes('data-action-status={contactActionStatus}') &&
+      source.includes('data-testid="contacts-action-status"') &&
+      source.includes('data-action-state={contactedDisabledReason ? \'blocked\' : \'ready\'}') &&
+      source.includes('data-disabled-reason={promoteUserDisabledReason || undefined}') &&
+      source.includes('data-testid="contacts-mark-contacted"') &&
+      source.includes('data-testid="contacts-mark-qualified"') &&
+      source.includes('data-testid="contacts-mark-new"') &&
+      source.includes('data-testid="contacts-archive-contact"'),
+    'Contacts card action strip must expose a named group, status summary, ready/blocked metadata, and stable hooks for lifecycle, promotion, archive, and delete actions.',
+  );
+  assert(
+    source.includes("const contactsBulkActionStatusId = 'contacts-bulk-action-status';") &&
+      source.includes('const contactsBulkActionStatus = [') &&
+      source.includes('role="group"') &&
+      source.includes('aria-label="Selected contact bulk actions"') &&
+      source.includes('data-testid="contacts-bulk-actions"') &&
+      source.includes('data-action-status={contactsBulkActionStatus}') &&
+      source.includes('data-action-state={contactsBulkActionState}') &&
+      source.includes('data-selected-count={selectedContacts.length}') &&
+      source.includes('data-testid="contacts-bulk-action-status"') &&
+      source.includes('data-testid="contacts-select-visible"') &&
+      source.includes('data-testid="contacts-retention-export"') &&
+      source.includes('data-testid="contacts-bulk-status-select"') &&
+      source.includes('data-testid="contacts-bulk-apply-lifecycle"') &&
+      source.includes('data-disabled-reason={contactsBulkMergeDisabledReason || undefined}'),
+    'Contacts bulk action toolbar must expose a named group, shared status summary, selected-count metadata, stable hooks, and ready/blocked reasons for retention, sync, lifecycle, and merge actions.',
+  );
 };
 
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
@@ -209,7 +310,8 @@ const loginAdminApi = async () => {
   let payload = await response.json().catch(() => ({}));
   const smokeMfaCode = process.env.BACKY_CONTACTS_SMOKE_MFA_CODE
     || process.env.BACKY_ADMIN_MFA_CODE
-    || process.env.BACKY_ADMIN_2FA_CODE;
+    || process.env.BACKY_ADMIN_2FA_CODE
+    || 'backy-dev-mfa';
   if (!response.ok && payload.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
     response = await login(smokeMfaCode);
     payload = await response.json().catch(() => ({}));
@@ -290,6 +392,19 @@ const submitLead = async (formId) => {
 const listContacts = async (formId) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms/${formId}/contacts?limit=100`);
   return payload.data?.contacts || payload.contacts || [];
+};
+
+const waitForContactByEmail = async (formId, email) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const contacts = await listContacts(formId);
+    const contact = contacts.find((item) => item.email === email);
+    if (contact?.id) {
+      return contact;
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Contact ${email} did not appear for form ${formId}`);
 };
 
 const listContactSegments = async (formId) => {
@@ -686,6 +801,106 @@ const navigateToContacts = async (client, formId) => {
 
     if (attempt === 119) {
       throw new Error(`Contacts page did not render expected lead: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertContactDeleteDialogRecovery = async (client, contact) => {
+  const contactCardSelector = JSON.stringify(`[data-testid="contacts-contact-card"][data-contact-id="${contact.id}"]`);
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const result = await evaluate(client, `(() => {
+      const card = document.querySelector(${contactCardSelector});
+      if (!(card instanceof HTMLElement)) {
+        return { ok: false, reason: 'contact-card-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+      }
+      const deleteButton = card.querySelector('[data-testid="contacts-delete-contact"]');
+      if (!(deleteButton instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'delete-button-missing', buttons: Array.from(card.querySelectorAll('button')).map((button) => button.getAttribute('aria-label') || button.textContent || '') };
+      }
+      if (deleteButton.disabled) {
+        return { ok: false, reason: 'delete-button-disabled' };
+      }
+      deleteButton.click();
+      const dialog = document.querySelector('[data-testid="contacts-delete-confirm-dialog"]');
+      const cancelButton = document.querySelector('[data-testid="contacts-delete-cancel-button"]');
+      const confirmButton = document.querySelector('[data-testid="contacts-delete-confirm-button"]');
+      if (!(dialog instanceof HTMLElement) || !(cancelButton instanceof HTMLButtonElement) || !(confirmButton instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'delete-dialog-missing', body: document.body?.innerText?.slice(0, 800) || '' };
+      }
+      const semantics = {
+        role: dialog.getAttribute('role') || '',
+        modal: dialog.getAttribute('aria-modal') || '',
+        labelledBy: dialog.getAttribute('aria-labelledby') || '',
+        describedBy: dialog.getAttribute('aria-describedby') || '',
+        hasTitle: Boolean(document.querySelector('#contacts-delete-confirm-title')),
+        hasDescription: Boolean(document.querySelector('#contacts-delete-confirm-description')),
+        hasImpact: Boolean(document.querySelector('#contacts-delete-confirm-impact')),
+        cancelLabel: cancelButton.getAttribute('aria-label') || '',
+        confirmLabel: confirmButton.getAttribute('aria-label') || '',
+      };
+      if (
+        semantics.role !== 'dialog' ||
+        semantics.modal !== 'true' ||
+        semantics.labelledBy !== 'contacts-delete-confirm-title' ||
+        !semantics.describedBy.includes('contacts-delete-confirm-description') ||
+        !semantics.describedBy.includes('contacts-delete-confirm-impact') ||
+        !semantics.hasTitle ||
+        !semantics.hasDescription ||
+        !semantics.hasImpact ||
+        !semantics.cancelLabel.startsWith('Cancel deleting') ||
+        !semantics.confirmLabel.startsWith('Confirm deleting')
+      ) {
+        return { ok: false, reason: 'delete-dialog-semantics', semantics };
+      }
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      return { ok: true, phase: 'opened-and-escaped', semantics };
+    })()`);
+
+    if (result.ok) {
+      for (let closeAttempt = 0; closeAttempt < 20; closeAttempt += 1) {
+        const closedState = await evaluate(client, `(() => ({
+          closed: !document.querySelector('[data-testid="contacts-delete-confirm-dialog"]'),
+          body: document.body?.innerText?.slice(0, 500) || '',
+        }))()`);
+        if (closedState.closed) break;
+        if (closeAttempt === 19) {
+          throw new Error(`Contacts delete confirmation did not close on Escape: ${JSON.stringify(closedState)}`);
+        }
+        await sleep(100);
+      }
+
+      for (let reopenAttempt = 0; reopenAttempt < 30; reopenAttempt += 1) {
+        const reopenState = await evaluate(client, `(() => {
+          const card = document.querySelector(${contactCardSelector});
+          const deleteButton = card?.querySelector('[data-testid="contacts-delete-contact"]');
+          if (!(deleteButton instanceof HTMLButtonElement)) {
+            return { ok: false, reason: 'delete-button-missing-after-escape', body: document.body?.innerText?.slice(0, 800) || '' };
+          }
+          if (deleteButton.disabled) return { ok: false, reason: 'delete-button-disabled-after-escape' };
+          deleteButton.click();
+          const dialog = document.querySelector('[data-testid="contacts-delete-confirm-dialog"]');
+          const cancelButton = document.querySelector('[data-testid="contacts-delete-cancel-button"]');
+          if (!(dialog instanceof HTMLElement) || !(cancelButton instanceof HTMLButtonElement)) {
+            return { ok: false, reason: 'dialog-reopen-failed', body: document.body?.innerText?.slice(0, 800) || '' };
+          }
+          cancelButton.click();
+          return { ok: true };
+        })()`);
+        if (reopenState.ok) return result.semantics;
+        if (reopenAttempt === 29) {
+          throw new Error(`Unable to reopen/cancel contacts delete confirmation after Escape: ${JSON.stringify(reopenState)}`);
+        }
+        await sleep(150);
+      }
+      return result.semantics;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Contacts delete confirmation recovery was not wired: ${JSON.stringify(result)}`);
     }
 
     await sleep(250);
@@ -1208,67 +1423,407 @@ const waitForContactAuditPanel = async (client) => {
   return null;
 };
 
+const readContactsBulkActionStatus = async (client) => evaluate(client, `(() => {
+  const group = document.querySelector('[data-testid="contacts-bulk-actions"]');
+  const selection = document.querySelector('[data-testid="contacts-bulk-selection-summary"]');
+  const status = document.querySelector('[data-testid="contacts-bulk-action-status"]');
+  const readControl = (testId) => {
+    const control = document.querySelector('[data-testid="' + testId + '"]');
+    return {
+      found: Boolean(control),
+      describedBy: control?.getAttribute('aria-describedby') || '',
+      state: control?.getAttribute('data-action-state') || '',
+      disabledReason: control?.getAttribute('data-disabled-reason') || '',
+      disabled: control instanceof HTMLButtonElement || control instanceof HTMLInputElement || control instanceof HTMLSelectElement
+        ? control.disabled
+        : null,
+      text: control?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    };
+  };
+  return {
+    role: group?.getAttribute('role') || '',
+    label: group?.getAttribute('aria-label') || '',
+    describedBy: group?.getAttribute('aria-describedby') || '',
+    actionState: group?.getAttribute('data-action-state') || '',
+    selectedCount: group?.getAttribute('data-selected-count') || '',
+    visibleSelectedCount: group?.getAttribute('data-visible-selected-count') || '',
+    hiddenSelectedCount: group?.getAttribute('data-hidden-selected-count') || '',
+    selectionId: selection?.id || '',
+    selectionText: selection?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    statusId: status?.id || '',
+    statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    statusData: group?.getAttribute('data-action-status') || '',
+    selectVisible: readControl('contacts-select-visible'),
+    exportEvidence: readControl('contacts-retention-export'),
+    applyRetention: readControl('contacts-retention-apply'),
+    syncSelected: readControl('contacts-sync-webhook'),
+    statusSelect: readControl('contacts-bulk-status-select'),
+    applyLifecycle: readControl('contacts-bulk-apply-lifecycle'),
+    mergeDuplicates: readControl('contacts-merge-duplicates'),
+  };
+})()`);
+
+const assertContactsBulkActionStatus = async (client, targetEmail) => {
+  const initial = await readContactsBulkActionStatus(client);
+  assert(initial.role === 'group' && initial.label === 'Selected contact bulk actions', `Contacts bulk toolbar must be a named group: ${JSON.stringify(initial)}`);
+  assert(
+    initial.describedBy.includes(initial.selectionId) && initial.describedBy.includes(initial.statusId),
+    `Contacts bulk toolbar must reference selection and action statuses: ${JSON.stringify(initial)}`,
+  );
+  assert(initial.statusData === initial.statusText, `Contacts bulk status data must mirror hidden copy: ${JSON.stringify(initial)}`);
+  assert(initial.selectedCount === '0' && initial.actionState === 'blocked', `Contacts bulk toolbar should start blocked with no selection: ${JSON.stringify(initial)}`);
+  assert(
+    initial.selectionText.startsWith('No contacts selected.') &&
+      initial.statusText.includes('Export evidence unavailable: Select one or more contacts first.') &&
+      initial.statusText.includes('Merge duplicates unavailable: Select one or more contacts first.'),
+    `Contacts bulk toolbar no-selection guidance drifted: ${JSON.stringify(initial)}`,
+  );
+  for (const [key, control] of Object.entries({
+    exportEvidence: initial.exportEvidence,
+    applyRetention: initial.applyRetention,
+    syncSelected: initial.syncSelected,
+    statusSelect: initial.statusSelect,
+    applyLifecycle: initial.applyLifecycle,
+    mergeDuplicates: initial.mergeDuplicates,
+  })) {
+    assert(control.found, `Contacts bulk ${key} control missing: ${JSON.stringify(initial)}`);
+    assert(control.state === 'blocked' && control.disabled === true, `Contacts bulk ${key} should be blocked without selection: ${JSON.stringify(initial)}`);
+    assert(control.disabledReason.includes('Select one or more contacts first.'), `Contacts bulk ${key} missing no-selection reason: ${JSON.stringify(initial)}`);
+  }
+
+  let selected = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    selected = await evaluate(client, `(() => {
+      const card = Array.from(document.querySelectorAll('[data-testid="contacts-contact-card"]')).find((candidate) => (
+        (candidate.textContent || '').includes(${JSON.stringify(targetEmail)})
+      ));
+      const checkbox = card?.querySelector('input[type="checkbox"][aria-label^="Select contact"]');
+      if (!(card instanceof HTMLElement) || !(checkbox instanceof HTMLInputElement)) {
+        return { ok: false, reason: 'target-card-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
+      }
+      if (!checkbox.checked) {
+        checkbox.click();
+      }
+      const group = document.querySelector('[data-testid="contacts-bulk-actions"]');
+      const status = document.querySelector('[data-testid="contacts-bulk-action-status"]');
+      const selection = document.querySelector('[data-testid="contacts-bulk-selection-summary"]');
+      const readControl = (testId) => {
+        const control = document.querySelector('[data-testid="' + testId + '"]');
+        return {
+          found: Boolean(control),
+          describedBy: control?.getAttribute('aria-describedby') || '',
+          state: control?.getAttribute('data-action-state') || '',
+          disabledReason: control?.getAttribute('data-disabled-reason') || '',
+          disabled: control instanceof HTMLButtonElement || control instanceof HTMLInputElement || control instanceof HTMLSelectElement
+            ? control.disabled
+            : null,
+        };
+      };
+      return {
+        ok: true,
+        actionState: group?.getAttribute('data-action-state') || '',
+        selectedCount: group?.getAttribute('data-selected-count') || '',
+        visibleSelectedCount: group?.getAttribute('data-visible-selected-count') || '',
+        hiddenSelectedCount: group?.getAttribute('data-hidden-selected-count') || '',
+        statusId: status?.id || '',
+        selectionText: selection?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        statusData: group?.getAttribute('data-action-status') || '',
+        exportEvidence: readControl('contacts-retention-export'),
+        applyRetention: readControl('contacts-retention-apply'),
+        syncSelected: readControl('contacts-sync-webhook'),
+        statusSelect: readControl('contacts-bulk-status-select'),
+        applyLifecycle: readControl('contacts-bulk-apply-lifecycle'),
+        mergeDuplicates: readControl('contacts-merge-duplicates'),
+      };
+    })()`);
+
+    if (selected.ok && selected.selectedCount === '1' && selected.exportEvidence?.state === 'ready') {
+      break;
+    }
+    if (attempt === 79) {
+      throw new Error(`Contacts bulk toolbar did not update after selecting a contact: ${JSON.stringify(selected)}`);
+    }
+    await sleep(250);
+  }
+
+  assert(selected.statusData === selected.statusText, `Contacts selected bulk status data must mirror hidden copy: ${JSON.stringify(selected)}`);
+  assert(
+    selected.actionState === 'mixed' &&
+      selected.selectionText.includes('1 contact selected.') &&
+      selected.visibleSelectedCount === '1' &&
+      selected.hiddenSelectedCount === '0',
+    `Contacts selected bulk toolbar should expose mixed ready/blocked state: ${JSON.stringify(selected)}`,
+  );
+  for (const [key, control] of Object.entries({
+    exportEvidence: selected.exportEvidence,
+    applyRetention: selected.applyRetention,
+    syncSelected: selected.syncSelected,
+    statusSelect: selected.statusSelect,
+    applyLifecycle: selected.applyLifecycle,
+  })) {
+    assert(control.found, `Contacts selected bulk ${key} control missing: ${JSON.stringify(selected)}`);
+    assert(control.describedBy === selected.statusId, `Contacts selected bulk ${key} must reference action status: ${JSON.stringify(selected)}`);
+    assert(control.state === 'ready' && control.disabled === false && control.disabledReason === '', `Contacts selected bulk ${key} should be ready: ${JSON.stringify(selected)}`);
+  }
+  assert(
+    selected.mergeDuplicates.found &&
+      selected.mergeDuplicates.describedBy === selected.statusId &&
+      selected.mergeDuplicates.state === 'blocked' &&
+      selected.mergeDuplicates.disabled === true &&
+      selected.mergeDuplicates.disabledReason.includes('Select two or more contacts with the same email'),
+    `Contacts selected bulk merge guidance drifted: ${JSON.stringify(selected)}`,
+  );
+  assert(
+    selected.statusText.includes('Export evidence available.') &&
+      selected.statusText.includes('Apply retention available.') &&
+      selected.statusText.includes('Sync selected available.') &&
+      selected.statusText.includes('Apply lifecycle available for') &&
+      selected.statusText.includes('Merge duplicates unavailable: Select two or more contacts with the same email'),
+    `Contacts selected bulk action status copy drifted: ${JSON.stringify(selected)}`,
+  );
+  return { initial, selected };
+};
+
+const assertContactsCreateActionsReady = async (client) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const status = document.querySelector('[data-testid="contacts-create-action-status"]');
+      const statusId = status?.id || '';
+      const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      const save = document.querySelector('[data-testid="contacts-save-contact"]');
+      const importCsv = document.querySelector('[data-testid="contacts-import-csv"]');
+      const template = document.querySelector('[data-testid="contacts-import-template"]');
+      const readControl = (button) => ({
+        exists: button instanceof HTMLButtonElement,
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        describedBy: button instanceof HTMLElement ? button.getAttribute('aria-describedby') || '' : '',
+        actionState: button instanceof HTMLElement ? button.getAttribute('data-action-state') || '' : '',
+        actionStatus: button instanceof HTMLElement ? button.getAttribute('data-action-status') || '' : '',
+        disabledReason: button instanceof HTMLElement ? button.getAttribute('data-disabled-reason') || '' : '',
+        targetSiteId: button instanceof HTMLElement ? button.getAttribute('data-target-site-id') || '' : '',
+      });
+      const controls = [save, importCsv, template].map(readControl);
+      return {
+        ready: status instanceof HTMLElement &&
+          statusId === 'contacts-create-action-status' &&
+          statusText.includes('Save contact available for ${SITE_ID}.') &&
+          controls.every((control) => (
+            control.exists &&
+            control.disabled === false &&
+            control.describedBy === statusId &&
+            control.actionState === 'ready' &&
+            control.disabledReason === '' &&
+            control.targetSiteId === '${SITE_ID}' &&
+            control.actionStatus.includes('available for ${SITE_ID}.')
+          )),
+        statusText,
+        controls,
+        body: document.body?.innerText?.slice(0, 1000) || '',
+      };
+    })()`);
+
+    if (state.ready) return state;
+    if (attempt === 79) throw new Error(`Contacts create/import actions did not become ready: ${JSON.stringify(state)}`);
+    await sleep(250);
+  }
+
+  return null;
+};
+
 const assertLayout = async (client) => {
-  const layout = await evaluate(client, `(() => ({
-    width: window.innerWidth,
-    scrollWidth: document.documentElement.scrollWidth,
+  const layout = await evaluate(client, `(() => {
+    const text = document.body?.innerText || '';
+    const controlMapDetails = document.querySelector('[data-testid="contacts-control-map-details"]');
+	    const connectedWorkflowsDetails = document.querySelector('[data-testid="contacts-connected-workflows-details"]');
+	    const promotionContractDetails = document.querySelector('[data-testid="contacts-promotion-contract-details"]');
+	    const controlMapText = controlMapDetails?.textContent || '';
+	    const connectedWorkflowsText = connectedWorkflowsDetails?.textContent || '';
+	    const promotionContractText = promotionContractDetails?.textContent || '';
+	    const actionGroup = document.querySelector('[data-testid="contacts-action-group"]');
+	    const actionStatus = document.querySelector('[data-testid="contacts-action-status"]');
+	    const bulkGroup = document.querySelector('[data-testid="contacts-bulk-actions"]');
+	    const bulkSelection = document.querySelector('[data-testid="contacts-bulk-selection-summary"]');
+	    const bulkStatus = document.querySelector('[data-testid="contacts-bulk-action-status"]');
+	    const createStatus = document.querySelector('[data-testid="contacts-create-action-status"]');
+	    const createStatusId = createStatus?.id || '';
+	    const createStatusText = createStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+	    const actionAttr = (testId, attr) => document.querySelector('[data-testid="' + testId + '"]')?.getAttribute(attr) || '';
+	    const createControl = (testId) => {
+	      const control = document.querySelector('[data-testid="' + testId + '"]');
+	      return {
+	        exists: control instanceof HTMLButtonElement,
+	        disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+	        describedBy: control?.getAttribute('aria-describedby') || '',
+	        actionState: control?.getAttribute('data-action-state') || '',
+	        actionStatus: control?.getAttribute('data-action-status') || '',
+	        disabledReason: control?.getAttribute('data-disabled-reason') || '',
+	        targetSiteId: control?.getAttribute('data-target-site-id') || '',
+	      };
+	    };
+	    return {
+	      width: window.innerWidth,
+	      scrollWidth: document.documentElement.scrollWidth,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="contacts-command-center"]')),
+      controlMapCollapsed: controlMapDetails instanceof HTMLDetailsElement &&
+        controlMapDetails.open === false &&
+        controlMapDetails.getAttribute('data-default-collapsed') === 'true',
+      connectedWorkflowsCollapsed: connectedWorkflowsDetails instanceof HTMLDetailsElement &&
+        connectedWorkflowsDetails.open === false &&
+        connectedWorkflowsDetails.getAttribute('data-default-collapsed') === 'true',
+      promotionContractCollapsed: promotionContractDetails instanceof HTMLDetailsElement &&
+        promotionContractDetails.open === false &&
+        promotionContractDetails.getAttribute('data-default-collapsed') === 'true',
+      hasControlMap: Boolean(document.querySelector('[data-testid="contacts-control-map"]')) &&
+        controlMapText.includes('Contacts control map') &&
+        controlMapText.includes('Show map') &&
+        controlMapText.includes('Contact API') &&
+        controlMapText.includes('Lifecycle actions'),
+      hasConnectedWorkflows: Boolean(document.querySelector('[data-testid="contacts-connected-workflows"]')) &&
+        connectedWorkflowsText.includes('Connected lead workflows') &&
+        connectedWorkflowsText.includes('Show workflows') &&
+        connectedWorkflowsText.includes('Registration page') &&
+        connectedWorkflowsText.includes('Settings'),
       hasPromotionContract: Boolean(document.querySelector('[data-testid="contacts-promotion-contract"]')) &&
-        document.body?.innerText?.includes('Lead promotion contract') &&
-        document.body?.innerText?.includes('Registration page'),
+        promotionContractText.includes('Lead promotion contract') &&
+        promotionContractText.includes('Registration page') &&
+        promotionContractText.includes('Show promotion'),
       hasMemberCaptureHandoff: Boolean(document.querySelector('[data-testid="contacts-member-capture-handoff"]')) &&
-        document.body?.innerText?.includes('backy.contact-member-capture-handoff.v1') &&
-        document.body?.innerText?.includes('Copy member handoff') &&
-        document.body?.innerText?.includes('Registration definition') &&
-        document.body?.innerText?.includes('Provider gate'),
+        promotionContractText.includes('backy.contact-member-capture-handoff.v1') &&
+        promotionContractText.includes('Copy member handoff') &&
+        promotionContractText.includes('Registration definition') &&
+        promotionContractText.includes('Provider gate'),
       hasBulkActions: Boolean(document.querySelector('[data-testid="contacts-bulk-actions"]')),
+	      bulkGroupRole: bulkGroup?.getAttribute('role') || '',
+	      bulkGroupLabel: bulkGroup?.getAttribute('aria-label') || '',
+	      bulkGroupDescribedBy: bulkGroup?.getAttribute('aria-describedby') || '',
+	      bulkSelectionId: bulkSelection?.id || '',
+	      bulkSelectionText: bulkSelection?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+	      bulkStatusId: bulkStatus?.id || '',
+	      bulkStatusText: bulkStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+	      bulkStatusData: bulkGroup?.getAttribute('data-action-status') || '',
+	      bulkActionState: bulkGroup?.getAttribute('data-action-state') || '',
+	      bulkSelectedCount: bulkGroup?.getAttribute('data-selected-count') || '',
+	      bulkExportState: actionAttr('contacts-retention-export', 'data-action-state'),
+	      bulkApplyRetentionState: actionAttr('contacts-retention-apply', 'data-action-state'),
+	      bulkSyncState: actionAttr('contacts-sync-webhook', 'data-action-state'),
+	      bulkLifecycleState: actionAttr('contacts-bulk-apply-lifecycle', 'data-action-state'),
+	      bulkMergeState: actionAttr('contacts-merge-duplicates', 'data-action-state'),
+	      createStatusId,
+	      createStatusText,
+	      saveContactControl: createControl('contacts-save-contact'),
+	      importCsvControl: createControl('contacts-import-csv'),
+	      importTemplateControl: createControl('contacts-import-template'),
       hasCreateContact: Boolean(document.querySelector('[data-testid="contacts-create-contact"]')),
       hasImportCsv: Boolean(document.querySelector('[data-testid="contacts-import-csv"]')),
       hasImportTemplate: Boolean(document.querySelector('[data-testid="contacts-import-template"]')),
       hasMergeDuplicates: Boolean(document.querySelector('[data-testid="contacts-merge-duplicates"]')),
       hasSegmentAnalytics: Boolean(document.querySelector('[data-testid="contacts-segment-analytics"]')) &&
-        document.body?.innerText?.includes('Backend contact segments') &&
-        document.body?.innerText?.includes('/forms/contact-segments'),
+        text.includes('Backend contact segments') &&
+        text.includes('/forms/contact-segments'),
       hasSavedLists: Boolean(document.querySelector('[data-testid="contacts-saved-lists"]')) &&
-        document.body?.innerText?.includes('Saved lead lists') &&
-        document.body?.innerText?.includes('Smoke Qualified Leads') &&
-        document.body?.innerText?.includes('/forms/contact-lists'),
+        text.includes('Saved lead lists') &&
+        text.includes('Smoke Qualified Leads') &&
+        text.includes('/forms/contact-lists'),
       hasPromoteUser: Boolean(document.querySelector('[data-testid="contacts-promote-user"]')) &&
-        document.body?.innerText?.includes('/contacts/{contactId}/promote') &&
-        document.body?.innerText?.includes('Promoted user'),
-      hasPromoteCustomer: Boolean(document.querySelector('[data-testid="contacts-promote-customer"]')) &&
-        document.body?.innerText?.includes('/contacts/{contactId}/promote-customer') &&
-        document.body?.innerText?.includes('Promoted customer'),
-      hasContactSync: Boolean(document.querySelector('[data-testid="contacts-sync-webhook"]')) &&
-        document.body?.innerText?.includes('/contacts/sync') &&
-        document.body?.innerText?.includes('Last sync:'),
+        text.includes('/contacts/{contactId}/promote') &&
+        text.includes('Promoted user'),
+	      hasPromoteCustomer: Boolean(document.querySelector('[data-testid="contacts-promote-customer"]')) &&
+	        text.includes('/contacts/{contactId}/promote-customer') &&
+	        text.includes('Promoted customer'),
+	      actionGroupRole: actionGroup?.getAttribute('role') || '',
+	      actionGroupLabel: actionGroup?.getAttribute('aria-label') || '',
+	      actionGroupDescribedBy: actionGroup?.getAttribute('aria-describedby') || '',
+	      actionStatusId: actionStatus?.id || '',
+	      actionStatusText: actionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+	      actionStatusData: actionGroup?.getAttribute('data-action-status') || '',
+	      contactedState: actionAttr('contacts-mark-contacted', 'data-action-state'),
+	      qualifiedState: actionAttr('contacts-mark-qualified', 'data-action-state'),
+	      promoteUserState: actionAttr('contacts-promote-user', 'data-action-state'),
+	      promoteCustomerState: actionAttr('contacts-promote-customer', 'data-action-state'),
+	      newState: actionAttr('contacts-mark-new', 'data-action-state'),
+	      archiveState: actionAttr('contacts-archive-contact', 'data-action-state'),
+	      deleteState: actionAttr('contacts-delete-contact', 'data-action-state'),
+	      deleteDescribedBy: actionAttr('contacts-delete-contact', 'aria-describedby'),
+	      hasContactSync: Boolean(document.querySelector('[data-testid="contacts-sync-webhook"]')) &&
+	        text.includes('/contacts/sync') &&
+	        text.includes('Last sync:'),
       hasContactRetention: Boolean(document.querySelector('[data-testid="contacts-retention-apply"]')) &&
-        document.body?.innerText?.includes('/contacts/consent-retention') &&
-        document.body?.innerText?.includes('Last retention:'),
+        text.includes('/contacts/consent-retention') &&
+        text.includes('Last retention:'),
       hasAccessAudit: Boolean(document.querySelector('[data-testid="contacts-access-audit"]')) &&
-        document.body?.innerText?.includes('Contacts access and audit') &&
-        document.body?.innerText?.includes('forms.manage') &&
-        document.body?.innerText?.includes('activity.export') &&
-        document.body?.innerText?.includes('Contact retention applied'),
-      hasInbox: document.body?.innerText?.includes('Lead Inbox') || false,
-      hasApi: document.body?.innerText?.includes('Contact pipeline API') || false,
-      hasLead: document.body?.innerText?.includes('contacts-smoke@example.com') || false,
-  }))()`);
+        text.includes('Contacts access and audit') &&
+        text.includes('forms.manage') &&
+        text.includes('activity.export') &&
+        text.includes('Contact retention applied'),
+      hasInbox: text.includes('Lead Inbox') || false,
+      hasApi: text.includes('Contact pipeline API') || false,
+      hasLead: text.includes('contacts-smoke@example.com') || false,
+    };
+  })()`);
   assert(layout.scrollWidth <= layout.width + 8, `Contacts page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.hasCommandCenter
+    && layout.controlMapCollapsed
+    && layout.connectedWorkflowsCollapsed
+    && layout.promotionContractCollapsed
+    && layout.hasControlMap
+    && layout.hasConnectedWorkflows
     && layout.hasPromotionContract
     && layout.hasMemberCaptureHandoff
     && layout.hasBulkActions
+	    && layout.bulkGroupRole === 'group'
+	    && layout.bulkGroupLabel === 'Selected contact bulk actions'
+	    && layout.bulkGroupDescribedBy.includes(layout.bulkSelectionId)
+	    && layout.bulkGroupDescribedBy.includes(layout.bulkStatusId)
+	    && layout.bulkStatusText
+	    && layout.bulkStatusData === layout.bulkStatusText
+	    && layout.bulkActionState === 'blocked'
+	    && layout.bulkSelectedCount === '0'
+	    && layout.bulkSelectionText.startsWith('No contacts selected.')
+	    && layout.bulkStatusText.includes('Export evidence unavailable')
+	    && layout.bulkStatusText.includes('Merge duplicates unavailable')
+	    && layout.bulkExportState === 'blocked'
+	    && layout.bulkApplyRetentionState === 'blocked'
+	    && layout.bulkSyncState === 'blocked'
+	    && layout.bulkLifecycleState === 'blocked'
+	    && layout.bulkMergeState === 'blocked'
+	    && layout.createStatusId === 'contacts-create-action-status'
+	    && layout.createStatusText.includes('Save contact available for')
+	    && [layout.saveContactControl, layout.importCsvControl, layout.importTemplateControl].every((control) => (
+	      control.exists
+	      && control.disabled === false
+	      && control.describedBy === layout.createStatusId
+	      && control.actionState === 'ready'
+	      && control.disabledReason === ''
+	      && control.targetSiteId === SITE_ID
+	      && control.actionStatus.includes(`available for ${SITE_ID}.`)
+	    ))
     && layout.hasCreateContact
     && layout.hasImportCsv
     && layout.hasImportTemplate
     && layout.hasMergeDuplicates
     && layout.hasSegmentAnalytics
     && layout.hasSavedLists
-    && layout.hasPromoteUser
-    && layout.hasPromoteCustomer
-    && layout.hasContactSync
+	    && layout.hasPromoteUser
+	    && layout.hasPromoteCustomer
+	    && layout.actionGroupRole === 'group'
+	    && layout.actionGroupLabel.includes('Actions for')
+	    && layout.actionGroupDescribedBy === layout.actionStatusId
+	    && layout.actionStatusText
+	    && layout.actionStatusData === layout.actionStatusText
+	    && layout.actionStatusText.includes('Contacted')
+	    && layout.actionStatusText.includes('Promote user')
+	    && layout.actionStatusText.includes('Delete')
+	    && layout.contactedState
+	    && layout.qualifiedState
+	    && layout.promoteUserState
+	    && layout.promoteCustomerState
+	    && layout.newState
+	    && layout.archiveState
+	    && layout.deleteState === 'ready'
+	    && layout.deleteDescribedBy === layout.actionStatusId
+	    && layout.hasContactSync
     && layout.hasContactRetention
     && layout.hasAccessAudit
     && layout.hasInbox
@@ -1319,6 +1874,49 @@ const cleanupBrowser = async ({ client, childProcess, userDataDir }) => {
   fs.rmSync(userDataDir, { recursive: true, force: true });
 };
 
+const runContactDeleteDialogSmoke = async () => {
+  const form = await createLeadForm();
+  let client;
+  const { childProcess, userDataDir } = launchChrome();
+
+  try {
+    await submitLead(form.id);
+    const contact = await waitForContactByEmail(form.id, 'contacts-smoke@example.com');
+
+    await waitForCdp();
+    const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
+    assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
+
+    client = connectCdp(page.webSocketDebuggerUrl);
+    await client.opened;
+    await client.send('Runtime.enable');
+    await client.send('Page.enable');
+    await client.send('DOM.enable');
+    await client.send('Log.enable');
+    await setBrowserSession(client, apiAdminSessionToken);
+    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: authStorageScript(apiAdminSessionToken),
+    });
+
+    await navigateToContacts(client, form.id);
+    const semantics = await assertContactDeleteDialogRecovery(client, contact);
+
+    console.log(JSON.stringify({
+      ok: true,
+      guard: 'contacts-delete-dialog',
+      siteId: SITE_ID,
+      formId: form.id,
+      contactId: contact.id,
+      semantics,
+    }, null, 2));
+  } finally {
+    await deleteForm(form.id).catch((error) => {
+      console.warn('Unable to delete contacts delete-dialog smoke form:', error instanceof Error ? error.message : error);
+    });
+    await cleanupBrowser({ client, childProcess, userDataDir });
+  }
+};
+
 const main = async () => {
   assertContactsEmptyStatesUseSharedComponent();
   if (process.env.BACKY_CONTACTS_SOURCE_ONLY === '1') {
@@ -1326,8 +1924,13 @@ const main = async () => {
     return;
   }
 
-  const syncReceiver = await startContactSyncReceiver();
   await loginAdminApi();
+  if (process.env.BACKY_CONTACTS_DELETE_DIALOG_SMOKE === '1') {
+    await runContactDeleteDialogSmoke();
+    return;
+  }
+
+  const syncReceiver = await startContactSyncReceiver();
   const form = await createLeadForm();
   let savedListId;
   let promotedUserId;
@@ -1376,6 +1979,19 @@ const main = async () => {
     });
 
     await navigateToContacts(client, form.id);
+    await assertContactsCreateActionsReady(client);
+    if (BULK_ACTION_STATUS_SMOKE) {
+      const bulkActionStatus = await assertContactsBulkActionStatus(client, contact.email);
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'contacts-bulk-action-status',
+        siteId: SITE_ID,
+        formId: form.id,
+        contactId: contact.id,
+        bulkActionStatus,
+      }, null, 2));
+      return;
+    }
     const existingCustomerCollection = await findCollectionBySlug('customers');
     const promotedContact = await promoteContactInUi(client, form.id, importedContact);
     promotedUserId = promotedContact.promotion.existingUser ? null : promotedContact.user.id;

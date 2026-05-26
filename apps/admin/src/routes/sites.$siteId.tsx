@@ -1,4 +1,11 @@
-import { type DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  type DragEvent,
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -68,6 +75,8 @@ import {
 } from "@/lib/adminContentApi";
 import type {
   AdminFrontendDesignResponse,
+  AdminSiteNavigation,
+  AdminSiteRedirects,
   AdminSiteRedirectConflict,
   AdminSiteSeoPreview,
   AdminSiteSeoPreviewRoute,
@@ -81,6 +90,7 @@ import type {
 import type { Page, Site } from "@/stores/mockStore";
 import { useAuthStore, type User } from "@/stores/authStore";
 import { siteMatchesIdentifier } from "@/lib/siteSelection";
+import { getLocalBackendOrigin } from "@/lib/localBackendOrigin";
 import type {
   Comment,
   CommentReportReason,
@@ -305,6 +315,8 @@ const SITE_WORKSPACE_AREAS = [
 interface SiteNavigationEditorState {
   navigation: SiteNavigationConfig;
   pages: Page[];
+  hydrated: boolean;
+  dirty: boolean;
   loading: boolean;
   saving: boolean;
   errorMessage: string | null;
@@ -314,6 +326,8 @@ interface SiteNavigationEditorState {
 interface SiteRedirectEditorState {
   rules: SiteRedirectRule[];
   conflicts: AdminSiteRedirectConflict[];
+  hydrated: boolean;
+  dirty: boolean;
   loading: boolean;
   saving: boolean;
   previewing: boolean;
@@ -325,6 +339,8 @@ interface SiteSeoEditorState {
   seo: AdminSiteSeoSettings;
   jsonLdText: string;
   preview: AdminSiteSeoPreview;
+  hydrated: boolean;
+  dirty: boolean;
   loading: boolean;
   saving: boolean;
   errorMessage: string | null;
@@ -344,6 +360,8 @@ type SiteWebhookEndpointDraft = {
 interface SiteWebhookEditorState {
   enabled: boolean;
   endpoints: SiteWebhookEndpointDraft[];
+  hydrated: boolean;
+  dirty: boolean;
   loading: boolean;
   saving: boolean;
   errorMessage: string | null;
@@ -358,6 +376,8 @@ interface SiteFrontendDesignEditorState {
   chromeJson: string;
   templatesJson: string;
   editableMapJson: string;
+  hydrated: boolean;
+  dirty: boolean;
   loading: boolean;
   saving: boolean;
   capturing: boolean;
@@ -367,6 +387,7 @@ interface SiteFrontendDesignEditorState {
 
 interface SiteAuditPanelState {
   logs: AdminAuditLog[];
+  hydrated: boolean;
   loading: boolean;
   errorMessage: string | null;
 }
@@ -675,6 +696,28 @@ const normalizeNavigationLayoutState = (
   },
 });
 
+const createNavigationEditorState = (
+  siteNavigation?: AdminSiteNavigation,
+  pages: Page[] = [],
+): SiteNavigationEditorState => ({
+  navigation: siteNavigation
+    ? {
+        primary: siteNavigation.settings.primary || [],
+        footer: siteNavigation.settings.footer || [],
+        layout: normalizeNavigationLayoutState(
+          siteNavigation.settings.layout || siteNavigation.resolved.layout,
+        ),
+      }
+    : EMPTY_NAVIGATION,
+  pages,
+  hydrated: Boolean(siteNavigation),
+  dirty: false,
+  loading: false,
+  saving: false,
+  errorMessage: null,
+  notice: null,
+});
+
 const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
   titleTemplate: "%s | {siteName}",
   defaultDescription: "",
@@ -698,6 +741,24 @@ const EMPTY_SEO_SETTINGS: AdminSiteSeoSettings = {
 const EMPTY_SEO_PREVIEW: AdminSiteSeoPreview = {
   supportedVariables: [],
   routes: [],
+};
+
+const createSeoEditorState = (
+  seo: AdminSiteSeoSettings = EMPTY_SEO_SETTINGS,
+  preview: AdminSiteSeoPreview = EMPTY_SEO_PREVIEW,
+): SiteSeoEditorState => {
+  const nextSeo = { ...EMPTY_SEO_SETTINGS, ...seo };
+  return {
+    seo: nextSeo,
+    jsonLdText: formatJsonLd(nextSeo.jsonLd),
+    preview,
+    hydrated: seo !== EMPTY_SEO_SETTINGS || preview !== EMPTY_SEO_PREVIEW,
+    dirty: false,
+    loading: false,
+    saving: false,
+    errorMessage: null,
+    notice: null,
+  };
 };
 
 const SITE_WEBHOOK_EVENT_OPTIONS: Array<{
@@ -825,6 +886,8 @@ const createFrontendDesignState = (
   chromeJson: formatContractJson(frontendDesign.chrome || {}),
   templatesJson: JSON.stringify(frontendDesign.templates || [], null, 2),
   editableMapJson: JSON.stringify(frontendDesign.editableMap || [], null, 2),
+  hydrated: Boolean(response),
+  dirty: false,
   loading: false,
   saving: false,
   capturing: false,
@@ -1115,6 +1178,22 @@ function makeRedirectRule(): SiteRedirectRule {
   };
 }
 
+function createRedirectEditorState(
+  redirects?: AdminSiteRedirects,
+): SiteRedirectEditorState {
+  return {
+    rules: redirects?.rules || [],
+    conflicts: redirects?.conflicts || [],
+    hydrated: Boolean(redirects),
+    dirty: false,
+    loading: false,
+    saving: false,
+    previewing: false,
+    errorMessage: null,
+    notice: null,
+  };
+}
+
 function makeSiteWebhookEndpoint(): SiteWebhookEndpointDraft {
   return {
     id: `webhook_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
@@ -1129,6 +1208,7 @@ function makeSiteWebhookEndpoint(): SiteWebhookEndpointDraft {
 
 function createWebhookEditorState(
   settings?: SiteSettings["webhooks"],
+  hydrated = Boolean(settings),
 ): SiteWebhookEditorState {
   const endpoints = (settings?.endpoints || []).map<SiteWebhookEndpointDraft>(
     (endpoint) => ({
@@ -1151,6 +1231,8 @@ function createWebhookEditorState(
       settings?.enabled === true ||
       endpoints.some((endpoint) => endpoint.enabled),
     endpoints,
+    hydrated,
+    dirty: false,
     loading: false,
     saving: false,
     errorMessage: null,
@@ -1580,7 +1662,7 @@ const apiBase = (() => {
     typeof window !== "undefined" &&
     window.location.port === "5173"
   ) {
-    return "http://localhost:3001";
+    return getLocalBackendOrigin();
   }
   return envBase
     ? envBase
@@ -1865,6 +1947,12 @@ function EditSitePage() {
     selectedCommentIds: [],
     commentReportReasons: [...DEFAULT_COMMENT_REPORT_REASONS],
   });
+  const workflowLoadRequestRef = useRef(0);
+  const [workflowHydrated, setWorkflowHydrated] = useState(false);
+  const submissionLoadRequestRef = useRef(0);
+  const contactLoadRequestRef = useRef(0);
+  const [submissionsHydrated, setSubmissionsHydrated] = useState(false);
+  const [contactsHydrated, setContactsHydrated] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [siteSettingsSubmitted, setSiteSettingsSubmitted] = useState(false);
@@ -1878,48 +1966,39 @@ function EditSitePage() {
     null,
   );
   const [readiness, setReadiness] = useState<SiteReadiness | null>(null);
+  const [readinessHydrated, setReadinessHydrated] = useState(false);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
+  const readinessLoadRequestRef = useRef(0);
   const [navigationState, setNavigationState] =
-    useState<SiteNavigationEditorState>({
-      navigation: EMPTY_NAVIGATION,
-      pages: [],
-      loading: false,
-      saving: false,
-      errorMessage: null,
-      notice: null,
-    });
-  const [redirectState, setRedirectState] = useState<SiteRedirectEditorState>({
-    rules: [],
-    conflicts: [],
-    loading: false,
-    saving: false,
-    previewing: false,
-    errorMessage: null,
-    notice: null,
-  });
-  const [seoState, setSeoState] = useState<SiteSeoEditorState>({
-    seo: EMPTY_SEO_SETTINGS,
-    jsonLdText: formatJsonLd(EMPTY_SEO_SETTINGS.jsonLd),
-    preview: EMPTY_SEO_PREVIEW,
-    loading: false,
-    saving: false,
-    errorMessage: null,
-    notice: null,
-  });
+    useState<SiteNavigationEditorState>(() => createNavigationEditorState());
+  const navigationLoadRequestRef = useRef(0);
+  const [redirectState, setRedirectState] = useState<SiteRedirectEditorState>(
+    () => createRedirectEditorState(),
+  );
+  const redirectLoadRequestRef = useRef(0);
+  const redirectPreviewRequestRef = useRef(0);
+  const [seoState, setSeoState] = useState<SiteSeoEditorState>(() =>
+    createSeoEditorState(),
+  );
+  const seoLoadRequestRef = useRef(0);
   const [webhookState, setWebhookState] = useState<SiteWebhookEditorState>(() =>
     createWebhookEditorState(),
   );
+  const webhookLoadRequestRef = useRef(0);
   const [frontendDesignState, setFrontendDesignState] =
     useState<SiteFrontendDesignEditorState>(() => createFrontendDesignState());
+  const frontendDesignLoadRequestRef = useRef(0);
   const [themeDraft, setThemeDraft] = useState<SiteThemeDraft>(() =>
     normalizeSiteThemeDraft(),
   );
   const [auditState, setAuditState] = useState<SiteAuditPanelState>({
     logs: [],
+    hydrated: false,
     loading: false,
     errorMessage: null,
   });
+  const auditLoadRequestRef = useRef(0);
   const [submissionStatus, setSubmissionStatus] =
     useState<SubmissionStatusFilter>("pending");
   const [contactStatus, setContactStatus] =
@@ -1931,16 +2010,31 @@ function EditSitePage() {
   const [commentTargetType, setCommentTargetType] =
     useState<CommentTargetFilter>("all");
   const [commentTargetId, setCommentTargetId] = useState("");
+  const commentsLoadRequestRef = useRef(0);
+  const [commentsHydrated, setCommentsHydrated] = useState(false);
   const [commentBlockReason, setCommentBlockReason] =
     useState<CommentReportReason>(DEFAULT_COMMENT_REPORT_REASONS[0]);
   const [commentPolicyDraft, setCommentPolicyDraft] =
     useState<SiteCommentPolicyDraft>(DEFAULT_SITE_COMMENT_POLICY);
   const [savedCommentPolicy, setSavedCommentPolicy] =
     useState<SiteCommentPolicyDraft>(DEFAULT_SITE_COMMENT_POLICY);
+  const commentPolicyDraftRef = useRef<SiteCommentPolicyDraft>(
+    DEFAULT_SITE_COMMENT_POLICY,
+  );
+  const savedCommentPolicyRef = useRef<SiteCommentPolicyDraft>(
+    DEFAULT_SITE_COMMENT_POLICY,
+  );
+  const commentPolicyLoadRequestRef = useRef(0);
+  const [commentPolicyHydrated, setCommentPolicyHydrated] = useState(false);
   const [commentPolicyLoading, setCommentPolicyLoading] = useState(false);
   const [commentPolicySaving, setCommentPolicySaving] = useState(false);
+  const [commentPolicyNotice, setCommentPolicyNotice] = useState<
+    string | null
+  >(null);
   const [formBuilderDraft, setFormBuilderDraft] =
     useState<FormDefinition | null>(null);
+  const formBuilderDraftRef = useRef<FormDefinition | null>(null);
+  const savedFormBuilderDraftRef = useRef<FormDefinition | null>(null);
   const [formBuilderSaving, setFormBuilderSaving] = useState(false);
   const [formBuilderCreating, setFormBuilderCreating] = useState(false);
   const [formBuilderDeleting, setFormBuilderDeleting] = useState(false);
@@ -1956,86 +2050,36 @@ function EditSitePage() {
     useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canViewSite =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, "sites.view");
+  const canUseSiteDetailRoleDefaults =
+    isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending =
+    isPermissionsLoading && !permissionMatrix && !canUseSiteDetailRoleDefaults;
+  const isSiteDetailRoutePermissionAllowed = (
+    key: SiteDetailPermissionKey,
+  ) =>
+    isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, key) ||
+    (canUseSiteDetailRoleDefaults &&
+      Boolean(
+        currentAdmin &&
+          SITE_DETAIL_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role),
+      ));
+  const canViewSite = isSiteDetailRoutePermissionAllowed("sites.view");
   const canConfigureSite =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "sites.configure",
-    );
-  const canDeleteSite =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "sites.delete",
-    );
-  const canViewForms =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, "forms.view");
-  const canCreateForms =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "forms.create",
-    );
-  const canEditForms =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, "forms.edit");
-  const canManageForms =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "forms.manage",
-    );
-  const canDeleteForms =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "forms.delete",
-    );
-  const canExportForms =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "forms.export",
-    );
-  const canViewComments =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "comments.view",
-    );
+    isSiteDetailRoutePermissionAllowed("sites.configure");
+  const canDeleteSite = isSiteDetailRoutePermissionAllowed("sites.delete");
+  const canViewForms = isSiteDetailRoutePermissionAllowed("forms.view");
+  const canCreateForms = isSiteDetailRoutePermissionAllowed("forms.create");
+  const canEditForms = isSiteDetailRoutePermissionAllowed("forms.edit");
+  const canManageForms = isSiteDetailRoutePermissionAllowed("forms.manage");
+  const canDeleteForms = isSiteDetailRoutePermissionAllowed("forms.delete");
+  const canExportForms = isSiteDetailRoutePermissionAllowed("forms.export");
+  const canViewComments = isSiteDetailRoutePermissionAllowed("comments.view");
   const canManageComments =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "comments.manage",
-    );
+    isSiteDetailRoutePermissionAllowed("comments.manage");
   const canConfigureComments =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "comments.configure",
-    );
+    isSiteDetailRoutePermissionAllowed("comments.configure");
   const canExportActivity =
-    !isPermissionMatrixPending &&
-    isSiteDetailPermissionAllowed(
-      permissionMatrix,
-      currentAdmin,
-      "activity.export",
-    );
+    isSiteDetailRoutePermissionAllowed("activity.export");
   const viewSitePermissionTitle = canViewSite
     ? undefined
     : siteDetailPermissionReason(permissionMatrix, currentAdmin, "sites.view");
@@ -2120,8 +2164,41 @@ function EditSitePage() {
   const formsManageDeniedMessage = `Your account needs forms.manage to update submissions or contacts. ${formsManagePermissionTitle}`;
   const commentsManageDeniedMessage = `Your account needs comments.manage to moderate comments. ${commentsManagePermissionTitle}`;
   const commentsConfigureDeniedMessage = `Your account needs comments.configure to change comment policy. ${commentsConfigurePermissionTitle}`;
-  const isSiteSettingsBusy =
-    isLoading || commentPolicySaving || isPermissionMatrixPending;
+  const isSiteSettingsBusy = isLoading;
+  const isNavigationInitialLoading =
+    navigationState.loading && !navigationState.hydrated;
+  const isNavigationDraftDisabled =
+    !canConfigureSite || isNavigationInitialLoading || navigationState.saving;
+  const isNavigationSaveDisabled =
+    !siteApiId ||
+    !canConfigureSite ||
+    isNavigationInitialLoading ||
+    navigationState.saving;
+  const isFrontendDesignInitialLoading =
+    frontendDesignState.loading && !frontendDesignState.hydrated;
+  const isFrontendDesignMutationBusy =
+    frontendDesignState.saving || frontendDesignState.capturing;
+  const isFrontendDesignDraftDisabled =
+    !canConfigureSite ||
+    isFrontendDesignInitialLoading ||
+    isFrontendDesignMutationBusy;
+  const isFrontendDesignSaveDisabled =
+    !siteApiId ||
+    !canConfigureSite ||
+    frontendDesignState.loading ||
+    isFrontendDesignInitialLoading ||
+    isFrontendDesignMutationBusy;
+  const isFrontendDesignCaptureDisabled =
+    !siteApiId ||
+    !canConfigureSite ||
+    frontendDesignState.loading ||
+    isFrontendDesignInitialLoading ||
+    isFrontendDesignMutationBusy;
+  const isFrontendDesignVersionDisabled =
+    !canConfigureSite ||
+    isFrontendDesignInitialLoading ||
+    isFrontendDesignMutationBusy ||
+    frontendDesignState.frontendDesign.templates.length === 0;
   const isSiteConfigurationDisabled = isSiteSettingsBusy || !canConfigureSite;
   const siteSettingsInlineErrors = useMemo(
     () => buildSiteSettingsInlineErrors(formData),
@@ -2132,29 +2209,59 @@ function EditSitePage() {
   ).some(Boolean);
   const showSiteSettingsInlineErrors =
     siteSettingsSubmitted && hasSiteSettingsInlineErrors;
+  const isWebhookInitialLoading =
+    webhookState.loading && !webhookState.hydrated;
   const isWebhookConfigurationDisabled =
-    webhookState.loading || webhookState.saving || !canConfigureSite;
+    !canConfigureSite || isWebhookInitialLoading || webhookState.saving;
+  const isWebhookSaveDisabled =
+    !siteApiId ||
+    !canConfigureSite ||
+    isWebhookInitialLoading ||
+    webhookState.saving;
+  const isRedirectInitialLoading =
+    redirectState.loading && !redirectState.hydrated;
   const isSiteDeletionDisabled = isSiteSettingsBusy || !canDeleteSite;
   const areRedirectEditsDisabled =
-    redirectState.loading ||
+    !canConfigureSite || isRedirectInitialLoading || redirectState.saving;
+  const isRedirectPreviewDisabled =
+    !siteApiId ||
+    !canConfigureSite ||
+    isRedirectInitialLoading ||
     redirectState.saving ||
-    redirectState.previewing ||
-    !canConfigureSite;
+    redirectState.previewing;
+  const isRedirectSaveDisabled =
+    !siteApiId ||
+    !canConfigureSite ||
+    isRedirectInitialLoading ||
+    redirectState.saving ||
+    redirectState.previewing;
+  const isSeoInitialLoading = seoState.loading && !seoState.hydrated;
   const areSeoEditsDisabled =
-    seoState.loading || seoState.saving || !canConfigureSite;
+    !canConfigureSite || isSeoInitialLoading || seoState.saving;
+  const isSeoSaveDisabled =
+    !siteApiId || !canConfigureSite || isSeoInitialLoading || seoState.saving;
+  const isWorkflowInitialLoading = state.workflowLoading && !workflowHydrated;
+  const isSubmissionInitialLoading =
+    state.submissionLoading && !submissionsHydrated;
+  const isContactInitialLoading = state.contactLoading && !contactsHydrated;
   const isWorkflowRefreshDisabled =
     state.workflowLoading || (!canViewForms && !canViewComments);
-  const isFormViewDisabled = state.workflowLoading || !canViewForms;
-  const isFormManagementDisabled = state.workflowLoading || !canManageForms;
+  const isFormViewDisabled = isWorkflowInitialLoading || !canViewForms;
+  const isFormManagementDisabled = isWorkflowInitialLoading || !canManageForms;
   const isFormBuilderBusy =
     formBuilderSaving ||
     formBuilderCreating ||
     formBuilderDeleting ||
-    state.workflowLoading;
+    isWorkflowInitialLoading;
   const isFormBuilderDisabled = isFormBuilderBusy || !canEditForms;
+  const isCommentPolicyInitialLoading =
+    commentPolicyLoading && !commentPolicyHydrated;
   const isCommentPolicyDisabled =
-    commentPolicyLoading || commentPolicySaving || !canConfigureComments;
-  const isCommentViewDisabled = state.commentsLoading || !canViewComments;
+    !canConfigureComments || isCommentPolicyInitialLoading || commentPolicySaving;
+  const isCommentInitialLoading = state.commentsLoading && !commentsHydrated;
+  const isCommentViewDisabled = isCommentInitialLoading || !canViewComments;
+  const isAuditInitialLoading = auditState.loading && !auditState.hydrated;
+  const isReadinessInitialLoading = readinessLoading && !readinessHydrated;
   const selectedCommentSet = useMemo(
     () => new Set(state.selectedCommentIds),
     [state.selectedCommentIds],
@@ -2280,20 +2387,31 @@ function EditSitePage() {
 
   const loadReadiness = async () => {
     if (!siteApiId) return;
+    const requestId = readinessLoadRequestRef.current + 1;
+    readinessLoadRequestRef.current = requestId;
     setReadinessLoading(true);
     setReadinessError(null);
     try {
       const nextReadiness = await getSiteReadiness(siteApiId);
+      if (requestId !== readinessLoadRequestRef.current) {
+        return;
+      }
       setReadiness(nextReadiness);
+      setReadinessHydrated(true);
     } catch (error) {
-      setReadiness(null);
+      if (requestId !== readinessLoadRequestRef.current) {
+        return;
+      }
+      setReadiness((current) => (readinessHydrated ? current : null));
       setReadinessError(
         error instanceof Error
           ? error.message
           : "Unable to load site readiness.",
       );
     } finally {
-      setReadinessLoading(false);
+      if (requestId === readinessLoadRequestRef.current) {
+        setReadinessLoading(false);
+      }
     }
   };
 
@@ -2312,6 +2430,8 @@ function EditSitePage() {
       return;
     }
 
+    const requestId = auditLoadRequestRef.current + 1;
+    auditLoadRequestRef.current = requestId;
     setAuditState((prev) => ({ ...prev, loading: true, errorMessage: null }));
 
     try {
@@ -2320,15 +2440,23 @@ function EditSitePage() {
         limit: 12,
         offset: 0,
       });
+      if (requestId !== auditLoadRequestRef.current) {
+        return;
+      }
       setAuditState({
         logs: result.logs,
+        hydrated: true,
         loading: false,
         errorMessage: null,
       });
     } catch (error) {
+      if (requestId !== auditLoadRequestRef.current) {
+        return;
+      }
       setAuditState((prev) => ({
         ...prev,
         loading: false,
+        hydrated: prev.hydrated,
         errorMessage:
           error instanceof Error
             ? error.message
@@ -2337,9 +2465,42 @@ function EditSitePage() {
     }
   };
 
+  const applyNavigationEditorResponse = (
+    siteNavigation: AdminSiteNavigation,
+    pages: Page[],
+    notice: string | null = null,
+    options: { preserveDirtyDraft?: boolean } = {},
+  ) => {
+    setNavigationState((prev) => {
+      if (options.preserveDirtyDraft && prev.dirty) {
+        return {
+          ...prev,
+          pages,
+          hydrated: true,
+          loading: false,
+          saving: false,
+          errorMessage: null,
+          notice:
+            notice ||
+            "Latest navigation loaded in the background. Unsaved local edits were preserved.",
+        };
+      }
+
+      return {
+        ...createNavigationEditorState(siteNavigation, pages),
+        hydrated: true,
+        dirty: false,
+        notice,
+      };
+    });
+  };
+
   const loadNavigationEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
+      if (!currentAdmin || isPermissionMatrixPending) {
+        return;
+      }
       setNavigationState((prev) => ({
         ...prev,
         errorMessage: siteDetailPermissionReason(
@@ -2350,6 +2511,8 @@ function EditSitePage() {
       }));
       return;
     }
+    const requestId = navigationLoadRequestRef.current + 1;
+    navigationLoadRequestRef.current = requestId;
     setNavigationState((prev) => ({
       ...prev,
       loading: true,
@@ -2362,20 +2525,17 @@ function EditSitePage() {
         listPages(siteApiId),
       ]);
 
-      setNavigationState((prev) => ({
-        ...prev,
-        navigation: {
-          primary: siteNavigation.settings.primary || [],
-          footer: siteNavigation.settings.footer || [],
-          layout: normalizeNavigationLayoutState(
-            siteNavigation.settings.layout || siteNavigation.resolved.layout,
-          ),
-        },
-        pages,
-        loading: false,
-        notice: null,
-      }));
+      if (requestId !== navigationLoadRequestRef.current) {
+        return;
+      }
+
+      applyNavigationEditorResponse(siteNavigation, pages, null, {
+        preserveDirtyDraft: true,
+      });
     } catch (error) {
+      if (requestId !== navigationLoadRequestRef.current) {
+        return;
+      }
       setNavigationState((prev) => ({
         ...prev,
         loading: false,
@@ -2394,7 +2554,9 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setNavigationState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       navigation: {
         ...prev.navigation,
         [menu]: updater(prev.navigation[menu] || []),
@@ -2409,7 +2571,9 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setNavigationState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       navigation: {
         ...prev.navigation,
         layout: {
@@ -2505,6 +2669,7 @@ function EditSitePage() {
       }));
       return;
     }
+    navigationLoadRequestRef.current += 1;
     setNavigationState((prev) => ({
       ...prev,
       saving: true,
@@ -2517,18 +2682,11 @@ function EditSitePage() {
         siteApiId,
         navigationState.navigation,
       );
-      setNavigationState((prev) => ({
-        ...prev,
-        navigation: {
-          primary: siteNavigation.settings.primary || [],
-          footer: siteNavigation.settings.footer || [],
-          layout: normalizeNavigationLayoutState(
-            siteNavigation.settings.layout || siteNavigation.resolved.layout,
-          ),
-        },
-        saving: false,
-        notice: "Navigation saved and available to public/front-end contracts.",
-      }));
+      applyNavigationEditorResponse(
+        siteNavigation,
+        navigationState.pages,
+        "Navigation saved and available to public/front-end contracts.",
+      );
       void loadReadiness();
       void loadSiteAuditEvents();
     } catch (error) {
@@ -2545,6 +2703,21 @@ function EditSitePage() {
 
   const loadRedirectEditor = async () => {
     if (!siteApiId) return;
+    if (!canViewSite) {
+      if (!currentAdmin || isPermissionMatrixPending) {
+        return;
+      }
+      setRedirectState((prev) => ({
+        ...prev,
+        loading: false,
+        errorMessage:
+          viewSitePermissionTitle ||
+          "Your account needs sites.view to load site redirects.",
+      }));
+      return;
+    }
+    const requestId = redirectLoadRequestRef.current + 1;
+    redirectLoadRequestRef.current = requestId;
     setRedirectState((prev) => ({
       ...prev,
       loading: true,
@@ -2553,14 +2726,31 @@ function EditSitePage() {
 
     try {
       const redirects = await getSiteRedirects(siteApiId);
-      setRedirectState((prev) => ({
-        ...prev,
-        rules: redirects.rules || [],
-        conflicts: redirects.conflicts || [],
-        loading: false,
-        notice: null,
-      }));
+      if (requestId !== redirectLoadRequestRef.current) {
+        return;
+      }
+      setRedirectState((prev) => {
+        if (prev.dirty) {
+          return {
+            ...prev,
+            hydrated: true,
+            loading: false,
+            errorMessage: null,
+            notice:
+              "Latest redirects loaded in the background. Unsaved local edits were preserved.",
+          };
+        }
+
+        return {
+          ...createRedirectEditorState(redirects),
+          hydrated: true,
+          notice: null,
+        };
+      });
     } catch (error) {
+      if (requestId !== redirectLoadRequestRef.current) {
+        return;
+      }
       setRedirectState((prev) => ({
         ...prev,
         loading: false,
@@ -2580,9 +2770,13 @@ function EditSitePage() {
       }));
       return;
     }
+    redirectPreviewRequestRef.current += 1;
     setRedirectState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
+      previewing: false,
       conflicts: [],
       rules: [...prev.rules, makeRedirectRule()],
     }));
@@ -2593,9 +2787,13 @@ function EditSitePage() {
     updates: Partial<SiteRedirectRule>,
   ) => {
     if (!canConfigureSite) return;
+    redirectPreviewRequestRef.current += 1;
     setRedirectState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
+      previewing: false,
       conflicts: [],
       rules: prev.rules.map((rule) =>
         (rule.id || rule.from) === ruleId
@@ -2607,9 +2805,13 @@ function EditSitePage() {
 
   const handleRemoveRedirectRule = (ruleId: string) => {
     if (!canConfigureSite) return;
+    redirectPreviewRequestRef.current += 1;
     setRedirectState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
+      previewing: false,
       conflicts: [],
       rules: prev.rules.filter((rule) => (rule.id || rule.from) !== ruleId),
     }));
@@ -2624,6 +2826,8 @@ function EditSitePage() {
       }));
       return;
     }
+    const requestId = redirectPreviewRequestRef.current + 1;
+    redirectPreviewRequestRef.current = requestId;
     setRedirectState((prev) => ({
       ...prev,
       previewing: true,
@@ -2636,6 +2840,9 @@ function EditSitePage() {
         siteApiId,
         redirectState.rules.map(normalizeRedirectEditorRule),
       );
+      if (requestId !== redirectPreviewRequestRef.current) {
+        return;
+      }
       setRedirectState((prev) => ({
         ...prev,
         conflicts: redirects.conflicts || [],
@@ -2646,6 +2853,9 @@ function EditSitePage() {
             : "Preview found no route conflicts.",
       }));
     } catch (error) {
+      if (requestId !== redirectPreviewRequestRef.current) {
+        return;
+      }
       setRedirectState((prev) => ({
         ...prev,
         previewing: false,
@@ -2666,6 +2876,8 @@ function EditSitePage() {
       }));
       return;
     }
+    redirectLoadRequestRef.current += 1;
+    redirectPreviewRequestRef.current += 1;
     setRedirectState((prev) => ({
       ...prev,
       saving: true,
@@ -2682,6 +2894,8 @@ function EditSitePage() {
         ...prev,
         rules: redirects.rules || [],
         conflicts: redirects.conflicts || [],
+        hydrated: true,
+        dirty: false,
         saving: false,
         notice:
           (redirects.conflicts || []).length > 0
@@ -2705,6 +2919,9 @@ function EditSitePage() {
   const loadSeoEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
+      if (!currentAdmin || isPermissionMatrixPending) {
+        return;
+      }
       setSeoState((prev) => ({
         ...prev,
         errorMessage: siteDetailPermissionReason(
@@ -2715,21 +2932,39 @@ function EditSitePage() {
       }));
       return;
     }
+    const requestId = seoLoadRequestRef.current + 1;
+    seoLoadRequestRef.current = requestId;
     setSeoState((prev) => ({ ...prev, loading: true, errorMessage: null }));
 
     try {
       const result = await getSiteSeoSettings(siteApiId);
-      const seo = result.seo;
-      const nextSeo = { ...EMPTY_SEO_SETTINGS, ...seo };
-      setSeoState((prev) => ({
-        ...prev,
-        seo: nextSeo,
-        jsonLdText: formatJsonLd(nextSeo.jsonLd),
-        preview: result.preview,
-        loading: false,
-        notice: null,
-      }));
+      if (requestId !== seoLoadRequestRef.current) {
+        return;
+      }
+      setSeoState((prev) => {
+        if (prev.dirty) {
+          return {
+            ...prev,
+            preview: result.preview,
+            hydrated: true,
+            loading: false,
+            saving: false,
+            errorMessage: null,
+            notice:
+              "Latest SEO settings loaded in the background. Unsaved local edits were preserved.",
+          };
+        }
+
+        return {
+          ...createSeoEditorState(result.seo, result.preview),
+          hydrated: true,
+          notice: null,
+        };
+      });
     } catch (error) {
+      if (requestId !== seoLoadRequestRef.current) {
+        return;
+      }
       setSeoState((prev) => ({
         ...prev,
         loading: false,
@@ -2744,16 +2979,40 @@ function EditSitePage() {
   const applyFrontendDesignResponse = (
     response: AdminFrontendDesignResponse,
     notice: string | null = null,
+    options: { preserveDirtyDraft?: boolean } = {},
   ) => {
-    setFrontendDesignState({
-      ...createFrontendDesignState(response.frontendDesign, response),
-      notice,
+    setFrontendDesignState((prev) => {
+      if (options.preserveDirtyDraft && prev.dirty) {
+        return {
+          ...prev,
+          endpoints: response.endpoints,
+          templateRegistry: response.templateRegistry,
+          hydrated: true,
+          loading: false,
+          saving: false,
+          capturing: false,
+          errorMessage: null,
+          notice:
+            notice ||
+            "Latest frontend design contract loaded in the background. Unsaved local edits were preserved.",
+        };
+      }
+
+      return {
+        ...createFrontendDesignState(response.frontendDesign, response),
+        hydrated: true,
+        dirty: false,
+        notice,
+      };
     });
   };
 
   const loadFrontendDesignEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
+      if (!currentAdmin || isPermissionMatrixPending) {
+        return;
+      }
       setFrontendDesignState((prev) => ({
         ...prev,
         errorMessage: siteDetailPermissionReason(
@@ -2764,6 +3023,8 @@ function EditSitePage() {
       }));
       return;
     }
+    const requestId = frontendDesignLoadRequestRef.current + 1;
+    frontendDesignLoadRequestRef.current = requestId;
     setFrontendDesignState((prev) => ({
       ...prev,
       loading: true,
@@ -2772,8 +3033,14 @@ function EditSitePage() {
 
     try {
       const response = await getSiteFrontendDesign(siteApiId);
-      applyFrontendDesignResponse(response);
+      if (requestId !== frontendDesignLoadRequestRef.current) {
+        return;
+      }
+      applyFrontendDesignResponse(response, null, { preserveDirtyDraft: true });
     } catch (error) {
+      if (requestId !== frontendDesignLoadRequestRef.current) {
+        return;
+      }
       setFrontendDesignState((prev) => ({
         ...prev,
         loading: false,
@@ -2791,6 +3058,7 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setFrontendDesignState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
       errorMessage: null,
       frontendDesign: {
@@ -2806,6 +3074,7 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setFrontendDesignState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
       errorMessage: null,
       frontendDesign: {
@@ -2827,6 +3096,7 @@ function EditSitePage() {
       }));
       return;
     }
+    frontendDesignLoadRequestRef.current += 1;
     setFrontendDesignState((prev) => ({
       ...prev,
       saving: true,
@@ -2881,6 +3151,7 @@ function EditSitePage() {
       }));
       return;
     }
+    frontendDesignLoadRequestRef.current += 1;
     setFrontendDesignState((prev) => ({
       ...prev,
       capturing: true,
@@ -2925,6 +3196,7 @@ function EditSitePage() {
       );
       return {
         ...prev,
+        dirty: true,
         errorMessage: null,
         notice:
           "Template version metadata prepared. Save contract to persist it.",
@@ -2963,28 +3235,55 @@ function EditSitePage() {
 
   const loadSiteCommentPolicy = async () => {
     if (!siteApiId) return;
+    const requestId = commentPolicyLoadRequestRef.current + 1;
+    commentPolicyLoadRequestRef.current = requestId;
     setCommentPolicyLoading(true);
+    setSiteSettingsError(null);
     try {
       const siteDetail = await getAdminSite(siteApiId);
+      if (requestId !== commentPolicyLoadRequestRef.current) {
+        return;
+      }
       const normalized = normalizeSiteCommentPolicyDraft(
         siteDetail.settings?.commentPolicy,
       );
-      setCommentPolicyDraft(normalized);
+      const hasDirtyDraft =
+        JSON.stringify(commentPolicyDraftRef.current) !==
+        JSON.stringify(savedCommentPolicyRef.current);
+      savedCommentPolicyRef.current = normalized;
       setSavedCommentPolicy(normalized);
+      setCommentPolicyHydrated(true);
+      if (hasDirtyDraft) {
+        setCommentPolicyNotice(
+          "Latest comment policy loaded in the background. Unsaved local edits were preserved.",
+        );
+      } else {
+        commentPolicyDraftRef.current = normalized;
+        setCommentPolicyDraft(normalized);
+        setCommentPolicyNotice(null);
+      }
     } catch (error) {
+      if (requestId !== commentPolicyLoadRequestRef.current) {
+        return;
+      }
       setSiteSettingsError(
         error instanceof Error
           ? error.message
           : "Unable to load site comment policy.",
       );
     } finally {
-      setCommentPolicyLoading(false);
+      if (requestId === commentPolicyLoadRequestRef.current) {
+        setCommentPolicyLoading(false);
+      }
     }
   };
 
   const loadWebhookEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
+      if (!currentAdmin || isPermissionMatrixPending) {
+        return;
+      }
       setWebhookState((prev) => ({
         ...prev,
         loading: false,
@@ -2995,15 +3294,37 @@ function EditSitePage() {
       return;
     }
 
+    const requestId = webhookLoadRequestRef.current + 1;
+    webhookLoadRequestRef.current = requestId;
     setWebhookState((prev) => ({ ...prev, loading: true, errorMessage: null }));
 
     try {
       const siteDetail = await getAdminSite(siteApiId);
-      setWebhookState({
-        ...createWebhookEditorState(siteDetail.settings?.webhooks),
-        loading: false,
+      if (requestId !== webhookLoadRequestRef.current) {
+        return;
+      }
+      setWebhookState((prev) => {
+        if (prev.dirty) {
+          return {
+            ...prev,
+            hydrated: true,
+            loading: false,
+            saving: false,
+            errorMessage: null,
+            notice:
+              "Latest webhook configuration loaded in the background. Unsaved local edits were preserved.",
+          };
+        }
+
+        return {
+          ...createWebhookEditorState(siteDetail.settings?.webhooks, true),
+          loading: false,
+        };
       });
     } catch (error) {
+      if (requestId !== webhookLoadRequestRef.current) {
+        return;
+      }
       setWebhookState((prev) => ({
         ...prev,
         loading: false,
@@ -3022,7 +3343,9 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setWebhookState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       endpoints: prev.endpoints.map((endpoint) =>
         endpoint.id === endpointId ? { ...endpoint, ...updates } : endpoint,
       ),
@@ -3037,7 +3360,9 @@ function EditSitePage() {
   ) => {
     setWebhookState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       endpoints: prev.endpoints.map((endpoint) => {
         if (endpoint.id !== endpointId) return endpoint;
         const nextEvents = checked
@@ -3054,7 +3379,9 @@ function EditSitePage() {
     setWebhookState((prev) => ({
       ...prev,
       enabled: true,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       endpoints: [...prev.endpoints, makeSiteWebhookEndpoint()],
     }));
     setSiteWorkspaceNotice(null);
@@ -3064,7 +3391,9 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setWebhookState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       endpoints: prev.endpoints.filter(
         (endpoint) => endpoint.id !== endpointId,
       ),
@@ -3082,6 +3411,7 @@ function EditSitePage() {
       return;
     }
 
+    webhookLoadRequestRef.current += 1;
     setWebhookState((prev) => ({
       ...prev,
       saving: true,
@@ -3100,7 +3430,7 @@ function EditSitePage() {
       updateSite(storeSiteId, savedSite);
       setFetchedSite(savedSite);
       setWebhookState({
-        ...createWebhookEditorState(savedSite.settings?.webhooks),
+        ...createWebhookEditorState(savedSite.settings?.webhooks, true),
         saving: false,
         notice: "Webhook configuration saved.",
       });
@@ -3126,6 +3456,19 @@ function EditSitePage() {
       ...current,
       ...updates,
     }));
+    commentPolicyDraftRef.current = {
+      ...commentPolicyDraftRef.current,
+      ...updates,
+    };
+    setCommentPolicyNotice(null);
+    setSiteWorkspaceNotice(null);
+  };
+
+  const resetCommentPolicyDraft = () => {
+    if (!canConfigureComments) return;
+    commentPolicyDraftRef.current = savedCommentPolicyRef.current;
+    setCommentPolicyDraft(savedCommentPolicyRef.current);
+    setCommentPolicyNotice(null);
     setSiteWorkspaceNotice(null);
   };
 
@@ -3144,8 +3487,10 @@ function EditSitePage() {
       setSiteSettingsError(commentsConfigureDeniedMessage);
       return;
     }
+    commentPolicyLoadRequestRef.current += 1;
     setCommentPolicySaving(true);
     setSiteSettingsError(null);
+    setCommentPolicyNotice(null);
     setSiteWorkspaceNotice(null);
 
     try {
@@ -3159,8 +3504,12 @@ function EditSitePage() {
       const normalized = normalizeSiteCommentPolicyDraft(
         siteDetail.settings?.commentPolicy,
       );
+      commentPolicyDraftRef.current = normalized;
+      savedCommentPolicyRef.current = normalized;
       setCommentPolicyDraft(normalized);
       setSavedCommentPolicy(normalized);
+      setCommentPolicyHydrated(true);
+      setCommentPolicyNotice("Site comment policy saved.");
       setSiteWorkspaceNotice("Site comment policy saved.");
       void loadComments();
       void loadSiteAuditEvents();
@@ -3330,7 +3679,9 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setSeoState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       seo: {
         ...prev.seo,
         ...updates,
@@ -3342,6 +3693,7 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setSeoState((prev) => ({
       ...prev,
+      dirty: true,
       jsonLdText: value,
       notice: null,
       errorMessage: null,
@@ -3352,7 +3704,9 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setSeoState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       seo: {
         ...prev.seo,
         routeOverrides: [
@@ -3373,7 +3727,9 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setSeoState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       seo: {
         ...prev.seo,
         routeOverrides: (prev.seo.routeOverrides || []).map(
@@ -3388,7 +3744,9 @@ function EditSitePage() {
     if (!canConfigureSite) return;
     setSeoState((prev) => ({
       ...prev,
+      dirty: true,
       notice: null,
+      errorMessage: null,
       seo: {
         ...prev.seo,
         routeOverrides: (prev.seo.routeOverrides || []).filter(
@@ -3407,6 +3765,7 @@ function EditSitePage() {
       }));
       return;
     }
+    seoLoadRequestRef.current += 1;
     setSeoState((prev) => ({
       ...prev,
       saving: true,
@@ -3420,16 +3779,13 @@ function EditSitePage() {
         ...seoState.seo,
         jsonLd,
       });
-      const seo = result.seo;
-      const nextSeo = { ...EMPTY_SEO_SETTINGS, ...seo };
-      setSeoState((prev) => ({
-        ...prev,
-        seo: nextSeo,
-        jsonLdText: formatJsonLd(nextSeo.jsonLd),
-        preview: result.preview,
+      setSeoState({
+        ...createSeoEditorState(result.seo, result.preview),
+        hydrated: true,
+        dirty: false,
         saving: false,
         notice: "SEO defaults saved and reflected in public SEO discovery.",
-      }));
+      });
       void loadReadiness();
       void loadSiteAuditEvents();
     } catch (error) {
@@ -3452,11 +3808,7 @@ function EditSitePage() {
       );
       return;
     }
-    setState((prev) => ({
-      ...prev,
-      workflowLoading: true,
-      errorMessage: null,
-    }));
+    setWorkflowError(null);
     try {
       const forms = await listFormsFromApi(siteApiId);
       const firstFormId = forms[0]?.id || "";
@@ -3471,8 +3823,6 @@ function EditSitePage() {
       const message = normalizeWorkflowError(error, "Unable to load forms.");
       setWorkflowError(message);
       setState((prev) => ({ ...prev, forms: [], selectedFormId: "" }));
-    } finally {
-      setState((prev) => ({ ...prev, workflowLoading: false }));
     }
   };
 
@@ -3485,6 +3835,8 @@ function EditSitePage() {
       );
       return;
     }
+    const loadRequestId = submissionLoadRequestRef.current + 1;
+    submissionLoadRequestRef.current = loadRequestId;
     setState((prev) => ({
       ...prev,
       submissionLoading: true,
@@ -3502,20 +3854,35 @@ function EditSitePage() {
           ? detail.submissions.pagination.total
           : submissions.length;
 
+      if (loadRequestId !== submissionLoadRequestRef.current) {
+        return;
+      }
+
       setState((prev) => ({
         ...prev,
         submissions,
         submissionCount,
       }));
+      setSubmissionsHydrated(true);
     } catch (error) {
+      if (loadRequestId !== submissionLoadRequestRef.current) {
+        return;
+      }
       const message = normalizeWorkflowError(
         error,
         "Unable to load form submissions.",
       );
-      setState((prev) => ({ ...prev, submissions: [], submissionCount: 0 }));
+      setState((prev) => ({
+        ...prev,
+        ...(submissionsHydrated
+          ? {}
+          : { submissions: [], submissionCount: 0 }),
+      }));
       setWorkflowError(message);
     } finally {
-      setState((prev) => ({ ...prev, submissionLoading: false }));
+      if (loadRequestId === submissionLoadRequestRef.current) {
+        setState((prev) => ({ ...prev, submissionLoading: false }));
+      }
     }
   };
 
@@ -3527,6 +3894,8 @@ function EditSitePage() {
       );
       return;
     }
+    const loadRequestId = contactLoadRequestRef.current + 1;
+    contactLoadRequestRef.current = loadRequestId;
     setState((prev) => ({ ...prev, contactLoading: true, errorMessage: null }));
     try {
       const requestId = normalizeRequestIdInput(commentRequestId);
@@ -3536,6 +3905,10 @@ function EditSitePage() {
       });
       const contacts = result.contacts;
       const contactCount = result.count;
+
+      if (loadRequestId !== contactLoadRequestRef.current) {
+        return;
+      }
 
       setState((prev) => ({
         ...prev,
@@ -3550,15 +3923,24 @@ function EditSitePage() {
           ]),
         ),
       );
+      setContactsHydrated(true);
     } catch (error) {
+      if (loadRequestId !== contactLoadRequestRef.current) {
+        return;
+      }
       const message = normalizeWorkflowError(
         error,
         "Unable to load contacts.",
       );
-      setState((prev) => ({ ...prev, contacts: [], contactCount: 0 }));
+      setState((prev) => ({
+        ...prev,
+        ...(contactsHydrated ? {} : { contacts: [], contactCount: 0 }),
+      }));
       setWorkflowError(message);
     } finally {
-      setState((prev) => ({ ...prev, contactLoading: false }));
+      if (loadRequestId === contactLoadRequestRef.current) {
+        setState((prev) => ({ ...prev, contactLoading: false }));
+      }
     }
   };
 
@@ -3570,6 +3952,8 @@ function EditSitePage() {
       );
       return;
     }
+    const requestId = commentsLoadRequestRef.current + 1;
+    commentsLoadRequestRef.current = requestId;
     setState((prev) => ({
       ...prev,
       commentsLoading: true,
@@ -3590,13 +3974,20 @@ function EditSitePage() {
       const commentCount =
         typeof data.count === "number" ? data.count : comments.length;
 
+      if (requestId !== commentsLoadRequestRef.current) {
+        return;
+      }
+
       setState((prev) => ({
         ...prev,
         comments,
         commentCount,
-        selectedCommentIds: [],
       }));
+      setCommentsHydrated(true);
     } catch (error) {
+      if (requestId !== commentsLoadRequestRef.current) {
+        return;
+      }
       const message = normalizeWorkflowError(
         error,
         "Unable to load comments.",
@@ -3605,11 +3996,12 @@ function EditSitePage() {
         ...prev,
         comments: [],
         commentCount: 0,
-        selectedCommentIds: [],
       }));
       setWorkflowError(message);
     } finally {
-      setState((prev) => ({ ...prev, commentsLoading: false }));
+      if (requestId === commentsLoadRequestRef.current) {
+        setState((prev) => ({ ...prev, commentsLoading: false }));
+      }
     }
   };
 
@@ -3677,19 +4069,26 @@ function EditSitePage() {
       return;
     }
     const activeFormId = formId || state.selectedFormId;
+    const requestId = workflowLoadRequestRef.current + 1;
+    workflowLoadRequestRef.current = requestId;
     setWorkflowLoading(true);
 
     try {
       await loadForms();
+      if (requestId !== workflowLoadRequestRef.current) return;
       if (activeFormId) {
         await Promise.all([
           loadSubmissions(activeFormId),
           loadContacts(activeFormId),
         ]);
       }
+      if (requestId !== workflowLoadRequestRef.current) return;
       await loadComments();
     } finally {
-      setWorkflowLoading(false);
+      if (requestId === workflowLoadRequestRef.current) {
+        setWorkflowHydrated(true);
+        setWorkflowLoading(false);
+      }
     }
   };
 
@@ -3746,7 +4145,11 @@ function EditSitePage() {
         ],
         selectedFormId: created.id,
       }));
-      setFormBuilderDraft(cloneSiteFormDefinition(created));
+      const createdDraft = cloneSiteFormDefinition(created);
+      savedFormBuilderDraftRef.current = createdDraft;
+      formBuilderDraftRef.current = createdDraft;
+      setFormBuilderDraft(createdDraft);
+      setWorkflowHydrated(true);
       setFormBuilderNotice("Standalone site form created.");
       void loadSiteAuditEvents();
     } catch (error) {
@@ -3760,9 +4163,11 @@ function EditSitePage() {
 
   const patchFormBuilderDraft = (patch: Partial<FormDefinition>) => {
     if (!canEditForms) return;
-    setFormBuilderDraft((current) =>
-      current ? { ...current, ...patch } : current,
-    );
+    setFormBuilderDraft((current) => {
+      const next = current ? { ...current, ...patch } : current;
+      formBuilderDraftRef.current = next;
+      return next;
+    });
     setFormBuilderNotice(null);
   };
 
@@ -3773,12 +4178,14 @@ function EditSitePage() {
     if (!canEditForms) return;
     setFormBuilderDraft((current) => {
       if (!current) return current;
-      return {
+      const next = {
         ...current,
         fields: current.fields.map((field, index) =>
           index === fieldIndex ? { ...field, ...patch } : field,
         ),
       };
+      formBuilderDraftRef.current = next;
+      return next;
     });
     setFormBuilderNotice(null);
   };
@@ -3787,13 +4194,15 @@ function EditSitePage() {
     if (!canEditForms) return;
     setFormBuilderDraft((current) => {
       if (!current) return current;
-      return {
+      const next = {
         ...current,
         fields: [
           ...current.fields,
           makeSiteFormField(current.fields.length + 1),
         ],
       };
+      formBuilderDraftRef.current = next;
+      return next;
     });
     setFormBuilderNotice(null);
   };
@@ -3802,10 +4211,12 @@ function EditSitePage() {
     if (!canEditForms) return;
     setFormBuilderDraft((current) => {
       if (!current || current.fields.length <= 1) return current;
-      return {
+      const next = {
         ...current,
         fields: current.fields.filter((_, index) => index !== fieldIndex),
       };
+      formBuilderDraftRef.current = next;
+      return next;
     });
     setFormBuilderNotice(null);
   };
@@ -3819,8 +4230,19 @@ function EditSitePage() {
       const fields = [...current.fields];
       const [field] = fields.splice(fieldIndex, 1);
       fields.splice(nextIndex, 0, field);
-      return { ...current, fields };
+      const next = { ...current, fields };
+      formBuilderDraftRef.current = next;
+      return next;
     });
+    setFormBuilderNotice(null);
+  };
+
+  const resetFormBuilderDraft = () => {
+    const nextDraft =
+      savedFormBuilderDraftRef.current ||
+      (activeForm ? cloneSiteFormDefinition(activeForm) : null);
+    formBuilderDraftRef.current = nextDraft;
+    setFormBuilderDraft(nextDraft);
     setFormBuilderNotice(null);
   };
 
@@ -3869,7 +4291,10 @@ function EditSitePage() {
           form.id === updated.id ? updated : form,
         ),
       }));
-      setFormBuilderDraft(cloneSiteFormDefinition(updated));
+      const updatedDraft = cloneSiteFormDefinition(updated);
+      savedFormBuilderDraftRef.current = updatedDraft;
+      formBuilderDraftRef.current = updatedDraft;
+      setFormBuilderDraft(updatedDraft);
       setFormBuilderNotice("Site form builder changes saved.");
       await Promise.all([
         loadSubmissions(updated.id),
@@ -3913,6 +4338,8 @@ function EditSitePage() {
           contactCount: 0,
         };
       });
+      savedFormBuilderDraftRef.current = null;
+      formBuilderDraftRef.current = null;
       setFormBuilderDraft(null);
       setFormBuilderNotice("Site form deleted.");
       void loadSiteAuditEvents();
@@ -4485,6 +4912,41 @@ function EditSitePage() {
   };
 
   useEffect(() => {
+    readinessLoadRequestRef.current += 1;
+    workflowLoadRequestRef.current += 1;
+    submissionLoadRequestRef.current += 1;
+    contactLoadRequestRef.current += 1;
+    commentsLoadRequestRef.current += 1;
+    auditLoadRequestRef.current += 1;
+    setReadiness(null);
+    setReadinessHydrated(false);
+    setReadinessLoading(false);
+    setReadinessError(null);
+    setWorkflowHydrated(false);
+    setSubmissionsHydrated(false);
+    setContactsHydrated(false);
+    setCommentsHydrated(false);
+    setState((prev) => ({
+      ...prev,
+      submissions: [],
+      contacts: [],
+      submissionCount: 0,
+      contactCount: 0,
+      submissionLoading: false,
+      contactLoading: false,
+    }));
+    setAuditState({
+      logs: [],
+      hydrated: false,
+      loading: false,
+      errorMessage: null,
+    });
+    formBuilderDraftRef.current = null;
+    savedFormBuilderDraftRef.current = null;
+    setFormBuilderDraft(null);
+  }, [siteApiId]);
+
+  useEffect(() => {
     if (siteApiId) {
       void refreshWorkflow();
       void loadCommentReportReasons();
@@ -4502,6 +4964,24 @@ function EditSitePage() {
   ]);
 
   useEffect(() => {
+    if (
+      siteApiId &&
+      (canViewForms || canViewComments) &&
+      !workflowHydrated &&
+      !state.workflowLoading
+    ) {
+      void refreshWorkflow();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    siteApiId,
+    canViewForms,
+    canViewComments,
+    workflowHydrated,
+    state.workflowLoading,
+  ]);
+
+  useEffect(() => {
     if (siteApiId) {
       void loadReadiness();
       void loadNavigationEditor();
@@ -4515,6 +4995,101 @@ function EditSitePage() {
   }, [siteApiId]);
 
   useEffect(() => {
+    if (
+      siteApiId &&
+      canViewSite &&
+      !navigationState.hydrated &&
+      !navigationState.loading &&
+      !navigationState.errorMessage
+    ) {
+      void loadNavigationEditor();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    siteApiId,
+    canViewSite,
+    navigationState.hydrated,
+    navigationState.loading,
+    navigationState.errorMessage,
+  ]);
+
+  useEffect(() => {
+    if (
+      siteApiId &&
+      canViewSite &&
+      !redirectState.hydrated &&
+      !redirectState.loading &&
+      !redirectState.errorMessage
+    ) {
+      void loadRedirectEditor();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    siteApiId,
+    canViewSite,
+    redirectState.hydrated,
+    redirectState.loading,
+    redirectState.errorMessage,
+  ]);
+
+  useEffect(() => {
+    if (
+      siteApiId &&
+      canViewSite &&
+      !frontendDesignState.hydrated &&
+      !frontendDesignState.loading &&
+      !frontendDesignState.errorMessage
+    ) {
+      void loadFrontendDesignEditor();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    siteApiId,
+    canViewSite,
+    frontendDesignState.hydrated,
+    frontendDesignState.loading,
+    frontendDesignState.errorMessage,
+  ]);
+
+  useEffect(() => {
+    if (
+      siteApiId &&
+      canViewSite &&
+      !webhookState.hydrated &&
+      !webhookState.loading &&
+      !webhookState.errorMessage
+    ) {
+      void loadWebhookEditor();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    siteApiId,
+    canViewSite,
+    webhookState.hydrated,
+    webhookState.loading,
+    webhookState.errorMessage,
+  ]);
+
+  useEffect(() => {
+    if (
+      siteApiId &&
+      canViewSite &&
+      !seoState.hydrated &&
+      !seoState.loading &&
+      !seoState.errorMessage
+    ) {
+      void loadSeoEditor();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    siteApiId,
+    canViewSite,
+    seoState.hydrated,
+    seoState.loading,
+    seoState.errorMessage,
+  ]);
+
+  useEffect(() => {
     if (siteApiId && !isPermissionMatrixPending) {
       void loadSiteAuditEvents();
     }
@@ -4523,6 +5098,19 @@ function EditSitePage() {
 
   useEffect(() => {
     if (state.selectedFormId && siteApiId) {
+      submissionLoadRequestRef.current += 1;
+      contactLoadRequestRef.current += 1;
+      setSubmissionsHydrated(false);
+      setContactsHydrated(false);
+      setState((prev) => ({
+        ...prev,
+        submissions: [],
+        contacts: [],
+        submissionCount: 0,
+        contactCount: 0,
+        submissionLoading: false,
+        contactLoading: false,
+      }));
       void loadSubmissions(state.selectedFormId);
       void loadContacts(state.selectedFormId);
     }
@@ -4532,7 +5120,27 @@ function EditSitePage() {
   useEffect(() => {
     const selected =
       state.forms.find((form) => form.id === state.selectedFormId) || null;
-    setFormBuilderDraft(selected ? cloneSiteFormDefinition(selected) : null);
+    const nextSavedDraft = selected ? cloneSiteFormDefinition(selected) : null;
+    const currentDraft = formBuilderDraftRef.current;
+    const previousSavedDraft = savedFormBuilderDraftRef.current;
+    const selectedDraftChanged = currentDraft?.id !== nextSavedDraft?.id;
+    const hasDirtyDraft =
+      Boolean(currentDraft) &&
+      Boolean(previousSavedDraft) &&
+      !selectedDraftChanged &&
+      JSON.stringify(currentDraft) !== JSON.stringify(previousSavedDraft);
+
+    savedFormBuilderDraftRef.current = nextSavedDraft;
+
+    if (hasDirtyDraft) {
+      setFormBuilderNotice(
+        "Latest form definition loaded in the background. Unsaved local edits were preserved.",
+      );
+      return;
+    }
+
+    formBuilderDraftRef.current = nextSavedDraft;
+    setFormBuilderDraft(nextSavedDraft);
   }, [state.forms, state.selectedFormId]);
 
   useEffect(() => {
@@ -5261,9 +5869,14 @@ function EditSitePage() {
             {permissionError}
           </div>
         )}
-        {isPermissionMatrixPending && (
-          <div className="rounded-lg border border-info/25 bg-info/10 px-4 py-3 text-sm text-info">
-            Loading site permissions before enabling workspace actions.
+        {(canUseSiteDetailRoleDefaults || isPermissionMatrixPending) && (
+          <div
+            data-testid="site-detail-permission-sync-state"
+            className="rounded-lg border border-info/25 bg-info/10 px-4 py-3 text-sm text-info"
+          >
+            {canUseSiteDetailRoleDefaults
+              ? "Using current role defaults while detailed site permissions sync."
+              : "Loading site permissions before enabling workspace actions."}
           </div>
         )}
         <div className="bg-card border border-border rounded-xl p-6 flex items-center justify-between shadow-sm">
@@ -5981,6 +6594,11 @@ function EditSitePage() {
           id="site-webhooks"
           className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24"
           data-testid="site-webhooks-panel"
+          data-loading={String(webhookState.loading)}
+          data-hydrated={String(webhookState.hydrated)}
+          data-dirty={String(webhookState.dirty)}
+          data-draft-disabled={String(isWebhookConfigurationDisabled)}
+          aria-busy={webhookState.loading}
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -6020,7 +6638,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void saveSiteWebhooks()}
-                disabled={isWebhookConfigurationDisabled}
+                disabled={isWebhookSaveDisabled}
                 title={
                   canConfigureSite ? undefined : configureSitePermissionTitle
                 }
@@ -6042,6 +6660,15 @@ function EditSitePage() {
               {webhookState.notice}
             </div>
           ) : null}
+          {webhookState.loading && webhookState.hydrated ? (
+            <div
+              className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+              data-testid="site-webhooks-background-refresh"
+            >
+              Refreshing webhook settings in the background. Current endpoint
+              edits remain available.
+            </div>
+          ) : null}
 
           <div className="mt-5 rounded-lg border border-border bg-background p-4">
             <label className="flex items-start gap-3 text-sm">
@@ -6053,6 +6680,8 @@ function EditSitePage() {
                   setWebhookState((prev) => ({
                     ...prev,
                     enabled: event.target.checked,
+                    dirty: true,
+                    errorMessage: null,
                     notice: null,
                   }));
                   setSiteWorkspaceNotice(null);
@@ -6076,7 +6705,7 @@ function EditSitePage() {
           </div>
 
           <div className="mt-4 space-y-4">
-            {webhookState.loading ? (
+            {isWebhookInitialLoading ? (
               <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
                 Loading webhooks...
               </div>
@@ -6269,6 +6898,10 @@ function EditSitePage() {
           id="site-readiness"
           className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24"
           data-testid="site-readiness-panel"
+          data-loading={String(readinessLoading)}
+          data-hydrated={String(readinessHydrated)}
+          data-initial-loading={String(isReadinessInitialLoading)}
+          aria-busy={readinessLoading}
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -6307,8 +6940,19 @@ function EditSitePage() {
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {readinessError}
             </div>
-          ) : (
+          ) : null}
+
+          {!readinessError || readinessHydrated ? (
             <>
+              {readinessLoading && readinessHydrated ? (
+                <div
+                  className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+                  data-testid="site-readiness-background-refresh"
+                >
+                  Refreshing publish readiness in the background. Current
+                  readiness results remain visible.
+                </div>
+              ) : null}
               <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-9">
                 <div className="rounded-lg border border-border bg-background px-3 py-2">
                   <div className="text-xs font-medium text-muted-foreground">
@@ -6465,13 +7109,18 @@ function EditSitePage() {
                 </div>
               )}
             </>
-          )}
+          ) : null}
         </section>
 
         <section
           id="site-navigation"
           className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24"
           data-testid="site-navigation-panel"
+          data-loading={String(navigationState.loading)}
+          data-hydrated={String(navigationState.hydrated)}
+          data-dirty={String(navigationState.dirty)}
+          data-draft-disabled={String(isNavigationDraftDisabled)}
+          aria-busy={navigationState.loading}
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -6506,12 +7155,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleSaveNavigation()}
-                disabled={
-                  !siteApiId ||
-                  !canConfigureSite ||
-                  navigationState.loading ||
-                  navigationState.saving
-                }
+                disabled={isNavigationSaveDisabled}
                 title={
                   canConfigureSite ? undefined : configureSitePermissionTitle
                 }
@@ -6533,13 +7177,22 @@ function EditSitePage() {
               {navigationState.notice}
             </div>
           )}
+          {navigationState.loading && navigationState.hydrated && (
+            <div
+              className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+              data-testid="site-navigation-background-refresh"
+            >
+              Refreshing navigation in the background. Current menu edits remain
+              available.
+            </div>
+          )}
 
           <div className="mt-5">
             <NavigationLayoutEditor
               layout={normalizeNavigationLayoutState(
                 navigationState.navigation.layout,
               )}
-              loading={navigationState.loading || !canConfigureSite}
+              disabled={isNavigationDraftDisabled}
               onUpdate={updateNavigationLayout}
             />
           </div>
@@ -6551,7 +7204,8 @@ function EditSitePage() {
               menu="primary"
               items={navigationState.navigation.primary}
               pages={navigationState.pages}
-              loading={navigationState.loading || !canConfigureSite}
+              loading={isNavigationInitialLoading}
+              disabled={isNavigationDraftDisabled}
               onAddItem={handleAddNavigationItem}
               onAddChild={handleAddNavigationChild}
               onUpdateItem={handleUpdateNavigationItem}
@@ -6565,7 +7219,8 @@ function EditSitePage() {
               menu="footer"
               items={navigationState.navigation.footer || []}
               pages={navigationState.pages}
-              loading={navigationState.loading || !canConfigureSite}
+              loading={isNavigationInitialLoading}
+              disabled={isNavigationDraftDisabled}
               onAddItem={handleAddNavigationItem}
               onAddChild={handleAddNavigationChild}
               onUpdateItem={handleUpdateNavigationItem}
@@ -6580,6 +7235,11 @@ function EditSitePage() {
           id="site-frontend-design"
           className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24"
           data-testid="site-frontend-design-panel"
+          data-loading={String(frontendDesignState.loading)}
+          data-hydrated={String(frontendDesignState.hydrated)}
+          data-dirty={String(frontendDesignState.dirty)}
+          data-draft-disabled={String(isFrontendDesignDraftDisabled)}
+          aria-busy={frontendDesignState.loading}
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -6618,13 +7278,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleCaptureFrontendDesignDefaults()}
-                disabled={
-                  !siteApiId ||
-                  !canConfigureSite ||
-                  frontendDesignState.loading ||
-                  frontendDesignState.saving ||
-                  frontendDesignState.capturing
-                }
+                disabled={isFrontendDesignCaptureDisabled}
                 title={
                   canConfigureSite ? undefined : configureSitePermissionTitle
                 }
@@ -6638,13 +7292,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleSaveFrontendDesign()}
-                disabled={
-                  !siteApiId ||
-                  !canConfigureSite ||
-                  frontendDesignState.loading ||
-                  frontendDesignState.saving ||
-                  frontendDesignState.capturing
-                }
+                disabled={isFrontendDesignSaveDisabled}
                 title={
                   canConfigureSite ? undefined : configureSitePermissionTitle
                 }
@@ -6664,6 +7312,14 @@ function EditSitePage() {
           {frontendDesignState.notice && (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               {frontendDesignState.notice}
+            </div>
+          )}
+          {frontendDesignState.loading && frontendDesignState.hydrated && (
+            <div
+              className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900"
+              data-testid="site-frontend-design-background-refresh"
+            >
+              Refreshing the latest contract in the background. Draft fields stay editable; unsaved local edits will be preserved.
             </div>
           )}
 
@@ -6724,11 +7380,7 @@ function EditSitePage() {
                     type="button"
                     onClick={handlePrepareTemplateVersionMetadata}
                     disabled={
-                      !canConfigureSite ||
-                      frontendDesignState.loading ||
-                      frontendDesignState.saving ||
-                      frontendDesignState.capturing ||
-                      frontendDesignState.frontendDesign.templates.length === 0
+                      isFrontendDesignVersionDisabled
                     }
                     title={
                       canConfigureSite
@@ -6980,7 +7632,7 @@ function EditSitePage() {
                           .value as SiteFrontendDesignContract["status"],
                       })
                     }
-                    disabled={frontendDesignState.loading || !canConfigureSite}
+                    disabled={isFrontendDesignDraftDisabled}
                     title={
                       canConfigureSite
                         ? undefined
@@ -7004,7 +7656,7 @@ function EditSitePage() {
                           .value as SiteFrontendDesignContract["source"]["type"],
                       })
                     }
-                    disabled={frontendDesignState.loading || !canConfigureSite}
+                    disabled={isFrontendDesignDraftDisabled}
                     title={
                       canConfigureSite
                         ? undefined
@@ -7026,7 +7678,7 @@ function EditSitePage() {
                   onChange={(event) =>
                     patchFrontendDesignSource({ label: event.target.value })
                   }
-                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  disabled={isFrontendDesignDraftDisabled}
                   title={
                     canConfigureSite ? undefined : configureSitePermissionTitle
                   }
@@ -7043,7 +7695,7 @@ function EditSitePage() {
                     onChange={(event) =>
                       patchFrontendDesignSource({ url: event.target.value })
                     }
-                    disabled={frontendDesignState.loading || !canConfigureSite}
+                    disabled={isFrontendDesignDraftDisabled}
                     title={
                       canConfigureSite
                         ? undefined
@@ -7062,7 +7714,7 @@ function EditSitePage() {
                     onChange={(event) =>
                       patchFrontendDesignSource({ branch: event.target.value })
                     }
-                    disabled={frontendDesignState.loading || !canConfigureSite}
+                    disabled={isFrontendDesignDraftDisabled}
                     title={
                       canConfigureSite
                         ? undefined
@@ -7085,7 +7737,7 @@ function EditSitePage() {
                       repository: event.target.value,
                     })
                   }
-                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  disabled={isFrontendDesignDraftDisabled}
                   title={
                     canConfigureSite ? undefined : configureSitePermissionTitle
                   }
@@ -7101,7 +7753,7 @@ function EditSitePage() {
                   onChange={(event) =>
                     patchFrontendDesign({ notes: event.target.value })
                   }
-                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  disabled={isFrontendDesignDraftDisabled}
                   title={
                     canConfigureSite ? undefined : configureSitePermissionTitle
                   }
@@ -7120,12 +7772,13 @@ function EditSitePage() {
                   onChange={(event) =>
                     setFrontendDesignState((prev) => ({
                       ...prev,
+                      dirty: true,
                       tokensJson: event.target.value,
                       notice: null,
                       errorMessage: null,
                     }))
                   }
-                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  disabled={isFrontendDesignDraftDisabled}
                   title={
                     canConfigureSite ? undefined : configureSitePermissionTitle
                   }
@@ -7141,12 +7794,13 @@ function EditSitePage() {
                   onChange={(event) =>
                     setFrontendDesignState((prev) => ({
                       ...prev,
+                      dirty: true,
                       chromeJson: event.target.value,
                       notice: null,
                       errorMessage: null,
                     }))
                   }
-                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  disabled={isFrontendDesignDraftDisabled}
                   title={
                     canConfigureSite ? undefined : configureSitePermissionTitle
                   }
@@ -7162,12 +7816,13 @@ function EditSitePage() {
                   onChange={(event) =>
                     setFrontendDesignState((prev) => ({
                       ...prev,
+                      dirty: true,
                       templatesJson: event.target.value,
                       notice: null,
                       errorMessage: null,
                     }))
                   }
-                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  disabled={isFrontendDesignDraftDisabled}
                   title={
                     canConfigureSite ? undefined : configureSitePermissionTitle
                   }
@@ -7183,12 +7838,13 @@ function EditSitePage() {
                   onChange={(event) =>
                     setFrontendDesignState((prev) => ({
                       ...prev,
+                      dirty: true,
                       editableMapJson: event.target.value,
                       notice: null,
                       errorMessage: null,
                     }))
                   }
-                  disabled={frontendDesignState.loading || !canConfigureSite}
+                  disabled={isFrontendDesignDraftDisabled}
                   title={
                     canConfigureSite ? undefined : configureSitePermissionTitle
                   }
@@ -7205,6 +7861,11 @@ function EditSitePage() {
           id="site-redirects"
           className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24"
           data-testid="site-redirects-panel"
+          data-loading={String(redirectState.loading)}
+          data-hydrated={String(redirectState.hydrated)}
+          data-dirty={String(redirectState.dirty)}
+          data-draft-disabled={String(areRedirectEditsDisabled)}
+          aria-busy={redirectState.loading || redirectState.previewing}
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -7256,7 +7917,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handlePreviewRedirects()}
-                disabled={!siteApiId || areRedirectEditsDisabled}
+                disabled={isRedirectPreviewDisabled}
                 title={
                   canConfigureSite ? undefined : configureSitePermissionTitle
                 }
@@ -7270,7 +7931,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleSaveRedirects()}
-                disabled={!siteApiId || areRedirectEditsDisabled}
+                disabled={isRedirectSaveDisabled}
                 title={
                   canConfigureSite ? undefined : configureSitePermissionTitle
                 }
@@ -7290,6 +7951,15 @@ function EditSitePage() {
           {redirectState.notice && (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               {redirectState.notice}
+            </div>
+          )}
+          {redirectState.loading && redirectState.hydrated && (
+            <div
+              className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+              data-testid="site-redirects-background-refresh"
+            >
+              Refreshing redirect rules in the background. Current redirect
+              edits remain available.
             </div>
           )}
           {redirectState.conflicts.length > 0 && (
@@ -7336,7 +8006,7 @@ function EditSitePage() {
               <span />
             </div>
             <div className="overflow-x-auto">
-              {redirectState.loading ? (
+              {isRedirectInitialLoading ? (
                 <div className="min-w-[860px] px-3 py-8 text-center text-sm text-muted-foreground">
                   Loading redirect rules...
                 </div>
@@ -7366,7 +8036,7 @@ function EditSitePage() {
                               from: event.target.value,
                             })
                           }
-                          disabled={!canConfigureSite}
+                          disabled={areRedirectEditsDisabled}
                           title={
                             canConfigureSite
                               ? undefined
@@ -7382,7 +8052,7 @@ function EditSitePage() {
                               to: event.target.value,
                             })
                           }
-                          disabled={isGone || !canConfigureSite}
+                          disabled={isGone || areRedirectEditsDisabled}
                           title={
                             canConfigureSite
                               ? undefined
@@ -7404,7 +8074,7 @@ function EditSitePage() {
                               ) as SiteRedirectRule["statusCode"],
                             })
                           }
-                          disabled={!canConfigureSite}
+                          disabled={areRedirectEditsDisabled}
                           title={
                             canConfigureSite
                               ? undefined
@@ -7425,7 +8095,7 @@ function EditSitePage() {
                               enabled: rule.enabled === false ? true : false,
                             })
                           }
-                          disabled={!canConfigureSite}
+                          disabled={areRedirectEditsDisabled}
                           title={
                             canConfigureSite
                               ? undefined
@@ -7448,7 +8118,7 @@ function EditSitePage() {
                         <button
                           type="button"
                           onClick={() => handleRemoveRedirectRule(ruleId)}
-                          disabled={!canConfigureSite}
+                          disabled={areRedirectEditsDisabled}
                           className="rounded-md p-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
                           title={
                             canConfigureSite
@@ -7472,6 +8142,11 @@ function EditSitePage() {
           id="site-seo"
           className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24"
           data-testid="site-seo-panel"
+          data-loading={String(seoState.loading)}
+          data-hydrated={String(seoState.hydrated)}
+          data-dirty={String(seoState.dirty)}
+          data-draft-disabled={String(areSeoEditsDisabled)}
+          aria-busy={seoState.loading}
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -7506,7 +8181,7 @@ function EditSitePage() {
               <button
                 type="button"
                 onClick={() => void handleSaveSeo()}
-                disabled={!siteApiId || areSeoEditsDisabled}
+                disabled={isSeoSaveDisabled}
                 title={
                   canConfigureSite ? undefined : configureSitePermissionTitle
                 }
@@ -7526,6 +8201,15 @@ function EditSitePage() {
           {seoState.notice && (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
               {seoState.notice}
+            </div>
+          )}
+          {seoState.loading && seoState.hydrated && (
+            <div
+              className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+              data-testid="site-seo-background-refresh"
+            >
+              Refreshing SEO settings in the background. Current SEO edits
+              remain available.
             </div>
           )}
 
@@ -8438,6 +9122,10 @@ function EditSitePage() {
           id="site-activity"
           className="bg-card border border-border rounded-xl p-6 shadow-sm scroll-mt-24"
           data-testid="site-audit-panel"
+          data-loading={String(auditState.loading)}
+          data-hydrated={String(auditState.hydrated)}
+          data-initial-loading={String(isAuditInitialLoading)}
+          aria-busy={auditState.loading}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -8468,8 +9156,17 @@ function EditSitePage() {
               {auditState.errorMessage}
             </div>
           ) : null}
+          {auditState.loading && auditState.hydrated ? (
+            <div
+              className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+              data-testid="site-audit-background-refresh"
+            >
+              Refreshing site activity in the background. Current audit events
+              remain visible.
+            </div>
+          ) : null}
 
-          {auditState.loading ? (
+          {isAuditInitialLoading ? (
             <div className="mt-4 text-sm text-muted-foreground">
               Loading site audit activity...
             </div>
@@ -8748,6 +9445,11 @@ function EditSitePage() {
               <section
                 className="bg-card border border-border rounded-xl p-4 shadow-sm"
                 data-testid="site-form-builder-panel"
+                data-loading={String(state.workflowLoading)}
+                data-hydrated={String(workflowHydrated)}
+                data-dirty={String(formBuilderDirty)}
+                data-draft-disabled={String(isFormBuilderDisabled)}
+                aria-busy={state.workflowLoading}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -8780,10 +9482,7 @@ function EditSitePage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() =>
-                        activeForm &&
-                        setFormBuilderDraft(cloneSiteFormDefinition(activeForm))
-                      }
+                      onClick={resetFormBuilderDraft}
                       disabled={isFormBuilderBusy || !formBuilderDirty}
                       className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -8813,8 +9512,21 @@ function EditSitePage() {
                     {formBuilderNotice}
                   </div>
                 ) : null}
+                {state.workflowLoading && workflowHydrated ? (
+                  <div
+                    className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+                    data-testid="site-form-builder-background-refresh"
+                  >
+                    Refreshing form workflow data in the background. Current
+                    form edits remain available.
+                  </div>
+                ) : null}
 
-                {!formBuilderDraft ? (
+                {isWorkflowInitialLoading ? (
+                  <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
+                    Loading form workflow...
+                  </div>
+                ) : !formBuilderDraft ? (
                   <div className="mt-4">
                     <EmptyState
                       icon={Users}
@@ -9220,6 +9932,11 @@ function EditSitePage() {
               <section
                 className="bg-card border border-border rounded-xl p-4 shadow-sm"
                 data-testid="site-comment-policy-panel"
+                data-loading={String(commentPolicyLoading)}
+                data-hydrated={String(commentPolicyHydrated)}
+                data-dirty={String(commentPolicyDirty)}
+                data-draft-disabled={String(isCommentPolicyDisabled)}
+                aria-busy={commentPolicyLoading}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -9250,7 +9967,7 @@ function EditSitePage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setCommentPolicyDraft(savedCommentPolicy)}
+                      onClick={resetCommentPolicyDraft}
                       disabled={isCommentPolicyDisabled || !commentPolicyDirty}
                       title={
                         canConfigureComments
@@ -9280,7 +9997,22 @@ function EditSitePage() {
                   </div>
                 </div>
 
-                {commentPolicyLoading ? (
+                {commentPolicyNotice ? (
+                  <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    {commentPolicyNotice}
+                  </div>
+                ) : null}
+                {commentPolicyLoading && commentPolicyHydrated ? (
+                  <div
+                    className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+                    data-testid="site-comment-policy-background-refresh"
+                  >
+                    Refreshing comment policy in the background. Current comment
+                    edits remain available.
+                  </div>
+                ) : null}
+
+                {isCommentPolicyInitialLoading ? (
                   <div className="mt-4 rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground">
                     Loading comment policy...
                   </div>
@@ -9484,7 +10216,14 @@ function EditSitePage() {
               </section>
 
               <div className="grid grid-cols-1 gap-6">
-                <div className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-4">
+                <div
+                  className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-4"
+                  data-testid="site-submissions-panel"
+                  data-loading={String(state.submissionLoading)}
+                  data-hydrated={String(submissionsHydrated)}
+                  data-initial-loading={String(isSubmissionInitialLoading)}
+                  aria-busy={state.submissionLoading}
+                >
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold">Form Submissions</h3>
                     <button
@@ -9503,7 +10242,16 @@ function EditSitePage() {
                       Reload
                     </button>
                   </div>
-                  {state.submissionLoading ? (
+                  {state.submissionLoading && submissionsHydrated ? (
+                    <div
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+                      data-testid="site-submissions-background-refresh"
+                    >
+                      Refreshing submissions in the background. Current
+                      submission rows remain visible.
+                    </div>
+                  ) : null}
+                  {isSubmissionInitialLoading ? (
                     <div className="text-sm text-muted-foreground py-4">
                       Loading submissions...
                     </div>
@@ -9651,7 +10399,14 @@ function EditSitePage() {
                   )}
                 </div>
 
-                <div className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-4">
+                <div
+                  className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-4"
+                  data-testid="site-contacts-panel"
+                  data-loading={String(state.contactLoading)}
+                  data-hydrated={String(contactsHydrated)}
+                  data-initial-loading={String(isContactInitialLoading)}
+                  aria-busy={state.contactLoading}
+                >
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold">Contacts (Lead Share)</h3>
                     <button
@@ -9670,7 +10425,16 @@ function EditSitePage() {
                       Reload
                     </button>
                   </div>
-                  {state.contactLoading ? (
+                  {state.contactLoading && contactsHydrated ? (
+                    <div
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+                      data-testid="site-contacts-background-refresh"
+                    >
+                      Refreshing contacts in the background. Current lead-share
+                      rows remain visible.
+                    </div>
+                  ) : null}
+                  {isContactInitialLoading ? (
                     <div className="text-sm text-muted-foreground py-4">
                       Loading contacts...
                     </div>
@@ -9823,7 +10587,14 @@ function EditSitePage() {
                   )}
                 </div>
 
-                <div className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-4">
+                <div
+                  className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-4"
+                  data-testid="site-comments-moderation-panel"
+                  data-loading={String(state.commentsLoading)}
+                  data-hydrated={String(commentsHydrated)}
+                  data-view-disabled={String(isCommentViewDisabled)}
+                  aria-busy={state.commentsLoading}
+                >
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold">Comments moderation</h3>
                     <div className="flex items-center gap-2">
@@ -9878,6 +10649,7 @@ function EditSitePage() {
                             e.target.value as CommentStatusFilter,
                           )
                         }
+                        aria-label="Site comment status filter"
                         disabled={isCommentViewDisabled}
                         title={
                           canViewComments
@@ -9903,6 +10675,7 @@ function EditSitePage() {
                             e.target.value as CommentTargetFilter,
                           )
                         }
+                        aria-label="Site comment target filter"
                         disabled={isCommentViewDisabled}
                         title={
                           canViewComments
@@ -9923,6 +10696,7 @@ function EditSitePage() {
                         onChange={(event) =>
                           setCommentTargetId(event.target.value)
                         }
+                        aria-label="Site comment target id filter"
                         placeholder="pageId / postId"
                         disabled={isCommentViewDisabled}
                         title={
@@ -9940,6 +10714,7 @@ function EditSitePage() {
                         onChange={(event) =>
                           setCommentRequestId(event.target.value)
                         }
+                        aria-label="Site comment request id filter"
                         placeholder="req_..."
                         disabled={isCommentViewDisabled}
                         title={
@@ -9981,6 +10756,7 @@ function EditSitePage() {
                         onChange={(event) =>
                           setCommentSearch(event.target.value)
                         }
+                        aria-label="Site comment search filter"
                         placeholder="author, email, text..."
                         disabled={isCommentViewDisabled}
                         title={
@@ -10096,7 +10872,16 @@ function EditSitePage() {
                       Clear selection
                     </button>
                   </div>
-                  {state.commentsLoading ? (
+                  {state.commentsLoading && commentsHydrated ? (
+                    <div
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+                      data-testid="site-comments-background-refresh"
+                    >
+                      Refreshing comments in the background. Current moderation
+                      filters and loaded comments remain available.
+                    </div>
+                  ) : null}
+                  {isCommentInitialLoading ? (
                     <div className="text-sm text-muted-foreground py-4">
                       Loading comments...
                     </div>
@@ -10444,6 +11229,7 @@ interface NavigationMenuEditorProps {
   items: SiteNavigationConfigItem[];
   pages: Page[];
   loading: boolean;
+  disabled: boolean;
   onAddItem: (
     menu: NavigationMenuKey,
     type: SiteNavigationConfigItem["type"],
@@ -10474,7 +11260,7 @@ interface NavigationMenuEditorProps {
 
 interface NavigationLayoutEditorProps {
   layout: SiteNavigationLayoutConfig;
-  loading: boolean;
+  disabled: boolean;
   onUpdate: (
     section: keyof SiteNavigationLayoutConfig,
     updates: Partial<
@@ -10485,7 +11271,7 @@ interface NavigationLayoutEditorProps {
 
 function NavigationLayoutEditor({
   layout,
-  loading,
+  disabled,
   onUpdate,
 }: NavigationLayoutEditorProps) {
   const header = layout.header || EMPTY_NAVIGATION.layout?.header || {};
@@ -10522,7 +11308,7 @@ function NavigationLayoutEditor({
                 Variant
                 <select
                   value={header.variant || "minimal"}
-                  disabled={loading}
+                  disabled={disabled}
                   onChange={(event) =>
                     onUpdate("header", {
                       variant: event.target.value as NonNullable<
@@ -10543,7 +11329,7 @@ function NavigationLayoutEditor({
                 Position
                 <select
                   value={header.position || "sticky"}
-                  disabled={loading}
+                  disabled={disabled}
                   onChange={(event) =>
                     onUpdate("header", {
                       position: event.target.value as NonNullable<
@@ -10564,7 +11350,7 @@ function NavigationLayoutEditor({
                 Width
                 <select
                   value={header.width || "contained"}
-                  disabled={loading}
+                  disabled={disabled}
                   onChange={(event) =>
                     onUpdate("header", {
                       width: event.target.value as NonNullable<
@@ -10586,7 +11372,7 @@ function NavigationLayoutEditor({
               <NavigationToggle
                 label="Brand slot"
                 checked={header.showBrand !== false}
-                disabled={loading}
+                disabled={disabled}
                 onChange={(checked) =>
                   onUpdate("header", { showBrand: checked })
                 }
@@ -10594,7 +11380,7 @@ function NavigationLayoutEditor({
               <NavigationToggle
                 label="Search"
                 checked={Boolean(header.showSearch)}
-                disabled={loading}
+                disabled={disabled}
                 onChange={(checked) =>
                   onUpdate("header", { showSearch: checked })
                 }
@@ -10602,7 +11388,7 @@ function NavigationLayoutEditor({
               <NavigationToggle
                 label="Account"
                 checked={Boolean(header.showAccount)}
-                disabled={loading}
+                disabled={disabled}
                 onChange={(checked) =>
                   onUpdate("header", { showAccount: checked })
                 }
@@ -10610,7 +11396,7 @@ function NavigationLayoutEditor({
               <NavigationToggle
                 label="Cart"
                 checked={Boolean(header.showCart)}
-                disabled={loading}
+                disabled={disabled}
                 onChange={(checked) =>
                   onUpdate("header", { showCart: checked })
                 }
@@ -10621,7 +11407,7 @@ function NavigationLayoutEditor({
                 CTA label
                 <input
                   value={header.ctaLabel || ""}
-                  disabled={loading}
+                  disabled={disabled}
                   onChange={(event) =>
                     onUpdate("header", { ctaLabel: event.target.value })
                   }
@@ -10633,7 +11419,7 @@ function NavigationLayoutEditor({
                 CTA href
                 <input
                   value={header.ctaHref || ""}
-                  disabled={loading}
+                  disabled={disabled}
                   onChange={(event) =>
                     onUpdate("header", { ctaHref: event.target.value })
                   }
@@ -10654,7 +11440,7 @@ function NavigationLayoutEditor({
                 Variant
                 <select
                   value={footer.variant || "columns"}
-                  disabled={loading}
+                  disabled={disabled}
                   onChange={(event) =>
                     onUpdate("footer", {
                       variant: event.target.value as NonNullable<
@@ -10675,7 +11461,7 @@ function NavigationLayoutEditor({
                 Width
                 <select
                   value={footer.width || "contained"}
-                  disabled={loading}
+                  disabled={disabled}
                   onChange={(event) =>
                     onUpdate("footer", {
                       width: event.target.value as NonNullable<
@@ -10697,7 +11483,7 @@ function NavigationLayoutEditor({
               <NavigationToggle
                 label="Social links"
                 checked={footer.showSocial !== false}
-                disabled={loading}
+                disabled={disabled}
                 onChange={(checked) =>
                   onUpdate("footer", { showSocial: checked })
                 }
@@ -10705,7 +11491,7 @@ function NavigationLayoutEditor({
               <NavigationToggle
                 label="Newsletter"
                 checked={Boolean(footer.showNewsletter)}
-                disabled={loading}
+                disabled={disabled}
                 onChange={(checked) =>
                   onUpdate("footer", { showNewsletter: checked })
                 }
@@ -10715,7 +11501,7 @@ function NavigationLayoutEditor({
               Footer note
               <textarea
                 value={footer.note || ""}
-                disabled={loading}
+                disabled={disabled}
                 onChange={(event) =>
                   onUpdate("footer", { note: event.target.value })
                 }
@@ -10829,6 +11615,7 @@ function NavigationMenuEditor({
   items,
   pages,
   loading,
+  disabled,
   onAddItem,
   onAddChild,
   onUpdateItem,
@@ -10852,7 +11639,7 @@ function NavigationMenuEditor({
           <button
             type="button"
             onClick={() => onAddItem(menu, "page")}
-            disabled={loading || pages.length === 0}
+            disabled={disabled || pages.length === 0}
             className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -10861,7 +11648,7 @@ function NavigationMenuEditor({
           <button
             type="button"
             onClick={() => onAddItem(menu, "route")}
-            disabled={loading}
+            disabled={disabled}
             className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -10870,7 +11657,7 @@ function NavigationMenuEditor({
           <button
             type="button"
             onClick={() => onAddItem(menu, "url")}
-            disabled={loading}
+            disabled={disabled}
             className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -10902,6 +11689,7 @@ function NavigationMenuEditor({
               depth={0}
               rootIndex={index}
               rootCount={items.length}
+              disabled={disabled}
               onAddChild={onAddChild}
               onUpdateItem={onUpdateItem}
               onRemoveItem={onRemoveItem}
@@ -10922,6 +11710,7 @@ interface NavigationItemEditorProps {
   depth: number;
   rootIndex: number;
   rootCount: number;
+  disabled: boolean;
   onAddChild: (
     menu: NavigationMenuKey,
     parentId: string,
@@ -10953,6 +11742,7 @@ function NavigationItemEditor({
   depth,
   rootIndex,
   rootCount,
+  disabled,
   onAddChild,
   onUpdateItem,
   onRemoveItem,
@@ -10962,6 +11752,7 @@ function NavigationItemEditor({
   const itemId = item.id || item.label;
   const canNest = depth < 2 && Boolean(item.id);
   const handleDragStart = (event: DragEvent<HTMLElement>) => {
+    if (disabled) return;
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-backy-navigation-item", itemId);
     event.dataTransfer.setData("text/plain", itemId);
@@ -10971,6 +11762,7 @@ function NavigationItemEditor({
     placement: "before" | "after",
   ) => {
     event.preventDefault();
+    if (disabled) return;
     const draggedId =
       event.dataTransfer.getData("application/x-backy-navigation-item") ||
       event.dataTransfer.getData("text/plain");
@@ -10986,8 +11778,12 @@ function NavigationItemEditor({
       data-navigation-item-label={item.label}
     >
       <div
-        className="h-2 rounded-t-lg border-b border-dashed border-transparent transition-colors hover:border-primary hover:bg-primary/10"
+        className={cn(
+          "h-2 rounded-t-lg border-b border-dashed border-transparent transition-colors",
+          !disabled && "hover:border-primary hover:bg-primary/10",
+        )}
         onDragOver={(event) => {
+          if (disabled) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
         }}
@@ -10996,8 +11792,13 @@ function NavigationItemEditor({
       />
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <span
-          className="cursor-grab rounded-md p-1 text-muted-foreground active:cursor-grabbing"
-          draggable
+          className={cn(
+            "rounded-md p-1 text-muted-foreground",
+            disabled
+              ? "cursor-not-allowed opacity-50"
+              : "cursor-grab active:cursor-grabbing",
+          )}
+          draggable={!disabled}
           onDragStart={handleDragStart}
           title="Drag to reorder"
           aria-label={`Drag ${item.label}`}
@@ -11010,6 +11811,7 @@ function NavigationItemEditor({
         </span>
         <select
           value={item.type}
+          disabled={disabled}
           onChange={(event) =>
             onUpdateItem(menu, itemId, {
               type: event.target.value as SiteNavigationConfigItem["type"],
@@ -11031,6 +11833,7 @@ function NavigationItemEditor({
         </select>
         <input
           value={item.label}
+          disabled={disabled}
           onChange={(event) =>
             onUpdateItem(menu, itemId, { label: event.target.value })
           }
@@ -11039,12 +11842,13 @@ function NavigationItemEditor({
         />
         <button
           type="button"
+          disabled={disabled}
           onClick={() =>
             onUpdateItem(menu, itemId, {
               visible: item.visible === false ? true : false,
             })
           }
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           title={item.visible === false ? "Show item" : "Hide item"}
           aria-label={item.visible === false ? "Show item" : "Hide item"}
         >
@@ -11057,7 +11861,7 @@ function NavigationItemEditor({
         <button
           type="button"
           onClick={() => onMoveItem(menu, itemId, -1)}
-          disabled={rootIndex === 0}
+          disabled={disabled || rootIndex === 0}
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           title="Move up"
           aria-label="Move up"
@@ -11067,7 +11871,7 @@ function NavigationItemEditor({
         <button
           type="button"
           onClick={() => onMoveItem(menu, itemId, 1)}
-          disabled={rootIndex >= rootCount - 1}
+          disabled={disabled || rootIndex >= rootCount - 1}
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           title="Move down"
           aria-label="Move down"
@@ -11077,7 +11881,8 @@ function NavigationItemEditor({
         <button
           type="button"
           onClick={() => onRemoveItem(menu, itemId)}
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+          disabled={disabled}
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
           title="Remove item"
           aria-label="Remove item"
         >
@@ -11090,6 +11895,7 @@ function NavigationItemEditor({
           {item.type === "page" ? (
             <select
               value={item.pageId || ""}
+              disabled={disabled}
               onChange={(event) =>
                 onUpdateItem(menu, itemId, { pageId: event.target.value })
               }
@@ -11107,6 +11913,7 @@ function NavigationItemEditor({
               <Link2 className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <input
                 value={item.type === "url" ? item.href || "" : item.path || ""}
+                disabled={disabled}
                 onChange={(event) =>
                   onUpdateItem(
                     menu,
@@ -11127,6 +11934,7 @@ function NavigationItemEditor({
 
         <select
           value={item.target || "_self"}
+          disabled={disabled}
           onChange={(event) =>
             onUpdateItem(menu, itemId, {
               target: event.target.value as SiteNavigationConfigItem["target"],
@@ -11144,7 +11952,7 @@ function NavigationItemEditor({
           <button
             type="button"
             onClick={() => onAddChild(menu, itemId, "page")}
-            disabled={pages.length === 0}
+            disabled={disabled || pages.length === 0}
             className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -11153,7 +11961,8 @@ function NavigationItemEditor({
           <button
             type="button"
             onClick={() => onAddChild(menu, itemId, "route")}
-            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent"
+            disabled={disabled}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
             Child route
@@ -11161,7 +11970,8 @@ function NavigationItemEditor({
           <button
             type="button"
             onClick={() => onAddChild(menu, itemId, "url")}
-            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent"
+            disabled={disabled}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
             Child URL
@@ -11180,6 +11990,7 @@ function NavigationItemEditor({
               depth={depth + 1}
               rootIndex={childIndex}
               rootCount={item.children?.length || 0}
+              disabled={disabled}
               onAddChild={onAddChild}
               onUpdateItem={onUpdateItem}
               onRemoveItem={onRemoveItem}
@@ -11190,8 +12001,12 @@ function NavigationItemEditor({
         </div>
       )}
       <div
-        className="h-2 rounded-b-lg border-t border-dashed border-transparent transition-colors hover:border-primary hover:bg-primary/10"
+        className={cn(
+          "h-2 rounded-b-lg border-t border-dashed border-transparent transition-colors",
+          !disabled && "hover:border-primary hover:bg-primary/10",
+        )}
         onDragOver={(event) => {
+          if (disabled) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
         }}

@@ -349,14 +349,19 @@ function NewSitePage() {
     templateImportUrl: '',
     marketplaceTemplateId: 'backy-starter-business',
   });
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix;
-  const canCreateSites = !isPermissionMatrixPending && isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, 'sites.create');
-  const canEditPages = !isPermissionMatrixPending && isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit');
-  const canPublishPages = !isPermissionMatrixPending && isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish');
+  const canUseSiteCreateRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSiteCreateRoleDefaults;
+  const isSiteCreateRoutePermissionAllowed = (key: SiteCreatePermissionKey) => (
+    isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, key)
+    || (canUseSiteCreateRoleDefaults && Boolean(currentAdmin && SITE_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+  );
+  const canCreateSites = isSiteCreateRoutePermissionAllowed('sites.create');
+  const canEditPages = isSiteCreateRoutePermissionAllowed('pages.edit');
+  const canPublishPages = isSiteCreateRoutePermissionAllowed('pages.publish');
   const createPermissionTitle = canCreateSites ? undefined : siteCreatePermissionReason(permissionMatrix, currentAdmin, 'sites.create');
   const editPagesPermissionTitle = canEditPages ? undefined : siteCreatePermissionReason(permissionMatrix, currentAdmin, 'pages.edit');
   const publishPagesPermissionTitle = canPublishPages ? undefined : siteCreatePermissionReason(permissionMatrix, currentAdmin, 'pages.publish');
-  const isCreateBusy = isLoading || isPermissionMatrixPending;
+  const isCreateBusy = isLoading;
 
   const selectedStatus = useMemo(
     () => STATUS_OPTIONS.find((status) => status.value === formData.status) || STATUS_OPTIONS[0],
@@ -421,6 +426,19 @@ function NewSitePage() {
   const hasSiteCreateInlineErrors = Object.values(siteCreateInlineErrors).some(Boolean);
   const showSiteCreateInlineErrors = siteCreateSubmitted && hasSiteCreateInlineErrors;
   const canSubmit = canCreateSites && canSeedStarterPages;
+  const siteCreateSubmitStatusId = 'site-create-submit-action-status';
+  const siteCreateSubmitDisabledReason = isCreateBusy
+    ? 'Site creation is already running.'
+    : !canCreateSites
+      ? createPermissionTitle || 'Your account cannot create sites.'
+      : !canSeedStarterPages
+        ? starterPageDisabledTitle || 'Starter page seeding needs page permissions.'
+        : '';
+  const siteCreateSubmitStatus = siteCreateSubmitDisabledReason
+    ? `Create site unavailable: ${siteCreateSubmitDisabledReason}`
+    : showSiteCreateInlineErrors
+      ? 'Create site available: fix the highlighted fields before backend persistence.'
+      : `Create site available: ${selectedBlueprint.name} will create ${displaySlug || 'new-site'}.`;
   const adminSitesUrl = useMemo(() => `${getAdminApiBase()}/sites`, []);
   const publicApiBase = useMemo(() => getAdminApiBase().replace(/\/api\/admin$/, '/api'), []);
   const siteCreationReadiness = useMemo(() => {
@@ -1096,6 +1114,9 @@ function NewSitePage() {
       </section>
 
       <form onSubmit={handleSubmit} noValidate data-testid="site-create-form" className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <span id={siteCreateSubmitStatusId} className="sr-only" data-testid="site-create-submit-action-status" aria-live="polite">
+          {siteCreateSubmitStatus}
+        </span>
         <section id="site-identity" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
           <div className="flex items-start gap-3">
             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
@@ -1117,6 +1138,11 @@ function NewSitePage() {
           {notice && (
             <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
               {notice}
+            </div>
+          )}
+          {canUseSiteCreateRoleDefaults && (
+            <div data-testid="site-create-permission-sync-state" className="mt-5 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              Using current role defaults while detailed site creation permissions sync.
             </div>
           )}
           {(permissionError || isPermissionMatrixPending || !canCreateSites || (starterPagesSelected && !canSeedStarterPages)) && (
@@ -1726,7 +1752,13 @@ function NewSitePage() {
             <button
               type="submit"
               disabled={isCreateBusy || !canSubmit}
-              title={!canCreateSites ? createPermissionTitle : !canSeedStarterPages ? starterPageDisabledTitle : undefined}
+              title={siteCreateSubmitDisabledReason || undefined}
+              aria-describedby={siteCreateSubmitStatusId}
+              data-action-state={siteCreateSubmitDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={siteCreateSubmitStatus}
+              data-disabled-reason={siteCreateSubmitDisabledReason || undefined}
+              data-target-site-id={displaySlug || 'new-site'}
+              data-target-blueprint={selectedBlueprint.id}
               className={cn(
                 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-ring',
                 'bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50',
