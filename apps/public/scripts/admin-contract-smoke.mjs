@@ -7953,6 +7953,10 @@ try {
           runbook.artifactVerifier?.freshnessWindow?.maxAgeHoursEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS' &&
           runbook.artifactVerifier?.validates?.includes?.('certifiedAtReady') &&
           runbook.artifactVerifier?.validates?.includes?.('artifactFreshReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceArtifactSiteTargetReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceArtifactTargetSiteId') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceArtifactSiteSelectorEnvReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceArtifactSiteSelectorEnv') &&
           runbook.artifactVerifier?.validates?.includes?.('productApiHandoffSiteTargetReady') &&
           runbook.artifactVerifier?.validates?.includes?.('productApiHandoffTargetSiteId') &&
           runbook.artifactVerifier?.validates?.includes?.('commerceApiHandoffSiteSelectorEnv'),
@@ -7968,6 +7972,10 @@ try {
           runbook.artifactVerifier?.freshnessWindow?.maxAgeHoursEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS' &&
           runbook.artifactVerifier?.validates?.includes?.('certifiedAtReady') &&
           runbook.artifactVerifier?.validates?.includes?.('artifactFreshReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceArtifactSiteTargetReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceArtifactTargetSiteId') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceArtifactSiteSelectorEnvReady') &&
+          runbook.artifactVerifier?.validates?.includes?.('commerceArtifactSiteSelectorEnv') &&
           runbook.artifactVerifier?.validates?.includes?.('orderApiHandoffSiteTargetReady') &&
           runbook.artifactVerifier?.validates?.includes?.('orderApiHandoffTargetSiteId') &&
           runbook.artifactVerifier?.validates?.includes?.('commerceApiHandoffSiteSelectorEnv'),

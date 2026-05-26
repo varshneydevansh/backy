@@ -246,6 +246,7 @@ const verifyCommerceApiHandoffs = (payload) => {
   const requested = isRecord(payload.requested) ? payload.requested : {};
   const readiness = isRecord(payload.readiness) ? payload.readiness : {};
   const certified = Array.isArray(payload.certified) ? payload.certified.filter((item) => typeof item === 'string') : [];
+  const target = isRecord(payload.target) ? payload.target : {};
   const runtime = isRecord(payload.runtime) ? payload.runtime : {};
   const diagnostics = isRecord(payload.diagnostics) ? payload.diagnostics : {};
   const requestedCommerceGroups = ['payment', 'tax', 'shipping', 'discount', 'catalog', 'subscriptions', 'webhooks']
@@ -262,6 +263,14 @@ const verifyCommerceApiHandoffs = (payload) => {
   const apiHandoffSiteId = typeof handoffs.siteId === 'string' && handoffs.siteId.trim()
     ? handoffs.siteId.trim()
     : null;
+  const commerceArtifactTargetSiteId = typeof target.siteId === 'string' && target.siteId.trim()
+    ? target.siteId.trim()
+    : null;
+  const commerceArtifactSiteSelectorEnvReady = target.siteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID';
+  const commerceArtifactSiteTargetReady = commerceArtifactTargetSiteId !== null &&
+    apiHandoffSiteId !== null &&
+    commerceArtifactTargetSiteId === apiHandoffSiteId &&
+    commerceArtifactSiteSelectorEnvReady;
   const publicCommerceApiHandoffReady = publicApis.status === 'certified' &&
     publicApis.manifestProviderSchema === 'backy.commerce-provider-certification-handoff.v1' &&
     publicApis.runtimeProviderSchema === 'backy.commerce-provider-certification-handoff.v1' &&
@@ -296,12 +305,19 @@ const verifyCommerceApiHandoffs = (payload) => {
   const apiHandoffReady = publicCommerceApiHandoffReady && productApiHandoffReady && orderApiHandoffReady;
 
   return {
-    ready: apiHandoffReady && commerceRequestedGroupEvidenceReady && commerceRuntimeEvidenceReady,
+    ready: apiHandoffReady &&
+      commerceArtifactSiteTargetReady &&
+      commerceRequestedGroupEvidenceReady &&
+      commerceRuntimeEvidenceReady,
     fields: {
       commerceRequestedGroupEvidenceReady,
       commerceRuntimeEvidenceReady,
       requestedCommerceGroups,
       certifiedCommerceGroups: certified,
+      commerceArtifactSiteTargetReady,
+      commerceArtifactTargetSiteId,
+      commerceArtifactSiteSelectorEnvReady,
+      commerceArtifactSiteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
       apiHandoffReady,
       apiHandoffSiteId,
       publicCommerceApiHandoffReady,

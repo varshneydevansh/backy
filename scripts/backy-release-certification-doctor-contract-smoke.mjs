@@ -76,6 +76,8 @@ const leakedSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-pr
 const forbiddenFieldSettingsArtifactPath = path.join(artifactTempDir, 'backy-settings-provider-certification-forbidden-field.json');
 const commerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification.json');
 const staleCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-stale.json');
+const artifactTargetMissingCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-missing-target.json');
+const artifactTargetMismatchCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-mismatched-target.json');
 const untargetedCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-untargeted.json');
 const missingResultCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-missing-result.json');
 const expiredCommerceArtifactPath = path.join(artifactTempDir, 'backy-commerce-provider-certification-expired.json');
@@ -270,7 +272,12 @@ fs.writeFileSync(commerceArtifactPath, JSON.stringify({
     secretHandling: 'Certification artifacts contain provider names, readiness booleans, target mode, non-secret runtime selections, and diagnostic counts only; admin keys, external target URLs, provider credentials, payment references, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
   },
   required: true,
-  target: { mode: 'local', externalBaseUrlConfigured: false },
+  target: {
+    mode: 'local',
+    externalBaseUrlConfigured: false,
+    siteId: 'site-demo',
+    siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+  },
   requested: { payment: true, tax: true, shipping: true },
   readiness: { payment: true, tax: true, shipping: true },
   requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
@@ -321,6 +328,13 @@ const missingResultCommerceArtifactPayload = JSON.parse(fs.readFileSync(commerce
 missingResultCommerceArtifactPayload.certified = ['payment', 'shipping'];
 missingResultCommerceArtifactPayload.readiness.tax = false;
 fs.writeFileSync(missingResultCommerceArtifactPath, JSON.stringify(missingResultCommerceArtifactPayload, null, 2));
+const artifactTargetMissingCommerceArtifactPayload = JSON.parse(fs.readFileSync(commerceArtifactPath, 'utf8'));
+delete artifactTargetMissingCommerceArtifactPayload.target.siteId;
+delete artifactTargetMissingCommerceArtifactPayload.target.siteSelectorEnv;
+fs.writeFileSync(artifactTargetMissingCommerceArtifactPath, JSON.stringify(artifactTargetMissingCommerceArtifactPayload, null, 2));
+const artifactTargetMismatchCommerceArtifactPayload = JSON.parse(fs.readFileSync(commerceArtifactPath, 'utf8'));
+artifactTargetMismatchCommerceArtifactPayload.target.siteId = 'site-other';
+fs.writeFileSync(artifactTargetMismatchCommerceArtifactPath, JSON.stringify(artifactTargetMismatchCommerceArtifactPayload, null, 2));
 fs.writeFileSync(staleCommerceArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.commerce-provider-certification.v1',
@@ -332,7 +346,12 @@ fs.writeFileSync(staleCommerceArtifactPath, JSON.stringify({
     secretHandling: 'Certification artifacts contain provider names, readiness booleans, target mode, non-secret runtime selections, and diagnostic counts only; admin keys, external target URLs, provider credentials, payment references, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
   },
   required: true,
-  target: { mode: 'local', externalBaseUrlConfigured: false },
+  target: {
+    mode: 'local',
+    externalBaseUrlConfigured: false,
+    siteId: 'site-demo',
+    siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+  },
   requested: { payment: true, tax: true, shipping: true },
   readiness: { payment: true, tax: true, shipping: true },
   requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
@@ -351,7 +370,12 @@ fs.writeFileSync(untargetedCommerceArtifactPath, JSON.stringify({
     secretHandling: 'Certification artifacts contain provider names, readiness booleans, target mode, non-secret runtime selections, and diagnostic counts only; admin keys, external target URLs, provider credentials, payment references, webhook bodies, and customer/order payloads stay in CI secrets or runtime logs.',
   },
   required: true,
-  target: { mode: 'local', externalBaseUrlConfigured: false },
+  target: {
+    mode: 'local',
+    externalBaseUrlConfigured: false,
+    siteId: 'site-demo',
+    siteSelectorEnv: 'BACKY_COMMERCE_CERTIFY_SITE_ID',
+  },
   requested: { payment: true, tax: true, shipping: true },
   readiness: { payment: true, tax: true, shipping: true },
   requestedProviders: { payment: 'stripe', tax: 'taxjar', shipping: 'easypost' },
@@ -574,6 +598,10 @@ assert(
     validCertificationArtifactsJson.certificationArtifacts.commerce.noSecretBoundaryReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.noRawSecretValuesReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.noForbiddenArtifactFieldsReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.commerceArtifactSiteTargetReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.commerceArtifactTargetSiteId === 'site-demo' &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.commerceArtifactSiteSelectorEnvReady === true &&
+    validCertificationArtifactsJson.certificationArtifacts.commerce.commerceArtifactSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.apiHandoffReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.publicCommerceApiHandoffReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.productApiHandoffSchemaReady === true &&
@@ -586,7 +614,7 @@ assert(
     validCertificationArtifactsJson.certificationArtifacts.commerce.orderApiHandoffTargetSiteId === 'site-demo' &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.apiHandoffSiteId === 'site-demo' &&
     validCertificationArtifactsJson.certificationArtifacts.commerce.commerceApiHandoffSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID',
-  'Doctor valid artifact mode should expose schema, no-secret, and API-handoff readiness for both artifacts.',
+  'Doctor valid artifact mode should expose schema, no-secret, selected-site target, and API-handoff readiness for both artifacts.',
 );
 
 const expiredSettingsArtifact = await runDoctor({
@@ -748,10 +776,58 @@ const staleCommerceArtifactJson = parseJson(staleCommerceArtifact, 'stale commer
 assert(
   staleCommerceArtifactJson.failures.includes('Commerce certification artifact') &&
     staleCommerceArtifactJson.certificationArtifacts.commerce.apiHandoffReady === false &&
+    staleCommerceArtifactJson.certificationArtifacts.commerce.commerceArtifactSiteTargetReady === false &&
     staleCommerceArtifactJson.certificationArtifacts.commerce.publicCommerceApiHandoffReady === false &&
     staleCommerceArtifactJson.certificationArtifacts.commerce.productApiHandoffReady === false &&
     staleCommerceArtifactJson.certificationArtifacts.commerce.orderApiHandoffReady === false,
   'Doctor should report missing Commerce product/order API-handoff evidence.',
+);
+
+const artifactTargetMissingCommerceArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: artifactTargetMissingCommerceArtifactPath,
+});
+assert(
+  artifactTargetMissingCommerceArtifact.code === 1,
+  `Doctor should reject a Commerce artifact that lacks top-level selected-site target proof, got ${artifactTargetMissingCommerceArtifact.code}.`,
+);
+const artifactTargetMissingCommerceArtifactJson = parseJson(
+  artifactTargetMissingCommerceArtifact,
+  'missing commerce certification artifact target doctor',
+);
+assert(
+  artifactTargetMissingCommerceArtifactJson.failures.includes('Commerce certification artifact') &&
+    artifactTargetMissingCommerceArtifactJson.certificationArtifacts.commerce.apiHandoffReady === true &&
+    artifactTargetMissingCommerceArtifactJson.certificationArtifacts.commerce.commerceArtifactSiteTargetReady === false &&
+    artifactTargetMissingCommerceArtifactJson.certificationArtifacts.commerce.commerceArtifactTargetSiteId === null &&
+    artifactTargetMissingCommerceArtifactJson.certificationArtifacts.commerce.commerceArtifactSiteSelectorEnvReady === false &&
+    artifactTargetMissingCommerceArtifactJson.certificationArtifacts.commerce.productApiHandoffSiteTargetReady === true &&
+    artifactTargetMissingCommerceArtifactJson.certificationArtifacts.commerce.orderApiHandoffSiteTargetReady === true,
+  'Doctor should reject Commerce artifacts whose nested handoffs are site-targeted but whose artifact boundary omits BACKY_COMMERCE_CERTIFY_SITE_ID proof.',
+);
+
+const artifactTargetMismatchCommerceArtifact = await runDoctor({
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: artifactTargetMismatchCommerceArtifactPath,
+});
+assert(
+  artifactTargetMismatchCommerceArtifact.code === 1,
+  `Doctor should reject a Commerce artifact whose top-level selected-site target does not match apiHandoffs.siteId, got ${artifactTargetMismatchCommerceArtifact.code}.`,
+);
+const artifactTargetMismatchCommerceArtifactJson = parseJson(
+  artifactTargetMismatchCommerceArtifact,
+  'mismatched commerce certification artifact target doctor',
+);
+assert(
+  artifactTargetMismatchCommerceArtifactJson.failures.includes('Commerce certification artifact') &&
+    artifactTargetMismatchCommerceArtifactJson.certificationArtifacts.commerce.apiHandoffReady === true &&
+    artifactTargetMismatchCommerceArtifactJson.certificationArtifacts.commerce.apiHandoffSiteId === 'site-demo' &&
+    artifactTargetMismatchCommerceArtifactJson.certificationArtifacts.commerce.commerceArtifactSiteTargetReady === false &&
+    artifactTargetMismatchCommerceArtifactJson.certificationArtifacts.commerce.commerceArtifactTargetSiteId === 'site-other' &&
+    artifactTargetMismatchCommerceArtifactJson.certificationArtifacts.commerce.commerceArtifactSiteSelectorEnvReady === true &&
+    artifactTargetMismatchCommerceArtifactJson.certificationArtifacts.commerce.productApiHandoffSiteTargetReady === true &&
+    artifactTargetMismatchCommerceArtifactJson.certificationArtifacts.commerce.orderApiHandoffSiteTargetReady === true,
+  'Doctor should reject Commerce artifacts whose artifact target site disagrees with otherwise valid selected-site API handoffs.',
 );
 
 const untargetedCommerceArtifact = await runDoctor({

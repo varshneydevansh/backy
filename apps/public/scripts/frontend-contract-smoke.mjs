@@ -174,6 +174,10 @@ assert(
     manifestRoute.includes("'backy.commerce-provider-certification-artifact.v1'") &&
     manifestRoute.includes("'apiHandoffReady'") &&
     manifestRoute.includes("'publicCommerceApiHandoffReady'") &&
+    manifestRoute.includes("'commerceArtifactSiteTargetReady'") &&
+    manifestRoute.includes("'commerceArtifactTargetSiteId'") &&
+    manifestRoute.includes("'commerceArtifactSiteSelectorEnvReady'") &&
+    manifestRoute.includes("'commerceArtifactSiteSelectorEnv'") &&
     manifestRoute.includes("'productApiHandoffSiteTargetReady'") &&
     manifestRoute.includes("'productApiHandoffTargetSiteId'") &&
     manifestRoute.includes("'productApiHandoffReady'") &&
@@ -212,6 +216,10 @@ assert(
     openApiRoute.includes('"BACKY_COMMERCE_CERTIFICATION_OUTPUT"') &&
     openApiRoute.includes('"apiHandoffReady"') &&
     openApiRoute.includes('"publicCommerceApiHandoffReady"') &&
+    openApiRoute.includes('"commerceArtifactSiteTargetReady"') &&
+    openApiRoute.includes('"commerceArtifactTargetSiteId"') &&
+    openApiRoute.includes('"commerceArtifactSiteSelectorEnvReady"') &&
+    openApiRoute.includes('"commerceArtifactSiteSelectorEnv"') &&
     openApiRoute.includes('"productApiHandoffSiteTargetReady"') &&
     openApiRoute.includes('"productApiHandoffTargetSiteId"') &&
     openApiRoute.includes('"productApiHandoffReady"') &&
@@ -237,6 +245,8 @@ assert(
 	    apiContracts.includes('settingsApiHandoffSiteTargetReady') &&
 	    apiContracts.includes('settingsApiHandoffReady') &&
 	    apiContracts.includes('productApiHandoffSiteTargetReady') &&
+	    apiContracts.includes('commerceArtifactSiteTargetReady') &&
+	    apiContracts.includes('commerceArtifactTargetSiteId') &&
 	    apiContracts.includes('orderApiHandoffSiteTargetReady') &&
 	    apiContracts.includes('apiHandoffReady') &&
 	    apiContracts.includes('publicCommerceApiHandoffReady') &&
@@ -261,6 +271,8 @@ assert(
     sdkSmoke.includes('backy-commerce-provider-certification-evidence') &&
     sdkSmoke.includes('hasCompletionArtifactVerifier') &&
     sdkSmoke.includes('settingsApiHandoffSiteTargetReady') &&
+    sdkSmoke.includes('commerceArtifactSiteTargetReady') &&
+    sdkSmoke.includes('commerceArtifactTargetSiteId') &&
     sdkSmoke.includes('productApiHandoffSiteTargetReady') &&
     sdkSmoke.includes('orderApiHandoffSiteTargetReady') &&
     sdkSmoke.includes('manifest() completion status missing Settings runbook') &&
