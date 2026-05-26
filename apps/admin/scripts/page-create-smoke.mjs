@@ -1295,6 +1295,7 @@ const assertPageCreateSourceContracts = () => {
   const pageEditorSource = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
   const mediaApiSource = fs.readFileSync(new URL('../src/lib/mediaApi.ts', import.meta.url), 'utf8');
   const chromeSource = fs.readFileSync(new URL('../src/lib/editorTemplateChrome.ts', import.meta.url), 'utf8');
+  const templateLibrarySource = fs.readFileSync(new URL('../src/lib/pageCreateTemplateLibrary.ts', import.meta.url), 'utf8');
   const pageCreateSubmitKeepsValidationReachable = /data-testid="page-create-submit-button"[\s\S]{0,500}disabled=\{isPageCreateBusy \|\| !canEditPages\}/.test(source);
   assert(
     source.includes('&& selectedSite') &&
@@ -1364,6 +1365,18 @@ const assertPageCreateSourceContracts = () => {
       source.includes('data-testid="page-creation-control-map"') &&
       source.includes('data-testid="page-create-preview-button"') &&
       source.includes('data-testid="page-template-library-shell"') &&
+      source.includes("const [templateSearchQuery, setTemplateSearchQuery] = useState('');") &&
+      source.includes("const [templateLibraryCategory, setTemplateLibraryCategory] = useState<PageTemplateLibraryCategory>('all');") &&
+      source.includes('getVisiblePageTemplateOptions(TEMPLATE_OPTIONS, templateLibraryCategory, templateSearchQuery)') &&
+      templateLibrarySource.includes("export type PageTemplateLibraryCategory = 'all'") &&
+      templateLibrarySource.includes('export const PAGE_TEMPLATE_LIBRARY_CATEGORIES') &&
+      templateLibrarySource.includes('export function getVisiblePageTemplateOptions') &&
+      templateLibrarySource.includes("templates: ['storefront', 'product-detail', 'pricing', 'cart', 'checkout'") &&
+      source.includes('data-testid="page-template-library-filters"') &&
+      source.includes('data-testid="page-template-library-search"') &&
+      source.includes('data-testid={`page-template-category-${category.id}`}') &&
+      source.includes('visibleTemplateOptions.map((tmpl)') &&
+      source.includes('data-testid="page-template-library-empty"') &&
       source.includes('data-testid="page-template-library-scroll"') &&
       source.includes('max-h-[34rem] overflow-y-auto') &&
       source.includes('options?: { markEdited?: boolean }') &&
@@ -2787,6 +2800,99 @@ const assertTemplatePreviewVisualState = async (client, label, screenshotPath) =
   return {
     ...state,
     screenshotPath,
+  };
+};
+
+const assertTemplateLibraryFilters = async (client) => {
+  const readState = async () => evaluate(client, `(() => {
+    const scroll = document.querySelector('[data-testid="page-template-library-scroll"]');
+    const cards = Array.from(scroll?.querySelectorAll('[data-testid^="page-template-preview-"]') || []);
+    const search = document.querySelector('[data-testid="page-template-library-search"]');
+    return {
+      searchValue: search instanceof HTMLInputElement ? search.value : '',
+      allActive: document.querySelector('[data-testid="page-template-category-all"]')?.getAttribute('data-active') || '',
+      commerceActive: document.querySelector('[data-testid="page-template-category-commerce"]')?.getAttribute('data-active') || '',
+      count: cards.length,
+      templates: cards.map((card) => card.getAttribute('data-template') || ''),
+      emptyVisible: Boolean(document.querySelector('[data-testid="page-template-library-empty"]')),
+      shellText: document.querySelector('[data-testid="page-template-library-shell"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    };
+  })()`);
+
+  const setSearch = async (value) => evaluate(client, `(() => {
+    const input = document.querySelector('[data-testid="page-template-library-search"]');
+    if (!(input instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'missing-search' };
+    }
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, ${JSON.stringify(value)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return { ok: true, value: input.value };
+  })()`);
+
+  const clickCategory = async (category) => evaluate(client, `(() => {
+    const button = document.querySelector('[data-testid="page-template-category-${category}"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-category' };
+    }
+    button.click();
+    return { ok: true };
+  })()`);
+
+  const waitForState = async (predicate, label) => {
+    let state = null;
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      state = await readState();
+      if (predicate(state)) {
+        return state;
+      }
+      await sleep(150);
+    }
+
+    throw new Error(`Template library filter state did not settle for ${label}: ${JSON.stringify(state)}`);
+  };
+
+  const initial = await waitForState(
+    (state) => state.allActive === 'true' && state.count >= STARTER_TEMPLATE_BACKEND_CASES.length && state.templates.includes('about'),
+    'initial all templates',
+  );
+
+  const commerceClick = await clickCategory('commerce');
+  assert(commerceClick.ok, `Unable to click commerce template category: ${JSON.stringify(commerceClick)}`);
+  const commerce = await waitForState(
+    (state) => state.commerceActive === 'true' && state.templates.includes('checkout') && !state.templates.includes('about'),
+    'commerce templates',
+  );
+
+  const searchResult = await setSearch('checkout');
+  assert(searchResult.ok, `Unable to set template search: ${JSON.stringify(searchResult)}`);
+  const searched = await waitForState(
+    (state) => state.searchValue === 'checkout' && state.templates.includes('checkout') && state.count < commerce.count,
+    'checkout search',
+  );
+
+  await setSearch('zzzz-no-template');
+  const empty = await waitForState(
+    (state) => state.searchValue === 'zzzz-no-template' && state.emptyVisible && state.count === 0,
+    'empty search',
+  );
+
+  await setSearch('');
+  const allClick = await clickCategory('all');
+  assert(allClick.ok, `Unable to click all template category: ${JSON.stringify(allClick)}`);
+  const reset = await waitForState(
+    (state) => state.searchValue === '' && state.allActive === 'true' && state.count >= STARTER_TEMPLATE_BACKEND_CASES.length && state.templates.includes('about'),
+    'reset all templates',
+  );
+
+  return {
+    initial,
+    commerce,
+    searched,
+    empty,
+    reset,
   };
 };
 
@@ -4806,6 +4912,7 @@ const main = async () => {
       'desktop template preview',
       TEMPLATE_DESKTOP_SCREENSHOT_PATH,
     );
+    const templateLibraryFilters = await assertTemplateLibraryFilters(client);
     const templateSwitching = await assertTemplateSwitching(client);
     await setViewport(client, { width: 390, height: 900, mobile: true, deviceScaleFactor: 2 });
     await waitForPageCreateControls(client, slug, title, navLabel, seo, parentPage.id, initialRender.url);
@@ -4849,6 +4956,7 @@ const main = async () => {
         desktop: desktopTemplateVisual,
         mobile: mobileTemplateVisual,
       },
+      templateLibraryFilters,
       templateSwitching,
       autosave,
       recovery,

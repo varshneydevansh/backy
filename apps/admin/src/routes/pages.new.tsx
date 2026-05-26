@@ -31,6 +31,11 @@ import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
 import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import {
+    getVisiblePageTemplateOptions,
+    PAGE_TEMPLATE_LIBRARY_CATEGORIES,
+    type PageTemplateLibraryCategory,
+} from '@/lib/pageCreateTemplateLibrary';
+import {
     DEFAULT_CANVAS_SIZE,
     createCanvasElement,
     extractFrontendTemplateDesignSerialization,
@@ -1293,6 +1298,8 @@ function NewPageRoute() {
     const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
     const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
     const [permissionError, setPermissionError] = useState<string | null>(null);
+    const [templateSearchQuery, setTemplateSearchQuery] = useState('');
+    const [templateLibraryCategory, setTemplateLibraryCategory] = useState<PageTemplateLibraryCategory>('all');
     const canViewPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canEditPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
     const canPublishPages = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.publish', PAGE_CREATE_PERMISSION_ROLE_DEFAULTS);
@@ -1692,6 +1699,10 @@ function NewPageRoute() {
     const selectedTemplate = useMemo(
         () => TEMPLATE_OPTIONS.find((template) => template.id === formData.template) || TEMPLATE_OPTIONS[0],
         [formData.template],
+    );
+    const visibleTemplateOptions = useMemo(
+        () => getVisiblePageTemplateOptions(TEMPLATE_OPTIONS, templateLibraryCategory, templateSearchQuery),
+        [templateLibraryCategory, templateSearchQuery],
     );
     const frontendPageTemplates = useMemo(
         () => (frontendDesign?.templates || []).filter((template) => template.type === 'page'),
@@ -4150,48 +4161,91 @@ function NewPageRoute() {
                                         </p>
                                     </div>
                                     <span className="w-fit rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
-                                        {TEMPLATE_OPTIONS.length} templates
+                                        {visibleTemplateOptions.length} of {TEMPLATE_OPTIONS.length} templates
                                     </span>
                                 </div>
-                                <div className="mt-3 max-h-[34rem] overflow-y-auto pr-1 [scrollbar-gutter:stable]" data-testid="page-template-library-scroll">
-                                    <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                                        {TEMPLATE_OPTIONS.map((tmpl) => (
-                                            <label
-                                                key={tmpl.id}
+                                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(220px,0.9fr)_minmax(0,1.1fr)]" data-testid="page-template-library-filters">
+                                    <label className="relative block min-w-0" htmlFor="page-template-library-search">
+                                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                        <input
+                                            id="page-template-library-search"
+                                            type="search"
+                                            value={templateSearchQuery}
+                                            onChange={(event) => setTemplateSearchQuery(event.target.value)}
+                                            disabled={templateSelectionDisabled}
+                                            placeholder="Search templates"
+                                            aria-label="Search starter templates"
+                                            data-testid="page-template-library-search"
+                                            className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                        />
+                                    </label>
+                                    <div className="flex min-w-0 flex-wrap gap-2" role="group" aria-label="Filter starter templates">
+                                        {PAGE_TEMPLATE_LIBRARY_CATEGORIES.map((category) => (
+                                            <button
+                                                key={category.id}
+                                                type="button"
+                                                onClick={() => setTemplateLibraryCategory(category.id)}
+                                                disabled={templateSelectionDisabled}
+                                                aria-pressed={templateLibraryCategory === category.id}
+                                                data-testid={`page-template-category-${category.id}`}
+                                                data-active={templateLibraryCategory === category.id}
                                                 className={cn(
-                                                    'min-w-0 cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm',
-                                                    formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
-                                                    templateSelectionDisabled && 'cursor-not-allowed opacity-70'
+                                                    'inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
+                                                    templateLibraryCategory === category.id
+                                                        ? 'border-primary bg-primary text-primary-foreground'
+                                                        : 'border-border bg-card text-muted-foreground hover:border-primary/50 hover:bg-accent',
                                                 )}
                                             >
-                                                <input
-                                                    type="radio"
-                                                    name="template"
-                                                    value={tmpl.id}
-                                                    checked={formData.template === tmpl.id}
-                                                    onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
-                                                    disabled={templateSelectionDisabled}
-                                                    className="sr-only"
-                                                />
-                                                <div className="mb-1 flex min-w-0 items-center gap-2">
-                                                    <Layout className={cn(
-                                                        'h-4 w-4 shrink-0',
-                                                        formData.template === tmpl.id ? 'text-primary' : 'text-muted-foreground'
-                                                    )} />
-                                                    <span className="min-w-0 truncate font-semibold">{tmpl.name}</span>
-                                                </div>
-                                                <TemplateVisualPreview template={tmpl.id} active={formData.template === tmpl.id} />
-                                                <span className="text-xs leading-5 text-muted-foreground">{tmpl.desc}</span>
-                                                <span className="mt-3 flex flex-wrap gap-1">
-                                                    {tmpl.sections.map((section) => (
-                                                        <span key={section} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                                                            {section}
-                                                        </span>
-                                                    ))}
-                                                </span>
-                                            </label>
+                                                {category.label}
+                                            </button>
                                         ))}
                                     </div>
+                                </div>
+                                <div className="mt-3 max-h-[34rem] overflow-y-auto pr-1 [scrollbar-gutter:stable]" data-testid="page-template-library-scroll">
+                                    {visibleTemplateOptions.length > 0 ? (
+                                        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                                            {visibleTemplateOptions.map((tmpl) => (
+                                                <label
+                                                    key={tmpl.id}
+                                                    className={cn(
+                                                        'min-w-0 cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm',
+                                                        formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
+                                                        templateSelectionDisabled && 'cursor-not-allowed opacity-70'
+                                                    )}
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="template"
+                                                        value={tmpl.id}
+                                                        checked={formData.template === tmpl.id}
+                                                        onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
+                                                        disabled={templateSelectionDisabled}
+                                                        className="sr-only"
+                                                    />
+                                                    <div className="mb-1 flex min-w-0 items-center gap-2">
+                                                        <Layout className={cn(
+                                                            'h-4 w-4 shrink-0',
+                                                            formData.template === tmpl.id ? 'text-primary' : 'text-muted-foreground'
+                                                        )} />
+                                                        <span className="min-w-0 truncate font-semibold">{tmpl.name}</span>
+                                                    </div>
+                                                    <TemplateVisualPreview template={tmpl.id} active={formData.template === tmpl.id} />
+                                                    <span className="text-xs leading-5 text-muted-foreground">{tmpl.desc}</span>
+                                                    <span className="mt-3 flex flex-wrap gap-1">
+                                                        {tmpl.sections.map((section) => (
+                                                            <span key={section} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                                                                {section}
+                                                            </span>
+                                                        ))}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground" data-testid="page-template-library-empty">
+                                            No starter templates match this filter.
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
