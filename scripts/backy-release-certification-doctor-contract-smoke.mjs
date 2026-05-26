@@ -442,11 +442,34 @@ for (const row of ['/settings', 'Settings admin APIs', '/products', '/orders']) 
   const closure = normalJson.partialClosureReadiness.rows.find((item) => item.row === row);
   assert(closure, `Doctor Partial closure readiness missing ${row}.`);
   assert(closure.ready === false && closure.status === 'partial', `Doctor default closure row ${row} should remain partial without artifacts.`);
+  assert(
+    closure.evidenceMode === 'live-provider-certification-artifact' &&
+      closure.aggregatePreflight === 'npm run test:partial-gate-preflights' &&
+      closure.adminSourceGuard === 'npm run test:admin-contract-source' &&
+      closure.doctorRequiredEnv === 'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED=1' &&
+      typeof closure.gate === 'string' &&
+      typeof closure.preflight === 'string' &&
+      typeof closure.sourceOnlyGuard === 'string' &&
+      typeof closure.workflow === 'string' &&
+      typeof closure.requiredInputFamily === 'string' &&
+      typeof closure.artifactRequiredEnv === 'string' &&
+      typeof closure.artifactSchemaVersion === 'string' &&
+      closure.nextAction.includes(closure.gate) &&
+      closure.nextAction.includes('npm run doctor:release-certification'),
+    `Doctor Partial closure row ${row} should be self-contained with gate, guard, workflow, artifact, and next-action metadata.`,
+  );
   if (row === '/settings' || row === 'Settings admin APIs') {
     assert(
       closure.artifactKey === 'settings' &&
         closure.requiredArtifact === 'Settings certification artifact' &&
         closure.artifactPathEnv === 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT' &&
+        closure.artifactRequiredEnv.includes('BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1') &&
+        closure.artifactSchemaVersion === 'backy.settings-provider-certification-artifact.v1' &&
+        closure.gate === 'npm run ci:settings-provider-certification' &&
+        closure.preflight === 'npm run test:settings-provider-certification-preflight-contract' &&
+        closure.sourceOnlyGuard === 'npm run test:settings-source-only' &&
+        closure.mockGate === null &&
+        closure.workflow === '.github/workflows/settings-provider-certification.yml' &&
         closure.reason.includes('not configured'),
       `Doctor default closure row ${row} should point at the Settings artifact.`,
     );
@@ -455,6 +478,12 @@ for (const row of ['/settings', 'Settings admin APIs', '/products', '/orders']) 
       closure.artifactKey === 'commerce' &&
         closure.requiredArtifact === 'Commerce certification artifact' &&
         closure.artifactPathEnv === 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT' &&
+        closure.artifactRequiredEnv.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1') &&
+        closure.artifactSchemaVersion === 'backy.commerce-provider-certification-artifact.v1' &&
+        closure.gate === 'npm run ci:commerce-provider-certification' &&
+        closure.preflight === 'npm run test:commerce-provider-certification-preflight-contract' &&
+        closure.mockGate === 'npm run ci:commerce-provider-smoke' &&
+        closure.workflow === '.github/workflows/commerce-provider-certification.yml' &&
         closure.reason.includes('not configured'),
       `Doctor default closure row ${row} should point at the Commerce artifact.`,
     );
@@ -610,7 +639,7 @@ assert(
   validCertificationArtifactsJson.partialClosureReadiness?.ready === true &&
     validCertificationArtifactsJson.partialClosureReadiness?.readyCount === 4 &&
     validCertificationArtifactsJson.partialClosureReadiness?.partialCount === 0 &&
-    validCertificationArtifactsJson.partialClosureReadiness?.rows.every((row) => row.ready === true && row.status === 'ready') &&
+    validCertificationArtifactsJson.partialClosureReadiness?.rows.every((row) => row.ready === true && row.status === 'ready' && row.nextAction.includes('Archive')) &&
     validCertificationArtifactsJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'settings').length === 2 &&
     validCertificationArtifactsJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'commerce').length === 2,
   'Doctor valid artifact mode should mark all four remaining Partial closure rows ready.',

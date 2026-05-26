@@ -819,9 +819,24 @@ function partialClosureRow(gate) {
 
   return {
     row: gate.row,
+    gate: gate.gate,
+    preflight: gate.preflight,
+    sourceOnlyGuard: gate.sourceOnlyGuard,
+    mockGate: gate.mockGate || null,
+    aggregatePreflight: gate.aggregatePreflight,
+    adminSourceGuard: gate.adminSourceGuard,
+    doctorRequiredEnv: gate.doctorRequiredEnv,
+    workflow: gate.workflow,
+    requiredInputFamily: gate.requiredInputFamily,
     artifactKey: details.artifactKey,
     requiredArtifact: artifact.label,
     artifactPathEnv: gate.artifactPathEnv,
+    artifactRequiredEnv: gate.artifactRequiredEnv,
+    artifactSchemaVersion: gate.artifactSchemaVersion,
+    evidenceMode: 'live-provider-certification-artifact',
+    nextAction: artifact.ready
+      ? `Archive ${artifact.label} and keep ${gate.preflight} in the release regression path.`
+      : `Run ${gate.gate}, then verify the redacted artifact with npm run doctor:release-certification.`,
     ready: artifact.ready,
     status: artifact.ready ? 'ready' : 'partial',
     reason: closureReason(artifact, details.readyReason, details.configuredFallback, details.unconfiguredReason),
