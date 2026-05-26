@@ -244,7 +244,7 @@ fs.writeFileSync(leakedSettingsArtifactPath, JSON.stringify({
   },
   results: {
     ...settingsResults,
-    leakedCredential: 'backy-release-doctor-redacted-secret',
+    leakedCredential: 'BACKY_SECRET_TEST_VALUE_releaseDoctorShouldReject123',
   },
 }, null, 2));
 const forbiddenFieldSettingsArtifactPayload = JSON.parse(fs.readFileSync(settingsArtifactPath, 'utf8'));

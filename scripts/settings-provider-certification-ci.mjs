@@ -49,7 +49,7 @@ const assert = (condition, message) => {
 };
 
 const isHttpUrl = (url) => /^https?:\/\//i.test(url);
-const RAW_SECRET_VALUE_PATTERN = /(sk_live|sk_test|whsec_|AKIA|-----BEGIN|xox[baprs]-)/i;
+const RAW_SECRET_VALUE_PATTERN = /(BACKY_SECRET_TEST_VALUE_|sk_live|sk_test|whsec_|AKIA|-----BEGIN|xox[baprs]-)/i;
 const URL_WITH_CREDENTIALS_PATTERN = /\b(?:https?|postgres(?:ql)?):\/\/[^/\s:@]+:[^@\s/]+@/i;
 const FORBIDDEN_CERTIFICATION_ARTIFACT_FIELD_NAMES = new Set([
   'adminkey',
