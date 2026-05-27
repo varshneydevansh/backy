@@ -11,6 +11,7 @@ import {
   Download,
   ExternalLink,
   History,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Save,
@@ -4675,92 +4676,8 @@ function CollectionsPage() {
               Control reusable structured data for custom frontends: schemas, records, permissions, imports, exports, routes, and public API delivery.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest', {
-                key: 'collections.export',
-                action: 'copy collection handoff manifests',
-              })}
-              disabled={isCollectionsBusy || !canExportCollections}
-              title={exportPermissionTitle}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Copy className="h-4 w-4" />
-              Copy manifest
-            </button>
-            <button
-              type="button"
-              onClick={downloadCollectionHandoff}
-              disabled={isCollectionsBusy || !canExportCollections}
-              title={exportPermissionTitle}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="h-4 w-4" />
-              Download JSON
-            </button>
-            <button
-              type="button"
-              onClick={downloadCollectionSchemaCsv}
-              disabled={collections.length === 0 || isCollectionsBusy || !canExportCollections}
-              title={exportPermissionTitle}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="h-4 w-4" />
-              Export schemas
-            </button>
-            <button
-              type="button"
-              onClick={() => void downloadCollectionsBackup()}
-              disabled={collections.length === 0 || isCollectionsBusy || !canExportCollections}
-              title={exportPermissionTitle}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              data-testid="collections-export-backup"
-            >
-              <Download className="h-4 w-4" />
-              {isExportingBackup ? 'Exporting...' : 'Export JSON'}
-            </button>
-            <input
-              ref={backupImportInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(event) => void handleImportCollectionsBackup(event)}
-              aria-label="Import collections JSON backup"
-              aria-describedby={collectionActionStatusId}
-              disabled={Boolean(backupImportDisabledReason)}
-              data-action-state={actionState(backupImportDisabledReason)}
-              data-action-status={backupImportActionStatus}
-              data-disabled-reason={backupImportDisabledReason || undefined}
-              data-target-site-id={activeSiteId}
-              data-testid="collections-import-backup-input"
-            />
-            <button
-              type="button"
-              onClick={() => backupImportInputRef.current?.click()}
-              disabled={Boolean(backupImportDisabledReason)}
-              title={backupImportDisabledReason || undefined}
-              aria-describedby={collectionActionStatusId}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              data-action-state={actionState(backupImportDisabledReason)}
-              data-action-status={backupImportActionStatus}
-              data-disabled-reason={backupImportDisabledReason || undefined}
-              data-target-site-id={activeSiteId}
-              data-testid="collections-import-backup"
-            >
-              <Upload className="h-4 w-4" />
-              {isImportingBackup ? 'Importing...' : 'Import JSON'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void loadCollections()}
-              disabled={isCollectionsBusy}
-              className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-            <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2 xl:items-end">
+            <div className="flex flex-wrap gap-2 xl:justify-end" data-testid="collections-primary-actions">
               <button
                 type="button"
                 onClick={beginNewCollection}
@@ -4777,6 +4694,28 @@ function CollectionsPage() {
                 <Plus className="h-4 w-4" />
                 {newCollectionButtonLabel}
               </button>
+              <button
+                type="button"
+                onClick={downloadCollectionSchemaCsv}
+                disabled={collections.length === 0 || isCollectionsBusy || !canExportCollections}
+                title={exportPermissionTitle}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="collections-command-export-schemas"
+              >
+                <Download className="h-4 w-4" />
+                Export schemas
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadCollections()}
+                disabled={isCollectionsBusy || !canViewCollections}
+                title={!canViewCollections ? viewPermissionTitle : undefined}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="collections-command-refresh"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
               {newCollectionDisabledReason && (
                 <p
                   id="collections-library-new-collection-disabled-reason"
@@ -4788,6 +4727,84 @@ function CollectionsPage() {
                 </p>
               )}
             </div>
+            <details className="self-start xl:self-end" data-testid="collections-secondary-actions" data-default-collapsed="true">
+              <summary
+                className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
+                data-testid="collections-more-actions"
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                More actions
+              </summary>
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2 shadow-sm" data-testid="collections-secondary-action-menu">
+                <button
+                  type="button"
+                  onClick={() => void copyCollectionApiText(collectionHandoffText, 'Collections handoff manifest', {
+                    key: 'collections.export',
+                    action: 'copy collection handoff manifests',
+                  })}
+                  disabled={isCollectionsBusy || !canExportCollections}
+                  title={exportPermissionTitle}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="collections-command-copy-manifest"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy manifest
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadCollectionHandoff}
+                  disabled={isCollectionsBusy || !canExportCollections}
+                  title={exportPermissionTitle}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="collections-command-download-json"
+                >
+                  <Download className="h-4 w-4" />
+                  Download JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void downloadCollectionsBackup()}
+                  disabled={collections.length === 0 || isCollectionsBusy || !canExportCollections}
+                  title={exportPermissionTitle}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="collections-export-backup"
+                >
+                  <Download className="h-4 w-4" />
+                  {isExportingBackup ? 'Exporting...' : 'Export JSON'}
+                </button>
+                <input
+                  ref={backupImportInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={(event) => void handleImportCollectionsBackup(event)}
+                  aria-label="Import collections JSON backup"
+                  aria-describedby={collectionActionStatusId}
+                  disabled={Boolean(backupImportDisabledReason)}
+                  data-action-state={actionState(backupImportDisabledReason)}
+                  data-action-status={backupImportActionStatus}
+                  data-disabled-reason={backupImportDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid="collections-import-backup-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => backupImportInputRef.current?.click()}
+                  disabled={Boolean(backupImportDisabledReason)}
+                  title={backupImportDisabledReason || undefined}
+                  aria-describedby={collectionActionStatusId}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  data-action-state={actionState(backupImportDisabledReason)}
+                  data-action-status={backupImportActionStatus}
+                  data-disabled-reason={backupImportDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid="collections-import-backup"
+                >
+                  <Upload className="h-4 w-4" />
+                  {isImportingBackup ? 'Importing...' : 'Import JSON'}
+                </button>
+              </div>
+            </details>
           </div>
         </div>
 

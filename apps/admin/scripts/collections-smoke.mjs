@@ -63,6 +63,37 @@ const assertCollectionsRouteSourceContract = () => {
       source.includes('Keep page, media, commerce, form, site, and API shortcuts available without stretching the schema workspace.'),
     'Collections command center must keep low-frequency maps and workflow shortcuts behind collapsed disclosures.',
   );
+  {
+    const commandCenterBlockStart = source.indexOf('data-testid="collections-command-center"');
+    const commandCenterBlockEnd = source.indexOf('<div className="mt-5 grid gap-3', commandCenterBlockStart);
+    const commandCenterBlock = commandCenterBlockStart >= 0
+      ? source.slice(commandCenterBlockStart, commandCenterBlockEnd >= 0 ? commandCenterBlockEnd : commandCenterBlockStart + 7600)
+      : '';
+    const primaryActionsIndex = commandCenterBlock.indexOf('data-testid="collections-primary-actions"');
+    const createIndex = commandCenterBlock.indexOf('data-testid="collections-library-new-collection-button"');
+    const exportSchemasIndex = commandCenterBlock.indexOf('data-testid="collections-command-export-schemas"');
+    const refreshIndex = commandCenterBlock.indexOf('data-testid="collections-command-refresh"');
+    const secondaryActionsIndex = commandCenterBlock.indexOf('data-testid="collections-secondary-actions"');
+    const moreActionsIndex = commandCenterBlock.indexOf('data-testid="collections-more-actions"');
+    const copyIndex = commandCenterBlock.indexOf('data-testid="collections-command-copy-manifest"');
+    const downloadIndex = commandCenterBlock.indexOf('data-testid="collections-command-download-json"');
+    const exportBackupIndex = commandCenterBlock.indexOf('data-testid="collections-export-backup"');
+    const importBackupIndex = commandCenterBlock.indexOf('data-testid="collections-import-backup"');
+    assert(
+      primaryActionsIndex >= 0 &&
+        createIndex > primaryActionsIndex &&
+        exportSchemasIndex > createIndex &&
+        refreshIndex > exportSchemasIndex &&
+        secondaryActionsIndex > refreshIndex &&
+        commandCenterBlock.includes('data-default-collapsed="true"') &&
+        moreActionsIndex > secondaryActionsIndex &&
+        copyIndex > moreActionsIndex &&
+        downloadIndex > copyIndex &&
+        exportBackupIndex > downloadIndex &&
+        importBackupIndex > exportBackupIndex,
+      'Collections command center must lead with schema work and move manifest/JSON backup handoff behind More actions.',
+    );
+  }
   assert(
     source.includes('data-testid="collections-audit-details"') &&
       source.includes('data-testid="collections-audit-panel"') &&
@@ -948,6 +979,8 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
     const controlMapDetails = document.querySelector('[data-testid="collections-control-map-details"]');
     const connectedWorkflowsDetails = document.querySelector('[data-testid="collections-connected-workflows-details"]');
     const auditDetails = document.querySelector('[data-testid="collections-audit-details"]');
+    const firstPrimaryActionText = (document.querySelector('[data-testid="collections-primary-actions"] button')?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const secondaryActions = document.querySelector('[data-testid="collections-secondary-actions"]');
     const controlMapText = controlMapDetails?.textContent || '';
     const connectedWorkflowsText = connectedWorkflowsDetails?.textContent || '';
     const auditText = auditDetails?.textContent || '';
@@ -973,6 +1006,17 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       scrollWidth: document.documentElement.scrollWidth,
       path: window.location.pathname,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="collections-command-center"]')),
+      firstPrimaryActionText,
+      secondaryActionsCollapsed: secondaryActions instanceof HTMLDetailsElement &&
+        secondaryActions.open === false &&
+        secondaryActions.getAttribute('data-default-collapsed') === 'true',
+      hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="collections-more-actions"]')),
+      hasCommandHandoffActionsNested: Boolean(
+        document.querySelector('[data-testid="collections-secondary-action-menu"] [data-testid="collections-command-copy-manifest"]') &&
+        document.querySelector('[data-testid="collections-secondary-action-menu"] [data-testid="collections-command-download-json"]') &&
+        document.querySelector('[data-testid="collections-secondary-action-menu"] [data-testid="collections-export-backup"]') &&
+        document.querySelector('[data-testid="collections-secondary-action-menu"] [data-testid="collections-import-backup"]')
+      ),
       controlMapCollapsed: controlMapDetails instanceof HTMLDetailsElement &&
         controlMapDetails.open === false &&
         controlMapDetails.getAttribute('data-default-collapsed') === 'true',
@@ -1098,8 +1142,13 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
     })()`);
 
     assert(layout.scrollWidth <= layout.width + 8, `Collections page has horizontal overflow: ${JSON.stringify(layout)}`);
+    const actionHierarchyReady = /collection draft/i.test(layout.firstPrimaryActionText || '') &&
+      layout.secondaryActionsCollapsed &&
+      layout.hasMoreActionsTrigger &&
+      layout.hasCommandHandoffActionsNested;
     const layoutReady = layout.path === '/collections' &&
       layout.hasCommandCenter &&
+      actionHierarchyReady &&
       layout.controlMapCollapsed &&
       layout.connectedWorkflowsCollapsed &&
       layout.auditCollapsed &&
