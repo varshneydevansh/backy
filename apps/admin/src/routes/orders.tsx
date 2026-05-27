@@ -2451,6 +2451,24 @@ function OrdersRoute() {
       detail: activeSiteId,
     },
   ];
+  const ordersProviderCertificationActionStatusId = 'orders-provider-certification-action-status';
+  const ordersProviderCertificationBusyDisabledReason = isOrdersAccessBusy ? 'Orders workspace is busy.' : '';
+  const ordersProviderCertificationExportDisabledReason = ordersProviderCertificationBusyDisabledReason || (!canExportOrders
+    ? exportPermissionTitle || 'Your account cannot export orders.'
+    : '');
+  const ordersProviderCertificationSelectorDisabledReason = providerCertificationHasSelectedSelector ? '' : 'Select at least one commerce provider selector.';
+  const ordersProviderCertificationCommandDisabledReason = ordersProviderCertificationExportDisabledReason || ordersProviderCertificationSelectorDisabledReason;
+  const ordersProviderCertificationPacketDisabledReason = ordersProviderCertificationExportDisabledReason || (providerCertificationEvidencePacket.selectedFamilies.length === 0
+    ? 'Select at least one order provider family.'
+    : '');
+  const ordersProviderCertificationActionStatus = [
+    ordersProviderCertificationExportDisabledReason ? `Copy provider handoff unavailable: ${ordersProviderCertificationExportDisabledReason}` : 'Copy provider handoff available.',
+    ordersProviderCertificationCommandDisabledReason ? `Copy CI command unavailable: ${ordersProviderCertificationCommandDisabledReason}` : 'Copy CI command available.',
+    ordersProviderCertificationExportDisabledReason ? `Download provider JSON unavailable: ${ordersProviderCertificationExportDisabledReason}` : 'Download provider JSON available.',
+    ordersProviderCertificationCommandDisabledReason ? `Copy env template unavailable: ${ordersProviderCertificationCommandDisabledReason}` : 'Copy env template available.',
+    ordersProviderCertificationCommandDisabledReason ? `Copy guarded command unavailable: ${ordersProviderCertificationCommandDisabledReason}` : 'Copy guarded command available.',
+    ordersProviderCertificationPacketDisabledReason ? `Copy evidence packet unavailable: ${ordersProviderCertificationPacketDisabledReason}` : 'Copy evidence packet available.',
+  ].join(' ');
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -4930,7 +4948,17 @@ function OrdersRoute() {
                     {providerReadinessError}
                   </div>
                 ) : null}
-                <div className="mt-3 rounded-lg border border-border bg-card p-3" data-testid="orders-provider-certification">
+                <div
+                  className="mt-3 rounded-lg border border-border bg-card p-3"
+                  data-testid="orders-provider-certification"
+                  role="group"
+                  aria-label="Orders provider certification actions"
+                  aria-describedby={ordersProviderCertificationActionStatusId}
+                  data-action-status={ordersProviderCertificationActionStatus}
+                >
+                  <span id={ordersProviderCertificationActionStatusId} className="sr-only" data-testid="orders-provider-certification-action-status" aria-live="polite">
+                    {ordersProviderCertificationActionStatus}
+                  </span>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold text-foreground">Live provider certification</div>
@@ -4943,8 +4971,12 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void copyProviderCertificationHandoff()}
-                        disabled={isOrdersAccessBusy || !canExportOrders}
-                        title={!canExportOrders ? exportPermissionTitle : undefined}
+                        disabled={Boolean(ordersProviderCertificationExportDisabledReason)}
+                        title={ordersProviderCertificationExportDisabledReason || undefined}
+                        aria-describedby={ordersProviderCertificationActionStatusId}
+                        data-action-state={ordersProviderCertificationExportDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={ordersProviderCertificationActionStatus}
+                        data-disabled-reason={ordersProviderCertificationExportDisabledReason || undefined}
                         iconStart={<Copy className="size-4" />}
                         data-testid="orders-provider-certification-copy-button"
                       >
@@ -4954,8 +4986,12 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void copyProviderCertificationOperatorGate()}
-                        disabled={isOrdersAccessBusy || !canExportOrders}
-                        title={!canExportOrders ? exportPermissionTitle : undefined}
+                        disabled={Boolean(ordersProviderCertificationCommandDisabledReason)}
+                        title={ordersProviderCertificationCommandDisabledReason || undefined}
+                        aria-describedby={ordersProviderCertificationActionStatusId}
+                        data-action-state={ordersProviderCertificationCommandDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={ordersProviderCertificationActionStatus}
+                        data-disabled-reason={ordersProviderCertificationCommandDisabledReason || undefined}
                         iconStart={<Copy className="size-4" />}
                         data-testid="orders-provider-certification-command-copy-button"
                       >
@@ -4965,8 +5001,12 @@ function OrdersRoute() {
                         size="sm"
                         variant="outline"
                         onClick={downloadProviderCertificationHandoff}
-                        disabled={isOrdersAccessBusy || !canExportOrders}
-                        title={!canExportOrders ? exportPermissionTitle : undefined}
+                        disabled={Boolean(ordersProviderCertificationExportDisabledReason)}
+                        title={ordersProviderCertificationExportDisabledReason || undefined}
+                        aria-describedby={ordersProviderCertificationActionStatusId}
+                        data-action-state={ordersProviderCertificationExportDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={ordersProviderCertificationActionStatus}
+                        data-disabled-reason={ordersProviderCertificationExportDisabledReason || undefined}
                         iconStart={<Download className="size-4" />}
                         data-testid="orders-provider-certification-download-button"
                       >
@@ -5097,8 +5137,12 @@ function OrdersRoute() {
 	                          size="sm"
 	                          variant="outline"
 	                          onClick={() => void copyProviderCertificationEnvTemplate()}
-	                          disabled={isOrdersAccessBusy || !canExportOrders || !providerCertificationHasSelectedSelector}
-	                          title={!canExportOrders ? exportPermissionTitle : !providerCertificationHasSelectedSelector ? 'Select at least one commerce provider selector' : undefined}
+	                          disabled={Boolean(ordersProviderCertificationCommandDisabledReason)}
+	                          title={ordersProviderCertificationCommandDisabledReason || undefined}
+	                          aria-describedby={ordersProviderCertificationActionStatusId}
+	                          data-action-state={ordersProviderCertificationCommandDisabledReason ? 'blocked' : 'ready'}
+	                          data-action-status={ordersProviderCertificationActionStatus}
+	                          data-disabled-reason={ordersProviderCertificationCommandDisabledReason || undefined}
 	                          iconStart={<Copy className="size-4" />}
 	                          data-testid="orders-provider-certification-env-copy-button"
 	                        >
@@ -5108,8 +5152,12 @@ function OrdersRoute() {
 	                          size="sm"
 	                          variant="outline"
 	                          onClick={() => void copyProviderCertificationOperatorGate()}
-	                          disabled={isOrdersAccessBusy || !canExportOrders || !providerCertificationHasSelectedSelector}
-	                          title={!canExportOrders ? exportPermissionTitle : !providerCertificationHasSelectedSelector ? 'Select at least one commerce provider selector' : undefined}
+	                          disabled={Boolean(ordersProviderCertificationCommandDisabledReason)}
+	                          title={ordersProviderCertificationCommandDisabledReason || undefined}
+	                          aria-describedby={ordersProviderCertificationActionStatusId}
+	                          data-action-state={ordersProviderCertificationCommandDisabledReason ? 'blocked' : 'ready'}
+	                          data-action-status={ordersProviderCertificationActionStatus}
+	                          data-disabled-reason={ordersProviderCertificationCommandDisabledReason || undefined}
 	                          iconStart={<Copy className="size-4" />}
 	                          data-testid="orders-provider-certification-command-builder-copy-button"
 	                        >
@@ -5501,8 +5549,12 @@ function OrdersRoute() {
                           size="sm"
                           variant="outline"
                           onClick={() => void copyProviderCertificationEvidencePacket()}
-                          disabled={isOrdersAccessBusy || !canExportOrders || providerCertificationEvidencePacket.selectedFamilies.length === 0}
-                          title={!canExportOrders ? exportPermissionTitle : providerCertificationEvidencePacket.selectedFamilies.length === 0 ? 'Select at least one order provider family' : undefined}
+                          disabled={Boolean(ordersProviderCertificationPacketDisabledReason)}
+                          title={ordersProviderCertificationPacketDisabledReason || undefined}
+                          aria-describedby={ordersProviderCertificationActionStatusId}
+                          data-action-state={ordersProviderCertificationPacketDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={ordersProviderCertificationActionStatus}
+                          data-disabled-reason={ordersProviderCertificationPacketDisabledReason || undefined}
                           iconStart={<Copy className="size-4" />}
                           data-testid="orders-provider-certification-evidence-packet-copy-button"
                         >

@@ -374,9 +374,22 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
   );
   assert(source.includes('data-testid="orders-provider-certification"'), 'Orders page must render the live provider certification handoff');
   assert(
+    source.includes("const ordersProviderCertificationActionStatusId = 'orders-provider-certification-action-status';") &&
+      source.includes('data-testid="orders-provider-certification-action-status"') &&
+      source.includes('aria-label="Orders provider certification actions"') &&
+      source.includes('aria-describedby={ordersProviderCertificationActionStatusId}') &&
+      source.includes('data-action-status={ordersProviderCertificationActionStatus}') &&
+      source.includes('data-action-state={ordersProviderCertificationCommandDisabledReason ?') &&
+      source.includes('data-disabled-reason={ordersProviderCertificationCommandDisabledReason || undefined}') &&
+      source.includes('Copy provider handoff available.') &&
+      source.includes('Copy evidence packet available.'),
+    'Orders provider certification actions must expose shared ready/blocked status metadata',
+  );
+  assert(
     source.includes('data-testid="orders-provider-certification-download-button"') &&
       source.includes('data-testid="orders-provider-certification-copy-button"') &&
       source.includes('data-testid="orders-provider-certification-command-copy-button"') &&
+      source.includes('data-testid="orders-provider-certification-action-status"') &&
       source.includes('data-testid="orders-provider-certification-command-builder"') &&
       source.includes('data-testid="orders-provider-certification-env-copy-button"') &&
       source.includes('data-testid="orders-provider-certification-env-template"') &&
@@ -2483,8 +2496,46 @@ const assertOrdersLayout = async (client) => {
       providerCertificationExport: (() => {
         const root = document.querySelector('[data-testid="orders-provider-certification"]');
         const text = root?.textContent || document.body?.innerText || '';
+        const actionStatus = document.querySelector('[data-testid="orders-provider-certification-action-status"]');
+        const actionStatusText = (actionStatus?.textContent || '').replace(/\s+/g, ' ').trim();
+        const actionStatusId = actionStatus?.id || '';
+        const actionTestIds = [
+          'orders-provider-certification-copy-button',
+          'orders-provider-certification-command-copy-button',
+          'orders-provider-certification-download-button',
+          'orders-provider-certification-env-copy-button',
+          'orders-provider-certification-command-builder-copy-button',
+          'orders-provider-certification-evidence-packet-copy-button',
+        ];
+        const actions = actionTestIds.map((testId) => {
+          const element = document.querySelector('[data-testid="' + testId + '"]');
+
+          return {
+            testId,
+            state: element?.getAttribute('data-action-state') || '',
+            describedBy: element?.getAttribute('aria-describedby') || '',
+            status: element?.getAttribute('data-action-status') || '',
+            disabledReason: element?.getAttribute('data-disabled-reason') || '',
+            disabled: Boolean(element?.disabled || element?.getAttribute('aria-disabled') === 'true'),
+          };
+        });
         const details = {
           wrapper: Boolean(root),
+          wrapperLabel: root?.getAttribute('aria-label') === 'Orders provider certification actions',
+          wrapperDescribedBy: root?.getAttribute('aria-describedby') === actionStatusId,
+          wrapperStatus: root?.getAttribute('data-action-status') === actionStatusText,
+          actionStatus: Boolean(actionStatus),
+          actionStatusId: actionStatusId === 'orders-provider-certification-action-status',
+          actionStatusText: actionStatusText.includes('Copy provider handoff available.') &&
+            actionStatusText.includes('Copy CI command available.') &&
+            actionStatusText.includes('Copy env template available.') &&
+            actionStatusText.includes('Copy guarded command available.') &&
+            actionStatusText.includes('Copy evidence packet available.'),
+          actionStates: actions.length === 6 && actions.every((action) => action.state === 'ready'),
+          actionDescriptions: actions.every((action) => action.describedBy === actionStatusId),
+          actionStatuses: actions.every((action) => action.status === actionStatusText),
+          actionDisabledReasons: actions.every((action) => action.disabledReason === ''),
+          actionEnabled: actions.every((action) => action.disabled === false),
           downloadButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-download-button"]')),
           copyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')),
           commandCopyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-command-copy-button"]')),
