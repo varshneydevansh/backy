@@ -452,6 +452,8 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('Required site selector') &&
       source.includes('Next operator action') &&
       source.includes('Configure order provider credentials') &&
+      source.includes('Attach live order evidence') &&
+      source.includes('Attach certification artifact') &&
       source.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT') &&
       source.includes('artifacts/backy-commerce-provider-certification.json') &&
       source.includes('Secret boundary: no commerce provider credentials, customer payloads, raw order payloads, payment references, addresses, or webhook bodies are copied.') &&
@@ -2513,7 +2515,9 @@ const assertOrdersLayout = async (client) => {
           artifactVerifierRequiredEnv: text.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED'),
           requiredSiteSelector: text.includes('Required site selector'),
           nextOperatorAction: text.includes('Next operator action'),
-          nextOperatorCredentialAction: text.includes('Configure order provider credentials'),
+          nextOperatorCredentialAction: text.includes('Configure order provider credentials') ||
+            text.includes('Attach live order evidence') ||
+            text.includes('Attach certification artifact'),
           commandBuilderText: text.includes('Order certification command builder'),
           envTemplateText: text.includes('Env template') || text.includes('ENV TEMPLATE'),
           envTemplateSchema: text.includes('backy.commerce-provider-certification-env-template.v1'),

@@ -8199,7 +8199,10 @@ const assertProductsLayout = async (client) => {
           providerCertificationText.includes('artifacts/backy-commerce-provider-certification.json') &&
           providerCertificationText.includes('Required site selector') &&
           providerCertificationText.includes('Next operator action') &&
-          providerCertificationText.includes('Configure live provider credentials') &&
+          (
+            providerCertificationText.includes('Configure live provider credentials') ||
+            providerCertificationText.includes('Attach certification artifact')
+          ) &&
           providerCertificationText.includes('Provider certification command builder') &&
           providerCertificationText.includes('Product provider certification evidence') &&
           providerCertificationText.includes('backy.product-provider-certification-evidence.v1') &&

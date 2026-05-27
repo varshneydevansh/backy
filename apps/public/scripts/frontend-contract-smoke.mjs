@@ -81,6 +81,7 @@ const adminCollectionsPage = read('../../../apps/admin/src/routes/collections.ts
 const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-sections.tsx');
 const adminReusableSectionsSmoke = read('../../../apps/admin/scripts/reusable-sections-smoke.mjs');
 const adminPropertyPanel = read('../../../apps/admin/src/components/editor/PropertyPanel.tsx');
+const adminLinkBehaviorProperties = read('../../../apps/admin/src/components/editor/LinkBehaviorProperties.tsx');
 const adminCanvas = read('../../../apps/admin/src/components/editor/Canvas.tsx');
 const adminCanvasEditor = read('../../../apps/admin/src/components/editor/CanvasEditor.tsx');
 const adminLayersPanel = read('../../../apps/admin/src/components/editor/LayersPanel.tsx');
@@ -894,13 +895,13 @@ assert(
     openApiRoute.includes('"responsive.tablet.props.fileSignedUrlEndpoint"') &&
     openApiRoute.includes('"responsive.tablet.tokenRefs.styles.boxShadow"') &&
     openApiRoute.includes('"responsive.tablet.props.fileMediaIds"') &&
-    adminPropertyPanel.includes("| 'downloadFile'") &&
+    adminLinkBehaviorProperties.includes("field: 'downloadFile'") &&
     adminPropertyPanel.includes('fileDownloadIdentityProps') &&
     adminPropertyPanel.includes('fileIds: [media.id]') &&
     adminPropertyPanel.includes('fileMediaIds: [media.id]') &&
     adminPropertyPanel.includes('downloadMediaId: media.id') &&
     adminPropertyPanel.includes('downloadMediaIds: [media.id]') &&
-    adminPropertyPanel.includes('...cleanMediaStrings(props.fileIds)') &&
+    adminLinkBehaviorProperties.includes('...cleanMediaStrings(props.fileIds)') &&
     adminCanvasEditor.includes("'fileMediaIds'") &&
     adminCanvasEditor.includes("'downloadMediaIds'") &&
     adminCanvasEditor.includes("'fallbackImageMediaIds'") &&
@@ -908,7 +909,7 @@ assert(
     adminCanvasEditor.includes('parseEditorBoolean(value, true)') &&
     adminCanvasEditor.includes('selectedActiveElements.every(isLayerHidden)') &&
     adminCanvasEditor.includes('selectedActiveElements.every(isLayerLocked)') &&
-    adminPropertyPanel.includes('data-testid={`editor-${prefix}-download-media`}') &&
+    adminLinkBehaviorProperties.includes('data-testid={`editor-${prefix}-download-media`}') &&
     adminCanvas.includes('fileDownloadDataAttributes(p)') &&
     adminCanvas.includes('const isCanvasElementHidden =') &&
     adminCanvas.includes('const isCanvasElementLocked =') &&

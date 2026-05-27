@@ -20,6 +20,7 @@ import {
   LockKeyhole,
   Mail,
   Minus,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Search,
@@ -1591,97 +1592,135 @@ function UsersListView() {
               Control workspace membership, role authority, invite states, access reviews, private user APIs, and exportable user records.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isUsersBusy}
-              onClick={() => void copyUserApiText(userHandoffText, 'Users handoff manifest')}
-              iconStart={<Copy className="size-4" />}
-            >
-              Copy manifest
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isUsersBusy}
-              onClick={downloadUserHandoff}
-              iconStart={<Download className="size-4" />}
-            >
-              Download JSON
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={data.length === 0 || isUsersBusy || !canViewUsers}
-              title={!canViewUsers ? viewPermissionTitle : undefined}
-              onClick={handleExportUsers}
-              iconStart={<Download className="size-4" />}
-            >
-              Export CSV
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={userInviteActionDisabled}
-              title={!canCreateUsers ? createPermissionTitle : undefined}
-              onClick={downloadUserImportTemplate}
-              iconStart={<Download className="size-4" />}
-            >
-              CSV template
-            </Button>
-            <select
-              value={importMode}
-              disabled={userImportModeDisabled}
-              title={!canCreateUsers ? createPermissionTitle : undefined}
-              onChange={(event) => {
-                setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create');
-                setUserImportInlineError(null);
-              }}
-              className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="User import duplicate handling"
-              aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
-            >
-              <option value="create">Skip duplicates</option>
-              <option value="upsert">Update duplicates</option>
-            </select>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={userImportActionDisabled}
-              title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
-              onClick={() => openImportFile(true)}
-              iconStart={<ClipboardList className="size-4" />}
-              aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
-              data-testid="users-import-preview-button"
-            >
-              {isPreviewingImport ? 'Previewing...' : 'Preview CSV'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={userImportActionDisabled}
-              title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
-              onClick={() => openImportFile(false)}
-              iconStart={<Upload className="size-4" />}
-              aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
-              data-testid="users-import-button"
-            >
-              {isImportingUsers ? 'Importing...' : 'Import CSV'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void loadUsers()}
-              disabled={isUsersBusy || !canViewUsers}
-              title={!canViewUsers ? viewPermissionTitle : undefined}
-              iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
-            >
-              Refresh users
-            </Button>
-            <Button onClick={openInviteUser} disabled={userInviteActionDisabled} title={!canCreateUsers ? createPermissionTitle : undefined} iconStart={<Send className="size-4" />}>
-              Invite user
-            </Button>
+          <div className="flex flex-col gap-2 xl:items-end">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end" data-testid="users-primary-actions">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={openInviteUser}
+                disabled={userInviteActionDisabled}
+                title={!canCreateUsers ? createPermissionTitle : undefined}
+                iconStart={<Send className="size-4" />}
+                data-testid="users-command-invite"
+              >
+                Invite user
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={userImportActionDisabled}
+                title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
+                onClick={() => openImportFile(false)}
+                iconStart={<Upload className="size-4" />}
+                aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
+                data-testid="users-import-button"
+              >
+                {isImportingUsers ? 'Importing...' : 'Import CSV'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={userImportActionDisabled}
+                title={importMode === 'upsert' && !canManageUsers ? managePermissionTitle : !canCreateUsers ? createPermissionTitle : undefined}
+                onClick={() => openImportFile(true)}
+                iconStart={<ClipboardList className="size-4" />}
+                aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
+                data-testid="users-import-preview-button"
+              >
+                {isPreviewingImport ? 'Previewing...' : 'Preview CSV'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void loadUsers()}
+                disabled={isUsersBusy || !canViewUsers}
+                title={!canViewUsers ? viewPermissionTitle : undefined}
+                iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+                data-testid="users-command-refresh"
+              >
+                Refresh users
+              </Button>
+            </div>
+            <details className="group relative self-start xl:self-end" data-testid="users-secondary-actions" data-default-collapsed="true">
+              <summary
+                className="inline-flex min-h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring group-open:bg-accent [&::-webkit-details-marker]:hidden"
+                data-testid="users-more-actions"
+              >
+                <MoreHorizontal className="size-4" />
+                More actions
+              </summary>
+              <div className="mt-2 flex flex-col gap-2 rounded-lg border border-border bg-popover p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:w-72" data-testid="users-secondary-action-menu">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={data.length === 0 || isUsersBusy || !canViewUsers}
+                  title={!canViewUsers ? viewPermissionTitle : undefined}
+                  onClick={handleExportUsers}
+                  className="w-full justify-start"
+                  iconStart={<Download className="size-4" />}
+                  data-testid="users-command-export-csv"
+                >
+                  Export CSV
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={userInviteActionDisabled}
+                  title={!canCreateUsers ? createPermissionTitle : undefined}
+                  onClick={downloadUserImportTemplate}
+                  className="w-full justify-start"
+                  iconStart={<Download className="size-4" />}
+                  data-testid="users-command-csv-template"
+                >
+                  CSV template
+                </Button>
+                <label className="flex flex-col gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  Import duplicate handling
+                  <select
+                    value={importMode}
+                    disabled={userImportModeDisabled}
+                    title={!canCreateUsers ? createPermissionTitle : undefined}
+                    onChange={(event) => {
+                      setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create');
+                      setUserImportInlineError(null);
+                    }}
+                    className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="User import duplicate handling"
+                    aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
+                    data-testid="users-command-import-mode"
+                  >
+                    <option value="create">Skip duplicates</option>
+                    <option value="upsert">Update duplicates</option>
+                  </select>
+                </label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isUsersBusy}
+                  onClick={() => void copyUserApiText(userHandoffText, 'Users handoff manifest')}
+                  className="w-full justify-start"
+                  iconStart={<Copy className="size-4" />}
+                  data-testid="users-command-copy-manifest"
+                >
+                  Copy manifest
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={isUsersBusy}
+                  onClick={downloadUserHandoff}
+                  className="w-full justify-start"
+                  iconStart={<Download className="size-4" />}
+                  data-testid="users-command-download-json"
+                >
+                  Download JSON
+                </Button>
+              </div>
+            </details>
           </div>
         </div>
         {userImportInlineError && (

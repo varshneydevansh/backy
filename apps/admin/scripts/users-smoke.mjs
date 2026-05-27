@@ -93,6 +93,31 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       source.includes('Jump links for access health, API contracts, directory controls, people, and role permissions.'),
     'Users command center must keep the low-frequency control map and API handoff packet behind default-collapsed progressive disclosure',
   );
+  {
+    const commandCenterBlockStart = source.indexOf('data-testid="users-command-center"');
+    const commandCenterBlockEnd = source.indexOf('<div className="mt-5 grid gap-3', commandCenterBlockStart);
+    const commandCenterBlock = commandCenterBlockStart >= 0
+      ? source.slice(commandCenterBlockStart, commandCenterBlockEnd >= 0 ? commandCenterBlockEnd : commandCenterBlockStart + 4200)
+      : '';
+    const primaryActionsIndex = commandCenterBlock.indexOf('data-testid="users-primary-actions"');
+    const inviteIndex = commandCenterBlock.indexOf('data-testid="users-command-invite"');
+    const importIndex = commandCenterBlock.indexOf('data-testid="users-import-button"');
+    const secondaryActionsIndex = commandCenterBlock.indexOf('data-testid="users-secondary-actions"');
+    const moreActionsIndex = commandCenterBlock.indexOf('data-testid="users-more-actions"');
+    const copyIndex = commandCenterBlock.indexOf('data-testid="users-command-copy-manifest"');
+    const downloadIndex = commandCenterBlock.indexOf('data-testid="users-command-download-json"');
+    assert(
+      primaryActionsIndex >= 0 &&
+        inviteIndex > primaryActionsIndex &&
+        importIndex > inviteIndex &&
+        secondaryActionsIndex > importIndex &&
+        commandCenterBlock.includes('data-default-collapsed="true"') &&
+        moreActionsIndex > secondaryActionsIndex &&
+        copyIndex > moreActionsIndex &&
+        downloadIndex > moreActionsIndex,
+      'Users command center must lead with invite/import actions and move manifest/JSON handoff behind More actions.',
+    );
+  }
 	  assert(
 	    source.includes("const canViewUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', USER_PERMISSION_ROLE_DEFAULTS);") &&
       source.includes("const canCreateUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.create', USER_PERMISSION_ROLE_DEFAULTS);") &&
@@ -3012,6 +3037,15 @@ const assertLayout = async (client, expectedName) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="users-command-center"]')),
+    firstPrimaryActionText: document.querySelector('[data-testid="users-primary-actions"] button')?.textContent?.trim() || '',
+    secondaryActionsCollapsed: document.querySelector('[data-testid="users-secondary-actions"]') instanceof HTMLDetailsElement &&
+      document.querySelector('[data-testid="users-secondary-actions"]')?.open === false &&
+      document.querySelector('[data-testid="users-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+    hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="users-more-actions"]')),
+    hasHandoffActionsNested: Boolean(
+      document.querySelector('[data-testid="users-secondary-action-menu"] [data-testid="users-command-copy-manifest"]') &&
+      document.querySelector('[data-testid="users-secondary-action-menu"] [data-testid="users-command-download-json"]'),
+    ),
     controlMapCollapsed: document.querySelector('[data-testid="users-control-map-details"]') instanceof HTMLDetailsElement &&
       document.querySelector('[data-testid="users-control-map-details"]')?.open === false &&
       document.querySelector('[data-testid="users-control-map-details"]')?.getAttribute('data-default-collapsed') === 'true',
@@ -3036,7 +3070,23 @@ const assertLayout = async (client, expectedName) => {
     hasActivity: document.body?.innerText?.includes('Access activity') || false,
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Users page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandCenter && layout.controlMapCollapsed && layout.apiDetailsCollapsed && layout.hasControlMap && layout.hasDirectory && layout.hasApi && layout.hasMembership && layout.hasMemberAuthBoundary && layout.hasMemberAccessHandoff && layout.hasActivity, `Users page missing expected regions: ${JSON.stringify(layout)}`);
+  assert(
+    layout.hasCommandCenter &&
+      layout.firstPrimaryActionText === 'Invite user' &&
+      layout.secondaryActionsCollapsed &&
+      layout.hasMoreActionsTrigger &&
+      layout.hasHandoffActionsNested &&
+      layout.controlMapCollapsed &&
+      layout.apiDetailsCollapsed &&
+      layout.hasControlMap &&
+      layout.hasDirectory &&
+      layout.hasApi &&
+      layout.hasMembership &&
+      layout.hasMemberAuthBoundary &&
+      layout.hasMemberAccessHandoff &&
+      layout.hasActivity,
+    `Users page missing expected regions or action hierarchy: ${JSON.stringify(layout)}`,
+  );
   return layout;
 };
 
