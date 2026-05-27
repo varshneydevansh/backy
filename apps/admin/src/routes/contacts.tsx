@@ -13,6 +13,7 @@ import {
   Filter,
   GitMerge,
   Mail,
+  MoreHorizontal,
   Phone,
   RefreshCw,
   Save,
@@ -1816,6 +1817,13 @@ function ContactsRoute() {
     URL.revokeObjectURL(url);
   };
 
+  const focusContactCreate = () => {
+    document.getElementById('contacts-create')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => {
+      document.querySelector<HTMLInputElement>('[data-testid="contacts-draft-name"]')?.focus({ preventScroll: true });
+    }, 160);
+  };
+
   const downloadContactImportTemplate = () => {
     if (isContactsBusy) return;
     if (!canManageForms) {
@@ -2246,60 +2254,111 @@ function ContactsRoute() {
               Control lead capture, source forms, CRM lifecycle states, internal notes, CSV exports, and private contact APIs for custom frontends.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
-              disabled={contactViewDisabled}
-              title={!canViewForms ? viewPermissionTitle : undefined}
-              iconStart={<Copy className="size-4" />}
-            >
-              Copy manifest
-            </Button>
-            <Button variant="outline" onClick={downloadContactHandoff} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
-              Download JSON
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleExportContacts}
-              disabled={filteredContacts.length === 0 || contactExportDisabled}
-              title={!canExportForms ? exportPermissionTitle : undefined}
-              iconStart={<Download className="size-4" />}
-            >
-              Export CSV
-            </Button>
-            <Button
-              variant="outline"
-              onClick={downloadContactImportTemplate}
-              disabled={contactMutationDisabled}
-              title={contactsCreateTemplateDisabledReason || undefined}
-              aria-describedby={contactsCreateActionStatusId}
-              iconStart={<FileText className="size-4" />}
-              data-action-state={contactsCreateTemplateDisabledReason ? 'blocked' : 'ready'}
-              data-action-status={contactsImportTemplateActionStatus}
-              data-disabled-reason={contactsCreateTemplateDisabledReason || undefined}
-              data-target-site-id={activeSiteId}
-            >
-              CSV template
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => contactImportInputRef.current?.click()}
-              disabled={!apiForm || contactMutationDisabled}
-              title={contactsCreateMutationDisabledReason || undefined}
-              aria-describedby={contactsCreateActionStatusId}
-              iconStart={<Upload className="size-4" />}
-              data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
-              data-action-status={contactsImportCsvActionStatus}
-              data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
-              data-target-site-id={activeSiteId}
-              data-testid="contacts-import-csv"
-            >
-              Import CSV
-            </Button>
-            <Button onClick={() => void loadContacts()} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
-              Refresh contacts
-            </Button>
+          <div className="flex flex-col gap-2 xl:items-end">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end" data-testid="contacts-primary-actions">
+              <Button
+                type="button"
+                onClick={focusContactCreate}
+                disabled={!apiForm || contactMutationDisabled}
+                title={contactsCreateMutationDisabledReason || undefined}
+                aria-describedby={contactsCreateActionStatusId}
+                iconStart={<UserPlus className="size-4" />}
+                data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={contactsCreateActionStatus}
+                data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
+                data-testid="contacts-command-add-contact"
+              >
+                Add contact
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => contactImportInputRef.current?.click()}
+                disabled={!apiForm || contactMutationDisabled}
+                title={contactsCreateMutationDisabledReason || undefined}
+                aria-describedby={contactsCreateActionStatusId}
+                iconStart={<Upload className="size-4" />}
+                data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={contactsImportCsvActionStatus}
+                data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
+                data-testid="contacts-import-csv"
+              >
+                Import CSV
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleExportContacts}
+                disabled={filteredContacts.length === 0 || contactExportDisabled}
+                title={!canExportForms ? exportPermissionTitle : undefined}
+                iconStart={<Download className="size-4" />}
+                data-testid="contacts-command-export-csv"
+              >
+                Export CSV
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void loadContacts()}
+                disabled={contactViewDisabled}
+                title={!canViewForms ? viewPermissionTitle : undefined}
+                iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+                data-testid="contacts-command-refresh"
+              >
+                Refresh contacts
+              </Button>
+            </div>
+            <details className="self-start xl:self-end" data-testid="contacts-secondary-actions" data-default-collapsed="true">
+              <summary
+                className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
+                data-testid="contacts-more-actions"
+              >
+                <MoreHorizontal className="size-4" aria-hidden="true" />
+                More actions
+              </summary>
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2 shadow-sm" data-testid="contacts-secondary-action-menu">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={downloadContactImportTemplate}
+                  disabled={contactMutationDisabled}
+                  title={contactsCreateTemplateDisabledReason || undefined}
+                  aria-describedby={contactsCreateActionStatusId}
+                  iconStart={<FileText className="size-4" />}
+                  data-action-state={contactsCreateTemplateDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsImportTemplateActionStatus}
+                  data-disabled-reason={contactsCreateTemplateDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid="contacts-command-csv-template"
+                >
+                  CSV template
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
+                  disabled={contactViewDisabled}
+                  title={!canViewForms ? viewPermissionTitle : undefined}
+                  iconStart={<Copy className="size-4" />}
+                  data-testid="contacts-command-copy-manifest"
+                >
+                  Copy manifest
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={downloadContactHandoff}
+                  disabled={contactViewDisabled}
+                  title={!canViewForms ? viewPermissionTitle : undefined}
+                  iconStart={<Download className="size-4" />}
+                  data-testid="contacts-command-download-json"
+                >
+                  Download JSON
+                </Button>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -2885,7 +2944,7 @@ function ContactsRoute() {
             </div>
           )}
 
-          <div className="mb-4 rounded-lg border border-border bg-card p-4" data-testid="contacts-create-contact">
+          <div id="contacts-create" className="mb-4 scroll-mt-24 rounded-lg border border-border bg-card p-4" data-testid="contacts-create-contact">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold">
@@ -2940,6 +2999,7 @@ function ContactsRoute() {
                   onChange={(event) => setContactDraft((current) => ({ ...current, name: event.target.value }))}
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   placeholder="Lead name"
+                  data-testid="contacts-draft-name"
                 />
               </label>
               <label className="text-xs font-medium text-muted-foreground">

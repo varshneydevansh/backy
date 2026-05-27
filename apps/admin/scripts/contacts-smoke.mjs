@@ -103,6 +103,35 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
       source.includes('Promotion rules, Users handoff, registration pages, and custom frontend member-capture contracts.'),
     'Contacts command center must keep low-frequency maps, workflows, and member-capture contracts behind collapsed disclosures.',
   );
+  {
+    const commandCenterBlockStart = source.indexOf('data-testid="contacts-command-center"');
+    const commandCenterBlockEnd = source.indexOf('<div className="mt-5 grid gap-3', commandCenterBlockStart);
+    const commandCenterBlock = commandCenterBlockStart >= 0
+      ? source.slice(commandCenterBlockStart, commandCenterBlockEnd >= 0 ? commandCenterBlockEnd : commandCenterBlockStart + 5200)
+      : '';
+    const primaryActionsIndex = commandCenterBlock.indexOf('data-testid="contacts-primary-actions"');
+    const addContactIndex = commandCenterBlock.indexOf('data-testid="contacts-command-add-contact"');
+    const importIndex = commandCenterBlock.indexOf('data-testid="contacts-import-csv"');
+    const exportIndex = commandCenterBlock.indexOf('data-testid="contacts-command-export-csv"');
+    const secondaryActionsIndex = commandCenterBlock.indexOf('data-testid="contacts-secondary-actions"');
+    const moreActionsIndex = commandCenterBlock.indexOf('data-testid="contacts-more-actions"');
+    const templateIndex = commandCenterBlock.indexOf('data-testid="contacts-command-csv-template"');
+    const copyIndex = commandCenterBlock.indexOf('data-testid="contacts-command-copy-manifest"');
+    const downloadIndex = commandCenterBlock.indexOf('data-testid="contacts-command-download-json"');
+    assert(
+      primaryActionsIndex >= 0 &&
+        addContactIndex > primaryActionsIndex &&
+        importIndex > addContactIndex &&
+        exportIndex > importIndex &&
+        secondaryActionsIndex > exportIndex &&
+        commandCenterBlock.includes('data-default-collapsed="true"') &&
+        moreActionsIndex > secondaryActionsIndex &&
+        templateIndex > moreActionsIndex &&
+        copyIndex > moreActionsIndex &&
+        downloadIndex > copyIndex,
+      'Contacts command center must lead with add/import/export actions and move CSV template plus manifest/JSON handoff behind More actions.',
+    );
+  }
   assert(
     source.includes("const contactsCreateActionStatusId = 'contacts-create-action-status';") &&
       source.includes('contactsCreateMutationDisabledReason') &&
@@ -1769,6 +1798,16 @@ const assertLayout = async (client) => {
 	      width: window.innerWidth,
 	      scrollWidth: document.documentElement.scrollWidth,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="contacts-command-center"]')),
+      firstPrimaryActionText: document.querySelector('[data-testid="contacts-primary-actions"] button')?.textContent?.trim() || '',
+      secondaryActionsCollapsed: document.querySelector('[data-testid="contacts-secondary-actions"]') instanceof HTMLDetailsElement &&
+        document.querySelector('[data-testid="contacts-secondary-actions"]')?.open === false &&
+        document.querySelector('[data-testid="contacts-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+      hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="contacts-more-actions"]')),
+      hasCommandHandoffActionsNested: Boolean(
+        document.querySelector('[data-testid="contacts-secondary-action-menu"] [data-testid="contacts-command-csv-template"]') &&
+        document.querySelector('[data-testid="contacts-secondary-action-menu"] [data-testid="contacts-command-copy-manifest"]') &&
+        document.querySelector('[data-testid="contacts-secondary-action-menu"] [data-testid="contacts-command-download-json"]'),
+      ),
       controlMapCollapsed: controlMapDetails instanceof HTMLDetailsElement &&
         controlMapDetails.open === false &&
         controlMapDetails.getAttribute('data-default-collapsed') === 'true',
@@ -1883,6 +1922,10 @@ const assertLayout = async (client) => {
   assert(layout.scrollWidth <= layout.width + 8, `Contacts page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.hasCommandCenter
+    && layout.firstPrimaryActionText === 'Add contact'
+    && layout.secondaryActionsCollapsed
+    && layout.hasMoreActionsTrigger
+    && layout.hasCommandHandoffActionsNested
     && layout.controlMapCollapsed
     && layout.connectedWorkflowsCollapsed
     && layout.promotionContractCollapsed
