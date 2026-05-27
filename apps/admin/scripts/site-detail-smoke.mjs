@@ -35,6 +35,23 @@ const assertSiteDetailSourceContract = () => {
       !source.includes('designTemplate: template.id'),
     'Site detail template registry page/blog actions must deep-link with frontendDesignTemplateId, matching the template registry clone field',
   );
+  assert(
+    source.includes('const siteWorkspaceCommandActionStatusId = "site-workspace-command-action-status";') &&
+      source.includes('const siteWorkspaceCommandActionStatus = [') &&
+      source.includes('data-testid="site-workspace-command-actions"') &&
+      source.includes('data-testid="site-workspace-command-action-status"') &&
+      source.includes('data-testid="site-workspace-primary-actions"') &&
+      source.includes('data-testid="site-workspace-open-public-site"') &&
+      source.includes('data-testid="site-workspace-site-settings"') &&
+      source.includes('data-testid="site-workspace-secondary-actions"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('data-testid="site-workspace-more-actions"') &&
+      source.includes('data-testid="site-workspace-secondary-action-menu"') &&
+      source.includes('data-testid="site-workspace-copy-api-url"') &&
+      source.includes('data-testid="site-workspace-copy-handoff"') &&
+      source.includes('data-testid="site-workspace-download-json"'),
+    'Site detail command center must lead with public/settings actions and keep API/handoff exports behind collapsed More actions',
+  );
   assert(source.includes('title="No site audit events yet"'), 'Site detail audit panel must keep the empty audit title visible');
   assert(source.includes('Save navigation, redirects, SEO, frontend design, or site settings to create request-id activity for this site.'), 'Site detail audit empty state must explain which actions populate activity');
   assert(
@@ -139,7 +156,7 @@ const assertSiteDetailSourceContract = () => {
     source.includes('hydrated: Boolean(response)') &&
       source.includes('dirty: false') &&
       source.includes('const frontendDesignLoadRequestRef = useRef(0);') &&
-      source.includes('if (!currentAdmin || isPermissionMatrixPending)') &&
+      source.includes('if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError))') &&
       source.includes('!frontendDesignState.hydrated') &&
       source.includes('!frontendDesignState.errorMessage') &&
       source.includes('preserveDirtyDraft') &&
@@ -1279,6 +1296,17 @@ const assertSiteDetailLayout = async (client, siteName) => {
       path: window.location.pathname,
       hasSite: body.includes(${JSON.stringify(siteName)}),
       hasCommandCenter: Boolean(document.querySelector('[data-testid="site-workspace-command-center"]')) && body.includes('Site command center'),
+      hasCommandActions: Boolean(document.querySelector('[data-testid="site-workspace-command-actions"]')),
+      hasCommandStatus: Boolean(document.querySelector('[data-testid="site-workspace-command-action-status"]')),
+      primaryActionLabels: Array.from(document.querySelectorAll('[data-testid="site-workspace-primary-actions"] a')).map((link) => (link.textContent || '').replace(/\\s+/g, ' ').trim()),
+      openPublicState: document.querySelector('[data-testid="site-workspace-open-public-site"]')?.getAttribute('data-action-state') || '',
+      siteSettingsState: document.querySelector('[data-testid="site-workspace-site-settings"]')?.getAttribute('data-action-state') || '',
+      hasSecondaryActions: Boolean(document.querySelector('[data-testid="site-workspace-secondary-actions"]')),
+      secondaryDefaultCollapsed: document.querySelector('[data-testid="site-workspace-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+      secondaryOpen: document.querySelector('[data-testid="site-workspace-secondary-actions"]')?.hasAttribute('open') || false,
+      hasMoreActions: Boolean(document.querySelector('[data-testid="site-workspace-more-actions"]')),
+      secondaryActionLabels: Array.from(document.querySelectorAll('[data-testid="site-workspace-secondary-action-menu"] button')).map((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim()),
+      primaryHasHandoffActions: Boolean(document.querySelector('[data-testid="site-workspace-primary-actions"] [data-testid="site-workspace-copy-api-url"], [data-testid="site-workspace-primary-actions"] [data-testid="site-workspace-copy-handoff"], [data-testid="site-workspace-primary-actions"] [data-testid="site-workspace-download-json"]')),
       hasReadiness: Boolean(document.querySelector('[data-testid="site-readiness-panel"]')) && body.includes('Publish readiness'),
       hasDomainVerification: Boolean(document.querySelector('[data-testid="site-domain-verification-panel"]')) &&
         body.includes('Domain verification') &&
@@ -1315,6 +1343,25 @@ const assertSiteDetailLayout = async (client, siteName) => {
 
   assert(layout, 'Site detail page layout could not be evaluated');
   assert(layout.scrollWidth <= layout.width + 8, `Site detail page has horizontal overflow: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandActions && layout.hasCommandStatus, `Site detail command center should expose a named action-status contract: ${JSON.stringify(layout)}`);
+  assert(
+    layout.primaryActionLabels[0] === 'Open public site' &&
+      layout.primaryActionLabels[1] === 'Site settings' &&
+      ['ready', 'blocked'].includes(layout.openPublicState) &&
+      ['ready', 'blocked'].includes(layout.siteSettingsState),
+    `Site detail primary actions should prioritize public/site settings with action metadata: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.hasSecondaryActions &&
+      layout.secondaryDefaultCollapsed &&
+      !layout.secondaryOpen &&
+      layout.hasMoreActions &&
+      layout.secondaryActionLabels[0] === 'Copy API URL' &&
+      layout.secondaryActionLabels.includes('Copy handoff') &&
+      layout.secondaryActionLabels.includes('Download JSON') &&
+      !layout.primaryHasHandoffActions,
+    `Site detail API/handoff exports should stay nested behind collapsed More actions: ${JSON.stringify(layout)}`,
+  );
   assert(
     layout.path.startsWith('/sites/') &&
       layout.hasSite &&

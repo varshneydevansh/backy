@@ -27,6 +27,7 @@ import {
   Link2,
   LayoutTemplate,
   Menu,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Save,
@@ -2498,7 +2499,7 @@ function EditSitePage() {
   const loadNavigationEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
-      if (!currentAdmin || isPermissionMatrixPending) {
+      if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError)) {
         return;
       }
       setNavigationState((prev) => ({
@@ -2704,7 +2705,7 @@ function EditSitePage() {
   const loadRedirectEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
-      if (!currentAdmin || isPermissionMatrixPending) {
+      if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError)) {
         return;
       }
       setRedirectState((prev) => ({
@@ -2919,7 +2920,7 @@ function EditSitePage() {
   const loadSeoEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
-      if (!currentAdmin || isPermissionMatrixPending) {
+      if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError)) {
         return;
       }
       setSeoState((prev) => ({
@@ -3010,7 +3011,7 @@ function EditSitePage() {
   const loadFrontendDesignEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
-      if (!currentAdmin || isPermissionMatrixPending) {
+      if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError)) {
         return;
       }
       setFrontendDesignState((prev) => ({
@@ -3281,7 +3282,7 @@ function EditSitePage() {
   const loadWebhookEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
-      if (!currentAdmin || isPermissionMatrixPending) {
+      if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError)) {
         return;
       }
       setWebhookState((prev) => ({
@@ -5419,6 +5420,27 @@ function EditSitePage() {
   const adminSiteUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(siteApiId || siteId)}`;
   const publicApiBase = buildApiUrl("/api");
   const publicSiteApiUrl = `${publicApiBase}/sites/${encodeURIComponent(siteApiId || siteId)}`;
+  const siteWorkspaceCommandActionStatusId = "site-workspace-command-action-status";
+  const siteWorkspaceCommandDisabledReason = isSiteSettingsBusy
+    ? "Site workspace is loading."
+    : "";
+  const siteWorkspaceCommandActionStatus = [
+    siteWorkspaceCommandDisabledReason
+      ? `Open public site unavailable: ${siteWorkspaceCommandDisabledReason}`
+      : `Open public site available at ${publicSiteUrl}.`,
+    siteWorkspaceCommandDisabledReason
+      ? `Site settings unavailable: ${siteWorkspaceCommandDisabledReason}`
+      : "Site settings available.",
+    siteWorkspaceCommandDisabledReason
+      ? `Copy API URL unavailable: ${siteWorkspaceCommandDisabledReason}`
+      : "Copy API URL available.",
+    siteWorkspaceCommandDisabledReason
+      ? `Copy handoff unavailable: ${siteWorkspaceCommandDisabledReason}`
+      : "Copy handoff available.",
+    siteWorkspaceCommandDisabledReason
+      ? `Download JSON unavailable: ${siteWorkspaceCommandDisabledReason}`
+      : "Download JSON available.",
+  ].join(" ");
   const domainActionDisabled =
     isSiteSettingsBusy || !canConfigureSite || !hasCustomDomain;
   const domainActionTitle = !hasCustomDomain
@@ -5956,64 +5978,135 @@ function EditSitePage() {
                 frontend contracts.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  void copySiteHandoffText(
-                    siteWorkspaceHandoffText,
-                    "Site workspace handoff manifest",
-                  )
-                }
-                disabled={isSiteSettingsBusy}
-                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            <div
+              className="flex flex-wrap items-center justify-start gap-2 xl:justify-end"
+              role="group"
+              aria-label="Site workspace command actions"
+              aria-describedby={siteWorkspaceCommandActionStatusId}
+              data-testid="site-workspace-command-actions"
+              data-action-status={siteWorkspaceCommandActionStatus}
+            >
+              <span
+                id={siteWorkspaceCommandActionStatusId}
+                className="sr-only"
+                data-testid="site-workspace-command-action-status"
+                aria-live="polite"
               >
-                <Copy className="h-4 w-4" />
-                Copy handoff
-              </button>
-              <button
-                type="button"
-                onClick={downloadSiteHandoff}
-                disabled={isSiteSettingsBusy}
-                className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                {siteWorkspaceCommandActionStatus}
+              </span>
+              <div className="flex flex-wrap items-center gap-2" data-testid="site-workspace-primary-actions">
+                <a
+                  href={publicSiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-disabled={isSiteSettingsBusy}
+                  aria-describedby={siteWorkspaceCommandActionStatusId}
+                  tabIndex={isSiteSettingsBusy ? -1 : undefined}
+                  data-testid="site-workspace-open-public-site"
+                  data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
+                  data-action-status={siteWorkspaceCommandActionStatus}
+                  data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
+                  onClick={(event) => {
+                    if (isSiteSettingsBusy) {
+                      event.preventDefault();
+                    }
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90",
+                    isSiteSettingsBusy && "pointer-events-none opacity-60",
+                  )}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open public site
+                </a>
+                <a
+                  href="#site-settings"
+                  aria-disabled={isSiteSettingsBusy}
+                  aria-describedby={siteWorkspaceCommandActionStatusId}
+                  tabIndex={isSiteSettingsBusy ? -1 : undefined}
+                  data-testid="site-workspace-site-settings"
+                  data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
+                  data-action-status={siteWorkspaceCommandActionStatus}
+                  data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
+                  onClick={(event) => {
+                    if (isSiteSettingsBusy) {
+                      event.preventDefault();
+                    }
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent",
+                    isSiteSettingsBusy && "pointer-events-none opacity-60",
+                  )}
+                >
+                  <Save className="h-4 w-4" />
+                  Site settings
+                </a>
+              </div>
+              <details
+                className="group relative"
+                data-testid="site-workspace-secondary-actions"
+                data-default-collapsed="true"
               >
-                <Download className="h-4 w-4" />
-                Download JSON
-              </button>
-              <a
-                href="#site-settings"
-                aria-disabled={isSiteSettingsBusy}
-                onClick={(event) => {
-                  if (isSiteSettingsBusy) {
-                    event.preventDefault();
-                  }
-                }}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent",
-                  isSiteSettingsBusy && "pointer-events-none opacity-60",
-                )}
-              >
-                <Save className="h-4 w-4" />
-                Site settings
-              </a>
-              <a
-                href={publicSiteUrl}
-                target="_blank"
-                rel="noreferrer"
-                aria-disabled={isSiteSettingsBusy}
-                onClick={(event) => {
-                  if (isSiteSettingsBusy) {
-                    event.preventDefault();
-                  }
-                }}
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90",
-                  isSiteSettingsBusy && "pointer-events-none opacity-60",
-                )}
-              >
-                <ExternalLink className="h-4 w-4" />
-                Open public site
-              </a>
+                <summary
+                  className="inline-flex min-h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+                  data-testid="site-workspace-more-actions"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                  More actions
+                </summary>
+                <div
+                  className="absolute right-0 z-20 mt-2 grid min-w-56 gap-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
+                  data-testid="site-workspace-secondary-action-menu"
+                >
+                  <button
+                    type="button"
+                    onClick={() => void copySiteHandoffText(adminSiteUrl, "Site admin API URL")}
+                    disabled={isSiteSettingsBusy}
+                    aria-describedby={siteWorkspaceCommandActionStatusId}
+                    data-testid="site-workspace-copy-api-url"
+                    data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
+                    data-action-status={siteWorkspaceCommandActionStatus}
+                    data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
+                    className="inline-flex items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy API URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void copySiteHandoffText(
+                        siteWorkspaceHandoffText,
+                        "Site workspace handoff manifest",
+                      )
+                    }
+                    disabled={isSiteSettingsBusy}
+                    aria-describedby={siteWorkspaceCommandActionStatusId}
+                    data-testid="site-workspace-copy-handoff"
+                    data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
+                    data-action-status={siteWorkspaceCommandActionStatus}
+                    data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
+                    className="inline-flex items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy handoff
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadSiteHandoff}
+                    disabled={isSiteSettingsBusy}
+                    aria-describedby={siteWorkspaceCommandActionStatusId}
+                    data-testid="site-workspace-download-json"
+                    data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
+                    data-action-status={siteWorkspaceCommandActionStatus}
+                    data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
+                    className="inline-flex items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download JSON
+                  </button>
+                </div>
+              </details>
             </div>
           </div>
 
