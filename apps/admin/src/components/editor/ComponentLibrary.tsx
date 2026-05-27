@@ -84,6 +84,13 @@ const COMPONENT_LIBRARY_CATEGORIES = [
   { id: 'saved', name: 'Saved', color: 'bg-sky-500' },
   { id: 'advanced', name: 'Advanced', color: 'bg-red-500' },
 ];
+type ComponentLibraryCategory = (typeof COMPONENT_LIBRARY_CATEGORIES)[number];
+const PRIMARY_COMPONENT_CATEGORY_IDS = new Set<string>([
+  RECENT_CATEGORY_ID,
+  FAVORITES_CATEGORY_ID,
+  'saved',
+]);
+const COMPONENT_CATEGORY_BUTTON_CLASS = 'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors';
 
 const getLibraryCategory = (item: ComponentLibraryItem): string => item.category || 'basic';
 const getLibraryItemKey = (item: ComponentLibraryItem): string => String(item.id ?? item.type);
@@ -303,6 +310,15 @@ export function ComponentLibrary({
     [libraryItems, previewItemKey],
   );
   const categories = COMPONENT_LIBRARY_CATEGORIES;
+  const primaryComponentCategories = useMemo(() => (
+    categories.filter((category) => PRIMARY_COMPONENT_CATEGORY_IDS.has(category.id))
+  ), [categories]);
+  const secondaryComponentCategories = useMemo(() => (
+    categories.filter((category) => (
+      category.id !== ESSENTIALS_CATEGORY_ID &&
+      !PRIMARY_COMPONENT_CATEGORY_IDS.has(category.id)
+    ))
+  ), [categories]);
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const isGlobalSearch = normalizedSearchQuery.length > 0 && selectedCategory === ESSENTIALS_CATEGORY_ID;
 
@@ -384,6 +400,9 @@ export function ComponentLibrary({
     )).length;
     return acc;
   }, {}), [categories, favoriteKeySet, libraryItems, normalizedSearchQuery, recentKeySet]);
+  const secondaryComponentCategoryCount = useMemo(() => (
+    secondaryComponentCategories.reduce((total, category) => total + (categoryItemCounts[category.id] || 0), 0)
+  ), [categoryItemCounts, secondaryComponentCategories]);
   const activeCategoryName = useMemo(() => (isGlobalSearch
     ? 'Search results'
     : selectedCategory
@@ -454,6 +473,31 @@ export function ComponentLibrary({
       }
       : groupedItems
   ), [favoriteKeySet, favoriteSearchItems, groupedItems, selectedCategory]);
+  const renderCategoryButton = (cat: ComponentLibraryCategory) => (
+    <button
+      key={cat.id}
+      type="button"
+      onClick={() => setSelectedCategory(cat.id)}
+      data-testid={`editor-component-category-${cat.id}`}
+      aria-describedby={componentLibraryActionStatusId}
+      aria-pressed={selectedCategory === cat.id}
+      data-action-state={selectedCategory === cat.id ? 'selected' : 'ready'}
+      data-action-status={componentLibraryActionStatus}
+      className={cn(
+        COMPONENT_CATEGORY_BUTTON_CLASS,
+        selectedCategory === cat.id
+          ? 'border-slate-950 bg-slate-950 text-white'
+          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+      )}
+      aria-label={`${cat.name} components, ${categoryItemCounts[cat.id] || 0} available`}
+    >
+      <span className="flex min-w-0 items-center gap-1">
+        <span className={cn('h-2 w-2 rounded-full', cat.color)} />
+        <span className="truncate">{cat.name}</span>
+      </span>
+      <span className="shrink-0 opacity-70">{categoryItemCounts[cat.id] || 0}</span>
+    </button>
+  );
 
   return (
     <div
@@ -528,76 +572,73 @@ export function ComponentLibrary({
         </div>
 
         <div
-          className="grid grid-cols-2 gap-1"
+          className="space-y-1.5"
           data-testid="editor-component-category-rail"
-          data-category-layout="wrapped-grid"
+          data-category-layout="primary-plus-collapsed-secondary"
         >
-          <button
-            type="button"
-            onClick={() => setSelectedCategory(ESSENTIALS_CATEGORY_ID)}
-            data-testid="editor-component-category-essentials"
-            aria-describedby={componentLibraryActionStatusId}
-            aria-pressed={selectedCategory === ESSENTIALS_CATEGORY_ID}
-            data-action-state={selectedCategory === ESSENTIALS_CATEGORY_ID ? 'selected' : 'ready'}
-            data-action-status={componentLibraryActionStatus}
-            className={cn(
-              'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
-              selectedCategory === ESSENTIALS_CATEGORY_ID
-                ? 'border-slate-950 bg-slate-950 text-white'
-                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-            )}
-            aria-label={`Essential components, ${categoryItemCounts[ESSENTIALS_CATEGORY_ID] || 0} available`}
-          >
-            <span className="flex min-w-0 items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="truncate">Essentials</span>
-            </span>
-            <span className="shrink-0 opacity-70">{categoryItemCounts[ESSENTIALS_CATEGORY_ID] || 0}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedCategory(null)}
-            data-testid="editor-component-category-all"
-            aria-label={`All components, ${totalSearchResultCount} available`}
-            aria-describedby={componentLibraryActionStatusId}
-            aria-pressed={selectedCategory === null}
-            data-action-state={selectedCategory === null ? 'selected' : 'ready'}
-            data-action-status={componentLibraryActionStatus}
-            className={cn(
-              'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
-              selectedCategory === null
-                ? 'border-slate-950 bg-slate-950 text-white'
-                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-            )}
-          >
-            <span className="truncate">All</span>
-            <span className="shrink-0 opacity-70">{totalSearchResultCount}</span>
-          </button>
-          {categories.filter((cat) => cat.id !== ESSENTIALS_CATEGORY_ID).map((cat) => (
+          <div className="grid grid-cols-2 gap-1" data-testid="editor-component-primary-categories">
             <button
-              key={cat.id}
               type="button"
-              onClick={() => setSelectedCategory(cat.id)}
-              data-testid={`editor-component-category-${cat.id}`}
+              onClick={() => setSelectedCategory(ESSENTIALS_CATEGORY_ID)}
+              data-testid="editor-component-category-essentials"
               aria-describedby={componentLibraryActionStatusId}
-              aria-pressed={selectedCategory === cat.id}
-              data-action-state={selectedCategory === cat.id ? 'selected' : 'ready'}
+              aria-pressed={selectedCategory === ESSENTIALS_CATEGORY_ID}
+              data-action-state={selectedCategory === ESSENTIALS_CATEGORY_ID ? 'selected' : 'ready'}
               data-action-status={componentLibraryActionStatus}
               className={cn(
-                'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors',
-                selectedCategory === cat.id
+                COMPONENT_CATEGORY_BUTTON_CLASS,
+                selectedCategory === ESSENTIALS_CATEGORY_ID
                   ? 'border-slate-950 bg-slate-950 text-white'
                   : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
               )}
-              aria-label={`${cat.name} components, ${categoryItemCounts[cat.id] || 0} available`}
+              aria-label={`Essential components, ${categoryItemCounts[ESSENTIALS_CATEGORY_ID] || 0} available`}
             >
               <span className="flex min-w-0 items-center gap-1">
-                <span className={cn('h-2 w-2 rounded-full', cat.color)} />
-                <span className="truncate">{cat.name}</span>
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="truncate">Essentials</span>
               </span>
-              <span className="shrink-0 opacity-70">{categoryItemCounts[cat.id] || 0}</span>
+              <span className="shrink-0 opacity-70">{categoryItemCounts[ESSENTIALS_CATEGORY_ID] || 0}</span>
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setSelectedCategory(null)}
+              data-testid="editor-component-category-all"
+              aria-label={`All components, ${totalSearchResultCount} available`}
+              aria-describedby={componentLibraryActionStatusId}
+              aria-pressed={selectedCategory === null}
+              data-action-state={selectedCategory === null ? 'selected' : 'ready'}
+              data-action-status={componentLibraryActionStatus}
+              className={cn(
+                COMPONENT_CATEGORY_BUTTON_CLASS,
+                selectedCategory === null
+                  ? 'border-slate-950 bg-slate-950 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+              )}
+            >
+              <span className="truncate">All</span>
+              <span className="shrink-0 opacity-70">{totalSearchResultCount}</span>
+            </button>
+            {primaryComponentCategories.map((cat) => renderCategoryButton(cat))}
+          </div>
+
+          <details
+            className="group rounded-lg border border-slate-200 bg-slate-50/70"
+            data-testid="editor-component-secondary-categories"
+            data-default-collapsed="true"
+            data-selected-secondary={secondaryComponentCategories.some((cat) => selectedCategory === cat.id) ? 'true' : 'false'}
+          >
+            <summary
+              className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 [&::-webkit-details-marker]:hidden"
+              data-testid="editor-component-category-more"
+              aria-label={`Show more component categories, ${secondaryComponentCategoryCount} components available`}
+            >
+              <span className="truncate">More categories</span>
+              <span className="shrink-0 tabular-nums text-slate-500">{secondaryComponentCategoryCount}</span>
+            </summary>
+            <div className="grid grid-cols-2 gap-1 border-t border-slate-200 p-1.5" data-testid="editor-component-secondary-category-grid">
+              {secondaryComponentCategories.map((cat) => renderCategoryButton(cat))}
+            </div>
+          </details>
         </div>
 
         <div className="mt-2 grid grid-cols-[1fr_auto] gap-1">

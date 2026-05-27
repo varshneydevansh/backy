@@ -1297,8 +1297,13 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes("const ESSENTIALS_CATEGORY_ID = 'essentials'") &&
       source.includes("const RECENT_CATEGORY_ID = 'recent'") &&
       source.includes('const ESSENTIAL_ITEM_KEYS = new Set') &&
+      source.includes('const PRIMARY_COMPONENT_CATEGORY_IDS = new Set') &&
       source.includes('data-testid="editor-component-category-essentials"') &&
       source.includes('data-testid={`editor-component-category-${cat.id}`}') &&
+      source.includes('data-testid="editor-component-primary-categories"') &&
+      source.includes('data-testid="editor-component-secondary-categories"') &&
+      source.includes('data-testid="editor-component-category-more"') &&
+      source.includes('data-default-collapsed="true"') &&
       source.includes('data-component-library-essentials-count') &&
       source.includes('data-component-library-recent-count') &&
       source.includes('data-component-library-shown={filteredItems.length}') &&
@@ -1309,7 +1314,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('const categoryItemCounts = useMemo(() => categories.reduce<Record<string, number>>') &&
       source.includes('data-component-library-density="compact"') &&
       source.includes('data-component-library-filter-active={isComponentFilterActive ?') &&
-      source.includes('data-category-layout="wrapped-grid"') &&
+      source.includes('data-category-layout="primary-plus-collapsed-secondary"') &&
       source.includes('data-testid="editor-component-list"') &&
       source.includes('data-component-list-density="compact"') &&
       source.includes('data-component-library-item-actions="visible"') &&
@@ -1328,7 +1333,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       smokeSource.includes('needsReusableSectionFixture') &&
       source.includes('const handleKeyboardAdd = (event: KeyboardEvent<HTMLDivElement>) =>') &&
       source.includes("'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"),
-    'Editor component library category filters must stay wrapped, compact, keyboard-addable, visible, memoized with result counts, and action-status observable',
+    'Editor component library category filters must stay compact, primary-first, secondary-collapsed, keyboard-addable, visible, memoized with result counts, and action-status observable',
   );
   assert(typeSource.includes("defaultResponsive?: CanvasElement['responsive']") && typeSource.includes("responsive?: CanvasElement['responsive']"), 'Editor component presets must type root and child responsive override defaults');
   assert(typeSource.includes('export interface ComponentBindingSlot') && typeSource.includes('bindingSlots?: ComponentBindingSlot[]') && typeSource.includes('defaultBindingSlots?: ComponentBindingSlot[]'), 'Editor component presets must type binding-slot metadata for root and child preset fields');
@@ -13240,6 +13245,10 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
     const summary = document.querySelector('[data-testid="editor-component-library-summary"]');
     const actionStatus = document.querySelector('[data-testid="editor-component-library-action-status"]');
     const categoryRail = document.querySelector('[data-testid="editor-component-category-rail"]');
+    const primaryCategories = document.querySelector('[data-testid="editor-component-primary-categories"]');
+    const secondaryCategories = document.querySelector('[data-testid="editor-component-secondary-categories"]');
+    const secondaryCategoryGrid = document.querySelector('[data-testid="editor-component-secondary-category-grid"]');
+    const moreCategories = document.querySelector('[data-testid="editor-component-category-more"]');
     const emptyState = document.querySelector('[data-testid="editor-component-filter-empty"]');
     const emptyReset = document.querySelector('[data-testid="editor-component-empty-reset-filters"]');
     const headerReset = document.querySelector('[data-testid="editor-component-reset-filters"]');
@@ -13362,8 +13371,45 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
           scrollWidth: Math.round(categoryRail.scrollWidth),
           clientWidth: Math.round(categoryRail.clientWidth),
           overflowX: getComputedStyle(categoryRail).overflowX,
+          primaryExists: primaryCategories instanceof HTMLElement,
+          primaryDisplay: primaryCategories instanceof HTMLElement ? getComputedStyle(primaryCategories).display : '',
+          primaryCategoryIds: Array.from(primaryCategories?.querySelectorAll('[data-testid^="editor-component-category-"]') || []).map((node) => (
+            node.getAttribute('data-testid') || ''
+          )),
+          secondaryExists: secondaryCategories instanceof HTMLDetailsElement,
+          secondaryOpen: secondaryCategories instanceof HTMLDetailsElement ? secondaryCategories.open : null,
+          secondaryDefaultCollapsed: secondaryCategories?.getAttribute('data-default-collapsed') || '',
+          secondarySelected: secondaryCategories?.getAttribute('data-selected-secondary') || '',
+          secondaryDisplay: secondaryCategories instanceof HTMLElement ? getComputedStyle(secondaryCategories).display : '',
+          secondaryGridExists: secondaryCategoryGrid instanceof HTMLElement,
+          secondaryGridDisplay: secondaryCategoryGrid instanceof HTMLElement ? getComputedStyle(secondaryCategoryGrid).display : '',
+          secondaryCategoryIds: Array.from(secondaryCategoryGrid?.querySelectorAll('[data-testid^="editor-component-category-"]') || []).map((node) => (
+            node.getAttribute('data-testid') || ''
+          )),
+          moreExists: moreCategories instanceof HTMLElement,
+          moreText: moreCategories?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         }
-        : { exists: false, layout: '', display: '', scrollWidth: 0, clientWidth: 0, overflowX: '' },
+        : {
+          exists: false,
+          layout: '',
+          display: '',
+          scrollWidth: 0,
+          clientWidth: 0,
+          overflowX: '',
+          primaryExists: false,
+          primaryDisplay: '',
+          primaryCategoryIds: [],
+          secondaryExists: false,
+          secondaryOpen: null,
+          secondaryDefaultCollapsed: '',
+          secondarySelected: '',
+          secondaryDisplay: '',
+          secondaryGridExists: false,
+          secondaryGridDisplay: '',
+          secondaryCategoryIds: [],
+          moreExists: false,
+          moreText: '',
+        },
       hasEmpty: /No components match this view/i.test(library?.textContent || ''),
       empty: {
         exists: Boolean(emptyState),
@@ -13773,9 +13819,25 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       Array.isArray(initial.storedRecent) &&
       initial.storedRecent.length === 0 &&
       initial.categoryRail.exists &&
-      initial.categoryRail.layout === 'wrapped-grid' &&
-      initial.categoryRail.display === 'grid',
-    `Component library essentials summary or compact wrapped category grid missing: ${JSON.stringify(initial)}`,
+      initial.categoryRail.layout === 'primary-plus-collapsed-secondary' &&
+      initial.categoryRail.display === 'block' &&
+      initial.categoryRail.primaryExists &&
+      initial.categoryRail.primaryDisplay === 'grid' &&
+      initial.categoryRail.primaryCategoryIds.includes('editor-component-category-essentials') &&
+      initial.categoryRail.primaryCategoryIds.includes('editor-component-category-all') &&
+      initial.categoryRail.primaryCategoryIds.includes('editor-component-category-recent') &&
+      initial.categoryRail.primaryCategoryIds.includes('editor-component-category-favorites') &&
+      initial.categoryRail.primaryCategoryIds.includes('editor-component-category-saved') &&
+      initial.categoryRail.secondaryExists &&
+      initial.categoryRail.secondaryOpen === false &&
+      initial.categoryRail.secondaryDefaultCollapsed === 'true' &&
+      initial.categoryRail.secondarySelected === 'false' &&
+      initial.categoryRail.moreExists &&
+      /More categories/.test(initial.categoryRail.moreText) &&
+      initial.categoryRail.secondaryCategoryIds.includes('editor-component-category-layout') &&
+      initial.categoryRail.secondaryCategoryIds.includes('editor-component-category-content') &&
+      initial.categoryRail.secondaryCategoryIds.includes('editor-component-category-advanced'),
+    `Component library essentials summary or compact primary/collapsed category rail missing: ${JSON.stringify(initial)}`,
   );
   assert(initial.itemIds.includes('divider'), `Divider component missing from library: ${JSON.stringify(initial)}`);
   assert(initial.itemIds.includes('image'), `Image component missing from library: ${JSON.stringify(initial)}`);
@@ -13883,11 +13945,26 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   assert(searchFiltered.itemIds.includes('divider'), `Divider missing after component search: ${JSON.stringify(searchFiltered)}`);
   assert(!searchFiltered.itemIds.includes('image'), `Component search did not filter image out: ${JSON.stringify(searchFiltered)}`);
 
+  await clickControlByTestId(client, 'editor-component-category-more');
+  await sleep(100);
+  const expandedCategories = await readComponentLibraryState(client, 'expanded secondary categories');
+  assert(
+    expandedCategories.categoryRail.secondaryOpen === true &&
+      expandedCategories.categoryRail.secondarySelected === 'false' &&
+      expandedCategories.categoryRail.secondaryGridDisplay === 'grid',
+    `Secondary component categories did not expand before selecting layout: ${JSON.stringify(expandedCategories.categoryRail)}`,
+  );
+
   await clickControlByTestId(client, 'editor-component-category-layout');
   await sleep(150);
   const layoutFiltered = await readComponentLibraryState(client, 'layout filtered');
   assert(layoutFiltered.itemIds.includes('divider'), `Layout category did not retain divider search result: ${JSON.stringify(layoutFiltered)}`);
   assert(layoutFiltered.categories.every((category) => category.id === 'layout'), `Layout category rendered unexpected groups: ${JSON.stringify(layoutFiltered)}`);
+  assert(
+    layoutFiltered.categoryRail.secondaryOpen === true &&
+      layoutFiltered.categoryRail.secondarySelected === 'true',
+    `Layout category should keep secondary category disclosure open and marked selected: ${JSON.stringify(layoutFiltered.categoryRail)}`,
+  );
 
   await setFormControlByTestId(client, 'editor-component-search', '');
   await clickControlByTestId(client, 'editor-component-category-all');
