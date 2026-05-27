@@ -726,6 +726,19 @@ interface ApiUserPermissionsResponse {
 const userPermissionMatrixCache = new Map<string, AdminUserPermissionMatrix>();
 const userPermissionMatrixRequests = new Map<string, Promise<AdminUserPermissionMatrix>>();
 let userPermissionMatrixCacheRevision = 0;
+const USER_PERMISSION_MATRIX_STORAGE_KEY = 'backy-user-permission-matrix-cache-v1';
+const USER_PERMISSION_MATRIX_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
+
+interface StoredUserPermissionMatrixCacheEntry {
+  userId: string;
+  cachedAt: string;
+  matrix: AdminUserPermissionMatrix;
+}
+
+interface StoredUserPermissionMatrixCache {
+  version: 1;
+  entries: Record<string, StoredUserPermissionMatrixCacheEntry>;
+}
 
 const getUserPermissionCacheKey = (userId: string): string => {
   const sessionScope = getActiveAdminSessionToken() || 'cookie-session';
@@ -736,8 +749,113 @@ const userPermissionCacheKeyMatchesUser = (cacheKey: string, userId: string): bo
   cacheKey.endsWith(`::${userId}`)
 );
 
+const emptyStoredUserPermissionMatrixCache = (): StoredUserPermissionMatrixCache => ({
+  version: 1,
+  entries: {},
+});
+
+const canUsePermissionMatrixStorage = (): boolean => (
+  typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+);
+
+const readStoredUserPermissionMatrixCache = (): StoredUserPermissionMatrixCache => {
+  if (!canUsePermissionMatrixStorage()) return emptyStoredUserPermissionMatrixCache();
+
+  try {
+    const raw = window.localStorage.getItem(USER_PERMISSION_MATRIX_STORAGE_KEY);
+    if (!raw) return emptyStoredUserPermissionMatrixCache();
+
+    const parsed = JSON.parse(raw) as Partial<StoredUserPermissionMatrixCache> | null;
+    if (!parsed || parsed.version !== 1 || !parsed.entries || typeof parsed.entries !== 'object') {
+      return emptyStoredUserPermissionMatrixCache();
+    }
+
+    return {
+      version: 1,
+      entries: parsed.entries,
+    };
+  } catch {
+    return emptyStoredUserPermissionMatrixCache();
+  }
+};
+
+const writeStoredUserPermissionMatrixCache = (cache: StoredUserPermissionMatrixCache): void => {
+  if (!canUsePermissionMatrixStorage()) return;
+
+  try {
+    window.localStorage.setItem(USER_PERMISSION_MATRIX_STORAGE_KEY, JSON.stringify(cache));
+  } catch {
+    // Permission matrix caching is only a reload UX optimization.
+  }
+};
+
+const isStoredUserPermissionMatrixEntryFresh = (entry: StoredUserPermissionMatrixCacheEntry): boolean => {
+  const cachedAt = Date.parse(entry.cachedAt);
+  return Number.isFinite(cachedAt) && Date.now() - cachedAt <= USER_PERMISSION_MATRIX_CACHE_MAX_AGE_MS;
+};
+
+const isStoredUserPermissionMatrixEntryValid = (
+  entry: StoredUserPermissionMatrixCacheEntry | undefined,
+  userId: string,
+): entry is StoredUserPermissionMatrixCacheEntry => (
+  Boolean(entry) &&
+  entry?.userId === userId &&
+  entry.matrix?.userId === userId &&
+  Array.isArray(entry.matrix.groups) &&
+  Boolean(entry.matrix.summary) &&
+  isStoredUserPermissionMatrixEntryFresh(entry)
+);
+
+const readPersistedUserPermissions = (userId: string): AdminUserPermissionMatrix | null => {
+  const stored = readStoredUserPermissionMatrixCache();
+  const entry = stored.entries[userId];
+
+  if (!isStoredUserPermissionMatrixEntryValid(entry, userId)) {
+    if (entry) {
+      delete stored.entries[userId];
+      writeStoredUserPermissionMatrixCache(stored);
+    }
+    return null;
+  }
+
+  const matrix = entry.matrix;
+  userPermissionMatrixCache.set(getUserPermissionCacheKey(userId), matrix);
+  return matrix;
+};
+
+const persistUserPermissions = (userId: string, matrix: AdminUserPermissionMatrix): void => {
+  if (matrix.userId !== userId) return;
+
+  const stored = readStoredUserPermissionMatrixCache();
+  stored.entries[userId] = {
+    userId,
+    cachedAt: new Date().toISOString(),
+    matrix,
+  };
+  writeStoredUserPermissionMatrixCache(stored);
+};
+
+const clearPersistedUserPermissionsCache = (userId?: string): void => {
+  if (!canUsePermissionMatrixStorage()) return;
+
+  if (!userId) {
+    try {
+      window.localStorage.removeItem(USER_PERMISSION_MATRIX_STORAGE_KEY);
+    } catch {
+      // Permission matrix caching is only a reload UX optimization.
+    }
+    return;
+  }
+
+  const stored = readStoredUserPermissionMatrixCache();
+  if (!stored.entries[userId]) return;
+  delete stored.entries[userId];
+  writeStoredUserPermissionMatrixCache(stored);
+};
+
 export const clearUserPermissionsCache = (userId?: string): void => {
   userPermissionMatrixCacheRevision += 1;
+  clearPersistedUserPermissionsCache(userId);
 
   if (!userId) {
     userPermissionMatrixCache.clear();
@@ -759,7 +877,7 @@ export const clearUserPermissionsCache = (userId?: string): void => {
 };
 
 export const getCachedUserPermissions = (userId: string): AdminUserPermissionMatrix | null => (
-  userPermissionMatrixCache.get(getUserPermissionCacheKey(userId)) ?? null
+  userPermissionMatrixCache.get(getUserPermissionCacheKey(userId)) ?? readPersistedUserPermissions(userId)
 );
 
 interface ApiBlogPost {
@@ -5449,6 +5567,7 @@ export async function getUserPermissions(userId: string): Promise<AdminUserPermi
     const matrix = payload.data.permissions;
     if (cacheRevision === userPermissionMatrixCacheRevision) {
       userPermissionMatrixCache.set(cacheKey, matrix);
+      persistUserPermissions(userId, matrix);
     }
     return matrix;
   })().finally(() => {
@@ -5481,6 +5600,7 @@ export async function updateUserPermissions(
   const matrix = payload.data.permissions;
   clearUserPermissionsCache(userId);
   userPermissionMatrixCache.set(getUserPermissionCacheKey(userId), matrix);
+  persistUserPermissions(userId, matrix);
   return matrix;
 }
 

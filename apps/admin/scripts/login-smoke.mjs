@@ -322,6 +322,16 @@ const assertAuthRecoverySource = () => {
   );
 
   assert(
+    adminContentApiSource.includes("USER_PERMISSION_MATRIX_STORAGE_KEY = 'backy-user-permission-matrix-cache-v1'") &&
+      adminContentApiSource.includes('USER_PERMISSION_MATRIX_CACHE_MAX_AGE_MS') &&
+      adminContentApiSource.includes('readPersistedUserPermissions') &&
+      adminContentApiSource.includes('persistUserPermissions(userId, matrix)') &&
+      adminContentApiSource.includes('clearPersistedUserPermissionsCache(userId)') &&
+      adminContentApiSource.includes('userPermissionMatrixCache.get(getUserPermissionCacheKey(userId)) ?? readPersistedUserPermissions(userId)'),
+    'Admin sidebar permissions must use a short-lived local matrix cache that is cleared with the session so reloads do not fall back to late role-default navigation.',
+  );
+
+  assert(
     adminAuthApiSource.includes('AUTH_REQUEST_TIMEOUT_MS') &&
       adminAuthApiSource.includes('adminAuthFetch') &&
       adminAuthApiSource.includes('AdminAuthNetworkError') &&
@@ -3063,6 +3073,47 @@ const assertSidebarQuickCreateInteraction = async (client) => {
   return { initialState, pageRouteState, postRouteState, productRouteState, formRouteState };
 };
 
+const assertSidebarPermissionMatrixCache = async (client, label = 'Sidebar permission matrix cache') => (
+  waitForState(
+    client,
+    `(() => {
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const stored = JSON.parse(localStorage.getItem('backy-auth-storage') || '{}');
+      const matrixCache = JSON.parse(localStorage.getItem('backy-user-permission-matrix-cache-v1') || '{"entries":{}}');
+      const userId = stored?.state?.user?.id || '';
+      const entry = userId ? matrixCache?.entries?.[userId] : null;
+      const matrix = entry?.matrix;
+      const permissionSource = sidebar?.getAttribute('data-permission-source') || '';
+      const permissionSyncState = sidebar?.getAttribute('data-permission-sync-state') || '';
+      const permissionsLoading = sidebar?.getAttribute('data-permissions-loading') || '';
+      const cachedAt = Date.parse(entry?.cachedAt || '');
+      return {
+        ready: sidebar instanceof HTMLElement &&
+          stored?.state?.user?.email === 'admin@backy.io' &&
+          permissionSource === 'matrix' &&
+          permissionSyncState === 'synced' &&
+          permissionsLoading === 'false' &&
+          entry?.userId === userId &&
+          matrix?.userId === userId &&
+          Array.isArray(matrix?.groups) &&
+          matrix.groups.length > 0 &&
+          Number.isFinite(cachedAt) &&
+          Date.now() - cachedAt <= 10 * 60 * 1000,
+        userId,
+        permissionSource,
+        permissionSyncState,
+        permissionsLoading,
+        hasEntry: Boolean(entry),
+        entryUserId: entry?.userId || '',
+        matrixUserId: matrix?.userId || '',
+        groupCount: Array.isArray(matrix?.groups) ? matrix.groups.length : 0,
+        cachedAt: entry?.cachedAt || '',
+      };
+    })()`,
+    label,
+  )
+);
+
 const assertSessionSurvivesIdleReloadAndNavigation = async (client) => {
   await sleep(2500);
   await waitForState(
@@ -3089,9 +3140,18 @@ const assertSessionSurvivesIdleReloadAndNavigation = async (client) => {
     'Authenticated dashboard idle session',
   );
 
+  const cachedPermissionMatrix = await assertSidebarPermissionMatrixCache(
+    client,
+    'Dashboard sidebar permissions cached before reload',
+  );
+
   await client.send('Page.reload', { ignoreCache: true });
   await waitForDashboard(client);
   const reloadedShell = await assertSidebarViewportScrollContract(client, 'Dashboard shell after reload');
+  const reloadedPermissionMatrix = await assertSidebarPermissionMatrixCache(
+    client,
+    'Dashboard sidebar permissions hydrated from cache after reload',
+  );
 
   await evaluate(client, `(() => {
     localStorage.setItem('backy:admin-sidebar-collapsed', 'false');
@@ -3150,7 +3210,7 @@ const assertSessionSurvivesIdleReloadAndNavigation = async (client) => {
     'Authenticated blog session stability',
   );
 
-  return { reloadedShell, stableBlogSession };
+  return { cachedPermissionMatrix, reloadedShell, reloadedPermissionMatrix, stableBlogSession };
 };
 
 const seedStaleAdminProfile = async (client) => {
