@@ -776,6 +776,18 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-toggle-component-panel"') && source.includes('aria-keyshortcuts="B"') && source.includes('data-testid="editor-toggle-inspector-panel"') && source.includes('aria-keyshortcuts="I"'), 'Editor component and inspector panel toggles must expose keyboard shortcut metadata');
   assert(source.includes('data-testid="editor-toggle-layers-panel"') && source.includes('aria-keyshortcuts="L"') && source.includes('data-testid="editor-toggle-focus-mode"') && source.includes('aria-keyshortcuts="F"'), 'Editor layers and focus toggles must expose keyboard shortcut metadata');
   assert(smokeSource.includes("await pressKey(client, '-', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '=', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '0', { ctrlKey: true })"), 'Editor zoom browser smoke must exercise keyboard zoom shortcuts');
+  assert(
+    source.includes("viewport.addEventListener('wheel', handleCanvasWheelZoom, { passive: false })") &&
+      source.includes('event.preventDefault();') &&
+      source.includes('event.metaKey || event.ctrlKey') &&
+      source.includes('data-canvas-wheel-zoom="enabled"') &&
+      source.includes('data-wheel-zoom-modifier="meta-or-control"') &&
+      source.includes('data-wheel-zoom-prevents-browser-zoom="true"') &&
+      smokeSource.includes('dispatchCanvasWheelZoom') &&
+      smokeSource.includes('defaultPrevented') &&
+      smokeSource.includes('dispatchReturned === false'),
+    'Editor canvas viewport must intercept Cmd/Ctrl wheel zoom with a non-passive listener so browser/page zoom is not triggered',
+  );
   assert(smokeSource.includes("await pressKey(client, 'h')") && smokeSource.includes('keyboardPanEnabled') && smokeSource.includes('keyboardPanDisabled'), 'Editor zoom browser smoke must exercise the H pan toggle shortcut');
   assert(smokeSource.includes('keyboardGridHidden') && smokeSource.includes('keyboardGridRestored') && smokeSource.includes('keyboardSnapOff') && smokeSource.includes('keyboardSnapRestored'), 'Editor grid/snap browser smoke must exercise G and S shortcuts');
   assert(smokeSource.includes('testEditorShellPanelShortcuts') && smokeSource.includes("await pressKey(client, 'b')") && smokeSource.includes("await pressKey(client, 'i')") && smokeSource.includes("await pressKey(client, 'l')") && smokeSource.includes("await pressKey(client, 'f')"), 'Editor shortcuts browser smoke must exercise shell panel and focus shortcuts');
@@ -1881,6 +1893,77 @@ const updateAdminSettings = async (input) => {
     body: JSON.stringify(input),
   });
   return payload.data?.settings || payload.settings || null;
+};
+
+const getSite = async (siteId) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`);
+  return payload.data?.site || payload.site || null;
+};
+
+const updateSite = async (siteId, input) => {
+  const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.site || payload.site || null;
+};
+
+const listSitePages = async (siteId) => {
+  const pages = [];
+  const limit = 100;
+  let offset = 0;
+
+  for (;;) {
+    const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}/pages?limit=${limit}&offset=${offset}`);
+    const chunk = payload.data?.pages || payload.pages || [];
+    pages.push(...chunk);
+    const pagination = payload.data?.pagination || payload.pagination || {};
+
+    if (!pagination.hasMore || chunk.length === 0) {
+      break;
+    }
+
+    offset += limit;
+  }
+
+  return pages;
+};
+
+const temporarilyAllowEditorSmokePageQuota = async (extraPages = 4) => {
+  const site = await getSite(SITE_ID);
+  const originalSettings = site?.settings || {};
+  const originalBillingQuota = originalSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const existingPages = await listSitePages(SITE_ID);
+  const currentPageLimit = Number(originalLimits.pages || 0);
+  const nextPageLimit = Math.max(
+    Number.isFinite(currentPageLimit) ? currentPageLimit : 0,
+    existingPages.length + extraPages,
+  );
+
+  if (nextPageLimit === currentPageLimit) {
+    return null;
+  }
+
+  await updateSite(SITE_ID, {
+    settings: {
+      ...originalSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          pages: nextPageLimit,
+        },
+      },
+    },
+  });
+
+  return originalSettings;
+};
+
+const restoreEditorSmokePageQuota = async (settings) => {
+  if (!settings) return;
+  await updateSite(SITE_ID, { settings });
 };
 
 const storageSettingsFor = (settings) => {
@@ -11949,6 +12032,49 @@ const dragCanvasViewportPan = async (client, deltaX, deltaY) => {
   };
 };
 
+const dispatchCanvasWheelZoom = async (client, deltaY, label) => {
+  const dispatched = await evaluate(client, `(() => {
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    if (!(viewport instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-viewport' };
+    }
+
+    const event = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      ctrlKey: true,
+      deltaY: ${JSON.stringify(deltaY)},
+    });
+    const dispatchReturned = viewport.dispatchEvent(event);
+
+    return {
+      ok: true,
+      dispatchReturned,
+      defaultPrevented: event.defaultPrevented,
+      wheelZoom: viewport.getAttribute('data-canvas-wheel-zoom'),
+      modifier: viewport.getAttribute('data-wheel-zoom-modifier'),
+      preventsBrowserZoom: viewport.getAttribute('data-wheel-zoom-prevents-browser-zoom'),
+    };
+  })()`);
+
+  assert(dispatched?.ok, `Unable to dispatch canvas wheel zoom during ${label}: ${JSON.stringify(dispatched)}`);
+  assert(dispatched.defaultPrevented === true, `Canvas wheel zoom did not prevent browser zoom during ${label}: ${JSON.stringify(dispatched)}`);
+  assert(dispatched.dispatchReturned === false, `Canvas wheel zoom dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
+  assert(
+    dispatched.wheelZoom === 'enabled' &&
+      dispatched.modifier === 'meta-or-control' &&
+      dispatched.preventsBrowserZoom === 'true',
+    `Canvas wheel zoom metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
+  );
+  await sleep(150);
+
+  return {
+    dispatched,
+    state: await readZoomControlState(client, label),
+  };
+};
+
 const testZoomControls = async (client) => {
   const initial = await readZoomControlState(client, 'initial');
   const initialNavigation = await readCanvasNavigationState(client, 'initial navigation');
@@ -11983,6 +12109,20 @@ const testZoomControls = async (client) => {
   const afterKeyboardFit = await readZoomControlState(client, 'after keyboard fit');
   assert(afterKeyboardFit.autoFit === true, `Ctrl/Cmd+0 did not enable auto-fit: ${JSON.stringify(afterKeyboardFit)}`);
   assert(afterKeyboardFit.scale > 0 && afterKeyboardFit.scale <= 2, `Ctrl/Cmd+0 produced out-of-range scale: ${JSON.stringify(afterKeyboardFit)}`);
+
+  const afterWheelZoomIn = await dispatchCanvasWheelZoom(client, -240, 'after canvas wheel zoom in');
+  assert(
+    afterWheelZoomIn.state.scale > afterKeyboardFit.scale,
+    `Ctrl/Cmd wheel up did not increase canvas scale: ${JSON.stringify({ afterKeyboardFit, afterWheelZoomIn })}`,
+  );
+  assert(afterWheelZoomIn.state.autoFit === false, `Ctrl/Cmd wheel zoom should disable auto-fit: ${JSON.stringify(afterWheelZoomIn)}`);
+
+  const afterWheelZoomOut = await dispatchCanvasWheelZoom(client, 240, 'after canvas wheel zoom out');
+  assert(
+    afterWheelZoomOut.state.scale < afterWheelZoomIn.state.scale,
+    `Ctrl/Cmd wheel down did not reduce canvas scale: ${JSON.stringify({ afterWheelZoomIn, afterWheelZoomOut })}`,
+  );
+  assert(afterWheelZoomOut.state.autoFit === false, `Ctrl/Cmd wheel zoom out should keep manual zoom mode: ${JSON.stringify(afterWheelZoomOut)}`);
 
   await clickControlByTestId(client, 'editor-pan-toggle');
   const panEnabled = await readCanvasNavigationState(client, 'pan enabled');
@@ -12025,6 +12165,8 @@ const testZoomControls = async (client) => {
     afterKeyboardZoomOut,
     afterKeyboardZoomIn,
     afterKeyboardFit,
+    afterWheelZoomIn,
+    afterWheelZoomOut,
     panEnabled,
     panDrag,
     panDisabled,
@@ -23081,22 +23223,34 @@ const main = async () => {
     return;
   }
 
-  await loginAdminApi();
-  const tempPageId = EDITOR_PATH ? null : await createSmokePage();
-  const seededRevisionHistory = REVISION_NAVIGATION_SMOKE && tempPageId
-    ? await createSmokePageRevisionHistory(tempPageId)
-    : { revisions: [] };
   const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
-  const tempReusableSectionId = needsReusableSectionFixture ? await createSmokeReusableSection() : null;
-  const tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
-  const editorPath = EDITOR_PATH || `/pages/${tempPageId}/edit`;
-  const { childProcess, userDataDir } = launchChrome();
   let client;
+  let childProcess = null;
+  let userDataDir = null;
+  let editorPath = EDITOR_PATH;
+  let tempPageId = null;
+  let tempReusableSectionId = null;
+  let tempCollection = null;
+  let seededRevisionHistory = { revisions: [] };
   let resetPageEditPermission = false;
   let editorMediaSmokeSettings = null;
+  let editorSmokePageQuotaSettings = null;
 
   try {
+    await loginAdminApi();
+    if (!EDITOR_PATH) {
+      editorSmokePageQuotaSettings = await temporarilyAllowEditorSmokePageQuota();
+      tempPageId = await createSmokePage();
+      editorPath = `/pages/${tempPageId}/edit`;
+    }
+    seededRevisionHistory = REVISION_NAVIGATION_SMOKE && tempPageId
+      ? await createSmokePageRevisionHistory(tempPageId)
+      : { revisions: [] };
+    tempReusableSectionId = needsReusableSectionFixture ? await createSmokeReusableSection() : null;
+    tempCollection = skipsAuxiliaryFixtures ? null : await createSmokeCollection();
+    ({ childProcess, userDataDir } = launchChrome());
+
     if (VIEW_ONLY_SMOKE) {
       await setAdminPermissionOverrides({ 'pages.edit': 'deny' });
       resetPageEditPermission = true;
@@ -25439,12 +25593,21 @@ const main = async () => {
         console.warn('Unable to restore editor media smoke settings:', error instanceof Error ? error.message : error);
       }
     }
-    await cleanup({ client, childProcess, userDataDir });
+    if (childProcess && userDataDir) {
+      await cleanup({ client, childProcess, userDataDir });
+    }
     await deleteSmokePage(tempPageId);
     await deleteSmokeReusableSection(tempReusableSectionId);
     await deleteSmokeCollection(tempCollection?.id);
     await deleteSmokeCollection(tempCollection?.referenceCollectionId);
     await deleteSmokeCollection(tempCollection?.nestedReferenceCollectionId);
+    if (editorSmokePageQuotaSettings) {
+      try {
+        await restoreEditorSmokePageQuota(editorSmokePageQuotaSettings);
+      } catch (error) {
+        console.warn('Unable to restore editor smoke page quota:', error instanceof Error ? error.message : error);
+      }
+    }
   }
 };
 

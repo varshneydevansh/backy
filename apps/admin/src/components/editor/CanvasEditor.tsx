@@ -1989,6 +1989,19 @@ export function CanvasEditor({
     setCanvasZoom((current) => clampCanvasZoom(Number((current - 0.1).toFixed(2))));
   }, [clampCanvasZoom]);
 
+  const handleCanvasWheelZoom = useCallback((event: WheelEvent) => {
+    if (!(event.metaKey || event.ctrlKey)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsCanvasAutoFit(false);
+    const direction = event.deltaY > 0 ? -1 : 1;
+    const strength = Math.min(3, Math.max(1, Math.abs(event.deltaY) / 100));
+    setCanvasZoom((current) => clampCanvasZoom(Number((current + direction * 0.08 * strength).toFixed(2))));
+  }, [clampCanvasZoom]);
+
   const handleToggleSnap = useCallback(() => {
     setSnapEnabled((current) => !current);
   }, []);
@@ -2050,6 +2063,23 @@ export function CanvasEditor({
     };
     setIsCanvasPanning(true);
   }, [isCanvasPanActive]);
+
+  useEffect(() => {
+    if (isPreview) {
+      return undefined;
+    }
+
+    const viewport = canvasViewportRef.current;
+    if (!viewport) {
+      return undefined;
+    }
+
+    viewport.addEventListener('wheel', handleCanvasWheelZoom, { passive: false });
+
+    return () => {
+      viewport.removeEventListener('wheel', handleCanvasWheelZoom);
+    };
+  }, [handleCanvasWheelZoom, isPreview]);
 
   const markChanges = useCallback(() => {
     changeSequenceRef.current += 1;
@@ -8112,6 +8142,9 @@ export function CanvasEditor({
               isCanvasPanActive && (isCanvasPanning ? 'cursor-grabbing select-none' : 'cursor-grab')
             )}
             data-testid="editor-canvas-viewport"
+            data-canvas-wheel-zoom="enabled"
+            data-wheel-zoom-modifier="meta-or-control"
+            data-wheel-zoom-prevents-browser-zoom="true"
             data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
             data-pan-active={isCanvasPanActive ? 'true' : 'false'}
             data-space-pan-active={isCanvasSpacePanning ? 'true' : 'false'}
