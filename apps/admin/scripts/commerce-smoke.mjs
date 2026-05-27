@@ -1049,6 +1049,27 @@ const assertProductsApiContractsSource = () => {
     "Products command center must keep New product primary while grouping secondary catalog and readiness actions",
   );
   assert(
+    source.includes("const productsStorefrontApiActionStatusId = 'products-storefront-api-action-status';") &&
+      source.includes('const productsStorefrontApiActionStatus = [') &&
+      source.includes('data-testid="products-storefront-api-actions"') &&
+      source.includes('data-testid="products-storefront-api-action-status"') &&
+      source.includes('data-testid="products-storefront-api-primary-actions"') &&
+      source.includes('data-testid="products-storefront-api-sync-schema"') &&
+      source.includes('data-testid="products-storefront-api-import-csv"') &&
+      source.includes('data-testid="products-storefront-api-storefront-page"') &&
+      source.includes('data-testid="products-storefront-api-open-api"') &&
+      source.includes('data-testid="products-storefront-api-secondary-actions"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('data-testid="products-storefront-api-more-actions"') &&
+      source.includes('data-testid="products-storefront-api-copy-url"') &&
+      source.includes('data-testid="products-storefront-api-copy-manifest"') &&
+      source.includes('data-testid="products-storefront-api-export-csv"') &&
+      source.includes('data-testid="products-storefront-api-csv-template"') &&
+      source.indexOf('data-testid="products-storefront-api-sync-schema"') < source.indexOf('data-testid="products-storefront-api-import-csv"') &&
+      source.indexOf('data-testid="products-storefront-api-import-csv"') < source.indexOf('data-testid="products-storefront-api-secondary-actions"'),
+    "Products storefront API panel must lead with import/storefront/open actions while grouping URL, manifest, CSV export, and template actions behind More actions",
+  );
+  assert(
     source.includes('const productActionStatusId = `products-actions-status-${product.id}`;') &&
       source.includes('data-testid="products-product-card"') &&
       source.includes('data-testid="products-action-group"') &&
@@ -8045,6 +8066,20 @@ const assertProductsLayout = async (client) => {
 	      const providerCertificationText = providerCertification?.textContent || '';
 	      const productsStorefrontApiDetails = document.querySelector('[data-testid="products-storefront-api-details"]');
 	      const productsStorefrontApiText = productsStorefrontApiDetails?.textContent || '';
+        const storefrontActionMeta = (selector) => Array.from(document.querySelectorAll(selector)).map((element) => ({
+          testId: element.getAttribute('data-testid') || '',
+          label: (element.textContent || '').replace(/\\s+/g, ' ').trim(),
+          state: element.getAttribute('data-action-state') || '',
+          describedBy: element.getAttribute('aria-describedby') || '',
+          status: element.getAttribute('data-action-status') || '',
+          disabledReason: element.getAttribute('data-disabled-reason') || '',
+          disabled: Boolean(element.disabled || element.getAttribute('aria-disabled') === 'true'),
+        }));
+        const storefrontApiPrimaryActions = storefrontActionMeta('[data-testid="products-storefront-api-primary-actions"] button, [data-testid="products-storefront-api-primary-actions"] a');
+        const storefrontApiPrimaryLabels = storefrontApiPrimaryActions.map((action) => action.label);
+        const storefrontApiPrimaryStates = storefrontApiPrimaryActions.map((action) => action.state);
+        const storefrontApiSecondaryActions = storefrontActionMeta('[data-testid="products-storefront-api-secondary-action-menu"] button');
+        const storefrontApiSecondaryLabels = storefrontApiSecondaryActions.map((action) => action.label);
 	      const productsApiContracts = document.querySelector('[data-testid="products-api-contracts"]');
 	      const commerceAnalytics = document.querySelector('[data-testid="products-commerce-analytics"]');
 	      const commerceAnalyticsText = commerceAnalytics?.textContent || '';
@@ -8088,6 +8123,21 @@ const assertProductsLayout = async (client) => {
 	        controlMapCollapsed: productsControlMap instanceof HTMLDetailsElement && productsControlMap.open === false,
 	        frontendTemplateOptionsCollapsed: frontendTemplateOptions instanceof HTMLDetailsElement && frontendTemplateOptions.open === false,
 	        storefrontApiDetailsCollapsed: productsStorefrontApiDetails instanceof HTMLDetailsElement && productsStorefrontApiDetails.open === false,
+          hasStorefrontApiActions: Boolean(document.querySelector('[data-testid="products-storefront-api-actions"]')),
+          hasStorefrontApiStatus: Boolean(document.querySelector('[data-testid="products-storefront-api-action-status"]')),
+          storefrontApiStatusId: document.querySelector('[data-testid="products-storefront-api-action-status"]')?.id || '',
+          storefrontApiStatusText: (document.querySelector('[data-testid="products-storefront-api-action-status"]')?.textContent || '').replace(/\\s+/g, ' ').trim(),
+          storefrontApiGroupStatus: document.querySelector('[data-testid="products-storefront-api-actions"]')?.getAttribute('data-action-status') || '',
+          storefrontApiPrimaryActions,
+          storefrontApiPrimaryLabels,
+          storefrontApiPrimaryStates,
+          hasStorefrontApiSecondaryActions: Boolean(document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')),
+          storefrontApiSecondaryDefaultCollapsed: document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+          storefrontApiSecondaryOpen: document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')?.hasAttribute('open') || false,
+          hasStorefrontApiMoreActions: Boolean(document.querySelector('[data-testid="products-storefront-api-more-actions"]')),
+          storefrontApiSecondaryActions,
+          storefrontApiSecondaryLabels,
+          storefrontApiPrimaryHasSecondaryOnlyActions: Boolean(document.querySelector('[data-testid="products-storefront-api-primary-actions"] [data-testid="products-storefront-api-copy-url"], [data-testid="products-storefront-api-primary-actions"] [data-testid="products-storefront-api-copy-manifest"], [data-testid="products-storefront-api-primary-actions"] [data-testid="products-storefront-api-export-csv"], [data-testid="products-storefront-api-primary-actions"] [data-testid="products-storefront-api-csv-template"]')),
 	        providerCertificationOperatorDetailsCollapsed: providerCertificationOperatorDetails instanceof HTMLDetailsElement && providerCertificationOperatorDetails.open === false,
 	        hasApiPanel: Boolean(productsStorefrontApiDetails) && (document.body?.innerText?.includes('Storefront API and provider handoff') || false),
         hasApiContracts: Boolean(productsApiContracts) &&
@@ -8289,6 +8339,39 @@ const assertProductsLayout = async (client) => {
   assert(
     layout.scrollWidth <= layout.width + 8,
     `Products page has horizontal overflow: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.hasStorefrontApiActions &&
+      layout.hasStorefrontApiStatus &&
+      layout.storefrontApiStatusId === 'products-storefront-api-action-status' &&
+      layout.storefrontApiGroupStatus === layout.storefrontApiStatusText &&
+      (
+        JSON.stringify(layout.storefrontApiPrimaryLabels) === JSON.stringify(['Import CSV', 'Storefront page', 'Open API']) ||
+        JSON.stringify(layout.storefrontApiPrimaryLabels) === JSON.stringify(['Sync Schema', 'Import CSV', 'Storefront page', 'Open API'])
+      ) &&
+      layout.storefrontApiPrimaryStates.every((state) => state === 'ready' || state === 'blocked') &&
+      layout.storefrontApiPrimaryActions.every((action) => action.describedBy === 'products-storefront-api-action-status') &&
+      layout.storefrontApiPrimaryActions.every((action) => action.status === layout.storefrontApiStatusText) &&
+      layout.storefrontApiPrimaryActions.every((action) => action.state === 'blocked' ? Boolean(action.disabledReason) : action.disabledReason === '') &&
+      layout.storefrontApiPrimaryActions.every((action) => action.disabled === (action.state === 'blocked')),
+    `Products storefront API primary actions should prioritize schema/import/storefront/open API work with action metadata: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.hasStorefrontApiSecondaryActions &&
+      layout.storefrontApiSecondaryDefaultCollapsed &&
+      !layout.storefrontApiSecondaryOpen &&
+      layout.hasStorefrontApiMoreActions &&
+      layout.storefrontApiSecondaryLabels[0] === 'Copy URL' &&
+      layout.storefrontApiSecondaryLabels.includes('Copy manifest') &&
+      layout.storefrontApiSecondaryLabels.includes('Export CSV') &&
+      layout.storefrontApiSecondaryLabels.includes('CSV template') &&
+      layout.storefrontApiSecondaryActions.every((action) => action.state === 'ready' || action.state === 'blocked') &&
+      layout.storefrontApiSecondaryActions.every((action) => action.describedBy === 'products-storefront-api-action-status') &&
+      layout.storefrontApiSecondaryActions.every((action) => action.status === layout.storefrontApiStatusText) &&
+      layout.storefrontApiSecondaryActions.every((action) => action.state === 'blocked' ? Boolean(action.disabledReason) : action.disabledReason === '') &&
+      layout.storefrontApiSecondaryActions.every((action) => action.disabled === (action.state === 'blocked')) &&
+      !layout.storefrontApiPrimaryHasSecondaryOnlyActions,
+    `Products storefront API URL/export/handoff actions should stay nested behind collapsed More actions: ${JSON.stringify(layout)}`,
   );
 	  assert(
 	      layout.hasCommandCenter &&

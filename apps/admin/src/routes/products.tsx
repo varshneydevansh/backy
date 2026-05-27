@@ -2265,6 +2265,39 @@ function ProductsRoute() {
     productsBulkClearDisabledReason ? `Clear selection unavailable: ${productsBulkClearDisabledReason}` : `Clear selection available for ${selectedProductActionLabel}.`,
     productsBulkDeleteDisabledReason ? `Delete selected unavailable: ${productsBulkDeleteDisabledReason}` : `Delete selected available for ${selectedProductActionLabel}.`,
   ].join(' ');
+  const productsStorefrontApiActionStatusId = 'products-storefront-api-action-status';
+  const productsStorefrontApiBusyDisabledReason = isProductsAccessBusy ? 'Product catalog is busy.' : '';
+  const productsStorefrontApiSyncDisabledReason = productApiReady
+    ? 'Product API schema is already synced.'
+    : productsStorefrontApiBusyDisabledReason || (!canConfigureProducts
+      ? configurePermissionTitle || 'Your account cannot configure products.'
+      : '');
+  const productsStorefrontApiImportDisabledReason = productsStorefrontApiBusyDisabledReason || (!canEditProducts
+    ? editPermissionTitle || 'Your account cannot edit products.'
+    : '');
+  const productsStorefrontApiViewDisabledReason = productsStorefrontApiBusyDisabledReason || (!canViewProducts
+    ? viewPermissionTitle || 'Your account cannot view products.'
+    : '');
+  const productsStorefrontApiStorefrontDisabledReason = productsStorefrontApiBusyDisabledReason || (!canEditPages
+    ? pagesEditPermissionTitle || 'Your account cannot edit pages.'
+    : '');
+  const productsStorefrontApiExportDisabledReason = filteredProducts.length === 0
+    ? 'No visible products to export.'
+    : productsStorefrontApiBusyDisabledReason || productsBulkExportPermissionDisabledReason;
+  const productsStorefrontApiTemplateDisabledReason = productsStorefrontApiBusyDisabledReason || (!canEditProducts
+    ? editPermissionTitle || 'Your account cannot edit products.'
+    : '');
+  const productsStorefrontApiHandoffDisabledReason = productsStorefrontApiBusyDisabledReason || productsBulkExportPermissionDisabledReason;
+  const productsStorefrontApiActionStatus = [
+    productApiReady ? 'Sync schema already complete.' : productsStorefrontApiSyncDisabledReason ? `Sync schema unavailable: ${productsStorefrontApiSyncDisabledReason}` : 'Sync schema available.',
+    productsStorefrontApiImportDisabledReason ? `Import CSV unavailable: ${productsStorefrontApiImportDisabledReason}` : 'Import CSV available.',
+    productsStorefrontApiStorefrontDisabledReason ? `Storefront page unavailable: ${productsStorefrontApiStorefrontDisabledReason}` : 'Storefront page available.',
+    productsStorefrontApiViewDisabledReason ? `Open API unavailable: ${productsStorefrontApiViewDisabledReason}` : `Open API available at ${storefrontApiUrl}.`,
+    productsStorefrontApiViewDisabledReason ? `Copy URL unavailable: ${productsStorefrontApiViewDisabledReason}` : 'Copy URL available.',
+    productsStorefrontApiHandoffDisabledReason ? `Copy manifest unavailable: ${productsStorefrontApiHandoffDisabledReason}` : 'Copy manifest available.',
+    productsStorefrontApiExportDisabledReason ? `Export CSV unavailable: ${productsStorefrontApiExportDisabledReason}` : `Export CSV available for ${visibleProductActionLabel}.`,
+    productsStorefrontApiTemplateDisabledReason ? `CSV template unavailable: ${productsStorefrontApiTemplateDisabledReason}` : 'CSV template available.',
+  ].join(' ');
   const metrics = useMemo(() => ({
     total: totalProductCount,
     published: products.filter((product) => product.status === 'published').length,
@@ -5343,51 +5376,160 @@ function ProductsRoute() {
           </summary>
           <div className="border-t border-border p-4">
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {!productApiReady && (
+              <div
+                className="flex flex-wrap items-center gap-2"
+                role="group"
+                aria-label="Storefront API actions"
+                aria-describedby={productsStorefrontApiActionStatusId}
+                data-testid="products-storefront-api-actions"
+                data-action-status={productsStorefrontApiActionStatus}
+              >
+                <span id={productsStorefrontApiActionStatusId} className="sr-only" data-testid="products-storefront-api-action-status" aria-live="polite">
+                  {productsStorefrontApiActionStatus}
+                </span>
+                <div className="flex flex-wrap items-center gap-2" data-testid="products-storefront-api-primary-actions">
+                  {!productApiReady && (
+                    <Button
+                      onClick={() => void syncProductsCollection()}
+                      disabled={Boolean(productsStorefrontApiSyncDisabledReason)}
+                      title={productsStorefrontApiSyncDisabledReason || undefined}
+                      aria-describedby={productsStorefrontApiActionStatusId}
+                      data-testid="products-storefront-api-sync-schema"
+                      data-action-state={productsStorefrontApiSyncDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={productsStorefrontApiActionStatus}
+                      data-disabled-reason={productsStorefrontApiSyncDisabledReason || undefined}
+                      iconStart={<Sparkles className="size-4" />}
+                    >
+                      Sync Schema
+                    </Button>
+                  )}
                   <Button
-                    onClick={() => void syncProductsCollection()}
-                    disabled={isProductsAccessBusy || !canConfigureProducts}
-                    title={!canConfigureProducts ? configurePermissionTitle : undefined}
+                    variant="outline"
+                    onClick={() => productImportInputRef.current?.click()}
+                    disabled={Boolean(productsStorefrontApiImportDisabledReason)}
+                    title={productsStorefrontApiImportDisabledReason || undefined}
+                    aria-describedby={productsStorefrontApiActionStatusId}
+                    data-testid="products-storefront-api-import-csv"
+                    data-action-state={productsStorefrontApiImportDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={productsStorefrontApiActionStatus}
+                    data-disabled-reason={productsStorefrontApiImportDisabledReason || undefined}
+                    iconStart={<Upload className="size-4" />}
+                  >
+                    {isImportingProducts ? 'Importing...' : 'Import CSV'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={openStorefrontPage}
+                    disabled={Boolean(productsStorefrontApiStorefrontDisabledReason)}
+                    title={productsStorefrontApiStorefrontDisabledReason || undefined}
+                    aria-describedby={productsStorefrontApiActionStatusId}
+                    data-testid="products-storefront-api-storefront-page"
+                    data-action-state={productsStorefrontApiStorefrontDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={productsStorefrontApiActionStatus}
+                    data-disabled-reason={productsStorefrontApiStorefrontDisabledReason || undefined}
                     iconStart={<Sparkles className="size-4" />}
                   >
-                    Sync Schema
+                    Storefront page
                   </Button>
-                )}
-                <Button onClick={() => void copyProductHandoff()} disabled={isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
-                  Copy manifest
-                </Button>
-                <Button onClick={exportProductsCsv} disabled={filteredProducts.length === 0 || isProductsAccessBusy || !canExportProducts} title={!canExportProducts ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
-                  Export CSV
-                </Button>
-                <Button variant="outline" onClick={downloadProductImportTemplate} disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<FileText className="size-4" />}>
-                  CSV template
-                </Button>
-                <Button variant="outline" onClick={() => productImportInputRef.current?.click()} disabled={isProductsAccessBusy || !canEditProducts} title={!canEditProducts ? editPermissionTitle : undefined} iconStart={<Upload className="size-4" />}>
-                  {isImportingProducts ? 'Importing...' : 'Import CSV'}
-                </Button>
-                <Button onClick={() => void copyStorefrontApiUrl()} disabled={isProductsAccessBusy || !canViewProducts} title={!canViewProducts ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
-                  Copy URL
-                </Button>
-                <Button variant="outline" onClick={openStorefrontPage} disabled={isProductsAccessBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<Sparkles className="size-4" />}>
-                  Storefront page
-                </Button>
-                <a
-                  href={storefrontApiUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-disabled={isProductsAccessBusy || !canViewProducts}
-                  onClick={(event) => {
-                    if (isProductsAccessBusy || !canViewProducts) event.preventDefault();
-                  }}
-                  className={cn(
-                    'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
-                    (isProductsAccessBusy || !canViewProducts) && 'pointer-events-none opacity-60',
-                  )}
+                  <a
+                    href={storefrontApiUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-disabled={Boolean(productsStorefrontApiViewDisabledReason)}
+                    aria-describedby={productsStorefrontApiActionStatusId}
+                    tabIndex={productsStorefrontApiViewDisabledReason ? -1 : undefined}
+                    data-testid="products-storefront-api-open-api"
+                    data-action-state={productsStorefrontApiViewDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={productsStorefrontApiActionStatus}
+                    data-disabled-reason={productsStorefrontApiViewDisabledReason || undefined}
+                    onClick={(event) => {
+                      if (productsStorefrontApiViewDisabledReason) event.preventDefault();
+                    }}
+                    className={cn(
+                      'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent',
+                      productsStorefrontApiViewDisabledReason && 'pointer-events-none opacity-60',
+                    )}
+                  >
+                    <ExternalLink className="size-4" />
+                    Open API
+                  </a>
+                </div>
+                <details
+                  className="group relative"
+                  data-testid="products-storefront-api-secondary-actions"
+                  data-default-collapsed="true"
                 >
-                  <ExternalLink className="size-4" />
-                  Open API
-                </a>
+                  <summary
+                    className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+                    data-testid="products-storefront-api-more-actions"
+                    aria-label="More storefront API actions"
+                  >
+                    <MoreHorizontal className="size-4" />
+                    More actions
+                  </summary>
+                  <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56" data-testid="products-storefront-api-secondary-action-menu">
+                    <Button
+                      variant="ghost"
+                      className="justify-start"
+                      onClick={() => void copyStorefrontApiUrl()}
+                      disabled={Boolean(productsStorefrontApiViewDisabledReason)}
+                      title={productsStorefrontApiViewDisabledReason || undefined}
+                      aria-describedby={productsStorefrontApiActionStatusId}
+                      data-testid="products-storefront-api-copy-url"
+                      data-action-state={productsStorefrontApiViewDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={productsStorefrontApiActionStatus}
+                      data-disabled-reason={productsStorefrontApiViewDisabledReason || undefined}
+                      iconStart={<Copy className="size-4" />}
+                    >
+                      Copy URL
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start"
+                      onClick={() => void copyProductHandoff()}
+                      disabled={Boolean(productsStorefrontApiHandoffDisabledReason)}
+                      title={productsStorefrontApiHandoffDisabledReason || undefined}
+                      aria-describedby={productsStorefrontApiActionStatusId}
+                      data-testid="products-storefront-api-copy-manifest"
+                      data-action-state={productsStorefrontApiHandoffDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={productsStorefrontApiActionStatus}
+                      data-disabled-reason={productsStorefrontApiHandoffDisabledReason || undefined}
+                      iconStart={<Copy className="size-4" />}
+                    >
+                      Copy manifest
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start"
+                      onClick={exportProductsCsv}
+                      disabled={Boolean(productsStorefrontApiExportDisabledReason)}
+                      title={productsStorefrontApiExportDisabledReason || undefined}
+                      aria-describedby={productsStorefrontApiActionStatusId}
+                      data-testid="products-storefront-api-export-csv"
+                      data-action-state={productsStorefrontApiExportDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={productsStorefrontApiActionStatus}
+                      data-disabled-reason={productsStorefrontApiExportDisabledReason || undefined}
+                      iconStart={<Download className="size-4" />}
+                    >
+                      Export CSV
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="justify-start"
+                      onClick={downloadProductImportTemplate}
+                      disabled={Boolean(productsStorefrontApiTemplateDisabledReason)}
+                      title={productsStorefrontApiTemplateDisabledReason || undefined}
+                      aria-describedby={productsStorefrontApiActionStatusId}
+                      data-testid="products-storefront-api-csv-template"
+                      data-action-state={productsStorefrontApiTemplateDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={productsStorefrontApiActionStatus}
+                      data-disabled-reason={productsStorefrontApiTemplateDisabledReason || undefined}
+                      iconStart={<FileText className="size-4" />}
+                    >
+                      CSV template
+                    </Button>
+                  </div>
+                </details>
               </div>
               <div className="grid gap-2 lg:grid-cols-2">
                 <ProductApiSnippet label="List products" value={storefrontApiUrl} />
