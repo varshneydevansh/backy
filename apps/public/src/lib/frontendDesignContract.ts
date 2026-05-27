@@ -1978,6 +1978,8 @@ const buildFrontendDesignProvenanceFields = (
 
   return {
     ...current,
+    templateSource: stringValue(current.templateSource) || 'custom-frontend',
+    templateSourceLabel: stringValue(current.templateSourceLabel) || 'Custom frontend',
     frontendDesignTemplateId: stringValue(current.frontendDesignTemplateId) || template.id,
     frontendDesignTemplateName: stringValue(current.frontendDesignTemplateName) || template.name,
     frontendDesignRoutePattern: stringValue(current.frontendDesignRoutePattern) || template.routePattern,

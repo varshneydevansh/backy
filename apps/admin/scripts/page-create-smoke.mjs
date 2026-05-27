@@ -1469,16 +1469,28 @@ const assertPageCreateSourceContracts = () => {
     'Page create must provide a backend-backed Save draft and preview action with publish-permission gating',
   );
   assert(
-    source.includes('normalizedFrontendDesignTemplateSearch') &&
+      source.includes('normalizedFrontendDesignTemplateSearch') &&
       source.includes('search.frontendDesignTemplateId') &&
       source.includes('search.frontendTemplate') &&
+      source.includes("type PageTemplateSourceMode = 'backy-canvas' | 'custom-frontend';") &&
+      source.includes("templateSource: isPageTemplateSourceMode(search.templateSource) ? search.templateSource : undefined") &&
+      source.includes("data-testid=\"page-template-source-switch\"") &&
+      source.includes("data-testid=\"page-template-source-backy-canvas\"") &&
+      source.includes("data-testid=\"page-template-source-custom-frontend\"") &&
+      source.includes("data-testid=\"page-template-source-status\"") &&
+      source.includes("const handleTemplateSourceChange = (nextSourceMode: PageTemplateSourceMode) =>") &&
       source.includes('designTemplate: normalizedFrontendDesignTemplateSearch(search)'),
-    'Page create route must accept designTemplate, frontendDesignTemplateId, and frontendTemplate aliases for custom frontend template handoffs',
+    'Page create route must accept designTemplate, frontendDesignTemplateId, frontendTemplate, and templateSource aliases for custom frontend template handoffs',
   );
   assert(
     source.includes('extractFrontendTemplateDesignSerialization') &&
       source.includes('const frontendTemplateDesignState = selectedFrontendTemplate') &&
+      source.includes('templateSource: formData.templateSourceMode') &&
+      source.includes("templateSourceLabel: selectedFrontendTemplate ? 'Custom frontend' : 'Backy canvas'") &&
+      source.includes('backyCanvasTemplateId: selectedFrontendTemplate ? undefined : formData.template') &&
+      source.includes("templateSource: input.frontendTemplate ? 'custom-frontend' : input.templateSourceMode") &&
       source.includes('...(templateDesignState?.options || {})') &&
+      source.includes('metadata: templateMetadata') &&
       source.includes('frontendDesignCustomJs: frontendTemplateDesignState?.provenance.customJS') &&
       source.includes('frontendDesignContentDocument: frontendTemplateDesignState?.provenance.contentDocument') &&
       source.includes('frontendDesignThemeTokenRefs: frontendTemplateDesignState?.provenance.themeTokenRefs') &&
@@ -1488,7 +1500,7 @@ const assertPageCreateSourceContracts = () => {
       source.includes('frontendDesignDataBindings: frontendTemplateDesignState?.provenance.dataBindings') &&
       source.includes('frontendDesignEditableMap: frontendTemplateDesignState?.provenance.editableMap') &&
       source.includes('frontendDesignMetadata: frontendTemplateDesignState?.provenance.metadata'),
-    'Page create frontend template seeding must preserve custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance',
+    'Page create frontend template seeding must preserve source mode, custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance',
   );
   assert(
     source.includes("schemaVersion: 'backy.page-create-dataset-readiness.v1'") &&
@@ -3662,10 +3674,17 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
+        sourceSwitch: document.querySelector('[data-testid="page-template-source-switch"]')?.getAttribute('data-active-source') || '',
+        sourceStatus: document.querySelector('[data-testid="page-template-source-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        canvasSourceActive: document.querySelector('[data-testid="page-template-source-backy-canvas"]')?.getAttribute('data-active') || '',
+        customSourceActive: document.querySelector('[data-testid="page-template-source-custom-frontend"]')?.getAttribute('data-active') || '',
+        customSourceTemplateCount: document.querySelector('[data-testid="page-template-source-custom-frontend"]')?.getAttribute('data-template-count') || '',
+        canvasLibraryHidden: !document.querySelector('[data-testid="page-template-library-shell"]'),
         frontendPanel: Boolean(document.querySelector('[data-testid="page-frontend-template-options"]')),
         frontendButtonActive: document.querySelector('[data-testid="page-frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
         title: document.querySelector('#page-title')?.value || '',
         slug: document.querySelector('#page-slug')?.value || '',
+        payloadTemplateSourceMode: payload.templateSource || '',
         payloadTemplateId: payload.template?.id || '',
         payloadTemplateSource: payload.template?.source || '',
         payloadTemplateName: payload.template?.name || '',
@@ -3690,10 +3709,17 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
 
     if (
       state.ready
+      && state.sourceSwitch === 'custom-frontend'
+      && state.sourceStatus.includes(FRONTEND_DESIGN_TEMPLATE_NAME)
+      && state.canvasSourceActive === 'false'
+      && state.customSourceActive === 'true'
+      && state.customSourceTemplateCount !== '0'
+      && state.canvasLibraryHidden
       && state.frontendPanel
       && state.frontendButtonActive === 'true'
       && state.title === title
       && state.slug === slug
+      && state.payloadTemplateSourceMode === 'custom-frontend'
       && state.payloadTemplateId === FRONTEND_DESIGN_TEMPLATE_ID
       && state.payloadTemplateSource === 'frontend-design'
       && state.payloadTemplateName === FRONTEND_DESIGN_TEMPLATE_NAME
@@ -4149,6 +4175,8 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
   assert(page, `Created frontend design page ${pageId} detail was not returned`);
   assert(page.title === title, `Created frontend design title mismatch: ${JSON.stringify({ title: page.title, expected: title })}`);
   assert(page.slug === slug, `Created frontend design slug mismatch: ${JSON.stringify({ slug: page.slug, expected: slug })}`);
+  assert(page.meta?.templateSource === 'custom-frontend', `Created page did not store custom frontend template source: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.templateSourceLabel === 'Custom frontend', `Created page did not store custom frontend template source label: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.frontendDesignTemplateId === FRONTEND_DESIGN_TEMPLATE_ID, `Created page did not store frontend template id: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.frontendDesignTemplateName === FRONTEND_DESIGN_TEMPLATE_NAME, `Created page did not store frontend template name: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.frontendDesignSource?.type === 'custom-frontend', `Created page did not store frontend design source: ${JSON.stringify(page.meta)}`);
@@ -4178,6 +4206,8 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
   assert(canvasSize.width === 1280 && canvasSize.height >= 960, `Frontend template canvas size mismatch: ${JSON.stringify(canvasSize)}`);
   assert(contentDocument?.kind === 'page', `Frontend template contentDocument kind mismatch: ${JSON.stringify(contentDocument)}`);
   assert(contentDocument?.slug === page.slug, `Frontend template contentDocument slug mismatch: ${JSON.stringify({ slug: page.slug, contentDocumentSlug: contentDocument?.slug })}`);
+  assert(contentDocument?.metadata?.templateSource === 'custom-frontend', `Frontend template contentDocument template source missing: ${JSON.stringify(contentDocument?.metadata)}`);
+  assert(contentDocument?.metadata?.frontendDesignTemplateId === FRONTEND_DESIGN_TEMPLATE_ID, `Frontend template contentDocument template id missing: ${JSON.stringify(contentDocument?.metadata)}`);
   assert(typeof content.customCSS === 'string' && content.customCSS.includes('--backy-smoke-primary'), `Frontend template custom CSS was not persisted: ${JSON.stringify(content.customCSS)}`);
   assert(typeof content.customJS === 'string' && content.customJS.includes('__backySmokePageTemplate'), `Frontend template custom JS was not persisted: ${JSON.stringify(content.customJS)}`);
   assert(contentDocument?.metadata?.customJS?.includes('__backySmokePageTemplate'), `Frontend template contentDocument custom JS missing: ${JSON.stringify(contentDocument?.metadata)}`);
@@ -4193,6 +4223,7 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
     pageId,
     slug: page.slug,
     meta: {
+      templateSource: page.meta?.templateSource,
       frontendDesignTemplateId: page.meta?.frontendDesignTemplateId,
       frontendDesignTemplateName: page.meta?.frontendDesignTemplateName,
       frontendDesignSourceType: page.meta?.frontendDesignSource?.type,

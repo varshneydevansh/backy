@@ -55,6 +55,9 @@ interface PageMeta {
   canonical?: string | null;
   jsonLd?: Array<Record<string, unknown>>;
   template?: string | null;
+  templateSource?: string | null;
+  templateSourceLabel?: string | null;
+  backyCanvasTemplateId?: string | null;
   noIndex?: boolean;
   noFollow?: boolean;
   parentPageId?: string | null;
@@ -4518,6 +4521,9 @@ function normalizeFrontendDesignMetaFields(
 ): Pick<
   PageMeta,
   | "frontendDesignTemplateId"
+  | "templateSource"
+  | "templateSourceLabel"
+  | "backyCanvasTemplateId"
   | "frontendDesignTemplateName"
   | "frontendDesignSource"
   | "frontendDesignRoutePattern"
@@ -4568,6 +4574,9 @@ function normalizeFrontendDesignMetaFields(
   };
 
   return {
+    templateSource: stringField("templateSource"),
+    templateSourceLabel: stringField("templateSourceLabel"),
+    backyCanvasTemplateId: stringField("backyCanvasTemplateId"),
     frontendDesignTemplateId: stringField("frontendDesignTemplateId"),
     frontendDesignTemplateName: stringField("frontendDesignTemplateName"),
     frontendDesignSource: recordField("frontendDesignSource"),

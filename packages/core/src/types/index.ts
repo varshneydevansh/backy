@@ -1065,6 +1065,15 @@ export interface PageMeta {
   /** Backy starter template used to seed this page */
   template?: string;
 
+  /** Template source used to create this page: Backy canvas or custom frontend */
+  templateSource?: "backy-canvas" | "custom-frontend" | string;
+
+  /** Human-readable template source label for editor and API consumers */
+  templateSourceLabel?: string;
+
+  /** Backy canvas starter template id when the page was seeded from Backy canvas */
+  backyCanvasTemplateId?: string;
+
   /** Whether to exclude from search engines */
   noIndex?: boolean;
 

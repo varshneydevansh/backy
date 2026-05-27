@@ -42,7 +42,7 @@ import {
     serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 import type { CanvasElement } from '@/types/editor';
-import type { SiteNavigationConfig, SiteNavigationConfigItem, SiteSettings } from '@backy-cms/core';
+import type { BackyContentDocument, SiteNavigationConfig, SiteNavigationConfigItem, SiteSettings } from '@backy-cms/core';
 
 interface NewPageSearch {
     siteId?: string;
@@ -63,6 +63,7 @@ interface NewPageSearch {
     ogImage?: string;
     noIndex?: boolean;
     noFollow?: boolean;
+    templateSource?: PageTemplateSourceMode;
     designTemplate?: string;
     frontendDesignTemplateId?: string;
     frontendTemplate?: string;
@@ -74,6 +75,7 @@ type PageTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pri
 type PageCreationStatus = 'draft' | 'published' | 'scheduled';
 type PageNavigationPlacement = 'none' | 'primary' | 'footer';
 type PageDatasetMode = 'list' | 'item';
+type PageTemplateSourceMode = 'backy-canvas' | 'custom-frontend';
 type PageCreatePermissionKey = 'pages.view' | 'pages.edit' | 'pages.publish' | 'collections.view' | 'sites.view' | 'sites.configure' | 'sites.create';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
@@ -106,6 +108,7 @@ interface PageCreateDraftState {
     ogImage: string;
     noIndex: boolean;
     noFollow: boolean;
+    templateSourceMode: PageTemplateSourceMode;
     designTemplateId: string;
     collectionId: string;
     datasetMode: PageDatasetMode | '';
@@ -1144,6 +1147,10 @@ const isPageDatasetMode = (value: unknown): value is PageDatasetMode => (
     value === 'list' || value === 'item'
 );
 
+const isPageTemplateSourceMode = (value: unknown): value is PageTemplateSourceMode => (
+    value === 'backy-canvas' || value === 'custom-frontend'
+);
+
 const normalizedSearchString = (value: unknown): string | undefined => {
     if (typeof value !== 'string') return undefined;
     const trimmed = value.trim();
@@ -1208,6 +1215,7 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.ogImage?.trim() ? { ogImage: input.ogImage.trim() } : {}),
     ...(input.noIndex ? { noIndex: true } : {}),
     ...(input.noFollow ? { noFollow: true } : {}),
+    ...(input.templateSource === 'custom-frontend' ? { templateSource: input.templateSource } : {}),
     ...(input.designTemplate?.trim() ? { designTemplate: input.designTemplate.trim() } : {}),
     ...(input.collectionId?.trim() ? { collectionId: input.collectionId.trim() } : {}),
     ...(input.datasetMode ? { datasetMode: input.datasetMode } : {}),
@@ -1240,6 +1248,7 @@ const hasMeaningfulPageCreateDraftContent = (
         || formData.ogImage.trim().length > 0
         || formData.noIndex
         || formData.noFollow
+        || formData.templateSourceMode !== 'backy-canvas'
         || formData.designTemplateId.trim().length > 0
         || formData.collectionId.trim().length > 0
         || Boolean(formData.datasetMode)
@@ -1266,6 +1275,7 @@ export const Route = createFileRoute('/pages/new')({
         ogImage: normalizedSearchString(search.ogImage),
         noIndex: normalizedSearchBoolean(search.noIndex),
         noFollow: normalizedSearchBoolean(search.noFollow),
+        templateSource: isPageTemplateSourceMode(search.templateSource) ? search.templateSource : undefined,
         designTemplate: normalizedFrontendDesignTemplateSearch(search),
         frontendDesignTemplateId: normalizedSearchString(search.frontendDesignTemplateId),
         frontendTemplate: normalizedSearchString(search.frontendTemplate),
@@ -1342,6 +1352,7 @@ function NewPageRoute() {
     const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || search.siteId || defaultSiteId;
     const initialTemplate = search.template || 'blank';
     const templateDefaults = TEMPLATE_DEFAULTS[initialTemplate];
+    const initialTemplateSourceMode: PageTemplateSourceMode = search.templateSource || (search.designTemplate ? 'custom-frontend' : 'backy-canvas');
 
     // Default to first site if available
     const [formData, setFormData] = useState<PageCreateDraftState>({
@@ -1363,6 +1374,7 @@ function NewPageRoute() {
         ogImage: search.ogImage ?? '',
         noIndex: search.noIndex ?? false,
         noFollow: search.noFollow ?? false,
+        templateSourceMode: initialTemplateSourceMode,
         designTemplateId: search.designTemplate ?? '',
         collectionId: search.collectionId ?? '',
         datasetMode: search.datasetMode ?? '',
@@ -1387,6 +1399,7 @@ function NewPageRoute() {
         ogImage: nextFormData.ogImage,
         noIndex: nextFormData.noIndex,
         noFollow: nextFormData.noFollow,
+        templateSource: nextFormData.templateSourceMode,
         designTemplate: nextFormData.designTemplateId,
         collectionId: nextFormData.collectionId,
         datasetMode: nextFormData.datasetMode || undefined,
@@ -1633,6 +1646,7 @@ function NewPageRoute() {
         const nextSiteId = nextRequestedSite?.publicSiteId || nextRequestedSite?.id || search.siteId || defaultSiteId;
         const nextTemplate = search.template || 'blank';
         const nextDefaults = TEMPLATE_DEFAULTS[nextTemplate];
+        const nextTemplateSourceMode: PageTemplateSourceMode = search.templateSource || (search.designTemplate ? 'custom-frontend' : 'backy-canvas');
         const nextFormData: PageCreateDraftState = {
             siteId: nextSiteId,
             template: nextTemplate,
@@ -1652,6 +1666,7 @@ function NewPageRoute() {
             ogImage: search.ogImage ?? '',
             noIndex: search.noIndex ?? false,
             noFollow: search.noFollow ?? false,
+            templateSourceMode: nextTemplateSourceMode,
             designTemplateId: search.designTemplate ?? '',
             collectionId: search.collectionId ?? '',
             datasetMode: search.datasetMode || '',
@@ -1676,6 +1691,7 @@ function NewPageRoute() {
                 || nextFormData.ogImage !== current.ogImage
                 || nextFormData.noIndex !== current.noIndex
                 || nextFormData.noFollow !== current.noFollow
+                || nextFormData.templateSourceMode !== current.templateSourceMode
                 || nextFormData.designTemplateId !== current.designTemplateId
                 || nextFormData.collectionId !== current.collectionId
                 || nextFormData.datasetMode !== current.datasetMode
@@ -1705,6 +1721,7 @@ function NewPageRoute() {
         search.ogImage,
         search.noIndex,
         search.noFollow,
+        search.templateSource,
         search.designTemplate,
         search.collectionId,
         search.datasetMode,
@@ -1716,6 +1733,8 @@ function NewPageRoute() {
         updatePageDraft({
             siteId: nextSiteId,
             parentPageId: '',
+            templateSourceMode: 'backy-canvas',
+            designTemplateId: '',
             collectionId: '',
             datasetMode: '',
         });
@@ -1732,9 +1751,12 @@ function NewPageRoute() {
         () => (frontendDesign?.templates || []).filter((template) => template.type === 'page'),
         [frontendDesign?.templates],
     );
+    const isCustomFrontendTemplateSource = formData.templateSourceMode === 'custom-frontend';
     const selectedFrontendTemplate = useMemo(
-        () => frontendPageTemplates.find((template) => template.id === formData.designTemplateId) || null,
-        [formData.designTemplateId, frontendPageTemplates],
+        () => isCustomFrontendTemplateSource
+            ? frontendPageTemplates.find((template) => template.id === formData.designTemplateId) || null
+            : null,
+        [formData.designTemplateId, frontendPageTemplates, isCustomFrontendTemplateSource],
     );
     const selectedDatasetCollection = useMemo(
         () => collections.find((collection) => (
@@ -1760,13 +1782,64 @@ function NewPageRoute() {
             ? `${selectedDatasetCollection.name} dataset ${selectedDatasetMode || 'list'} page`
         : selectedTemplate.name;
     const effectiveCanvasSize = selectedFrontendTemplate?.canvasSize || DEFAULT_CANVAS_SIZE;
+    const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(selectedFrontendTemplate);
+    const templateSourceStatus = isCustomFrontendTemplateSource
+        ? selectedFrontendTemplate
+            ? `Custom frontend template selected: ${selectedFrontendTemplate.name}.`
+            : frontendDesignLoading
+                ? 'Loading custom frontend templates.'
+                : frontendPageTemplates.length > 0
+                    ? 'Choose a custom frontend template before creating this page.'
+                    : 'No custom frontend page templates are captured for this site yet.'
+        : `Backy canvas template selected: ${selectedTemplate.name}.`;
 
     useEffect(() => {
+        if (formData.templateSourceMode !== 'custom-frontend' && formData.designTemplateId) {
+            updatePageDraft({ designTemplateId: '' }, { markEdited: false });
+            return;
+        }
+
         if (formData.designTemplateId && frontendDesign && !frontendPageTemplates.some((template) => template.id === formData.designTemplateId)) {
             updatePageDraft({ designTemplateId: '' }, { markEdited: false });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [formData.designTemplateId, frontendDesign, frontendPageTemplates]);
+    }, [formData.designTemplateId, formData.templateSourceMode, frontendDesign, frontendPageTemplates]);
+
+    const handleTemplateSourceChange = (nextSourceMode: PageTemplateSourceMode) => {
+        if (templateSelectionDisabled || !canEditPages || nextSourceMode === formData.templateSourceMode) return;
+
+        if (nextSourceMode === 'backy-canvas') {
+            updatePageDraft({
+                templateSourceMode: 'backy-canvas',
+                designTemplateId: '',
+            });
+            return;
+        }
+
+        const nextTemplate = selectedFrontendTemplate || frontendPageTemplates[0] || null;
+        if (!nextTemplate) {
+            updatePageDraft({
+                templateSourceMode: 'custom-frontend',
+                designTemplateId: '',
+            });
+            return;
+        }
+
+        const shouldApplyTitle = !formData.title.trim() || formData.title === TEMPLATE_DEFAULTS[formData.template].title;
+        const routeSlug = routeSlugFromPattern(nextTemplate.routePattern);
+        const shouldApplySlug = Boolean(routeSlug) && (!formData.slug.trim() || formData.slug === TEMPLATE_DEFAULTS[formData.template].slug);
+        const shouldApplyDescription = !formData.description.trim() || formData.description === TEMPLATE_DEFAULTS[formData.template].description;
+
+        updatePageDraft({
+            templateSourceMode: 'custom-frontend',
+            designTemplateId: nextTemplate.id,
+            title: shouldApplyTitle ? nextTemplate.name : formData.title,
+            slug: formData.isHomepage ? 'index' : shouldApplySlug ? routeSlug : formData.slug,
+            description: shouldApplyDescription ? nextTemplate.description || formData.description : formData.description,
+            navigationLabel: shouldApplyTitle ? nextTemplate.name : formData.navigationLabel || formData.title,
+            seoTitle: shouldApplyTitle ? nextTemplate.name : formData.seoTitle || formData.title,
+        });
+    };
 
     const handleTemplateChange = (nextTemplate: PageTemplate) => {
         if (templateSelectionDisabled || !canEditPages) return;
@@ -1786,6 +1859,7 @@ function NewPageRoute() {
                 navigationPlacement: DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
                 navigationLabel: shouldApplyTitle ? nextDefaults.title : formData.navigationLabel || formData.title,
                 seoTitle: shouldApplyTitle ? nextDefaults.title : formData.seoTitle || formData.title,
+                templateSourceMode: 'backy-canvas',
                 designTemplateId: '',
             },
         );
@@ -1800,6 +1874,7 @@ function NewPageRoute() {
 
         updatePageDraft(
             {
+                templateSourceMode: 'custom-frontend',
                 designTemplateId: template.id,
                 title: shouldApplyTitle ? template.name : formData.title,
                 slug: formData.isHomepage ? 'index' : shouldApplySlug ? routeSlug : formData.slug,
@@ -1993,6 +2068,7 @@ function NewPageRoute() {
         && canonicalValid
         && jsonLdValid
         && datasetImportReady
+        && templateSourceReady
         && (!formData.isHomepage || formData.slug.trim() || formData.title.trim()),
     );
     const canSubmit = Boolean(baseCreateReady && publishPermissionReady && hasFutureSchedule);
@@ -2011,13 +2087,20 @@ function NewPageRoute() {
         if (routeConflict) return routeConflict.message;
         if (!canonicalValid) return 'Use a canonical path that starts with / or paste a valid site URL.';
         if (!jsonLdValid) return jsonLdResult.message;
+        if (!templateSourceReady) return isCustomFrontendTemplateSource
+            ? frontendDesignLoading
+                ? 'Backy is loading custom frontend templates for this site.'
+                : frontendPageTemplates.length > 0
+                    ? 'Choose a captured custom frontend template before creating this page.'
+                    : 'Capture or import a frontend page template before using the custom frontend source.'
+            : 'Choose a starter template before creating this page.';
         if (formData.collectionId && collectionsLoading) return 'Loading the selected collection before creating the dataset page.';
         if (formData.collectionId && !selectedDatasetCollection) return collectionsError || 'Choose an existing collection before creating this dataset page.';
         if (!hasValidParentPage) return 'Choose an existing parent page or keep this page at the top level.';
         if (scheduleValidationMessage) return scheduleValidationMessage;
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this page to navigation.';
         return 'Review the required page basics before creating this page.';
-    }, [canEditPages, canSubmit, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isLoading, jsonLdResult, jsonLdValid, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, scheduleValidationMessage, selectedDatasetCollection, selectedSite]);
+    }, [canEditPages, canSubmit, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, frontendDesignLoading, frontendPageTemplates.length, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isCustomFrontendTemplateSource, isLoading, jsonLdResult, jsonLdValid, publishPermissionReady, publishPermissionTitle, routeCheckError, routeConflict, scheduleValidationMessage, selectedDatasetCollection, selectedSite, templateSourceReady]);
     const submitControlState = canSubmit ? 'ready' : isPageCreateStatusBusy ? 'busy' : 'blocked';
     const previewDraftBlockerMessage = useMemo(() => {
         if (isPreviewAfterCreateBusy || canCreatePreviewDraft) return null;
@@ -2032,12 +2115,19 @@ function NewPageRoute() {
         if (routeConflict) return routeConflict.message;
         if (!canonicalValid) return 'Use a canonical path that starts with / or paste a valid site URL.';
         if (!jsonLdValid) return jsonLdResult.message;
+        if (!templateSourceReady) return isCustomFrontendTemplateSource
+            ? frontendDesignLoading
+                ? 'Backy is loading custom frontend templates for this site.'
+                : frontendPageTemplates.length > 0
+                    ? 'Choose a captured custom frontend template before creating this preview draft.'
+                    : 'Capture or import a frontend page template before using the custom frontend source.'
+            : 'Choose a starter template before creating this preview draft.';
         if (formData.collectionId && collectionsLoading) return 'Loading the selected collection before creating the preview draft.';
         if (formData.collectionId && !selectedDatasetCollection) return collectionsError || 'Choose an existing collection before creating this dataset preview draft.';
         if (!hasValidParentPage) return 'Choose an existing parent page or keep this preview draft at the top level.';
         if (!hasNavigationLabel) return 'Add a navigation label or choose not to add this preview draft to navigation.';
         return 'Review the required page basics before creating this preview draft.';
-    }, [canCreatePreviewDraft, canEditPages, canPublishPages, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isPreviewAfterCreateBusy, jsonLdResult, jsonLdValid, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite]);
+    }, [canCreatePreviewDraft, canEditPages, canPublishPages, canonicalValid, collectionRouteCheckError, collectionsError, collectionsLoading, editPermissionTitle, formData.collectionId, formData.title, frontendDesignLoading, frontendPageTemplates.length, hasNavigationLabel, hasValidParentPage, isCheckingPages, isCollectionRouteCheckPending, isCustomFrontendTemplateSource, isPreviewAfterCreateBusy, jsonLdResult, jsonLdValid, publishPermissionTitle, routeCheckError, routeConflict, selectedDatasetCollection, selectedSite, templateSourceReady]);
     const previewDraftControlState = canCreatePreviewDraft ? 'ready' : isPageCreateStatusBusy ? 'busy' : 'blocked';
     const pageCreateSubmitActionStatusId = 'page-create-submit-action-status';
     const pageCreatePreviewActionStatusId = 'page-create-preview-action-status';
@@ -2185,6 +2275,11 @@ function NewPageRoute() {
                     : 'Blank still creates a heading and intro copy.',
                 ready: true,
             },
+            {
+                label: 'Template source',
+                detail: templateSourceStatus,
+                ready: templateSourceReady,
+            },
             ...(formData.collectionId ? [{
                 label: 'Dataset import',
                 detail: selectedDatasetCollection
@@ -2248,6 +2343,7 @@ function NewPageRoute() {
         formData.parentPageId,
         formData.seoTitle,
         formData.template,
+        formData.templateSourceMode,
         formData.title,
         formData.designTemplateId,
         formData.collectionId,
@@ -2273,6 +2369,8 @@ function NewPageRoute() {
         selectedDatasetMode,
         selectedTemplate.sections.length,
         frontendDesign?.chrome,
+        templateSourceReady,
+        templateSourceStatus,
     ]);
     const datasetCreationReadiness = useMemo(() => {
         if (!formData.collectionId.trim() && !selectedDatasetCollection) return null;
@@ -2492,6 +2590,7 @@ function NewPageRoute() {
         siteId: formData.siteId,
         status: formData.status,
         scheduledAt: formData.status === 'scheduled' ? formData.scheduledAt : null,
+        templateSource: formData.templateSourceMode,
         template: selectedFrontendTemplate
             ? { id: selectedFrontendTemplate.id, source: 'frontend-design', name: selectedFrontendTemplate.name }
             : formData.template,
@@ -2598,6 +2697,7 @@ function NewPageRoute() {
         formData.siteId,
         formData.status,
         formData.template,
+        formData.templateSourceMode,
         formData.title,
         formData.designTemplateId,
         selectedDatasetCollection,
@@ -2661,7 +2761,8 @@ function NewPageRoute() {
         template: {
             id: selectedFrontendTemplate?.id || selectedTemplate.id,
             name: selectedFrontendTemplate?.name || selectedTemplate.name,
-            source: selectedFrontendTemplate ? 'frontend-design' : 'backy-starter',
+            source: formData.templateSourceMode,
+            sourceContract: selectedFrontendTemplate ? 'frontend-design' : 'backy-canvas-editor',
             sections: selectedFrontendTemplate ? selectedFrontendTemplate.bindingHints || [] : selectedTemplate.sections,
             seedsFormApi: ['contact', 'newsletter', 'survey', 'registration', 'member-login', 'member-account'].includes(formData.template),
             seedsDynamicData: ['storefront', 'product-detail', 'pricing', 'services', 'booking', 'portfolio', 'gallery', 'events', 'privacy', 'terms', 'cookie-policy', 'accessibility-statement', 'refund-policy', 'shipping-policy', 'cart', 'checkout', 'order-confirmation', 'help-center', 'faq', 'testimonials', 'blog-index', 'blog-post', 'team', 'careers'].includes(formData.template) || Boolean(selectedDatasetCollection),
@@ -2741,6 +2842,7 @@ function NewPageRoute() {
         formData.siteId,
         formData.status,
         formData.template,
+        formData.templateSourceMode,
         formData.title,
         formData.designTemplateId,
         effectiveSeoDescription,
@@ -2835,6 +2937,7 @@ function NewPageRoute() {
 
         const recoveredFormData: PageCreateDraftState = {
             ...draftRecovery.formData,
+            templateSourceMode: draftRecovery.formData.templateSourceMode || (draftRecovery.formData.designTemplateId ? 'custom-frontend' : 'backy-canvas'),
             designTemplateId: draftRecovery.formData.designTemplateId || '',
             collectionId: draftRecovery.formData.collectionId || '',
             datasetMode: draftRecovery.formData.datasetMode || '',
@@ -2910,6 +3013,7 @@ function NewPageRoute() {
             : null;
         const content = createInitialPageContent({
             template: formData.template,
+            templateSourceMode: formData.templateSourceMode,
             frontendTemplate: selectedFrontendTemplate,
             frontendDesign,
             datasetCollection: selectedDatasetCollection,
@@ -2940,6 +3044,9 @@ function NewPageRoute() {
                 noIndex: formData.noIndex,
                 noFollow: formData.noFollow,
                 template: formData.template,
+                templateSource: formData.templateSourceMode,
+                templateSourceLabel: selectedFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
+                backyCanvasTemplateId: selectedFrontendTemplate ? undefined : formData.template,
                 frontendDesignTemplateId: selectedFrontendTemplate?.id,
                 frontendDesignTemplateName: selectedFrontendTemplate?.name,
                 frontendDesignSource: selectedFrontendTemplate ? frontendDesign?.source : undefined,
@@ -4153,8 +4260,56 @@ function NewPageRoute() {
                             )}
                         </div>
 
+                        <div
+                            className="rounded-lg border border-border bg-background p-3"
+                            data-testid="page-template-source-switch"
+                            data-active-source={formData.templateSourceMode}
+                            data-action-status={templateSourceStatus}
+                        >
+                            <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Template source">
+                                <button
+                                    type="button"
+                                    onClick={() => handleTemplateSourceChange('backy-canvas')}
+                                    disabled={templateSelectionDisabled}
+                                    aria-pressed={formData.templateSourceMode === 'backy-canvas'}
+                                    data-testid="page-template-source-backy-canvas"
+                                    data-active={formData.templateSourceMode === 'backy-canvas'}
+                                    className={cn(
+                                        'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
+                                        formData.templateSourceMode === 'backy-canvas'
+                                            ? 'border-primary bg-primary text-primary-foreground'
+                                            : 'border-border bg-card text-foreground hover:border-primary/50 hover:bg-accent',
+                                    )}
+                                >
+                                    Backy canvas
+                                    <span className="mt-0.5 block text-xs font-normal opacity-80">Generated editable page</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleTemplateSourceChange('custom-frontend')}
+                                    disabled={templateSelectionDisabled}
+                                    aria-pressed={formData.templateSourceMode === 'custom-frontend'}
+                                    data-testid="page-template-source-custom-frontend"
+                                    data-active={formData.templateSourceMode === 'custom-frontend'}
+                                    data-template-count={frontendPageTemplates.length}
+                                    className={cn(
+                                        'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
+                                        formData.templateSourceMode === 'custom-frontend'
+                                            ? 'border-teal-700 bg-teal-700 text-white'
+                                            : 'border-border bg-card text-foreground hover:border-teal-400 hover:bg-accent',
+                                    )}
+                                >
+                                    Custom frontend
+                                    <span className="mt-0.5 block text-xs font-normal opacity-80">Stored design contract</span>
+                                </button>
+                            </div>
+                            <div className="mt-2 text-xs text-muted-foreground" data-testid="page-template-source-status">
+                                {templateSourceStatus}
+                            </div>
+                        </div>
+
                         <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                            {frontendPageTemplates.length > 0 && (
+                            {isCustomFrontendTemplateSource && frontendPageTemplates.length > 0 && (
                                 <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-teal-200 bg-teal-50/60 p-4" data-testid="page-frontend-template-options">
                                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
@@ -4199,16 +4354,22 @@ function NewPageRoute() {
                                     </div>
                                 </div>
                             )}
-                            {frontendDesignLoading && (
+                            {isCustomFrontendTemplateSource && frontendDesignLoading && (
                                 <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
                                     Loading frontend design templates...
                                 </div>
                             )}
-                            {frontendDesignError && (
+                            {isCustomFrontendTemplateSource && frontendDesignError && (
                                 <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                                     {frontendDesignError}
                                 </div>
                             )}
+                            {isCustomFrontendTemplateSource && !frontendDesignLoading && !frontendDesignError && frontendPageTemplates.length === 0 && (
+                                <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-dashed border-teal-300 bg-teal-50/50 px-4 py-5 text-sm text-teal-950" data-testid="page-frontend-template-empty">
+                                    No custom frontend page templates are captured for this site. Use Backy canvas or import a frontend design contract from Settings.
+                                </div>
+                            )}
+                            {!isCustomFrontendTemplateSource && (
                             <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-border bg-background p-3" data-testid="page-template-library-shell">
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
@@ -4305,14 +4466,17 @@ function NewPageRoute() {
                                     )}
                                 </div>
                             </div>
+                            )}
                         </div>
 
                         <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(240px,0.9fr)]">
                             <TemplateVisualPreview template={formData.template} active={true} size="large" testId="page-selected-template-preview" />
                             <div className="space-y-3">
                                 <div>
-                                    <div className="text-sm font-semibold text-foreground">{selectedTemplate.name} canvas seed</div>
-                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{selectedTemplate.detail}</p>
+                                    <div className="text-sm font-semibold text-foreground">{selectedFrontendTemplate ? selectedFrontendTemplate.name : selectedTemplate.name} seed</div>
+                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                        {selectedFrontendTemplate?.description || selectedTemplate.detail}
+                                    </p>
                                 </div>
                                 <dl className="grid gap-2 text-xs sm:grid-cols-3 lg:grid-cols-1">
                                     <div className="rounded-lg border border-border bg-card px-3 py-2">
@@ -4766,6 +4930,7 @@ const isRecoverablePageCreateDraft = (value: Partial<PageCreateAutosaveDraft>): 
         && typeof formData.ogImage === 'string'
         && typeof formData.noIndex === 'boolean'
         && typeof formData.noFollow === 'boolean'
+        && (formData.templateSourceMode === undefined || isPageTemplateSourceMode(formData.templateSourceMode))
         && (formData.designTemplateId === undefined || typeof formData.designTemplateId === 'string')
         && (formData.collectionId === undefined || typeof formData.collectionId === 'string')
         && (formData.datasetMode === undefined || formData.datasetMode === '' || isPageDatasetMode(formData.datasetMode))
@@ -4887,6 +5052,7 @@ function appendPageToNavigation(
 
 function createInitialPageContent(input: {
     template: PageTemplate;
+    templateSourceMode: PageTemplateSourceMode;
     frontendTemplate?: SiteFrontendDesignTemplate | null;
     frontendDesign?: SiteFrontendDesignContract | null;
     datasetCollection?: Collection | null;
@@ -4915,6 +5081,15 @@ function createInitialPageContent(input: {
         ? extractFrontendTemplateDesignSerialization(input.frontendTemplate.content, input.frontendDesign?.tokens?.customCss)
         : null;
     const customCSS = templateDesignState?.customCSS;
+    const templateMetadata: BackyContentDocument['metadata'] = {
+        ...(templateDesignState?.options.metadata || {}),
+        templateSource: input.frontendTemplate ? 'custom-frontend' : input.templateSourceMode,
+        templateSourceLabel: input.frontendTemplate ? 'Custom frontend' : 'Backy canvas',
+        ...(!input.frontendTemplate ? { backyCanvasTemplateId: input.template } : {}),
+        ...(input.frontendTemplate?.id ? { frontendDesignTemplateId: input.frontendTemplate.id } : {}),
+        ...(input.frontendTemplate?.name ? { frontendDesignTemplateName: input.frontendTemplate.name } : {}),
+        ...(input.frontendTemplate?.routePattern ? { frontendDesignRoutePattern: input.frontendTemplate.routePattern } : {}),
+    };
 
     return JSON.parse(serializeCanvasContent(elements, {
         ...canvasSize,
@@ -4927,6 +5102,7 @@ function createInitialPageContent(input: {
         status: input.status,
         locale: 'en',
         ...(templateDesignState?.options || {}),
+        metadata: templateMetadata,
     }));
 }
 
