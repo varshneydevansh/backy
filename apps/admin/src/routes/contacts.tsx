@@ -466,6 +466,30 @@ function ContactsRoute() {
       return matchesSearch;
     });
   }, [allContacts, duplicateEmailSet, formById, qualityFilter, searchQuery, selectedFormId, statusFilter]);
+  const contactsViewActionStatusId = 'contacts-view-action-status';
+  const contactsExportActionStatusId = 'contacts-export-action-status';
+  const contactsSavedListActionStatusId = 'contacts-saved-list-action-status';
+  const contactViewDisabledReason = !canViewForms
+    ? viewPermissionTitle || 'Your account cannot view contact pipelines.'
+    : isContactsBusy
+      ? 'Contacts are temporarily unavailable while Backy updates contact data.'
+      : '';
+  const contactExportDisabledReason = !canExportForms
+    ? exportPermissionTitle || 'Your account cannot export contacts.'
+    : isContactsBusy
+      ? 'Contact exports are temporarily unavailable while Backy updates contact data.'
+      : '';
+  const contactExportCsvDisabledReason = contactExportDisabledReason || (filteredContacts.length === 0 ? 'No visible contacts to export.' : '');
+  const contactSavedListMutationDisabledReason = contactsCreateTemplateDisabledReason;
+  const contactsViewActionStatus = contactViewDisabledReason
+    ? `Refresh contacts unavailable: ${contactViewDisabledReason}`
+    : `Refresh contacts available for ${activeSiteId}.`;
+  const contactsExportActionStatus = contactExportCsvDisabledReason
+    ? `Export contacts CSV unavailable: ${contactExportCsvDisabledReason}`
+    : `Export contacts CSV available for ${filteredContacts.length} visible contact${filteredContacts.length === 1 ? '' : 's'}.`;
+  const contactsSavedListActionStatus = contactSavedListMutationDisabledReason
+    ? `Saved list actions unavailable: ${contactSavedListMutationDisabledReason}`
+    : `Saved list actions available for ${activeSiteId}.`;
   const hasActiveContactFilters = Boolean(
     searchQuery.trim() ||
     selectedFormId !== 'all' ||
@@ -2131,6 +2155,7 @@ function ContactsRoute() {
     return !canViewSettings;
   };
   const contactWorkflowSurfaceTitle = (surface: typeof CONTACT_WORKFLOW_SURFACES[number]) => {
+    if (isContactsBusy) return contactViewDisabledReason;
     if (surface.route === '/pages/new' && !canEditPages) return pagesEditPermissionTitle;
     if (surface.route === '/forms' && !canViewForms) return viewPermissionTitle;
     if (surface.route === '/users' && !canViewUsers) return usersViewPermissionTitle;
@@ -2173,7 +2198,22 @@ function ContactsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadContacts()} disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button
+            onClick={() => void loadContacts()}
+            disabled={contactViewDisabled}
+            title={contactViewDisabledReason || undefined}
+            aria-describedby={contactsViewActionStatusId}
+            iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+            data-action="contacts.refresh"
+            data-action-target={activeSiteId}
+            data-action-route="/contacts"
+            data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+            data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={contactsViewActionStatus}
+            data-disabled-reason={contactViewDisabledReason || undefined}
+            data-target-site-id={activeSiteId}
+            data-testid="contacts-header-refresh"
+          >
             Refresh
           </Button>
         </div>
@@ -2236,6 +2276,15 @@ function ContactsRoute() {
       <span id={contactsCreateActionStatusId} className="sr-only" data-testid="contacts-create-action-status" aria-live="polite">
         {contactsCreateActionStatus}
       </span>
+      <span id={contactsViewActionStatusId} className="sr-only" data-testid="contacts-view-action-status" aria-live="polite">
+        {contactsViewActionStatus}
+      </span>
+      <span id={contactsExportActionStatusId} className="sr-only" data-testid="contacts-export-action-status" aria-live="polite">
+        {contactsExportActionStatus}
+      </span>
+      <span id={contactsSavedListActionStatusId} className="sr-only" data-testid="contacts-saved-list-action-status" aria-live="polite">
+        {contactsSavedListActionStatus}
+      </span>
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="contacts-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -2263,7 +2312,11 @@ function ContactsRoute() {
                 title={contactsCreateMutationDisabledReason || undefined}
                 aria-describedby={contactsCreateActionStatusId}
                 iconStart={<UserPlus className="size-4" />}
+                data-action="contacts.create.focus"
+                data-action-target={apiForm?.id || activeSiteId}
+                data-action-route={contactCreateUrl || contactListsUrl}
                 data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
+                data-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
                 data-action-status={contactsCreateActionStatus}
                 data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
                 data-target-site-id={activeSiteId}
@@ -2278,7 +2331,11 @@ function ContactsRoute() {
                 title={contactsCreateMutationDisabledReason || undefined}
                 aria-describedby={contactsCreateActionStatusId}
                 iconStart={<Upload className="size-4" />}
+                data-action="contacts.import.csv"
+                data-action-target={apiForm?.id || activeSiteId}
+                data-action-route={contactImportUrl || contactListsUrl}
                 data-action-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
+                data-state={contactsCreateMutationDisabledReason ? 'blocked' : 'ready'}
                 data-action-status={contactsImportCsvActionStatus}
                 data-disabled-reason={contactsCreateMutationDisabledReason || undefined}
                 data-target-site-id={activeSiteId}
@@ -2290,8 +2347,17 @@ function ContactsRoute() {
                 variant="outline"
                 onClick={handleExportContacts}
                 disabled={filteredContacts.length === 0 || contactExportDisabled}
-                title={!canExportForms ? exportPermissionTitle : undefined}
+                title={contactExportCsvDisabledReason || undefined}
+                aria-describedby={contactsExportActionStatusId}
                 iconStart={<Download className="size-4" />}
+                data-action="contacts.export.csv"
+                data-action-target={apiForm?.id || activeSiteId}
+                data-action-route={contactsUrl || contactListsUrl}
+                data-action-state={contactExportCsvDisabledReason ? 'blocked' : 'ready'}
+                data-state={contactExportCsvDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={contactsExportActionStatus}
+                data-disabled-reason={contactExportCsvDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="contacts-command-export-csv"
               >
                 Export CSV
@@ -2300,8 +2366,17 @@ function ContactsRoute() {
                 variant="outline"
                 onClick={() => void loadContacts()}
                 disabled={contactViewDisabled}
-                title={!canViewForms ? viewPermissionTitle : undefined}
+                title={contactViewDisabledReason || undefined}
+                aria-describedby={contactsViewActionStatusId}
                 iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+                data-action="contacts.refresh"
+                data-action-target={activeSiteId}
+                data-action-route="/contacts"
+                data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={contactsViewActionStatus}
+                data-disabled-reason={contactViewDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="contacts-command-refresh"
               >
                 Refresh contacts
@@ -2325,7 +2400,11 @@ function ContactsRoute() {
                   title={contactsCreateTemplateDisabledReason || undefined}
                   aria-describedby={contactsCreateActionStatusId}
                   iconStart={<FileText className="size-4" />}
+                  data-action="contacts.download.importTemplate"
+                  data-action-target={activeSiteId}
+                  data-action-route={contactImportUrl || contactListsUrl}
                   data-action-state={contactsCreateTemplateDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactsCreateTemplateDisabledReason ? 'blocked' : 'ready'}
                   data-action-status={contactsImportTemplateActionStatus}
                   data-disabled-reason={contactsCreateTemplateDisabledReason || undefined}
                   data-target-site-id={activeSiteId}
@@ -2339,8 +2418,17 @@ function ContactsRoute() {
                   size="sm"
                   onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
                   disabled={contactViewDisabled}
-                  title={!canViewForms ? viewPermissionTitle : undefined}
+                  title={contactViewDisabledReason || undefined}
+                  aria-describedby={contactsViewActionStatusId}
                   iconStart={<Copy className="size-4" />}
+                  data-action="contacts.copy.handoffManifest"
+                  data-action-target={activeSiteId}
+                  data-action-route={contactListsUrl}
+                  data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsViewActionStatus}
+                  data-disabled-reason={contactViewDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   data-testid="contacts-command-copy-manifest"
                 >
                   Copy manifest
@@ -2351,8 +2439,17 @@ function ContactsRoute() {
                   size="sm"
                   onClick={downloadContactHandoff}
                   disabled={contactViewDisabled}
-                  title={!canViewForms ? viewPermissionTitle : undefined}
+                  title={contactViewDisabledReason || undefined}
+                  aria-describedby={contactsViewActionStatusId}
                   iconStart={<Download className="size-4" />}
+                  data-action="contacts.download.handoffJson"
+                  data-action-target={activeSiteId}
+                  data-action-route={contactListsUrl}
+                  data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsViewActionStatus}
+                  data-disabled-reason={contactViewDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   data-testid="contacts-command-download-json"
                 >
                   Download JSON
@@ -2454,6 +2551,14 @@ function ContactsRoute() {
                   onClick={() => openContactWorkflowSurface(surface)}
                   disabled={contactWorkflowSurfaceDisabled(surface)}
                   title={contactWorkflowSurfaceTitle(surface)}
+                  aria-describedby={contactsViewActionStatusId}
+                  data-action="contacts.open.workflowSurface"
+                  data-action-target={surface.key}
+                  data-action-route={surface.route}
+                  data-action-state={contactWorkflowSurfaceDisabled(surface) ? 'blocked' : 'ready'}
+                  data-state={contactWorkflowSurfaceDisabled(surface) ? 'blocked' : 'ready'}
+                  data-disabled-reason={contactWorkflowSurfaceTitle(surface) || undefined}
+                  data-target-site-id={activeSiteId}
                   className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div className="text-sm font-semibold text-foreground">{surface.title}</div>
@@ -2492,10 +2597,44 @@ function ContactsRoute() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={openUsersWorkspace} disabled={isContactsBusy || !canViewUsers} title={!canViewUsers ? usersViewPermissionTitle : undefined} iconStart={<UserCheck className="size-4" />}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openUsersWorkspace}
+                  disabled={isContactsBusy || !canViewUsers}
+                  title={isContactsBusy ? contactViewDisabledReason : !canViewUsers ? usersViewPermissionTitle : undefined}
+                  aria-describedby={contactsViewActionStatusId}
+                  iconStart={<UserCheck className="size-4" />}
+                  data-action="contacts.open.usersWorkspace"
+                  data-action-target={activeSiteId}
+                  data-action-route={`/users?siteId=${encodeURIComponent(activeSiteId)}`}
+                  data-action-state={isContactsBusy || !canViewUsers ? 'blocked' : 'ready'}
+                  data-state={isContactsBusy || !canViewUsers ? 'blocked' : 'ready'}
+                  data-action-status={contactsViewActionStatus}
+                  data-disabled-reason={isContactsBusy ? contactViewDisabledReason : !canViewUsers ? usersViewPermissionTitle : undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid="contacts-promotion-users-button"
+                >
                   Users
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => openLeadCapturePage('registration')} disabled={isContactsBusy || !canEditPages} title={!canEditPages ? pagesEditPermissionTitle : undefined} iconStart={<UserPlus className="size-4" />}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openLeadCapturePage('registration')}
+                  disabled={isContactsBusy || !canEditPages}
+                  title={isContactsBusy ? contactViewDisabledReason : !canEditPages ? pagesEditPermissionTitle : undefined}
+                  aria-describedby={contactsViewActionStatusId}
+                  iconStart={<UserPlus className="size-4" />}
+                  data-action="contacts.open.registrationPageTemplate"
+                  data-action-target="registration"
+                  data-action-route={`/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`}
+                  data-action-state={isContactsBusy || !canEditPages ? 'blocked' : 'ready'}
+                  data-state={isContactsBusy || !canEditPages ? 'blocked' : 'ready'}
+                  data-action-status={contactsViewActionStatus}
+                  data-disabled-reason={isContactsBusy ? contactViewDisabledReason : !canEditPages ? pagesEditPermissionTitle : undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid="contacts-promotion-registration-page-button"
+                >
                   Registration page
                 </Button>
               </div>
@@ -2526,8 +2665,18 @@ function ContactsRoute() {
                   variant="outline"
                   onClick={() => void copyContactApiText(contactMemberCaptureHandoffText, 'Member capture handoff')}
                   disabled={contactViewDisabled}
-                  title={!canViewForms ? viewPermissionTitle : undefined}
+                  title={contactViewDisabledReason || undefined}
+                  aria-describedby={contactsViewActionStatusId}
                   iconStart={<Copy className="size-3.5" />}
+                  data-action="contacts.copy.memberCaptureHandoff"
+                  data-action-target={activeSiteId}
+                  data-action-route={contactListsUrl}
+                  data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsViewActionStatus}
+                  data-disabled-reason={contactViewDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid="contacts-member-capture-handoff-copy-button"
                 >
                   Copy member handoff
                 </Button>
@@ -2637,8 +2786,18 @@ function ContactsRoute() {
             variant="outline"
             onClick={() => void copyContactApiText(contactListsUrl, 'Contact lists URL')}
             disabled={contactViewDisabled}
-            title={!canViewForms ? viewPermissionTitle : undefined}
+            title={contactViewDisabledReason || undefined}
+            aria-describedby={contactsViewActionStatusId}
             iconStart={<Copy className="size-4" />}
+            data-action="contacts.copy.savedListsEndpoint"
+            data-action-target={activeSiteId}
+            data-action-route={contactListsUrl}
+            data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+            data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+            data-action-status={contactsViewActionStatus}
+            data-disabled-reason={contactViewDisabledReason || undefined}
+            data-target-site-id={activeSiteId}
+            data-testid="contacts-saved-list-copy-endpoint"
           >
             Copy endpoint
           </Button>
@@ -2654,6 +2813,13 @@ function ContactsRoute() {
               aria-describedby={savedListNameInlineError ? 'contacts-saved-list-name-error' : undefined}
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Qualified leads with source values"
+              data-action="contacts.savedList.name"
+              data-action-target={activeSiteId}
+              data-action-route={contactListsUrl}
+              data-action-state={contactSavedListMutationDisabledReason ? 'blocked' : 'ready'}
+              data-state={savedListName.trim() ? 'filled' : 'empty'}
+              data-disabled-reason={contactSavedListMutationDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
               data-testid="contacts-saved-list-name-input"
             />
             {savedListNameInlineError && (
@@ -2666,9 +2832,18 @@ function ContactsRoute() {
             <Button
               type="button"
               disabled={contactMutationDisabled}
-              title={!canManageForms ? managePermissionTitle : undefined}
+              title={contactSavedListMutationDisabledReason || undefined}
+              aria-describedby={contactsSavedListActionStatusId}
               onClick={() => void handleSaveContactList()}
               iconStart={<Save className="size-4" />}
+              data-action="contacts.savedList.saveCurrentView"
+              data-action-target={activeSiteId}
+              data-action-route={contactListsUrl}
+              data-action-state={contactSavedListMutationDisabledReason ? 'blocked' : 'ready'}
+              data-state={contactSavedListMutationDisabledReason ? 'blocked' : 'ready'}
+              data-action-status={contactsSavedListActionStatus}
+              data-disabled-reason={contactSavedListMutationDisabledReason || undefined}
+              data-target-site-id={activeSiteId}
               data-testid="contacts-saved-list-save"
             >
               Save current view
@@ -2698,10 +2873,42 @@ function ContactsRoute() {
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" disabled={contactViewDisabled} title={!canViewForms ? viewPermissionTitle : undefined} onClick={() => applyContactSavedList(list)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={contactViewDisabled}
+                  title={contactViewDisabledReason || undefined}
+                  aria-describedby={contactsViewActionStatusId}
+                  onClick={() => applyContactSavedList(list)}
+                  data-action="contacts.savedList.apply"
+                  data-action-target={list.id}
+                  data-action-route={`/contacts?siteId=${encodeURIComponent(activeSiteId)}&listId=${encodeURIComponent(list.id)}`}
+                  data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsViewActionStatus}
+                  data-disabled-reason={contactViewDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid={`contacts-saved-list-${list.id}-apply`}
+                >
                   Apply
                 </Button>
-                <Button size="sm" variant="ghost" disabled={contactMutationDisabled} title={!canManageForms ? managePermissionTitle : undefined} onClick={() => void handleDeleteContactSavedList(list)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={contactMutationDisabled}
+                  title={contactSavedListMutationDisabledReason || undefined}
+                  aria-describedby={contactsSavedListActionStatusId}
+                  onClick={() => void handleDeleteContactSavedList(list)}
+                  data-action="contacts.savedList.delete"
+                  data-action-target={list.id}
+                  data-action-route={contactListsUrl}
+                  data-action-state={contactSavedListMutationDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactSavedListMutationDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsSavedListActionStatus}
+                  data-disabled-reason={contactSavedListMutationDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
+                  data-testid={`contacts-saved-list-${list.id}-delete`}
+                >
                   Delete
                 </Button>
               </div>

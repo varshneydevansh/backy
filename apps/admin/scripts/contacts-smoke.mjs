@@ -132,6 +132,35 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
       'Contacts command center must lead with add/import/export actions and move CSV template plus manifest/JSON handoff behind More actions.',
     );
   }
+  for (const [snippet, message] of [
+    ['const contactsViewActionStatusId = \'contacts-view-action-status\';', 'Contacts route must define a shared view action status id'],
+    ['const contactsExportActionStatusId = \'contacts-export-action-status\';', 'Contacts route must define a shared export action status id'],
+    ['data-testid="contacts-view-action-status"', 'Contacts route must render hidden view action status copy'],
+    ['data-testid="contacts-export-action-status"', 'Contacts route must render hidden export action status copy'],
+    ['data-action="contacts.create.focus"', 'Contacts add-contact command must expose a stable data-action'],
+    ['data-action="contacts.import.csv"', 'Contacts import command must expose a stable data-action'],
+    ['data-action="contacts.export.csv"', 'Contacts export command must expose a stable data-action'],
+    ['data-action="contacts.refresh"', 'Contacts refresh controls must expose a stable data-action'],
+    ['data-action="contacts.download.importTemplate"', 'Contacts CSV template action must expose a stable data-action'],
+    ['data-action="contacts.copy.handoffManifest"', 'Contacts manifest copy action must expose a stable data-action'],
+    ['data-action="contacts.download.handoffJson"', 'Contacts manifest download action must expose a stable data-action'],
+    ['data-action-route={contactImportUrl || contactListsUrl}', 'Contacts import actions must expose target API routes'],
+    ['data-state={contactExportCsvDisabledReason ? \'blocked\' : \'ready\'}', 'Contacts export action must mirror ready/blocked state in data-state'],
+    ['data-disabled-reason={contactExportCsvDisabledReason || undefined}', 'Contacts export action must expose disabled reasons'],
+  ]) {
+    assert(source.includes(snippet), message);
+  }
+  assert(
+    source.includes('data-action="contacts.open.workflowSurface"') &&
+      source.includes('data-action-target={surface.key}') &&
+      source.includes('data-action-route={surface.route}') &&
+      source.includes('data-disabled-reason={contactWorkflowSurfaceTitle(surface) || undefined}') &&
+      source.includes('data-testid="contacts-promotion-users-button"') &&
+      source.includes('data-testid="contacts-promotion-registration-page-button"') &&
+      source.includes('data-action="contacts.copy.memberCaptureHandoff"') &&
+      source.includes('data-testid="contacts-member-capture-handoff-copy-button"'),
+    'Contacts workflow, promotion, and member-capture actions must expose stable action contracts and target routes.',
+  );
   assert(
     source.includes("const contactsCreateActionStatusId = 'contacts-create-action-status';") &&
       source.includes('contactsCreateMutationDisabledReason') &&
@@ -155,9 +184,18 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
       source.includes('data-testid="contacts-saved-list-name-error"') &&
       source.includes('aria-invalid={Boolean(savedListNameInlineError)}') &&
       source.includes("aria-describedby={savedListNameInlineError ? 'contacts-saved-list-name-error' : undefined}") &&
+      source.includes('const contactsSavedListActionStatusId = \'contacts-saved-list-action-status\';') &&
+      source.includes('data-testid="contacts-saved-list-action-status"') &&
+      source.includes('data-action="contacts.savedList.name"') &&
+      source.includes('data-action="contacts.savedList.saveCurrentView"') &&
+      source.includes('data-action="contacts.savedList.apply"') &&
+      source.includes('data-action="contacts.savedList.delete"') &&
+      source.includes('data-action-target={list.id}') &&
+      source.includes('data-action-route={contactListsUrl}') &&
+      source.includes('data-disabled-reason={contactSavedListMutationDisabledReason || undefined}') &&
       source.includes('data-testid="contacts-saved-list-save"') &&
-      /disabled=\{contactMutationDisabled\}[\s\S]{0,300}data-testid="contacts-saved-list-save"/.test(source),
-    'Contacts saved-list creation must keep Save reachable and expose inline list-name validation',
+      /disabled=\{contactMutationDisabled\}[\s\S]{0,1200}data-testid="contacts-saved-list-save"/.test(source),
+    'Contacts saved-list creation and saved-list row actions must keep Save reachable, expose inline validation, and publish action contracts',
   );
   assert(
     source.includes('const [contactSyncSubmitted, setContactSyncSubmitted] = useState(false);') &&
@@ -337,6 +375,100 @@ const updateSettings = async (input) => {
     body: JSON.stringify(input),
   });
   return payload.data?.settings || payload.settings;
+};
+
+const getSite = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`);
+  return payload.data?.site || payload.site;
+};
+
+const updateSite = async (input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.site || payload.site;
+};
+
+const listForms = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/forms`);
+  return payload.data?.forms || payload.forms || [];
+};
+
+const listCollections = async () => {
+  const collections = [];
+  const limit = 100;
+  let offset = 0;
+
+  for (;;) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections?includeUnpublished=true&limit=${limit}&offset=${offset}`);
+    const chunk = payload.data?.collections || payload.collections || [];
+    collections.push(...chunk);
+    const pagination = payload.data?.pagination || payload.pagination || {};
+
+    if (!pagination.hasMore || chunk.length === 0) {
+      break;
+    }
+
+    offset += limit;
+  }
+
+  return collections;
+};
+
+const temporarilyAllowContactsSmokeFixtureQuotas = async (extraForms = 2, extraCollections = 1, extraSeats = 1) => {
+  const [site, settings, existingForms, existingCollections, existingUsers] = await Promise.all([
+    getSite(),
+    getSettings(),
+    listForms(),
+    listCollections(),
+    listUsers(),
+  ]);
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentFormLimit = Number(originalLimits.forms || 0);
+  const currentCollectionLimit = Number(originalLimits.collections || 0);
+  const currentSeatLimit = Number(originalCommerce.seatLimit || 0);
+  const nextFormLimit = Math.max(Number.isFinite(currentFormLimit) ? currentFormLimit : 0, existingForms.length + extraForms);
+  const nextCollectionLimit = Math.max(Number.isFinite(currentCollectionLimit) ? currentCollectionLimit : 0, existingCollections.length + extraCollections);
+  const nextSeatLimit = Math.max(Number.isFinite(currentSeatLimit) ? currentSeatLimit : 0, existingUsers.length + extraSeats);
+
+  await updateSite({
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          forms: nextFormLimit,
+          collections: nextCollectionLimit,
+        },
+      },
+    },
+  });
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        seatLimit: nextSeatLimit,
+      },
+    },
+  });
+
+  return {
+    siteSettings: originalSiteSettings,
+    integrations: originalIntegrations,
+  };
+};
+
+const restoreContactsSmokeFixtureQuotas = async (restoreState) => {
+  if (!restoreState) return;
+  await updateSite({ settings: restoreState.siteSettings });
+  await updateSettings({ integrations: restoreState.integrations });
 };
 
 const loginAdminApi = async () => {
@@ -2103,21 +2235,33 @@ const main = async () => {
   }
 
   await loginAdminApi();
+  const contactsSmokeFixtureQuotaState = await temporarilyAllowContactsSmokeFixtureQuotas();
   if (process.env.BACKY_CONTACTS_DELETE_DIALOG_SMOKE === '1') {
-    await runContactDeleteDialogSmoke();
-    return;
+    try {
+      await runContactDeleteDialogSmoke();
+      return;
+    } finally {
+      await restoreContactsSmokeFixtureQuotas(contactsSmokeFixtureQuotaState).catch((error) => {
+        console.warn('Unable to restore contacts smoke fixture quota:', error instanceof Error ? error.message : error);
+      });
+    }
   }
 
-  const syncReceiver = await startContactSyncReceiver();
-  const form = await createLeadForm();
+  let syncReceiver = null;
+  let form = null;
   let savedListId;
   let promotedUserId;
   let promotedCustomerCleanup = null;
   let cleaned = false;
   let client;
-  const { childProcess, userDataDir } = launchChrome();
+  let childProcess = null;
+  let userDataDir = null;
 
   try {
+    syncReceiver = await startContactSyncReceiver();
+    form = await createLeadForm();
+    ({ childProcess, userDataDir } = launchChrome());
+
     const directContact = await createContactDirectly(form.id);
     await assertInvalidContactEmailRejected(form.id, directContact.id);
     await assertContactHardDelete(form.id);
@@ -2309,8 +2453,15 @@ const main = async () => {
       });
     }
 
-    await cleanupBrowser({ client, childProcess, userDataDir });
-    await syncReceiver.close();
+    if (childProcess && userDataDir) {
+      await cleanupBrowser({ client, childProcess, userDataDir });
+    }
+    if (syncReceiver) {
+      await syncReceiver.close();
+    }
+    await restoreContactsSmokeFixtureQuotas(contactsSmokeFixtureQuotaState).catch((error) => {
+      console.warn('Unable to restore contacts smoke fixture quota:', error instanceof Error ? error.message : error);
+    });
   }
 };
 

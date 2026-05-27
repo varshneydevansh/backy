@@ -1019,6 +1019,26 @@ function FormsRoute() {
       ].filter(Boolean).join(' ')
     : 'Select a form to review form actions.';
   const formDraftDirty = Boolean(selectedForm && formDraft && JSON.stringify(buildFormUpdatePayload(formDraft)) !== JSON.stringify(buildFormUpdatePayload(selectedForm)));
+  const formBuilderActionStatusId = selectedForm
+    ? `form-builder-action-status-${selectedForm.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+    : 'form-builder-action-status';
+  const formBuilderBusyDisabledReason = isFormsBusy
+    ? 'Form builder actions are temporarily unavailable while Backy updates forms or submissions.'
+    : '';
+  const formBuilderEditDisabledReason = !selectedForm
+    ? 'Select a form before using the builder.'
+    : !selectedFormIsStandalone
+      ? 'This form is owned by a page or blog canvas. Open the source canvas to change fields.'
+      : !canEditForms
+        ? editPermissionTitle || 'Your account cannot edit forms.'
+        : formBuilderBusyDisabledReason;
+  const formBuilderResetDisabledReason = formBuilderEditDisabledReason || (!formDraftDirty ? 'No builder changes to reset.' : '');
+  const formBuilderSaveDisabledReason = formBuilderEditDisabledReason || (!formDraftDirty ? 'Change the standalone form before saving.' : '');
+  const formBuilderActionStatus = [
+    formBuilderResetDisabledReason ? `Reset unavailable: ${formBuilderResetDisabledReason}` : 'Reset available.',
+    formBuilderSaveDisabledReason ? `Save form unavailable: ${formBuilderSaveDisabledReason}` : 'Save form available.',
+    formBuilderEditDisabledReason ? `Field builder unavailable: ${formBuilderEditDisabledReason}` : 'Field builder available.',
+  ].join(' ');
   const writableCollections = useMemo(() => collections.filter((collection) => (
     collection.status === 'published' && collection.permissions.publicCreate
   )), [collections]);
@@ -1028,6 +1048,11 @@ function FormsRoute() {
     : writableCollections.length === 0
       ? 'No published public-create collection is available. Create or publish one before enabling collection writes.'
       : null;
+  const formCollectionWriteDisabledReason = !canEditForms
+    ? editPermissionTitle || 'Your account cannot edit forms.'
+    : (!formDraft?.collectionTarget?.enabled && !canUseCollectionTargets)
+      ? collectionTargetUnavailableReason || 'Collection writes are not available for this site.'
+      : '';
   const frontendFormTemplates = useMemo(
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'form'),
     [frontendDesign?.templates],
@@ -1194,6 +1219,29 @@ function FormsRoute() {
       return searchable.includes(normalizedSearch);
     });
   }, [formDestinationFilter, formReadinessFilter, formSearchQuery, formSourceFilter, formStateFilter, forms]);
+  const formsViewActionStatusId = 'forms-view-action-status';
+  const formsExportActionStatusId = 'forms-export-action-status';
+  const formsCatalogExportActionStatusId = 'forms-catalog-export-action-status';
+  const formsViewDisabledReason = !canViewForms
+    ? viewPermissionTitle || 'Your account cannot view forms.'
+    : isFormsBusy
+      ? 'Forms are temporarily unavailable while Backy updates forms or submissions.'
+      : '';
+  const formsExportDisabledReason = !canExportForms
+    ? exportPermissionTitle || 'Your account cannot export forms.'
+    : isFormsBusy
+      ? 'Form exports are temporarily unavailable while Backy updates forms or submissions.'
+      : '';
+  const formsCatalogExportDisabledReason = formsExportDisabledReason || (filteredForms.length === 0 ? 'No visible forms to export.' : '');
+  const formsViewActionStatus = formsViewDisabledReason
+    ? `Refresh forms unavailable: ${formsViewDisabledReason}`
+    : `Refresh forms available for ${activeSiteId}.`;
+  const formsExportActionStatus = formsExportDisabledReason
+    ? `Forms handoff export unavailable: ${formsExportDisabledReason}`
+    : `Forms handoff export available for ${activeSiteId}.`;
+  const formsCatalogExportActionStatus = formsCatalogExportDisabledReason
+    ? `Export forms CSV unavailable: ${formsCatalogExportDisabledReason}`
+    : `Export forms CSV available for ${filteredForms.length} visible form${filteredForms.length === 1 ? '' : 's'}.`;
   const hasActiveFormFilters = Boolean(
     formSearchQuery.trim() ||
     formSourceFilter !== 'all' ||
@@ -3385,7 +3433,22 @@ function FormsRoute() {
               </option>
             ))}
           </select>
-          <Button onClick={() => void loadForms()} disabled={isFormsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
+          <Button
+            onClick={() => void loadForms()}
+            disabled={isFormsBusy}
+            title={isFormsBusy ? formsViewDisabledReason : undefined}
+            aria-describedby={formsViewActionStatusId}
+            iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+            data-action="forms.refresh"
+            data-action-target={activeSiteId}
+            data-action-route="/forms"
+            data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+            data-state={isFormsBusy ? 'blocked' : 'ready'}
+            data-action-status={formsViewActionStatus}
+            data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+            data-target-site-id={activeSiteId}
+            data-testid="forms-header-refresh"
+          >
             Refresh
           </Button>
         </div>
@@ -3465,6 +3528,15 @@ function FormsRoute() {
       <span id={formsCreateActionStatusId} className="sr-only" data-testid="forms-create-action-status" aria-live="polite">
         {formsCreateActionStatus}
       </span>
+      <span id={formsViewActionStatusId} className="sr-only" data-testid="forms-view-action-status" aria-live="polite">
+        {formsViewActionStatus}
+      </span>
+      <span id={formsExportActionStatusId} className="sr-only" data-testid="forms-export-action-status" aria-live="polite">
+        {formsExportActionStatus}
+      </span>
+      <span id={formsCatalogExportActionStatusId} className="sr-only" data-testid="forms-catalog-export-action-status" aria-live="polite">
+        {formsCatalogExportActionStatus}
+      </span>
 
       <section
         className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm"
@@ -3497,7 +3569,11 @@ function FormsRoute() {
                 title={formsCreateDisabledReason || undefined}
                 aria-describedby={formsCreateActionStatusId}
                 iconStart={<Plus className="size-4" />}
+                data-action="forms.create.blank"
+                data-action-target={activeSiteId}
+                data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}&quickCreate=blank`}
                 data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
                 data-action-status={formsCreateActionStatus}
                 data-disabled-reason={formsCreateDisabledReason || undefined}
                 data-target-site-id={activeSiteId}
@@ -3509,8 +3585,17 @@ function FormsRoute() {
                 variant="outline"
                 onClick={handleExportFormsCatalog}
                 disabled={isFormsBusy || filteredForms.length === 0 || !canExportForms}
-                title={!canExportForms ? exportPermissionTitle : undefined}
+                title={formsCatalogExportDisabledReason || undefined}
+                aria-describedby={formsCatalogExportActionStatusId}
                 iconStart={<Download className="size-4" />}
+                data-action="forms.export.catalogCsv"
+                data-action-target={activeSiteId}
+                data-action-route={formsListUrl}
+                data-action-state={formsCatalogExportDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsCatalogExportDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsCatalogExportActionStatus}
+                data-disabled-reason={formsCatalogExportDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-command-export-csv"
               >
                 Export forms CSV
@@ -3518,8 +3603,17 @@ function FormsRoute() {
               <Button
                 onClick={() => void loadForms()}
                 disabled={isFormsBusy || !canViewForms}
-                title={!canViewForms ? viewPermissionTitle : undefined}
+                title={formsViewDisabledReason || undefined}
+                aria-describedby={formsViewActionStatusId}
                 iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+                data-action="forms.refresh"
+                data-action-target={activeSiteId}
+                data-action-route="/forms"
+                data-action-state={formsViewDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsViewDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsViewActionStatus}
+                data-disabled-reason={formsViewDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-command-refresh"
               >
                 Refresh forms
@@ -3538,8 +3632,17 @@ function FormsRoute() {
                   variant="outline"
                   onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
                   disabled={isFormsBusy || !canExportForms}
-                  title={!canExportForms ? exportPermissionTitle : undefined}
+                  title={formsExportDisabledReason || undefined}
+                  aria-describedby={formsExportActionStatusId}
                   iconStart={<Copy className="size-4" />}
+                  data-action="forms.copy.handoffManifest"
+                  data-action-target={activeSiteId}
+                  data-action-route={formsListUrl}
+                  data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                  data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={formsExportActionStatus}
+                  data-disabled-reason={formsExportDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   data-testid="forms-command-copy-manifest"
                 >
                   Copy manifest
@@ -3548,8 +3651,17 @@ function FormsRoute() {
                   variant="outline"
                   onClick={downloadFormsHandoff}
                   disabled={isFormsBusy || !canExportForms}
-                  title={!canExportForms ? exportPermissionTitle : undefined}
+                  title={formsExportDisabledReason || undefined}
+                  aria-describedby={formsExportActionStatusId}
                   iconStart={<Download className="size-4" />}
+                  data-action="forms.download.handoffJson"
+                  data-action-target={activeSiteId}
+                  data-action-route={formsListUrl}
+                  data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                  data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={formsExportActionStatus}
+                  data-disabled-reason={formsExportDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   data-testid="forms-command-download-json"
                 >
                   Download JSON
@@ -3658,8 +3770,17 @@ function FormsRoute() {
                 variant="outline"
                 onClick={() => void copyFormApiText(formsAccountRegistrationHandoffText, 'Registration account handoff')}
                 disabled={isFormsBusy || !canExportForms}
-                title={!canExportForms ? exportPermissionTitle : undefined}
+                title={formsExportDisabledReason || undefined}
+                aria-describedby={formsExportActionStatusId}
                 iconStart={<Copy className="size-4" />}
+                data-action="forms.copy.accountRegistrationHandoff"
+                data-action-target={activeSiteId}
+                data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}`}
+                data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsExportActionStatus}
+                data-disabled-reason={formsExportDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-account-registration-handoff-copy-button"
               >
                 Copy account handoff
@@ -3672,7 +3793,11 @@ function FormsRoute() {
                 title={formsCreateDisabledReason || undefined}
                 aria-describedby={formsCreateActionStatusId}
                 iconStart={<FileInput className="size-4" />}
+                data-action="forms.create.registrationTemplate"
+                data-action-target={REGISTRATION_FORM_TEMPLATE.id}
+                data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}`}
                 data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
                 data-action-status={formCreateActionStatus('Registration form')}
                 data-disabled-reason={formsCreateDisabledReason || undefined}
                 data-target-site-id={activeSiteId}
@@ -3684,7 +3809,17 @@ function FormsRoute() {
                 variant="outline"
                 onClick={() => openFormPageTemplate(REGISTRATION_FORM_TEMPLATE.pageTemplate)}
                 disabled={isFormsBusy}
+                title={isFormsBusy ? formsViewDisabledReason : undefined}
+                aria-describedby={formsViewActionStatusId}
                 iconStart={<Sparkles className="size-4" />}
+                data-action="forms.open.registrationPageTemplate"
+                data-action-target={REGISTRATION_FORM_TEMPLATE.pageTemplate}
+                data-action-route={`/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=${encodeURIComponent(REGISTRATION_FORM_TEMPLATE.pageTemplate)}`}
+                data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                data-state={isFormsBusy ? 'blocked' : 'ready'}
+                data-action-status={formsViewActionStatus}
+                data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                data-target-site-id={activeSiteId}
               >
                 Start registration page
               </Button>
@@ -3747,8 +3882,17 @@ function FormsRoute() {
                 variant="outline"
                 onClick={() => void copyFormApiText(formPersistenceCertificationText, 'Forms persistence certification handoff')}
                 disabled={isFormsBusy || !canExportForms}
-                title={!canExportForms ? exportPermissionTitle : undefined}
+                title={formsExportDisabledReason || undefined}
+                aria-describedby={formsExportActionStatusId}
                 iconStart={<Copy className="size-4" />}
+                data-action="forms.copy.persistenceCertification"
+                data-action-target={activeSiteId}
+                data-action-route={formsListUrl}
+                data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsExportActionStatus}
+                data-disabled-reason={formsExportDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-persistence-certification-copy-button"
               >
                 Copy DB handoff
@@ -3758,8 +3902,17 @@ function FormsRoute() {
                 variant="outline"
                 onClick={() => void copyFormApiText(formPersistenceOperatorGate, 'Forms persistence CI command')}
                 disabled={isFormsBusy || !canExportForms}
-                title={!canExportForms ? exportPermissionTitle : undefined}
+                title={formsExportDisabledReason || undefined}
+                aria-describedby={formsExportActionStatusId}
                 iconStart={<Copy className="size-4" />}
+                data-action="forms.copy.persistenceCiCommand"
+                data-action-target={activeSiteId}
+                data-action-route={formsListUrl}
+                data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsExportActionStatus}
+                data-disabled-reason={formsExportDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-persistence-certification-command-copy-button"
               >
                 Copy CI command
@@ -3769,8 +3922,17 @@ function FormsRoute() {
                 variant="outline"
                 onClick={downloadFormPersistenceCertification}
                 disabled={isFormsBusy || !canExportForms}
-                title={!canExportForms ? exportPermissionTitle : undefined}
+                title={formsExportDisabledReason || undefined}
+                aria-describedby={formsExportActionStatusId}
                 iconStart={<Download className="size-4" />}
+                data-action="forms.download.persistenceCertification"
+                data-action-target={activeSiteId}
+                data-action-route={formsListUrl}
+                data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsExportActionStatus}
+                data-disabled-reason={formsExportDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-persistence-certification-download-button"
               >
                 Download DB JSON
@@ -3859,8 +4021,17 @@ function FormsRoute() {
                     variant="outline"
                     onClick={() => void copyFormApiText(formsPostgresCertificationEnvTemplate, 'Forms Postgres certification env template')}
                     disabled={isFormsBusy || !canExportForms}
-                    title={!canExportForms ? exportPermissionTitle : undefined}
+                    title={formsExportDisabledReason || undefined}
+                    aria-describedby={formsExportActionStatusId}
                     iconStart={<Copy className="size-4" />}
+                    data-action="forms.copy.postgresEnvTemplate"
+                    data-action-target={activeSiteId}
+                    data-action-route={formsListUrl}
+                    data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                    data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={formsExportActionStatus}
+                    data-disabled-reason={formsExportDisabledReason || undefined}
+                    data-target-site-id={activeSiteId}
                     data-testid="forms-postgres-certification-env-copy-button"
                   >
                     Copy env template
@@ -3870,8 +4041,17 @@ function FormsRoute() {
                     variant="outline"
                     onClick={() => void copyFormApiText(formsPostgresCertificationCommand, 'Forms Postgres certification command')}
                     disabled={isFormsBusy || !canExportForms}
-                    title={!canExportForms ? exportPermissionTitle : undefined}
+                    title={formsExportDisabledReason || undefined}
+                    aria-describedby={formsExportActionStatusId}
                     iconStart={<Copy className="size-4" />}
+                    data-action="forms.copy.postgresGuardedCommand"
+                    data-action-target={activeSiteId}
+                    data-action-route={formsListUrl}
+                    data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                    data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={formsExportActionStatus}
+                    data-disabled-reason={formsExportDisabledReason || undefined}
+                    data-target-site-id={activeSiteId}
                     data-testid="forms-postgres-certification-command-builder-copy-button"
                   >
                     Copy guarded command
@@ -3888,6 +4068,14 @@ function FormsRoute() {
                     })}
                     disabled={isFormsBusy}
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-describedby={formsViewActionStatusId}
+                    data-action="forms.configure.postgresDatabaseAlias"
+                    data-action-target={activeSiteId}
+                    data-action-route={formsListUrl}
+                    data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                    data-state={formsPostgresCommandOptions.databaseEnvAlias}
+                    data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                    data-target-site-id={activeSiteId}
                     data-testid="forms-postgres-certification-database-alias-select"
                   >
                     {FORMS_POSTGRES_DATABASE_ENV_ALIASES.map((alias) => (
@@ -3907,6 +4095,14 @@ function FormsRoute() {
                     disabled={isFormsBusy}
                     placeholder="db.example.supabase.co"
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-describedby={formsViewActionStatusId}
+                    data-action="forms.configure.postgresExpectedHost"
+                    data-action-target={activeSiteId}
+                    data-action-route={formsListUrl}
+                    data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                    data-state={formsPostgresCommandOptions.expectedHost ? 'set' : 'empty'}
+                    data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                    data-target-site-id={activeSiteId}
                     data-testid="forms-postgres-certification-expected-host-input"
                   />
                   <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
@@ -3922,6 +4118,14 @@ function FormsRoute() {
                     disabled={isFormsBusy}
                     placeholder="postgres"
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-describedby={formsViewActionStatusId}
+                    data-action="forms.configure.postgresExpectedDatabase"
+                    data-action-target={activeSiteId}
+                    data-action-route={formsListUrl}
+                    data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                    data-state={formsPostgresCommandOptions.expectedDatabase ? 'set' : 'empty'}
+                    data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                    data-target-site-id={activeSiteId}
                     data-testid="forms-postgres-certification-expected-database-input"
                   />
                   <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
@@ -3936,6 +4140,14 @@ function FormsRoute() {
                       onChange={(event) => updateFormsPostgresCommandOptions({ disposableConfirmed: event.target.checked })}
                       disabled={isFormsBusy}
                       className="mt-1 size-4 rounded border-border"
+                      aria-describedby={formsViewActionStatusId}
+                      data-action="forms.toggle.postgresDisposableConfirmed"
+                      data-action-target={activeSiteId}
+                      data-action-route={formsListUrl}
+                      data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                      data-state={formsPostgresCommandOptions.disposableConfirmed ? 'checked' : 'unchecked'}
+                      data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                      data-target-site-id={activeSiteId}
                       data-testid="forms-postgres-certification-disposable-toggle"
                     />
                     <span>
@@ -3950,6 +4162,14 @@ function FormsRoute() {
                       onChange={(event) => updateFormsPostgresCommandOptions({ includeReleaseDoctor: event.target.checked })}
                       disabled={isFormsBusy}
                       className="mt-1 size-4 rounded border-border"
+                      aria-describedby={formsViewActionStatusId}
+                      data-action="forms.toggle.postgresReleaseDoctor"
+                      data-action-target={activeSiteId}
+                      data-action-route={formsListUrl}
+                      data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                      data-state={formsPostgresCommandOptions.includeReleaseDoctor ? 'checked' : 'unchecked'}
+                      data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                      data-target-site-id={activeSiteId}
                       data-testid="forms-postgres-certification-doctor-toggle"
                     />
                     <span>
@@ -4307,8 +4527,17 @@ function FormsRoute() {
                 variant="outline"
                 onClick={downloadFormTemplatePack}
                 disabled={isFormsBusy || !canExportForms}
-                title={!canExportForms ? exportPermissionTitle : undefined}
+                title={formsExportDisabledReason || undefined}
+                aria-describedby={formsExportActionStatusId}
                 iconStart={<Download className="size-4" />}
+                data-action="forms.download.templatePack"
+                data-action-target={activeSiteId}
+                data-action-route={formsListUrl}
+                data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsExportActionStatus}
+                data-disabled-reason={formsExportDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
                 data-testid="forms-template-pack-download-button"
               >
                 Download templates
@@ -4320,7 +4549,11 @@ function FormsRoute() {
                 title={formsCreateDisabledReason || undefined}
                 aria-describedby={formsCreateActionStatusId}
                 iconStart={<Plus className="size-4" />}
+                data-action="forms.create.blank"
+                data-action-target={activeSiteId}
+                data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}&quickCreate=blank`}
                 data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
+                data-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
                 data-action-status={formsCreateActionStatus}
                 data-disabled-reason={formsCreateDisabledReason || undefined}
                 data-target-site-id={activeSiteId}
@@ -4427,7 +4660,11 @@ function FormsRoute() {
                             title={createFrontendTemplateDisabledReason || createFrontendTemplateTitle}
                             aria-describedby={formsCreateActionStatusId}
                             iconStart={<FileInput className="size-4" />}
+                            data-action="forms.create.frontendTemplate"
+                            data-action-target={template.id}
+                            data-action-route={template.routePattern || `/forms?siteId=${encodeURIComponent(activeSiteId)}`}
                             data-action-state={createFrontendTemplateDisabledReason ? 'blocked' : 'ready'}
+                            data-state={createFrontendTemplateDisabledReason ? 'blocked' : 'ready'}
                             data-action-status={createFrontendTemplateActionStatus}
                             data-disabled-reason={createFrontendTemplateDisabledReason || undefined}
                             data-target-site-id={activeSiteId}
@@ -4445,7 +4682,17 @@ function FormsRoute() {
                             variant="outline"
                             onClick={() => void copyFormApiText(manifestText, `${template.name} frontend form template`)}
                             disabled={isFormsBusy}
+                            title={isFormsBusy ? formsViewDisabledReason : undefined}
+                            aria-describedby={formsViewActionStatusId}
                             iconStart={<Copy className="size-4" />}
+                            data-action="forms.copy.frontendTemplateSchema"
+                            data-action-target={template.id}
+                            data-action-route={template.routePattern || `/forms?siteId=${encodeURIComponent(activeSiteId)}`}
+                            data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                            data-state={isFormsBusy ? 'blocked' : 'ready'}
+                            data-action-status={formsViewActionStatus}
+                            data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                            data-target-site-id={activeSiteId}
                           >
                             Copy schema
                           </Button>
@@ -4515,7 +4762,11 @@ function FormsRoute() {
                       title={createTemplateDisabledReason || createTemplateTitle}
                       aria-describedby={formsCreateActionStatusId}
                       iconStart={<FileInput className="size-4" />}
+                      data-action="forms.create.template"
+                      data-action-target={template.id}
+                      data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}`}
                       data-action-state={createTemplateDisabledReason ? 'blocked' : 'ready'}
+                      data-state={createTemplateDisabledReason ? 'blocked' : 'ready'}
                       data-action-status={createTemplateActionStatus}
                       data-disabled-reason={createTemplateDisabledReason || undefined}
                       data-target-site-id={activeSiteId}
@@ -4532,7 +4783,17 @@ function FormsRoute() {
                       variant="outline"
                       onClick={() => openFormPageTemplate(template.pageTemplate)}
                       disabled={isFormsBusy}
+                      title={isFormsBusy ? formsViewDisabledReason : undefined}
+                      aria-describedby={formsViewActionStatusId}
                       iconStart={<Sparkles className="size-4" />}
+                      data-action="forms.open.pageTemplate"
+                      data-action-target={template.pageTemplate}
+                      data-action-route={`/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=${encodeURIComponent(template.pageTemplate)}`}
+                      data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                      data-state={isFormsBusy ? 'blocked' : 'ready'}
+                      data-action-status={formsViewActionStatus}
+                      data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                      data-target-site-id={activeSiteId}
                     >
                       Start page
                     </Button>
@@ -4540,7 +4801,17 @@ function FormsRoute() {
                       size="sm"
                       onClick={() => void copyFormApiText(templateText, `${template.title} form template`)}
                       disabled={isFormsBusy}
+                      title={isFormsBusy ? formsViewDisabledReason : undefined}
+                      aria-describedby={formsViewActionStatusId}
                       iconStart={<Copy className="size-4" />}
+                      data-action="forms.copy.templateSchema"
+                      data-action-target={template.id}
+                      data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}`}
+                      data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                      data-state={isFormsBusy ? 'blocked' : 'ready'}
+                      data-action-status={formsViewActionStatus}
+                      data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                      data-target-site-id={activeSiteId}
                     >
                       Copy schema
                     </Button>
@@ -4549,7 +4820,17 @@ function FormsRoute() {
                       variant="outline"
                       onClick={() => void copyFormApiText(payloadText, `${template.title} sample payload`)}
                       disabled={isFormsBusy}
+                      title={isFormsBusy ? formsViewDisabledReason : undefined}
+                      aria-describedby={formsViewActionStatusId}
                       iconStart={<Copy className="size-4" />}
+                      data-action="forms.copy.templatePayload"
+                      data-action-target={template.id}
+                      data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}`}
+                      data-action-state={isFormsBusy ? 'blocked' : 'ready'}
+                      data-state={isFormsBusy ? 'blocked' : 'ready'}
+                      data-action-status={formsViewActionStatus}
+                      data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                      data-target-site-id={activeSiteId}
                     >
                       Payload
                     </Button>
@@ -4795,7 +5076,11 @@ function FormsRoute() {
                           aria-disabled={Boolean(selectedFormPageDisabledReason)}
                           aria-describedby={selectedFormActionStatusId}
                           aria-label={`Open source page for ${selectedForm.title || selectedForm.name}`}
+                          data-action="forms.open.sourcePage"
+                          data-action-target={selectedForm.pageId}
+                          data-action-route={`/pages/${selectedForm.pageId}/edit`}
                           data-action-state={selectedFormPageDisabledReason ? 'blocked' : 'ready'}
+                          data-state={selectedFormPageDisabledReason ? 'blocked' : 'ready'}
                           data-disabled-reason={selectedFormPageDisabledReason || undefined}
                           data-testid="form-page-link"
                           onClick={(event) => {
@@ -4820,7 +5105,11 @@ function FormsRoute() {
                           aria-disabled={Boolean(selectedFormBlogDisabledReason)}
                           aria-describedby={selectedFormActionStatusId}
                           aria-label={`Open source blog post for ${selectedForm.title || selectedForm.name}`}
+                          data-action="forms.open.sourceBlogPost"
+                          data-action-target={selectedForm.postId}
+                          data-action-route={`/blog/${selectedForm.postId}`}
                           data-action-state={selectedFormBlogDisabledReason ? 'blocked' : 'ready'}
+                          data-state={selectedFormBlogDisabledReason ? 'blocked' : 'ready'}
                           data-disabled-reason={selectedFormBlogDisabledReason || undefined}
                           data-testid="form-blog-link"
                           onClick={(event) => {
@@ -4845,7 +5134,11 @@ function FormsRoute() {
                         title={selectedFormCloneDisabledReason || undefined}
                         aria-describedby={selectedFormActionStatusId}
                         aria-label={`Clone ${selectedForm.title || selectedForm.name}`}
+                        data-action="forms.clone"
+                        data-action-target={selectedForm.id}
+                        data-action-route={selectedFormDefinitionUrl}
                         data-action-state={selectedFormCloneDisabledReason ? 'blocked' : 'ready'}
+                        data-state={selectedFormCloneDisabledReason ? 'blocked' : 'ready'}
                         data-disabled-reason={selectedFormCloneDisabledReason || undefined}
                         iconStart={<Copy className="size-4" />}
                         data-testid="form-clone-button"
@@ -4859,7 +5152,11 @@ function FormsRoute() {
                         title={selectedFormDeleteDisabledReason || undefined}
                         aria-describedby={selectedFormActionStatusId}
                         aria-label={`Delete ${selectedForm.title || selectedForm.name}`}
+                        data-action="forms.delete"
+                        data-action-target={selectedForm.id}
+                        data-action-route={selectedFormDefinitionUrl}
                         data-action-state={selectedFormDeleteDisabledReason ? 'blocked' : 'ready'}
+                        data-state={selectedFormDeleteDisabledReason ? 'blocked' : 'ready'}
                         data-disabled-reason={selectedFormDeleteDisabledReason || undefined}
                         iconStart={<Trash2 className="size-4" />}
                         data-testid="form-delete-button"
@@ -4893,6 +5190,9 @@ function FormsRoute() {
                               Unsaved changes
                             </span>
                           )}
+                          <span id={formBuilderActionStatusId} className="sr-only" data-testid="form-builder-action-status" aria-live="polite">
+                            {formBuilderActionStatus}
+                          </span>
                           <Button
                             variant="outline"
                             onClick={() => {
@@ -4900,15 +5200,34 @@ function FormsRoute() {
                               setFormDraftSubmitted(false);
                             }}
                             disabled={isFormsBusy || !formDraftDirty || !canEditForms}
-                            title={!canEditForms ? editPermissionTitle : undefined}
+                            title={formBuilderResetDisabledReason || undefined}
+                            aria-describedby={formBuilderActionStatusId}
+                            data-action="forms.builder.reset"
+                            data-action-target={selectedForm.id}
+                            data-action-route={selectedFormDefinitionUrl}
+                            data-action-state={formBuilderResetDisabledReason ? 'blocked' : 'ready'}
+                            data-state={formBuilderResetDisabledReason ? 'blocked' : 'ready'}
+                            data-action-status={formBuilderActionStatus}
+                            data-disabled-reason={formBuilderResetDisabledReason || undefined}
+                            data-target-form-id={selectedForm.id}
+                            data-testid="form-builder-reset-button"
                           >
                             Reset
                           </Button>
                           <Button
                             onClick={() => void saveFormDraft()}
                             disabled={isFormsBusy || !selectedFormIsStandalone || !formDraftDirty || !canEditForms}
-                            title={!canEditForms ? editPermissionTitle : undefined}
+                            title={formBuilderSaveDisabledReason || undefined}
+                            aria-describedby={formBuilderActionStatusId}
                             iconStart={<Save className="size-4" />}
+                            data-action="forms.builder.save"
+                            data-action-target={selectedForm.id}
+                            data-action-route={selectedFormDefinitionUrl}
+                            data-action-state={formBuilderSaveDisabledReason ? 'blocked' : 'ready'}
+                            data-state={formBuilderSaveDisabledReason ? 'blocked' : 'ready'}
+                            data-action-status={formBuilderActionStatus}
+                            data-disabled-reason={formBuilderSaveDisabledReason || undefined}
+                            data-target-form-id={selectedForm.id}
                             data-testid="form-builder-save-button"
                           >
                             {isSavingForm ? 'Saving...' : 'Save form'}
@@ -4924,7 +5243,16 @@ function FormsRoute() {
 
                       <fieldset
                         disabled={isFormsBusy || !selectedFormIsStandalone || !canEditForms}
-                        title={!canEditForms ? editPermissionTitle : undefined}
+                        title={formBuilderEditDisabledReason || undefined}
+                        aria-describedby={formBuilderActionStatusId}
+                        data-action="forms.builder.edit"
+                        data-action-target={selectedForm.id}
+                        data-action-route={selectedFormDefinitionUrl}
+                        data-action-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                        data-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={formBuilderActionStatus}
+                        data-disabled-reason={formBuilderEditDisabledReason || undefined}
+                        data-target-form-id={selectedForm.id}
                         className="mt-4 grid gap-4 disabled:opacity-60"
                       >
                         <div className="grid gap-3 lg:grid-cols-2">
@@ -5064,6 +5392,15 @@ function FormsRoute() {
                               type="checkbox"
                               checked={formDraft.isActive}
                               onChange={(event) => patchFormDraft({ isActive: event.target.checked })}
+                              aria-describedby={formBuilderActionStatusId}
+                              data-action="forms.builder.toggleActive"
+                              data-action-target={selectedForm.id}
+                              data-action-route={selectedFormDefinitionUrl}
+                              data-action-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                              data-state={formDraft.isActive ? 'checked' : 'unchecked'}
+                              data-disabled-reason={formBuilderEditDisabledReason || undefined}
+                              data-target-form-id={selectedForm.id}
+                              data-testid="form-builder-active-toggle"
                             />
                             Active
                           </label>
@@ -5072,6 +5409,15 @@ function FormsRoute() {
                               type="checkbox"
                               checked={formDraft.enableHoneypot !== false}
                               onChange={(event) => patchFormDraft({ enableHoneypot: event.target.checked })}
+                              aria-describedby={formBuilderActionStatusId}
+                              data-action="forms.builder.toggleHoneypot"
+                              data-action-target={selectedForm.id}
+                              data-action-route={selectedFormDefinitionUrl}
+                              data-action-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                              data-state={formDraft.enableHoneypot !== false ? 'checked' : 'unchecked'}
+                              data-disabled-reason={formBuilderEditDisabledReason || undefined}
+                              data-target-form-id={selectedForm.id}
+                              data-testid="form-builder-honeypot-toggle"
                             />
                             Honeypot
                           </label>
@@ -5080,6 +5426,15 @@ function FormsRoute() {
                               type="checkbox"
                               checked={formDraft.enableCaptcha === true}
                               onChange={(event) => patchFormDraft({ enableCaptcha: event.target.checked })}
+                              aria-describedby={formBuilderActionStatusId}
+                              data-action="forms.builder.toggleCaptcha"
+                              data-action-target={selectedForm.id}
+                              data-action-route={selectedFormDefinitionUrl}
+                              data-action-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                              data-state={formDraft.enableCaptcha === true ? 'checked' : 'unchecked'}
+                              data-disabled-reason={formBuilderEditDisabledReason || undefined}
+                              data-target-form-id={selectedForm.id}
+                              data-testid="form-builder-captcha-toggle"
                             />
                             Captcha provider
                           </label>
@@ -5097,6 +5452,15 @@ function FormsRoute() {
                                   dedupeByEmail: formDraft.contactShare?.dedupeByEmail !== false,
                                 },
                               })}
+                              aria-describedby={formBuilderActionStatusId}
+                              data-action="forms.builder.toggleContactShare"
+                              data-action-target={selectedForm.id}
+                              data-action-route={selectedFormDefinitionUrl}
+                              data-action-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                              data-state={formDraft.contactShare?.enabled ? 'checked' : 'unchecked'}
+                              data-disabled-reason={formBuilderEditDisabledReason || undefined}
+                              data-target-form-id={selectedForm.id}
+                              data-testid="form-builder-contact-share-toggle"
                             />
                             Contact share
                           </label>
@@ -5112,6 +5476,14 @@ function FormsRoute() {
                               checked={Boolean(formDraft.collectionTarget?.enabled)}
                               disabled={!canEditForms || (!formDraft.collectionTarget?.enabled && !canUseCollectionTargets)}
                               data-testid="form-collection-write-toggle"
+                              aria-describedby={formBuilderActionStatusId}
+                              data-action="forms.builder.toggleCollectionWrite"
+                              data-action-target={selectedForm.id}
+                              data-action-route={selectedFormDefinitionUrl}
+                              data-action-state={formCollectionWriteDisabledReason ? 'blocked' : 'ready'}
+                              data-state={formDraft.collectionTarget?.enabled ? 'checked' : 'unchecked'}
+                              data-disabled-reason={formCollectionWriteDisabledReason || undefined}
+                              data-target-form-id={selectedForm.id}
                               onChange={(event) => {
                                 const selectedCollection = formDraftTargetCollectionWritable
                                   ? formDraftTargetCollection
@@ -5192,6 +5564,14 @@ function FormsRoute() {
                                 checked={Boolean(formDraft.contactShare.emailField) && formDraft.contactShare.dedupeByEmail !== false}
                                 onChange={(event) => patchFormDraftContactShare({ dedupeByEmail: event.target.checked })}
                                 disabled={!canEditForms || !formDraft.contactShare.emailField}
+                                aria-describedby={formBuilderActionStatusId}
+                                data-action="forms.builder.toggleContactDedupe"
+                                data-action-target={selectedForm.id}
+                                data-action-route={selectedFormDefinitionUrl}
+                                data-action-state={!canEditForms || !formDraft.contactShare.emailField ? 'blocked' : 'ready'}
+                                data-state={Boolean(formDraft.contactShare.emailField) && formDraft.contactShare.dedupeByEmail !== false ? 'checked' : 'unchecked'}
+                                data-disabled-reason={!canEditForms ? editPermissionTitle || 'Your account cannot edit forms.' : !formDraft.contactShare.emailField ? 'Map an email field before enabling contact dedupe.' : undefined}
+                                data-target-form-id={selectedForm.id}
                                 data-testid="form-contact-share-dedupe-toggle"
                                 className="mt-1 disabled:cursor-not-allowed disabled:opacity-60"
                               />
@@ -5408,6 +5788,14 @@ function FormsRoute() {
                               type="checkbox"
                               checked={readFormConsentSettings(formDraft).exportIncludesIp}
                               onChange={(event) => patchFormDraftConsentSettings({ exportIncludesIp: event.target.checked })}
+                              aria-describedby={formBuilderActionStatusId}
+                              data-action="forms.builder.toggleConsentExportIp"
+                              data-action-target={selectedForm.id}
+                              data-action-route={selectedFormDefinitionUrl}
+                              data-action-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                              data-state={readFormConsentSettings(formDraft).exportIncludesIp ? 'checked' : 'unchecked'}
+                              data-disabled-reason={formBuilderEditDisabledReason || undefined}
+                              data-target-form-id={selectedForm.id}
                               data-testid="form-consent-export-ip-toggle"
                               className="mt-1"
                             />
@@ -5457,9 +5845,17 @@ function FormsRoute() {
 	                                  className={formDraftInputClassName(
 	                                    'form-builder-collection-target',
 	                                    'min-h-10 rounded-lg border border-border bg-card px-3 py-2 text-sm font-normal text-foreground disabled:cursor-not-allowed disabled:opacity-60',
-	                                  )}
+                                  )}
 	                                  aria-label="Collection target collection"
-	                                  {...formDraftErrorProps('form-builder-collection-target')}
+                                  aria-invalid={Boolean(formDraftInlineError('form-builder-collection-target'))}
+                                  aria-describedby={formDraftInlineError('form-builder-collection-target') ? `form-builder-collection-target-error ${formBuilderActionStatusId}` : formBuilderActionStatusId}
+                                  data-action="forms.builder.selectCollectionTarget"
+                                  data-action-target={selectedForm.id}
+                                  data-action-route={selectedFormDefinitionUrl}
+                                  data-action-state={!canEditForms || !canUseCollectionTargets ? 'blocked' : 'ready'}
+                                  data-state={formDraft.collectionTarget.collectionId ? 'set' : 'empty'}
+                                  data-disabled-reason={!canEditForms ? editPermissionTitle || 'Your account cannot edit forms.' : !canUseCollectionTargets ? collectionTargetUnavailableReason || 'Collection writes are not available for this site.' : undefined}
+                                  data-target-form-id={selectedForm.id}
 	                                >
                                   <option value="">Select collection</option>
                                   {formDraftTargetCollection && !formDraftTargetCollectionWritable ? (
@@ -5548,13 +5944,38 @@ function FormsRoute() {
                                 disabled={!canEditForms}
                                 className="min-h-9 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                 aria-label="New form field type"
+                                aria-describedby={formBuilderActionStatusId}
+                                data-action="forms.builder.selectNewFieldType"
+                                data-action-target={selectedForm.id}
+                                data-action-route={selectedFormDefinitionUrl}
+                                data-action-state={!canEditForms ? 'blocked' : 'ready'}
+                                data-state={newFormFieldType}
+                                data-disabled-reason={!canEditForms ? editPermissionTitle || 'Your account cannot edit forms.' : undefined}
+                                data-target-form-id={selectedForm.id}
                                 data-testid="form-new-field-type-select"
                               >
                                 {FORM_FIELD_TYPES.map((type) => (
                                   <option key={type} value={type}>{FORM_FIELD_TYPE_LABELS[type]}</option>
                                 ))}
                               </select>
-                              <Button size="sm" variant="outline" onClick={() => addFormDraftField()} disabled={!canEditForms} title={!canEditForms ? editPermissionTitle : undefined} iconStart={<Plus className="size-4" />}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => addFormDraftField()}
+                                disabled={!canEditForms}
+                                title={!canEditForms ? editPermissionTitle : undefined}
+                                aria-describedby={formBuilderActionStatusId}
+                                iconStart={<Plus className="size-4" />}
+                                data-action="forms.builder.addField"
+                                data-action-target={selectedForm.id}
+                                data-action-route={selectedFormDefinitionUrl}
+                                data-action-state={!canEditForms ? 'blocked' : 'ready'}
+                                data-state={!canEditForms ? 'blocked' : 'ready'}
+                                data-action-status={formBuilderActionStatus}
+                                data-disabled-reason={!canEditForms ? editPermissionTitle || 'Your account cannot edit forms.' : undefined}
+                                data-target-form-id={selectedForm.id}
+                                data-testid="form-builder-add-field-button"
+                              >
                                 Add field
                               </Button>
 	                            </div>
@@ -5574,6 +5995,10 @@ function FormsRoute() {
                               const fieldDefaultErrorKey = `form-builder-field-${fieldIndex}-default`;
                               const fieldOptionsErrorKey = `form-builder-field-${fieldIndex}-options`;
                               const fieldValidationErrorKey = `form-builder-field-${fieldIndex}-validation`;
+                              const duplicateFieldDisabledReason = !canEditForms ? editPermissionTitle || 'Your account cannot edit forms.' : '';
+                              const moveFieldUpDisabledReason = fieldIndex === 0 ? 'This field is already first.' : '';
+                              const moveFieldDownDisabledReason = fieldIndex === formDraft.fields.length - 1 ? 'This field is already last.' : '';
+                              const removeFieldDisabledReason = formDraft.fields.length <= 1 ? 'At least one form field is required.' : '';
 
 	                              return (
 	                                <div key={`${field.key}-${fieldIndex}`} className="rounded-lg border border-border bg-card p-3">
@@ -5620,6 +6045,15 @@ function FormsRoute() {
                                       value={field.type}
                                       onChange={(event) => patchFormDraftFieldType(fieldIndex, event.target.value as FormFieldType)}
                                       className="min-h-10 rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+                                      aria-label={`Type for ${field.label}`}
+                                      aria-describedby={formBuilderActionStatusId}
+                                      data-action="forms.builder.changeFieldType"
+                                      data-action-target={field.key}
+                                      data-action-route={selectedFormDefinitionUrl}
+                                      data-action-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                                      data-state={field.type}
+                                      data-disabled-reason={formBuilderEditDisabledReason || undefined}
+                                      data-target-form-id={selectedForm.id}
                                     >
                                       {FORM_FIELD_TYPES.map((type) => (
                                         <option key={type} value={type}>{type}</option>
@@ -5631,6 +6065,14 @@ function FormsRoute() {
                                       type="checkbox"
                                       checked={Boolean(field.required)}
                                       onChange={(event) => patchFormDraftField(fieldIndex, { required: event.target.checked })}
+                                      aria-describedby={formBuilderActionStatusId}
+                                      data-action="forms.builder.toggleFieldRequired"
+                                      data-action-target={field.key}
+                                      data-action-route={selectedFormDefinitionUrl}
+                                      data-action-state={formBuilderEditDisabledReason ? 'blocked' : 'ready'}
+                                      data-state={field.required ? 'checked' : 'unchecked'}
+                                      data-disabled-reason={formBuilderEditDisabledReason || undefined}
+                                      data-target-form-id={selectedForm.id}
                                     />
                                     Required
                                   </label>
@@ -5640,9 +6082,18 @@ function FormsRoute() {
                                       variant="outline"
                                       onClick={() => duplicateFormDraftField(fieldIndex)}
                                       disabled={!canEditForms}
-                                      title={!canEditForms ? editPermissionTitle : undefined}
+                                      title={duplicateFieldDisabledReason || undefined}
+                                      aria-describedby={formBuilderActionStatusId}
                                       iconStart={<Copy className="size-4" />}
                                       aria-label={`Duplicate ${field.label}`}
+                                      data-action="forms.builder.duplicateField"
+                                      data-action-target={field.key}
+                                      data-action-route={selectedFormDefinitionUrl}
+                                      data-action-state={duplicateFieldDisabledReason ? 'blocked' : 'ready'}
+                                      data-state={duplicateFieldDisabledReason ? 'blocked' : 'ready'}
+                                      data-action-status={formBuilderActionStatus}
+                                      data-disabled-reason={duplicateFieldDisabledReason || undefined}
+                                      data-target-form-id={selectedForm.id}
                                       data-testid="form-field-duplicate-button"
                                     >
                                       Duplicate
@@ -5652,7 +6103,18 @@ function FormsRoute() {
                                       variant="outline"
                                       onClick={() => moveFormDraftField(fieldIndex, -1)}
                                       disabled={fieldIndex === 0}
+                                      title={moveFieldUpDisabledReason || undefined}
+                                      aria-describedby={formBuilderActionStatusId}
                                       aria-label={`Move ${field.label} up`}
+                                      data-action="forms.builder.moveFieldUp"
+                                      data-action-target={field.key}
+                                      data-action-route={selectedFormDefinitionUrl}
+                                      data-action-state={moveFieldUpDisabledReason ? 'blocked' : 'ready'}
+                                      data-state={moveFieldUpDisabledReason ? 'blocked' : 'ready'}
+                                      data-action-status={formBuilderActionStatus}
+                                      data-disabled-reason={moveFieldUpDisabledReason || undefined}
+                                      data-target-form-id={selectedForm.id}
+                                      data-testid="form-field-move-up-button"
                                     >
                                       Up
                                     </Button>
@@ -5661,7 +6123,18 @@ function FormsRoute() {
                                       variant="outline"
                                       onClick={() => moveFormDraftField(fieldIndex, 1)}
                                       disabled={fieldIndex === formDraft.fields.length - 1}
+                                      title={moveFieldDownDisabledReason || undefined}
+                                      aria-describedby={formBuilderActionStatusId}
                                       aria-label={`Move ${field.label} down`}
+                                      data-action="forms.builder.moveFieldDown"
+                                      data-action-target={field.key}
+                                      data-action-route={selectedFormDefinitionUrl}
+                                      data-action-state={moveFieldDownDisabledReason ? 'blocked' : 'ready'}
+                                      data-state={moveFieldDownDisabledReason ? 'blocked' : 'ready'}
+                                      data-action-status={formBuilderActionStatus}
+                                      data-disabled-reason={moveFieldDownDisabledReason || undefined}
+                                      data-target-form-id={selectedForm.id}
+                                      data-testid="form-field-move-down-button"
                                     >
                                       Down
                                     </Button>
@@ -5670,8 +6143,19 @@ function FormsRoute() {
                                       variant="danger"
                                       onClick={() => removeFormDraftField(fieldIndex)}
                                       disabled={formDraft.fields.length <= 1}
+                                      title={removeFieldDisabledReason || undefined}
+                                      aria-describedby={formBuilderActionStatusId}
                                       iconStart={<Trash2 className="size-4" />}
                                       aria-label={`Remove ${field.label}`}
+                                      data-action="forms.builder.removeField"
+                                      data-action-target={field.key}
+                                      data-action-route={selectedFormDefinitionUrl}
+                                      data-action-state={removeFieldDisabledReason ? 'blocked' : 'ready'}
+                                      data-state={removeFieldDisabledReason ? 'blocked' : 'ready'}
+                                      data-action-status={formBuilderActionStatus}
+                                      data-disabled-reason={removeFieldDisabledReason || undefined}
+                                      data-target-form-id={selectedForm.id}
+                                      data-testid="form-field-remove-button"
                                     >
                                       Remove
                                     </Button>

@@ -85,6 +85,24 @@ const assertFormsPersistenceCertificationSource = () => {
       'Forms command center must lead with create/export/refresh actions and move manifest/JSON handoff behind More actions.',
     );
   }
+  for (const [snippet, message] of [
+    ['const formsViewActionStatusId = \'forms-view-action-status\';', 'Forms route must define a shared view action status id'],
+    ['const formsExportActionStatusId = \'forms-export-action-status\';', 'Forms route must define a shared export action status id'],
+    ['data-testid="forms-view-action-status"', 'Forms route must render hidden view action status copy'],
+    ['data-testid="forms-export-action-status"', 'Forms route must render hidden export action status copy'],
+    ['data-action="forms.create.blank"', 'Forms blank-create actions must expose a stable data-action'],
+    ['data-action="forms.export.catalogCsv"', 'Forms CSV export must expose a stable data-action'],
+    ['data-action="forms.refresh"', 'Forms refresh controls must expose a stable data-action'],
+    ['data-action="forms.copy.handoffManifest"', 'Forms manifest copy action must expose a stable data-action'],
+    ['data-action="forms.download.handoffJson"', 'Forms manifest download action must expose a stable data-action'],
+    ['data-action-route={formsListUrl}', 'Forms handoff actions must expose their target route'],
+    ['data-state={formsCatalogExportDisabledReason ? \'blocked\' : \'ready\'}', 'Forms catalog export must mirror ready/blocked state in data-state'],
+    ['data-disabled-reason={formsCatalogExportDisabledReason || undefined}', 'Forms catalog export must expose disabled reasons'],
+    ['data-action="forms.copy.accountRegistrationHandoff"', 'Forms account handoff copy must expose a stable data-action'],
+    ['data-action="forms.open.registrationPageTemplate"', 'Forms registration page action must expose a stable route action'],
+  ]) {
+    assert(source.includes(snippet), message);
+  }
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
   assert(source.includes('scenarioEvidence'), 'Forms persistence handoff must expose scenario-level database evidence metadata');
   assert(
@@ -276,6 +294,26 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("label: `${field.label || 'Field'} copy`") &&
       source.includes('validation: field.validation ? field.validation.map((rule) => ({ ...rule })) : undefined'),
     'Forms builder must expose duplicate field controls that preserve field configuration with a unique key',
+  );
+  assert(
+    source.includes('const formBuilderActionStatusId = selectedForm') &&
+      source.includes('data-testid="form-builder-action-status"') &&
+      source.includes('data-action="forms.builder.reset"') &&
+      source.includes('data-action="forms.builder.save"') &&
+      source.includes('data-action="forms.builder.edit"') &&
+      source.includes('data-action="forms.builder.toggleActive"') &&
+      source.includes('data-action="forms.builder.toggleHoneypot"') &&
+      source.includes('data-action="forms.builder.toggleCaptcha"') &&
+      source.includes('data-action="forms.builder.toggleContactShare"') &&
+      source.includes('data-action="forms.builder.toggleCollectionWrite"') &&
+      source.includes('data-action="forms.builder.addField"') &&
+      source.includes('data-action="forms.builder.duplicateField"') &&
+      source.includes('data-action="forms.builder.moveFieldUp"') &&
+      source.includes('data-action="forms.builder.moveFieldDown"') &&
+      source.includes('data-action="forms.builder.removeField"') &&
+      source.includes('data-target-form-id={selectedForm.id}') &&
+      source.includes('data-disabled-reason={formBuilderSaveDisabledReason || undefined}'),
+    'Forms builder controls must expose action contracts, target form ids, ready/blocked state, and disabled reasons.',
   );
   assert(
     source.includes('form-field-duplicate-button') &&
@@ -549,6 +587,15 @@ const assertFormsPersistenceCertificationSource = () => {
     'forms-postgres-certification-env-template',
     'forms-postgres-certification-env-template-body',
     'forms-postgres-certification-command-builder-copy-button',
+    'data-action="forms.copy.postgresEnvTemplate"',
+    'data-action="forms.copy.postgresGuardedCommand"',
+    'data-action="forms.configure.postgresDatabaseAlias"',
+    'data-action="forms.configure.postgresExpectedHost"',
+    'data-action="forms.configure.postgresExpectedDatabase"',
+    'data-action="forms.toggle.postgresDisposableConfirmed"',
+    'data-action="forms.toggle.postgresReleaseDoctor"',
+    "data-state={formsPostgresCommandOptions.disposableConfirmed ? 'checked' : 'unchecked'}",
+    "data-state={formsPostgresCommandOptions.includeReleaseDoctor ? 'checked' : 'unchecked'}",
     'forms-postgres-certification-database-alias-select',
     'forms-postgres-certification-expected-host-input',
     'forms-postgres-certification-expected-database-input',
@@ -927,6 +974,65 @@ const updateSettings = async (input) => {
     body: JSON.stringify(input),
   });
   return payload.data?.settings || payload.settings;
+};
+
+const listCollections = async () => {
+  const collections = [];
+  const limit = 100;
+  let offset = 0;
+
+  for (;;) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections?includeUnpublished=true&limit=${limit}&offset=${offset}`);
+    const chunk = payload.data?.collections || payload.collections || [];
+    collections.push(...chunk);
+    const pagination = payload.data?.pagination || payload.pagination || {};
+
+    if (!pagination.hasMore || chunk.length === 0) {
+      break;
+    }
+
+    offset += limit;
+  }
+
+  return collections;
+};
+
+const temporarilyAllowFormsSmokeFixtureQuotas = async (extraForms = 5, extraCollections = 1) => {
+  const site = await getSite();
+  const existingForms = await listForms();
+  const existingCollections = await listCollections();
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const currentFormLimit = Number(originalLimits.forms || 0);
+  const currentCollectionLimit = Number(originalLimits.collections || 0);
+  const nextFormLimit = Math.max(Number.isFinite(currentFormLimit) ? currentFormLimit : 0, existingForms.length + extraForms);
+  const nextCollectionLimit = Math.max(Number.isFinite(currentCollectionLimit) ? currentCollectionLimit : 0, existingCollections.length + extraCollections);
+
+  if (nextFormLimit === currentFormLimit && nextCollectionLimit === currentCollectionLimit) {
+    return null;
+  }
+
+  await updateSite({
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          forms: nextFormLimit,
+          collections: nextCollectionLimit,
+        },
+      },
+    },
+  });
+
+  return originalSiteSettings;
+};
+
+const restoreFormsSmokeFixtureQuotas = async (settings) => {
+  if (!settings) return;
+  await updateSite({ settings });
 };
 
 const listReusableSections = async () => {
@@ -3267,23 +3373,27 @@ const main = async () => {
   }
 
   await loginAdminApi();
+  const formsSmokeFixtureQuotaSettings = await temporarilyAllowFormsSmokeFixtureQuotas();
   if (process.env.BACKY_FORMS_DELETE_DIALOG_SMOKE === '1') {
-    await runDeleteDialogSmoke();
-    return;
+    try {
+      await runDeleteDialogSmoke();
+      return;
+    } finally {
+      await restoreFormsSmokeFixtureQuotas(formsSmokeFixtureQuotaSettings).catch((error) => {
+        console.warn('Unable to restore forms smoke fixture quota:', error instanceof Error ? error.message : error);
+      });
+    }
   }
 
   const suffix = Date.now().toString(36);
-  await assertFormsPermissionOverridesAreEnforced();
-  await assertFormCreateFieldSanitization();
-  await assertFormBillingLimitEnforced(suffix);
-  const originalFrontendDesign = await getFrontendDesign();
-  await patchFrontendDesign(smokeFrontendDesignContract());
-  const beforeIds = new Set((await listForms()).map((form) => form.id));
-  const captchaHook = await assertCaptchaProviderHook();
-  const smokeCollection = await createCollection();
-  const webhookReceiver = await startWebhookReceiver({ failFirstFormSubmission: true });
-  const { childProcess, userDataDir } = launchChrome();
   let client;
+  let childProcess = null;
+  let userDataDir = null;
+  let originalFrontendDesign = null;
+  let beforeIds = new Set();
+  let captchaHook = null;
+  let smokeCollection = null;
+  let webhookReceiver = null;
   let frontendCreatedFormId = null;
   let blankCreatedFormId = null;
   let createdFormId = null;
@@ -3301,6 +3411,17 @@ const main = async () => {
   let emailRetry = null;
 
   try {
+    await assertFormsPermissionOverridesAreEnforced();
+    await assertFormCreateFieldSanitization();
+    await assertFormBillingLimitEnforced(suffix);
+    originalFrontendDesign = await getFrontendDesign();
+    await patchFrontendDesign(smokeFrontendDesignContract());
+    beforeIds = new Set((await listForms()).map((form) => form.id));
+    captchaHook = await assertCaptchaProviderHook();
+    smokeCollection = await createCollection();
+    webhookReceiver = await startWebhookReceiver({ failFirstFormSubmission: true });
+    ({ childProcess, userDataDir } = launchChrome());
+
     await waitForCdp();
     const page = (await fetchJson('/json/list')).find((candidate) => candidate.type === 'page');
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
@@ -3545,15 +3666,24 @@ const main = async () => {
         console.warn('Unable to delete smoke collection:', error instanceof Error ? error.message : error);
       });
     }
-    await patchFrontendDesign(originalFrontendDesign).catch((error) => {
-      console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
-    });
+    if (originalFrontendDesign) {
+      await patchFrontendDesign(originalFrontendDesign).catch((error) => {
+        console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
+      });
+    }
 
-    await cleanupBrowser({ client, childProcess, userDataDir }).catch((error) => {
-      console.warn('Unable to clean up forms smoke browser:', error instanceof Error ? error.message : error);
-    });
-    await webhookReceiver.close().catch((error) => {
-      console.warn('Unable to close forms smoke webhook receiver:', error instanceof Error ? error.message : error);
+    if (childProcess && userDataDir) {
+      await cleanupBrowser({ client, childProcess, userDataDir }).catch((error) => {
+        console.warn('Unable to clean up forms smoke browser:', error instanceof Error ? error.message : error);
+      });
+    }
+    if (webhookReceiver) {
+      await webhookReceiver.close().catch((error) => {
+        console.warn('Unable to close forms smoke webhook receiver:', error instanceof Error ? error.message : error);
+      });
+    }
+    await restoreFormsSmokeFixtureQuotas(formsSmokeFixtureQuotaSettings).catch((error) => {
+      console.warn('Unable to restore forms smoke fixture quota:', error instanceof Error ? error.message : error);
     });
   }
 };
