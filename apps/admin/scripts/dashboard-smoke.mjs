@@ -58,6 +58,12 @@ const assertDashboardSourceContracts = () => {
     'data-testid="dashboard-secondary-actions"',
     'data-testid="dashboard-more-actions"',
     'data-testid="dashboard-secondary-action-menu"',
+    "label: 'New product'",
+    "label: 'New form'",
+    "quickCreate: 'product'",
+    "quickCreate: 'blank'",
+    "'commerce.edit'",
+    "'forms.create'",
     'data-testid="dashboard-command-refresh"',
     'data-testid="dashboard-command-copy-handoff"',
     'data-testid="dashboard-command-download-handoff"',
@@ -780,6 +786,8 @@ const assertDashboardCommandActionStatus = async (client) => {
         newSite: readAction('dashboard-command-new-site'),
         newPage: readAction('dashboard-command-new-page'),
         newPost: readAction('dashboard-command-new-post'),
+        newProduct: readAction('dashboard-command-new-product'),
+        newForm: readAction('dashboard-command-new-form'),
         refresh: readAction('dashboard-command-refresh'),
         copy: readAction('dashboard-command-copy-handoff'),
         download: readAction('dashboard-command-download-handoff'),
@@ -800,6 +808,8 @@ const assertDashboardCommandActionStatus = async (client) => {
     state.statusText.includes('New site available.') &&
       state.statusText.includes('New page available.') &&
       state.statusText.includes('New post available.') &&
+      state.statusText.includes('New product available.') &&
+      state.statusText.includes('New form available.') &&
       state.statusText.includes('Refresh data available.') &&
       state.statusText.includes('Copy handoff available.') &&
       state.statusText.includes('Download JSON available.') &&
@@ -812,7 +822,9 @@ const assertDashboardCommandActionStatus = async (client) => {
     `Dashboard handoff actions should not be duplicated in primary actions: ${JSON.stringify(state)}`,
   );
   assert(state.secondaryCollapsed && state.hasMoreActions, `Dashboard handoff actions must be behind collapsed More actions: ${JSON.stringify(state)}`);
-  for (const [key, action] of Object.entries({ newSite: state.newSite, newPage: state.newPage, newPost: state.newPost, refresh: state.refresh, copy: state.copy, download: state.download })) {
+  assert(state.newProduct.href.includes('/products') && state.newProduct.href.includes('quickCreate=product'), `Dashboard New product must route into quick product creation: ${JSON.stringify(state)}`);
+  assert(state.newForm.href.includes('/forms') && state.newForm.href.includes('quickCreate=blank'), `Dashboard New form must route into quick form creation: ${JSON.stringify(state)}`);
+  for (const [key, action] of Object.entries({ newSite: state.newSite, newPage: state.newPage, newPost: state.newPost, newProduct: state.newProduct, newForm: state.newForm, refresh: state.refresh, copy: state.copy, download: state.download })) {
     assert(action.found, `Dashboard ${key} command action was not found: ${JSON.stringify(state)}`);
     assert(action.describedBy === state.statusId, `Dashboard ${key} command action must reference the shared status: ${JSON.stringify(state)}`);
     assert(action.state === 'ready' && action.disabled === false && action.disabledReason === '', `Dashboard ${key} command action should be ready: ${JSON.stringify(state)}`);
@@ -1029,6 +1041,8 @@ const assertDashboardLinks = async (client) => {
       ['New site', '/sites/new'],
       ['New page', '/pages/new'],
       ['New post', '/blog/new'],
+      ['New product', '/products'],
+      ['New form', '/forms'],
       ['Media library', '/media'],
       ['Registration page', '/pages/new'],
       ['Product catalog', '/products'],
@@ -1040,7 +1054,15 @@ const assertDashboardLinks = async (client) => {
       ['Manage frontend datasets', '/collections'],
     ];
     const missing = required.filter(([text, href]) => !hrefs.some((item) => item.text.includes(text) && item.href.includes(href)));
-    return { ok: missing.length === 0, missing, hrefs: hrefs.slice(0, 120) };
+    const newProduct = hrefs.find((item) => item.text.includes('New product') && item.href.includes('/products')) || null;
+    const newForm = hrefs.find((item) => item.text.includes('New form') && item.href.includes('/forms')) || null;
+    const quickCreateOk = Boolean(
+      newProduct?.href.includes('siteId=') &&
+        newProduct.href.includes('quickCreate=product') &&
+        newForm?.href.includes('siteId=') &&
+        newForm.href.includes('quickCreate=blank'),
+    );
+    return { ok: missing.length === 0 && quickCreateOk, missing, quickCreateOk, newProduct, newForm, hrefs: hrefs.slice(0, 120) };
   })()`);
   assert(links.ok, `Dashboard missing expected navigation links: ${JSON.stringify(links)}`);
   return links;

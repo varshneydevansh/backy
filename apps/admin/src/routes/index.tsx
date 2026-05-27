@@ -73,6 +73,22 @@ export const Route = createFileRoute('/')({
 });
 
 type DashboardSource = 'backend' | 'fallback';
+type DashboardRouteTarget =
+  | '/sites'
+  | '/pages'
+  | '/blog'
+  | '/media'
+  | '/users'
+  | '/settings'
+  | '/collections'
+  | '/forms'
+  | '/comments'
+  | '/products'
+  | '/orders'
+  | '/sites/new'
+  | '/pages/new'
+  | '/blog/new';
+type DashboardWorkflowSearch = { quickCreate: 'product' } | { quickCreate: 'blank' };
 
 interface DashboardData {
   sites: Site[];
@@ -147,7 +163,16 @@ interface DashboardIssue {
   label: string;
   detail: string;
   severity: 'error' | 'warning' | 'info';
-  to: '/sites' | '/pages' | '/settings' | '/media' | '/collections' | '/comments' | '/forms' | '/products' | '/orders';
+  to: DashboardRouteTarget;
+}
+
+interface DashboardWorkflowAction {
+  label: string;
+  to: DashboardRouteTarget;
+  icon: ElementType;
+  detail: string;
+  visible: boolean;
+  search?: DashboardWorkflowSearch;
 }
 
 type DashboardPermissionKey =
@@ -159,8 +184,10 @@ type DashboardPermissionKey =
   | 'media.view'
   | 'collections.view'
   | 'forms.view'
+  | 'forms.create'
   | 'comments.view'
   | 'commerce.view'
+  | 'commerce.edit'
   | 'users.view'
   | 'settings.view'
   | 'settings.configure'
@@ -175,8 +202,10 @@ const DASHBOARD_PERMISSION_ROLE_DEFAULTS: Record<DashboardPermissionKey, User['r
   'media.view': ['owner', 'admin', 'editor', 'viewer'],
   'collections.view': ['owner', 'admin', 'editor', 'viewer'],
   'forms.view': ['owner', 'admin', 'editor', 'viewer'],
+  'forms.create': ['owner', 'admin', 'editor'],
   'comments.view': ['owner', 'admin', 'editor', 'viewer'],
   'commerce.view': ['owner', 'admin', 'editor', 'viewer'],
+  'commerce.edit': ['owner', 'admin', 'editor'],
   'users.view': ['owner', 'admin'],
   'settings.view': ['owner', 'admin'],
   'settings.configure': ['owner', 'admin'],
@@ -1264,7 +1293,9 @@ function Index() {
   const canViewMedia = isDashboardPermissionAllowed(permissionMatrix, user, 'media.view');
   const canViewCollections = isDashboardPermissionAllowed(permissionMatrix, user, 'collections.view');
   const canViewForms = isDashboardPermissionAllowed(permissionMatrix, user, 'forms.view');
+  const canCreateForms = isDashboardPermissionAllowed(permissionMatrix, user, 'forms.create');
   const canViewCommerce = isDashboardPermissionAllowed(permissionMatrix, user, 'commerce.view');
+  const canEditCommerce = isDashboardPermissionAllowed(permissionMatrix, user, 'commerce.edit');
   const rbacSummary = {
     role: permissionMatrix?.role || user?.role || 'unknown',
     allowed: permissionMatrix?.summary.allowed ?? null,
@@ -1379,10 +1410,12 @@ function Index() {
       note: database?.note || database?.error || '',
     };
   }, [database, storage?.bucket, supabase]);
-  const dashboardWorkflowActions = [
+  const dashboardWorkflowActions: DashboardWorkflowAction[] = [
     { label: 'New site', to: '/sites/new' as const, icon: Globe, detail: 'Website container', visible: canCreateSites },
     { label: 'New page', to: '/pages/new' as const, icon: Layout, detail: 'Visual canvas', visible: canEditPages },
     { label: 'New post', to: '/blog/new' as const, icon: FileText, detail: 'Blog article', visible: canEditPages },
+    { label: 'New product', to: '/products' as const, icon: Package, detail: 'Catalog item', visible: canEditCommerce, search: { quickCreate: 'product' as const } },
+    { label: 'New form', to: '/forms' as const, icon: ClipboardList, detail: 'Lead capture', visible: canCreateForms, search: { quickCreate: 'blank' as const } },
     { label: 'Media library', to: '/media' as const, icon: HardDrive, detail: 'Images, files, fonts', visible: canViewMedia },
     { label: 'Collections', to: '/collections' as const, icon: Database, detail: 'Structured data', visible: canViewCollections },
     { label: 'API setup', to: '/settings' as const, icon: Settings, detail: 'Frontend control', visible: canViewSettings },
@@ -1395,12 +1428,22 @@ function Index() {
         : true
   ));
   const getDashboardRouteSearch = (
-    to: '/sites' | '/pages' | '/blog' | '/media' | '/users' | '/settings' | '/collections' | '/forms' | '/comments' | '/products' | '/orders' | '/sites/new' | '/pages/new' | '/blog/new',
+    to: DashboardRouteTarget,
   ) => (
     ['/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/users', '/pages/new', '/blog/new'].includes(to)
       ? { siteId: activeSiteId }
       : undefined
   );
+  const getDashboardWorkflowActionSearch = (action: DashboardWorkflowAction) => {
+    if (action.search?.quickCreate === 'product') {
+      return { siteId: activeSiteId, quickCreate: 'product' as const };
+    }
+    if (action.search?.quickCreate === 'blank') {
+      return { siteId: activeSiteId, quickCreate: 'blank' as const };
+    }
+
+    return getDashboardRouteSearch(action.to);
+  };
   const selectDashboardSite = (nextSiteId: string) => {
     if (isCheckingInfrastructure || isRunningDeployment) return;
 
@@ -2207,7 +2250,11 @@ function Index() {
     : '';
   const dashboardCommandActionState = dashboardCommandDisabledReason ? 'busy' : 'ready';
   const dashboardPrimaryCommandActions = dashboardWorkflowActions.filter((action) => (
-    action.label === 'New site' || action.label === 'New page' || action.label === 'New post'
+    action.label === 'New site' ||
+    action.label === 'New page' ||
+    action.label === 'New post' ||
+    action.label === 'New product' ||
+    action.label === 'New form'
   ));
   const dashboardPrimaryCommandActionStatus = dashboardPrimaryCommandActions.length > 0
     ? dashboardPrimaryCommandActions.map((action) => `${action.label} available.`).join(' ')
@@ -2301,7 +2348,7 @@ function Index() {
                   <Link
                     key={action.label}
                     to={action.to}
-                    search={getDashboardRouteSearch(action.to)}
+                    search={getDashboardWorkflowActionSearch(action)}
                     aria-describedby={dashboardCommandActionStatusId}
                     data-testid={`dashboard-command-${action.label.toLowerCase().replace(/\s+/g, '-')}`}
                     data-action-state="ready"
@@ -2415,7 +2462,7 @@ function Index() {
                 <Link
                   key={action.label}
                   to={action.to}
-                  search={getDashboardRouteSearch(action.to)}
+                  search={getDashboardWorkflowActionSearch(action)}
                   className="group flex min-h-20 items-center gap-3 rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                 >
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
@@ -3662,7 +3709,7 @@ function Index() {
                   <Link
                     key={action.label}
                     to={action.to}
-                    search={getDashboardRouteSearch(action.to)}
+                    search={getDashboardWorkflowActionSearch(action)}
                     className="group rounded-lg border border-border p-4 transition-colors hover:border-primary/40 hover:bg-accent/40"
                   >
                     <div className="flex items-center gap-3">
