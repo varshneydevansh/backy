@@ -43,6 +43,7 @@ lerna-debug.log*
 Thumbs.db
 
 # Testing
+artifacts/
 coverage/
 .nyc_output/
 playwright-report/
