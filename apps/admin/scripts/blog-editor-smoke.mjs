@@ -85,6 +85,16 @@ const assertBlogEditorFallbackIsReadOnly = () => {
       source.includes('data-action-status={blogEditorFocusActionStatus}') &&
       source.includes('data-testid="blog-editor-command-action-status"') &&
       source.includes('data-action-status={blogEditorCommandActionStatus}') &&
+      source.includes('const editorCommandBusy = editorBusy;') &&
+      source.includes('const editorPreviewBusy = editorBusy || isPreviewBusy;') &&
+      source.includes('const editorReadinessBusy = editorBusy || readinessLoading;') &&
+      source.includes('const editorRouteCheckBusy = editorBusy || isCheckingRoutes;') &&
+      source.includes('const editorActionBusy = editorBusy || isPreviewBusy || readinessLoading;') &&
+      source.includes('const blogEditorHandoffDisabledReason = editorCommandBusy') &&
+      source.includes('const blogEditorRevisionGraphDisabledReason = editorCommandBusy') &&
+      source.includes('disabled={editorCommandBusy || !canViewBlog}') &&
+      source.includes('disabled={editorPreviewBusy || isUsingLocalPostCopy') &&
+      source.includes('disabled={editorReadinessBusy || !canViewBlog}') &&
       source.includes('data-testid={`blog-editor-status-${nextStatus}`}') &&
       source.includes('data-action-status={statusActionStatus}') &&
       source.includes('data-testid="blog-editor-copy-handoff"') &&

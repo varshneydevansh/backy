@@ -422,7 +422,8 @@ const missingPageEditorPermissionFallbackGuards = [
     "const canViewPage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.view');",
     "const canEditPage = isPageEditorPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit');",
     'const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy;',
-    'const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy;',
+    'const isPageEditorCommandBusy = isLoadingPage || isWorkflowBusy;',
+    'const isPageEditorMutationBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy || readinessLoading;',
   ]).map((snippet) => `pages.$pageId.edit.tsx missing ${snippet}`),
   pageEditorRouteSource.includes('const canViewPage = !isPermissionMatrixPending')
     ? 'pages.$pageId.edit.tsx must not block role-default page access while backend permissions hydrate'

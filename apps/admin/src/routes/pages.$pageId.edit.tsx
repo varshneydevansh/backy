@@ -678,9 +678,11 @@ function PageEditorRoute() {
   const editPageDeniedMessage = `Your account needs pages.edit to change this page. ${editPagePermissionTitle}`;
   const publishPageDeniedMessage = `Your account needs pages.publish to preview or publish this page. ${publishPagePermissionTitle}`;
   const workspaceFocusDisabled = isLoadingPage || isWorkflowBusy;
-  const isPageEditorWorkflowBusy = isWorkflowBusy || isPreviewBusy || readinessLoading;
+  const isPageEditorCommandBusy = isLoadingPage || isWorkflowBusy;
   const isPageEditorSaveBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy;
-  const isPageEditorBusy = isLoadingPage || isPageEditorWorkflowBusy;
+  const isPageEditorPreviewBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy;
+  const isPageEditorReadinessBusy = isLoadingPage || isWorkflowBusy || readinessLoading;
+  const isPageEditorMutationBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy || readinessLoading;
 
   useEffect(() => {
     let cancelled = false;
@@ -1527,7 +1529,7 @@ function PageEditorRoute() {
   const editorHandoffText = JSON.stringify(editorHandoff, null, 2);
 
   const copyEditorHandoffText = async (value: string, label: string) => {
-    if (isPageEditorBusy) return;
+    if (isPageEditorCommandBusy) return;
 
     try {
       await navigator.clipboard.writeText(value);
@@ -1600,7 +1602,7 @@ function PageEditorRoute() {
   };
 
   const downloadEditorHandoff = () => {
-    if (isPageEditorBusy) return;
+    if (isPageEditorCommandBusy) return;
 
     const blob = new Blob([editorHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1717,7 +1719,7 @@ function PageEditorRoute() {
   };
 
   const reloadLatestPage = async () => {
-    if (isPageEditorBusy) return;
+    if (isPageEditorMutationBusy) return;
     if (!canViewPage) {
       setSaveWarning(viewPagePermissionTitle || 'Your account cannot reload this page.');
       return;
@@ -1744,7 +1746,7 @@ function PageEditorRoute() {
   };
 
   const handleBack = () => {
-    if (isPageEditorBusy) return;
+    if (isPageEditorCommandBusy) return;
 
     navigate({ to: '/pages', search: { siteId } });
   };
@@ -1765,7 +1767,7 @@ function PageEditorRoute() {
   };
 
   const applyWorkflow = async (action: 'publish' | 'unpublish' | 'archive') => {
-    if (isPageEditorBusy) return;
+    if (isPageEditorMutationBusy) return;
     if (action === 'publish' && !canPublishPage) {
       setSaveWarning(publishPageDeniedMessage);
       return;
@@ -1824,7 +1826,7 @@ function PageEditorRoute() {
   };
 
   const generatePreview = async () => {
-    if (isPageEditorBusy) return;
+    if (isPageEditorPreviewBusy) return;
     if (!canPublishPage) {
       setSaveWarning(publishPageDeniedMessage);
       return;
@@ -1856,7 +1858,7 @@ function PageEditorRoute() {
   };
 
   const restoreRevision = async (revision: ContentRevision) => {
-    if (isPageEditorBusy) return;
+    if (isPageEditorMutationBusy) return;
     if (!canEditPage) {
       setSaveWarning(editPageDeniedMessage);
       return;
@@ -1894,7 +1896,7 @@ function PageEditorRoute() {
   const pendingRestoreRevisionGraphNode = pendingRestoreRevision
     ? pageRevisionTimelineById.get(pendingRestoreRevision.id) || null
     : null;
-  const pageEditorBackDisabledReason = isPageEditorBusy
+  const pageEditorBackDisabledReason = isPageEditorCommandBusy
     ? 'Wait for the current page editor workflow before returning to Pages.'
     : '';
   const pageEditorBackActionStatus = pageEditorBackDisabledReason
@@ -1910,11 +1912,28 @@ function PageEditorRoute() {
     : isWorkspaceFocus
       ? 'Show page panels available.'
       : 'Focus canvas available.';
-  const pageEditorCommandBusyReason = isPageEditorBusy
+  const pageEditorCommandBusyReason = isPageEditorCommandBusy
     ? 'Wait for the current page editor workflow to finish.'
     : '';
-  const pageEditorWorkflowActionState = (disabledReason: string) => (
-    disabledReason ? isPageEditorBusy ? 'busy' : 'blocked' : 'ready'
+  const pageEditorPreviewBusyReason = isPageEditorPreviewBusy
+    ? isPreviewBusy
+      ? 'Wait for the current page preview to finish.'
+      : pageEditorCommandBusyReason
+    : '';
+  const pageEditorReadinessBusyReason = isPageEditorReadinessBusy
+    ? readinessLoading
+      ? 'Wait for the current page readiness check to finish.'
+      : pageEditorCommandBusyReason
+    : '';
+  const pageEditorMutationBusyReason = isPageEditorMutationBusy
+    ? isPreviewBusy
+      ? 'Wait for the current page preview to finish.'
+      : readinessLoading
+        ? 'Wait for the current page readiness check to finish.'
+        : pageEditorCommandBusyReason
+    : '';
+  const pageEditorWorkflowActionState = (disabledReason: string, busy = isPageEditorMutationBusy) => (
+    disabledReason ? busy ? 'busy' : 'blocked' : 'ready'
   );
   const pageEditorHandoffActionStatus = pageEditorCommandBusyReason
     ? `Frontend handoff unavailable: ${pageEditorCommandBusyReason}`
@@ -1926,8 +1945,8 @@ function PageEditorRoute() {
     ? `Publish impact unavailable: ${pageEditorCommandBusyReason}`
     : 'Publish impact copy available for route, relation, navigation, and readiness handoff.';
   const pageEditorHandoffActionState = pageEditorCommandBusyReason ? 'busy' : 'ready';
-  const pageEditorPreviewDisabledReason = isPageEditorBusy
-    ? pageEditorCommandBusyReason
+  const pageEditorPreviewDisabledReason = pageEditorPreviewBusyReason
+    ? pageEditorPreviewBusyReason
     : isUsingLocalPageCopy
       ? localPageCopyDisabledMessage
       : editorHasUnsavedChanges
@@ -1938,7 +1957,7 @@ function PageEditorRoute() {
   const pageEditorPreviewActionStatus = pageEditorPreviewDisabledReason
     ? `Preview unavailable: ${pageEditorPreviewDisabledReason}`
     : 'Preview available for this page.';
-  const pageEditorPreviewActionState = pageEditorWorkflowActionState(pageEditorPreviewDisabledReason);
+  const pageEditorPreviewActionState = pageEditorWorkflowActionState(pageEditorPreviewDisabledReason, isPageEditorPreviewBusy);
   const generatedPreviewExpiresLabel = previewExpiresAt ? new Date(previewExpiresAt).toLocaleTimeString() : 'soon';
   const pageEditorGeneratedPreviewDisabledReason = pageEditorCommandBusyReason;
   const pageEditorGeneratedPreviewActionStatus = pageEditorGeneratedPreviewDisabledReason
@@ -1947,17 +1966,17 @@ function PageEditorRoute() {
       ? `Generated preview link available until ${generatedPreviewExpiresLabel}.`
       : 'No generated preview link yet.';
   const pageEditorGeneratedPreviewActionState = pageEditorGeneratedPreviewDisabledReason ? 'busy' : 'ready';
-  const pageEditorReadinessDisabledReason = isPageEditorBusy
-    ? pageEditorCommandBusyReason
+  const pageEditorReadinessDisabledReason = pageEditorReadinessBusyReason
+    ? pageEditorReadinessBusyReason
     : !canViewPage
       ? viewPagePermissionTitle || 'Your account cannot refresh page readiness.'
       : '';
   const pageEditorReadinessActionStatus = pageEditorReadinessDisabledReason
     ? `Readiness refresh unavailable: ${pageEditorReadinessDisabledReason}`
     : 'Readiness refresh available.';
-  const pageEditorReadinessActionState = pageEditorWorkflowActionState(pageEditorReadinessDisabledReason);
-  const pageEditorPublishDisabledReason = isPageEditorBusy
-    ? pageEditorCommandBusyReason
+  const pageEditorReadinessActionState = pageEditorWorkflowActionState(pageEditorReadinessDisabledReason, isPageEditorReadinessBusy);
+  const pageEditorPublishDisabledReason = pageEditorMutationBusyReason
+    ? pageEditorMutationBusyReason
     : page.status === 'published'
       ? 'This page is already published.'
       : externalWorkflowDisabledReason || '';
@@ -1965,8 +1984,8 @@ function PageEditorRoute() {
     ? `Publish unavailable: ${pageEditorPublishDisabledReason}`
     : 'Publish available for this page.';
   const pageEditorPublishActionState = pageEditorWorkflowActionState(pageEditorPublishDisabledReason);
-  const pageEditorUnpublishDisabledReason = isPageEditorBusy
-    ? pageEditorCommandBusyReason
+  const pageEditorUnpublishDisabledReason = pageEditorMutationBusyReason
+    ? pageEditorMutationBusyReason
     : page.status !== 'published'
       ? 'Only published pages can be unpublished.'
       : unpublishDisabledReason || '';
@@ -1974,8 +1993,8 @@ function PageEditorRoute() {
     ? `Unpublish unavailable: ${pageEditorUnpublishDisabledReason}`
     : 'Unpublish available for this page.';
   const pageEditorUnpublishActionState = pageEditorWorkflowActionState(pageEditorUnpublishDisabledReason);
-  const pageEditorArchiveDisabledReason = isPageEditorBusy
-    ? pageEditorCommandBusyReason
+  const pageEditorArchiveDisabledReason = pageEditorMutationBusyReason
+    ? pageEditorMutationBusyReason
     : page.status === 'archived'
       ? 'This page is already archived.'
       : archiveDisabledReason || '';
@@ -2001,7 +2020,7 @@ function PageEditorRoute() {
     pageEditorArchiveActionStatus,
   ].join(' ');
   const pageEditorRecoveryActionStatusId = 'page-editor-recovery-action-status';
-  const pageEditorReloadLatestDisabledReason = pageEditorCommandBusyReason;
+  const pageEditorReloadLatestDisabledReason = pageEditorMutationBusyReason;
   const pageEditorReloadLatestActionStatus = pageEditorReloadLatestDisabledReason
     ? `Reload latest unavailable: ${pageEditorReloadLatestDisabledReason}`
     : 'Reload latest backend page available.';
@@ -2029,8 +2048,8 @@ function PageEditorRoute() {
   const pageEditorRevisionCompareActionStatus = pageEditorCommandBusyReason
     ? `Revision comparison copy unavailable: ${pageEditorCommandBusyReason}`
     : 'Revision comparison copy available for frontend handoff.';
-  const pageEditorRevisionRestoreDisabledReason = isPageEditorBusy
-    ? pageEditorCommandBusyReason
+  const pageEditorRevisionRestoreDisabledReason = pageEditorMutationBusyReason
+    ? pageEditorMutationBusyReason
     : isUsingLocalPageCopy
       ? localPageCopyDisabledMessage
       : editorHasUnsavedChanges
@@ -2070,7 +2089,7 @@ function PageEditorRoute() {
     'data-disabled-reason': disabledReason || undefined,
   });
   const handlePageEditorRevisionAnchorClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!isPageEditorBusy) return;
+    if (!isPageEditorCommandBusy) return;
     event.preventDefault();
   };
   const pageEditorRestoreModalActionProps = (
@@ -2097,7 +2116,7 @@ function PageEditorRoute() {
           <button
             type="button"
             onClick={handleBack}
-            disabled={isPageEditorBusy}
+            disabled={isPageEditorCommandBusy}
             className="rounded-lg border border-border bg-background p-2 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Back to pages"
             aria-describedby={pageEditorCommandActionStatusId}
@@ -2164,7 +2183,7 @@ function PageEditorRoute() {
               size="sm"
               variant="outline"
               onClick={() => void reloadLatestPage()}
-              disabled={isPageEditorBusy}
+              disabled={isPageEditorMutationBusy}
               iconStart={<RefreshCw className={cn('size-3.5', isLoadingPage && 'animate-spin')} />}
               title={pageEditorReloadLatestDisabledReason || 'Reload latest backend page'}
               data-testid="page-editor-load-error-reload"
@@ -2211,7 +2230,7 @@ function PageEditorRoute() {
             size="sm"
             variant="outline"
             onClick={() => void reloadLatestPage()}
-            disabled={isPageEditorBusy}
+            disabled={isPageEditorMutationBusy}
             data-testid="page-editor-conflict-reload"
             iconStart={<RefreshCw className="size-4" />}
             title={pageEditorReloadLatestDisabledReason || 'Reload latest backend page'}
@@ -2246,7 +2265,7 @@ function PageEditorRoute() {
         data-testid="page-editor-command-center"
         data-default-editor-order="after-canvas"
         aria-describedby={pageEditorCommandActionStatusId}
-        data-action-state={isPageEditorBusy ? 'busy' : 'ready'}
+        data-action-state={isPageEditorCommandBusy ? 'busy' : 'ready'}
         data-action-status={pageEditorCommandActionStatus}
       >
         <span id={pageEditorCommandActionStatusId} className="sr-only" data-testid="page-editor-command-action-status" aria-live="polite">
@@ -2274,7 +2293,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void copyEditorHandoffText(editorHandoffText, 'Page editor handoff manifest')}
-              disabled={isPageEditorBusy}
+              disabled={isPageEditorCommandBusy}
               iconStart={<Copy className="size-4" />}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-copy-handoff"
@@ -2288,7 +2307,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={downloadEditorHandoff}
-              disabled={isPageEditorBusy}
+              disabled={isPageEditorCommandBusy}
               iconStart={<Download className="size-4" />}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-download-handoff"
@@ -2302,7 +2321,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void generatePreview()}
-              disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
+              disabled={isPageEditorPreviewBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
               iconStart={<Eye className="size-4" />}
               title={pageEditorPreviewDisabledReason || 'Preview page'}
               aria-describedby={pageEditorCommandActionStatusId}
@@ -2317,7 +2336,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void loadPageReadiness()}
-              disabled={isPageEditorBusy || !canViewPage}
+              disabled={isPageEditorReadinessBusy || !canViewPage}
               title={pageEditorReadinessDisabledReason || 'Refresh readiness'}
               iconStart={<RefreshCw className={cn('size-4', readinessLoading && 'animate-spin')} />}
               aria-describedby={pageEditorCommandActionStatusId}
@@ -2331,7 +2350,7 @@ function PageEditorRoute() {
             <Button
               type="button"
               onClick={() => void applyWorkflow('publish')}
-              disabled={isPageEditorBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
+              disabled={isPageEditorMutationBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
               iconStart={<CheckCircle2 className="size-4" />}
               title={pageEditorPublishDisabledReason || 'Publish page'}
               aria-describedby={pageEditorCommandActionStatusId}
@@ -2346,7 +2365,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void applyWorkflow('unpublish')}
-              disabled={isPageEditorBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
+              disabled={isPageEditorMutationBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
               iconStart={<EyeOff className="size-4" />}
               title={pageEditorUnpublishDisabledReason || 'Set published page back to draft'}
               aria-describedby={pageEditorCommandActionStatusId}
@@ -2436,15 +2455,15 @@ function PageEditorRoute() {
               <a
                 key={area.title}
                 href={area.href}
-                aria-disabled={isPageEditorBusy}
+                aria-disabled={isPageEditorCommandBusy}
                 aria-describedby={pageEditorCommandActionStatusId}
                 aria-label={`${area.title}: ${area.detail}`}
                 onClick={(event) => {
-                  if (isPageEditorBusy) event.preventDefault();
+                  if (isPageEditorCommandBusy) event.preventDefault();
                 }}
                 className={cn(
                   'inline-flex min-h-10 items-center rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/40 hover:bg-primary/5',
-                  isPageEditorBusy && 'pointer-events-none opacity-60',
+                  isPageEditorCommandBusy && 'pointer-events-none opacity-60',
                 )}
                 data-testid={`page-editor-control-map-link-${area.id}`}
                 data-control-area={area.id}
@@ -2469,7 +2488,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void copyEditorHandoffText(adminPageUrl, 'Page editor API URL')}
-              disabled={isPageEditorBusy}
+              disabled={isPageEditorCommandBusy}
               iconStart={<Copy className="size-4" />}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-control-map-copy-api-url"
@@ -2483,7 +2502,7 @@ function PageEditorRoute() {
               type="button"
               variant="outline"
               onClick={() => void copyEditorHandoffText(editorHandoffText, 'Page editor handoff manifest')}
-              disabled={isPageEditorBusy}
+              disabled={isPageEditorCommandBusy}
               iconStart={<Copy className="size-4" />}
               aria-describedby={pageEditorCommandActionStatusId}
               data-testid="page-editor-control-map-copy-handoff"
@@ -2622,7 +2641,7 @@ function PageEditorRoute() {
                 <div className="grid gap-2">
                   <Button
                     onClick={() => void generatePreview()}
-                    disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
+                    disabled={isPageEditorPreviewBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canPublishPage}
                     variant="outline"
                     iconStart={<Eye className="size-4" />}
                     className="w-full"
@@ -2637,7 +2656,7 @@ function PageEditorRoute() {
                   </Button>
                   <Button
                     onClick={() => void applyWorkflow('publish')}
-                    disabled={isPageEditorBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
+                    disabled={isPageEditorMutationBusy || page.status === 'published' || Boolean(externalWorkflowDisabledReason)}
                     variant="primary"
                     iconStart={<CheckCircle2 className="size-4" />}
                     className="w-full"
@@ -2652,7 +2671,7 @@ function PageEditorRoute() {
                   </Button>
                   <Button
                     onClick={() => void applyWorkflow('unpublish')}
-                    disabled={isPageEditorBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
+                    disabled={isPageEditorMutationBusy || page.status !== 'published' || Boolean(unpublishDisabledReason)}
                     variant="outline"
                     iconStart={<EyeOff className="size-4" />}
                     className="w-full"
@@ -2667,7 +2686,7 @@ function PageEditorRoute() {
                   </Button>
                   <Button
                     onClick={() => void applyWorkflow('archive')}
-                    disabled={isPageEditorBusy || page.status === 'archived' || Boolean(archiveDisabledReason)}
+                    disabled={isPageEditorMutationBusy || page.status === 'archived' || Boolean(archiveDisabledReason)}
                     variant="outline"
                     iconStart={<Archive className="size-4" />}
                     className="w-full"
@@ -2702,7 +2721,7 @@ function PageEditorRoute() {
                       type="button"
                       size="sm"
                       variant="ghost"
-                      disabled={isPageEditorBusy}
+                      disabled={isPageEditorCommandBusy}
                       onClick={() => void copyEditorHandoffText(pagePublishImpactText, 'Page publish impact')}
                       data-testid="page-editor-copy-publish-impact"
                       aria-describedby={pageEditorCommandActionStatusId}
@@ -2748,14 +2767,14 @@ function PageEditorRoute() {
 	                    href={previewUrl}
 	                    target="_blank"
 	                    rel="noreferrer"
-	                    aria-disabled={isPageEditorBusy}
+	                    aria-disabled={isPageEditorCommandBusy}
                       aria-describedby={pageEditorCommandActionStatusId}
 	                    onClick={(event) => {
-	                      if (isPageEditorBusy) event.preventDefault();
+	                      if (isPageEditorCommandBusy) event.preventDefault();
 	                    }}
                     className={cn(
                       'flex max-w-full items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground',
-	                      isPageEditorBusy && 'pointer-events-none opacity-60',
+	                      isPageEditorCommandBusy && 'pointer-events-none opacity-60',
 	                    )}
                       data-testid="page-editor-generated-preview-link"
                       data-action-state={pageEditorGeneratedPreviewActionState}
@@ -2784,7 +2803,7 @@ function PageEditorRoute() {
                 <button
                   type="button"
                   onClick={() => void loadPageReadiness()}
-                  disabled={isPageEditorBusy || !canViewPage}
+                  disabled={isPageEditorReadinessBusy || !canViewPage}
                   className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   title={pageEditorReadinessDisabledReason || 'Refresh page readiness'}
                   aria-describedby={pageEditorCommandActionStatusId}
@@ -2896,7 +2915,7 @@ function PageEditorRoute() {
                           type="button"
                           className="inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
                           onClick={() => void copyEditorHandoffText(pageRevisionBranchGraphText, 'Page revision branch graph')}
-                          disabled={isPageEditorBusy}
+                          disabled={isPageEditorCommandBusy}
                           data-testid="page-editor-copy-revision-branch-graph"
                           {...pageEditorRevisionActionProps(
                             pageEditorRevisionReadonlyActionState,
@@ -2912,7 +2931,7 @@ function PageEditorRoute() {
                             type="button"
                             className="rounded-md px-2 py-1 font-medium text-primary hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={() => setIsRevisionTimelineExpanded((current) => !current)}
-                            disabled={isPageEditorBusy}
+                            disabled={isPageEditorCommandBusy}
                             data-testid="page-editor-toggle-revision-graph"
                             {...pageEditorRevisionActionProps(
                               pageEditorRevisionReadonlyActionState,
@@ -2937,12 +2956,12 @@ function PageEditorRoute() {
                           <a
                             key={node.id}
                             href={`#page-editor-revision-${node.id}`}
-                            className={cn(nodeClassName, isPageEditorBusy && 'pointer-events-none opacity-60')}
+                            className={cn(nodeClassName, isPageEditorCommandBusy && 'pointer-events-none opacity-60')}
                             onClick={handlePageEditorRevisionAnchorClick}
                             title={node.summary}
                             aria-label={node.summary}
-                            aria-disabled={isPageEditorBusy}
-                            tabIndex={isPageEditorBusy ? -1 : undefined}
+                            aria-disabled={isPageEditorCommandBusy}
+                            tabIndex={isPageEditorCommandBusy ? -1 : undefined}
                             data-action={node.action}
                             data-actor={node.actor}
                             data-testid={`page-editor-revision-graph-node-${node.id}`}
@@ -2960,7 +2979,7 @@ function PageEditorRoute() {
                             type="button"
                             className={nodeClassName}
                             onClick={() => expandRevisionTimelineTo(node.id)}
-                            disabled={isPageEditorBusy}
+                            disabled={isPageEditorCommandBusy}
                             title={node.summary}
                             aria-label={node.summary}
                             data-action={node.action}
@@ -3018,12 +3037,12 @@ function PageEditorRoute() {
                                   href={`#page-editor-revision-${nodeId}`}
                                   className={cn(
                                     'rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary',
-                                    isPageEditorBusy && 'pointer-events-none opacity-60',
+                                    isPageEditorCommandBusy && 'pointer-events-none opacity-60',
                                   )}
                                   onClick={handlePageEditorRevisionAnchorClick}
                                   title={node.summary}
-                                  aria-disabled={isPageEditorBusy}
-                                  tabIndex={isPageEditorBusy ? -1 : undefined}
+                                  aria-disabled={isPageEditorCommandBusy}
+                                  tabIndex={isPageEditorCommandBusy ? -1 : undefined}
                                   data-testid={`page-editor-revision-branch-node-${nodeId}`}
                                   data-branch-id={node.branchId}
                                   data-branch-role={node.branchRole}
@@ -3041,7 +3060,7 @@ function PageEditorRoute() {
                                   type="button"
                                   className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground opacity-70 hover:border-primary/50 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
                                   onClick={() => expandRevisionTimelineTo(nodeId)}
-                                  disabled={isPageEditorBusy}
+                                  disabled={isPageEditorCommandBusy}
                                   title={node.summary}
                                   data-testid={`page-editor-revision-branch-node-${nodeId}`}
                                   data-branch-id={node.branchId}
@@ -3133,11 +3152,11 @@ function PageEditorRoute() {
                                 href={`#page-editor-revision-${revisionGraphNode.newerId}`}
                                 className={cn(
                                   'rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground',
-                                  isPageEditorBusy && 'pointer-events-none opacity-60',
+                                  isPageEditorCommandBusy && 'pointer-events-none opacity-60',
                                 )}
                                 onClick={handlePageEditorRevisionAnchorClick}
-                                aria-disabled={isPageEditorBusy}
-                                tabIndex={isPageEditorBusy ? -1 : undefined}
+                                aria-disabled={isPageEditorCommandBusy}
+                                tabIndex={isPageEditorCommandBusy ? -1 : undefined}
                                 data-testid={`page-editor-revision-newer-${revision.id}`}
                                 {...pageEditorRevisionActionProps(
                                   pageEditorRevisionReadonlyActionState,
@@ -3153,11 +3172,11 @@ function PageEditorRoute() {
                                 href={`#page-editor-revision-${revisionGraphNode.olderId}`}
                                 className={cn(
                                   'rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground',
-                                  isPageEditorBusy && 'pointer-events-none opacity-60',
+                                  isPageEditorCommandBusy && 'pointer-events-none opacity-60',
                                 )}
                                 onClick={handlePageEditorRevisionAnchorClick}
-                                aria-disabled={isPageEditorBusy}
-                                tabIndex={isPageEditorBusy ? -1 : undefined}
+                                aria-disabled={isPageEditorCommandBusy}
+                                tabIndex={isPageEditorCommandBusy ? -1 : undefined}
                                 data-testid={`page-editor-revision-older-${revision.id}`}
                                 {...pageEditorRevisionActionProps(
                                   pageEditorRevisionReadonlyActionState,
@@ -3172,7 +3191,7 @@ function PageEditorRoute() {
                                 type="button"
                                 className="rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                                 onClick={() => expandRevisionTimelineTo(revisionGraphNode.olderId || revision.id)}
-                                disabled={isPageEditorBusy}
+                                disabled={isPageEditorCommandBusy}
                                 data-testid={`page-editor-revision-older-${revision.id}`}
                                 {...pageEditorRevisionActionProps(
                                   pageEditorRevisionReadonlyActionState,
@@ -3185,7 +3204,7 @@ function PageEditorRoute() {
                             ) : null}
                             <button
                               type="button"
-                              disabled={isPageEditorBusy}
+                              disabled={isPageEditorCommandBusy}
                               onClick={() => void copyPageRevisionCompare(revision)}
                               className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                               title="Copy revision comparison"
@@ -3201,7 +3220,7 @@ function PageEditorRoute() {
                             </button>
                             <button
                               type="button"
-                              disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
+                              disabled={isPageEditorMutationBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
                               onClick={() => setPendingRestoreRevision(revision)}
                               className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                               title={pageEditorRevisionRestoreDisabledReason || 'Restore revision'}
@@ -3389,7 +3408,7 @@ function PageEditorRoute() {
               <button
                 type="button"
                 onClick={() => setPendingRestoreRevision(null)}
-                disabled={isPageEditorBusy}
+                disabled={isPageEditorCommandBusy}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="page-editor-cancel-restore"
                 {...pageEditorRestoreModalActionProps(
@@ -3403,7 +3422,7 @@ function PageEditorRoute() {
               <button
                 type="button"
                 onClick={() => void restoreRevision(pendingRestoreRevision)}
-                disabled={isPageEditorBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
+                disabled={isPageEditorMutationBusy || isUsingLocalPageCopy || editorHasUnsavedChanges || !canEditPage}
                 title={pageEditorRevisionRestoreDisabledReason || undefined}
                 className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="page-editor-confirm-restore"

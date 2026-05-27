@@ -301,6 +301,13 @@ const assertPageEditorFallbackIsReadOnly = () => {
 	      source.includes('data-testid="page-editor-control-map-copy-handoff"') &&
 	      source.includes('data-testid={`page-editor-control-map-link-${area.id}`}') &&
 	      source.includes('data-control-target={area.href}') &&
+	      source.includes('const isPageEditorCommandBusy = isLoadingPage || isWorkflowBusy;') &&
+	      source.includes('const isPageEditorPreviewBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy;') &&
+	      source.includes('const isPageEditorReadinessBusy = isLoadingPage || isWorkflowBusy || readinessLoading;') &&
+	      source.includes('const isPageEditorMutationBusy = isLoadingPage || isWorkflowBusy || isPreviewBusy || readinessLoading;') &&
+	      source.includes('const pageEditorPreviewBusyReason = isPageEditorPreviewBusy') &&
+	      source.includes('const pageEditorReadinessBusyReason = isPageEditorReadinessBusy') &&
+	      source.includes('const pageEditorMutationBusyReason = isPageEditorMutationBusy') &&
 	      source.includes('data-action-status={pageEditorControlMapActionStatus}') &&
 	      source.includes('data-testid="page-editor-preview"') &&
 	      source.includes('const pageEditorGeneratedPreviewActionStatus = pageEditorGeneratedPreviewDisabledReason') &&
@@ -379,8 +386,8 @@ const assertPageEditorFallbackIsReadOnly = () => {
       source.includes('const handlePageEditorRevisionAnchorClick = (event: MouseEvent<HTMLAnchorElement>) => {') &&
       source.includes('event.preventDefault();') &&
       source.includes('onClick={handlePageEditorRevisionAnchorClick}') &&
-      source.includes('aria-disabled={isPageEditorBusy}') &&
-      source.includes('tabIndex={isPageEditorBusy ? -1 : undefined}') &&
+      source.includes('aria-disabled={isPageEditorCommandBusy}') &&
+      source.includes('tabIndex={isPageEditorCommandBusy ? -1 : undefined}') &&
       source.includes('data-testid={`page-editor-revision-graph-node-${node.id}`}') &&
       source.includes('data-testid={`page-editor-revision-branch-node-${nodeId}`}') &&
       source.includes('data-testid={`page-editor-revision-newer-${revision.id}`}') &&
