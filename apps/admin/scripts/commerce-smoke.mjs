@@ -1284,6 +1284,18 @@ const assertProductsApiContractsSource = () => {
     "Products page must render the live provider certification handoff",
   );
   assert(
+    source.includes("const productsProviderCertificationActionStatusId = 'products-provider-certification-action-status';") &&
+      source.includes('data-testid="products-provider-certification-action-status"') &&
+      source.includes('aria-label="Products provider certification actions"') &&
+      source.includes('aria-describedby={productsProviderCertificationActionStatusId}') &&
+      source.includes('data-action-status={productsProviderCertificationActionStatus}') &&
+      source.includes('data-action-state={productsProviderCertificationCommandDisabledReason ?') &&
+      source.includes('data-disabled-reason={productsProviderCertificationCommandDisabledReason || undefined}') &&
+      source.includes('Copy provider handoff available.') &&
+      source.includes('Copy evidence packet available.'),
+    "Products provider certification actions must expose shared ready/blocked status metadata",
+  );
+  assert(
     source.includes('data-testid="products-launch-readiness"') &&
       source.includes('data-testid="products-launch-readiness-copy-button"') &&
       source.includes('data-testid="products-storefront-handoff-copy-button"') &&
@@ -1472,6 +1484,7 @@ const assertProductsApiContractsSource = () => {
     source.includes('data-testid="products-provider-certification-download-button"') &&
       source.includes('data-testid="products-provider-certification-copy-button"') &&
       source.includes('data-testid="products-provider-certification-command-copy-button"') &&
+      source.includes('data-testid="products-provider-certification-action-status"') &&
       source.includes('data-testid="products-provider-certification-operator-details"') &&
       source.includes('data-testid="products-provider-certification-command-builder"') &&
       source.includes('data-testid="products-provider-certification-env-copy-button"') &&
@@ -8064,6 +8077,29 @@ const assertProductsLayout = async (client) => {
 	      const providerReconciliationText = providerReconciliation?.textContent || '';
 	      const providerCertification = document.querySelector('[data-testid="products-provider-certification"]');
 	      const providerCertificationText = providerCertification?.textContent || '';
+        const providerCertificationActionStatus = document.querySelector('[data-testid="products-provider-certification-action-status"]');
+        const providerCertificationActionStatusText = (providerCertificationActionStatus?.textContent || '').replace(/\s+/g, ' ').trim();
+        const providerCertificationActionStatusId = providerCertificationActionStatus?.id || '';
+        const providerCertificationActionTestIds = [
+          'products-provider-certification-copy-button',
+          'products-provider-certification-command-copy-button',
+          'products-provider-certification-download-button',
+          'products-provider-certification-env-copy-button',
+          'products-provider-certification-command-builder-copy-button',
+          'products-provider-certification-evidence-packet-copy-button',
+        ];
+        const providerCertificationActions = providerCertificationActionTestIds.map((testId) => {
+          const element = document.querySelector('[data-testid="' + testId + '"]');
+
+          return {
+            testId,
+            state: element?.getAttribute('data-action-state') || '',
+            describedBy: element?.getAttribute('aria-describedby') || '',
+            status: element?.getAttribute('data-action-status') || '',
+            disabledReason: element?.getAttribute('data-disabled-reason') || '',
+            disabled: Boolean(element?.disabled || element?.getAttribute('aria-disabled') === 'true'),
+          };
+        });
 	      const productsStorefrontApiDetails = document.querySelector('[data-testid="products-storefront-api-details"]');
 	      const productsStorefrontApiText = productsStorefrontApiDetails?.textContent || '';
         const storefrontActionMeta = (selector) => Array.from(document.querySelectorAll(selector)).map((element) => ({
@@ -8232,6 +8268,22 @@ const assertProductsLayout = async (client) => {
           /\\d+ events \\/ \\d+ eligible/.test(providerReconciliationText),
         providerReconciliationText,
         hasProviderCertificationExport: Boolean(providerCertification) &&
+          providerCertification?.getAttribute('aria-label') === 'Products provider certification actions' &&
+          providerCertification?.getAttribute('aria-describedby') === providerCertificationActionStatusId &&
+          providerCertification?.getAttribute('data-action-status') === providerCertificationActionStatusText &&
+          Boolean(providerCertificationActionStatus) &&
+          providerCertificationActionStatusId === 'products-provider-certification-action-status' &&
+          providerCertificationActionStatusText.includes('Copy provider handoff available.') &&
+          providerCertificationActionStatusText.includes('Copy CI command available.') &&
+          providerCertificationActionStatusText.includes('Copy env template available.') &&
+          providerCertificationActionStatusText.includes('Copy guarded command available.') &&
+          providerCertificationActionStatusText.includes('Copy evidence packet available.') &&
+          providerCertificationActions.length === 6 &&
+          providerCertificationActions.every((action) => action.state === 'ready') &&
+          providerCertificationActions.every((action) => action.describedBy === providerCertificationActionStatusId) &&
+          providerCertificationActions.every((action) => action.status === providerCertificationActionStatusText) &&
+          providerCertificationActions.every((action) => action.disabledReason === '') &&
+          providerCertificationActions.every((action) => action.disabled === false) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-download-button"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-copy-button"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder"]')) &&

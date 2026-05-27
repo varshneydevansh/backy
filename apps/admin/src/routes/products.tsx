@@ -2298,6 +2298,19 @@ function ProductsRoute() {
     productsStorefrontApiExportDisabledReason ? `Export CSV unavailable: ${productsStorefrontApiExportDisabledReason}` : `Export CSV available for ${visibleProductActionLabel}.`,
     productsStorefrontApiTemplateDisabledReason ? `CSV template unavailable: ${productsStorefrontApiTemplateDisabledReason}` : 'CSV template available.',
   ].join(' ');
+  const productsProviderCertificationActionStatusId = 'products-provider-certification-action-status';
+  const productsProviderCertificationBusyDisabledReason = isProductsAccessBusy ? 'Product catalog is busy.' : '';
+  const productsProviderCertificationExportDisabledReason = productsProviderCertificationBusyDisabledReason || productsBulkExportPermissionDisabledReason;
+  const productsProviderCertificationFamilyDisabledReason = providerCertificationHasSelectedFamily ? '' : 'Select at least one provider family.';
+  const productsProviderCertificationCommandDisabledReason = productsProviderCertificationExportDisabledReason || productsProviderCertificationFamilyDisabledReason;
+  const productsProviderCertificationActionStatus = [
+    productsProviderCertificationExportDisabledReason ? `Copy provider handoff unavailable: ${productsProviderCertificationExportDisabledReason}` : 'Copy provider handoff available.',
+    productsProviderCertificationCommandDisabledReason ? `Copy CI command unavailable: ${productsProviderCertificationCommandDisabledReason}` : 'Copy CI command available.',
+    productsProviderCertificationExportDisabledReason ? `Download provider JSON unavailable: ${productsProviderCertificationExportDisabledReason}` : 'Download provider JSON available.',
+    productsProviderCertificationCommandDisabledReason ? `Copy env template unavailable: ${productsProviderCertificationCommandDisabledReason}` : 'Copy env template available.',
+    productsProviderCertificationCommandDisabledReason ? `Copy guarded command unavailable: ${productsProviderCertificationCommandDisabledReason}` : 'Copy guarded command available.',
+    productsProviderCertificationCommandDisabledReason ? `Copy evidence packet unavailable: ${productsProviderCertificationCommandDisabledReason}` : 'Copy evidence packet available.',
+  ].join(' ');
   const metrics = useMemo(() => ({
     total: totalProductCount,
     published: products.filter((product) => product.status === 'published').length,
@@ -5708,7 +5721,17 @@ function ProductsRoute() {
                     </Link>
                   </div>
                 </div>
-                <div data-testid="products-provider-certification" className="mt-3 rounded-lg border border-border bg-card p-3">
+                <div
+                  data-testid="products-provider-certification"
+                  className="mt-3 rounded-lg border border-border bg-card p-3"
+                  role="group"
+                  aria-label="Products provider certification actions"
+                  aria-describedby={productsProviderCertificationActionStatusId}
+                  data-action-status={productsProviderCertificationActionStatus}
+                >
+                  <span id={productsProviderCertificationActionStatusId} className="sr-only" data-testid="products-provider-certification-action-status" aria-live="polite">
+                    {productsProviderCertificationActionStatus}
+                  </span>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="text-xs font-semibold text-foreground">Live provider certification</div>
@@ -5721,8 +5744,12 @@ function ProductsRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void copyText(providerCertificationHandoffText, 'Products provider certification handoff')}
-                        disabled={isProductsAccessBusy || !canExportProducts}
-                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        disabled={Boolean(productsProviderCertificationExportDisabledReason)}
+                        title={productsProviderCertificationExportDisabledReason || undefined}
+                        aria-describedby={productsProviderCertificationActionStatusId}
+                        data-action-state={productsProviderCertificationExportDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsProviderCertificationActionStatus}
+                        data-disabled-reason={productsProviderCertificationExportDisabledReason || undefined}
                         iconStart={<Copy className="size-4" />}
                         data-testid="products-provider-certification-copy-button"
                       >
@@ -5732,8 +5759,12 @@ function ProductsRoute() {
                         size="sm"
                         variant="outline"
                         onClick={() => void copyText(providerCertificationCommand, 'Products provider certification CI command')}
-                        disabled={isProductsAccessBusy || !canExportProducts}
-                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        disabled={Boolean(productsProviderCertificationCommandDisabledReason)}
+                        title={productsProviderCertificationCommandDisabledReason || undefined}
+                        aria-describedby={productsProviderCertificationActionStatusId}
+                        data-action-state={productsProviderCertificationCommandDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsProviderCertificationActionStatus}
+                        data-disabled-reason={productsProviderCertificationCommandDisabledReason || undefined}
                         iconStart={<Copy className="size-4" />}
                         data-testid="products-provider-certification-command-copy-button"
                       >
@@ -5743,8 +5774,12 @@ function ProductsRoute() {
                         size="sm"
                         variant="outline"
                         onClick={downloadProviderCertificationHandoff}
-                        disabled={isProductsAccessBusy || !canExportProducts}
-                        title={!canExportProducts ? exportPermissionTitle : undefined}
+                        disabled={Boolean(productsProviderCertificationExportDisabledReason)}
+                        title={productsProviderCertificationExportDisabledReason || undefined}
+                        aria-describedby={productsProviderCertificationActionStatusId}
+                        data-action-state={productsProviderCertificationExportDisabledReason ? 'blocked' : 'ready'}
+                        data-action-status={productsProviderCertificationActionStatus}
+                        data-disabled-reason={productsProviderCertificationExportDisabledReason || undefined}
                         iconStart={<Download className="size-4" />}
                         data-testid="products-provider-certification-download-button"
                       >
@@ -5877,8 +5912,12 @@ function ProductsRoute() {
                           size="sm"
                           variant="outline"
                           onClick={() => void copyText(providerCertificationEnvTemplate, 'Products provider certification env template')}
-                          disabled={isProductsAccessBusy || !canExportProducts || !providerCertificationHasSelectedFamily}
-                          title={!canExportProducts ? exportPermissionTitle : !providerCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined}
+                          disabled={Boolean(productsProviderCertificationCommandDisabledReason)}
+                          title={productsProviderCertificationCommandDisabledReason || undefined}
+                          aria-describedby={productsProviderCertificationActionStatusId}
+                          data-action-state={productsProviderCertificationCommandDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={productsProviderCertificationActionStatus}
+                          data-disabled-reason={productsProviderCertificationCommandDisabledReason || undefined}
                           iconStart={<Copy className="size-4" />}
                           data-testid="products-provider-certification-env-copy-button"
                         >
@@ -5888,8 +5927,12 @@ function ProductsRoute() {
                           size="sm"
                           variant="outline"
                           onClick={() => void copyText(providerCertificationCommand, 'Products provider certification guarded command')}
-                          disabled={isProductsAccessBusy || !canExportProducts || !providerCertificationHasSelectedFamily}
-                          title={!canExportProducts ? exportPermissionTitle : !providerCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined}
+                          disabled={Boolean(productsProviderCertificationCommandDisabledReason)}
+                          title={productsProviderCertificationCommandDisabledReason || undefined}
+                          aria-describedby={productsProviderCertificationActionStatusId}
+                          data-action-state={productsProviderCertificationCommandDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={productsProviderCertificationActionStatus}
+                          data-disabled-reason={productsProviderCertificationCommandDisabledReason || undefined}
                           iconStart={<Copy className="size-4" />}
                           data-testid="products-provider-certification-command-builder-copy-button"
                         >
@@ -6290,8 +6333,12 @@ function ProductsRoute() {
                           size="sm"
                           variant="outline"
                           onClick={() => void copyText(providerCertificationEvidencePacketText, 'Products provider certification evidence packet')}
-                          disabled={isProductsAccessBusy || !canExportProducts || !providerCertificationHasSelectedFamily}
-                          title={!canExportProducts ? exportPermissionTitle : !providerCertificationHasSelectedFamily ? 'Select at least one provider family' : undefined}
+                          disabled={Boolean(productsProviderCertificationCommandDisabledReason)}
+                          title={productsProviderCertificationCommandDisabledReason || undefined}
+                          aria-describedby={productsProviderCertificationActionStatusId}
+                          data-action-state={productsProviderCertificationCommandDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={productsProviderCertificationActionStatus}
+                          data-disabled-reason={productsProviderCertificationCommandDisabledReason || undefined}
                           iconStart={<Copy className="size-4" />}
                           data-testid="products-provider-certification-evidence-packet-copy-button"
                         >
