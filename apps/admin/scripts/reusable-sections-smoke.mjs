@@ -53,8 +53,13 @@ const assertReusableSectionsRouteSourceContract = () => {
     source.includes("const reusableSectionsCommandActionStatusId = 'reusable-sections-command-action-status';") &&
       source.includes("const reusableSectionsWorkflowActionStatusId = 'reusable-sections-workflow-action-status';") &&
       source.includes('data-testid="reusable-sections-command-action-status"') &&
+      source.includes('data-testid="reusable-sections-primary-actions"') &&
+      source.includes('data-testid="reusable-sections-command-create"') &&
       source.includes('data-testid="reusable-sections-workflow-action-status"') &&
       source.includes('data-testid="reusable-sections-copy-manifest"') &&
+      source.includes('data-testid="reusable-sections-secondary-actions"') &&
+      source.includes('data-testid="reusable-sections-more-actions"') &&
+      source.includes('data-testid="reusable-sections-secondary-action-menu"') &&
       source.includes('data-testid="reusable-sections-command-refresh"') &&
       source.includes('data-testid="reusable-sections-workflow-export-visible"') &&
       source.includes('data-testid="reusable-sections-workflow-import"') &&
@@ -64,6 +69,26 @@ const assertReusableSectionsRouteSourceContract = () => {
       source.includes('data-action-status={actionStatus(') &&
       source.includes('data-action-state={actionStateFromDisabledReason('),
     'Reusable sections command/workflow controls must publish explicit action status, state, and stable hooks instead of relying on disabled styling',
+  );
+  const commandCenterStart = source.indexOf('data-testid="reusable-sections-command-center"');
+  const commandCenterEnd = source.indexOf('<div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">', commandCenterStart);
+  const commandCenterSource = commandCenterStart >= 0 && commandCenterEnd > commandCenterStart
+    ? source.slice(commandCenterStart, commandCenterEnd)
+    : '';
+  const createActionIndex = commandCenterSource.indexOf('data-testid="reusable-sections-command-create"');
+  const refreshActionIndex = commandCenterSource.indexOf('data-testid="reusable-sections-command-refresh"');
+  const moreActionsIndex = commandCenterSource.indexOf('data-testid="reusable-sections-more-actions"');
+  const copyManifestIndex = commandCenterSource.indexOf('data-testid="reusable-sections-copy-manifest"');
+  const importJsonIndex = commandCenterSource.indexOf('data-testid="reusable-sections-import"');
+  assert(
+    commandCenterSource.includes('data-testid="reusable-sections-primary-actions"') &&
+      commandCenterSource.includes('data-testid="reusable-sections-secondary-actions" data-default-collapsed="true"') &&
+      createActionIndex >= 0 &&
+      refreshActionIndex > createActionIndex &&
+      moreActionsIndex > refreshActionIndex &&
+      copyManifestIndex > moreActionsIndex &&
+      importJsonIndex > copyManifestIndex,
+    'Reusable sections command center must prioritize Create section and Refresh before collapsed handoff actions',
   );
   assert(
     source.includes('data-testid="reusable-sections-workflows-details"') &&
@@ -756,12 +781,20 @@ const assertReusableSectionsLayout = async (client) => {
     };
     const commandStatus = document.querySelector('[data-testid="reusable-sections-command-action-status"]');
     const workflowStatus = document.querySelector('[data-testid="reusable-sections-workflow-action-status"]');
+    const commandPrimaryActions = Array.from(document.querySelectorAll('[data-testid="reusable-sections-primary-actions"] button'))
+      .map((button) => button.textContent?.replace(/\\s+/g, ' ').trim() || '');
+    const commandPrimaryActionIds = Array.from(document.querySelectorAll('[data-testid="reusable-sections-primary-actions"] [data-testid]'))
+      .map((element) => element.getAttribute('data-testid') || '')
+      .filter(Boolean);
+    const commandSecondaryDetails = document.querySelector('[data-testid="reusable-sections-secondary-actions"]');
+    const commandSecondaryMenu = document.querySelector('[data-testid="reusable-sections-secondary-action-menu"]');
     const commandActions = [
+      'reusable-sections-command-create',
+      'reusable-sections-command-refresh',
       'reusable-sections-copy-manifest',
       'reusable-sections-copy-portability-plan',
       'reusable-sections-export-visible',
       'reusable-sections-import',
-      'reusable-sections-command-refresh',
       'reusable-section-portability-action-plan',
     ].map(readAction);
     const workflowActions = [
@@ -778,6 +811,14 @@ const assertReusableSectionsLayout = async (client) => {
       hasCommandCenter: Boolean(document.querySelector('[data-testid="reusable-sections-command-center"]')),
       commandStatusId: commandStatus?.id || '',
       commandStatusText: commandStatus?.textContent?.trim() || '',
+      firstPrimaryCommandAction: commandPrimaryActions[0] || '',
+      commandPrimaryActionIds,
+      secondaryActionsCollapsed: commandSecondaryDetails instanceof HTMLDetailsElement &&
+        commandSecondaryDetails.open === false &&
+        commandSecondaryDetails.getAttribute('data-default-collapsed') === 'true',
+      hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="reusable-sections-more-actions"]')),
+      handoffActionsNested: ['reusable-sections-copy-manifest', 'reusable-sections-copy-portability-plan', 'reusable-sections-export-visible', 'reusable-sections-import']
+        .every((testId) => Boolean(commandSecondaryMenu?.querySelector('[data-testid="' + testId + '"]'))),
       commandActions,
       portabilityReadinessCollapsed: portabilityDetails instanceof HTMLDetailsElement &&
         portabilityDetails.open === false &&
@@ -830,8 +871,15 @@ const assertReusableSectionsLayout = async (client) => {
   );
   assert(
     layout.commandStatusId === 'reusable-sections-command-action-status' &&
+      layout.commandStatusText.includes('Create section available.') &&
       layout.commandStatusText.includes('Copy manifest available.') &&
       layout.commandStatusText.includes('Refresh reusable sections available.') &&
+      layout.firstPrimaryCommandAction === 'Create section' &&
+      ['reusable-sections-copy-manifest', 'reusable-sections-copy-portability-plan', 'reusable-sections-export-visible', 'reusable-sections-import']
+        .every((testId) => !layout.commandPrimaryActionIds.includes(testId)) &&
+      layout.secondaryActionsCollapsed &&
+      layout.hasMoreActionsTrigger &&
+      layout.handoffActionsNested &&
       layout.commandActions.every((action) => actionContractOk(layout.commandStatusId, action)),
     `Reusable sections command actions are missing explicit ready/busy/blocked status: ${JSON.stringify(layout.commandActions)}`,
   );
@@ -991,6 +1039,40 @@ const assertReusableSectionCardActionStatus = async (client, section) => {
   assert(state.selectState === 'ready' && !state.selectReason && state.selectDescribedBy === state.statusId, `Reusable section select action state is wrong: ${JSON.stringify(state)}`);
   assert(state.deleteState === 'ready' && !state.deleteReason && state.deleteDescribedBy === state.statusId, `Reusable section delete action state is wrong: ${JSON.stringify(state)}`);
   return state;
+};
+
+const assertReusableSectionsCommandCreateResetsEditor = async (client, section) => {
+  const before = await evaluate(client, `(() => ({
+    url: window.location.href,
+    name: document.querySelector('[data-testid="reusable-section-name"]')?.value || '',
+    sectionHeading: document.querySelector('#reusable-sections-editor')?.textContent || '',
+  }))()`);
+  assert(before.url.includes(`sectionId=${encodeURIComponent(section.id)}`) || before.sectionHeading.includes('Edit section'), `Reusable section should be selected before command create reset: ${JSON.stringify(before)}`);
+
+  const clicked = await clickReusableSectionControl(client, 'reusable-sections-command-create');
+  assert(clicked.ok, `Unable to click reusable sections command create: ${JSON.stringify(clicked)}`);
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const name = document.querySelector('[data-testid="reusable-section-name"]');
+      const slug = document.querySelector('[data-testid="reusable-section-slug"]');
+      const editor = document.querySelector('#reusable-sections-editor');
+      return {
+        url: window.location.href,
+        nameValue: name instanceof HTMLInputElement ? name.value : null,
+        slugValue: slug instanceof HTMLInputElement ? slug.value : null,
+        focusedName: document.activeElement === name,
+        editorText: editor?.textContent || '',
+      };
+    })()`);
+
+    if (!state.url.includes('sectionId=') && state.nameValue === '' && state.slugValue === '' && state.focusedName && state.editorText.includes('Create section')) {
+      return state;
+    }
+    await sleep(100);
+  }
+
+  throw new Error('Reusable sections command create did not clear the selected section, reset the form, and focus the name field');
 };
 
 const deleteReusableSectionThroughUi = async (client, section) => {
@@ -1476,6 +1558,7 @@ const main = async () => {
     await assertReusableSectionsLayout(client);
     const manualSection = await createManualReusableSectionThroughUi(client);
     sectionIds.push(manualSection.id);
+    await assertReusableSectionsCommandCreateResetsEditor(client, manualSection);
     await deleteReusableSectionThroughUi(client, manualSection);
     const deletedManualIndex = sectionIds.indexOf(manualSection.id);
     if (deletedManualIndex !== -1) {
