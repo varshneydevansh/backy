@@ -295,6 +295,9 @@ const assertPageEditorFallbackIsReadOnly = () => {
       source.includes('data-testid="page-editor-command-center"') &&
       source.includes('data-testid="page-editor-command-action-status"') &&
       source.includes('data-action-status={pageEditorCommandActionStatus}') &&
+      source.includes("data-editor-management-layout={isWorkspaceFocus ? 'hidden' : 'below-canvas'}") &&
+      source.includes('data-testid="page-editor-management-panels"') &&
+      !source.includes('[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px]') &&
       source.includes('data-testid="page-editor-copy-handoff"') &&
       source.includes('data-testid="page-editor-download-handoff"') &&
 	      source.includes('data-testid="page-editor-control-map-copy-api-url"') &&

@@ -2557,8 +2557,9 @@ function NewBlogPostPage() {
                     )}
 
                     <div
-                        className={cn('grid gap-5', isWorkspaceFocus && 'h-full min-h-0', !isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_380px]')}
+                        className={cn('grid gap-5', isWorkspaceFocus && 'h-full min-h-0')}
                         data-testid="blog-create-workspace-grid"
+                        data-editor-management-layout={isWorkspaceFocus ? 'hidden' : 'below-canvas'}
                     >
                     <div className={cn('min-w-0 space-y-6', isWorkspaceFocus && 'h-full min-h-0 space-y-0')}>
                         {!isWorkspaceFocus && (
@@ -3095,7 +3096,11 @@ function NewBlogPostPage() {
                     </div>
 
                     {!isWorkspaceFocus && (
-                    <aside className="grid gap-4 xl:grid-cols-3 2xl:sticky 2xl:top-5 2xl:block 2xl:self-start 2xl:space-y-4">
+                    <aside
+                        className="grid gap-4 xl:grid-cols-3"
+                        data-testid="blog-create-management-panels"
+                        data-editor-management-layout="below-canvas"
+                    >
                         <Panel id="blog-create-publish" className="scroll-mt-24">
                             <PanelHeader
                                 title="Publish"

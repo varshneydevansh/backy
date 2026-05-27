@@ -2992,10 +2992,10 @@ function EditBlogPostPage() {
                         'grid gap-5',
                         isWorkspaceFocus && 'h-full min-h-0',
                         !isWorkspaceFocus && 'order-1',
-                        !isWorkspaceFocus && '[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px] [@media(min-width:2200px)]:items-start',
                     )}
                     data-testid="blog-editor-workspace-grid"
                     data-default-editor-order={isWorkspaceFocus ? 'focused-canvas' : 'canvas-first'}
+                    data-editor-management-layout={isWorkspaceFocus ? 'hidden' : 'below-canvas'}
                 >
                     <div className={cn(
                         'min-w-0',
@@ -3361,7 +3361,11 @@ function EditBlogPostPage() {
                     </div>
 
                     {!isWorkspaceFocus && (
-                    <aside className="grid gap-4 xl:grid-cols-2 [@media(min-width:2200px)]:sticky [@media(min-width:2200px)]:top-4 [@media(min-width:2200px)]:block [@media(min-width:2200px)]:space-y-4">
+                    <aside
+                        className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3"
+                        data-testid="blog-editor-management-panels"
+                        data-editor-management-layout="below-canvas"
+                    >
                         <Panel id="blog-editor-publish" className="scroll-mt-24">
                             <PanelHeader
                                 title="Publish"

@@ -2521,9 +2521,9 @@ function PageEditorRoute() {
         'grid gap-5',
         !isWorkspaceFocus && 'order-1',
         isWorkspaceFocus && 'h-full min-h-0',
-        !isWorkspaceFocus && '[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px] [@media(min-width:2200px)]:items-start',
       )}
         data-default-editor-order={isWorkspaceFocus ? 'focused-canvas' : 'canvas-first'}
+        data-editor-management-layout={isWorkspaceFocus ? 'hidden' : 'below-canvas'}
       >
         <div id="page-editor-canvas" className={cn('min-w-0 scroll-mt-24', isWorkspaceFocus && 'h-full min-h-0')}>
           <EditorWorkspaceFrame
@@ -2622,7 +2622,11 @@ function PageEditorRoute() {
         </div>
 
         {!isWorkspaceFocus && (
-          <aside className="grid gap-4 lg:grid-cols-3 [@media(min-width:2200px)]:sticky [@media(min-width:2200px)]:top-4 [@media(min-width:2200px)]:block [@media(min-width:2200px)]:space-y-4">
+          <aside
+            className="grid gap-4 lg:grid-cols-3"
+            data-testid="page-editor-management-panels"
+            data-editor-management-layout="below-canvas"
+          >
             <Panel id="page-editor-publish" className="scroll-mt-24">
               <PanelHeader
                 title="Publish"

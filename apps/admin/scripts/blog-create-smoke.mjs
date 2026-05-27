@@ -180,10 +180,14 @@ const assertBlogCreateSourceContract = () => {
       source.includes('aria-label={`${area.title}: ${area.detail}`}') &&
       source.includes('inline-flex min-h-10 items-center rounded-lg') &&
       source.includes('{BLOG_CREATE_CONTROL_AREAS.length} areas') &&
+      source.includes("data-editor-management-layout={isWorkspaceFocus ? 'hidden' : 'below-canvas'}") &&
+      source.includes('data-testid="blog-create-management-panels"') &&
+      !source.includes("!isWorkspaceFocus && '2xl:grid-cols-[minmax(0,1fr)_380px]'") &&
+      !source.includes('2xl:sticky 2xl:top-5 2xl:block 2xl:self-start 2xl:space-y-4') &&
       source.includes("density={isWorkspaceFocus ? 'compact' : 'default'}") &&
       source.includes('initialCanvasFocusMode={isWorkspaceFocus}') &&
       source.includes("data-testid={isWorkspaceFocus ? 'blog-create-focus-banner' : undefined}"),
-    'Blog create default shell must stay compact, keep the collapsed chip control map, and boot the inner editor in focused canvas mode.',
+    'Blog create default shell must stay compact, keep management panels below the canvas, and boot the inner editor in focused canvas mode.',
   );
   {
     const commandCenterBlockStart = source.indexOf('data-testid="blog-create-command-center"');
@@ -612,6 +616,7 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
     const inspector = document.querySelector('[data-testid="editor-inspector"]');
     const focusBanner = document.querySelector('[data-testid="blog-create-focus-banner"]');
     const controlMap = document.querySelector('[data-testid="blog-create-control-map"]');
+    const managementPanels = document.querySelector('[data-testid="blog-create-management-panels"]');
     const frontendTemplatePanel = document.querySelector('[data-testid="blog-frontend-template-panel"]');
     const writingPanel = document.querySelector('[data-testid="blog-create-writing-panel"]');
     const frontendTemplateRoot = document.querySelector('[data-element-id="frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}"]');
@@ -653,6 +658,10 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
       submitBlockerState: submitBlocker?.getAttribute('data-state') || '',
       submitBlockerText: submitBlocker?.textContent || '',
       workspaceVisible: Boolean(workspaceGrid && rect(workspaceGrid)?.width > 320 && rect(workspaceGrid)?.height > 400),
+      managementPanels: Boolean(managementPanels),
+      managementLayout: workspaceGrid?.getAttribute('data-editor-management-layout') || '',
+      managementPanelLayout: managementPanels?.getAttribute('data-editor-management-layout') || '',
+      canvasShellRect: rect(canvasShell),
       canvasVisible: Boolean(canvasShell && rect(canvasShell)?.width > 320 && rect(canvasShell)?.height > 500),
       editorCanvasVisible: Boolean(editorCanvas && rect(editorCanvas)?.width > 260 && rect(editorCanvas)?.height > 240),
       componentLibraryVisible: Boolean(componentLibrary && rect(componentLibrary)?.width > 180 && rect(componentLibrary)?.height > 240),
@@ -707,6 +716,13 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
   } else {
     assert(state.commandVisible, `${label} command center missing: ${JSON.stringify(state)}`);
     assert(state.submitButtonVisible, `${label} submit action state missing: ${JSON.stringify(state)}`);
+    assert(
+      state.managementPanels &&
+        state.managementLayout === 'below-canvas' &&
+        state.managementPanelLayout === 'below-canvas' &&
+        state.canvasShellRect?.width >= 900,
+      `${label} must reserve horizontal editor width and keep management panels below the canvas: ${JSON.stringify(state)}`,
+    );
     assert(state.controlMapVisible && state.controlMapOpen === false, `${label} control map should stay collapsed until requested: ${JSON.stringify(state)}`);
     assert(state.draftPanel && state.seoPanel && state.mediaPanel && state.publishPanel && state.taxonomyPanel && state.writingPanel, `${label} create panels missing: ${JSON.stringify(state)}`);
     assert(state.componentLibraryVisible && state.inspectorVisible, `${label} editor side panels were not visibly rendered: ${JSON.stringify(state)}`);

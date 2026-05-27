@@ -68,13 +68,16 @@ const assertBlogEditorFallbackIsReadOnly = () => {
       source.includes('data-testid="blog-editor-command-center"') &&
       source.includes('data-default-editor-order="after-canvas"') &&
       source.includes("data-default-editor-order={isWorkspaceFocus ? 'focused-canvas' : 'canvas-first'}") &&
+      source.includes("data-editor-management-layout={isWorkspaceFocus ? 'hidden' : 'below-canvas'}") &&
+      source.includes('data-testid="blog-editor-management-panels"') &&
       source.includes("!isWorkspaceFocus && 'order-1'") &&
+      !source.includes('[@media(min-width:2200px)]:grid-cols-[minmax(0,1fr)_360px]') &&
       source.includes('id="blog-editor-canvas"') &&
       source.includes("isWorkspaceFocus ? 'h-full min-h-0' : 'order-1'") &&
       source.includes('initialCanvasFocusMode={isWorkspaceFocus}') &&
       source.includes('actions={isWorkspaceFocus ? (') &&
       source.includes('onClick={() => void generatePreview()}'),
-    'Blog editor default layout must open on the canvas first, boot the inner editor in focus mode, keep Save/Preview actions on the canvas frame, and move the dense command center below it',
+    'Blog editor default layout must open on the canvas first, reserve horizontal width for the editor instead of a second right rail, keep Save/Preview actions on the canvas frame, and move the dense command center below it',
   );
   assert(
     source.includes("const blogEditorCommandActionStatusId = 'blog-editor-command-action-status';") &&
@@ -668,11 +671,13 @@ const waitForEditor = async (client, postId) => {
       const grid = document.querySelector('[data-testid="blog-editor-workspace-grid"]');
       const canvasShell = document.querySelector('[data-testid="blog-editor-canvas-shell"]');
       const commandCenter = document.querySelector('[data-testid="blog-editor-command-center"]');
+      const managementPanels = document.querySelector('[data-testid="blog-editor-management-panels"]');
       const draftPanel = document.querySelector('#blog-editor-draft');
       const canvas = document.querySelector('[data-testid="editor-canvas"]');
       const saveStatus = document.querySelector('[data-testid="editor-save-status"]');
       const rect = canvasShell?.getBoundingClientRect();
       const commandRect = commandCenter?.getBoundingClientRect();
+      const managementRect = managementPanels?.getBoundingClientRect();
       const draftRect = draftPanel?.getBoundingClientRect();
       const commandStatus = document.querySelector('[data-testid="blog-editor-command-action-status"]');
       const readRouteAction = (testId) => {
@@ -794,6 +799,9 @@ const waitForEditor = async (client, postId) => {
         grid: Boolean(grid),
         commandCenter: Boolean(commandCenter),
         commandCenterOrder: commandCenter?.getAttribute('data-default-editor-order') || '',
+        managementPanels: Boolean(managementPanels),
+        managementLayout: grid?.getAttribute('data-editor-management-layout') || '',
+        managementPanelLayout: managementPanels?.getAttribute('data-editor-management-layout') || '',
         commandActionState: commandCenter?.getAttribute('data-action-state') || '',
         commandActionStatus: commandCenter?.getAttribute('data-action-status') || '',
         commandStatusId: commandStatus?.id || '',
@@ -815,6 +823,7 @@ const waitForEditor = async (client, postId) => {
         canvasOrder: canvasShell?.getAttribute('data-default-editor-order') || '',
         canvasTop: Math.round(rect?.top || 0),
         commandCenterTop: Math.round(commandRect?.top || 0),
+        managementPanelTop: Math.round(managementRect?.top || 0),
         draftTop: Math.round(draftRect?.top || 0),
         canvasFrameSaveAction: Boolean(canvasShell?.querySelector('button[type="submit"][form="blog-editor-form"]')),
         canvasFramePreviewAction: Array.from(canvasShell?.querySelectorAll('button') || []).some((button) => (button.textContent || '').trim() === 'Preview'),
@@ -856,6 +865,9 @@ const waitForEditor = async (client, postId) => {
       state.grid &&
       state.commandCenter &&
       state.commandCenterOrder === 'after-canvas' &&
+      state.managementPanels &&
+      state.managementLayout === 'below-canvas' &&
+      state.managementPanelLayout === 'below-canvas' &&
       state.routeActionsOk &&
       state.workspaceOrder === 'canvas-first' &&
       state.canvasOrder === 'canvas-first' &&
