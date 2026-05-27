@@ -173,9 +173,18 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   assert(
     source.includes('data-testid="blog-command-create"') &&
       source.includes('data-testid="blog-command-secondary-actions"') &&
+      source.includes("const blogCommandSecondaryActionStatusId = 'blog-command-secondary-action-status';") &&
+      source.includes('data-testid="blog-command-secondary-action-status"') &&
+      source.includes('data-action-state={blogCommandSecondaryActionState}') &&
+      source.includes('data-action-status={blogCommandSecondaryActionStatus}') &&
+      source.includes('data-testid="blog-command-copy-handoff"') &&
+      source.includes('data-testid="blog-command-download-handoff"') &&
+      source.includes('data-testid="blog-command-export-csv"') &&
+      source.includes('aria-describedby={blogCommandSecondaryActionStatusId}') &&
+      source.includes('data-disabled-reason={blogCommandExportDisabledReason || undefined}') &&
       source.includes('More actions') &&
       source.indexOf('data-testid="blog-command-create"') < source.indexOf('data-testid="blog-command-secondary-actions"'),
-    'Blog command center must keep New post primary while grouping handoff/export actions behind a secondary disclosure.',
+    'Blog command center must keep New post primary while grouping handoff/export actions behind a secondary disclosure with observable action metadata.',
   );
   assert(
     source.includes('const createPostLinkDisabled = !canEditBlog') &&
@@ -608,7 +617,8 @@ const captureScreenshot = async (client, screenshotPath, options = {}) => {
   return screenshotPath;
 };
 
-const navigateToBlog = async (client, title, postId = '') => {
+const navigateToBlog = async (client, title, postId = '', options = {}) => {
+  const requireSeededRevision = options.requireSeededRevision !== false;
   await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog?siteId=${encodeURIComponent(SITE_ID)}` });
 
   const editSelector = postId ? `[data-testid="blog-post-edit-${postId}"]` : '';
@@ -627,7 +637,7 @@ const navigateToBlog = async (client, title, postId = '') => {
         (${JSON.stringify(editSelector)} ? Boolean(document.querySelector(${JSON.stringify(editSelector)})) : true) &&
         (${JSON.stringify(commentSelector)} ? Boolean(document.querySelector(${JSON.stringify(commentSelector)})) : true) &&
         (${JSON.stringify(revisionSelector)} ? Boolean(document.querySelector(${JSON.stringify(revisionSelector)})) : true) &&
-        (${JSON.stringify(revisionSelector)} ? document.body?.innerText?.includes('Blog list revision smoke snapshot') : true) &&
+        (${JSON.stringify(revisionSelector)} && ${JSON.stringify(requireSeededRevision)} ? document.body?.innerText?.includes('Blog list revision smoke snapshot') : true) &&
         document.querySelectorAll('#blog-posts tbody tr').length > 0,
       command: Boolean(document.querySelector('[data-testid="blog-command-center"]')),
       taxonomy: Boolean(document.querySelector('[data-testid="blog-taxonomy-manager"]')),
@@ -640,6 +650,7 @@ const navigateToBlog = async (client, title, postId = '') => {
       commentFound: ${JSON.stringify(commentSelector)} ? Boolean(document.querySelector(${JSON.stringify(commentSelector)})) : true,
       revisionFound: ${JSON.stringify(revisionSelector)} ? Boolean(document.querySelector(${JSON.stringify(revisionSelector)})) : true,
       revisionSnapshotFound: ${JSON.stringify(revisionSelector)} ? document.body?.innerText?.includes('Blog list revision smoke snapshot') : true,
+      requireSeededRevision: ${JSON.stringify(requireSeededRevision)},
       titleFound: document.body?.innerText?.includes(${JSON.stringify(title)}) || false,
       body: document.body?.innerText?.slice(0, 400) || '',
     }))()`);
@@ -669,11 +680,32 @@ const assertBlogListLayout = async (client, { title, categoryName, tagName, auth
     const postId = ${JSON.stringify(postId)};
     const actionGroup = document.querySelector(\`[data-testid="blog-post-actions-\${postId}"]\`);
     const actionStatus = document.querySelector(\`[data-testid="blog-post-actions-status-\${postId}"]\`);
+    const commandSecondaryActions = document.querySelector('[data-testid="blog-command-secondary-actions"]');
+    const commandSecondaryStatus = document.querySelector('[data-testid="blog-command-secondary-action-status"]');
     const actionAttr = (testId, attr) => document.querySelector(\`[data-testid="\${testId}"]\`)?.getAttribute(attr) || '';
 
     return {
       commandCenter: Boolean(document.querySelector('[data-testid="blog-command-center"]')),
       commandCreate: Boolean(document.querySelector('[data-testid="blog-command-create"]')),
+      commandSecondaryCollapsed: commandSecondaryActions instanceof HTMLDetailsElement && commandSecondaryActions.open === false,
+      commandSecondaryDescribedBy: commandSecondaryActions?.getAttribute('aria-describedby') || '',
+      commandSecondaryStatusId: commandSecondaryStatus?.id || '',
+      commandSecondaryStatusText: commandSecondaryStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      commandSecondaryStatusData: commandSecondaryActions?.getAttribute('data-action-status') || '',
+      commandSecondaryState: commandSecondaryActions?.getAttribute('data-action-state') || '',
+      commandCopyLabel: actionAttr('blog-command-copy-handoff', 'aria-label'),
+      commandCopyDescribedBy: actionAttr('blog-command-copy-handoff', 'aria-describedby'),
+      commandCopyState: actionAttr('blog-command-copy-handoff', 'data-action-state'),
+      commandCopyStatus: actionAttr('blog-command-copy-handoff', 'data-action-status'),
+      commandDownloadLabel: actionAttr('blog-command-download-handoff', 'aria-label'),
+      commandDownloadDescribedBy: actionAttr('blog-command-download-handoff', 'aria-describedby'),
+      commandDownloadState: actionAttr('blog-command-download-handoff', 'data-action-state'),
+      commandDownloadStatus: actionAttr('blog-command-download-handoff', 'data-action-status'),
+      commandExportLabel: actionAttr('blog-command-export-csv', 'aria-label'),
+      commandExportDescribedBy: actionAttr('blog-command-export-csv', 'aria-describedby'),
+      commandExportState: actionAttr('blog-command-export-csv', 'data-action-state'),
+      commandExportStatus: actionAttr('blog-command-export-csv', 'data-action-status'),
+      commandExportDisabledReasonReady: actionAttr('blog-command-export-csv', 'data-disabled-reason') === '',
       advancedWorkflowsCollapsed: document.querySelector('[data-testid="blog-advanced-workflows-details"]') instanceof HTMLDetailsElement &&
         document.querySelector('[data-testid="blog-advanced-workflows-details"]').open === false,
       apiContract: Boolean(apiContract) && bodyText.includes('Blog API contract'),
@@ -727,6 +759,19 @@ const assertBlogListLayout = async (client, { title, categoryName, tagName, auth
   })()`);
 
   assert(Object.entries(state).every(([, value]) => Boolean(value)), `Blog list layout missing expected regions: ${JSON.stringify(state)}`);
+  assert(state.commandSecondaryCollapsed, `Blog command secondary actions should start collapsed: ${JSON.stringify(state)}`);
+  assert(state.commandSecondaryDescribedBy === state.commandSecondaryStatusId, `Blog secondary command actions must point at their shared status: ${JSON.stringify(state)}`);
+  assert(state.commandSecondaryState === 'ready', `Blog secondary command action group should be ready for admin smoke data: ${JSON.stringify(state)}`);
+  assert(state.commandSecondaryStatusData === state.commandSecondaryStatusText, `Blog secondary command status data must mirror hidden copy: ${JSON.stringify(state)}`);
+  assert(
+    state.commandSecondaryStatusText.includes('Copy handoff available.') &&
+      state.commandSecondaryStatusText.includes('Download JSON available.') &&
+      state.commandSecondaryStatusText.includes('Export CSV available for'),
+    `Blog secondary command status must summarize handoff/export readiness: ${JSON.stringify(state)}`,
+  );
+  assert(state.commandCopyLabel === 'Copy blog handoff manifest' && state.commandCopyDescribedBy === state.commandSecondaryStatusId && state.commandCopyState === 'ready' && state.commandCopyStatus === 'Copy handoff available.', `Blog copy handoff action lacks ready metadata: ${JSON.stringify(state)}`);
+  assert(state.commandDownloadLabel === 'Download blog handoff JSON' && state.commandDownloadDescribedBy === state.commandSecondaryStatusId && state.commandDownloadState === 'ready' && state.commandDownloadStatus === 'Download JSON available.', `Blog download handoff action lacks ready metadata: ${JSON.stringify(state)}`);
+  assert(state.commandExportLabel === 'Export visible blog posts CSV' && state.commandExportDescribedBy === state.commandSecondaryStatusId && state.commandExportState === 'ready' && state.commandExportStatus.includes('Export CSV available for') && state.commandExportDisabledReasonReady, `Blog export CSV action lacks ready metadata: ${JSON.stringify(state)}`);
   assert(state.actionGroupRole === 'group' && state.actionGroupLabel === `Actions for ${title}`, `Blog post actions must be a named group: ${JSON.stringify(state)}`);
   assert(state.actionGroupDescribedBy === state.actionStatusId, `Blog post action group must be described by its status summary: ${JSON.stringify(state)}`);
   assert(
@@ -1122,7 +1167,7 @@ const assertEditButtonOpensFocusedCanvas = async (client, { postId, title }) => 
     await sleep(250);
   }
 
-  await navigateToBlog(client, title, postId);
+  await navigateToBlog(client, title, postId, { requireSeededRevision: false });
   return focused;
 };
 
@@ -1149,6 +1194,7 @@ const assertBlogVisualState = async (client, label, screenshotPath, { title } = 
       .map((node) => node.textContent || '')
       .join('\\n');
     const tableRows = Array.from(document.querySelectorAll('#blog-posts tbody tr'));
+    const revisionBlocks = Array.from(document.querySelectorAll('[data-testid^="blog-post-revisions-"]'));
     const commandRect = commandCenter?.getBoundingClientRect();
     const postsRect = postsRegion?.getBoundingClientRect();
     const taxonomyRect = taxonomyManager?.getBoundingClientRect();
@@ -1180,7 +1226,10 @@ const assertBlogVisualState = async (client, label, screenshotPath, { title } = 
       hasTaxonomyControls: bodyText.includes('Taxonomy manager') || bodyText.includes('Categories') && bodyText.includes('Tags'),
       hasSeoControls: Boolean(document.querySelector('[data-testid^="blog-post-seo-noindex-"]')),
       hasCommentSummary: Boolean(document.querySelector('[data-testid^="blog-post-comments-"]')),
-      hasRevisionSummary: Boolean(document.querySelector('[data-testid^="blog-post-revisions-"]')) && bodyText.includes('Blog list revision smoke snapshot'),
+      hasRevisionSummary: revisionBlocks.some((node) => {
+        const text = node.textContent || '';
+        return !text.includes('No saved snapshots yet') && /revision/i.test(text);
+      }),
       hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
       apiSnippetLabels: apiSnippetLabels.slice(0, 1200),
       body: bodyText.slice(0, 3000),

@@ -1363,6 +1363,35 @@ function BlogListView() {
         : !canRunBulkAction
           ? bulkActionPermissionTitle || 'Your account cannot run this blog bulk action.'
           : `Ready to ${bulkActionLabel.toLowerCase()}.`;
+  const blogCommandSecondaryActionStatusId = 'blog-command-secondary-action-status';
+  const blogCommandBusyDisabledReason = isBlogWorkflowBusy
+    ? 'Blog command actions are temporarily unavailable while Backy updates content.'
+    : '';
+  const blogCommandViewDisabledReason = !canViewBlog
+    ? viewBlogPermissionTitle || 'Your account needs pages.view to use blog handoff actions.'
+    : '';
+  const blogCommandCopyDisabledReason = blogCommandBusyDisabledReason || blogCommandViewDisabledReason;
+  const blogCommandDownloadDisabledReason = blogCommandBusyDisabledReason || blogCommandViewDisabledReason;
+  const blogCommandExportDisabledReason = blogCommandBusyDisabledReason
+    || (!canExportBlog ? exportBlogPermissionTitle || 'Your account needs activity.export to export blog data.' : '')
+    || (data.length === 0 ? 'No visible blog posts are available to export.' : '');
+  const blogCommandCopyActionStatus = blogCommandCopyDisabledReason
+    ? `Copy handoff unavailable: ${blogCommandCopyDisabledReason}`
+    : 'Copy handoff available.';
+  const blogCommandDownloadActionStatus = blogCommandDownloadDisabledReason
+    ? `Download JSON unavailable: ${blogCommandDownloadDisabledReason}`
+    : 'Download JSON available.';
+  const blogCommandExportActionStatus = blogCommandExportDisabledReason
+    ? `Export CSV unavailable: ${blogCommandExportDisabledReason}`
+    : `Export CSV available for ${data.length} visible blog post${data.length === 1 ? '' : 's'}.`;
+  const blogCommandSecondaryActionStatus = [
+    blogCommandCopyActionStatus,
+    blogCommandDownloadActionStatus,
+    blogCommandExportActionStatus,
+  ].join(' ');
+  const blogCommandSecondaryActionState = blogCommandCopyDisabledReason && blogCommandDownloadDisabledReason && blogCommandExportDisabledReason
+    ? 'blocked'
+    : 'ready';
   const hasPosts = siteScopedPosts.length > 0;
   const scheduleMetrics = useMemo(() => {
     const summaries = siteScopedPosts.map((post) => getPostScheduleSummary(post));
@@ -1847,6 +1876,9 @@ function BlogListView() {
       <span id={createPostActionStatusId} className="sr-only" data-testid="blog-create-action-status" aria-live="polite">
         {createPostActionStatus}
       </span>
+      <span id={blogCommandSecondaryActionStatusId} className="sr-only" data-testid="blog-command-secondary-action-status" aria-live="polite">
+        {blogCommandSecondaryActionStatus}
+      </span>
 
       <section className="mb-5 rounded-lg border border-border bg-card shadow-sm" data-testid="blog-command-center">
         <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-5">
@@ -1885,8 +1917,17 @@ function BlogListView() {
               <Plus className="h-4 w-4" />
               New post
             </Link>
-            <details className="group relative" data-testid="blog-command-secondary-actions">
-              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden">
+            <details
+              className="group relative"
+              data-testid="blog-command-secondary-actions"
+              aria-describedby={blogCommandSecondaryActionStatusId}
+              data-action-state={blogCommandSecondaryActionState}
+              data-action-status={blogCommandSecondaryActionStatus}
+            >
+              <summary
+                className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+                aria-label="Show blog export and handoff actions"
+              >
                 <MoreHorizontal className="size-4" />
                 More actions
               </summary>
@@ -1894,8 +1935,14 @@ function BlogListView() {
                 <button
                   type="button"
                   onClick={() => void copyBlogText(blogHandoffText, 'Blog handoff manifest')}
-                  disabled={isBlogWorkflowBusy || !canViewBlog}
-                  title={viewBlogPermissionTitle}
+                  disabled={Boolean(blogCommandCopyDisabledReason)}
+                  title={blogCommandCopyDisabledReason || 'Copy blog handoff manifest'}
+                  aria-label="Copy blog handoff manifest"
+                  aria-describedby={blogCommandSecondaryActionStatusId}
+                  data-testid="blog-command-copy-handoff"
+                  data-action-state={blogCommandCopyDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={blogCommandCopyActionStatus}
+                  data-disabled-reason={blogCommandCopyDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Copy className="size-4" />
@@ -1904,8 +1951,14 @@ function BlogListView() {
                 <button
                   type="button"
                   onClick={downloadBlogHandoff}
-                  disabled={isBlogWorkflowBusy || !canViewBlog}
-                  title={viewBlogPermissionTitle}
+                  disabled={Boolean(blogCommandDownloadDisabledReason)}
+                  title={blogCommandDownloadDisabledReason || 'Download blog handoff JSON'}
+                  aria-label="Download blog handoff JSON"
+                  aria-describedby={blogCommandSecondaryActionStatusId}
+                  data-testid="blog-command-download-handoff"
+                  data-action-state={blogCommandDownloadDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={blogCommandDownloadActionStatus}
+                  data-disabled-reason={blogCommandDownloadDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Download className="size-4" />
@@ -1914,8 +1967,14 @@ function BlogListView() {
                 <button
                   type="button"
                   onClick={downloadBlogCsv}
-                  disabled={data.length === 0 || isBlogWorkflowBusy || !canExportBlog}
-                  title={exportBlogPermissionTitle}
+                  disabled={Boolean(blogCommandExportDisabledReason)}
+                  title={blogCommandExportDisabledReason || 'Export visible blog posts CSV'}
+                  aria-label="Export visible blog posts CSV"
+                  aria-describedby={blogCommandSecondaryActionStatusId}
+                  data-testid="blog-command-export-csv"
+                  data-action-state={blogCommandExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={blogCommandExportActionStatus}
+                  data-disabled-reason={blogCommandExportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Download className="size-4" />
