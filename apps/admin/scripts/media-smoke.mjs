@@ -89,6 +89,35 @@ const assertMediaRouteSourceContract = () => {
       source.includes('Show workflows'),
     'Media command center must keep low-frequency operator handoffs and maps collapsed by default',
   );
+  {
+    const commandCenterBlockStart = source.indexOf('data-testid="media-library-command-center"');
+    const commandCenterBlockEnd = source.indexOf('<div className="mt-5 grid gap-3', commandCenterBlockStart);
+    const commandCenterBlock = commandCenterBlockStart >= 0
+      ? source.slice(commandCenterBlockStart, commandCenterBlockEnd >= 0 ? commandCenterBlockEnd : commandCenterBlockStart + 6200)
+      : '';
+    const primaryActionsIndex = commandCenterBlock.indexOf('data-testid="media-primary-actions"');
+    const uploadIndex = commandCenterBlock.indexOf('data-testid="media-command-upload-trigger"');
+    const folderIndex = commandCenterBlock.indexOf('data-testid="media-command-new-folder"');
+    const exportIndex = commandCenterBlock.indexOf('data-testid="media-command-export-csv"');
+    const refreshIndex = commandCenterBlock.indexOf('data-testid="media-command-refresh"');
+    const secondaryActionsIndex = commandCenterBlock.indexOf('data-testid="media-secondary-actions"');
+    const moreActionsIndex = commandCenterBlock.indexOf('data-testid="media-more-actions"');
+    const copyIndex = commandCenterBlock.indexOf('data-testid="media-command-copy-manifest"');
+    const downloadIndex = commandCenterBlock.indexOf('data-testid="media-command-download-json"');
+    assert(
+      primaryActionsIndex >= 0 &&
+        uploadIndex > primaryActionsIndex &&
+        folderIndex > uploadIndex &&
+        exportIndex > folderIndex &&
+        refreshIndex > exportIndex &&
+        secondaryActionsIndex > refreshIndex &&
+        commandCenterBlock.includes('data-default-collapsed="true"') &&
+        moreActionsIndex > secondaryActionsIndex &&
+        copyIndex > moreActionsIndex &&
+        downloadIndex > copyIndex,
+      'Media command center must lead with upload/folder/export/refresh actions and move manifest/JSON handoff behind More actions.',
+    );
+  }
   assert(source.includes("schemaVersion: 'backy.media-storage-provider-certification.v1'") && source.includes('storageProviderCertification: mediaStorageProviderCertificationHandoff'), 'Media handoff manifest must export the storage-provider certification schema');
   assert(
     source.includes('data-testid="media-storage-provider-certification"') &&
@@ -1332,6 +1361,15 @@ const assertMediaLayout = async (client, expectedText) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="media-library-command-center"]')),
+    firstPrimaryActionText: document.querySelector('[data-testid="media-primary-actions"] [role="button"], [data-testid="media-primary-actions"] button')?.textContent?.trim() || '',
+    secondaryActionsCollapsed: document.querySelector('[data-testid="media-secondary-actions"]') instanceof HTMLDetailsElement &&
+      document.querySelector('[data-testid="media-secondary-actions"]')?.open === false &&
+      document.querySelector('[data-testid="media-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+    hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="media-more-actions"]')),
+    hasCommandHandoffActionsNested: Boolean(
+      document.querySelector('[data-testid="media-secondary-action-menu"] [data-testid="media-command-copy-manifest"]') &&
+      document.querySelector('[data-testid="media-secondary-action-menu"] [data-testid="media-command-download-json"]'),
+    ),
     operationDetailsCollapsed: document.querySelector('[data-testid="media-operation-action-plan-details"]') instanceof HTMLDetailsElement &&
       document.querySelector('[data-testid="media-operation-action-plan-details"]')?.open === false &&
       document.querySelector('[data-testid="media-operation-action-plan-details"]')?.getAttribute('data-default-collapsed') === 'true',
@@ -1413,7 +1451,7 @@ const assertMediaLayout = async (client, expectedText) => {
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.operationDetailsCollapsed && layout.attributionDetailsCollapsed && layout.controlMapDetailsCollapsed && layout.connectedWorkflowsDetailsCollapsed && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasStorageProviderCertification && layout.hasOperationActionPlan && layout.hasAttributionHandoff && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
+    layout.hasCommandCenter && layout.firstPrimaryActionText === 'Upload files' && layout.secondaryActionsCollapsed && layout.hasMoreActionsTrigger && layout.hasCommandHandoffActionsNested && layout.operationDetailsCollapsed && layout.attributionDetailsCollapsed && layout.controlMapDetailsCollapsed && layout.connectedWorkflowsDetailsCollapsed && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasStorageProviderCertification && layout.hasOperationActionPlan && layout.hasAttributionHandoff && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
     `Media page missing expected regions: ${JSON.stringify(layout)}`,
   );
   assert(

@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, CheckCircle2, CheckSquare, Cloud, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, Music, RefreshCw, Save, Shield, Trash2, Type, Upload, Video, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, CheckSquare, Cloud, Code2, Copy, Download, Edit3, ExternalLink, File, FileText, Folder, FolderPlus, Image as ImageIcon, KeyRound, Layout, MoreHorizontal, Music, RefreshCw, Save, Shield, Trash2, Type, Upload, Video, X } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -3900,6 +3900,12 @@ function MediaPage() {
     setError(null);
     setBulkNotice(`${displayedFiles.length} visible media asset${displayedFiles.length === 1 ? '' : 's'} exported.`);
   };
+  const focusMediaFolders = () => {
+    document.getElementById('media-folders')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => {
+      document.querySelector<HTMLInputElement>('[data-testid="media-new-folder-name-input"]')?.focus({ preventScroll: true });
+    }, 160);
+  };
   const exportMediaAuditCsv = () => {
     if (!canExportMediaActivity) {
       setBulkNotice(null);
@@ -4074,7 +4080,7 @@ function MediaPage() {
               Control the central file layer for every site: uploads, folders, visibility, signed delivery, transforms, font files, and frontend media APIs.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-2 xl:items-end">
             <select
               aria-label="Active media site"
               value={siteId}
@@ -4096,62 +4102,100 @@ function MediaPage() {
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              onClick={() => void copyMediaHandoffManifest()}
-              disabled={isMediaLibraryBusy || !canExportMediaActivity}
-              title={!canExportMediaActivity ? activityPermissionTitle : undefined}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Copy className="h-4 w-4" />
-              Copy manifest
-            </button>
-            <button
-              type="button"
-              onClick={downloadMediaHandoff}
-              disabled={isMediaLibraryBusy || !canExportMediaActivity}
-              title={!canExportMediaActivity ? activityPermissionTitle : undefined}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="h-4 w-4" />
-              Download JSON
-            </button>
-            <button
-              type="button"
-              onClick={exportMediaCsv}
-              disabled={displayedFiles.length === 0 || isMediaLibraryBusy || !canExportMediaActivity}
-              title={activityPermissionTitle}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="h-4 w-4" />
-              Export CSV
-            </button>
-            <label
-              htmlFor="header-upload"
-              role="button"
-              tabIndex={isUploadActionDisabled ? -1 : 0}
-              aria-disabled={isUploadActionDisabled}
-              aria-describedby={uploadActionStatusId}
-              className={cn(
-                'inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90',
-                isUploadActionDisabled && 'pointer-events-none opacity-70',
-              )}
-              title={uploadActionDisabledReason || undefined}
-              data-testid="media-command-upload-trigger"
-              data-action-state={uploadActionState}
-              data-action-status={uploadActionStatus}
-              data-disabled-reason={uploadActionDisabledReason || undefined}
-              data-target-site-id={siteId}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') return;
-                if (isUploadActionDisabled) return;
-                event.preventDefault();
-                document.getElementById('header-upload')?.click();
-              }}
-            >
-              <Upload className="h-4 w-4" />
-              Upload files
-            </label>
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end" data-testid="media-primary-actions">
+              <label
+                htmlFor="header-upload"
+                role="button"
+                tabIndex={isUploadActionDisabled ? -1 : 0}
+                aria-disabled={isUploadActionDisabled}
+                aria-describedby={uploadActionStatusId}
+                className={cn(
+                  'inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90',
+                  isUploadActionDisabled && 'pointer-events-none opacity-70',
+                )}
+                title={uploadActionDisabledReason || undefined}
+                data-testid="media-command-upload-trigger"
+                data-action-state={uploadActionState}
+                data-action-status={uploadActionStatus}
+                data-disabled-reason={uploadActionDisabledReason || undefined}
+                data-target-site-id={siteId}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  if (isUploadActionDisabled) return;
+                  event.preventDefault();
+                  document.getElementById('header-upload')?.click();
+                }}
+              >
+                <Upload className="h-4 w-4" />
+                Upload files
+              </label>
+              <button
+                type="button"
+                onClick={focusMediaFolders}
+                disabled={isMediaLibraryBusy || !canCreateMedia}
+                title={!canCreateMedia ? createPermissionTitle : undefined}
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="media-command-new-folder"
+              >
+                <FolderPlus className="h-4 w-4" />
+                New folder
+              </button>
+              <button
+                type="button"
+                onClick={exportMediaCsv}
+                disabled={displayedFiles.length === 0 || isMediaLibraryBusy || !canExportMediaActivity}
+                title={activityPermissionTitle}
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="media-command-export-csv"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadLibrary()}
+                disabled={isMediaLibraryBusy || !canViewMedia}
+                title={!canViewMedia ? viewPermissionTitle : undefined}
+                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                data-testid="media-command-refresh"
+              >
+                <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+                Refresh library
+              </button>
+            </div>
+            <details className="self-start xl:self-end" data-testid="media-secondary-actions" data-default-collapsed="true">
+              <summary
+                className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
+                data-testid="media-more-actions"
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                More actions
+              </summary>
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2 shadow-sm" data-testid="media-secondary-action-menu">
+                <button
+                  type="button"
+                  onClick={() => void copyMediaHandoffManifest()}
+                  disabled={isMediaLibraryBusy || !canExportMediaActivity}
+                  title={!canExportMediaActivity ? activityPermissionTitle : undefined}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="media-command-copy-manifest"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Copy manifest
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadMediaHandoff}
+                  disabled={isMediaLibraryBusy || !canExportMediaActivity}
+                  title={!canExportMediaActivity ? activityPermissionTitle : undefined}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="media-command-download-json"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download JSON
+                </button>
+              </div>
+            </details>
           </div>
         </div>
 
