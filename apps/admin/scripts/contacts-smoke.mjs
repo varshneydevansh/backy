@@ -135,8 +135,15 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
   for (const [snippet, message] of [
     ['const contactsViewActionStatusId = \'contacts-view-action-status\';', 'Contacts route must define a shared view action status id'],
     ['const contactsExportActionStatusId = \'contacts-export-action-status\';', 'Contacts route must define a shared export action status id'],
+    ['const contactsCommandSecondaryActionStatusId = \'contacts-command-secondary-action-status\';', 'Contacts route must define a shared command secondary action status id'],
     ['data-testid="contacts-view-action-status"', 'Contacts route must render hidden view action status copy'],
     ['data-testid="contacts-export-action-status"', 'Contacts route must render hidden export action status copy'],
+    ['data-testid="contacts-command-secondary-action-status"', 'Contacts route must render hidden command secondary action status copy'],
+    ['data-action-status={contactsCommandSecondaryActionStatus}', 'Contacts secondary command group must expose aggregate action status'],
+    ['data-action-status={contactsCommandTemplateActionStatus}', 'Contacts CSV-template command must expose command-specific action status'],
+    ['data-action-status={contactsCommandCopyActionStatus}', 'Contacts manifest copy command must expose command-specific action status'],
+    ['data-action-status={contactsCommandDownloadActionStatus}', 'Contacts manifest download command must expose command-specific action status'],
+    ['data-disabled-reason={contactsCommandCopyDisabledReason || undefined}', 'Contacts manifest copy command must expose command-specific disabled reasons'],
     ['data-action="contacts.create.focus"', 'Contacts add-contact command must expose a stable data-action'],
     ['data-action="contacts.import.csv"', 'Contacts import command must expose a stable data-action'],
     ['data-action="contacts.export.csv"', 'Contacts export command must expose a stable data-action'],
@@ -1907,6 +1914,9 @@ const assertLayout = async (client) => {
 		    const editStatus = document.querySelector('[data-testid="contacts-edit-action-status"]');
 		    const actionGroup = document.querySelector('[data-testid="contacts-action-group"]');
 		    const actionStatus = document.querySelector('[data-testid="contacts-action-status"]');
+	    const secondaryActions = document.querySelector('[data-testid="contacts-secondary-actions"]');
+	    const secondaryStatus = document.querySelector('[data-testid="contacts-command-secondary-action-status"]');
+	    const secondaryStatusId = secondaryStatus?.id || '';
 	    const bulkGroup = document.querySelector('[data-testid="contacts-bulk-actions"]');
 	    const bulkSelection = document.querySelector('[data-testid="contacts-bulk-selection-summary"]');
 	    const bulkStatus = document.querySelector('[data-testid="contacts-bulk-action-status"]');
@@ -1931,15 +1941,26 @@ const assertLayout = async (client) => {
 	      scrollWidth: document.documentElement.scrollWidth,
       hasCommandCenter: Boolean(document.querySelector('[data-testid="contacts-command-center"]')),
       firstPrimaryActionText: document.querySelector('[data-testid="contacts-primary-actions"] button')?.textContent?.trim() || '',
-      secondaryActionsCollapsed: document.querySelector('[data-testid="contacts-secondary-actions"]') instanceof HTMLDetailsElement &&
-        document.querySelector('[data-testid="contacts-secondary-actions"]')?.open === false &&
-        document.querySelector('[data-testid="contacts-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+      secondaryActionsCollapsed: secondaryActions instanceof HTMLDetailsElement &&
+        secondaryActions.open === false &&
+        secondaryActions.getAttribute('data-default-collapsed') === 'true',
       hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="contacts-more-actions"]')),
       hasCommandHandoffActionsNested: Boolean(
         document.querySelector('[data-testid="contacts-secondary-action-menu"] [data-testid="contacts-command-csv-template"]') &&
         document.querySelector('[data-testid="contacts-secondary-action-menu"] [data-testid="contacts-command-copy-manifest"]') &&
         document.querySelector('[data-testid="contacts-secondary-action-menu"] [data-testid="contacts-command-download-json"]'),
       ),
+      secondaryActionStatus: {
+        exists: secondaryStatus instanceof HTMLElement,
+        statusId: secondaryStatusId,
+        statusText: secondaryStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        groupState: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('data-action-state') || '' : '',
+        groupStatus: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('data-action-status') || '' : '',
+        groupDescribedBy: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('aria-describedby') || '' : '',
+        template: createControl('contacts-command-csv-template'),
+        copy: createControl('contacts-command-copy-manifest'),
+        download: createControl('contacts-command-download-json'),
+      },
       controlMapCollapsed: controlMapDetails instanceof HTMLDetailsElement &&
         controlMapDetails.open === false &&
         controlMapDetails.getAttribute('data-default-collapsed') === 'true',
@@ -2092,6 +2113,26 @@ const assertLayout = async (client) => {
 	      && control.disabledReason === ''
 	      && control.targetSiteId === SITE_ID
 	      && control.actionStatus.includes(`available for ${SITE_ID}.`)
+	    ))
+	    && layout.secondaryActionStatus.exists
+	    && layout.secondaryActionStatus.statusId === 'contacts-command-secondary-action-status'
+	    && layout.secondaryActionStatus.groupDescribedBy === layout.secondaryActionStatus.statusId
+	    && ['ready', 'blocked'].includes(layout.secondaryActionStatus.groupState)
+	    && layout.secondaryActionStatus.groupStatus === layout.secondaryActionStatus.statusText
+	    && layout.secondaryActionStatus.statusText.includes('CSV template')
+	    && layout.secondaryActionStatus.statusText.includes('Copy manifest')
+	    && layout.secondaryActionStatus.statusText.includes('Download JSON')
+	    && [layout.secondaryActionStatus.template, layout.secondaryActionStatus.copy, layout.secondaryActionStatus.download].every((control) => (
+	      control.exists
+	      && control.describedBy === layout.secondaryActionStatus.statusId
+	      && ['ready', 'blocked'].includes(control.actionState)
+	      && control.actionState === (control.disabled ? 'blocked' : 'ready')
+	      && control.targetSiteId === SITE_ID
+	      && (
+	        control.disabled
+	          ? control.actionStatus.includes('unavailable:') && control.disabledReason.length > 0
+	          : control.actionStatus.includes(`available for ${SITE_ID}.`) && control.disabledReason === ''
+	      )
 	    ))
     && layout.hasCreateContact
     && layout.hasImportCsv

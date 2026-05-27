@@ -469,6 +469,7 @@ function ContactsRoute() {
   const contactsViewActionStatusId = 'contacts-view-action-status';
   const contactsExportActionStatusId = 'contacts-export-action-status';
   const contactsSavedListActionStatusId = 'contacts-saved-list-action-status';
+  const contactsCommandSecondaryActionStatusId = 'contacts-command-secondary-action-status';
   const contactViewDisabledReason = !canViewForms
     ? viewPermissionTitle || 'Your account cannot view contact pipelines.'
     : isContactsBusy
@@ -490,6 +491,26 @@ function ContactsRoute() {
   const contactsSavedListActionStatus = contactSavedListMutationDisabledReason
     ? `Saved list actions unavailable: ${contactSavedListMutationDisabledReason}`
     : `Saved list actions available for ${activeSiteId}.`;
+  const contactsCommandTemplateDisabledReason = contactsCreateTemplateDisabledReason;
+  const contactsCommandCopyDisabledReason = contactViewDisabledReason;
+  const contactsCommandDownloadDisabledReason = contactViewDisabledReason;
+  const contactsCommandTemplateActionStatus = contactsCreateActionStatusFor('CSV template', contactsCommandTemplateDisabledReason);
+  const contactsCommandCopyActionStatus = contactsCommandCopyDisabledReason
+    ? `Copy manifest unavailable: ${contactsCommandCopyDisabledReason}`
+    : `Copy manifest available for ${activeSiteId}.`;
+  const contactsCommandDownloadActionStatus = contactsCommandDownloadDisabledReason
+    ? `Download JSON unavailable: ${contactsCommandDownloadDisabledReason}`
+    : `Download JSON available for ${activeSiteId}.`;
+  const contactsCommandSecondaryActionStatus = [
+    contactsCommandTemplateActionStatus,
+    contactsCommandCopyActionStatus,
+    contactsCommandDownloadActionStatus,
+  ].join(' ');
+  const contactsCommandSecondaryActionState = [
+    contactsCommandTemplateDisabledReason,
+    contactsCommandCopyDisabledReason,
+    contactsCommandDownloadDisabledReason,
+  ].every(Boolean) ? 'blocked' : 'ready';
   const hasActiveContactFilters = Boolean(
     searchQuery.trim() ||
     selectedFormId !== 'all' ||
@@ -2285,6 +2306,9 @@ function ContactsRoute() {
       <span id={contactsSavedListActionStatusId} className="sr-only" data-testid="contacts-saved-list-action-status" aria-live="polite">
         {contactsSavedListActionStatus}
       </span>
+      <span id={contactsCommandSecondaryActionStatusId} className="sr-only" data-testid="contacts-command-secondary-action-status" aria-live="polite">
+        {contactsCommandSecondaryActionStatus}
+      </span>
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="contacts-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -2382,7 +2406,14 @@ function ContactsRoute() {
                 Refresh contacts
               </Button>
             </div>
-            <details className="self-start xl:self-end" data-testid="contacts-secondary-actions" data-default-collapsed="true">
+            <details
+              className="self-start xl:self-end"
+              aria-describedby={contactsCommandSecondaryActionStatusId}
+              data-action-state={contactsCommandSecondaryActionState}
+              data-action-status={contactsCommandSecondaryActionStatus}
+              data-testid="contacts-secondary-actions"
+              data-default-collapsed="true"
+            >
               <summary
                 className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
                 data-testid="contacts-more-actions"
@@ -2397,16 +2428,16 @@ function ContactsRoute() {
                   size="sm"
                   onClick={downloadContactImportTemplate}
                   disabled={contactMutationDisabled}
-                  title={contactsCreateTemplateDisabledReason || undefined}
-                  aria-describedby={contactsCreateActionStatusId}
+                  title={contactsCommandTemplateDisabledReason || undefined}
+                  aria-describedby={contactsCommandSecondaryActionStatusId}
                   iconStart={<FileText className="size-4" />}
                   data-action="contacts.download.importTemplate"
                   data-action-target={activeSiteId}
                   data-action-route={contactImportUrl || contactListsUrl}
-                  data-action-state={contactsCreateTemplateDisabledReason ? 'blocked' : 'ready'}
-                  data-state={contactsCreateTemplateDisabledReason ? 'blocked' : 'ready'}
-                  data-action-status={contactsImportTemplateActionStatus}
-                  data-disabled-reason={contactsCreateTemplateDisabledReason || undefined}
+                  data-action-state={contactsCommandTemplateDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactsCommandTemplateDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsCommandTemplateActionStatus}
+                  data-disabled-reason={contactsCommandTemplateDisabledReason || undefined}
                   data-target-site-id={activeSiteId}
                   data-testid="contacts-command-csv-template"
                 >
@@ -2418,16 +2449,16 @@ function ContactsRoute() {
                   size="sm"
                   onClick={() => void copyContactApiText(contactHandoffText, 'Contact handoff manifest')}
                   disabled={contactViewDisabled}
-                  title={contactViewDisabledReason || undefined}
-                  aria-describedby={contactsViewActionStatusId}
+                  title={contactsCommandCopyDisabledReason || undefined}
+                  aria-describedby={contactsCommandSecondaryActionStatusId}
                   iconStart={<Copy className="size-4" />}
                   data-action="contacts.copy.handoffManifest"
                   data-action-target={activeSiteId}
                   data-action-route={contactListsUrl}
-                  data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
-                  data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
-                  data-action-status={contactsViewActionStatus}
-                  data-disabled-reason={contactViewDisabledReason || undefined}
+                  data-action-state={contactsCommandCopyDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactsCommandCopyDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsCommandCopyActionStatus}
+                  data-disabled-reason={contactsCommandCopyDisabledReason || undefined}
                   data-target-site-id={activeSiteId}
                   data-testid="contacts-command-copy-manifest"
                 >
@@ -2439,16 +2470,16 @@ function ContactsRoute() {
                   size="sm"
                   onClick={downloadContactHandoff}
                   disabled={contactViewDisabled}
-                  title={contactViewDisabledReason || undefined}
-                  aria-describedby={contactsViewActionStatusId}
+                  title={contactsCommandDownloadDisabledReason || undefined}
+                  aria-describedby={contactsCommandSecondaryActionStatusId}
                   iconStart={<Download className="size-4" />}
                   data-action="contacts.download.handoffJson"
                   data-action-target={activeSiteId}
                   data-action-route={contactListsUrl}
-                  data-action-state={contactViewDisabledReason ? 'blocked' : 'ready'}
-                  data-state={contactViewDisabledReason ? 'blocked' : 'ready'}
-                  data-action-status={contactsViewActionStatus}
-                  data-disabled-reason={contactViewDisabledReason || undefined}
+                  data-action-state={contactsCommandDownloadDisabledReason ? 'blocked' : 'ready'}
+                  data-state={contactsCommandDownloadDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={contactsCommandDownloadActionStatus}
+                  data-disabled-reason={contactsCommandDownloadDisabledReason || undefined}
                   data-target-site-id={activeSiteId}
                   data-testid="contacts-command-download-json"
                 >
