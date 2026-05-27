@@ -88,8 +88,14 @@ const assertFormsPersistenceCertificationSource = () => {
   for (const [snippet, message] of [
     ['const formsViewActionStatusId = \'forms-view-action-status\';', 'Forms route must define a shared view action status id'],
     ['const formsExportActionStatusId = \'forms-export-action-status\';', 'Forms route must define a shared export action status id'],
+    ['const formsCommandSecondaryActionStatusId = \'forms-command-secondary-action-status\';', 'Forms route must define a shared command secondary action status id'],
     ['data-testid="forms-view-action-status"', 'Forms route must render hidden view action status copy'],
     ['data-testid="forms-export-action-status"', 'Forms route must render hidden export action status copy'],
+    ['data-testid="forms-command-secondary-action-status"', 'Forms route must render hidden command secondary action status copy'],
+    ['data-action-status={formsCommandSecondaryActionStatus}', 'Forms secondary command group must expose aggregate action status'],
+    ['data-action-status={formsCommandCopyActionStatus}', 'Forms copy-manifest command must expose command-specific action status'],
+    ['data-action-status={formsCommandDownloadActionStatus}', 'Forms download-manifest command must expose command-specific action status'],
+    ['data-disabled-reason={formsCommandCopyDisabledReason || undefined}', 'Forms copy-manifest command must expose command-specific disabled reasons'],
     ['data-action="forms.create.blank"', 'Forms blank-create actions must expose a stable data-action'],
     ['data-action="forms.export.catalogCsv"', 'Forms CSV export must expose a stable data-action'],
     ['data-action="forms.refresh"', 'Forms refresh controls must expose a stable data-action'],
@@ -3160,6 +3166,19 @@ const assertLayout = async (client) => {
     const createStatusText = (createStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
     const firstPrimaryActionText = (document.querySelector('[data-testid="forms-primary-actions"] button')?.textContent || '').replace(/\\s+/g, ' ').trim();
     const secondaryActions = document.querySelector('[data-testid="forms-secondary-actions"]');
+    const secondaryStatus = document.querySelector('[data-testid="forms-command-secondary-action-status"]');
+    const secondaryStatusId = secondaryStatus?.id || '';
+    const readCommandAction = (testId) => {
+      const element = document.querySelector('[data-testid="' + testId + '"]');
+      return {
+        exists: element instanceof HTMLElement,
+        describedBy: element instanceof HTMLElement ? element.getAttribute('aria-describedby') || '' : '',
+        actionState: element instanceof HTMLElement ? element.getAttribute('data-action-state') || '' : '',
+        actionStatus: element instanceof HTMLElement ? element.getAttribute('data-action-status') || '' : '',
+        disabledReason: element instanceof HTMLElement ? element.getAttribute('data-disabled-reason') || '' : '',
+        disabled: element instanceof HTMLButtonElement ? element.disabled : null,
+      };
+    };
     const commandCreate = document.querySelector('[data-testid="forms-create-blank-button"]');
     const templateCreate = document.querySelector('[data-testid="forms-template-create-blank-button"]');
     const frontendCreate = document.querySelector('[data-testid="forms-frontend-template-${FRONTEND_FORM_TEMPLATE_ID}"]');
@@ -3223,6 +3242,16 @@ const assertLayout = async (client) => {
       document.querySelector('[data-testid="forms-secondary-action-menu"] [data-testid="forms-command-copy-manifest"]') &&
       document.querySelector('[data-testid="forms-secondary-action-menu"] [data-testid="forms-command-download-json"]'),
     ),
+    secondaryActionStatus: {
+      exists: secondaryStatus instanceof HTMLElement,
+      statusId: secondaryStatusId,
+      statusText: (secondaryStatus?.textContent || '').replace(/\\s+/g, ' ').trim(),
+      groupState: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('data-action-state') || '' : '',
+      groupStatus: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('data-action-status') || '' : '',
+      groupDescribedBy: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('aria-describedby') || '' : '',
+      copy: readCommandAction('forms-command-copy-manifest'),
+      download: readCommandAction('forms-command-download-json'),
+    },
     createActionStatus: {
       exists: createStatus instanceof HTMLElement,
       statusId: createStatusId,
@@ -3289,6 +3318,27 @@ const assertLayout = async (client) => {
       layout.hasMoreActionsTrigger &&
       layout.hasCommandHandoffActionsNested,
     `Forms command center action hierarchy regressed: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.secondaryActionStatus.exists &&
+      layout.secondaryActionStatus.statusId === 'forms-command-secondary-action-status' &&
+      layout.secondaryActionStatus.groupDescribedBy === layout.secondaryActionStatus.statusId &&
+      ['ready', 'blocked'].includes(layout.secondaryActionStatus.groupState) &&
+      layout.secondaryActionStatus.groupStatus === layout.secondaryActionStatus.statusText &&
+      layout.secondaryActionStatus.statusText.includes('Copy manifest') &&
+      layout.secondaryActionStatus.statusText.includes('Download JSON') &&
+      [layout.secondaryActionStatus.copy, layout.secondaryActionStatus.download].every((action) => (
+        action.exists &&
+        action.describedBy === layout.secondaryActionStatus.statusId &&
+        ['ready', 'blocked'].includes(action.actionState) &&
+        action.actionState === (action.disabled ? 'blocked' : 'ready') &&
+        (
+          action.disabled
+            ? action.actionStatus.includes('unavailable:') && action.disabledReason.length > 0
+            : action.actionStatus.includes('available for') && action.disabledReason === ''
+        )
+      )),
+    `Forms command center secondary actions missing ready action metadata: ${JSON.stringify(layout.secondaryActionStatus)}`,
   );
   assert(layout.createActionStatus.exists && layout.createActionStatus.statusExplainsState && layout.createActionStatus.allConsistent, `Forms create action status contract is missing or inconsistent: ${JSON.stringify(layout.createActionStatus)}`);
   assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasPersistenceCertification && layout.hasLaunchReadiness && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);

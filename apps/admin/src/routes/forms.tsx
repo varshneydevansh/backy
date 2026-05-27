@@ -1222,6 +1222,7 @@ function FormsRoute() {
   const formsViewActionStatusId = 'forms-view-action-status';
   const formsExportActionStatusId = 'forms-export-action-status';
   const formsCatalogExportActionStatusId = 'forms-catalog-export-action-status';
+  const formsCommandSecondaryActionStatusId = 'forms-command-secondary-action-status';
   const formsViewDisabledReason = !canViewForms
     ? viewPermissionTitle || 'Your account cannot view forms.'
     : isFormsBusy
@@ -1242,6 +1243,22 @@ function FormsRoute() {
   const formsCatalogExportActionStatus = formsCatalogExportDisabledReason
     ? `Export forms CSV unavailable: ${formsCatalogExportDisabledReason}`
     : `Export forms CSV available for ${filteredForms.length} visible form${filteredForms.length === 1 ? '' : 's'}.`;
+  const formsCommandCopyDisabledReason = formsExportDisabledReason;
+  const formsCommandDownloadDisabledReason = formsExportDisabledReason;
+  const formsCommandCopyActionStatus = formsCommandCopyDisabledReason
+    ? `Copy manifest unavailable: ${formsCommandCopyDisabledReason}`
+    : `Copy manifest available for ${activeSiteId}.`;
+  const formsCommandDownloadActionStatus = formsCommandDownloadDisabledReason
+    ? `Download JSON unavailable: ${formsCommandDownloadDisabledReason}`
+    : `Download JSON available for ${activeSiteId}.`;
+  const formsCommandSecondaryActionStatus = [
+    formsCommandCopyActionStatus,
+    formsCommandDownloadActionStatus,
+  ].join(' ');
+  const formsCommandSecondaryActionState = [
+    formsCommandCopyDisabledReason,
+    formsCommandDownloadDisabledReason,
+  ].every(Boolean) ? 'blocked' : 'ready';
   const hasActiveFormFilters = Boolean(
     formSearchQuery.trim() ||
     formSourceFilter !== 'all' ||
@@ -3537,6 +3554,9 @@ function FormsRoute() {
       <span id={formsCatalogExportActionStatusId} className="sr-only" data-testid="forms-catalog-export-action-status" aria-live="polite">
         {formsCatalogExportActionStatus}
       </span>
+      <span id={formsCommandSecondaryActionStatusId} className="sr-only" data-testid="forms-command-secondary-action-status" aria-live="polite">
+        {formsCommandSecondaryActionStatus}
+      </span>
 
       <section
         className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm"
@@ -3619,7 +3639,14 @@ function FormsRoute() {
                 Refresh forms
               </Button>
             </div>
-            <details className="self-start xl:self-end" data-testid="forms-secondary-actions" data-default-collapsed="true">
+            <details
+              className="self-start xl:self-end"
+              aria-describedby={formsCommandSecondaryActionStatusId}
+              data-action-state={formsCommandSecondaryActionState}
+              data-action-status={formsCommandSecondaryActionStatus}
+              data-testid="forms-secondary-actions"
+              data-default-collapsed="true"
+            >
               <summary
                 className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
                 data-testid="forms-more-actions"
@@ -3632,16 +3659,16 @@ function FormsRoute() {
                   variant="outline"
                   onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
                   disabled={isFormsBusy || !canExportForms}
-                  title={formsExportDisabledReason || undefined}
-                  aria-describedby={formsExportActionStatusId}
+                  title={formsCommandCopyDisabledReason || undefined}
+                  aria-describedby={formsCommandSecondaryActionStatusId}
                   iconStart={<Copy className="size-4" />}
                   data-action="forms.copy.handoffManifest"
                   data-action-target={activeSiteId}
                   data-action-route={formsListUrl}
-                  data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
-                  data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
-                  data-action-status={formsExportActionStatus}
-                  data-disabled-reason={formsExportDisabledReason || undefined}
+                  data-action-state={formsCommandCopyDisabledReason ? 'blocked' : 'ready'}
+                  data-state={formsCommandCopyDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={formsCommandCopyActionStatus}
+                  data-disabled-reason={formsCommandCopyDisabledReason || undefined}
                   data-target-site-id={activeSiteId}
                   data-testid="forms-command-copy-manifest"
                 >
@@ -3651,16 +3678,16 @@ function FormsRoute() {
                   variant="outline"
                   onClick={downloadFormsHandoff}
                   disabled={isFormsBusy || !canExportForms}
-                  title={formsExportDisabledReason || undefined}
-                  aria-describedby={formsExportActionStatusId}
+                  title={formsCommandDownloadDisabledReason || undefined}
+                  aria-describedby={formsCommandSecondaryActionStatusId}
                   iconStart={<Download className="size-4" />}
                   data-action="forms.download.handoffJson"
                   data-action-target={activeSiteId}
                   data-action-route={formsListUrl}
-                  data-action-state={formsExportDisabledReason ? 'blocked' : 'ready'}
-                  data-state={formsExportDisabledReason ? 'blocked' : 'ready'}
-                  data-action-status={formsExportActionStatus}
-                  data-disabled-reason={formsExportDisabledReason || undefined}
+                  data-action-state={formsCommandDownloadDisabledReason ? 'blocked' : 'ready'}
+                  data-state={formsCommandDownloadDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={formsCommandDownloadActionStatus}
+                  data-disabled-reason={formsCommandDownloadDisabledReason || undefined}
                   data-target-site-id={activeSiteId}
                   data-testid="forms-command-download-json"
                 >
