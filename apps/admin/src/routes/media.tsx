@@ -1442,6 +1442,28 @@ function MediaPage() {
       ? `Upload unavailable: ${uploadActionDisabledReason}`
       : `Upload available for ${siteId}: ${activeUploadMode.label} to ${uploadTargetFolderLabel} as ${uploadVisibility}.`;
   const isUploadActionDisabled = Boolean(uploadActionDisabledReason);
+  const mediaCommandSecondaryActionStatusId = 'media-command-secondary-action-status';
+  const mediaCommandExportDisabledReason = !canExportMediaActivity
+    ? activityPermissionTitle || 'Your account needs activity.export to export media manifests.'
+    : isMediaLibraryBusy
+      ? 'Media handoff actions are temporarily unavailable while Backy updates the library.'
+      : '';
+  const mediaCommandCopyDisabledReason = mediaCommandExportDisabledReason;
+  const mediaCommandDownloadDisabledReason = mediaCommandExportDisabledReason;
+  const mediaCommandCopyActionStatus = mediaCommandCopyDisabledReason
+    ? `Copy manifest unavailable: ${mediaCommandCopyDisabledReason}`
+    : `Copy manifest available for ${siteId}.`;
+  const mediaCommandDownloadActionStatus = mediaCommandDownloadDisabledReason
+    ? `Download JSON unavailable: ${mediaCommandDownloadDisabledReason}`
+    : `Download JSON available for ${siteId}.`;
+  const mediaCommandSecondaryActionStatus = [
+    mediaCommandCopyActionStatus,
+    mediaCommandDownloadActionStatus,
+  ].join(' ');
+  const mediaCommandSecondaryActionState = [
+    mediaCommandCopyDisabledReason,
+    mediaCommandDownloadDisabledReason,
+  ].every(Boolean) ? 'blocked' : 'ready';
   const setUploadTagList = useCallback((nextTags: string[]) => {
     setUploadTags(serializeTagValues(nextTags));
   }, []);
@@ -4062,6 +4084,9 @@ function MediaPage() {
         <span id={uploadActionStatusId} className="sr-only" data-testid="media-upload-action-status" aria-live="polite">
           {uploadActionStatus}
         </span>
+        <span id={mediaCommandSecondaryActionStatusId} className="sr-only" data-testid="media-command-secondary-action-status" aria-live="polite">
+          {mediaCommandSecondaryActionStatus}
+        </span>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -4163,7 +4188,14 @@ function MediaPage() {
                 Refresh library
               </button>
             </div>
-            <details className="self-start xl:self-end" data-testid="media-secondary-actions" data-default-collapsed="true">
+            <details
+              className="self-start xl:self-end"
+              aria-describedby={mediaCommandSecondaryActionStatusId}
+              data-action-state={mediaCommandSecondaryActionState}
+              data-action-status={mediaCommandSecondaryActionStatus}
+              data-testid="media-secondary-actions"
+              data-default-collapsed="true"
+            >
               <summary
                 className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
                 data-testid="media-more-actions"
@@ -4175,9 +4207,14 @@ function MediaPage() {
                 <button
                   type="button"
                   onClick={() => void copyMediaHandoffManifest()}
-                  disabled={isMediaLibraryBusy || !canExportMediaActivity}
-                  title={!canExportMediaActivity ? activityPermissionTitle : undefined}
+                  disabled={Boolean(mediaCommandCopyDisabledReason)}
+                  title={mediaCommandCopyDisabledReason || 'Copy media handoff manifest'}
                   className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-describedby={mediaCommandSecondaryActionStatusId}
+                  data-action-state={mediaCommandCopyDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={mediaCommandCopyActionStatus}
+                  data-disabled-reason={mediaCommandCopyDisabledReason || undefined}
+                  data-target-site-id={siteId}
                   data-testid="media-command-copy-manifest"
                 >
                   <Copy className="h-3.5 w-3.5" />
@@ -4186,9 +4223,14 @@ function MediaPage() {
                 <button
                   type="button"
                   onClick={downloadMediaHandoff}
-                  disabled={isMediaLibraryBusy || !canExportMediaActivity}
-                  title={!canExportMediaActivity ? activityPermissionTitle : undefined}
+                  disabled={Boolean(mediaCommandDownloadDisabledReason)}
+                  title={mediaCommandDownloadDisabledReason || 'Download media handoff JSON'}
                   className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-describedby={mediaCommandSecondaryActionStatusId}
+                  data-action-state={mediaCommandDownloadDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={mediaCommandDownloadActionStatus}
+                  data-disabled-reason={mediaCommandDownloadDisabledReason || undefined}
+                  data-target-site-id={siteId}
                   data-testid="media-command-download-json"
                 >
                   <Download className="h-3.5 w-3.5" />

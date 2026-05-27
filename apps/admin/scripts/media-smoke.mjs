@@ -118,6 +118,17 @@ const assertMediaRouteSourceContract = () => {
       'Media command center must lead with upload/folder/export/refresh actions and move manifest/JSON handoff behind More actions.',
     );
   }
+  assert(
+    source.includes("const mediaCommandSecondaryActionStatusId = 'media-command-secondary-action-status';") &&
+      source.includes('data-testid="media-command-secondary-action-status"') &&
+      source.includes('aria-describedby={mediaCommandSecondaryActionStatusId}') &&
+      source.includes('data-action-status={mediaCommandSecondaryActionStatus}') &&
+      source.includes('data-action-status={mediaCommandCopyActionStatus}') &&
+      source.includes('data-action-status={mediaCommandDownloadActionStatus}') &&
+      source.includes('data-disabled-reason={mediaCommandCopyDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={mediaCommandDownloadDisabledReason || undefined}'),
+    'Media command center secondary actions must expose aggregate and per-command ready/blocked metadata.',
+  );
   assert(source.includes("schemaVersion: 'backy.media-storage-provider-certification.v1'") && source.includes('storageProviderCertification: mediaStorageProviderCertificationHandoff'), 'Media handoff manifest must export the storage-provider certification schema');
   assert(
     source.includes('data-testid="media-storage-provider-certification"') &&
@@ -1050,6 +1061,15 @@ const setBrowserSession = async (client, sessionToken) => {
   });
 };
 
+const clearBrowserPermissionCache = async (client) => {
+  await evaluate(client, `(() => {
+    try {
+      window.localStorage.removeItem('backy-user-permission-matrix-cache-v1');
+    } catch {}
+    return true;
+  })()`);
+};
+
 const evaluate = async (client, expression) => {
   const result = await client.send('Runtime.evaluate', {
     expression,
@@ -1128,6 +1148,7 @@ const assertDeniedMediaViewUi = async (client, searchText, hiddenAssetName) => {
     await setAdminPermissionOverrides({
       'media.view': 'deny',
     });
+    await clearBrowserPermissionCache(client);
     await navigateToMedia(client, searchText);
 
     let lastState = null;
@@ -1164,6 +1185,7 @@ const assertDeniedMediaViewUi = async (client, searchText, hiddenAssetName) => {
     await setAdminPermissionOverrides({
       'media.view': null,
     });
+    await clearBrowserPermissionCache(client);
     await navigateToMedia(client, searchText);
   }
 };
@@ -1173,6 +1195,7 @@ const assertDeniedMediaActivityUi = async (client, searchText, assetName) => {
     await setAdminPermissionOverrides({
       'activity.export': 'deny',
     });
+    await clearBrowserPermissionCache(client);
     await navigateToMedia(client, searchText);
     await waitForMediaPageAsset(client, assetName);
 
@@ -1255,6 +1278,7 @@ const assertDeniedMediaActivityUi = async (client, searchText, assetName) => {
     await setAdminPermissionOverrides({
       'activity.export': null,
     });
+    await clearBrowserPermissionCache(client);
     await navigateToMedia(client, searchText);
   }
 };
@@ -1357,19 +1381,46 @@ const waitForMediaGridFilter = async (client, { searchText, tag = null, assetNam
 };
 
 const assertMediaLayout = async (client, expectedText) => {
-  const layout = await evaluate(client, `(() => ({
+  const layout = await evaluate(client, `(() => {
+    const secondaryActions = document.querySelector('[data-testid="media-secondary-actions"]');
+    const secondaryStatus = document.querySelector('[data-testid="media-command-secondary-action-status"]');
+    const secondaryStatusId = secondaryStatus?.id || '';
+    const readSecondaryAction = (testId) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      return {
+        exists: control instanceof HTMLButtonElement,
+        disabled: control instanceof HTMLButtonElement ? control.disabled : null,
+        describedBy: control?.getAttribute('aria-describedby') || '',
+        actionState: control?.getAttribute('data-action-state') || '',
+        actionStatus: control?.getAttribute('data-action-status') || '',
+        disabledReason: control?.getAttribute('data-disabled-reason') || '',
+        targetSiteId: control?.getAttribute('data-target-site-id') || '',
+      };
+    };
+
+    return ({
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="media-library-command-center"]')),
     firstPrimaryActionText: document.querySelector('[data-testid="media-primary-actions"] [role="button"], [data-testid="media-primary-actions"] button')?.textContent?.trim() || '',
-    secondaryActionsCollapsed: document.querySelector('[data-testid="media-secondary-actions"]') instanceof HTMLDetailsElement &&
-      document.querySelector('[data-testid="media-secondary-actions"]')?.open === false &&
-      document.querySelector('[data-testid="media-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+    secondaryActionsCollapsed: secondaryActions instanceof HTMLDetailsElement &&
+      secondaryActions.open === false &&
+      secondaryActions.getAttribute('data-default-collapsed') === 'true',
     hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="media-more-actions"]')),
     hasCommandHandoffActionsNested: Boolean(
       document.querySelector('[data-testid="media-secondary-action-menu"] [data-testid="media-command-copy-manifest"]') &&
       document.querySelector('[data-testid="media-secondary-action-menu"] [data-testid="media-command-download-json"]'),
     ),
+    secondaryActionStatus: {
+      exists: secondaryStatus instanceof HTMLElement,
+      statusId: secondaryStatusId,
+      statusText: (secondaryStatus?.textContent || '').replace(/\\s+/g, ' ').trim(),
+      groupState: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('data-action-state') || '' : '',
+      groupStatus: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('data-action-status') || '' : '',
+      groupDescribedBy: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('aria-describedby') || '' : '',
+      copy: readSecondaryAction('media-command-copy-manifest'),
+      download: readSecondaryAction('media-command-download-json'),
+    },
     operationDetailsCollapsed: document.querySelector('[data-testid="media-operation-action-plan-details"]') instanceof HTMLDetailsElement &&
       document.querySelector('[data-testid="media-operation-action-plan-details"]')?.open === false &&
       document.querySelector('[data-testid="media-operation-action-plan-details"]')?.getAttribute('data-default-collapsed') === 'true',
@@ -1448,7 +1499,8 @@ const assertMediaLayout = async (client, expectedText) => {
     })(),
     hasAsset: document.body?.innerText?.includes(${JSON.stringify(expectedText)}) || false,
     hasSearch: Boolean(document.querySelector('input[aria-label="Search media"]')),
-  }))()`);
+  });
+  })()`);
   assert(layout.scrollWidth <= layout.width + 8, `Media page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.hasCommandCenter && layout.firstPrimaryActionText === 'Upload files' && layout.secondaryActionsCollapsed && layout.hasMoreActionsTrigger && layout.hasCommandHandoffActionsNested && layout.operationDetailsCollapsed && layout.attributionDetailsCollapsed && layout.controlMapDetailsCollapsed && layout.connectedWorkflowsDetailsCollapsed && layout.hasDropzone && layout.hasIntakeRules && layout.hasApi && layout.hasStorageOperations && layout.hasStorageEnvContract && layout.hasStorageProvisioning && layout.hasStorageCredentialRotation && layout.hasStorageSecretManager && layout.hasStorageProviderCertification && layout.hasOperationActionPlan && layout.hasAttributionHandoff && layout.hasScannerRuntime && layout.hasScannerEnvContract && layout.hasLibraryActivity && layout.hasFolders && layout.hasBulk && layout.hasProviderDelivery && layout.hasProviderRoi && layout.hasAsset && layout.hasSearch,
@@ -1469,6 +1521,28 @@ const assertMediaLayout = async (client, expectedText) => {
       layout.uploadActionStatus.allModeState === 'ready' &&
       layout.uploadActionStatus.allModePressed === layout.uploadActionStatus.allModeActive,
     `Media upload action status is incomplete: ${JSON.stringify(layout.uploadActionStatus)}`,
+  );
+  assert(
+    layout.secondaryActionStatus.exists &&
+      layout.secondaryActionStatus.statusId === 'media-command-secondary-action-status' &&
+      layout.secondaryActionStatus.groupDescribedBy === layout.secondaryActionStatus.statusId &&
+      ['ready', 'blocked'].includes(layout.secondaryActionStatus.groupState) &&
+      layout.secondaryActionStatus.groupStatus === layout.secondaryActionStatus.statusText &&
+      layout.secondaryActionStatus.statusText.includes('Copy manifest') &&
+      layout.secondaryActionStatus.statusText.includes('Download JSON') &&
+      [layout.secondaryActionStatus.copy, layout.secondaryActionStatus.download].every((action) => (
+        action.exists &&
+        action.describedBy === layout.secondaryActionStatus.statusId &&
+        ['ready', 'blocked'].includes(action.actionState) &&
+        action.actionState === (action.disabled ? 'blocked' : 'ready') &&
+        action.targetSiteId === SITE_ID &&
+        (
+          action.disabled
+            ? action.actionStatus.includes('unavailable:') && action.disabledReason.length > 0
+            : action.actionStatus.includes(`available for ${SITE_ID}.`) && action.disabledReason === ''
+        )
+      )),
+    `Media command center secondary actions missing ready action metadata: ${JSON.stringify(layout.secondaryActionStatus)}`,
   );
   return layout;
 };
