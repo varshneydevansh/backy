@@ -1041,19 +1041,38 @@ const assertProductsApiContractsSource = () => {
   );
   assert(
     source.includes('data-testid="products-command-secondary-actions"') &&
+      source.includes("const productsCommandSecondaryActionStatusId = 'products-command-secondary-action-status';") &&
+      source.includes('data-testid="products-command-secondary-action-status"') &&
+      source.includes('data-testid="products-command-secondary-action-menu"') &&
+      source.includes('aria-describedby={productsCommandSecondaryActionStatusId}') &&
+      source.includes('data-action-state={productsCommandSecondaryActionState}') &&
+      source.includes('data-action-status={productsCommandSecondaryActionStatus}') &&
       source.includes('data-testid="products-readiness-details"') &&
       source.includes('data-testid="products-control-map"') &&
       source.includes('data-default-collapsed="true"') &&
       source.includes("Catalog readiness, workflow, and navigation") &&
       source.includes('data-testid="products-command-copy-manifest"') &&
+      source.includes('data-action-status={productsCommandCopyManifestActionStatus}') &&
+      source.includes('aria-label="Copy product handoff manifest"') &&
       source.includes('data-testid="products-command-download-json"') &&
+      source.includes('data-action-status={productsCommandDownloadJsonActionStatus}') &&
+      source.includes('aria-label="Download product handoff JSON"') &&
       source.includes('data-testid="products-command-export-csv"') &&
+      source.includes('data-action-status={productsCommandExportCsvActionStatus}') &&
+      source.includes('data-disabled-reason={productsCommandCsvExportDisabledReason || undefined}') &&
+      source.includes('aria-label="Export filtered products CSV"') &&
       source.includes('data-testid="products-command-csv-template"') &&
+      source.includes('data-action-status={productsCommandCsvTemplateActionStatus}') &&
+      source.includes('aria-label="Download product CSV template"') &&
       source.includes('data-testid="products-command-import-csv"') &&
+      source.includes('data-action-status={productsCommandImportCsvActionStatus}') &&
+      source.includes('aria-label="Import products CSV"') &&
       source.includes('data-testid="products-command-storefront-page"') &&
+      source.includes('data-action-status={productsCommandStorefrontPageActionStatus}') &&
+      source.includes('aria-label="Create storefront page"') &&
       source.includes('aria-label="More catalog actions"') &&
       source.indexOf('New product') < source.indexOf('data-testid="products-command-secondary-actions"'),
-    "Products command center must keep New product primary while grouping secondary catalog and readiness actions",
+    "Products command center must keep New product primary while grouping secondary catalog and readiness actions with ready/blocked state metadata",
   );
   assert(
     source.includes("const productsStorefrontApiActionStatusId = 'products-storefront-api-action-status';") &&
@@ -8297,6 +8316,10 @@ const assertProductsLayout = async (client) => {
         const storefrontApiPrimaryStates = storefrontApiPrimaryActions.map((action) => action.state);
         const storefrontApiSecondaryActions = storefrontActionMeta('[data-testid="products-storefront-api-secondary-action-menu"] button');
         const storefrontApiSecondaryLabels = storefrontApiSecondaryActions.map((action) => action.label);
+        const productsCommandSecondaryActions = storefrontActionMeta('[data-testid="products-command-secondary-action-menu"] button');
+        const productsCommandSecondaryLabels = productsCommandSecondaryActions.map((action) => action.label);
+        const productsCommandSecondaryStatus = document.querySelector('[data-testid="products-command-secondary-action-status"]');
+        const productsCommandSecondaryDetails = document.querySelector('[data-testid="products-command-secondary-actions"]');
 	      const productsApiContracts = document.querySelector('[data-testid="products-api-contracts"]');
 	      const commerceAnalytics = document.querySelector('[data-testid="products-commerce-analytics"]');
 	      const commerceAnalyticsText = commerceAnalytics?.textContent || '';
@@ -8336,6 +8359,15 @@ const assertProductsLayout = async (client) => {
 	        width: window.innerWidth,
 	        scrollWidth: document.documentElement.scrollWidth,
 	        hasCommandCenter: Boolean(document.querySelector('[data-testid="products-command-center"]')),
+          hasProductsCommandSecondaryActions: Boolean(productsCommandSecondaryDetails),
+          productsCommandSecondaryCollapsed: productsCommandSecondaryDetails instanceof HTMLDetailsElement && productsCommandSecondaryDetails.open === false,
+          productsCommandSecondaryDescribedBy: productsCommandSecondaryDetails?.getAttribute('aria-describedby') || '',
+          productsCommandSecondaryStatusId: productsCommandSecondaryStatus?.id || '',
+          productsCommandSecondaryStatusText: (productsCommandSecondaryStatus?.textContent || '').replace(/\\s+/g, ' ').trim(),
+          productsCommandSecondaryStatusData: productsCommandSecondaryDetails?.getAttribute('data-action-status') || '',
+          productsCommandSecondaryState: productsCommandSecondaryDetails?.getAttribute('data-action-state') || '',
+          productsCommandSecondaryActions,
+          productsCommandSecondaryLabels,
 	        readinessDetailsCollapsed: productsReadinessDetails instanceof HTMLDetailsElement && productsReadinessDetails.open === false,
 	        controlMapCollapsed: productsControlMap instanceof HTMLDetailsElement && productsControlMap.open === false,
 	        frontendTemplateOptionsCollapsed: frontendTemplateOptions instanceof HTMLDetailsElement && frontendTemplateOptions.open === false,
@@ -8579,6 +8611,24 @@ const assertProductsLayout = async (client) => {
   assert(
     layout.scrollWidth <= layout.width + 8,
     `Products page has horizontal overflow: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.hasProductsCommandSecondaryActions &&
+      layout.productsCommandSecondaryCollapsed &&
+      layout.productsCommandSecondaryDescribedBy === 'products-command-secondary-action-status' &&
+      layout.productsCommandSecondaryStatusId === 'products-command-secondary-action-status' &&
+      layout.productsCommandSecondaryStatusText &&
+      layout.productsCommandSecondaryStatusData === layout.productsCommandSecondaryStatusText &&
+      layout.productsCommandSecondaryState === 'ready' &&
+      JSON.stringify(layout.productsCommandSecondaryLabels) === JSON.stringify(['Copy manifest', 'Download JSON', 'Export CSV', 'CSV template', 'Import CSV', 'Storefront page']) &&
+      layout.productsCommandSecondaryActions.every((action) => action.state === 'ready' || action.state === 'blocked') &&
+      layout.productsCommandSecondaryActions.every((action) => action.describedBy === 'products-command-secondary-action-status') &&
+      layout.productsCommandSecondaryActions.every((action) => action.status && layout.productsCommandSecondaryStatusText.includes(action.status)) &&
+      layout.productsCommandSecondaryActions.every((action) => action.state === 'blocked' ? Boolean(action.disabledReason) : action.disabledReason === '') &&
+      layout.productsCommandSecondaryActions.every((action) => action.disabled === (action.state === 'blocked')) &&
+      layout.productsCommandSecondaryActions.some((action) => action.testId === 'products-command-copy-manifest' && action.status.includes('Copy manifest available')) &&
+      layout.productsCommandSecondaryActions.some((action) => action.testId === 'products-command-export-csv' && action.status.includes('Export CSV available')),
+    `Products catalog More actions should be collapsed and expose ready/blocked metadata for every catalog action: ${JSON.stringify(layout)}`,
   );
   assert(
     layout.hasStorefrontApiActions &&

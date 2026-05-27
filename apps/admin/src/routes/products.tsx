@@ -2273,6 +2273,54 @@ function ProductsRoute() {
     productsBulkClearDisabledReason ? `Clear selection unavailable: ${productsBulkClearDisabledReason}` : `Clear selection available for ${selectedProductActionLabel}.`,
     productsBulkDeleteDisabledReason ? `Delete selected unavailable: ${productsBulkDeleteDisabledReason}` : `Delete selected available for ${selectedProductActionLabel}.`,
   ].join(' ');
+  const productsCommandSecondaryActionStatusId = 'products-command-secondary-action-status';
+  const productsCommandBusyDisabledReason = isProductsAccessBusy ? 'Product catalog is busy.' : '';
+  const productsCommandExportDisabledReason = productsCommandBusyDisabledReason || productsBulkExportPermissionDisabledReason;
+  const productsCommandCsvExportDisabledReason = filteredProducts.length === 0
+    ? 'No visible products to export.'
+    : productsCommandExportDisabledReason;
+  const productsCommandTemplateDisabledReason = !productCollection
+    ? 'Set up products before downloading a CSV template.'
+    : productsCommandBusyDisabledReason || productsBulkEditDisabledReason;
+  const productsCommandImportDisabledReason = !productCollection
+    ? 'Set up products before importing products.'
+    : productsCommandBusyDisabledReason || productsBulkEditDisabledReason;
+  const productsCommandStorefrontPageDisabledReason = productsCommandBusyDisabledReason || (!canEditPages
+    ? pagesEditPermissionTitle || 'Your account cannot edit pages.'
+    : '');
+  const productsCommandCopyManifestActionStatus = productsCommandExportDisabledReason
+    ? `Copy manifest unavailable: ${productsCommandExportDisabledReason}`
+    : `Copy manifest available for ${activeSiteId}.`;
+  const productsCommandDownloadJsonActionStatus = productsCommandExportDisabledReason
+    ? `Download JSON unavailable: ${productsCommandExportDisabledReason}`
+    : `Download JSON available for ${activeSiteId}.`;
+  const productsCommandExportCsvActionStatus = productsCommandCsvExportDisabledReason
+    ? `Export CSV unavailable: ${productsCommandCsvExportDisabledReason}`
+    : `Export CSV available for ${visibleProductActionLabel}.`;
+  const productsCommandCsvTemplateActionStatus = productsCommandTemplateDisabledReason
+    ? `CSV template unavailable: ${productsCommandTemplateDisabledReason}`
+    : 'CSV template available.';
+  const productsCommandImportCsvActionStatus = productsCommandImportDisabledReason
+    ? `Import CSV unavailable: ${productsCommandImportDisabledReason}`
+    : 'Import CSV available.';
+  const productsCommandStorefrontPageActionStatus = productsCommandStorefrontPageDisabledReason
+    ? `Storefront page unavailable: ${productsCommandStorefrontPageDisabledReason}`
+    : 'Storefront page available.';
+  const productsCommandSecondaryActionStatus = [
+    productsCommandCopyManifestActionStatus,
+    productsCommandDownloadJsonActionStatus,
+    productsCommandExportCsvActionStatus,
+    productsCommandCsvTemplateActionStatus,
+    productsCommandImportCsvActionStatus,
+    productsCommandStorefrontPageActionStatus,
+  ].join(' ');
+  const productsCommandSecondaryActionState = productsCommandExportDisabledReason &&
+    productsCommandCsvExportDisabledReason &&
+    productsCommandTemplateDisabledReason &&
+    productsCommandImportDisabledReason &&
+    productsCommandStorefrontPageDisabledReason
+    ? 'blocked'
+    : 'ready';
   const productsStorefrontApiActionStatusId = 'products-storefront-api-action-status';
   const productsStorefrontApiBusyDisabledReason = isProductsAccessBusy ? 'Product catalog is busy.' : '';
   const productsStorefrontApiSyncDisabledReason = productApiReady
@@ -5087,6 +5135,9 @@ function ProductsRoute() {
         aria-label="Import products CSV"
         onChange={(event) => void importProductsCsv(event)}
       />
+      <span id={productsCommandSecondaryActionStatusId} className="sr-only" data-testid="products-command-secondary-action-status" aria-live="polite">
+        {productsCommandSecondaryActionStatus}
+      </span>
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="products-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -5125,7 +5176,13 @@ function ProductsRoute() {
             <Button onClick={() => void loadProducts()} disabled={isProductsAccessBusy || !canViewProducts} title={!canViewProducts ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
-            <details className="group relative" data-testid="products-command-secondary-actions">
+            <details
+              className="group relative"
+              aria-describedby={productsCommandSecondaryActionStatusId}
+              data-action-state={productsCommandSecondaryActionState}
+              data-action-status={productsCommandSecondaryActionStatus}
+              data-testid="products-command-secondary-actions"
+            >
               <summary
                 className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
                 aria-label="More catalog actions"
@@ -5134,12 +5191,17 @@ function ProductsRoute() {
                 More actions
                 <span className="sr-only">Copy manifest, Download JSON, Export CSV, CSV template, Import CSV, and Storefront page</span>
               </summary>
-              <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56">
+              <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56" data-testid="products-command-secondary-action-menu">
                 <button
                   type="button"
                   onClick={() => void copyProductHandoff()}
-                  disabled={isProductsAccessBusy || !canExportProducts}
-                  title={!canExportProducts ? exportPermissionTitle : undefined}
+                  disabled={Boolean(productsCommandExportDisabledReason)}
+                  title={productsCommandExportDisabledReason || 'Copy product handoff manifest'}
+                  aria-label="Copy product handoff manifest"
+                  aria-describedby={productsCommandSecondaryActionStatusId}
+                  data-action-state={productsCommandExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={productsCommandCopyManifestActionStatus}
+                  data-disabled-reason={productsCommandExportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="products-command-copy-manifest"
                 >
@@ -5149,8 +5211,13 @@ function ProductsRoute() {
                 <button
                   type="button"
                   onClick={downloadProductHandoff}
-                  disabled={isProductsAccessBusy || !canExportProducts}
-                  title={!canExportProducts ? exportPermissionTitle : undefined}
+                  disabled={Boolean(productsCommandExportDisabledReason)}
+                  title={productsCommandExportDisabledReason || 'Download product handoff JSON'}
+                  aria-label="Download product handoff JSON"
+                  aria-describedby={productsCommandSecondaryActionStatusId}
+                  data-action-state={productsCommandExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={productsCommandDownloadJsonActionStatus}
+                  data-disabled-reason={productsCommandExportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="products-command-download-json"
                 >
@@ -5160,8 +5227,13 @@ function ProductsRoute() {
                 <button
                   type="button"
                   onClick={exportProductsCsv}
-                  disabled={filteredProducts.length === 0 || isProductsAccessBusy || !canExportProducts}
-                  title={!canExportProducts ? exportPermissionTitle : undefined}
+                  disabled={Boolean(productsCommandCsvExportDisabledReason)}
+                  title={productsCommandCsvExportDisabledReason || 'Export filtered products CSV'}
+                  aria-label="Export filtered products CSV"
+                  aria-describedby={productsCommandSecondaryActionStatusId}
+                  data-action-state={productsCommandCsvExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={productsCommandExportCsvActionStatus}
+                  data-disabled-reason={productsCommandCsvExportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="products-command-export-csv"
                 >
@@ -5171,8 +5243,13 @@ function ProductsRoute() {
                 <button
                   type="button"
                   onClick={downloadProductImportTemplate}
-                  disabled={!productCollection || isProductsAccessBusy || !canEditProducts}
-                  title={!canEditProducts ? editPermissionTitle : undefined}
+                  disabled={Boolean(productsCommandTemplateDisabledReason)}
+                  title={productsCommandTemplateDisabledReason || 'Download product CSV template'}
+                  aria-label="Download product CSV template"
+                  aria-describedby={productsCommandSecondaryActionStatusId}
+                  data-action-state={productsCommandTemplateDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={productsCommandCsvTemplateActionStatus}
+                  data-disabled-reason={productsCommandTemplateDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="products-command-csv-template"
                 >
@@ -5182,8 +5259,13 @@ function ProductsRoute() {
                 <button
                   type="button"
                   onClick={() => productImportInputRef.current?.click()}
-                  disabled={!productCollection || isProductsAccessBusy || !canEditProducts}
-                  title={!canEditProducts ? editPermissionTitle : undefined}
+                  disabled={Boolean(productsCommandImportDisabledReason)}
+                  title={productsCommandImportDisabledReason || 'Import products CSV'}
+                  aria-label="Import products CSV"
+                  aria-describedby={productsCommandSecondaryActionStatusId}
+                  data-action-state={productsCommandImportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={productsCommandImportCsvActionStatus}
+                  data-disabled-reason={productsCommandImportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="products-command-import-csv"
                 >
@@ -5193,8 +5275,13 @@ function ProductsRoute() {
                 <button
                   type="button"
                   onClick={openStorefrontPage}
-                  disabled={isProductsAccessBusy || !canEditPages}
-                  title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                  disabled={Boolean(productsCommandStorefrontPageDisabledReason)}
+                  title={productsCommandStorefrontPageDisabledReason || 'Create storefront page'}
+                  aria-label="Create storefront page"
+                  aria-describedby={productsCommandSecondaryActionStatusId}
+                  data-action-state={productsCommandStorefrontPageDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={productsCommandStorefrontPageActionStatus}
+                  data-disabled-reason={productsCommandStorefrontPageDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="products-command-storefront-page"
                 >
