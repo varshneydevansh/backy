@@ -1374,10 +1374,12 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-testid={`editor-component-item-action-status-${itemDomKey}`}') &&
       smokeSource.includes('savedReusableAction') &&
       smokeSource.includes('testComponentLibraryControls(client, tempReusableSectionId)') &&
+      smokeSource.includes('testComponentLibraryListReachability') &&
+      smokeSource.includes('lastAddHitTarget') &&
       smokeSource.includes('needsReusableSectionFixture') &&
       source.includes('const handleKeyboardAdd = (event: KeyboardEvent<HTMLDivElement>) =>') &&
       source.includes("'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"),
-    'Editor component library category filters must stay compact, primary-first, secondary-collapsed, keyboard-addable, visible, memoized with result counts, and action-status observable',
+    'Editor component library category filters must stay compact, primary-first, secondary-collapsed, keyboard-addable, visible, scroll-reachable, memoized with result counts, and action-status observable',
   );
   assert(typeSource.includes("defaultResponsive?: CanvasElement['responsive']") && typeSource.includes("responsive?: CanvasElement['responsive']"), 'Editor component presets must type root and child responsive override defaults');
   assert(typeSource.includes('export interface ComponentBindingSlot') && typeSource.includes('bindingSlots?: ComponentBindingSlot[]') && typeSource.includes('defaultBindingSlots?: ComponentBindingSlot[]'), 'Editor component presets must type binding-slot metadata for root and child preset fields');
@@ -13661,6 +13663,21 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
       hasLibrary: Boolean(library),
       libraryDensity: library?.getAttribute('data-component-library-density') || '',
       listDensity: list?.getAttribute('data-component-list-density') || '',
+      listMetrics: list instanceof HTMLElement
+        ? {
+          scrollTop: Math.round(list.scrollTop),
+          scrollHeight: Math.round(list.scrollHeight),
+          clientHeight: Math.round(list.clientHeight),
+          overflowY: getComputedStyle(list).overflowY,
+          itemCount: itemIds.length,
+        }
+        : {
+          scrollTop: 0,
+          scrollHeight: 0,
+          clientHeight: 0,
+          overflowY: '',
+          itemCount: 0,
+        },
       searchValue: document.querySelector('[data-testid="editor-component-search"]')?.value || '',
       itemIds,
       categories,
@@ -13823,6 +13840,104 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
     };
   })()`)
 );
+
+const readComponentListReachabilityState = async (client, label) => (
+  evaluate(client, `(() => {
+    const list = document.querySelector('[data-testid="editor-component-list"]');
+    const items = Array.from(list?.querySelectorAll('[data-component-library-item]') || []);
+    const listRect = list instanceof HTMLElement ? list.getBoundingClientRect() : null;
+    const firstItem = items[0];
+    const lastItem = items[items.length - 1];
+    const lastAddButton = lastItem?.querySelector('[data-component-add]');
+    const lastRect = lastItem instanceof HTMLElement ? lastItem.getBoundingClientRect() : null;
+    const lastAddRect = lastAddButton instanceof HTMLElement ? lastAddButton.getBoundingClientRect() : null;
+    const lastAddHit = lastAddRect
+      ? document.elementFromPoint(
+        lastAddRect.left + Math.min(Math.max(lastAddRect.width / 2, 1), Math.max(lastAddRect.width - 1, 1)),
+        lastAddRect.top + Math.min(Math.max(lastAddRect.height / 2, 1), Math.max(lastAddRect.height - 1, 1)),
+      )
+      : null;
+    const lastAddHitTarget = Boolean(
+      lastAddButton instanceof HTMLElement &&
+        lastAddHit instanceof Element &&
+        (lastAddHit === lastAddButton || lastAddButton.contains(lastAddHit)),
+    );
+    const lastVisible = Boolean(
+      listRect &&
+        lastRect &&
+        lastRect.top >= listRect.top - 1 &&
+        lastRect.bottom <= listRect.bottom + 1,
+    );
+
+    return {
+      label: ${JSON.stringify(label)},
+      exists: list instanceof HTMLElement,
+      itemCount: items.length,
+      firstItemId: firstItem?.getAttribute('data-component-library-item') || '',
+      lastItemId: lastItem?.getAttribute('data-component-library-item') || '',
+      scrollTop: list instanceof HTMLElement ? Math.round(list.scrollTop) : 0,
+      scrollHeight: list instanceof HTMLElement ? Math.round(list.scrollHeight) : 0,
+      clientHeight: list instanceof HTMLElement ? Math.round(list.clientHeight) : 0,
+      canScroll: list instanceof HTMLElement ? list.scrollHeight > list.clientHeight + 4 : false,
+      overflowY: list instanceof HTMLElement ? getComputedStyle(list).overflowY : '',
+      lastVisible,
+      lastAddExists: lastAddButton instanceof HTMLButtonElement,
+      lastAddDisabled: lastAddButton instanceof HTMLButtonElement ? lastAddButton.disabled : null,
+      lastAddState: lastAddButton?.getAttribute('data-action-state') || '',
+      lastAddStatus: lastAddButton?.getAttribute('data-action-status') || '',
+      lastAddHitTarget,
+      pageScrollY: Math.round(window.scrollY),
+    };
+  })()`)
+);
+
+const testComponentLibraryListReachability = async (client) => {
+  const before = await readComponentListReachabilityState(client, 'all components list before scroll');
+  assert(
+    before.exists &&
+      before.itemCount >= 20 &&
+      before.canScroll &&
+      /(auto|scroll)/.test(before.overflowY),
+    `Component library all-catalog list is not a bounded scroll area: ${JSON.stringify(before)}`,
+  );
+
+  const scrolled = await evaluate(client, `(() => {
+    const list = document.querySelector('[data-testid="editor-component-list"]');
+    const items = Array.from(list?.querySelectorAll('[data-component-library-item]') || []);
+    const lastItem = items[items.length - 1];
+    if (!(list instanceof HTMLElement) || !(lastItem instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-list-or-last-item' };
+    }
+    list.scrollTop = list.scrollHeight;
+    lastItem.scrollIntoView({ block: 'end', inline: 'nearest' });
+    return {
+      ok: true,
+      lastItemId: lastItem.getAttribute('data-component-library-item') || '',
+      scrollTop: Math.round(list.scrollTop),
+    };
+  })()`);
+  assert(scrolled?.ok, `Unable to scroll component library list to the last item: ${JSON.stringify(scrolled)}`);
+  await sleep(150);
+
+  const after = await readComponentListReachabilityState(client, 'all components list after scroll');
+  assert(
+    after.exists &&
+      after.lastItemId === before.lastItemId &&
+      after.scrollTop > before.scrollTop &&
+      after.lastVisible &&
+      after.lastAddExists &&
+      after.lastAddDisabled === false &&
+      after.lastAddState === 'ready' &&
+      after.lastAddHitTarget,
+    `Component library last item is not reachable and actionable after scrolling: ${JSON.stringify({ before, scrolled, after })}`,
+  );
+
+  return {
+    before,
+    scrolled,
+    after,
+  };
+};
 
 const readReusableSectionDraftDialogState = async (client, label) => (
   evaluate(client, `(() => {
@@ -14278,10 +14393,18 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   );
   assert(allComponents.itemIds.includes('html'), `HTML component missing from all library view: ${JSON.stringify(allComponents)}`);
   assert(allComponents.itemIds.includes('table'), `Table component missing from all library view: ${JSON.stringify(allComponents)}`);
+  assert(
+    allComponents.listMetrics.itemCount === allComponents.itemIds.length &&
+      allComponents.listMetrics.clientHeight > 0 &&
+      allComponents.listMetrics.scrollHeight > allComponents.listMetrics.clientHeight &&
+      /(auto|scroll)/.test(allComponents.listMetrics.overflowY),
+    `All component list should remain a bounded, internally scrollable catalog: ${JSON.stringify(allComponents.listMetrics)}`,
+  );
   for (const contentPreset of ['blog-post-card', 'latest-posts-section', 'category-list-section', 'related-content-section']) {
     assert(allComponents.itemIds.includes(contentPreset), `${contentPreset} content preset missing from all library view: ${JSON.stringify(allComponents)}`);
   }
   assert(allComponents.categories.some((category) => category.id === 'content'), `Content component category missing: ${JSON.stringify(allComponents)}`);
+  const allComponentsReachability = await testComponentLibraryListReachability(client);
   if (Number(initial.summary.saved) > 0) {
     assert(
       allComponents.itemIds.some((itemId) => itemId.startsWith('reusable-section:')) &&
@@ -14482,6 +14605,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
     initial,
     searchFiltered,
     layoutFiltered,
+    allComponentsReachability,
     dividerPreview,
     imagePreview,
     clearedPreview,
