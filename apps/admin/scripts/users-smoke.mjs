@@ -118,8 +118,22 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       'Users command center must lead with invite/import actions and move manifest/JSON handoff behind More actions.',
     );
   }
-	  assert(
-	    source.includes("const canViewUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', USER_PERMISSION_ROLE_DEFAULTS);") &&
+  assert(
+    source.includes("const usersCommandSecondaryActionStatusId = 'users-command-secondary-action-status';") &&
+      source.includes('data-testid="users-command-secondary-action-status"') &&
+      source.includes('aria-describedby={usersCommandSecondaryActionStatusId}') &&
+      source.includes('data-action-status={usersCommandSecondaryActionStatus}') &&
+      source.includes('data-action-status={usersCommandExportActionStatus}') &&
+      source.includes('data-action-status={usersCommandCsvTemplateActionStatus}') &&
+      source.includes('data-action-status={usersCommandImportModeActionStatus}') &&
+      source.includes('data-action-status={usersCommandCopyActionStatus}') &&
+      source.includes('data-action-status={usersCommandDownloadActionStatus}') &&
+      source.includes('data-disabled-reason={usersCommandExportDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={usersCommandCopyDisabledReason || undefined}'),
+    'Users command center secondary actions must expose ready/blocked action metadata for every overflow action.',
+  );
+  assert(
+    source.includes("const canViewUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', USER_PERMISSION_ROLE_DEFAULTS);") &&
       source.includes("const canCreateUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.create', USER_PERMISSION_ROLE_DEFAULTS);") &&
       source.includes("const canManageUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.manage', USER_PERMISSION_ROLE_DEFAULTS);") &&
       source.includes('const isUsersBusy = isLoading || isUserMutationBusy;') &&
@@ -127,7 +141,7 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       source.includes("const userImportActionDisabled = isUserMutationBusy || !canCreateUsers || (importMode === 'upsert' && !canManageUsers);") &&
       source.includes('disabled={userInviteActionDisabled}') &&
       source.includes('disabled={userImportActionDisabled}') &&
-      source.includes('disabled={userImportModeDisabled}') &&
+      source.includes('disabled={Boolean(usersCommandImportModeDisabledReason)}') &&
       source.includes('if (isUserMutationBusy) return;') &&
       !source.includes('const canViewUsers = !isPermissionMatrixPending') &&
       !source.includes('const canCreateUsers = !isPermissionMatrixPending') &&
@@ -3124,42 +3138,68 @@ const rollbackLatestUsersImport = async (client, email, restoredName) => {
 };
 
 const assertLayout = async (client, expectedName) => {
-  const layout = await evaluate(client, `(() => ({
-    width: window.innerWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-    hasCommandCenter: Boolean(document.querySelector('[data-testid="users-command-center"]')),
-    firstPrimaryActionText: document.querySelector('[data-testid="users-primary-actions"] button')?.textContent?.trim() || '',
-    secondaryActionsCollapsed: document.querySelector('[data-testid="users-secondary-actions"]') instanceof HTMLDetailsElement &&
-      document.querySelector('[data-testid="users-secondary-actions"]')?.open === false &&
-      document.querySelector('[data-testid="users-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
-    hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="users-more-actions"]')),
-    hasHandoffActionsNested: Boolean(
-      document.querySelector('[data-testid="users-secondary-action-menu"] [data-testid="users-command-copy-manifest"]') &&
-      document.querySelector('[data-testid="users-secondary-action-menu"] [data-testid="users-command-download-json"]'),
-    ),
-    controlMapCollapsed: document.querySelector('[data-testid="users-control-map-details"]') instanceof HTMLDetailsElement &&
-      document.querySelector('[data-testid="users-control-map-details"]')?.open === false &&
-      document.querySelector('[data-testid="users-control-map-details"]')?.getAttribute('data-default-collapsed') === 'true',
-    apiDetailsCollapsed: document.querySelector('[data-testid="users-api-details"]') instanceof HTMLDetailsElement &&
-      document.querySelector('[data-testid="users-api-details"]')?.open === false &&
-      document.querySelector('[data-testid="users-api-details"]')?.getAttribute('data-default-collapsed') === 'true',
-    hasControlMap: Boolean(document.querySelector('[data-testid="users-control-map"]')) &&
-      (document.querySelector('[data-testid="users-control-map-details"]')?.textContent || '').includes('Users control map') &&
-      (document.querySelector('[data-testid="users-control-map-details"]')?.textContent || '').includes('Show map'),
-    hasDirectory: document.body?.innerText?.includes('People directory') || document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
-    hasApi: document.body?.innerText?.includes('User access API') || false,
-    hasMembership: document.body?.innerText?.includes('Membership registration') || false,
-    hasMemberAuthBoundary: Boolean(document.querySelector('[data-testid="users-member-auth-boundary"]')) &&
-      document.body?.innerText?.includes('Member auth boundary') &&
-      document.body?.innerText?.includes('Credentialed member login') &&
-      document.body?.innerText?.includes('Self-service member portal'),
-    hasMemberAccessHandoff: Boolean(document.querySelector('[data-testid="users-member-access-handoff"]')) &&
-      document.body?.innerText?.includes('backy.member-access-handoff.v1') &&
-      document.body?.innerText?.includes('Copy member handoff') &&
-      document.body?.innerText?.includes('Editable regions') &&
-      document.body?.innerText?.includes('Data bindings'),
-    hasActivity: document.body?.innerText?.includes('Access activity') || false,
-  }))()`);
+  const layout = await evaluate(client, `(() => {
+    const secondaryActions = document.querySelector('[data-testid="users-secondary-actions"]');
+    const secondaryStatus = document.querySelector('[data-testid="users-command-secondary-action-status"]');
+    const secondaryStatusId = secondaryStatus?.id || '';
+    const readCommandAction = (testId) => {
+      const element = document.querySelector('[data-testid="' + testId + '"]');
+      return {
+        exists: Boolean(element),
+        actionState: element?.getAttribute('data-action-state') || '',
+        actionStatus: element?.getAttribute('data-action-status') || '',
+        disabledReason: element?.getAttribute('data-disabled-reason') || '',
+        describedBy: element?.getAttribute('aria-describedby') || '',
+      };
+    };
+
+    return {
+      width: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      hasCommandCenter: Boolean(document.querySelector('[data-testid="users-command-center"]')),
+      firstPrimaryActionText: document.querySelector('[data-testid="users-primary-actions"] button')?.textContent?.trim() || '',
+      secondaryActionsCollapsed: secondaryActions instanceof HTMLDetailsElement &&
+        secondaryActions.open === false &&
+        secondaryActions.getAttribute('data-default-collapsed') === 'true',
+      hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="users-more-actions"]')),
+      hasHandoffActionsNested: Boolean(
+        document.querySelector('[data-testid="users-secondary-action-menu"] [data-testid="users-command-copy-manifest"]') &&
+        document.querySelector('[data-testid="users-secondary-action-menu"] [data-testid="users-command-download-json"]'),
+      ),
+      secondaryActionStatusId: secondaryStatusId,
+      secondaryActionStatusText: secondaryStatus?.textContent?.trim() || '',
+      secondaryActionGroupStatus: secondaryActions?.getAttribute('data-action-status') || '',
+      secondaryActionGroupState: secondaryActions?.getAttribute('data-action-state') || '',
+      secondaryActionGroupDescribedBy: secondaryActions?.getAttribute('aria-describedby') || '',
+      exportAction: readCommandAction('users-command-export-csv'),
+      csvTemplateAction: readCommandAction('users-command-csv-template'),
+      importModeAction: readCommandAction('users-command-import-mode'),
+      copyAction: readCommandAction('users-command-copy-manifest'),
+      downloadAction: readCommandAction('users-command-download-json'),
+      controlMapCollapsed: document.querySelector('[data-testid="users-control-map-details"]') instanceof HTMLDetailsElement &&
+        document.querySelector('[data-testid="users-control-map-details"]')?.open === false &&
+        document.querySelector('[data-testid="users-control-map-details"]')?.getAttribute('data-default-collapsed') === 'true',
+      apiDetailsCollapsed: document.querySelector('[data-testid="users-api-details"]') instanceof HTMLDetailsElement &&
+        document.querySelector('[data-testid="users-api-details"]')?.open === false &&
+        document.querySelector('[data-testid="users-api-details"]')?.getAttribute('data-default-collapsed') === 'true',
+      hasControlMap: Boolean(document.querySelector('[data-testid="users-control-map"]')) &&
+        (document.querySelector('[data-testid="users-control-map-details"]')?.textContent || '').includes('Users control map') &&
+        (document.querySelector('[data-testid="users-control-map-details"]')?.textContent || '').includes('Show map'),
+      hasDirectory: document.body?.innerText?.includes('People directory') || document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
+      hasApi: document.body?.innerText?.includes('User access API') || false,
+      hasMembership: document.body?.innerText?.includes('Membership registration') || false,
+      hasMemberAuthBoundary: Boolean(document.querySelector('[data-testid="users-member-auth-boundary"]')) &&
+        document.body?.innerText?.includes('Member auth boundary') &&
+        document.body?.innerText?.includes('Credentialed member login') &&
+        document.body?.innerText?.includes('Self-service member portal'),
+      hasMemberAccessHandoff: Boolean(document.querySelector('[data-testid="users-member-access-handoff"]')) &&
+        document.body?.innerText?.includes('backy.member-access-handoff.v1') &&
+        document.body?.innerText?.includes('Copy member handoff') &&
+        document.body?.innerText?.includes('Editable regions') &&
+        document.body?.innerText?.includes('Data bindings'),
+      hasActivity: document.body?.innerText?.includes('Access activity') || false,
+    };
+  })()`);
   assert(layout.scrollWidth <= layout.width + 8, `Users page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.hasCommandCenter &&
@@ -3177,6 +3217,32 @@ const assertLayout = async (client, expectedName) => {
       layout.hasMemberAccessHandoff &&
       layout.hasActivity,
     `Users page missing expected regions or action hierarchy: ${JSON.stringify(layout)}`,
+  );
+  const secondaryCommandActions = [
+    layout.exportAction,
+    layout.csvTemplateAction,
+    layout.importModeAction,
+    layout.copyAction,
+    layout.downloadAction,
+  ];
+  assert(
+    layout.secondaryActionStatusId === 'users-command-secondary-action-status' &&
+      layout.secondaryActionGroupDescribedBy === layout.secondaryActionStatusId &&
+      layout.secondaryActionGroupState === 'ready' &&
+      layout.secondaryActionGroupStatus === layout.secondaryActionStatusText &&
+      layout.secondaryActionStatusText.includes('Export CSV available') &&
+      layout.secondaryActionStatusText.includes('CSV template available') &&
+      layout.secondaryActionStatusText.includes('Import duplicate handling available') &&
+      layout.secondaryActionStatusText.includes('Copy manifest available') &&
+      layout.secondaryActionStatusText.includes('Download JSON available') &&
+      secondaryCommandActions.every((action) => (
+        action.exists &&
+        action.actionState === 'ready' &&
+        action.actionStatus &&
+        action.disabledReason === '' &&
+        action.describedBy === layout.secondaryActionStatusId
+      )),
+    `Users command center secondary actions missing ready action metadata: ${JSON.stringify(layout)}`,
   );
   return layout;
 };

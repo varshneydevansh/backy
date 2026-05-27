@@ -401,7 +401,6 @@ function UsersListView() {
   const isUserMutationBusy = updatingUserId !== null || isBulkActionBusy || isImportingUsers || isPreviewingImport || isRollingBackImport;
   const isUsersBusy = isLoading || isUserMutationBusy;
   const userInviteActionDisabled = isUserMutationBusy || !canCreateUsers;
-  const userImportModeDisabled = isUserMutationBusy || !canCreateUsers;
   const userImportActionDisabled = isUserMutationBusy || !canCreateUsers || (importMode === 'upsert' && !canManageUsers);
   const routeNotice = routeSearch.notice || '';
   const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
@@ -1195,6 +1194,59 @@ function UsersListView() {
     initialSearch: routeSearch.query || '',
     pageSize: 10,
   });
+  const usersCommandSecondaryActionStatusId = 'users-command-secondary-action-status';
+  const usersCommandBusyDisabledReason = isUsersBusy
+    ? 'Users command actions are temporarily unavailable while Backy loads users.'
+    : '';
+  const usersCommandMutationDisabledReason = isUserMutationBusy ? 'User mutations are running.' : '';
+  const usersCommandViewDisabledReason = !canViewUsers
+    ? viewPermissionTitle || 'Your account needs users.view to use user handoff actions.'
+    : '';
+  const usersCommandCreateDisabledReason = !canCreateUsers
+    ? createPermissionTitle || 'Your account needs users.create to import users.'
+    : '';
+  const usersCommandExportDisabledReason =
+    usersCommandBusyDisabledReason ||
+    usersCommandViewDisabledReason ||
+    (data.length === 0 ? 'No visible users are available to export.' : '');
+  const usersCommandCsvTemplateDisabledReason =
+    usersCommandMutationDisabledReason || usersCommandCreateDisabledReason;
+  const usersCommandImportModeDisabledReason =
+    usersCommandMutationDisabledReason || usersCommandCreateDisabledReason;
+  const usersCommandCopyDisabledReason = usersCommandBusyDisabledReason || usersCommandViewDisabledReason;
+  const usersCommandDownloadDisabledReason = usersCommandBusyDisabledReason || usersCommandViewDisabledReason;
+  const usersCommandExportActionStatus = usersCommandExportDisabledReason
+    ? `Export CSV blocked: ${usersCommandExportDisabledReason}`
+    : `Export CSV available for ${data.length} visible user${data.length === 1 ? '' : 's'}.`;
+  const usersCommandCsvTemplateActionStatus = usersCommandCsvTemplateDisabledReason
+    ? `CSV template blocked: ${usersCommandCsvTemplateDisabledReason}`
+    : 'CSV template available.';
+  const usersCommandImportModeActionStatus = usersCommandImportModeDisabledReason
+    ? `Import duplicate handling blocked: ${usersCommandImportModeDisabledReason}`
+    : `Import duplicate handling available in ${importMode === 'upsert' ? 'update duplicates' : 'skip duplicates'} mode.`;
+  const usersCommandCopyActionStatus = usersCommandCopyDisabledReason
+    ? `Copy manifest blocked: ${usersCommandCopyDisabledReason}`
+    : `Copy manifest available for ${membershipSiteId}.`;
+  const usersCommandDownloadActionStatus = usersCommandDownloadDisabledReason
+    ? `Download JSON blocked: ${usersCommandDownloadDisabledReason}`
+    : `Download JSON available for ${membershipSiteId}.`;
+  const usersCommandSecondaryActionStatus = [
+    usersCommandExportActionStatus,
+    usersCommandCsvTemplateActionStatus,
+    usersCommandImportModeActionStatus,
+    usersCommandCopyActionStatus,
+    usersCommandDownloadActionStatus,
+  ].join(' ');
+  const usersCommandSecondaryActionState = [
+    usersCommandExportDisabledReason,
+    usersCommandCsvTemplateDisabledReason,
+    usersCommandImportModeDisabledReason,
+    usersCommandCopyDisabledReason,
+    usersCommandDownloadDisabledReason,
+  ].every(Boolean) ? 'blocked' : 'ready';
+  const usersCommandImportModeDescribedBy = userImportInlineError
+    ? `${usersCommandSecondaryActionStatusId} users-import-inline-error`
+    : usersCommandSecondaryActionStatusId;
 
   useEffect(() => {
     const routeQuery = routeSearch.query || '';
@@ -1575,6 +1627,14 @@ function UsersListView() {
           event.currentTarget.dataset.importDryRun === 'true',
         )}
       />
+      <span
+        id={usersCommandSecondaryActionStatusId}
+        className="sr-only"
+        data-testid="users-command-secondary-action-status"
+        aria-live="polite"
+      >
+        {usersCommandSecondaryActionStatus}
+      </span>
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="users-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -1641,7 +1701,14 @@ function UsersListView() {
                 Refresh users
               </Button>
             </div>
-            <details className="group relative self-start xl:self-end" data-testid="users-secondary-actions" data-default-collapsed="true">
+            <details
+              className="group relative self-start xl:self-end"
+              aria-describedby={usersCommandSecondaryActionStatusId}
+              data-action-state={usersCommandSecondaryActionState}
+              data-action-status={usersCommandSecondaryActionStatus}
+              data-testid="users-secondary-actions"
+              data-default-collapsed="true"
+            >
               <summary
                 className="inline-flex min-h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring group-open:bg-accent [&::-webkit-details-marker]:hidden"
                 data-testid="users-more-actions"
@@ -1654,11 +1721,15 @@ function UsersListView() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={data.length === 0 || isUsersBusy || !canViewUsers}
-                  title={!canViewUsers ? viewPermissionTitle : undefined}
+                  disabled={Boolean(usersCommandExportDisabledReason)}
+                  title={usersCommandExportDisabledReason || 'Export visible users as CSV.'}
                   onClick={handleExportUsers}
                   className="w-full justify-start"
                   iconStart={<Download className="size-4" />}
+                  aria-describedby={usersCommandSecondaryActionStatusId}
+                  data-action-state={usersCommandExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={usersCommandExportActionStatus}
+                  data-disabled-reason={usersCommandExportDisabledReason || undefined}
                   data-testid="users-command-export-csv"
                 >
                   Export CSV
@@ -1667,11 +1738,15 @@ function UsersListView() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={userInviteActionDisabled}
-                  title={!canCreateUsers ? createPermissionTitle : undefined}
+                  disabled={Boolean(usersCommandCsvTemplateDisabledReason)}
+                  title={usersCommandCsvTemplateDisabledReason || 'Download a user import CSV template.'}
                   onClick={downloadUserImportTemplate}
                   className="w-full justify-start"
                   iconStart={<Download className="size-4" />}
+                  aria-describedby={usersCommandSecondaryActionStatusId}
+                  data-action-state={usersCommandCsvTemplateDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={usersCommandCsvTemplateActionStatus}
+                  data-disabled-reason={usersCommandCsvTemplateDisabledReason || undefined}
                   data-testid="users-command-csv-template"
                 >
                   CSV template
@@ -1680,15 +1755,18 @@ function UsersListView() {
                   Import duplicate handling
                   <select
                     value={importMode}
-                    disabled={userImportModeDisabled}
-                    title={!canCreateUsers ? createPermissionTitle : undefined}
+                    disabled={Boolean(usersCommandImportModeDisabledReason)}
+                    title={usersCommandImportModeDisabledReason || 'Choose how CSV import handles duplicate emails.'}
                     onChange={(event) => {
                       setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create');
                       setUserImportInlineError(null);
                     }}
                     className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="User import duplicate handling"
-                    aria-describedby={userImportInlineError ? 'users-import-inline-error' : undefined}
+                    aria-describedby={usersCommandImportModeDescribedBy}
+                    data-action-state={usersCommandImportModeDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={usersCommandImportModeActionStatus}
+                    data-disabled-reason={usersCommandImportModeDisabledReason || undefined}
                     data-testid="users-command-import-mode"
                   >
                     <option value="create">Skip duplicates</option>
@@ -1699,10 +1777,15 @@ function UsersListView() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={isUsersBusy}
+                  disabled={Boolean(usersCommandCopyDisabledReason)}
+                  title={usersCommandCopyDisabledReason || 'Copy the users handoff manifest.'}
                   onClick={() => void copyUserApiText(userHandoffText, 'Users handoff manifest')}
                   className="w-full justify-start"
                   iconStart={<Copy className="size-4" />}
+                  aria-describedby={usersCommandSecondaryActionStatusId}
+                  data-action-state={usersCommandCopyDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={usersCommandCopyActionStatus}
+                  data-disabled-reason={usersCommandCopyDisabledReason || undefined}
                   data-testid="users-command-copy-manifest"
                 >
                   Copy manifest
@@ -1711,10 +1794,15 @@ function UsersListView() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  disabled={isUsersBusy}
+                  disabled={Boolean(usersCommandDownloadDisabledReason)}
+                  title={usersCommandDownloadDisabledReason || 'Download the users handoff manifest.'}
                   onClick={downloadUserHandoff}
                   className="w-full justify-start"
                   iconStart={<Download className="size-4" />}
+                  aria-describedby={usersCommandSecondaryActionStatusId}
+                  data-action-state={usersCommandDownloadDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={usersCommandDownloadActionStatus}
+                  data-disabled-reason={usersCommandDownloadDisabledReason || undefined}
                   data-testid="users-command-download-json"
                 >
                   Download JSON
@@ -1872,8 +1960,8 @@ function UsersListView() {
                   </Button>
 	                  <select
 	                    value={importMode}
-	                    disabled={userImportModeDisabled}
-	                    title={!canCreateUsers ? createPermissionTitle : undefined}
+	                    disabled={Boolean(usersCommandImportModeDisabledReason)}
+	                    title={usersCommandImportModeDisabledReason || 'Choose how CSV import handles duplicate emails.'}
                     onChange={(event) => {
                       setImportMode(event.target.value === 'upsert' ? 'upsert' : 'create');
                       setUserImportInlineError(null);
