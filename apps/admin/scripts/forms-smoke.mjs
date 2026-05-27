@@ -58,6 +58,33 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('data-default-collapsed="true"'),
     'Forms command center must keep low-frequency control maps and frontend-system details collapsed by default',
   );
+  {
+    const commandCenterBlockStart = source.indexOf('data-testid="forms-command-center"');
+    const commandCenterBlockEnd = source.indexOf('<div className="mt-5 grid gap-3', commandCenterBlockStart);
+    const commandCenterBlock = commandCenterBlockStart >= 0
+      ? source.slice(commandCenterBlockStart, commandCenterBlockEnd >= 0 ? commandCenterBlockEnd : commandCenterBlockStart + 6200)
+      : '';
+    const primaryActionsIndex = commandCenterBlock.indexOf('data-testid="forms-primary-actions"');
+    const createIndex = commandCenterBlock.indexOf('data-testid="forms-create-blank-button"');
+    const exportIndex = commandCenterBlock.indexOf('data-testid="forms-command-export-csv"');
+    const refreshIndex = commandCenterBlock.indexOf('data-testid="forms-command-refresh"');
+    const secondaryActionsIndex = commandCenterBlock.indexOf('data-testid="forms-secondary-actions"');
+    const moreActionsIndex = commandCenterBlock.indexOf('data-testid="forms-more-actions"');
+    const copyIndex = commandCenterBlock.indexOf('data-testid="forms-command-copy-manifest"');
+    const downloadIndex = commandCenterBlock.indexOf('data-testid="forms-command-download-json"');
+    assert(
+      primaryActionsIndex >= 0 &&
+        createIndex > primaryActionsIndex &&
+        exportIndex > createIndex &&
+        refreshIndex > exportIndex &&
+        secondaryActionsIndex > refreshIndex &&
+        commandCenterBlock.includes('data-default-collapsed="true"') &&
+        moreActionsIndex > secondaryActionsIndex &&
+        copyIndex > moreActionsIndex &&
+        downloadIndex > copyIndex,
+      'Forms command center must lead with create/export/refresh actions and move manifest/JSON handoff behind More actions.',
+    );
+  }
   assert(source.includes('persistenceCertification'), 'Forms handoff manifest must expose persistence certification metadata');
   assert(source.includes('scenarioEvidence'), 'Forms persistence handoff must expose scenario-level database evidence metadata');
   assert(
@@ -3025,6 +3052,8 @@ const assertLayout = async (client) => {
     const createStatus = document.querySelector('[data-testid="forms-create-action-status"]');
     const createStatusId = createStatus?.id || '';
     const createStatusText = (createStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const firstPrimaryActionText = (document.querySelector('[data-testid="forms-primary-actions"] button')?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const secondaryActions = document.querySelector('[data-testid="forms-secondary-actions"]');
     const commandCreate = document.querySelector('[data-testid="forms-create-blank-button"]');
     const templateCreate = document.querySelector('[data-testid="forms-template-create-blank-button"]');
     const frontendCreate = document.querySelector('[data-testid="forms-frontend-template-${FRONTEND_FORM_TEMPLATE_ID}"]');
@@ -3079,6 +3108,15 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="forms-command-center"]')),
+    firstPrimaryActionText,
+    secondaryActionsCollapsed: secondaryActions instanceof HTMLDetailsElement &&
+      secondaryActions.open === false &&
+      secondaryActions.getAttribute('data-default-collapsed') === 'true',
+    hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="forms-more-actions"]')),
+    hasCommandHandoffActionsNested: Boolean(
+      document.querySelector('[data-testid="forms-secondary-action-menu"] [data-testid="forms-command-copy-manifest"]') &&
+      document.querySelector('[data-testid="forms-secondary-action-menu"] [data-testid="forms-command-download-json"]'),
+    ),
     createActionStatus: {
       exists: createStatus instanceof HTMLElement,
       statusId: createStatusId,
@@ -3139,6 +3177,13 @@ const assertLayout = async (client) => {
   })()`);
   assert(layout.scrollWidth <= layout.width + 8, `Forms page has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(layout.hasControlMap && layout.hasFrontendContractSystems, `Forms command center collapsed maps are missing or open by default: ${JSON.stringify(layout)}`);
+  assert(
+    layout.firstPrimaryActionText === 'New blank form' &&
+      layout.secondaryActionsCollapsed &&
+      layout.hasMoreActionsTrigger &&
+      layout.hasCommandHandoffActionsNested,
+    `Forms command center action hierarchy regressed: ${JSON.stringify(layout)}`,
+  );
   assert(layout.createActionStatus.exists && layout.createActionStatus.statusExplainsState && layout.createActionStatus.allConsistent, `Forms create action status contract is missing or inconsistent: ${JSON.stringify(layout.createActionStatus)}`);
   assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasPersistenceCertification && layout.hasLaunchReadiness && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;

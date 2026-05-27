@@ -13,6 +13,7 @@ import {
   Filter,
   History,
   Inbox,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   Save,
@@ -3430,46 +3431,74 @@ function FormsRoute() {
               Control public form delivery, dynamic frontend rendering, spam protection, contact routing, collection writes, review queues, and submission exports.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-2 xl:items-end">
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end" data-testid="forms-primary-actions">
+              <Button
+                variant="primary"
+                onClick={() => void createBlankStandaloneForm()}
+                disabled={isFormsBusy || !canCreateForms}
+                title={formsCreateDisabledReason || undefined}
+                aria-describedby={formsCreateActionStatusId}
+                iconStart={<Plus className="size-4" />}
+                data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={formsCreateActionStatus}
+                data-disabled-reason={formsCreateDisabledReason || undefined}
+                data-target-site-id={activeSiteId}
+                data-testid="forms-create-blank-button"
+              >
+                {isCreatingTemplateId === 'blank' ? 'Creating...' : 'New blank form'}
+              </Button>
               <Button
                 variant="outline"
-                onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
-                disabled={isFormsBusy || !canExportForms}
+                onClick={handleExportFormsCatalog}
+                disabled={isFormsBusy || filteredForms.length === 0 || !canExportForms}
                 title={!canExportForms ? exportPermissionTitle : undefined}
-                iconStart={<Copy className="size-4" />}
+                iconStart={<Download className="size-4" />}
+                data-testid="forms-command-export-csv"
               >
-                Copy manifest
+                Export forms CSV
               </Button>
-            <Button variant="outline" onClick={downloadFormsHandoff} disabled={isFormsBusy || !canExportForms} title={!canExportForms ? exportPermissionTitle : undefined} iconStart={<Download className="size-4" />}>
-              Download JSON
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleExportFormsCatalog}
-              disabled={isFormsBusy || filteredForms.length === 0 || !canExportForms}
-              title={!canExportForms ? exportPermissionTitle : undefined}
-              iconStart={<Download className="size-4" />}
-            >
-              Export forms CSV
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => void createBlankStandaloneForm()}
-              disabled={isFormsBusy || !canCreateForms}
-              title={formsCreateDisabledReason || undefined}
-              aria-describedby={formsCreateActionStatusId}
-              iconStart={<Plus className="size-4" />}
-              data-action-state={formsCreateDisabledReason ? 'blocked' : 'ready'}
-              data-action-status={formsCreateActionStatus}
-              data-disabled-reason={formsCreateDisabledReason || undefined}
-              data-target-site-id={activeSiteId}
-              data-testid="forms-create-blank-button"
-            >
-              {isCreatingTemplateId === 'blank' ? 'Creating...' : 'New blank form'}
-            </Button>
-            <Button onClick={() => void loadForms()} disabled={isFormsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
-              Refresh forms
-            </Button>
+              <Button
+                onClick={() => void loadForms()}
+                disabled={isFormsBusy || !canViewForms}
+                title={!canViewForms ? viewPermissionTitle : undefined}
+                iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+                data-testid="forms-command-refresh"
+              >
+                Refresh forms
+              </Button>
+            </div>
+            <details className="self-start xl:self-end" data-testid="forms-secondary-actions" data-default-collapsed="true">
+              <summary
+                className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
+                data-testid="forms-more-actions"
+              >
+                <MoreHorizontal className="size-4" aria-hidden="true" />
+                More actions
+              </summary>
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2 shadow-sm" data-testid="forms-secondary-action-menu">
+                <Button
+                  variant="outline"
+                  onClick={() => void copyFormApiText(formsHandoffText, 'Forms handoff manifest')}
+                  disabled={isFormsBusy || !canExportForms}
+                  title={!canExportForms ? exportPermissionTitle : undefined}
+                  iconStart={<Copy className="size-4" />}
+                  data-testid="forms-command-copy-manifest"
+                >
+                  Copy manifest
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={downloadFormsHandoff}
+                  disabled={isFormsBusy || !canExportForms}
+                  title={!canExportForms ? exportPermissionTitle : undefined}
+                  iconStart={<Download className="size-4" />}
+                  data-testid="forms-command-download-json"
+                >
+                  Download JSON
+                </Button>
+              </div>
+            </details>
           </div>
         </div>
 
