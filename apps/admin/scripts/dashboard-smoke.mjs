@@ -54,10 +54,15 @@ const assertDashboardSourceContracts = () => {
     'const dashboardCommandActionStatusId =',
     'data-testid="dashboard-command-actions"',
     'data-testid="dashboard-command-actions-status"',
+    'data-testid="dashboard-primary-actions"',
+    'data-testid="dashboard-secondary-actions"',
+    'data-testid="dashboard-more-actions"',
+    'data-testid="dashboard-secondary-action-menu"',
     'data-testid="dashboard-command-refresh"',
     'data-testid="dashboard-command-copy-handoff"',
     'data-testid="dashboard-command-download-handoff"',
     'data-action-state={dashboardCommandActionState}',
+    'data-action-status={dashboardRefreshActionStatus}',
     'data-disabled-reason={dashboardCommandDisabledReason || undefined}',
     'data-testid="dashboard-control-map-details"',
     'aria-label={`${area.title}: ${area.detail}`}',
@@ -65,6 +70,31 @@ const assertDashboardSourceContracts = () => {
     'data-testid="dashboard-module-map-details"',
   ]) {
     assert(source.includes(snippet), `Dashboard handoff contract is missing ${snippet}`);
+  }
+  {
+    const commandCenterStart = source.indexOf('data-testid="dashboard-command-center"');
+    const commandCenterEnd = source.indexOf('<div className="grid gap-3 border-t border-border bg-background/55', commandCenterStart);
+    const commandCenterSource = commandCenterStart >= 0 && commandCenterEnd > commandCenterStart
+      ? source.slice(commandCenterStart, commandCenterEnd)
+      : '';
+    const primaryIndex = commandCenterSource.indexOf('data-testid="dashboard-primary-actions"');
+    const newSiteIndex = commandCenterSource.indexOf('dashboard-command-${action.label.toLowerCase().replace');
+    const refreshIndex = commandCenterSource.indexOf('data-testid="dashboard-command-refresh"');
+    const secondaryIndex = commandCenterSource.indexOf('data-testid="dashboard-secondary-actions"');
+    const moreIndex = commandCenterSource.indexOf('data-testid="dashboard-more-actions"');
+    const copyIndex = commandCenterSource.indexOf('data-testid="dashboard-command-copy-handoff"');
+    const downloadIndex = commandCenterSource.indexOf('data-testid="dashboard-command-download-handoff"');
+    assert(
+      primaryIndex >= 0 &&
+        newSiteIndex > primaryIndex &&
+        refreshIndex > newSiteIndex &&
+        secondaryIndex > refreshIndex &&
+        commandCenterSource.includes('data-testid="dashboard-secondary-actions" data-default-collapsed="true"') &&
+        moreIndex > secondaryIndex &&
+        copyIndex > moreIndex &&
+        downloadIndex > copyIndex,
+      'Dashboard command center must lead with workspace creation and Refresh before collapsed frontend handoff actions.',
+    );
   }
   assert(
     !source.includes('setInfrastructureDiagnostics([]);'),
@@ -709,16 +739,28 @@ const assertDashboardCommandActionStatus = async (client) => {
     state = await evaluate(client, `(() => {
       const group = document.querySelector('[data-testid="dashboard-command-actions"]');
       const status = document.querySelector('[data-testid="dashboard-command-actions-status"]');
-      const readButton = (testId) => {
-        const button = document.querySelector(\`[data-testid="\${testId}"]\`);
+      const primaryActions = document.querySelector('[data-testid="dashboard-primary-actions"]');
+      const primaryActionText = Array.from(primaryActions?.querySelectorAll('a, button') || [])
+        .map((node) => (node.textContent || '').replace(/\\s+/g, ' ').trim());
+      const primaryActionIds = Array.from(primaryActions?.querySelectorAll('[data-testid]') || [])
+        .map((node) => node.getAttribute('data-testid') || '')
+        .filter(Boolean);
+      const secondaryActions = document.querySelector('[data-testid="dashboard-secondary-actions"]');
+      const secondaryMenu = document.querySelector('[data-testid="dashboard-secondary-action-menu"]');
+      const readAction = (testId) => {
+        const element = document.querySelector(\`[data-testid="\${testId}"]\`);
+        const disabled = element instanceof HTMLButtonElement ? element.disabled : false;
         return {
-          found: Boolean(button),
-          label: button?.getAttribute('aria-label') || '',
-          describedBy: button?.getAttribute('aria-describedby') || '',
-          state: button?.getAttribute('data-action-state') || '',
-          disabledReason: button?.getAttribute('data-disabled-reason') || '',
-          disabled: button instanceof HTMLButtonElement ? button.disabled : null,
-          text: button?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+          found: Boolean(element),
+          label: element?.getAttribute('aria-label') || '',
+          href: element instanceof HTMLAnchorElement ? element.getAttribute('href') || '' : '',
+          describedBy: element?.getAttribute('aria-describedby') || '',
+          state: element?.getAttribute('data-action-state') || '',
+          status: element?.getAttribute('data-action-status') || '',
+          disabledReason: element?.getAttribute('data-disabled-reason') || '',
+          disabled,
+          nested: Boolean(secondaryMenu?.querySelector(\`[data-testid="\${testId}"]\`)),
+          text: element?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         };
       };
       return {
@@ -729,9 +771,18 @@ const assertDashboardCommandActionStatus = async (client) => {
         statusId: status?.id || '',
         statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         statusData: group?.getAttribute('data-action-status') || '',
-        refresh: readButton('dashboard-command-refresh'),
-        copy: readButton('dashboard-command-copy-handoff'),
-        download: readButton('dashboard-command-download-handoff'),
+        firstPrimaryActionText: primaryActionText[0] || '',
+        primaryActionIds,
+        secondaryCollapsed: secondaryActions instanceof HTMLDetailsElement &&
+          secondaryActions.open === false &&
+          secondaryActions.getAttribute('data-default-collapsed') === 'true',
+        hasMoreActions: Boolean(document.querySelector('[data-testid="dashboard-more-actions"]')),
+        newSite: readAction('dashboard-command-new-site'),
+        newPage: readAction('dashboard-command-new-page'),
+        newPost: readAction('dashboard-command-new-post'),
+        refresh: readAction('dashboard-command-refresh'),
+        copy: readAction('dashboard-command-copy-handoff'),
+        download: readAction('dashboard-command-download-handoff'),
       };
     })()`);
     if (state.actionState === 'ready') {
@@ -746,18 +797,31 @@ const assertDashboardCommandActionStatus = async (client) => {
   assert(state.describedBy === state.statusId, `Dashboard command action group must be described by its status: ${JSON.stringify(state)}`);
   assert(state.statusData === state.statusText, `Dashboard command action status data must mirror hidden copy: ${JSON.stringify(state)}`);
   assert(
-    state.statusText === 'Refresh data available. Copy handoff available. Download JSON available.' &&
+    state.statusText.includes('New site available.') &&
+      state.statusText.includes('New page available.') &&
+      state.statusText.includes('New post available.') &&
+      state.statusText.includes('Refresh data available.') &&
+      state.statusText.includes('Copy handoff available.') &&
+      state.statusText.includes('Download JSON available.') &&
       state.actionState === 'ready',
     `Dashboard command actions should summarize ready state: ${JSON.stringify(state)}`,
   );
-  for (const [key, button] of Object.entries({ refresh: state.refresh, copy: state.copy, download: state.download })) {
-    assert(button.found, `Dashboard ${key} command action was not found: ${JSON.stringify(state)}`);
-    assert(button.describedBy === state.statusId, `Dashboard ${key} command action must reference the shared status: ${JSON.stringify(state)}`);
-    assert(button.state === 'ready' && button.disabled === false && button.disabledReason === '', `Dashboard ${key} command action should be ready: ${JSON.stringify(state)}`);
+  assert(state.firstPrimaryActionText === 'New site', `Dashboard command center should lead with New site: ${JSON.stringify(state)}`);
+  assert(
+    ['dashboard-command-copy-handoff', 'dashboard-command-download-handoff'].every((testId) => !state.primaryActionIds.includes(testId)),
+    `Dashboard handoff actions should not be duplicated in primary actions: ${JSON.stringify(state)}`,
+  );
+  assert(state.secondaryCollapsed && state.hasMoreActions, `Dashboard handoff actions must be behind collapsed More actions: ${JSON.stringify(state)}`);
+  for (const [key, action] of Object.entries({ newSite: state.newSite, newPage: state.newPage, newPost: state.newPost, refresh: state.refresh, copy: state.copy, download: state.download })) {
+    assert(action.found, `Dashboard ${key} command action was not found: ${JSON.stringify(state)}`);
+    assert(action.describedBy === state.statusId, `Dashboard ${key} command action must reference the shared status: ${JSON.stringify(state)}`);
+    assert(action.state === 'ready' && action.disabled === false && action.disabledReason === '', `Dashboard ${key} command action should be ready: ${JSON.stringify(state)}`);
+    assert(action.status.length > 0, `Dashboard ${key} command action must publish action status: ${JSON.stringify(state)}`);
   }
   assert(state.refresh.label === 'Refresh dashboard command center data', `Dashboard refresh command label drifted: ${JSON.stringify(state)}`);
   assert(state.copy.label === 'Copy dashboard frontend handoff', `Dashboard copy command label drifted: ${JSON.stringify(state)}`);
   assert(state.download.label === 'Download dashboard frontend handoff JSON', `Dashboard download command label drifted: ${JSON.stringify(state)}`);
+  assert(state.copy.nested && state.download.nested, `Dashboard handoff actions must be nested inside More actions: ${JSON.stringify(state)}`);
   return state;
 };
 

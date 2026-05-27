@@ -23,6 +23,7 @@ import {
   Layout,
   Loader2,
   MessageSquare,
+  MoreHorizontal,
   Package,
   RefreshCw,
   Settings,
@@ -2204,10 +2205,28 @@ function Index() {
   const dashboardCommandDisabledReason = isDashboardBusy
     ? 'Dashboard data is refreshing.'
     : '';
-  const dashboardCommandActionState = dashboardCommandDisabledReason ? 'blocked' : 'ready';
-  const dashboardCommandActionStatus = dashboardCommandDisabledReason
-    ? `Refresh data unavailable: ${dashboardCommandDisabledReason} Copy handoff unavailable: ${dashboardCommandDisabledReason} Download JSON unavailable: ${dashboardCommandDisabledReason}`
-    : 'Refresh data available. Copy handoff available. Download JSON available.';
+  const dashboardCommandActionState = dashboardCommandDisabledReason ? 'busy' : 'ready';
+  const dashboardPrimaryCommandActions = dashboardWorkflowActions.filter((action) => (
+    action.label === 'New site' || action.label === 'New page' || action.label === 'New post'
+  ));
+  const dashboardPrimaryCommandActionStatus = dashboardPrimaryCommandActions.length > 0
+    ? dashboardPrimaryCommandActions.map((action) => `${action.label} available.`).join(' ')
+    : 'No workspace creation actions available for this role.';
+  const dashboardRefreshActionStatus = dashboardCommandDisabledReason
+    ? `Refresh data unavailable: ${dashboardCommandDisabledReason}`
+    : 'Refresh data available.';
+  const dashboardCopyHandoffActionStatus = dashboardCommandDisabledReason
+    ? `Copy handoff unavailable: ${dashboardCommandDisabledReason}`
+    : 'Copy handoff available.';
+  const dashboardDownloadHandoffActionStatus = dashboardCommandDisabledReason
+    ? `Download JSON unavailable: ${dashboardCommandDisabledReason}`
+    : 'Download JSON available.';
+  const dashboardCommandActionStatus = [
+    dashboardPrimaryCommandActionStatus,
+    dashboardRefreshActionStatus,
+    dashboardCopyHandoffActionStatus,
+    dashboardDownloadHandoffActionStatus,
+  ].join(' ');
 
   return (
     <PageShell
@@ -2262,7 +2281,7 @@ function Index() {
               </p>
             </div>
             <div
-              className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end"
+              className="flex flex-col gap-2 lg:items-end"
               role="group"
               aria-label="Dashboard command actions"
               aria-describedby={dashboardCommandActionStatusId}
@@ -2277,51 +2296,88 @@ function Index() {
               >
                 {dashboardCommandActionStatus}
               </span>
-              <button
-                type="button"
-                onClick={() => void loadDashboard()}
-                disabled={isDashboardBusy}
-                aria-label="Refresh dashboard command center data"
-                aria-describedby={dashboardCommandActionStatusId}
-                data-testid="dashboard-command-refresh"
-                data-action-state={dashboardCommandActionState}
-                data-disabled-reason={dashboardCommandDisabledReason || undefined}
-                title={dashboardCommandDisabledReason || 'Refresh dashboard data'}
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isDashboardBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-                Refresh data
-              </button>
-              <button
-                type="button"
-                onClick={() => void copyDashboardText(frontendHandoffText, 'Frontend handoff manifest')}
-                disabled={isDashboardBusy}
-                aria-label="Copy dashboard frontend handoff"
-                aria-describedby={dashboardCommandActionStatusId}
-                data-testid="dashboard-command-copy-handoff"
-                data-action-state={dashboardCommandActionState}
-                data-disabled-reason={dashboardCommandDisabledReason || undefined}
-                title={dashboardCommandDisabledReason || 'Copy frontend handoff manifest'}
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Copy className="size-4" />
-                Copy handoff
-              </button>
-              <button
-                type="button"
-                onClick={downloadFrontendHandoff}
-                disabled={isDashboardBusy}
-                aria-label="Download dashboard frontend handoff JSON"
-                aria-describedby={dashboardCommandActionStatusId}
-                data-testid="dashboard-command-download-handoff"
-                data-action-state={dashboardCommandActionState}
-                data-disabled-reason={dashboardCommandDisabledReason || undefined}
-                title={dashboardCommandDisabledReason || 'Download frontend handoff JSON'}
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Download className="size-4" />
-                Download JSON
-              </button>
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end" data-testid="dashboard-primary-actions">
+                {dashboardPrimaryCommandActions.map((action, index) => (
+                  <Link
+                    key={action.label}
+                    to={action.to}
+                    search={getDashboardRouteSearch(action.to)}
+                    aria-describedby={dashboardCommandActionStatusId}
+                    data-testid={`dashboard-command-${action.label.toLowerCase().replace(/\s+/g, '-')}`}
+                    data-action-state="ready"
+                    data-action-status={`${action.label} available.`}
+                    data-command-priority={index === 0 ? 'primary' : 'secondary'}
+                    className={cn(
+                      'inline-flex min-h-11 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition',
+                      index === 0
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'border border-border bg-background text-foreground hover:bg-accent',
+                    )}
+                  >
+                    <action.icon className="size-4" />
+                    {action.label}
+                  </Link>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => void loadDashboard()}
+                  disabled={isDashboardBusy}
+                  aria-label="Refresh dashboard command center data"
+                  aria-describedby={dashboardCommandActionStatusId}
+                  data-testid="dashboard-command-refresh"
+                  data-action-state={dashboardCommandActionState}
+                  data-action-status={dashboardRefreshActionStatus}
+                  data-disabled-reason={dashboardCommandDisabledReason || undefined}
+                  title={dashboardCommandDisabledReason || 'Refresh dashboard data'}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isDashboardBusy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                  Refresh
+                </button>
+              </div>
+              <details className="self-start lg:self-end" data-testid="dashboard-secondary-actions" data-default-collapsed="true">
+                <summary
+                  className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
+                  data-testid="dashboard-more-actions"
+                >
+                  <MoreHorizontal className="size-4" aria-hidden="true" />
+                  More actions
+                </summary>
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2 shadow-sm" data-testid="dashboard-secondary-action-menu">
+                  <button
+                    type="button"
+                    onClick={() => void copyDashboardText(frontendHandoffText, 'Frontend handoff manifest')}
+                    disabled={isDashboardBusy}
+                    aria-label="Copy dashboard frontend handoff"
+                    aria-describedby={dashboardCommandActionStatusId}
+                    data-testid="dashboard-command-copy-handoff"
+                    data-action-state={dashboardCommandActionState}
+                    data-action-status={dashboardCopyHandoffActionStatus}
+                    data-disabled-reason={dashboardCommandDisabledReason || undefined}
+                    title={dashboardCommandDisabledReason || 'Copy frontend handoff manifest'}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy handoff
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadFrontendHandoff}
+                    disabled={isDashboardBusy}
+                    aria-label="Download dashboard frontend handoff JSON"
+                    aria-describedby={dashboardCommandActionStatusId}
+                    data-testid="dashboard-command-download-handoff"
+                    data-action-state={dashboardCommandActionState}
+                    data-action-status={dashboardDownloadHandoffActionStatus}
+                    data-disabled-reason={dashboardCommandDisabledReason || undefined}
+                    title={dashboardCommandDisabledReason || 'Download frontend handoff JSON'}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Download className="size-3.5" />
+                    Download JSON
+                  </button>
+                </div>
+              </details>
             </div>
           </div>
 
