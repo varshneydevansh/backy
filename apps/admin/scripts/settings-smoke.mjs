@@ -387,6 +387,9 @@ const assertSettingsSourceContracts = () => {
     'includesSecretValues: false',
     "copySettingsHandoffText(settingsLaunchReadinessText, 'Settings launch readiness handoff')",
     'data-testid="settings-backy-completion-status"',
+    'data-testid="settings-backy-completion-closure-summary"',
+    'settings-backy-completion-closure-gate-${gate.key}',
+    'settings-backy-completion-closure-copy-${gate.key}',
     'data-testid="settings-backy-completion-status-details"',
     'data-testid="settings-backy-completion-status-copy-button"',
     'data-testid="settings-backy-completion-status-action-plan"',
@@ -411,6 +414,14 @@ const assertSettingsSourceContracts = () => {
     'freshnessWindow: COMPLETION_ARTIFACT_FRESHNESS_WINDOW',
     'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS',
     'BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES',
+    'getSettingsCompletionGateCopyActionStatus',
+    'data-gate-status={gate.status}',
+    'data-affected-surfaces={affectedSurfaces.join',
+    'relatedRunbookLabels',
+    'artifactPaths',
+    'verifierCommands',
+    'Closes {affectedSurfaces.join',
+    'Copy command',
     'certifiedAtReady',
     'artifactFreshReady',
     'evidenceArtifacts: SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS',
@@ -2469,6 +2480,24 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     const providerEnvTemplateText = document.querySelector('[data-testid="settings-provider-certification-env-template-body"]')?.textContent || '';
     const providerCommandText = document.querySelector('[data-testid="settings-provider-certification-command"]')?.textContent || '';
     const completionStatusText = document.querySelector('[data-testid="settings-backy-completion-status"]')?.textContent || '';
+    const completionClosureText = document.querySelector('[data-testid="settings-backy-completion-closure-summary"]')?.textContent || '';
+    const completionSettingsClosure = document.querySelector('[data-testid="settings-backy-completion-closure-gate-settings-provider-certification"]');
+    const completionCommerceClosure = document.querySelector('[data-testid="settings-backy-completion-closure-gate-commerce-provider-certification"]');
+    const completionSettingsClosureCopy = document.querySelector('[data-testid="settings-backy-completion-closure-copy-settings-provider-certification"]');
+    const completionCommerceClosureCopy = document.querySelector('[data-testid="settings-backy-completion-closure-copy-commerce-provider-certification"]');
+    const completionGateStatuses = ['ready-to-run', 'blocked-missing-inputs'];
+    const closureCopyActionReady = (button, label) => {
+      const actionState = button?.getAttribute('data-action-state') || '';
+      const actionStatus = button?.getAttribute('data-action-status') || '';
+      const disabledReason = button?.getAttribute('data-disabled-reason') || '';
+
+      return ['ready', 'blocked'].includes(actionState) &&
+        actionStatus.includes('Copy ' + label + ' command') &&
+        (
+          (actionState === 'ready' && actionStatus.includes('available') && disabledReason === '') ||
+          (actionState === 'blocked' && actionStatus.includes('unavailable') && disabledReason.length > 0)
+        );
+    };
     const completionRunbooksText = document.querySelector('[data-testid="settings-backy-completion-status-runbooks"]')?.textContent || '';
     const commerceRuntimeCard = document.querySelector('[data-testid="settings-runtime-card-commerce-runtime"]');
     const commerceRuntimeExtraDetails = document.querySelector('[data-testid="settings-runtime-card-commerce-runtime-extra-details"]');
@@ -2530,6 +2559,21 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       completionStatusText.includes('backy.completion-status.v1') &&
       completionStatusText.includes('data.contract.completionStatus') &&
       completionStatusText.includes('x-backy-completion-status'),
+    hasBackyCompletionClosureSummary: Boolean(document.querySelector('[data-testid="settings-backy-completion-closure-summary"]')) &&
+      document.querySelector('[data-testid="settings-backy-completion-closure-summary"]')?.getAttribute('data-partial-count') === '4' &&
+      completionClosureText.includes('Settings live provider certification') &&
+      completionClosureText.includes('Commerce live provider certification') &&
+      completionClosureText.includes('Closes /settings, Settings admin APIs') &&
+      completionClosureText.includes('Closes /products, /orders') &&
+      completionClosureText.includes('artifacts/backy-settings-provider-certification.json') &&
+      completionClosureText.includes('artifacts/backy-commerce-provider-certification.json') &&
+      completionClosureText.includes('npm run doctor:release-certification') &&
+      completionGateStatuses.includes(completionSettingsClosure?.getAttribute('data-gate-status') || '') &&
+      completionSettingsClosure?.getAttribute('data-affected-surfaces') === '/settings, Settings admin APIs' &&
+      completionGateStatuses.includes(completionCommerceClosure?.getAttribute('data-gate-status') || '') &&
+      completionCommerceClosure?.getAttribute('data-affected-surfaces') === '/products, /orders' &&
+      closureCopyActionReady(completionSettingsClosureCopy, 'Settings live provider certification') &&
+      closureCopyActionReady(completionCommerceClosureCopy, 'Commerce live provider certification'),
     hasBackyCompletionStatusDetailsCollapsed: document.querySelector('[data-testid="settings-backy-completion-status-details"]')?.tagName === 'DETAILS' &&
       document.querySelector('[data-testid="settings-backy-completion-status-details"]')?.getAttribute('data-default-collapsed') === 'true' &&
       document.querySelector('[data-testid="settings-backy-completion-status-details"]')?.hasAttribute('open') === false,
@@ -2705,6 +2749,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
       infrastructureState.hasReleaseCertificationSettingsGate &&
       infrastructureState.hasReleaseCertificationCommerceGate &&
       infrastructureState.hasBackyCompletionStatus &&
+      infrastructureState.hasBackyCompletionClosureSummary &&
       infrastructureState.hasBackyCompletionStatusDetailsCollapsed &&
       infrastructureState.hasBackyCompletionStatusCopyButton &&
       infrastructureState.hasBackyCompletionStatusActionPlan &&

@@ -2799,6 +2799,11 @@ function SettingsPage() {
   const settingsSaveActionStatus = settingsSaveDisabledReason
     ? `${saveButtonLabel} unavailable: ${settingsSaveDisabledReason}`
     : `${saveButtonLabel} available.`;
+  const getSettingsCompletionGateCopyActionStatus = (gate: BackyCompletionGate) => (
+    settingsConfigureDisabledReason
+      ? `Copy ${gate.label} command unavailable: ${settingsConfigureDisabledReason}`
+      : `Copy ${gate.label} command available.`
+  );
   const settingsPreviousTabActionStatus = `Previous section available: ${previousSettingsTab.name}.`;
   const settingsNextTabActionStatus = `Next section available: ${nextSettingsTab.name}.`;
   const settingsWorkbarActionStatus = [
@@ -4511,6 +4516,84 @@ function SettingsPage() {
                     <div className="mt-1 break-words font-mono text-[11px] leading-4 text-foreground">{item.value}</div>
                   </div>
                 ))}
+              </div>
+              <div
+                className="mt-3 grid gap-2 lg:grid-cols-2"
+                data-testid="settings-backy-completion-closure-summary"
+                data-partial-count={settingsBackyCompletionStatus.audit.partial}
+              >
+                {settingsBackyCompletionStatus.gates.map((gate) => {
+                  const affectedSurfaces = settingsBackyCompletionStatus.surfaces
+                    .filter((surface) => surface.blocker === gate.key)
+                    .map((surface) => surface.label);
+                  const relatedRunbooks = settingsBackyCompletionStatus.surfaceRunbooks.filter((runbook) => runbook.gate === gate.key);
+                  const relatedRunbookLabels = relatedRunbooks.map((runbook) => runbook.label);
+                  const artifactPaths = uniqueTextValues(relatedRunbooks.flatMap((runbook) => runbook.evidenceArtifacts.map((artifact) => artifact.path)));
+                  const verifierCommands = uniqueTextValues(relatedRunbooks.map((runbook) => runbook.artifactVerifier.command));
+                  const copyActionStatus = getSettingsCompletionGateCopyActionStatus(gate);
+
+                  return (
+                    <div
+                      key={gate.key}
+                      className="rounded-md border border-border bg-background px-3 py-3"
+                      data-testid={`settings-backy-completion-closure-gate-${gate.key}`}
+                      data-gate-status={gate.status}
+                      data-affected-surfaces={affectedSurfaces.join(', ')}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-xs font-semibold text-foreground">{gate.label}</h4>
+                            <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', BACKY_COMPLETION_GATE_STYLES[gate.status])}>
+                              {BACKY_COMPLETION_GATE_LABELS[gate.status]}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            Closes {affectedSurfaces.join(', ')} after the redacted provider artifact passes the doctor.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={Boolean(settingsConfigureDisabledReason)}
+                          title={settingsConfigureDisabledReason || undefined}
+                          aria-label={`Copy ${gate.label} certification command`}
+                          data-testid={`settings-backy-completion-closure-copy-${gate.key}`}
+                          data-action-state={settingsConfigureDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={copyActionStatus}
+                          data-disabled-reason={settingsConfigureDisabledReason || undefined}
+                          onClick={() => void copySettingsHandoffText(gate.command, `${gate.label} certification command`)}
+                        >
+                          Copy command
+                        </Button>
+                      </div>
+                      <div className="mt-2 break-words rounded border border-border bg-muted/20 px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground">
+                        {gate.command}
+                      </div>
+                      <div className="mt-2 grid gap-2 md:grid-cols-3">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Runbooks</div>
+                          <div className="mt-1 break-words font-mono text-[10px] leading-4 text-foreground">
+                            {relatedRunbookLabels.length > 0 ? relatedRunbookLabels.join(', ') : 'No mapped runbooks'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Artifacts</div>
+                          <div className="mt-1 break-words font-mono text-[10px] leading-4 text-foreground">
+                            {artifactPaths.length > 0 ? artifactPaths.join(', ') : 'Attach certification artifact'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Verifier</div>
+                          <div className="mt-1 break-words font-mono text-[10px] leading-4 text-foreground">
+                            {verifierCommands.length > 0 ? verifierCommands.join(', ') : 'npm run doctor:release-certification'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               <details className="mt-3 rounded-md border border-border bg-muted/10 p-3" data-testid="settings-backy-completion-status-details" data-default-collapsed="true">
                 <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 rounded-md focus-ring">
