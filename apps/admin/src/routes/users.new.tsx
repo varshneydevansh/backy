@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Code2, Copy, Download, KeyRound, Mail, Shield, UserPlus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Clock3, Code2, Copy, Download, KeyRound, Mail, MoreHorizontal, Shield, UserPlus } from 'lucide-react';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
@@ -137,17 +137,27 @@ function NewUserPage() {
     ? (isLoading ? 'Sending invite...' : 'Send invite')
     : (isLoading ? 'Creating user...' : 'Create user');
   const inviteSubmitActionStatusId = 'user-invite-submit-action-status';
+  const inviteHandoffActionStatusId = 'user-invite-handoff-action-status';
   const inviteSubmitDisabledReason = isInviteBusy
     ? 'Invite creation is already running.'
     : !canCreateUsers
       ? createPermissionTitle || 'Your account cannot invite or create users.'
       : '';
+  const inviteHandoffDisabledReason = isInviteBusy ? 'Invite creation is already running.' : '';
   const inviteSubmitActionState = inviteSubmitDisabledReason || !canSubmit ? 'blocked' : 'ready';
   const inviteSubmitActionStatus = inviteSubmitDisabledReason
     ? `${submitActionLabel} unavailable: ${inviteSubmitDisabledReason}`
     : !canSubmit
       ? `${submitActionLabel} needs a full name and a valid email address.`
       : `${submitActionLabel} available for ${formData.email.trim().toLowerCase()}.`;
+  const inviteHandoffActionState = inviteHandoffDisabledReason ? 'busy' : 'ready';
+  const inviteCopyHandoffActionStatus = inviteHandoffDisabledReason
+    ? `Copy manifest unavailable: ${inviteHandoffDisabledReason}`
+    : 'Copy manifest available.';
+  const inviteDownloadHandoffActionStatus = inviteHandoffDisabledReason
+    ? `Download JSON unavailable: ${inviteHandoffDisabledReason}`
+    : 'Download JSON available.';
+  const inviteHandoffActionStatus = `${inviteCopyHandoffActionStatus} ${inviteDownloadHandoffActionStatus}`;
   const inviteReadiness = useMemo(() => {
     const checks = [
       {
@@ -467,6 +477,9 @@ function NewUserPage() {
         <span id={inviteSubmitActionStatusId} className="sr-only" data-testid="user-invite-submit-action-status" aria-live="polite">
           {inviteSubmitActionStatus}
         </span>
+        <span id={inviteHandoffActionStatusId} className="sr-only" data-testid="user-invite-handoff-action-status" aria-live="polite">
+          {inviteHandoffActionStatus}
+        </span>
         <section className="rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="user-invite-command-center">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
@@ -485,42 +498,67 @@ function NewUserPage() {
                 Create collaborators with explicit role scope, lifecycle state, and API payload visibility before they touch a site.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void copyInviteText(inviteHandoffText, 'Invite handoff manifest')}
-                disabled={isInviteBusy}
-                iconStart={<Copy className="size-4" />}
-              >
-                Copy manifest
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={downloadInviteHandoff}
-                disabled={isInviteBusy}
-                iconStart={<Download className="size-4" />}
-              >
-                Download JSON
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={isInviteBusy || !canCreateUsers}
-                title={inviteSubmitDisabledReason || undefined}
-                aria-describedby={inviteSubmitActionStatusId}
-                data-action-state={inviteSubmitActionState}
-                data-action-status={inviteSubmitActionStatus}
-                data-disabled-reason={inviteSubmitDisabledReason || undefined}
-                data-target-email={formData.email.trim().toLowerCase() || undefined}
-                data-target-role={formData.role}
-                data-target-status={formData.status}
-                iconStart={<UserPlus className="size-4" />}
-                data-testid="user-invite-submit-primary"
-              >
-                {submitLabel}
-              </Button>
+            <div className="flex flex-col gap-2 xl:items-end">
+              <div className="flex flex-wrap items-center gap-2 xl:justify-end" data-testid="user-invite-primary-actions">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={isInviteBusy || !canCreateUsers}
+                  title={inviteSubmitDisabledReason || undefined}
+                  aria-describedby={inviteSubmitActionStatusId}
+                  data-action-state={inviteSubmitActionState}
+                  data-action-status={inviteSubmitActionStatus}
+                  data-disabled-reason={inviteSubmitDisabledReason || undefined}
+                  data-target-email={formData.email.trim().toLowerCase() || undefined}
+                  data-target-role={formData.role}
+                  data-target-status={formData.status}
+                  iconStart={<UserPlus className="size-4" />}
+                  data-testid="user-invite-submit-primary"
+                >
+                  {submitLabel}
+                </Button>
+              </div>
+              <details className="self-start xl:self-end" data-testid="user-invite-secondary-actions" data-default-collapsed="true">
+                <summary
+                  className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
+                  data-testid="user-invite-more-actions"
+                >
+                  <MoreHorizontal className="size-4" aria-hidden="true" />
+                  More actions
+                </summary>
+                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2 shadow-sm" data-testid="user-invite-secondary-action-menu">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void copyInviteText(inviteHandoffText, 'Invite handoff manifest')}
+                    disabled={isInviteBusy}
+                    title={inviteHandoffDisabledReason || undefined}
+                    aria-describedby={inviteHandoffActionStatusId}
+                    data-action-state={inviteHandoffActionState}
+                    data-action-status={inviteCopyHandoffActionStatus}
+                    data-disabled-reason={inviteHandoffDisabledReason || undefined}
+                    data-testid="user-invite-copy-manifest"
+                    iconStart={<Copy className="size-4" />}
+                  >
+                    Copy manifest
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={downloadInviteHandoff}
+                    disabled={isInviteBusy}
+                    title={inviteHandoffDisabledReason || undefined}
+                    aria-describedby={inviteHandoffActionStatusId}
+                    data-action-state={inviteHandoffActionState}
+                    data-action-status={inviteDownloadHandoffActionStatus}
+                    data-disabled-reason={inviteHandoffDisabledReason || undefined}
+                    data-testid="user-invite-download-json"
+                    iconStart={<Download className="size-4" />}
+                  >
+                    Download JSON
+                  </Button>
+                </div>
+              </details>
             </div>
           </div>
 

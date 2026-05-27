@@ -139,6 +139,31 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       createSource.includes('createdInvite.email || formData.email.trim().toLowerCase()'),
     'User invite success must return to the directory with the created account focused by search query.',
   );
+  {
+    const inviteCommandCenterStart = createSource.indexOf('data-testid="user-invite-command-center"');
+    const inviteCommandCenterEnd = createSource.indexOf('{noticeMessage && (', inviteCommandCenterStart);
+    const inviteCommandCenterBlock = inviteCommandCenterStart >= 0
+      ? createSource.slice(inviteCommandCenterStart, inviteCommandCenterEnd >= 0 ? inviteCommandCenterEnd : inviteCommandCenterStart + 3600)
+      : '';
+    const primaryActionsIndex = inviteCommandCenterBlock.indexOf('data-testid="user-invite-primary-actions"');
+    const submitIndex = inviteCommandCenterBlock.indexOf('data-testid="user-invite-submit-primary"');
+    const secondaryActionsIndex = inviteCommandCenterBlock.indexOf('data-testid="user-invite-secondary-actions"');
+    const moreActionsIndex = inviteCommandCenterBlock.indexOf('data-testid="user-invite-more-actions"');
+    const copyIndex = inviteCommandCenterBlock.indexOf('data-testid="user-invite-copy-manifest"');
+    const downloadIndex = inviteCommandCenterBlock.indexOf('data-testid="user-invite-download-json"');
+    assert(
+      createSource.includes("const inviteHandoffActionStatusId = 'user-invite-handoff-action-status';") &&
+        createSource.includes('data-testid="user-invite-handoff-action-status"') &&
+        primaryActionsIndex >= 0 &&
+        submitIndex > primaryActionsIndex &&
+        secondaryActionsIndex > submitIndex &&
+        inviteCommandCenterBlock.includes('data-testid="user-invite-secondary-actions" data-default-collapsed="true"') &&
+        moreActionsIndex > secondaryActionsIndex &&
+        copyIndex > moreActionsIndex &&
+        downloadIndex > copyIndex,
+      'User invite command center must lead with Send invite/Create user and move manifest/JSON handoff behind More actions.',
+    );
+  }
   assert(
     source.includes("template: 'member-login'") &&
       source.includes("template: 'member-account'") &&
@@ -1047,6 +1072,72 @@ const navigateToUsers = (client, expectedText = 'Users command center') => {
     }))()`,
     'Users page',
   );
+};
+
+const assertInviteCommandCenterLayout = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const commandCenter = document.querySelector('[data-testid="user-invite-command-center"]');
+    const primaryActions = document.querySelector('[data-testid="user-invite-primary-actions"]');
+    const primaryActionText = Array.from(primaryActions?.querySelectorAll('button') || [])
+      .map((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim());
+    const primaryActionIds = Array.from(primaryActions?.querySelectorAll('[data-testid]') || [])
+      .map((element) => element.getAttribute('data-testid') || '')
+      .filter(Boolean);
+    const secondaryActions = document.querySelector('[data-testid="user-invite-secondary-actions"]');
+    const secondaryMenu = document.querySelector('[data-testid="user-invite-secondary-action-menu"]');
+    const handoffStatus = document.querySelector('[data-testid="user-invite-handoff-action-status"]');
+    const readButton = (testId) => {
+      const button = document.querySelector('[data-testid="' + testId + '"]');
+      return button instanceof HTMLButtonElement ? {
+        exists: true,
+        disabled: button.disabled,
+        describedBy: button.getAttribute('aria-describedby') || '',
+        state: button.getAttribute('data-action-state') || '',
+        status: button.getAttribute('data-action-status') || '',
+        reason: button.getAttribute('data-disabled-reason') || '',
+        nested: Boolean(secondaryMenu?.querySelector('[data-testid="' + testId + '"]')),
+      } : { exists: false };
+    };
+    return {
+      hasCommandCenter: commandCenter instanceof HTMLElement,
+      firstPrimaryActionText: primaryActionText[0] || '',
+      primaryActionIds,
+      secondaryCollapsed: secondaryActions instanceof HTMLDetailsElement &&
+        secondaryActions.open === false &&
+        secondaryActions.getAttribute('data-default-collapsed') === 'true',
+      hasMoreActions: Boolean(document.querySelector('[data-testid="user-invite-more-actions"]')),
+      handoffStatusId: handoffStatus?.id || '',
+      handoffStatusText: handoffStatus?.textContent || '',
+      copy: readButton('user-invite-copy-manifest'),
+      download: readButton('user-invite-download-json'),
+      body: document.body?.innerText?.slice(0, 1200) || '',
+    };
+  })()`);
+
+  assert(state.hasCommandCenter, `Invite command center missing: ${JSON.stringify(state)}`);
+  assert(state.firstPrimaryActionText === 'Send invite', `Invite command center must lead with Send invite: ${JSON.stringify(state)}`);
+  assert(
+    ['user-invite-copy-manifest', 'user-invite-download-json'].every((testId) => !state.primaryActionIds.includes(testId)),
+    `Invite handoff controls must not be duplicated in primary actions: ${JSON.stringify(state)}`,
+  );
+  assert(state.secondaryCollapsed && state.hasMoreActions, `Invite handoff actions must live behind collapsed More actions: ${JSON.stringify(state)}`);
+  for (const action of [state.copy, state.download]) {
+    assert(
+      action.exists &&
+        action.nested &&
+        action.describedBy === state.handoffStatusId &&
+        action.state === 'ready' &&
+        action.status.length > 0 &&
+        action.disabled === false,
+      `Invite handoff action is missing ready-state metadata or nesting: ${JSON.stringify(state)}`,
+    );
+  }
+  assert(
+    state.handoffStatusText.includes('Copy manifest available.') &&
+      state.handoffStatusText.includes('Download JSON available.'),
+    `Invite handoff status text is incomplete: ${JSON.stringify(state)}`,
+  );
+  return state;
 };
 
 const assertInviteSubmitActionStatus = async (client, expectation) => {
@@ -3301,6 +3392,7 @@ const main = async () => {
     await signInAdmin(client);
 
     await navigateToInvite(client);
+    await assertInviteCommandCenterLayout(client);
     await assertInviteSubmitActionStatus(client, {
       state: 'blocked',
       disabled: false,
