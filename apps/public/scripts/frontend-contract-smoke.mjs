@@ -26,6 +26,7 @@ const publicCommerceOrdersRoute = read('../src/app/api/sites/[siteId]/commerce/o
 const publicCollectionsRoute = read('../src/app/api/sites/[siteId]/collections/route.ts');
 const publicCollectionResourcesLib = read('../src/lib/publicCollectionResources.ts');
 const commerceCatalogLib = read('../src/lib/commerceCatalog.ts');
+const completionStatusClosureLib = read('../src/lib/completionStatusClosure.ts');
 const routeResolverLib = read('../src/lib/routeResolver.ts');
 const repositoryRouteResolverLib = read('../src/lib/repositoryRouteResolver.ts');
 const renderPayloadLib = read('../src/lib/renderPayload.ts');
@@ -131,7 +132,8 @@ assert(
 );
 
 assert(
-  manifestRoute.includes('buildBackyCompletionStatus') &&
+    manifestRoute.includes('buildBackyCompletionStatus') &&
+    manifestRoute.includes('buildBackyPartialClosureReadiness') &&
     manifestRoute.includes("schemaVersion: 'backy.completion-status.v1'") &&
     manifestRoute.includes("ready: 41") &&
     manifestRoute.includes("partial: 4") &&
@@ -142,6 +144,7 @@ assert(
     manifestRoute.includes("gate: 'npm run ci:settings-provider-certification'") &&
     manifestRoute.includes("gate: 'npm run ci:commerce-provider-certification'") &&
     manifestRoute.includes('surfaceRunbooks') &&
+    manifestRoute.includes('partialClosureReadiness: buildBackyPartialClosureReadiness()') &&
     manifestRoute.includes("evidencePacketSchema: 'backy.settings-provider-certification-evidence-packet.v1'") &&
     manifestRoute.includes("evidencePacketSchema: 'backy.commerce-provider-certification-evidence-packet.v1'") &&
     manifestRoute.includes("evidencePacketSchema: 'backy.order-provider-certification-evidence-packet.v1'") &&
@@ -190,9 +193,12 @@ assert(
     manifestRoute.includes("evidenceUiPanel: 'orders-provider-certification-evidence-packet'") &&
     manifestRoute.includes('completionStatus: buildBackyCompletionStatus()') &&
     openApiRoute.includes('buildBackyCompletionStatus') &&
+    openApiRoute.includes('buildBackyPartialClosureReadiness') &&
     openApiRoute.includes('"x-backy-completion-status"') &&
     openApiRoute.includes('BackyCompletionStatus') &&
     openApiRoute.includes('surfaceRunbooks') &&
+    openApiRoute.includes('partialClosureReadiness: buildBackyPartialClosureReadiness()') &&
+    openApiRoute.includes('"backy.partial-closure-readiness.v1"') &&
     openApiRoute.includes('"evidenceArtifacts"') &&
     openApiRoute.includes('"artifactVerifier"') &&
     openApiRoute.includes('"no raw secret-like values"') &&
@@ -230,6 +236,8 @@ assert(
     openApiRoute.includes('"commerceApiHandoffSiteSelectorEnv"') &&
     frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
     frontendManifestSchema.includes('"backy.completion-status.v1"') &&
+    frontendManifestSchema.includes('"backy.partial-closure-readiness.v1"') &&
+    frontendManifestSchema.includes('"artifactAcceptedMode"') &&
     frontendManifestSchema.includes('"surfaceRunbooks"') &&
     frontendManifestSchema.includes('"evidenceArtifacts"') &&
 	    frontendManifestSchema.includes('"artifactVerifier"') &&
@@ -241,6 +249,7 @@ assert(
 	    frontendManifestSchema.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS') &&
 	    frontendManifestSchema.includes('"producerEnv"') &&
 	    apiContracts.includes('surfaceRunbooks[].artifactVerifier') &&
+	    apiContracts.includes('partialClosureReadiness') &&
 	    apiContracts.includes('noRawSecretValuesReady') &&
 	    apiContracts.includes('artifactFreshReady') &&
 	    apiContracts.includes('settingsApiHandoffSiteTargetReady') &&
@@ -258,7 +267,9 @@ assert(
 	    audit.includes('noRawSecretValuesReady') &&
 	    audit.includes('release certification doctor now rejects stale Commerce evidence artifacts') &&
 	    completionSpec.includes('surfaceRunbooks[].artifactVerifier') &&
+	    completionSpec.includes('partialClosureReadiness') &&
 	    sdkSource.includes('BackyCompletionStatus') &&
+    sdkSource.includes('BackyPartialClosureReadiness') &&
     sdkSource.includes('BackyCompletionArtifactVerifier') &&
     sdkSource.includes('BackyCompletionEvidenceArtifact') &&
     sdkSource.includes('surfaceRunbooks: Array<') &&
@@ -277,6 +288,7 @@ assert(
     sdkSmoke.includes('productApiHandoffSiteTargetReady') &&
     sdkSmoke.includes('orderApiHandoffSiteTargetReady') &&
     sdkSmoke.includes('manifest() completion status missing Settings runbook') &&
+    sdkSmoke.includes('manifest() completion status missing partial closure readiness handoff') &&
     sdkSmoke.includes('completionStatus.audit?.ready === 41') &&
     sdkSmoke.includes('completionStatus.audit?.partial === 4') &&
     sdkSmoke.includes('completionStatus.audit?.readyPercent === 91') &&
@@ -285,16 +297,30 @@ assert(
     sdkSmoke.includes('completion status should not recommend certified SDK Postgres as remaining work') &&
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestCompletionStatus') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiBackyCompletionStatus') &&
+    generatedSdkTypes.includes('partialClosureReadiness?') &&
     generatedSdkTypes.includes('surfaceRunbooks: Array<') &&
     generatedSdkTypes.includes('evidenceArtifacts: Array<') &&
     generatedSdkTypes.includes('artifactVerifier: {') &&
     generatedSdkSmoke.includes('surfaceRunbooks') &&
     generatedSdkSmoke.includes('settingsCompletionArtifactVerifier') &&
+    generatedSdkSmoke.includes('partialClosureReadiness') &&
     generatedSdkSmoke.includes('commerceCompletionArtifactVerifier') &&
     generatedSdkSmoke.includes('settingsCompletionEvidenceArtifacts') &&
     generatedSdkSmoke.includes('commerceCompletionEvidenceArtifacts') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCompletionStatus'),
   'Frontend manifest/OpenAPI/SDK must expose structured Backy completion status and remaining partial-gate handoff for custom admin clients.',
+);
+
+assert(
+  completionStatusClosureLib.includes("schemaVersion: 'backy.partial-closure-readiness.v1'") &&
+    completionStatusClosureLib.includes('artifactBackedDoctorCommand') &&
+    completionStatusClosureLib.includes('artifactAcceptedMode') &&
+    completionStatusClosureLib.includes("artifactAcceptedStatus: 'ready'") &&
+    completionStatusClosureLib.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+    completionStatusClosureLib.includes('artifacts/backy-settings-provider-certification.json') &&
+    completionStatusClosureLib.includes('artifacts/backy-commerce-provider-certification.json') &&
+    completionStatusClosureLib.includes('includesSecretValues: false'),
+  'Completion status closure helper must expose non-secret artifact-backed partial closure semantics.',
 );
 
 assert(

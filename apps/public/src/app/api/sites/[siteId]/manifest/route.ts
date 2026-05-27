@@ -52,6 +52,7 @@ import { getHostedRouteUrl, getSiteCanonicalBaseUrl } from '@/lib/seoDiscovery';
 import { buildInteractiveComponentManifestContract } from '@/lib/interactiveComponentRegistry';
 import { localizedRoutePatternVariants, normalizeSiteLocalization, type PublicRoutePattern } from '@/lib/siteLocalization';
 import { liveManagementEditorCommandRegistry } from '@/lib/liveManagementEditorCommandRegistry';
+import { buildBackyPartialClosureReadiness } from '@/lib/completionStatusClosure';
 
 interface RouteParams {
   params: Promise<{
@@ -956,6 +957,7 @@ const buildBackyCompletionStatus = () => {
       { key: 'settings', label: '/settings', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
       { key: 'settings-admin-apis', label: 'Settings admin APIs', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
     ],
+    partialClosureReadiness: buildBackyPartialClosureReadiness(),
     surfaceRunbooks,
     certifiedGates: certifiedDatabaseGates,
     gates,

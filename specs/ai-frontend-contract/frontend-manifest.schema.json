@@ -406,6 +406,97 @@
 	            },
 	            "minItems": 4
 	          },
+	          "partialClosureReadiness": {
+	            "type": "object",
+	            "additionalProperties": true,
+	            "properties": {
+	              "schemaVersion": { "const": "backy.partial-closure-readiness.v1" },
+	              "source": { "const": "completion-status-handoff" },
+	              "status": { "const": "external-artifacts-required" },
+	              "ready": { "const": false },
+	              "readyCount": { "const": 0 },
+	              "partialCount": { "const": 4 },
+	              "prototypeCount": { "const": 0 },
+	              "missingCount": { "const": 0 },
+	              "total": { "const": 4 },
+	              "aggregatePreflight": { "const": "npm run test:partial-gate-preflights" },
+	              "doctorCommand": { "const": "npm run doctor:release-certification" },
+	              "artifactRequiredEnv": { "const": "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
+	              "artifactBackedDoctorCommand": { "type": "string", "minLength": 1 },
+	              "defaultNoArtifactMode": {
+	                "type": "object",
+	                "additionalProperties": true,
+	                "properties": {
+	                  "ready": { "const": false },
+	                  "readyCount": { "const": 0 },
+	                  "partialCount": { "const": 4 },
+	                  "status": { "const": "partial" }
+	                },
+	                "required": ["ready", "readyCount", "partialCount", "status"]
+	              },
+	              "artifactAcceptedMode": {
+	                "type": "object",
+	                "additionalProperties": true,
+	                "properties": {
+	                  "ready": { "const": true },
+	                  "readyCount": { "const": 4 },
+	                  "partialCount": { "const": 0 },
+	                  "status": { "const": "ready" }
+	                },
+	                "required": ["ready", "readyCount", "partialCount", "status"]
+	              },
+	              "rows": {
+	                "type": "array",
+	                "minItems": 4,
+	                "items": {
+	                  "type": "object",
+	                  "additionalProperties": true,
+	                  "properties": {
+	                    "key": { "enum": ["settings", "settings-admin-apis", "products", "orders"] },
+	                    "row": { "type": "string", "minLength": 1 },
+	                    "gate": { "enum": ["settings-provider-certification", "commerce-provider-certification"] },
+	                    "artifactKey": { "enum": ["settings", "commerce"] },
+	                    "artifactPath": {
+	                      "enum": [
+	                        "artifacts/backy-settings-provider-certification.json",
+	                        "artifacts/backy-commerce-provider-certification.json"
+	                      ]
+	                    },
+	                    "artifactPathEnv": {
+	                      "enum": [
+	                        "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT",
+	                        "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT"
+	                      ]
+	                    },
+	                    "artifactSchemaVersion": {
+	                      "enum": [
+	                        "backy.settings-provider-certification-artifact.v1",
+	                        "backy.commerce-provider-certification-artifact.v1"
+	                      ]
+	                    },
+	                    "requiredEnv": { "type": "string", "minLength": 1 },
+	                    "sourceOnlyGuard": { "type": "string", "minLength": 1 },
+	                    "status": { "const": "partial" },
+	                    "ready": { "const": false },
+	                    "artifactAcceptedStatus": { "const": "ready" },
+	                    "nextAction": { "type": "string", "minLength": 1 }
+	                  },
+	                  "required": ["key", "row", "gate", "artifactKey", "artifactPath", "artifactPathEnv", "artifactSchemaVersion", "requiredEnv", "sourceOnlyGuard", "status", "ready", "artifactAcceptedStatus", "nextAction"]
+	                }
+	              },
+	              "privacy": {
+	                "type": "object",
+	                "additionalProperties": true,
+	                "properties": {
+	                  "includesSecretValues": { "const": false },
+	                  "exposesOnlyArtifactPathsAndBooleans": { "const": true },
+	                  "secretHandling": { "type": "string", "minLength": 1 }
+	                },
+	                "required": ["includesSecretValues", "exposesOnlyArtifactPathsAndBooleans", "secretHandling"]
+	              }
+	            },
+	            "required": ["schemaVersion", "source", "status", "ready", "readyCount", "partialCount", "prototypeCount", "missingCount", "total", "aggregatePreflight", "doctorCommand", "artifactRequiredEnv", "artifactBackedDoctorCommand", "defaultNoArtifactMode", "artifactAcceptedMode", "rows", "privacy"]
+	          },
 	          "surfaceRunbooks": {
 	            "type": "array",
 	            "items": {

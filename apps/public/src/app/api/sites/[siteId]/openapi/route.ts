@@ -25,6 +25,7 @@ import { normalizeRedirectRules } from "@/lib/redirectRules";
 import { getSiteCanonicalBaseUrl } from "@/lib/seoDiscovery";
 import { normalizeSiteLocalization } from "@/lib/siteLocalization";
 import { liveManagementEditorCommandRegistry } from "@/lib/liveManagementEditorCommandRegistry";
+import { buildBackyPartialClosureReadiness } from "@/lib/completionStatusClosure";
 
 interface RouteParams {
   params: Promise<{
@@ -879,6 +880,7 @@ const buildBackyCompletionStatus = () => {
       { key: "settings", label: "/settings", status: "partial", blocker: "settings-provider-certification", gate: "npm run ci:settings-provider-certification" },
       { key: "settings-admin-apis", label: "Settings admin APIs", status: "partial", blocker: "settings-provider-certification", gate: "npm run ci:settings-provider-certification" },
     ],
+    partialClosureReadiness: buildBackyPartialClosureReadiness(),
     surfaceRunbooks,
     certifiedGates: certifiedDatabaseGates,
     gates,
@@ -6660,6 +6662,129 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       status: { const: "partial" },
                       blocker: { type: "string" },
                       gate: { type: "string" },
+                    },
+                  },
+                },
+                partialClosureReadiness: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "source",
+                    "status",
+                    "ready",
+                    "readyCount",
+                    "partialCount",
+                    "prototypeCount",
+                    "missingCount",
+                    "total",
+                    "aggregatePreflight",
+                    "doctorCommand",
+                    "artifactRequiredEnv",
+                    "artifactBackedDoctorCommand",
+                    "defaultNoArtifactMode",
+                    "artifactAcceptedMode",
+                    "rows",
+                    "privacy",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: { const: "backy.partial-closure-readiness.v1" },
+                    source: { const: "completion-status-handoff" },
+                    status: { const: "external-artifacts-required" },
+                    ready: { const: false },
+                    readyCount: { const: 0 },
+                    partialCount: { const: 4 },
+                    prototypeCount: { const: 0 },
+                    missingCount: { const: 0 },
+                    total: { const: 4 },
+                    aggregatePreflight: { const: "npm run test:partial-gate-preflights" },
+                    doctorCommand: { const: "npm run doctor:release-certification" },
+                    artifactRequiredEnv: { const: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
+                    artifactBackedDoctorCommand: { type: "string" },
+                    defaultNoArtifactMode: {
+                      type: "object",
+                      required: ["ready", "readyCount", "partialCount", "status"],
+                      additionalProperties: true,
+                      properties: {
+                        ready: { const: false },
+                        readyCount: { const: 0 },
+                        partialCount: { const: 4 },
+                        status: { const: "partial" },
+                      },
+                    },
+                    artifactAcceptedMode: {
+                      type: "object",
+                      required: ["ready", "readyCount", "partialCount", "status"],
+                      additionalProperties: true,
+                      properties: {
+                        ready: { const: true },
+                        readyCount: { const: 4 },
+                        partialCount: { const: 0 },
+                        status: { const: "ready" },
+                      },
+                    },
+                    rows: {
+                      type: "array",
+                      minItems: 4,
+                      items: {
+                        type: "object",
+                        required: [
+                          "key",
+                          "row",
+                          "gate",
+                          "artifactKey",
+                          "artifactPath",
+                          "artifactPathEnv",
+                          "artifactSchemaVersion",
+                          "requiredEnv",
+                          "sourceOnlyGuard",
+                          "status",
+                          "ready",
+                          "artifactAcceptedStatus",
+                          "nextAction",
+                        ],
+                        additionalProperties: true,
+                        properties: {
+                          key: { enum: ["settings", "settings-admin-apis", "products", "orders"] },
+                          row: { type: "string" },
+                          gate: { enum: ["settings-provider-certification", "commerce-provider-certification"] },
+                          artifactKey: { enum: ["settings", "commerce"] },
+                          artifactPath: {
+                            enum: [
+                              "artifacts/backy-settings-provider-certification.json",
+                              "artifacts/backy-commerce-provider-certification.json",
+                            ],
+                          },
+                          artifactPathEnv: {
+                            enum: [
+                              "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT",
+                              "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT",
+                            ],
+                          },
+                          artifactSchemaVersion: {
+                            enum: [
+                              "backy.settings-provider-certification-artifact.v1",
+                              "backy.commerce-provider-certification-artifact.v1",
+                            ],
+                          },
+                          requiredEnv: { type: "string" },
+                          sourceOnlyGuard: { type: "string" },
+                          status: { const: "partial" },
+                          ready: { const: false },
+                          artifactAcceptedStatus: { const: "ready" },
+                          nextAction: { type: "string" },
+                        },
+                      },
+                    },
+                    privacy: {
+                      type: "object",
+                      required: ["includesSecretValues", "exposesOnlyArtifactPathsAndBooleans", "secretHandling"],
+                      additionalProperties: true,
+                      properties: {
+                        includesSecretValues: { const: false },
+                        exposesOnlyArtifactPathsAndBooleans: { const: true },
+                        secretHandling: { type: "string" },
+                      },
                     },
                   },
                 },

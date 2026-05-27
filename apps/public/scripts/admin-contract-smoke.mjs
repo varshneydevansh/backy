@@ -7917,6 +7917,25 @@ try {
     const completionStatus = json?.data?.settings?.completionStatus;
     assert(completionStatus?.schemaVersion === 'backy.completion-status.v1', `${url} missing completion status schema version`);
     assert(completionStatus?.audit?.ready === 41 && completionStatus?.audit?.partial === 4, `${url} completion status audit counts drifted`);
+    assert(completionStatus?.partialClosureReadiness?.schemaVersion === 'backy.partial-closure-readiness.v1', `${url} missing partial closure readiness handoff`);
+    assert(completionStatus?.partialClosureReadiness?.defaultNoArtifactMode?.partialCount === 4, `${url} default closure mode should still show 4 partial rows`);
+    assert(completionStatus?.partialClosureReadiness?.artifactAcceptedMode?.readyCount === 4, `${url} artifact-backed closure mode should explain 4 ready rows`);
+    assert(
+      completionStatus?.partialClosureReadiness?.artifactBackedDoctorCommand?.includes?.('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+        completionStatus.partialClosureReadiness.artifactBackedDoctorCommand.includes('artifacts/backy-settings-provider-certification.json') &&
+        completionStatus.partialClosureReadiness.artifactBackedDoctorCommand.includes('artifacts/backy-commerce-provider-certification.json'),
+      `${url} missing artifact-backed release doctor command`,
+    );
+    assert(
+      completionStatus?.partialClosureReadiness?.rows?.some?.(
+        (row) =>
+          row.key === 'settings-admin-apis' &&
+          row.artifactKey === 'settings' &&
+          row.artifactAcceptedStatus === 'ready' &&
+          row.status === 'partial',
+      ),
+      `${url} missing Settings admin API partial-closure row`,
+    );
     assert(
       completionStatus?.surfaceRunbooks?.some?.(
         (runbook) =>

@@ -539,6 +539,58 @@ export type GeneratedBackyOpenApiBackyCompletionStatus = {
     gate: string;
     [key: string]: unknown;
   }>;
+  partialClosureReadiness?: {
+    schemaVersion: "backy.partial-closure-readiness.v1";
+    source: "completion-status-handoff";
+    status: "external-artifacts-required";
+    ready: false;
+    readyCount: 0;
+    partialCount: 4;
+    prototypeCount: 0;
+    missingCount: 0;
+    total: 4;
+    aggregatePreflight: "npm run test:partial-gate-preflights";
+    doctorCommand: "npm run doctor:release-certification";
+    artifactRequiredEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1";
+    artifactBackedDoctorCommand: string;
+    defaultNoArtifactMode: {
+      ready: false;
+      readyCount: 0;
+      partialCount: 4;
+      status: "partial";
+      [key: string]: unknown;
+    };
+    artifactAcceptedMode: {
+      ready: true;
+      readyCount: 4;
+      partialCount: 0;
+      status: "ready";
+      [key: string]: unknown;
+    };
+    rows: Array<{
+      key: "settings" | "settings-admin-apis" | "products" | "orders";
+      row: string;
+      gate: "settings-provider-certification" | "commerce-provider-certification";
+      artifactKey: "settings" | "commerce";
+      artifactPath: "artifacts/backy-settings-provider-certification.json" | "artifacts/backy-commerce-provider-certification.json";
+      artifactPathEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT" | "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT";
+      artifactSchemaVersion: "backy.settings-provider-certification-artifact.v1" | "backy.commerce-provider-certification-artifact.v1";
+      requiredEnv: string;
+      sourceOnlyGuard: string;
+      status: "partial";
+      ready: false;
+      artifactAcceptedStatus: "ready";
+      nextAction: string;
+      [key: string]: unknown;
+    }>;
+    privacy: {
+      includesSecretValues: false;
+      exposesOnlyArtifactPathsAndBooleans: true;
+      secretHandling: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   surfaceRunbooks: Array<{
     key: "settings" | "settings-admin-apis" | "products" | "orders";
     label: string;
@@ -5357,6 +5409,58 @@ export type GeneratedBackyFrontendManifestCompletionStatus = {
     gate: string;
     [key: string]: unknown;
   }>;
+  partialClosureReadiness?: {
+    schemaVersion: "backy.partial-closure-readiness.v1";
+    source: "completion-status-handoff";
+    status: "external-artifacts-required";
+    ready: false;
+    readyCount: 0;
+    partialCount: 4;
+    prototypeCount: 0;
+    missingCount: 0;
+    total: 4;
+    aggregatePreflight: "npm run test:partial-gate-preflights";
+    doctorCommand: "npm run doctor:release-certification";
+    artifactRequiredEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1";
+    artifactBackedDoctorCommand: string;
+    defaultNoArtifactMode: {
+      ready: false;
+      readyCount: 0;
+      partialCount: 4;
+      status: "partial";
+      [key: string]: unknown;
+    };
+    artifactAcceptedMode: {
+      ready: true;
+      readyCount: 4;
+      partialCount: 0;
+      status: "ready";
+      [key: string]: unknown;
+    };
+    rows: Array<{
+      key: "settings" | "settings-admin-apis" | "products" | "orders";
+      row: string;
+      gate: "settings-provider-certification" | "commerce-provider-certification";
+      artifactKey: "settings" | "commerce";
+      artifactPath: "artifacts/backy-settings-provider-certification.json" | "artifacts/backy-commerce-provider-certification.json";
+      artifactPathEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT" | "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT";
+      artifactSchemaVersion: "backy.settings-provider-certification-artifact.v1" | "backy.commerce-provider-certification-artifact.v1";
+      requiredEnv: string;
+      sourceOnlyGuard: string;
+      status: "partial";
+      ready: false;
+      artifactAcceptedStatus: "ready";
+      nextAction: string;
+      [key: string]: unknown;
+    }>;
+    privacy: {
+      includesSecretValues: false;
+      exposesOnlyArtifactPathsAndBooleans: true;
+      secretHandling: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   surfaceRunbooks: Array<{
     key: "settings" | "settings-admin-apis" | "products" | "orders";
     label: string;

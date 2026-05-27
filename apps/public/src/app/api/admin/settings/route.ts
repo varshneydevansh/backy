@@ -26,6 +26,7 @@ import { resolveCommerceWebhookSecret } from '@/lib/commerceWebhookSecrets';
 import { getEmailDeliveryConfig } from '@/lib/formEmailDelivery';
 import { getMediaStorageAdapter, getMediaStorageConfigSummary, resolveMediaStorageConfig } from '@/lib/mediaStorage';
 import { resolveMediaScannerConfig } from '@/lib/mediaSafety';
+import { buildBackyPartialClosureReadiness } from '@/lib/completionStatusClosure';
 import {
   getRequiredDatabaseRepositories,
   resolvePublicRepositoryRuntimeConfig,
@@ -1352,6 +1353,7 @@ const buildSettingsCompletionStatus = () => {
       { key: 'settings', label: '/settings', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
       { key: 'settings-admin-apis', label: 'Settings admin APIs', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
     ],
+    partialClosureReadiness: buildBackyPartialClosureReadiness(),
     surfaceRunbooks,
     certifiedGates,
     gates,
