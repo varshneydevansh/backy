@@ -1396,6 +1396,8 @@ const assertProductsApiContractsSource = () => {
       source.includes("Required site selector") &&
       source.includes("Next operator action") &&
       source.includes("Configure live provider credentials") &&
+      source.includes("Attach live scenario evidence") &&
+      source.includes("Attach certification artifact") &&
       source.includes("BACKY_COMMERCE_CERTIFICATION_OUTPUT") &&
       source.includes("artifacts/backy-commerce-provider-certification.json") &&
       source.includes("Secret boundary: no commerce provider credentials, customer payloads, private order payloads, or webhook bodies are copied.") &&
@@ -8201,6 +8203,7 @@ const assertProductsLayout = async (client) => {
           providerCertificationText.includes('Next operator action') &&
           (
             providerCertificationText.includes('Configure live provider credentials') ||
+            providerCertificationText.includes('Attach live scenario evidence') ||
             providerCertificationText.includes('Attach certification artifact')
           ) &&
           providerCertificationText.includes('Provider certification command builder') &&
