@@ -7347,6 +7347,100 @@ export function CanvasEditor({
                 data-disabled-reason={canvasViewportDisabledReason || undefined}
               />
             </div>
+            <details
+              className="group relative xl:hidden"
+              aria-label="Canvas size controls"
+              aria-describedby={canvasViewportActionStatusId}
+              data-testid="editor-canvas-size-disclosure"
+              data-default-collapsed="true"
+              data-action-state={canvasViewportActionState}
+              data-action-status={canvasSizeControlActionStatus}
+              data-active-preset={activeCanvasPresetId}
+              data-canvas-width={size.width}
+              data-canvas-height={size.height}
+              data-disabled-reason={canvasViewportDisabledReason || undefined}
+            >
+              <summary
+                className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 group-open:bg-slate-950 group-open:text-white [&::-webkit-details-marker]:hidden"
+                aria-describedby={canvasViewportActionStatusId}
+                data-testid="editor-canvas-size-disclosure-summary"
+                data-action-state={canvasViewportActionState}
+                data-action-status={canvasSizeControlActionStatus}
+                data-disabled-reason={canvasViewportDisabledReason || undefined}
+              >
+                <Ruler className="h-4 w-4" />
+                <span>{activeCanvasPresetLabel}</span>
+                <span className="tabular-nums text-current/70">{size.width}x{size.height}</span>
+              </summary>
+              <div className="absolute left-0 top-full z-30 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-xl">
+                <label className="grid gap-1 font-medium text-slate-600">
+                  Preset
+                  <select
+                    value={activeCanvasPresetId}
+                    onChange={(event) => handleCanvasPresetChange(event.target.value)}
+                    disabled={isCanvasMutationDisabled}
+                    title={canvasViewportDisabledReason || undefined}
+                    className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-medium text-slate-800 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Compact canvas size preset"
+                    aria-describedby={canvasViewportActionStatusId}
+                    data-testid="editor-canvas-compact-preset-select"
+                    data-action-state={canvasViewportActionState}
+                    data-action-status={canvasSizeControlActionStatus}
+                    data-disabled-reason={canvasViewportDisabledReason || undefined}
+                  >
+                    <option value="custom">Custom</option>
+                    {CANVAS_SIZE_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                  <label className="grid gap-1 font-medium text-slate-600">
+                    Width
+                    <input
+                      type="number"
+                      min={MIN_CANVAS_DIMENSION}
+                      max={MAX_CANVAS_DIMENSION}
+                      step={10}
+                      value={size.width}
+                      onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
+                      disabled={isCanvasMutationDisabled}
+                      title={canvasViewportDisabledReason || undefined}
+                      className="h-9 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-800 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Compact canvas width"
+                      aria-describedby={canvasViewportActionStatusId}
+                      data-testid="editor-canvas-compact-width-input"
+                      data-action-state={canvasViewportActionState}
+                      data-action-status={canvasSizeControlActionStatus}
+                      data-disabled-reason={canvasViewportDisabledReason || undefined}
+                    />
+                  </label>
+                  <span className="pb-2 text-slate-400">x</span>
+                  <label className="grid gap-1 font-medium text-slate-600">
+                    Height
+                    <input
+                      type="number"
+                      min={MIN_CANVAS_DIMENSION}
+                      max={MAX_CANVAS_DIMENSION}
+                      step={10}
+                      value={size.height}
+                      onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
+                      disabled={isCanvasMutationDisabled}
+                      title={canvasViewportDisabledReason || undefined}
+                      className="h-9 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-800 outline-none focus:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Compact canvas height"
+                      aria-describedby={canvasViewportActionStatusId}
+                      data-testid="editor-canvas-compact-height-input"
+                      data-action-state={canvasViewportActionState}
+                      data-action-status={canvasSizeControlActionStatus}
+                      data-disabled-reason={canvasViewportDisabledReason || undefined}
+                    />
+                  </label>
+                </div>
+              </div>
+            </details>
           </div>
 
           {/* Right */}

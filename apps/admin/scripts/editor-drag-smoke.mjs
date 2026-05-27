@@ -637,8 +637,18 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-testid="editor-canvas-preset-select"') &&
       source.includes('data-testid="editor-canvas-width-input"') &&
       source.includes('data-testid="editor-canvas-height-input"') &&
+      source.includes('data-testid="editor-canvas-size-disclosure"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('data-testid="editor-canvas-size-disclosure-summary"') &&
+      source.includes('data-testid="editor-canvas-compact-preset-select"') &&
+      source.includes('data-testid="editor-canvas-compact-width-input"') &&
+      source.includes('data-testid="editor-canvas-compact-height-input"') &&
+      source.includes('className="group relative xl:hidden"') &&
+      source.includes("min={MIN_CANVAS_DIMENSION}") &&
+      source.includes("max={MAX_CANVAS_DIMENSION}") &&
+      smokeSource.includes('assertCompactCanvasSizeControls') &&
       smokeSource.includes('assertEditorViewportControls'),
-    'Editor viewport controls must expose stable breakpoint/preset/dimension action status metadata and rendered coverage',
+    'Editor viewport controls must expose stable breakpoint/preset/dimension action status metadata, compact size controls, and rendered coverage',
   );
   assert(
     source.includes('CANVAS_CONTEXT_QUICK_ADD_KEYS') &&
@@ -10193,9 +10203,11 @@ const assertEditorPrimaryActionStatus = async (client) => {
   return state;
 };
 
-const assertEditorViewportControls = async (client) => {
+const assertEditorViewportControls = async (client, options = {}) => {
+  const expectCompactCollapsed = options.expectCompactCollapsed !== false;
   const state = await evaluate(client, `(() => {
     const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const expectCompactCollapsed = ${JSON.stringify(expectCompactCollapsed)};
     const controls = document.querySelector('[data-testid="editor-viewport-controls"]');
     const status = document.querySelector('[data-testid="editor-viewport-action-status"]');
     const activeBreakpoint = controls?.getAttribute('data-active-breakpoint') || '';
@@ -10218,6 +10230,11 @@ const assertEditorViewportControls = async (client) => {
     const preset = document.querySelector('[data-testid="editor-canvas-preset-select"]');
     const width = document.querySelector('[data-testid="editor-canvas-width-input"]');
     const height = document.querySelector('[data-testid="editor-canvas-height-input"]');
+    const compactDisclosure = document.querySelector('[data-testid="editor-canvas-size-disclosure"]');
+    const compactSummary = document.querySelector('[data-testid="editor-canvas-size-disclosure-summary"]');
+    const compactPreset = document.querySelector('[data-testid="editor-canvas-compact-preset-select"]');
+    const compactWidth = document.querySelector('[data-testid="editor-canvas-compact-width-input"]');
+    const compactHeight = document.querySelector('[data-testid="editor-canvas-compact-height-input"]');
     const controlsState = controls?.getAttribute('data-action-state') || '';
     const expectedActiveButtonState = controlsState === 'blocked' ? 'blocked' : 'selected';
     const malformedButtons = buttons.filter((button) => (
@@ -10247,13 +10264,53 @@ const assertEditorViewportControls = async (client) => {
         preset instanceof HTMLSelectElement &&
         preset.getAttribute('aria-describedby') === status.id &&
         preset.getAttribute('data-action-state') === controlsState &&
+        preset.value === controls.getAttribute('data-active-preset') &&
         normalize(preset.getAttribute('data-action-status')).includes('Canvas size') &&
         width instanceof HTMLInputElement &&
         width.getAttribute('aria-describedby') === status.id &&
         width.getAttribute('data-action-state') === controlsState &&
+        width.min === '320' &&
+        width.max === '3840' &&
+        width.step === '10' &&
         height instanceof HTMLInputElement &&
         height.getAttribute('aria-describedby') === status.id &&
-        height.getAttribute('data-action-state') === controlsState,
+        height.getAttribute('data-action-state') === controlsState &&
+        height.min === '320' &&
+        height.max === '3840' &&
+        height.step === '10' &&
+        compactDisclosure instanceof HTMLDetailsElement &&
+        compactDisclosure.getAttribute('aria-label') === 'Canvas size controls' &&
+        compactDisclosure.getAttribute('aria-describedby') === status.id &&
+        compactDisclosure.getAttribute('data-default-collapsed') === 'true' &&
+        compactDisclosure.getAttribute('data-action-state') === controlsState &&
+        normalize(compactDisclosure.getAttribute('data-action-status')).includes('Canvas size') &&
+        compactDisclosure.getAttribute('data-active-preset') === controls.getAttribute('data-active-preset') &&
+        (!expectCompactCollapsed || compactDisclosure.open === false) &&
+        Number(compactDisclosure.getAttribute('data-canvas-width') || 0) === Number(controls.getAttribute('data-canvas-width') || 0) &&
+        Number(compactDisclosure.getAttribute('data-canvas-height') || 0) === Number(controls.getAttribute('data-canvas-height') || 0) &&
+        compactSummary instanceof HTMLElement &&
+        compactSummary.getAttribute('aria-describedby') === status.id &&
+        compactSummary.getAttribute('data-action-state') === controlsState &&
+        normalize(compactSummary.getAttribute('data-action-status')).includes('Canvas size') &&
+        compactPreset instanceof HTMLSelectElement &&
+        compactPreset.getAttribute('aria-describedby') === status.id &&
+        compactPreset.getAttribute('data-action-state') === controlsState &&
+        compactPreset.value === controls.getAttribute('data-active-preset') &&
+        normalize(compactPreset.getAttribute('data-action-status')).includes('Canvas size') &&
+        compactWidth instanceof HTMLInputElement &&
+        compactWidth.getAttribute('aria-describedby') === status.id &&
+        compactWidth.getAttribute('data-action-state') === controlsState &&
+        compactWidth.min === '320' &&
+        compactWidth.max === '3840' &&
+        compactWidth.step === '10' &&
+        Number(compactWidth.value) === Number(controls.getAttribute('data-canvas-width') || 0) &&
+        compactHeight instanceof HTMLInputElement &&
+        compactHeight.getAttribute('aria-describedby') === status.id &&
+        compactHeight.getAttribute('data-action-state') === controlsState &&
+        compactHeight.min === '320' &&
+        compactHeight.max === '3840' &&
+        compactHeight.step === '10' &&
+        Number(compactHeight.value) === Number(controls.getAttribute('data-canvas-height') || 0),
       role: controls?.getAttribute('role') || '',
       label: controls?.getAttribute('aria-label') || '',
       describedBy: controls?.getAttribute('aria-describedby') || '',
@@ -10272,24 +10329,180 @@ const assertEditorViewportControls = async (client) => {
         describedBy: preset?.getAttribute('aria-describedby') || '',
         actionState: preset?.getAttribute('data-action-state') || '',
         actionStatus: normalize(preset?.getAttribute('data-action-status')),
+        value: preset instanceof HTMLSelectElement ? preset.value : '',
       },
       widthInput: {
         exists: width instanceof HTMLInputElement,
         describedBy: width?.getAttribute('aria-describedby') || '',
         actionState: width?.getAttribute('data-action-state') || '',
         actionStatus: normalize(width?.getAttribute('data-action-status')),
+        min: width instanceof HTMLInputElement ? width.min : '',
+        max: width instanceof HTMLInputElement ? width.max : '',
+        step: width instanceof HTMLInputElement ? width.step : '',
       },
       heightInput: {
         exists: height instanceof HTMLInputElement,
         describedBy: height?.getAttribute('aria-describedby') || '',
         actionState: height?.getAttribute('data-action-state') || '',
         actionStatus: normalize(height?.getAttribute('data-action-status')),
+        min: height instanceof HTMLInputElement ? height.min : '',
+        max: height instanceof HTMLInputElement ? height.max : '',
+        step: height instanceof HTMLInputElement ? height.step : '',
+      },
+      compactSizeControls: {
+        disclosure: compactDisclosure instanceof HTMLDetailsElement,
+        expectedDefaultCollapsed: expectCompactCollapsed,
+        defaultCollapsed: compactDisclosure instanceof HTMLDetailsElement ? compactDisclosure.open === false : false,
+        describedBy: compactDisclosure?.getAttribute('aria-describedby') || '',
+        actionState: compactDisclosure?.getAttribute('data-action-state') || '',
+        actionStatus: normalize(compactDisclosure?.getAttribute('data-action-status')),
+        activePreset: compactDisclosure?.getAttribute('data-active-preset') || '',
+        width: Number(compactDisclosure?.getAttribute('data-canvas-width') || 0),
+        height: Number(compactDisclosure?.getAttribute('data-canvas-height') || 0),
+        summary: compactSummary instanceof HTMLElement,
+        preset: compactPreset instanceof HTMLSelectElement ? compactPreset.value : '',
+        compactWidth: compactWidth instanceof HTMLInputElement ? {
+          value: compactWidth.value,
+          min: compactWidth.min,
+          max: compactWidth.max,
+          step: compactWidth.step,
+        } : null,
+        compactHeight: compactHeight instanceof HTMLInputElement ? {
+          value: compactHeight.value,
+          min: compactHeight.min,
+          max: compactHeight.max,
+          step: compactHeight.step,
+        } : null,
       },
     };
   })()`);
 
   assert(state.ok, `Editor viewport controls action status contract failed: ${JSON.stringify(state)}`);
   return state;
+};
+
+const assertCompactCanvasSizeControls = async (client) => {
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width: 1024,
+    height: 760,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await sleep(300);
+
+  const opened = await evaluate(client, `(() => {
+    const disclosure = document.querySelector('[data-testid="editor-canvas-size-disclosure"]');
+    const summary = document.querySelector('[data-testid="editor-canvas-size-disclosure-summary"]');
+    if (!(disclosure instanceof HTMLDetailsElement) || !(summary instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-compact-size-disclosure' };
+    }
+    summary.click();
+    const rect = summary.getBoundingClientRect();
+    return {
+      ok: disclosure.open === true,
+      open: disclosure.open,
+      visible: rect.width > 0 && rect.height > 0 && window.getComputedStyle(summary).display !== 'none',
+      describedBy: summary.getAttribute('aria-describedby') || '',
+      actionStatus: summary.getAttribute('data-action-status') || '',
+      viewportWidth: window.innerWidth,
+    };
+  })()`);
+  assert(
+    opened?.ok &&
+      opened.visible &&
+      opened.viewportWidth === 1024 &&
+      opened.describedBy === 'editor-viewport-action-status' &&
+      /Canvas size/.test(opened.actionStatus || ''),
+    `Compact canvas size disclosure did not open as an accessible narrow-width control: ${JSON.stringify(opened)}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-canvas-compact-preset-select', 'mobile');
+  const mobileBreakpoint = await waitForEditorBreakpoint(client, 'mobile');
+  const mobileState = await assertEditorViewportControls(client, { expectCompactCollapsed: false });
+  const compactMobileState = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const context = document.querySelector('[data-testid="editor-canvas-context-bar"]');
+    const disclosure = document.querySelector('[data-testid="editor-canvas-size-disclosure"]');
+    const compactPreset = document.querySelector('[data-testid="editor-canvas-compact-preset-select"]');
+    const compactWidth = document.querySelector('[data-testid="editor-canvas-compact-width-input"]');
+    const compactHeight = document.querySelector('[data-testid="editor-canvas-compact-height-input"]');
+    return {
+      activePreset: disclosure?.getAttribute('data-active-preset') || '',
+      width: Number(disclosure?.getAttribute('data-canvas-width') || 0),
+      height: Number(disclosure?.getAttribute('data-canvas-height') || 0),
+      compactPreset: compactPreset instanceof HTMLSelectElement ? compactPreset.value : '',
+      compactWidth: compactWidth instanceof HTMLInputElement ? Number(compactWidth.value) : 0,
+      compactHeight: compactHeight instanceof HTMLInputElement ? Number(compactHeight.value) : 0,
+      contextWidth: Number(context?.getAttribute('data-canvas-width') || 0),
+      contextHeight: Number(context?.getAttribute('data-canvas-height') || 0),
+      actionStatus: normalize(disclosure?.getAttribute('data-action-status')),
+    };
+  })()`);
+  assert(
+    mobileBreakpoint.activePreset === 'mobile' &&
+      mobileState.activePreset === 'mobile' &&
+      mobileState.width === 375 &&
+      mobileState.height === 812 &&
+      compactMobileState.activePreset === 'mobile' &&
+      compactMobileState.compactPreset === 'mobile' &&
+      compactMobileState.width === 375 &&
+      compactMobileState.height === 812 &&
+      compactMobileState.compactWidth === 375 &&
+      compactMobileState.compactHeight === 812 &&
+      compactMobileState.contextWidth === 375 &&
+      compactMobileState.contextHeight === 812,
+    `Compact canvas preset did not drive mobile viewport metadata: ${JSON.stringify({ mobileBreakpoint, mobileState, compactMobileState })}`,
+  );
+
+  await setFormControlByTestId(client, 'editor-canvas-compact-width-input', '390');
+  let customState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    customState = await assertEditorViewportControls(client, { expectCompactCollapsed: false });
+    if (customState.activePreset === 'custom' && customState.width === 390 && customState.height === 812) {
+      break;
+    }
+    await sleep(100);
+  }
+  const compactCustomState = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const context = document.querySelector('[data-testid="editor-canvas-context-bar"]');
+    const disclosure = document.querySelector('[data-testid="editor-canvas-size-disclosure"]');
+    const compactPreset = document.querySelector('[data-testid="editor-canvas-compact-preset-select"]');
+    const compactWidth = document.querySelector('[data-testid="editor-canvas-compact-width-input"]');
+    const compactHeight = document.querySelector('[data-testid="editor-canvas-compact-height-input"]');
+    return {
+      activePreset: disclosure?.getAttribute('data-active-preset') || '',
+      width: Number(disclosure?.getAttribute('data-canvas-width') || 0),
+      height: Number(disclosure?.getAttribute('data-canvas-height') || 0),
+      compactPreset: compactPreset instanceof HTMLSelectElement ? compactPreset.value : '',
+      compactWidth: compactWidth instanceof HTMLInputElement ? Number(compactWidth.value) : 0,
+      compactHeight: compactHeight instanceof HTMLInputElement ? Number(compactHeight.value) : 0,
+      contextWidth: Number(context?.getAttribute('data-canvas-width') || 0),
+      contextHeight: Number(context?.getAttribute('data-canvas-height') || 0),
+      actionStatus: normalize(disclosure?.getAttribute('data-action-status')),
+    };
+  })()`);
+  assert(
+    customState?.activePreset === 'custom' &&
+      customState.width === 390 &&
+      customState.height === 812 &&
+      compactCustomState.activePreset === 'custom' &&
+      compactCustomState.compactPreset === 'custom' &&
+      compactCustomState.width === 390 &&
+      compactCustomState.height === 812 &&
+      compactCustomState.compactWidth === 390 &&
+      compactCustomState.compactHeight === 812 &&
+      compactCustomState.contextWidth === 390 &&
+      compactCustomState.contextHeight === 812 &&
+      /390 x 812px/.test(compactCustomState.actionStatus || ''),
+    `Compact canvas dimension input did not synchronize custom viewport metadata: ${JSON.stringify({ customState, compactCustomState })}`,
+  );
+
+  return {
+    opened,
+    mobileState: compactMobileState,
+    customState: compactCustomState,
+  };
 };
 
 const readEditorCommandPaletteState = async (client) => evaluate(client, `(() => {
@@ -22902,12 +23115,14 @@ const main = async () => {
     const primaryActionStatus = await assertEditorPrimaryActionStatus(client);
 
 	    if (PRIMARY_ACTION_STATUS_SMOKE) {
+	      const compactCanvasSizeControls = await assertCompactCanvasSizeControls(client);
 	      console.log(JSON.stringify({
 	        ok: true,
         mode: 'primary-action-status',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         pageEditorRouteActions,
         viewportControls,
+        compactCanvasSizeControls,
         primaryActionStatus,
       }, null, 2));
 	      return;
