@@ -51,11 +51,13 @@ import {
 interface BlogNewSearch {
     siteId?: string;
     focus?: 'canvas';
+    templateSource?: BlogTemplateSourceMode;
     designTemplate?: string;
     frontendDesignTemplateId?: string;
     frontendTemplate?: string;
 }
 
+type BlogTemplateSourceMode = 'backy-canvas' | 'custom-frontend';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
@@ -80,6 +82,7 @@ interface BlogCreateAutosaveDraft {
     selectedAuthorId: string;
     canvasElements: CanvasElement[];
     canvasSize: CanvasSize;
+    templateSourceMode?: BlogTemplateSourceMode;
     designTemplateId?: string;
     frontendDesignSource?: SiteFrontendDesignContract['source'] | null;
     frontendDesignTokens?: SiteFrontendDesignContract['tokens'] | null;
@@ -103,10 +106,15 @@ const normalizedFrontendDesignTemplateSearch = (search: Record<string, unknown>)
     || normalizedSearchString(search.frontendTemplate)
 );
 
+const isBlogTemplateSourceMode = (value: unknown): value is BlogTemplateSourceMode => (
+    value === 'backy-canvas' || value === 'custom-frontend'
+);
+
 export const Route = createFileRoute('/blog/new')({
     validateSearch: (search: Record<string, unknown>): BlogNewSearch => ({
         siteId: normalizedSearchString(search.siteId),
         focus: search.focus === 'canvas' ? 'canvas' : undefined,
+        templateSource: isBlogTemplateSourceMode(search.templateSource) ? search.templateSource : undefined,
         designTemplate: normalizedFrontendDesignTemplateSearch(search),
         frontendDesignTemplateId: normalizedSearchString(search.frontendDesignTemplateId),
         frontendTemplate: normalizedSearchString(search.frontendTemplate),
@@ -708,6 +716,7 @@ function NewBlogPostPage() {
     const requestedSiteId = requestedSite?.publicSiteId || requestedSite?.id || defaultSiteId;
     const [activeSiteId, setActiveSiteId] = useState(requestedSiteId);
     const isWorkspaceFocus = search.focus === 'canvas';
+    const initialTemplateSourceMode: BlogTemplateSourceMode = search.templateSource || (search.designTemplate ? 'custom-frontend' : 'backy-canvas');
 
     // Form State
     const [title, setTitle] = useState('');
@@ -728,6 +737,7 @@ function NewBlogPostPage() {
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
     const [selectedAuthorId, setSelectedAuthorId] = useState(user?.id || 'admin');
+    const [templateSourceMode, setTemplateSourceMode] = useState<BlogTemplateSourceMode>(initialTemplateSourceMode);
     const [designTemplateId, setDesignTemplateId] = useState(search.designTemplate || '');
     const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
     const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(user?.id));
@@ -949,11 +959,16 @@ function NewBlogPostPage() {
             setActiveSiteId(fallbackSiteId);
             navigate({
                 to: '/blog/new',
-                search: { siteId: fallbackSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), ...(designTemplateId ? { designTemplate: designTemplateId } : {}) },
+                search: {
+                    siteId: fallbackSiteId,
+                    ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
+                    ...(templateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
+                    ...(templateSourceMode === 'custom-frontend' && designTemplateId ? { designTemplate: designTemplateId } : {}),
+                },
                 replace: true,
             });
         }
-    }, [activeSiteId, designTemplateId, isWorkspaceFocus, navigate, sites]);
+    }, [activeSiteId, designTemplateId, isWorkspaceFocus, navigate, sites, templateSourceMode]);
 
     useEffect(() => {
         const nextRequestedSite = search.siteId
@@ -966,9 +981,10 @@ function NewBlogPostPage() {
         setSelectedCategoryIds([]);
         setSelectedTagIds([]);
         setDesignTemplateId(search.designTemplate || '');
+        setTemplateSourceMode(search.templateSource || (search.designTemplate ? 'custom-frontend' : 'backy-canvas'));
         setError(null);
         setNotice(null);
-    }, [activeSiteId, defaultSiteId, search.designTemplate, search.siteId, sites]);
+    }, [activeSiteId, defaultSiteId, search.designTemplate, search.siteId, search.templateSource, sites]);
 
     const selectBlogSite = (nextSiteId: string) => {
         if (isCreateBusy) return;
@@ -983,6 +999,8 @@ function NewBlogPostPage() {
         setSelectedTagIds([]);
         setFeaturedImageId(null);
         setOgImage('');
+        setTemplateSourceMode('backy-canvas');
+        setDesignTemplateId('');
         clearCreationFeedback();
         navigate({
             to: '/blog/new',
@@ -1034,12 +1052,15 @@ function NewBlogPostPage() {
         () => (frontendDesign?.templates || []).filter((template) => template.type === 'blogPost'),
         [frontendDesign?.templates],
     );
+    const isCustomFrontendTemplateSource = templateSourceMode === 'custom-frontend';
     const selectedFrontendTemplate = useMemo(
-        () => frontendBlogTemplates.find((template) => template.id === designTemplateId) || null,
-        [designTemplateId, frontendBlogTemplates],
+        () => isCustomFrontendTemplateSource
+            ? frontendBlogTemplates.find((template) => template.id === designTemplateId) || null
+            : null,
+        [designTemplateId, frontendBlogTemplates, isCustomFrontendTemplateSource],
     );
     const recoveredFrontendTemplate = useMemo<SiteFrontendDesignTemplate | null>(() => {
-        if (selectedFrontendTemplate || !designTemplateId) {
+        if (!isCustomFrontendTemplateSource || selectedFrontendTemplate || !designTemplateId) {
             return null;
         }
 
@@ -1070,7 +1091,7 @@ function NewBlogPostPage() {
             content: { elements: canvasElements },
             bindingHints: collectFrontendTemplateBindingHints(canvasElements, designTemplateId),
         };
-    }, [canvasElements, canvasSize, designTemplateId, selectedFrontendTemplate]);
+    }, [canvasElements, canvasSize, designTemplateId, isCustomFrontendTemplateSource, selectedFrontendTemplate]);
     const effectiveFrontendTemplate = selectedFrontendTemplate || recoveredFrontendTemplate;
     const visibleFrontendBlogTemplates = useMemo(
         () => effectiveFrontendTemplate && !frontendBlogTemplates.some((template) => template.id === effectiveFrontendTemplate.id)
@@ -1079,6 +1100,16 @@ function NewBlogPostPage() {
         [effectiveFrontendTemplate, frontendBlogTemplates],
     );
     const effectiveCanvasSource = effectiveFrontendTemplate ? 'frontend-design' : 'backy-starter';
+    const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(effectiveFrontendTemplate);
+    const templateSourceStatus = isCustomFrontendTemplateSource
+        ? effectiveFrontendTemplate
+            ? `Custom frontend blog template selected: ${effectiveFrontendTemplate.name}.`
+            : frontendDesignLoading
+                ? 'Loading custom frontend blog templates.'
+                : frontendBlogTemplates.length > 0
+                    ? 'Choose a custom frontend blog template before creating this post.'
+                    : 'No custom frontend blog templates are captured for this site yet.'
+        : 'Backy canvas blog article template selected.';
     const effectiveFrontendDesignSource = effectiveFrontendTemplate
         ? frontendDesign?.source || recoveredFrontendDesignSnapshot?.source || { type: 'custom-frontend' as const, label: 'Recovered frontend design contract' }
         : undefined;
@@ -1114,6 +1145,44 @@ function NewBlogPostPage() {
         setCanvasSeedKey(`longform-${kind}-${Date.now()}`);
         setNotice(kind === 'section' ? 'Added an editable article section to the canvas.' : 'Added an editable pull quote to the canvas.');
     };
+
+    const handleTemplateSourceChange = (nextSourceMode: BlogTemplateSourceMode) => {
+        if (isCreateBusy || !canEditBlog || nextSourceMode === templateSourceMode) return;
+
+        clearCreationFeedback();
+
+        if (nextSourceMode === 'backy-canvas') {
+            setTemplateSourceMode('backy-canvas');
+            setDesignTemplateId('');
+            setRecoveredFrontendDesignSnapshot(null);
+            if (effectiveFrontendTemplate) {
+                setCanvasElements(initialElements);
+                setCanvasSize(initialCanvasSize);
+                setCanvasSeedKey(`default-blog-template-${Date.now()}`);
+            }
+            navigate({
+                to: '/blog/new',
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}) },
+                replace: true,
+            });
+            return;
+        }
+
+        setTemplateSourceMode('custom-frontend');
+        const nextTemplate = selectedFrontendTemplate || frontendBlogTemplates[0] || null;
+        if (!nextTemplate) {
+            setDesignTemplateId('');
+            navigate({
+                to: '/blog/new',
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), templateSource: 'custom-frontend' as const },
+                replace: true,
+            });
+            return;
+        }
+
+        applyFrontendTemplate(nextTemplate, { syncRoute: true });
+    };
+
     const applyFrontendTemplate = (template: SiteFrontendDesignTemplate, options: { syncRoute?: boolean } = {}) => {
         if (isCreateBusy) return;
         if (!canEditBlog) {
@@ -1136,6 +1205,7 @@ function NewBlogPostPage() {
         const routeSlug = routeSlugFromPattern(template.routePattern);
 
         clearCreationFeedback();
+        setTemplateSourceMode('custom-frontend');
         setDesignTemplateId(template.id);
         setCanvasElements(nextElements);
         setCanvasSize(nextCanvasSize);
@@ -1154,7 +1224,7 @@ function NewBlogPostPage() {
         if (options.syncRoute) {
             navigate({
                 to: '/blog/new',
-                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), designTemplate: template.id },
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), templateSource: 'custom-frontend' as const, designTemplate: template.id },
                 replace: true,
             });
         }
@@ -1186,12 +1256,22 @@ function NewBlogPostPage() {
     const selectedSite = sites.find((site) => siteMatchesIdentifier(site, activeSiteId));
     useEffect(() => {
         const nextTemplateId = search.designTemplate || '';
+        const nextTemplateSourceMode = search.templateSource || (nextTemplateId ? 'custom-frontend' : 'backy-canvas');
+        if (nextTemplateSourceMode !== templateSourceMode) {
+            setTemplateSourceMode(nextTemplateSourceMode);
+        }
         if (nextTemplateId && nextTemplateId !== designTemplateId) {
             setDesignTemplateId(nextTemplateId);
         }
-    }, [designTemplateId, search.designTemplate]);
+    }, [designTemplateId, search.designTemplate, search.templateSource, templateSourceMode]);
 
     useEffect(() => {
+        if (templateSourceMode !== 'custom-frontend' && designTemplateId) {
+            setDesignTemplateId('');
+            appliedSearchTemplateRef.current = null;
+            return;
+        }
+
         if (
             designTemplateId
             && frontendDesign
@@ -1202,7 +1282,7 @@ function NewBlogPostPage() {
             setDesignTemplateId('');
             appliedSearchTemplateRef.current = null;
         }
-    }, [canvasElements, designTemplateId, frontendBlogTemplates, frontendDesign, frontendDesignLoading]);
+    }, [canvasElements, designTemplateId, frontendBlogTemplates, frontendDesign, frontendDesignLoading, templateSourceMode]);
 
     useEffect(() => {
         if (!selectedFrontendTemplate) {
@@ -1274,6 +1354,7 @@ function NewBlogPostPage() {
         { label: 'SEO', complete: effectiveSeoTitle.length > 0 && effectiveSeoDescription.length >= 50 && canonicalValid },
         { label: 'Featured image', complete: Boolean(featuredImageId) },
         { label: 'Design', complete: canvasElements.length > 0 },
+        { label: 'Template source', complete: templateSourceReady },
         { label: 'Schedule', complete: hasFutureSchedule },
     ];
     const readyCount = readinessChecks.filter((check) => check.complete).length;
@@ -1284,7 +1365,8 @@ function NewBlogPostPage() {
         && !isCheckingPosts
         && !routeCheckError
         && !routeConflict
-        && canonicalValid;
+        && canonicalValid
+        && templateSourceReady;
     const canCreatePreviewDraft = title.trim().length > 0
         && canEditBlog
         && canPublishBlog
@@ -1293,6 +1375,7 @@ function NewBlogPostPage() {
         && !routeCheckError
         && !routeConflict
         && canonicalValid
+        && templateSourceReady
         && interactivePublishReady;
     const canAttemptCreatePreviewDraft = canEditBlog && canPublishBlog;
     const canSubmit = canCreateDraft
@@ -1335,6 +1418,8 @@ function NewBlogPostPage() {
         authorId: selectedAuthorId || user?.id || 'admin',
         categoryIds: selectedCategoryIds,
         tagIds: selectedTagIds,
+        templateSource: templateSourceMode,
+        templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
         template: effectiveFrontendTemplate
             ? { id: effectiveFrontendTemplate.id, source: 'frontend-design', name: effectiveFrontendTemplate.name }
             : { id: 'blog-article', source: 'backy-starter', name: 'Blog article' },
@@ -1372,6 +1457,7 @@ function NewBlogPostPage() {
         selectedTagIds,
         slugValue,
         status,
+        templateSourceMode,
         title,
         user?.id,
     ]);
@@ -1448,6 +1534,8 @@ function NewBlogPostPage() {
             id: effectiveFrontendTemplate?.id || 'blog-article',
             name: effectiveFrontendTemplate?.name || 'Blog article',
             source: effectiveCanvasSource,
+            templateSource: templateSourceMode,
+            templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
             sections: effectiveFrontendTemplate ? effectiveFrontendTemplate.bindingHints || [] : ['article hero', 'article body'],
             routePattern: effectiveFrontendTemplate?.routePattern || '/blog/{slug}',
         },
@@ -1503,6 +1591,7 @@ function NewBlogPostPage() {
         selectedTagIds,
         slugValue,
         status,
+        templateSourceMode,
         title,
         user?.fullName,
         user?.id,
@@ -1524,6 +1613,7 @@ function NewBlogPostPage() {
         || selectedCategoryIds.length > 0
         || selectedTagIds.length > 0
         || selectedAuthorId !== (user?.id || 'admin')
+        || templateSourceMode !== 'backy-canvas'
         || designTemplateId.trim().length > 0
         || canvasSize.width !== initialCanvasSize.width
         || canvasSize.height !== initialCanvasSize.height
@@ -1550,6 +1640,7 @@ function NewBlogPostPage() {
         seoTitle,
         slug,
         status,
+        templateSourceMode,
         title,
         user?.id,
     ]);
@@ -1591,6 +1682,7 @@ function NewBlogPostPage() {
                     selectedAuthorId,
                     canvasElements,
                     canvasSize,
+                    templateSourceMode,
                     designTemplateId,
                     frontendDesignSource: effectiveFrontendTemplate ? effectiveFrontendDesignSource || null : null,
                     frontendDesignTokens: effectiveFrontendTemplate ? effectiveFrontendDesignTokens || null : null,
@@ -1633,6 +1725,7 @@ function NewBlogPostPage() {
         seoTitle,
         slug,
         status,
+        templateSourceMode,
         title,
     ]);
 
@@ -1664,6 +1757,8 @@ function NewBlogPostPage() {
         setSelectedCategoryIds(draftRecovery.selectedCategoryIds);
         setSelectedTagIds(draftRecovery.selectedTagIds);
         setSelectedAuthorId(draftRecovery.selectedAuthorId);
+        const recoveredTemplateSourceMode = draftRecovery.templateSourceMode || (draftRecovery.designTemplateId ? 'custom-frontend' : 'backy-canvas');
+        setTemplateSourceMode(recoveredTemplateSourceMode);
         setDesignTemplateId(draftRecovery.designTemplateId || '');
         setRecoveredFrontendDesignSnapshot(
             draftRecovery.frontendDesignSource || draftRecovery.frontendDesignTokens || draftRecovery.frontendDesignChrome
@@ -1687,7 +1782,12 @@ function NewBlogPostPage() {
         setNotice('Recovered local blog draft.');
         navigate({
             to: '/blog/new',
-            search: { siteId: recoveredSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), ...(draftRecovery.designTemplateId ? { designTemplate: draftRecovery.designTemplateId } : {}) },
+            search: {
+                siteId: recoveredSiteId,
+                ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
+                ...(recoveredTemplateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
+                ...(recoveredTemplateSourceMode === 'custom-frontend' && draftRecovery.designTemplateId ? { designTemplate: draftRecovery.designTemplateId } : {}),
+            },
             replace: true,
         });
     };
@@ -1706,7 +1806,8 @@ function NewBlogPostPage() {
             search: {
                 siteId: activeSiteId,
                 ...(focused ? { focus: 'canvas' as const } : {}),
-                ...(designTemplateId ? { designTemplate: designTemplateId } : {}),
+                ...(templateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
+                ...(templateSourceMode === 'custom-frontend' && designTemplateId ? { designTemplate: designTemplateId } : {}),
             },
             replace: true,
         });
@@ -1792,6 +1893,15 @@ function NewBlogPostPage() {
         const frontendTemplateDesignState = effectiveFrontendTemplate
             ? extractFrontendTemplateDesignSerialization(effectiveFrontendTemplate.content, effectiveFrontendDesignTokens?.customCss)
             : null;
+        const templateMetadata = {
+            ...(frontendTemplateDesignState?.options?.metadata || {}),
+            templateSource: effectiveFrontendTemplate ? 'custom-frontend' : templateSourceMode,
+            templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
+            ...(!effectiveFrontendTemplate ? { backyCanvasTemplateId: 'blog-article' } : {}),
+            ...(effectiveFrontendTemplate?.id ? { frontendDesignTemplateId: effectiveFrontendTemplate.id } : {}),
+            ...(effectiveFrontendTemplate?.name ? { frontendDesignTemplateName: effectiveFrontendTemplate.name } : {}),
+            ...(effectiveFrontendTemplate?.routePattern ? { frontendDesignRoutePattern: effectiveFrontendTemplate.routePattern } : {}),
+        };
         const content = serializeCanvasContent(contentElements, contentCanvasSize, frontendTemplateDesignState?.customCSS, {
             documentId: `new-post-${slugValue || title || 'draft'}`,
             kind: 'post',
@@ -1800,6 +1910,7 @@ function NewBlogPostPage() {
             status: resolvedStatus,
             locale: 'en',
             ...(frontendTemplateDesignState?.options || {}),
+            metadata: templateMetadata,
         });
 
         return {
@@ -1820,6 +1931,10 @@ function NewBlogPostPage() {
                 ogImage: ogImage.trim() || selectedFeaturedImageUrl || null,
                 noIndex,
                 noFollow,
+                template: 'blog-article',
+                templateSource: effectiveFrontendTemplate ? 'custom-frontend' : templateSourceMode,
+                templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
+                backyCanvasTemplateId: effectiveFrontendTemplate ? undefined : 'blog-article',
                 frontendDesignTemplateId: effectiveFrontendTemplate?.id,
                 frontendDesignTemplateName: effectiveFrontendTemplate?.name,
                 frontendDesignSource: effectiveFrontendDesignSource,
@@ -1854,6 +1969,15 @@ function NewBlogPostPage() {
         if ((mode === 'preview' || (mode === 'save' && status !== 'draft')) && interactivePublishDisabledReason) {
             return interactivePublishDisabledReason;
         }
+        if (!templateSourceReady) {
+            return isCustomFrontendTemplateSource
+                ? frontendDesignLoading
+                    ? 'Custom frontend blog templates are still loading.'
+                    : frontendBlogTemplates.length > 0
+                        ? 'Choose a custom frontend blog template before saving.'
+                        : 'Capture a blog post template from the custom frontend, or switch back to Backy canvas.'
+                : 'Choose a blog template source before saving.';
+        }
         if (isCheckingPosts) return 'Checking existing blog routes before saving';
         if (routeCheckError) return 'Backy could not verify existing blog routes for this site. Retry the route check before saving.';
         if (routeConflict) return `The ${routePath} route is already used by "${routeConflict.title}". Choose another slug or edit that post first.`;
@@ -1863,8 +1987,9 @@ function NewBlogPostPage() {
     };
     const submitBlockerMessage = isLoading || canSubmit ? null : getCreateBlockedMessage('save');
     const previewDraftBlockerMessage = isPreviewAfterCreateBusy || canCreatePreviewDraft ? null : getCreateBlockedMessage('preview');
-    const submitControlState = canSubmit ? 'ready' : (isCreateBusy || isCheckingPosts || isPermissionMatrixPending) ? 'busy' : 'blocked';
-    const previewDraftControlState = canCreatePreviewDraft ? 'ready' : (isCreateBusy || isCheckingPosts || isPermissionMatrixPending) ? 'busy' : 'blocked';
+    const isTemplateSourceBusy = isCustomFrontendTemplateSource && frontendDesignLoading && !effectiveFrontendTemplate;
+    const submitControlState = canSubmit ? 'ready' : (isCreateBusy || isCheckingPosts || isPermissionMatrixPending || isTemplateSourceBusy) ? 'busy' : 'blocked';
+    const previewDraftControlState = canCreatePreviewDraft ? 'ready' : (isCreateBusy || isCheckingPosts || isPermissionMatrixPending || isTemplateSourceBusy) ? 'busy' : 'blocked';
     const blogCreateSubmitActionStatusId = 'blog-create-submit-action-status';
     const blogCreatePreviewActionStatusId = 'blog-create-preview-action-status';
     const blogCreateCommandActionStatusId = 'blog-create-command-action-status';
@@ -2712,11 +2837,59 @@ function NewBlogPostPage() {
                         {!isWorkspaceFocus && (
                             <Panel id="blog-create-design-template" className="overflow-hidden scroll-mt-24" data-testid="blog-frontend-template-panel">
                                 <PanelHeader
-                                    title="Frontend design template"
-                                    description="Seed this post from blog templates captured from the selected site's custom frontend contract."
+                                    title="Template source"
+                                    description="Choose Backy canvas generation or a captured custom frontend blog template."
                                     icon={<LayoutTemplate className="size-4" />}
                                 />
-                                <PanelContent className="space-y-3">
+                                <PanelContent className="space-y-4">
+                                    <div
+                                        className="rounded-lg border border-border bg-background p-3"
+                                        data-testid="blog-template-source-switch"
+                                        data-active-source={templateSourceMode}
+                                        data-action-status={templateSourceStatus}
+                                    >
+                                        <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Blog template source">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleTemplateSourceChange('backy-canvas')}
+                                                disabled={isCreateBusy}
+                                                aria-pressed={templateSourceMode === 'backy-canvas'}
+                                                data-testid="blog-template-source-backy-canvas"
+                                                data-active={templateSourceMode === 'backy-canvas'}
+                                                className={cn(
+                                                    'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
+                                                    templateSourceMode === 'backy-canvas'
+                                                        ? 'border-primary bg-primary text-primary-foreground'
+                                                        : 'border-border bg-card text-foreground hover:border-primary/50 hover:bg-accent',
+                                                )}
+                                            >
+                                                Backy canvas
+                                                <span className="mt-0.5 block text-xs font-normal opacity-80">Generated editable article</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleTemplateSourceChange('custom-frontend')}
+                                                disabled={isCreateBusy}
+                                                aria-pressed={templateSourceMode === 'custom-frontend'}
+                                                data-testid="blog-template-source-custom-frontend"
+                                                data-active={templateSourceMode === 'custom-frontend'}
+                                                data-template-count={frontendBlogTemplates.length}
+                                                className={cn(
+                                                    'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
+                                                    templateSourceMode === 'custom-frontend'
+                                                        ? 'border-teal-700 bg-teal-700 text-white'
+                                                        : 'border-border bg-card text-foreground hover:border-teal-400 hover:bg-accent',
+                                                )}
+                                            >
+                                                Custom frontend
+                                                <span className="mt-0.5 block text-xs font-normal opacity-80">Stored design contract</span>
+                                            </button>
+                                        </div>
+                                        <div className="mt-2 text-xs text-muted-foreground" data-testid="blog-template-source-status">
+                                            {templateSourceStatus}
+                                        </div>
+                                    </div>
+
                                     {frontendDesignLoading && (
                                         <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
                                             Loading frontend design templates...
@@ -2727,7 +2900,7 @@ function NewBlogPostPage() {
                                             {frontendDesignError}
                                         </div>
                                     )}
-                                    {visibleFrontendBlogTemplates.length > 0 ? (
+                                    {isCustomFrontendTemplateSource && visibleFrontendBlogTemplates.length > 0 ? (
                                         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-testid="blog-frontend-template-options">
                                             {visibleFrontendBlogTemplates.map((template) => (
                                                 <button
@@ -2759,12 +2932,16 @@ function NewBlogPostPage() {
                                                 </button>
                                             ))}
                                         </div>
-                                    ) : !frontendDesignLoading && (
+                                    ) : isCustomFrontendTemplateSource && !frontendDesignLoading ? (
                                         <EmptyState
                                             icon={LayoutTemplate}
                                             title="No blog templates captured yet"
                                             description="Save a frontend design contract with blog post templates to seed this article from the connected custom frontend."
                                         />
+                                    ) : (
+                                        <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm leading-6 text-muted-foreground">
+                                            Backy will create an editable article page with saved header, navigation, body, footer, and long-form blocks. Switch to Custom frontend when this site has captured blog post templates.
+                                        </div>
                                     )}
                                 </PanelContent>
                             </Panel>
@@ -3380,6 +3557,10 @@ const isRecoverableBlogCreateDraft = (value: Partial<BlogCreateAutosaveDraft>): 
     && Array.isArray(value.canvasElements)
     && typeof value.canvasSize?.width === 'number'
     && typeof value.canvasSize?.height === 'number'
+    && (
+        value.templateSourceMode === undefined
+        || isBlogTemplateSourceMode(value.templateSourceMode)
+    )
     && (value.designTemplateId === undefined || typeof value.designTemplateId === 'string')
     && (
         value.frontendDesignSource === undefined
