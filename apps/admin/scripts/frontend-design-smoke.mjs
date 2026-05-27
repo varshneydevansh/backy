@@ -298,6 +298,261 @@ const getOrCreateProductCollection = async () => {
   return { collection: createdCollection, created: true };
 };
 
+const pageTemplateContent = () => ({
+  elements: [
+    {
+      id: 'smoke-page-hero',
+      type: 'section',
+      x: 0,
+      y: 0,
+      width: 1440,
+      height: 620,
+      props: {
+        backgroundColor: '#f8fafc',
+        frontendTemplateId: 'smoke-page-template',
+        className: 'smoke-page-shell',
+      },
+      children: [
+        {
+          id: 'smoke-page-title',
+          type: 'heading',
+          x: 96,
+          y: 112,
+          width: 760,
+          height: 112,
+          props: {
+            content: 'Custom frontend page shell',
+            level: 'h1',
+            fontFamily: 'Inter',
+            fontSize: 56,
+            fontWeight: '800',
+            color: '#0f766e',
+            binding: 'page.title',
+          },
+        },
+        {
+          id: 'smoke-page-cta',
+          type: 'button',
+          x: 96,
+          y: 280,
+          width: 180,
+          height: 52,
+          props: {
+            label: 'Start here',
+            href: '/contact',
+            backgroundColor: '#0f766e',
+            color: '#ffffff',
+            borderRadius: 8,
+          },
+        },
+      ],
+    },
+  ],
+  canvasSize: { width: 1440, height: 1200 },
+  customCSS: ':root { --smoke-primary: #0f766e; } .smoke-page-shell { color: var(--smoke-primary); }',
+  customJS: 'window.__backySmokePageTemplate = true;',
+  contentDocument: {
+    id: 'smoke-page-template-document',
+    kind: 'page',
+    title: 'Smoke Page Template',
+    slug: 'smoke-page-template',
+    status: 'published',
+    elements: [],
+    metadata: {
+      editableSurface: 'frontend-design-smoke-page',
+      templateKind: 'page',
+      customCSS: ':root { --smoke-primary: #0f766e; }',
+      customJS: 'window.__backySmokePageDocument = true;',
+    },
+  },
+  themeTokenRefs: {
+    'smoke-page-title.props.color': 'colors.primary',
+    'smoke-page-title.props.fontFamily': 'fonts.heading',
+  },
+  assets: {
+    heroImage: {
+      id: 'smoke-page-hero-image',
+      type: 'image',
+      url: 'https://cdn.backy.test/smoke-page-hero.jpg',
+      role: 'hero',
+    },
+  },
+  animations: [
+    {
+      id: 'smoke-page-hero-enter',
+      elementId: 'smoke-page-hero',
+      type: 'fade',
+      duration: 320,
+      easing: 'ease-out',
+    },
+  ],
+  interactions: {
+    ctaClick: {
+      elementId: 'smoke-page-cta',
+      trigger: 'click',
+      action: 'navigate',
+      href: '/contact',
+    },
+  },
+  dataBindings: {
+    heroTitle: {
+      elementId: 'smoke-page-title',
+      binding: 'page.title',
+      source: 'page',
+      field: 'title',
+    },
+  },
+  editableMap: {
+    'smoke-page-title.props.content': {
+      label: 'Hero title',
+      valueType: 'text',
+      binding: 'page.title',
+    },
+    'smoke-page-cta.props.backgroundColor': {
+      label: 'CTA color',
+      valueType: 'color',
+      token: 'colors.primary',
+    },
+  },
+  seo: {
+    titleTemplate: '%s | Smoke frontend',
+    description: 'Smoke page template SEO metadata.',
+  },
+  metadata: {
+    editableSurface: 'frontend-design-smoke-page',
+    templateKind: 'page',
+  },
+});
+
+const blogTemplateContent = () => ({
+  elements: [
+    {
+      id: 'smoke-blog-article',
+      type: 'section',
+      x: 0,
+      y: 0,
+      width: 1200,
+      height: 920,
+      props: {
+        backgroundColor: '#ffffff',
+        frontendTemplateId: 'smoke-blog-template',
+      },
+      children: [
+        {
+          id: 'smoke-blog-title',
+          type: 'heading',
+          x: 88,
+          y: 96,
+          width: 760,
+          height: 96,
+          props: {
+            content: 'Custom frontend article shell',
+            level: 'h1',
+            fontFamily: 'Inter',
+            fontSize: 48,
+            fontWeight: '800',
+            color: '#111827',
+            binding: 'post.title',
+          },
+        },
+        {
+          id: 'smoke-blog-body',
+          type: 'paragraph',
+          x: 92,
+          y: 248,
+          width: 760,
+          height: 180,
+          props: {
+            content: 'Article content keeps its custom frontend editable map.',
+            fontFamily: 'Inter',
+            fontSize: 18,
+            lineHeight: 1.7,
+            color: '#334155',
+            binding: 'post.content',
+          },
+        },
+      ],
+    },
+  ],
+  canvasSize: { width: 1200, height: 1000 },
+  customCSS: '.smoke-blog-article { --article-accent: #0f766e; }',
+  customJS: 'window.__backySmokeBlogTemplate = true;',
+  contentDocument: {
+    id: 'smoke-blog-template-document',
+    kind: 'post',
+    title: 'Smoke Blog Template',
+    slug: 'smoke-blog-template',
+    status: 'published',
+    elements: [],
+    metadata: {
+      editableSurface: 'frontend-design-smoke-blog',
+      templateKind: 'blogPost',
+    },
+  },
+  themeTokenRefs: {
+    'smoke-blog-title.props.fontFamily': 'fonts.heading',
+    'smoke-blog-body.props.color': 'colors.text',
+  },
+  assets: {
+    coverImage: {
+      id: 'smoke-blog-cover-image',
+      type: 'image',
+      url: 'https://cdn.backy.test/smoke-blog-cover.jpg',
+      role: 'cover',
+    },
+  },
+  animations: [
+    {
+      id: 'smoke-blog-title-reveal',
+      elementId: 'smoke-blog-title',
+      type: 'slide-up',
+      duration: 280,
+      easing: 'ease-out',
+    },
+  ],
+  interactions: {
+    bodyFocus: {
+      elementId: 'smoke-blog-body',
+      trigger: 'focus',
+      action: 'highlight',
+    },
+  },
+  dataBindings: {
+    articleTitle: {
+      elementId: 'smoke-blog-title',
+      binding: 'post.title',
+      source: 'blog',
+      field: 'title',
+    },
+    articleBody: {
+      elementId: 'smoke-blog-body',
+      binding: 'post.content',
+      source: 'blog',
+      field: 'content',
+    },
+  },
+  editableMap: {
+    'smoke-blog-title.props.content': {
+      label: 'Article title',
+      valueType: 'text',
+      binding: 'post.title',
+    },
+    'smoke-blog-body.props.content': {
+      label: 'Article body',
+      valueType: 'richText',
+      binding: 'post.content',
+    },
+  },
+  seo: {
+    titleTemplate: '%s | Smoke blog',
+    description: 'Smoke blog template SEO metadata.',
+  },
+  metadata: {
+    editableSurface: 'frontend-design-smoke-blog',
+    templateKind: 'blogPost',
+  },
+});
+
 const smokeContract = () => ({
   schemaVersion: 'backy.frontend-design.v1',
   status: 'synced',
@@ -324,6 +579,17 @@ const smokeContract = () => ({
     radii: {
       card: 8,
     },
+    motion: {
+      duration: {
+        fast: '160ms',
+        standard: '280ms',
+      },
+      easing: {
+        standard: 'cubic-bezier(0.2, 0, 0, 1)',
+      },
+      preset: 'subtle',
+    },
+    customCss: ':root { --backy-smoke-primary: #0f766e; }',
   },
   chrome: {
     header: {
@@ -350,6 +616,7 @@ const smokeContract = () => ({
       updatedAt: TEMPLATE_VERSIONED_AT,
       routePattern: '/{slug}',
       canvasSize: { width: 1440, height: 1200 },
+      content: pageTemplateContent(),
       bindingHints: [
         { role: 'page.title', binding: 'page.title' },
       ],
@@ -364,6 +631,7 @@ const smokeContract = () => ({
       updatedAt: TEMPLATE_VERSIONED_AT,
       routePattern: '/blog/{slug}',
       canvasSize: { width: 1200, height: 1000 },
+      content: blogTemplateContent(),
       bindingHints: [
         { role: 'post.title', binding: 'post.title' },
       ],
@@ -563,6 +831,8 @@ const main = async () => {
     assert(frontendDesignResponse.templateRegistry?.actionPlan?.schemaVersion === 'backy.template-registry-action-plan.v1', 'Frontend design response missing template registry action plan');
     const afterPatch = frontendDesignResponse.frontendDesign;
     assert(afterPatch.tokens?.colors?.primary === '#0f766e', 'GET did not persist patched color token');
+    assert(afterPatch.tokens?.motion?.duration?.fast === '160ms', 'GET did not persist patched motion tokens');
+    assert(afterPatch.tokens?.customCss?.includes('--backy-smoke-primary'), 'GET did not persist custom frontend CSS token payload');
     await assertTemplateRegistry();
 
     const manifestAfterPatch = await getManifest();
@@ -581,10 +851,27 @@ const main = async () => {
       }),
     });
     createdPageId = seededPage.data?.page?.id;
+    const seededPageContent = seededPage.data?.page?.content || {};
+    const seededPageMeta = seededPage.data?.page?.meta || {};
+    const seededPageMetaAssets = seededPageMeta.frontendDesignAssets;
     assert(createdPageId, 'Template-seeded page create did not return a page id');
-    assert(seededPage.data?.page?.meta?.frontendDesignTemplateId === 'smoke-page-template', 'Template-seeded page did not preserve template metadata');
-    assert(seededPage.data?.page?.meta?.frontendDesignTokens?.colors?.primary === '#0f766e', 'Template-seeded page did not preserve frontend tokens');
-    assert(Array.isArray(seededPage.data?.page?.content?.elements) && seededPage.data.page.content.elements.length > 0, 'Template-seeded page did not create editable content');
+    assert(seededPageMeta.frontendDesignTemplateId === 'smoke-page-template', 'Template-seeded page did not preserve template metadata');
+    assert(seededPageMeta.frontendDesignTokens?.colors?.primary === '#0f766e', 'Template-seeded page did not preserve frontend tokens');
+    assert(Array.isArray(seededPageContent.elements) && seededPageContent.elements.length > 0, 'Template-seeded page did not create editable content');
+    assert(seededPageContent.customCSS?.includes('--smoke-primary'), 'Template-seeded page did not preserve custom CSS');
+    assert(seededPageContent.customJS?.includes('__backySmokePageTemplate'), 'Template-seeded page did not preserve custom JS');
+    assert(seededPageContent.themeTokenRefs?.['smoke-page-title.props.color'] === 'colors.primary', 'Template-seeded page did not preserve theme token refs');
+    assert(seededPageContent.assets?.heroImage?.id === 'smoke-page-hero-image', 'Template-seeded page did not preserve asset manifest');
+    assert(Array.isArray(seededPageContent.animations) && seededPageContent.animations.some((item) => item?.id === 'smoke-page-hero-enter'), 'Template-seeded page did not preserve animation timeline');
+    assert(seededPageContent.interactions?.ctaClick?.action === 'navigate', 'Template-seeded page did not preserve interactions');
+    assert(seededPageContent.dataBindings?.heroTitle?.binding === 'page.title', 'Template-seeded page did not preserve data bindings');
+    assert(seededPageContent.editableMap?.['smoke-page-title.props.content']?.binding === 'page.title', 'Template-seeded page did not preserve editable map');
+    assert(seededPageContent.seo?.titleTemplate === '%s | Smoke frontend', 'Template-seeded page did not preserve SEO design state');
+    assert(seededPageContent.metadata?.editableSurface === 'frontend-design-smoke-page', 'Template-seeded page did not preserve design metadata');
+    assert(seededPageMeta.frontendDesignCustomCss?.includes('--smoke-primary'), 'Template-seeded page did not preserve custom CSS provenance');
+    assert(seededPageMeta.frontendDesignCustomJs?.includes('__backySmokePageTemplate'), 'Template-seeded page did not preserve custom JS provenance');
+    assert(seededPageMeta.frontendDesignContentDocument?.metadata?.editableSurface === 'frontend-design-smoke-page', 'Template-seeded page did not preserve content document provenance');
+    assert(Array.isArray(seededPageMetaAssets) && seededPageMetaAssets[0]?.heroImage?.id === 'smoke-page-hero-image', 'Template-seeded page did not preserve asset provenance');
 
     const seededPost = await requestApi(`/api/admin/sites/${SITE_ID}/blog`, {
       method: 'POST',
@@ -597,10 +884,27 @@ const main = async () => {
       }),
     });
     createdPostId = seededPost.data?.post?.id;
+    const seededPostContent = seededPost.data?.post?.content || {};
+    const seededPostMeta = seededPost.data?.post?.meta || {};
+    const seededPostMetaAssets = seededPostMeta.frontendDesignAssets;
     assert(createdPostId, 'Template-seeded post create did not return a post id');
-    assert(seededPost.data?.post?.meta?.frontendDesignTemplateId === 'smoke-blog-template', 'Template-seeded post did not preserve template metadata');
-    assert(seededPost.data?.post?.meta?.frontendDesignChrome?.header?.component === 'SiteHeader', 'Template-seeded post did not preserve frontend chrome');
-    assert(Array.isArray(seededPost.data?.post?.content?.elements) && seededPost.data.post.content.elements.length > 0, 'Template-seeded post did not create editable content');
+    assert(seededPostMeta.frontendDesignTemplateId === 'smoke-blog-template', 'Template-seeded post did not preserve template metadata');
+    assert(seededPostMeta.frontendDesignChrome?.header?.component === 'SiteHeader', 'Template-seeded post did not preserve frontend chrome');
+    assert(Array.isArray(seededPostContent.elements) && seededPostContent.elements.length > 0, 'Template-seeded post did not create editable content');
+    assert(seededPostContent.customCSS?.includes('--article-accent'), 'Template-seeded post did not preserve custom CSS');
+    assert(seededPostContent.customJS?.includes('__backySmokeBlogTemplate'), 'Template-seeded post did not preserve custom JS');
+    assert(seededPostContent.themeTokenRefs?.['smoke-blog-title.props.fontFamily'] === 'fonts.heading', 'Template-seeded post did not preserve theme token refs');
+    assert(seededPostContent.assets?.coverImage?.id === 'smoke-blog-cover-image', 'Template-seeded post did not preserve asset manifest');
+    assert(Array.isArray(seededPostContent.animations) && seededPostContent.animations.some((item) => item?.id === 'smoke-blog-title-reveal'), 'Template-seeded post did not preserve animation timeline');
+    assert(seededPostContent.interactions?.bodyFocus?.action === 'highlight', 'Template-seeded post did not preserve interactions');
+    assert(seededPostContent.dataBindings?.articleBody?.binding === 'post.content', 'Template-seeded post did not preserve data bindings');
+    assert(seededPostContent.editableMap?.['smoke-blog-body.props.content']?.binding === 'post.content', 'Template-seeded post did not preserve editable map');
+    assert(seededPostContent.seo?.titleTemplate === '%s | Smoke blog', 'Template-seeded post did not preserve SEO design state');
+    assert(seededPostContent.metadata?.editableSurface === 'frontend-design-smoke-blog', 'Template-seeded post did not preserve design metadata');
+    assert(seededPostMeta.frontendDesignCustomCss?.includes('--article-accent'), 'Template-seeded post did not preserve custom CSS provenance');
+    assert(seededPostMeta.frontendDesignCustomJs?.includes('__backySmokeBlogTemplate'), 'Template-seeded post did not preserve custom JS provenance');
+    assert(seededPostMeta.frontendDesignContentDocument?.metadata?.editableSurface === 'frontend-design-smoke-blog', 'Template-seeded post did not preserve content document provenance');
+    assert(Array.isArray(seededPostMetaAssets) && seededPostMetaAssets[0]?.coverImage?.id === 'smoke-blog-cover-image', 'Template-seeded post did not preserve asset provenance');
 
     const seededForm = await requestApi(`/api/admin/sites/${SITE_ID}/forms`, {
       method: 'POST',
