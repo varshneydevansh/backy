@@ -1709,12 +1709,16 @@ const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV = 'BACKY_SETTINGS_CERTIF
 const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV = 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED';
 const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND =
   `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV}="$${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}" ${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
+const SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND =
+  `${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT} npm run ci:settings-provider-certification && ${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV}=${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT} ${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV = 'BACKY_COMMERCE_CERTIFICATION_OUTPUT';
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-commerce-provider-certification.json';
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH';
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED';
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND =
   `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV}="$${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}" ${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
+const SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND =
+  `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT} npm run ci:commerce-provider-certification && ${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT} ${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
 
 const SETTINGS_CERTIFICATION_OPERATOR_COMMAND_TEMPLATE = {
   command: buildSettingsProviderCertificationCommand(DEFAULT_SETTINGS_CERTIFICATION_COMMAND_OPTIONS),
@@ -3441,7 +3445,7 @@ function SettingsPage() {
         key: 'settings-provider-certification',
         label: 'Settings live provider certification',
         status: settingsGateReady ? 'ready-to-run' : 'blocked-missing-inputs',
-        command: 'npm run ci:settings-provider-certification',
+        command: SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND,
         workflow: '.github/workflows/settings-provider-certification.yml',
         affectedSurfaces: ['/settings', 'Settings admin APIs'],
         requiredEnvAliases: SETTINGS_PROVIDER_CERTIFICATION_GROUPS
@@ -3453,7 +3457,7 @@ function SettingsPage() {
         key: 'commerce-provider-certification',
         label: 'Commerce live provider certification',
         status: commerceGateReady ? 'ready-to-run' : 'blocked-missing-inputs',
-        command: 'npm run ci:commerce-provider-certification',
+        command: SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND,
         workflow: '.github/workflows/commerce-provider-certification.yml',
         affectedSurfaces: ['/products', '/orders'],
         requiredEnvAliases: SETTINGS_PROVIDER_CERTIFICATION_GROUPS
@@ -3470,7 +3474,7 @@ function SettingsPage() {
         key: 'settings',
         label: '/settings',
         gate: 'settings-provider-certification',
-        command: 'npm run ci:settings-provider-certification',
+        command: SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND,
         preflight: 'npm run test:settings-provider-certification-preflight-contract',
         workflow: '.github/workflows/settings-provider-certification.yml',
         targetInputs: [
@@ -3515,7 +3519,7 @@ function SettingsPage() {
         key: 'settings-admin-apis',
         label: 'Settings admin APIs',
         gate: 'settings-provider-certification',
-        command: 'npm run ci:settings-provider-certification',
+        command: SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND,
         preflight: 'npm run test:settings-provider-certification-preflight-contract',
         workflow: '.github/workflows/settings-provider-certification.yml',
         targetInputs: [
@@ -3558,7 +3562,7 @@ function SettingsPage() {
         key: 'products',
         label: '/products',
         gate: 'commerce-provider-certification',
-        command: 'npm run ci:commerce-provider-certification',
+        command: SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND,
         preflight: 'npm run test:commerce-provider-certification-preflight-contract',
         workflow: '.github/workflows/commerce-provider-certification.yml',
         targetInputs: [
@@ -3601,7 +3605,7 @@ function SettingsPage() {
         key: 'orders',
         label: '/orders',
         gate: 'commerce-provider-certification',
-        command: 'npm run ci:commerce-provider-certification',
+        command: SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND,
         preflight: 'npm run test:commerce-provider-certification-preflight-contract',
         workflow: '.github/workflows/commerce-provider-certification.yml',
         targetInputs: [
@@ -3654,7 +3658,7 @@ function SettingsPage() {
       certifiedGates,
       gates,
       nextAction: blockedGates[0]
-        ? `Run ${blockedGates[0].command} after configuring ${blockedGates[0].requiredEnvAliases.slice(0, 3).join(', ')}.`
+        ? `Run the ${blockedGates[0].label} command after configuring ${blockedGates[0].requiredEnvAliases.slice(0, 3).join(', ')}; it writes and verifies the certification artifact.`
         : 'Run the release certification workflow and attach evidence before moving the remaining Partial rows to Ready.',
       recommendedCommands: uniqueTextValues([
         'npm run test:partial-gate-preflights',
@@ -3787,8 +3791,8 @@ function SettingsPage() {
           commands: ['npm run ci:forms-postgres', 'npm run ci:sdk-postgres-smoke'],
         },
         providerGates: [
-          { input: 'certify_settings_providers', command: 'npm run ci:settings-provider-certification' },
-          { input: 'certify_commerce_providers', command: 'npm run ci:commerce-provider-certification' },
+          { input: 'certify_settings_providers', command: SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND },
+          { input: 'certify_commerce_providers', command: SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND },
           { input: 'certify_storage', scope: 'live storage provisioning diagnostics' },
           { input: 'certify_rotation', scope: 'replacement storage credential validation' },
           { input: 'certify_vercel_secrets', scope: 'Vercel env secret-manager dry-run planning' },
@@ -4439,7 +4443,7 @@ function SettingsPage() {
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {settingsLaunchReadiness.actionPlan.recommendedCommands.length ? settingsLaunchReadiness.actionPlan.recommendedCommands.map((command) => (
-                      <span key={command} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      <span key={command} className="max-w-full break-all rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                         {command}
                       </span>
                     )) : (

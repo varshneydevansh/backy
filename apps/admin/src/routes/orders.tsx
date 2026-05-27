@@ -1332,7 +1332,7 @@ const buildOrderProviderCertificationEnvTemplate = (options: OrderProviderCertif
   const envEntries = buildOrderProviderCertificationEnvEntries(options);
 
   return [
-    '# Backy order provider certification environment',
+    '# Backy commerce provider certification environment',
     '# Keep real provider credential values in CI secrets or local shell variables.',
     ...envEntries.map(([key, value]) => `${key}=${quoteOrderEnvTemplateValue(value)}`),
   ].join('\n');

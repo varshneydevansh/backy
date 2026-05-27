@@ -72,6 +72,25 @@ const assertCommentsRouteSourceContract = () => {
     'Comments command center must keep low-frequency control maps behind default-collapsed progressive disclosure',
   );
   assert(
+    source.includes("const commentsCommandActionStatusId = 'comments-command-action-status';") &&
+      source.includes('const commentsCommandActionStatus = [') &&
+      source.includes('data-testid="comments-command-actions"') &&
+      source.includes('data-testid="comments-command-action-status"') &&
+      source.includes('data-testid="comments-primary-actions"') &&
+      source.includes('data-testid="comments-review-pending"') &&
+      source.includes('data-testid="comments-export-csv"') &&
+      source.includes('data-testid="comments-command-refresh"') &&
+      source.includes('data-testid="comments-secondary-actions"') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('data-testid="comments-more-actions"') &&
+      source.includes('data-testid="comments-secondary-action-menu"') &&
+      source.includes('data-testid="comments-copy-manifest"') &&
+      source.includes('data-testid="comments-download-json"') &&
+      source.includes("data-action-state={commentsCommandReviewDisabledReason ? 'blocked' : 'ready'}") &&
+      source.includes("data-action-state={commentsCommandHandoffDisabledReason ? 'blocked' : 'ready'}"),
+    'Comments command center must lead with daily moderation actions and move export/manifest/JSON handoff behind a default-collapsed More actions menu',
+  );
+  assert(
     source.includes('data-testid="comments-evidence-details"') &&
       source.includes('data-testid="comments-evidence-panels"') &&
       source.includes('data-default-collapsed="true"') &&
@@ -1600,6 +1619,23 @@ const assertLayout = async (client) => {
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="comments-command-center"]')),
+    hasCommandActions: Boolean(document.querySelector('[data-testid="comments-command-actions"]')),
+    hasCommandStatus: Boolean(document.querySelector('[data-testid="comments-command-action-status"]')),
+    primaryActionLabels: Array.from(document.querySelectorAll('[data-testid="comments-primary-actions"] button')).map((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim()),
+    hasReviewPending: Boolean(document.querySelector('[data-testid="comments-review-pending"]')),
+    reviewPendingState: document.querySelector('[data-testid="comments-review-pending"]')?.getAttribute('data-action-state') || '',
+    hasCommandExport: Boolean(document.querySelector('[data-testid="comments-export-csv"]')),
+    commandExportState: document.querySelector('[data-testid="comments-export-csv"]')?.getAttribute('data-action-state') || '',
+    hasCommandRefresh: Boolean(document.querySelector('[data-testid="comments-command-refresh"]')),
+    commandRefreshState: document.querySelector('[data-testid="comments-command-refresh"]')?.getAttribute('data-action-state') || '',
+    hasSecondaryActions: Boolean(document.querySelector('[data-testid="comments-secondary-actions"]')),
+    secondaryDefaultCollapsed: document.querySelector('[data-testid="comments-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+    secondaryOpen: document.querySelector('[data-testid="comments-secondary-actions"]')?.hasAttribute('open') || false,
+    hasMoreActions: Boolean(document.querySelector('[data-testid="comments-more-actions"]')),
+    hasSecondaryMenu: Boolean(document.querySelector('[data-testid="comments-secondary-action-menu"]')),
+    secondaryActionLabels: Array.from(document.querySelectorAll('[data-testid="comments-secondary-action-menu"] button')).map((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim()),
+    primaryHasSecondaryOnlyActions: Boolean(document.querySelector('[data-testid="comments-primary-actions"] [data-testid="comments-export-csv"], [data-testid="comments-primary-actions"] [data-testid="comments-copy-manifest"], [data-testid="comments-primary-actions"] [data-testid="comments-download-json"]')),
+    bulkActionLabels: Array.from(document.querySelectorAll('[data-testid="comments-bulk-action-group"] button')).map((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim()),
     hasControlMapDetails: Boolean(document.querySelector('[data-testid="comments-control-map-details"]')),
     controlMapDefaultCollapsed: document.querySelector('[data-testid="comments-control-map-details"]')?.getAttribute('data-default-collapsed') === 'true',
     controlMapOpen: document.querySelector('[data-testid="comments-control-map-details"]')?.hasAttribute('open') || false,
@@ -1622,6 +1658,41 @@ const assertLayout = async (client) => {
     hasBulk: Boolean(document.querySelector('[data-testid="comments-control-map"] a[href="#comments-actions"]')),
   }))()`);
   assert(layout.scrollWidth <= layout.width + 8, `Comments page has horizontal overflow: ${JSON.stringify(layout)}`);
+  assert(layout.hasCommandActions && layout.hasCommandStatus, `Comments command actions should expose a named status contract: ${JSON.stringify(layout)}`);
+  assert(
+    layout.hasReviewPending &&
+      layout.hasCommandExport &&
+      layout.hasCommandRefresh &&
+      layout.primaryActionLabels[0] === 'Review pending' &&
+      layout.primaryActionLabels[1] === 'Refresh comments',
+    `Comments primary actions should prioritize daily moderation before export and handoff: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    ['ready', 'blocked'].includes(layout.reviewPendingState) &&
+      ['ready', 'blocked'].includes(layout.commandExportState) &&
+      ['ready', 'blocked'].includes(layout.commandRefreshState),
+    `Comments command actions should expose ready/blocked metadata: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.hasSecondaryActions &&
+      layout.secondaryDefaultCollapsed &&
+      !layout.secondaryOpen &&
+      layout.hasMoreActions &&
+      layout.hasSecondaryMenu &&
+      layout.secondaryActionLabels[0] === 'Export CSV' &&
+      layout.secondaryActionLabels.includes('Copy manifest') &&
+      layout.secondaryActionLabels.includes('Download JSON') &&
+      !layout.primaryHasSecondaryOnlyActions,
+    `Comments export and manifest handoff should stay nested behind collapsed More actions: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.bulkActionLabels[0] === 'Approve' &&
+      layout.bulkActionLabels[1] === 'Reject' &&
+      layout.bulkActionLabels[2] === 'Spam' &&
+      layout.bulkActionLabels[3] === 'Block' &&
+      layout.bulkActionLabels[4] === 'Resolve reports',
+    `Comments bulk toolbar should lead with moderation decisions before export: ${JSON.stringify(layout)}`,
+  );
   assert(layout.hasControlMapDetails && layout.controlMapDefaultCollapsed && !layout.controlMapOpen && layout.hasControlMap, `Comments control map should start collapsed but remain available: ${JSON.stringify(layout)}`);
   assert(layout.hasConnectedWorkflowsDetails && layout.connectedWorkflowsDefaultCollapsed && !layout.connectedWorkflowsOpen && layout.hasConnectedWorkflows, `Comments connected workflows should start collapsed but remain available: ${JSON.stringify(layout)}`);
   assert(layout.hasEvidenceDetails && layout.evidenceDefaultCollapsed && !layout.evidenceOpen && layout.hasEvidencePanels, `Comments evidence/API diagnostics should start collapsed but remain available: ${JSON.stringify(layout)}`);

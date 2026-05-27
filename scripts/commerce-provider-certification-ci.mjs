@@ -797,6 +797,15 @@ const assertProductProviderApiHandoff = async (baseUrl, siteId, required) => {
     `Product provider-sync API operator evidence packet is not tied to ${siteId}: ${JSON.stringify(operatorEvidencePacket).slice(0, 900)}`,
   );
   assert(
+    commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT=artifacts/backy-commerce-provider-certification.json') &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT') &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+      stringValue(commandPreview.command).includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT') &&
+      stringValue(commandPreview.command).includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH="$BACKY_COMMERCE_CERTIFICATION_OUTPUT"') &&
+      stringValue(commandPreview.command).includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 npm run doctor:release-certification'),
+    `Product provider-sync API command preview is missing artifact output/verification inputs: ${JSON.stringify(commandPreview).slice(0, 900)}`,
+  );
+  assert(
     storefrontHandoff?.schemaVersion === 'backy.product-storefront-handoff.v1' &&
       storefrontHandoff.source === 'admin-product-provider-sync-api',
     `Product provider-sync API is missing storefront handoff: ${JSON.stringify(payload).slice(0, 900)}`,
@@ -858,6 +867,15 @@ const assertOrderProviderApiHandoff = async (baseUrl, siteId) => {
       operatorEvidenceTarget.siteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID' &&
       commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFY_SITE_ID'),
     `Order analytics API operator evidence packet is not tied to ${siteId}: ${JSON.stringify(operatorEvidencePacket).slice(0, 900)}`,
+  );
+  assert(
+    commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT=artifacts/backy-commerce-provider-certification.json') &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT') &&
+      commandPreviewTargetInputs.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+      stringValue(commandPreview.command).includes('BACKY_COMMERCE_CERTIFICATION_OUTPUT') &&
+      stringValue(commandPreview.command).includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH="$BACKY_COMMERCE_CERTIFICATION_OUTPUT"') &&
+      stringValue(commandPreview.command).includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 npm run doctor:release-certification'),
+    `Order analytics API command preview is missing artifact output/verification inputs: ${JSON.stringify(commandPreview).slice(0, 900)}`,
   );
   assertNoRawSecretsInPayload({ analytics, providerCertification }, 'Order analytics provider certification handoff');
 

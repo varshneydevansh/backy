@@ -11,6 +11,7 @@ import {
   Flag,
   GitBranch,
   MessageSquare,
+  MoreHorizontal,
   RefreshCw,
   RotateCcw,
   Search,
@@ -689,6 +690,12 @@ function CommentsRoute() {
     : commentsBulkBusyDisabledReason || (!canExportActivity
       ? activityPermissionTitle || 'Your account cannot export comment activity.'
       : '');
+  const commentsCommandActionStatusId = 'comments-command-action-status';
+  const commentsCommandReviewDisabledReason = commentsBulkBusyDisabledReason;
+  const commentsCommandRefreshDisabledReason = commentsBulkBusyDisabledReason;
+  const commentsCommandHandoffDisabledReason = commentsBulkBusyDisabledReason || (!canExportActivity
+    ? activityPermissionTitle || 'Your account cannot export comment activity.'
+    : '');
   const commentsBulkSelectionDisabledReason = filteredComments.length === 0
     ? 'No visible comments to select.'
     : commentsBulkBusyDisabledReason || commentsBulkManageDisabledReason;
@@ -710,6 +717,13 @@ function CommentsRoute() {
       ? 'Selected comments have no unresolved reports.'
       : 'Select a reported comment first.'
     : commentsBulkBusyDisabledReason || commentsBulkManageDisabledReason;
+  const commentsCommandActionStatus = [
+    commentsCommandReviewDisabledReason ? `Review pending unavailable: ${commentsCommandReviewDisabledReason}` : `Review pending available for ${metrics.pending} pending comment${metrics.pending === 1 ? '' : 's'}.`,
+    commentsBulkExportDisabledReason ? `Export CSV unavailable: ${commentsBulkExportDisabledReason}` : `Export CSV available for ${visibleCommentActionLabel}.`,
+    commentsCommandRefreshDisabledReason ? `Refresh comments unavailable: ${commentsCommandRefreshDisabledReason}` : 'Refresh comments available.',
+    commentsCommandHandoffDisabledReason ? `Copy manifest unavailable: ${commentsCommandHandoffDisabledReason}` : 'Copy manifest available.',
+    commentsCommandHandoffDisabledReason ? `Download JSON unavailable: ${commentsCommandHandoffDisabledReason}` : 'Download JSON available.',
+  ].join(' ');
   const commentsBulkActionStatus = [
     commentsBulkExportDisabledReason ? `Export CSV unavailable: ${commentsBulkExportDisabledReason}` : `Export CSV available for ${visibleCommentActionLabel}.`,
     commentsBulkSelectionDisabledReason ? `Select visible unavailable: ${commentsBulkSelectionDisabledReason}` : `Select visible available for ${visibleCommentActionLabel}.`,
@@ -2006,37 +2020,113 @@ function CommentsRoute() {
               Control public discussion safety, approval queues, reported content, blocked authors, frontend comment feeds, and private moderation APIs.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
-              disabled={isCommentsBusy || !canExportActivity}
-              title={activityPermissionTitle}
-              iconStart={<Copy className="size-4" />}
+          <div
+            className="flex flex-wrap items-center justify-start gap-2 xl:justify-end"
+            role="group"
+            aria-label="Comments command actions"
+            aria-describedby={commentsCommandActionStatusId}
+            data-testid="comments-command-actions"
+            data-action-status={commentsCommandActionStatus}
+          >
+            <span id={commentsCommandActionStatusId} className="sr-only" data-testid="comments-command-action-status" aria-live="polite">
+              {commentsCommandActionStatus}
+            </span>
+            <div className="flex flex-wrap items-center gap-2" data-testid="comments-primary-actions">
+              <Button
+                variant={statusFilter === 'pending' ? 'secondary' : 'outline'}
+                onClick={() => {
+                  if (isCommentsBusy) return;
+                  setStatusFilter('pending');
+                  updateCommentsRouteSearch({ status: 'pending' });
+                }}
+                disabled={Boolean(commentsCommandReviewDisabledReason)}
+                title={commentsCommandReviewDisabledReason || undefined}
+                aria-describedby={commentsCommandActionStatusId}
+                data-testid="comments-review-pending"
+                data-action-state={commentsCommandReviewDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsCommandActionStatus}
+                data-disabled-reason={commentsCommandReviewDisabledReason || undefined}
+                iconStart={<ShieldAlert className="size-4" />}
+              >
+                Review pending
+              </Button>
+              <Button
+                onClick={() => void loadComments()}
+                disabled={Boolean(commentsCommandRefreshDisabledReason)}
+                title={commentsCommandRefreshDisabledReason || undefined}
+                aria-describedby={commentsCommandActionStatusId}
+                data-testid="comments-command-refresh"
+                data-action-state={commentsCommandRefreshDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsCommandActionStatus}
+                data-disabled-reason={commentsCommandRefreshDisabledReason || undefined}
+                iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
+              >
+                Refresh comments
+              </Button>
+            </div>
+            <details
+              className="group relative"
+              data-testid="comments-secondary-actions"
+              data-default-collapsed="true"
             >
-              Copy manifest
-            </Button>
-            <Button
-              variant="outline"
-              onClick={downloadModerationHandoff}
-              disabled={isCommentsBusy || !canExportActivity}
-              title={activityPermissionTitle}
-              iconStart={<Download className="size-4" />}
-            >
-              Download JSON
-            </Button>
-            <Button
-              variant="outline"
-              disabled={filteredComments.length === 0 || isCommentsBusy || !canExportActivity}
-              title={activityPermissionTitle}
-              onClick={handleExportComments}
-              iconStart={<Download className="size-4" />}
-            >
-              Export CSV
-            </Button>
-            <Button onClick={() => void loadComments()} disabled={isCommentsBusy} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
-              Refresh comments
-            </Button>
+              <summary
+                className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+                data-testid="comments-more-actions"
+              >
+                <MoreHorizontal className="size-4" />
+                More actions
+              </summary>
+              <div
+                className="absolute right-0 z-20 mt-2 grid min-w-56 gap-2 rounded-lg border border-border bg-popover p-2 shadow-lg"
+                data-testid="comments-secondary-action-menu"
+              >
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  disabled={Boolean(commentsBulkExportDisabledReason)}
+                  title={commentsBulkExportDisabledReason || undefined}
+                  onClick={handleExportComments}
+                  aria-describedby={commentsCommandActionStatusId}
+                  data-testid="comments-export-csv"
+                  data-action-state={commentsBulkExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={commentsCommandActionStatus}
+                  data-disabled-reason={commentsBulkExportDisabledReason || undefined}
+                  iconStart={<Download className="size-4" />}
+                >
+                  Export CSV
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
+                  disabled={Boolean(commentsCommandHandoffDisabledReason)}
+                  title={commentsCommandHandoffDisabledReason || undefined}
+                  aria-describedby={commentsCommandActionStatusId}
+                  data-testid="comments-copy-manifest"
+                  data-action-state={commentsCommandHandoffDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={commentsCommandActionStatus}
+                  data-disabled-reason={commentsCommandHandoffDisabledReason || undefined}
+                  iconStart={<Copy className="size-4" />}
+                >
+                  Copy manifest
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={downloadModerationHandoff}
+                  disabled={Boolean(commentsCommandHandoffDisabledReason)}
+                  title={commentsCommandHandoffDisabledReason || undefined}
+                  aria-describedby={commentsCommandActionStatusId}
+                  data-testid="comments-download-json"
+                  data-action-state={commentsCommandHandoffDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={commentsCommandActionStatus}
+                  data-disabled-reason={commentsCommandHandoffDisabledReason || undefined}
+                  iconStart={<Download className="size-4" />}
+                >
+                  Download JSON
+                </Button>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -2872,20 +2962,6 @@ function CommentsRoute() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={Boolean(commentsBulkExportDisabledReason)}
-                title={commentsBulkExportDisabledReason || undefined}
-                aria-describedby={commentsBulkActionStatusId}
-                onClick={handleExportComments}
-                data-action-state={commentsBulkExportDisabledReason ? 'blocked' : 'ready'}
-                data-action-status={commentsBulkActionStatus}
-                data-disabled-reason={commentsBulkExportDisabledReason || undefined}
-                iconStart={<Download className="size-4" />}
-              >
-                Export CSV
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
                 disabled={Boolean(commentsBulkApproveDisabledReason)}
                 title={commentsBulkApproveDisabledReason || undefined}
                 aria-describedby={commentsBulkActionStatusId}
@@ -2952,6 +3028,20 @@ function CommentsRoute() {
                 iconStart={<Flag className="size-4" />}
               >
                 Resolve reports
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={Boolean(commentsBulkExportDisabledReason)}
+                title={commentsBulkExportDisabledReason || undefined}
+                aria-describedby={commentsBulkActionStatusId}
+                onClick={handleExportComments}
+                data-action-state={commentsBulkExportDisabledReason ? 'blocked' : 'ready'}
+                data-action-status={commentsBulkActionStatus}
+                data-disabled-reason={commentsBulkExportDisabledReason || undefined}
+                iconStart={<Download className="size-4" />}
+              >
+                Export CSV
               </Button>
             </div>
           }

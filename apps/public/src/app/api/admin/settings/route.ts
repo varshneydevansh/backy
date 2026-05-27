@@ -220,12 +220,16 @@ const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV = 'BACKY_SETTINGS_CERTIF
 const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV = 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED';
 const SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND =
   `${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV}="$${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}" ${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
+const SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND =
+  `${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT} npm run ci:settings-provider-certification && ${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_PATH_ENV}=${SETTINGS_PROVIDER_CERTIFICATION_OUTPUT_ARTIFACT} ${SETTINGS_PROVIDER_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV = 'BACKY_COMMERCE_CERTIFICATION_OUTPUT';
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT = 'artifacts/backy-commerce-provider-certification.json';
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH';
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED';
 const SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_DOCTOR_COMMAND =
   `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV}="$${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}" ${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
+const SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND =
+  `${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT} npm run ci:commerce-provider-certification && ${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_PATH_ENV}=${SETTINGS_NESTED_COMMERCE_CERTIFICATION_OUTPUT_ARTIFACT} ${SETTINGS_NESTED_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED_ENV}=1 npm run doctor:release-certification`;
 const hasSettingsCertificationGroup = (options: SettingsCertificationCommandOptions) => (
   options.certifyStorage ||
   options.certifyRotation ||
@@ -1060,7 +1064,7 @@ const buildSettingsCompletionStatus = () => {
       key: 'settings-provider-certification',
       label: 'Settings live provider certification',
       status: missingSettingsFamilies.length === 0 ? 'ready-to-run' : 'blocked-missing-inputs',
-      command: 'npm run ci:settings-provider-certification',
+      command: SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND,
       preflight: 'npm run test:settings-provider-certification-preflight-contract',
       workflow: '.github/workflows/settings-provider-certification.yml',
       affectedSurfaces: ['/settings', 'Settings admin APIs'],
@@ -1082,7 +1086,7 @@ const buildSettingsCompletionStatus = () => {
       key: 'commerce-provider-certification',
       label: 'Commerce live provider certification',
       status: missingCommerceFamilies.length === 0 ? 'ready-to-run' : 'blocked-missing-inputs',
-      command: 'npm run ci:commerce-provider-certification',
+      command: SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND,
       preflight: 'npm run test:commerce-provider-certification-preflight-contract',
       workflow: '.github/workflows/commerce-provider-certification.yml',
       affectedSurfaces: ['/products', '/orders'],
@@ -1166,7 +1170,7 @@ const buildSettingsCompletionStatus = () => {
       key: 'settings',
       label: '/settings',
       gate: 'settings-provider-certification',
-      command: 'npm run ci:settings-provider-certification',
+      command: SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND,
       preflight: 'npm run test:settings-provider-certification-preflight-contract',
       workflow: '.github/workflows/settings-provider-certification.yml',
       targetInputs: [
@@ -1210,7 +1214,7 @@ const buildSettingsCompletionStatus = () => {
       key: 'settings-admin-apis',
       label: 'Settings admin APIs',
       gate: 'settings-provider-certification',
-      command: 'npm run ci:settings-provider-certification',
+      command: SETTINGS_PROVIDER_CERTIFICATION_COMPLETION_COMMAND,
       preflight: 'npm run test:settings-provider-certification-preflight-contract',
       workflow: '.github/workflows/settings-provider-certification.yml',
       targetInputs: [
@@ -1248,7 +1252,7 @@ const buildSettingsCompletionStatus = () => {
       key: 'products',
       label: '/products',
       gate: 'commerce-provider-certification',
-      command: 'npm run ci:commerce-provider-certification',
+      command: SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND,
       preflight: 'npm run test:commerce-provider-certification-preflight-contract',
       workflow: '.github/workflows/commerce-provider-certification.yml',
       targetInputs: [
@@ -1288,7 +1292,7 @@ const buildSettingsCompletionStatus = () => {
       key: 'orders',
       label: '/orders',
       gate: 'commerce-provider-certification',
-      command: 'npm run ci:commerce-provider-certification',
+      command: SETTINGS_COMMERCE_CERTIFICATION_COMPLETION_COMMAND,
       preflight: 'npm run test:commerce-provider-certification-preflight-contract',
       workflow: '.github/workflows/commerce-provider-certification.yml',
       targetInputs: [
@@ -1352,7 +1356,7 @@ const buildSettingsCompletionStatus = () => {
     certifiedGates,
     gates,
     nextAction: missingInputs.length > 0
-      ? `Configure ${missingInputs.join(', ')} and run ${blockedGate?.command}.`
+      ? `Configure ${missingInputs.join(', ')} and run the ${blockedGate?.label || 'provider certification'} command; it writes and verifies the certification artifact.`
       : `Run ${blockedGate?.command || 'npm run test:partial-gate-preflights'} and attach the redacted evidence packet.`,
     recommendedCommands: gates.map((gate) => gate.command),
     localPreflight: 'npm run test:partial-gate-preflights',

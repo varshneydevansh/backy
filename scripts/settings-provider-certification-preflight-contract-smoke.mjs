@@ -290,6 +290,9 @@ includesAll(
     'webhook_provider',
     'Run Settings provider certification',
     'npm run ci:settings-provider-certification',
+    'Verify Settings provider certification artifact',
+    'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-settings-provider-certification.json',
+    "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED: '1'",
     'Upload Settings provider certification evidence',
     'actions/upload-artifact@v4',
     'backy-settings-provider-certification-evidence',
@@ -297,6 +300,9 @@ includesAll(
     'if-no-files-found: error',
     'Run Commerce provider certification from Settings provider gate',
     'npm run ci:commerce-provider-certification',
+    'Verify Commerce provider certification artifact from Settings gate',
+    'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-commerce-provider-certification.json',
+    "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED: '1'",
     'Upload Commerce provider certification evidence from Settings gate',
     'backy-commerce-provider-certification-evidence',
     'artifacts/backy-commerce-provider-certification.json',
@@ -325,10 +331,12 @@ assert(
     workflow.indexOf('- name: Run non-secret certification doctor') < workflow.indexOf('- name: Write non-secret Settings certification summary') &&
     workflow.indexOf('- name: Run Settings provider certification preflight') < workflow.indexOf('- name: Write non-secret Settings certification summary') &&
     workflow.indexOf('- name: Write non-secret Settings certification summary') < workflow.indexOf('- name: Run Settings provider certification\n') &&
-    workflow.indexOf('- name: Run Settings provider certification\n') < workflow.indexOf('- name: Upload Settings provider certification evidence') &&
+    workflow.indexOf('- name: Run Settings provider certification\n') < workflow.indexOf('- name: Verify Settings provider certification artifact') &&
+    workflow.indexOf('- name: Verify Settings provider certification artifact') < workflow.indexOf('- name: Upload Settings provider certification evidence') &&
     workflow.indexOf('- name: Upload Settings provider certification evidence') < workflow.indexOf('- name: Run Commerce provider certification from Settings provider gate') &&
-    workflow.indexOf('- name: Run Commerce provider certification from Settings provider gate') < workflow.indexOf('- name: Upload Commerce provider certification evidence from Settings gate'),
-  'Settings provider certification workflow must run preflight before Settings certification, upload Settings evidence, run commerce certification, and upload Commerce evidence last.',
+    workflow.indexOf('- name: Run Commerce provider certification from Settings provider gate') < workflow.indexOf('- name: Verify Commerce provider certification artifact from Settings gate') &&
+    workflow.indexOf('- name: Verify Commerce provider certification artifact from Settings gate') < workflow.indexOf('- name: Upload Commerce provider certification evidence from Settings gate'),
+  'Settings provider certification workflow must run preflight before Settings certification, verify Settings artifact before upload, run Commerce certification, and verify Commerce artifact before final upload.',
 );
 
 includesAll(
