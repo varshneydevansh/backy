@@ -213,16 +213,25 @@ const assertPagesListSourceContract = () => {
       source.includes('data-testid="pages-refresh-delivery-health"') &&
       source.includes('aria-label="Refresh delivery health for published pages"') &&
       source.includes('data-testid="pages-command-secondary-actions"') &&
+      source.includes("const pagesCommandSecondaryActionStatusId = 'pages-command-secondary-action-status';") &&
+      source.includes('data-testid="pages-command-secondary-action-status"') &&
+      source.includes('aria-describedby={pagesCommandSecondaryActionStatusId}') &&
+      source.includes('data-action-state={pagesCommandSecondaryActionState}') &&
+      source.includes('data-action-status={pagesCommandSecondaryActionStatus}') &&
       source.includes('aria-label="Show page export and handoff actions"') &&
       source.includes('data-testid="pages-command-copy-handoff"') &&
+      source.includes('data-action-status={pagesCommandCopyActionStatus}') &&
       source.includes('aria-label="Copy pages handoff manifest"') &&
       source.includes('data-testid="pages-command-download-handoff"') &&
+      source.includes('data-action-status={pagesCommandDownloadActionStatus}') &&
       source.includes('aria-label="Download pages handoff JSON"') &&
       source.includes('data-testid="pages-command-export-csv"') &&
+      source.includes('data-action-status={pagesCommandExportActionStatus}') &&
+      source.includes('data-disabled-reason={pagesCommandExportDisabledReason || undefined}') &&
       source.includes('aria-label="Export filtered pages CSV"') &&
       source.includes('More actions') &&
       source.indexOf('data-testid="pages-command-create"') < source.indexOf('data-testid="pages-command-secondary-actions"'),
-    'Pages command center must keep New Page primary while grouping labelled refresh, handoff, and export actions behind a secondary disclosure.',
+    'Pages command center must keep New Page primary while grouping labelled refresh, handoff, and export actions behind a secondary disclosure with ready/blocked state metadata.',
   );
   assert(
     source.includes('pageTitle={page.title}') &&
@@ -333,6 +342,7 @@ const assertPagesListSourceContract = () => {
       source.includes('aria-label={`Delete ${page.title}`}') &&
       smokeSource.includes('BACKY_PAGES_LIST_ROW_ACTION_LABEL_SMOKE') &&
       smokeSource.includes('assertPagesRowActionLabels') &&
+      smokeSource.includes('assertPagesCommandSecondaryEmptyExportState') &&
       smokeSource.includes('runPagesRowActionLabelSmoke'),
     'Pages row icon actions must expose page-specific accessible names, row action group semantics, status descriptions, and ready/blocked metadata for publish, unpublish, archive, open, preview, edit, and delete.',
   );
@@ -2720,10 +2730,33 @@ const assertPagesRowActionLabelsForPage = async (client, page, { published }) =>
 	      const pageId = ${JSON.stringify(page.id)};
 	      const actions = document.querySelector(\`[data-testid="pages-actions-\${pageId}"]\`);
 	      const actionStatus = document.querySelector(\`[data-testid="pages-actions-status-\${pageId}"]\`);
+	      const commandSecondaryActions = document.querySelector('[data-testid="pages-command-secondary-actions"]');
+	      const commandSecondaryStatus = document.querySelector('[data-testid="pages-command-secondary-action-status"]');
 	      return {
 	        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
 	        path: window.location.pathname,
 	        hasRow: document.body?.innerText?.includes(${JSON.stringify(page.title)}) || false,
+	        commandSecondaryCollapsed: commandSecondaryActions instanceof HTMLDetailsElement && commandSecondaryActions.open === false,
+	        commandSecondaryDescribedBy: commandSecondaryActions?.getAttribute('aria-describedby') || '',
+	        commandSecondaryStatusId: commandSecondaryStatus?.id || '',
+	        commandSecondaryStatusText: commandSecondaryStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+	        commandSecondaryStatusData: commandSecondaryActions?.getAttribute('data-action-status') || '',
+	        commandSecondaryState: commandSecondaryActions?.getAttribute('data-action-state') || '',
+	        commandCopyLabel: labelFor('pages-command-copy-handoff'),
+	        commandCopyDescribedBy: attrFor('pages-command-copy-handoff', 'aria-describedby'),
+	        commandCopyState: attrFor('pages-command-copy-handoff', 'data-action-state'),
+	        commandCopyStatus: attrFor('pages-command-copy-handoff', 'data-action-status'),
+	        commandCopyDisabledReasonReady: attrFor('pages-command-copy-handoff', 'data-disabled-reason') === '',
+	        commandDownloadLabel: labelFor('pages-command-download-handoff'),
+	        commandDownloadDescribedBy: attrFor('pages-command-download-handoff', 'aria-describedby'),
+	        commandDownloadState: attrFor('pages-command-download-handoff', 'data-action-state'),
+	        commandDownloadStatus: attrFor('pages-command-download-handoff', 'data-action-status'),
+	        commandDownloadDisabledReasonReady: attrFor('pages-command-download-handoff', 'data-disabled-reason') === '',
+	        commandExportLabel: labelFor('pages-command-export-csv'),
+	        commandExportDescribedBy: attrFor('pages-command-export-csv', 'aria-describedby'),
+	        commandExportState: attrFor('pages-command-export-csv', 'data-action-state'),
+	        commandExportStatus: attrFor('pages-command-export-csv', 'data-action-status'),
+	        commandExportDisabledReasonReady: attrFor('pages-command-export-csv', 'data-disabled-reason') === '',
 	        actionsRole: actions?.getAttribute('role') || '',
 	        actionsLabel: actions?.getAttribute('aria-label') || '',
 	        actionsDescribedBy: actions?.getAttribute('aria-describedby') || '',
@@ -2789,8 +2822,25 @@ const assertPagesRowActionLabelsForPage = async (client, page, { published }) =>
       throw new Error(`Pages row did not render for action-label check: ${JSON.stringify(state)}`);
     }
 
-    await sleep(250);
-  }
+	    await sleep(250);
+	  }
+
+	  assert(state.commandSecondaryCollapsed, `Pages command secondary actions should stay collapsed by default: ${JSON.stringify(state)}`);
+	  assert(state.commandSecondaryDescribedBy === state.commandSecondaryStatusId, `Pages command secondary actions must be described by their shared status summary: ${JSON.stringify(state)}`);
+	  assert(state.commandSecondaryState === 'ready', `Pages command secondary actions should be ready when filtered pages are available: ${JSON.stringify(state)}`);
+	  assert(state.commandSecondaryStatusText && state.commandSecondaryStatusData === state.commandSecondaryStatusText, `Pages command secondary action status data must mirror hidden status copy: ${JSON.stringify(state)}`);
+	  assert(
+	    state.commandSecondaryStatusText.includes('Copy handoff available') &&
+	      state.commandSecondaryStatusText.includes('Download JSON available') &&
+	      state.commandSecondaryStatusText.includes('Export CSV available for'),
+	    `Pages command secondary action status should summarize copy, download, and export availability: ${JSON.stringify(state)}`,
+	  );
+	  assert(state.commandCopyLabel === 'Copy pages handoff manifest', `Pages command copy handoff action lacks an accessible label: ${JSON.stringify(state)}`);
+	  assert(state.commandCopyState === 'ready' && state.commandCopyDescribedBy === state.commandSecondaryStatusId && state.commandCopyStatus.includes('Copy handoff available') && state.commandCopyDisabledReasonReady, `Pages command copy handoff action must expose ready state metadata: ${JSON.stringify(state)}`);
+	  assert(state.commandDownloadLabel === 'Download pages handoff JSON', `Pages command download handoff action lacks an accessible label: ${JSON.stringify(state)}`);
+	  assert(state.commandDownloadState === 'ready' && state.commandDownloadDescribedBy === state.commandSecondaryStatusId && state.commandDownloadStatus.includes('Download JSON available') && state.commandDownloadDisabledReasonReady, `Pages command download handoff action must expose ready state metadata: ${JSON.stringify(state)}`);
+	  assert(state.commandExportLabel === 'Export filtered pages CSV', `Pages command export action lacks an accessible label: ${JSON.stringify(state)}`);
+	  assert(state.commandExportState === 'ready' && state.commandExportDescribedBy === state.commandSecondaryStatusId && state.commandExportStatus.includes('Export CSV available for') && state.commandExportDisabledReasonReady, `Pages command export action must expose ready state metadata: ${JSON.stringify(state)}`);
 
 	  if (published) {
 	    assert(!state.publishExists, `Published page should not expose a publish row action: ${JSON.stringify(state)}`);
@@ -2840,6 +2890,76 @@ const assertPagesRowActionLabels = async (client, { draftPage, publishedPage }) 
   draft: await assertPagesRowActionLabelsForPage(client, draftPage, { published: false }),
   published: await assertPagesRowActionLabelsForPage(client, publishedPage, { published: true }),
 });
+
+const assertPagesCommandSecondaryEmptyExportState = async (client) => {
+  const query = new URLSearchParams({
+    siteId: HIERARCHY_SITE_ID,
+    q: `__backy_no_filtered_pages_${Date.now()}__`,
+  });
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/pages?${query.toString()}` });
+
+  let state = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const attrFor = (testId, attr) => document.querySelector(\`[data-testid="\${testId}"]\`)?.getAttribute(attr) || '';
+      const hasDisabled = (testId) => document.querySelector(\`[data-testid="\${testId}"]\`)?.hasAttribute('disabled') || false;
+      const commandSecondaryActions = document.querySelector('[data-testid="pages-command-secondary-actions"]');
+      const commandSecondaryStatus = document.querySelector('[data-testid="pages-command-secondary-action-status"]');
+      return {
+        ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
+        path: window.location.pathname,
+        search: window.location.search,
+        loading: document.body?.innerText?.includes('Loading pages from backend...') || false,
+        commandSecondaryCollapsed: commandSecondaryActions instanceof HTMLDetailsElement && commandSecondaryActions.open === false,
+        commandSecondaryDescribedBy: commandSecondaryActions?.getAttribute('aria-describedby') || '',
+        commandSecondaryStatusId: commandSecondaryStatus?.id || '',
+        commandSecondaryStatusText: commandSecondaryStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        commandSecondaryStatusData: commandSecondaryActions?.getAttribute('data-action-status') || '',
+        commandSecondaryState: commandSecondaryActions?.getAttribute('data-action-state') || '',
+        commandCopyState: attrFor('pages-command-copy-handoff', 'data-action-state'),
+        commandCopyStatus: attrFor('pages-command-copy-handoff', 'data-action-status'),
+        commandCopyDisabledReason: attrFor('pages-command-copy-handoff', 'data-disabled-reason'),
+        commandDownloadState: attrFor('pages-command-download-handoff', 'data-action-state'),
+        commandDownloadStatus: attrFor('pages-command-download-handoff', 'data-action-status'),
+        commandDownloadDisabledReason: attrFor('pages-command-download-handoff', 'data-disabled-reason'),
+        commandExportState: attrFor('pages-command-export-csv', 'data-action-state'),
+        commandExportStatus: attrFor('pages-command-export-csv', 'data-action-status'),
+        commandExportDisabledReason: attrFor('pages-command-export-csv', 'data-disabled-reason'),
+        commandExportDisabled: hasDisabled('pages-command-export-csv'),
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`);
+
+    if (state.ready && state.path === '/pages' && !state.loading && state.commandSecondaryStatusText) {
+      break;
+    }
+
+    if (attempt === 99) {
+      throw new Error(`Pages command secondary empty-export state did not render: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  assert(state.commandSecondaryCollapsed, `Pages command secondary actions should stay collapsed in empty-filter state: ${JSON.stringify(state)}`);
+  assert(state.commandSecondaryDescribedBy === state.commandSecondaryStatusId, `Pages command secondary empty-filter actions must be described by their shared status summary: ${JSON.stringify(state)}`);
+  assert(state.commandSecondaryState === 'ready', `Pages command secondary group should stay ready when copy/download are available and export is blocked: ${JSON.stringify(state)}`);
+  assert(state.commandSecondaryStatusText && state.commandSecondaryStatusData === state.commandSecondaryStatusText, `Pages command secondary empty-filter status data must mirror hidden status copy: ${JSON.stringify(state)}`);
+  assert(state.commandCopyState === 'ready' && state.commandCopyStatus.includes('Copy handoff available') && state.commandCopyDisabledReason === '', `Pages command copy handoff should remain ready with no filtered pages: ${JSON.stringify(state)}`);
+  assert(state.commandDownloadState === 'ready' && state.commandDownloadStatus.includes('Download JSON available') && state.commandDownloadDisabledReason === '', `Pages command download handoff should remain ready with no filtered pages: ${JSON.stringify(state)}`);
+  assert(state.commandExportDisabled, `Pages command export should be disabled with no filtered pages: ${JSON.stringify(state)}`);
+  assert(state.commandExportState === 'blocked', `Pages command export should expose blocked state with no filtered pages: ${JSON.stringify(state)}`);
+  assert(state.commandExportDisabledReason === 'No filtered pages are available to export.', `Pages command export should explain the empty-filter disabled state: ${JSON.stringify(state)}`);
+  assert(state.commandExportStatus === `Export CSV blocked: ${state.commandExportDisabledReason}`, `Pages command export status should mirror the empty-filter disabled reason: ${JSON.stringify(state)}`);
+  assert(
+    state.commandSecondaryStatusText.includes('Copy handoff available') &&
+      state.commandSecondaryStatusText.includes('Download JSON available') &&
+      state.commandSecondaryStatusText.includes('Export CSV blocked: No filtered pages are available to export.'),
+    `Pages command secondary empty-filter status should summarize ready copy/download actions and blocked export: ${JSON.stringify(state)}`,
+  );
+
+  return state;
+};
 
 const waitForPagesBulkSelectionState = async (client, label, expectedSelectedCount = null) => {
   let state = null;
@@ -4642,6 +4762,7 @@ const runPagesRowActionLabelSmoke = async (adminLogin) => {
       draftPage: hierarchyPages.childPage,
       publishedPage: hierarchyPages.parentPage,
     });
+    const commandSecondaryEmptyExportState = await assertPagesCommandSecondaryEmptyExportState(client);
 
     console.log(JSON.stringify({
       ok: true,
@@ -4650,6 +4771,7 @@ const runPagesRowActionLabelSmoke = async (adminLogin) => {
       draftPageId: hierarchyPages.childPage.id,
       publishedPageId: hierarchyPages.parentPage.id,
       rowActionLabels,
+      commandSecondaryEmptyExportState,
     }, null, 2));
   } finally {
     await cleanup({ client, childProcess, userDataDir, hierarchyPages });

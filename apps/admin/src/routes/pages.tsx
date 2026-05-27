@@ -2852,6 +2852,37 @@ function PagesListView() {
     totalPages,
   ]);
   const pageHandoffText = useMemo(() => JSON.stringify(pageHandoff, null, 2), [pageHandoff]);
+  const pagesCommandSecondaryActionStatusId = 'pages-command-secondary-action-status';
+  const pagesCommandBusyDisabledReason = isPageLibraryBusy
+    ? 'Pages command actions are temporarily unavailable while Backy loads pages.'
+    : '';
+  const pagesCommandViewDisabledReason = !canViewPages
+    ? viewPermissionTitle || 'Your account needs pages.view to use page handoff actions.'
+    : '';
+  const pagesCommandCopyDisabledReason = pagesCommandBusyDisabledReason || pagesCommandViewDisabledReason;
+  const pagesCommandDownloadDisabledReason = pagesCommandBusyDisabledReason || pagesCommandViewDisabledReason;
+  const pagesCommandExportDisabledReason = pagesCommandBusyDisabledReason ||
+    pagesCommandViewDisabledReason ||
+    (filteredPages.length === 0 ? 'No filtered pages are available to export.' : '');
+  const pagesCommandCopyActionStatus = pagesCommandCopyDisabledReason
+    ? `Copy handoff blocked: ${pagesCommandCopyDisabledReason}`
+    : `Copy handoff available for ${activeSiteId}.`;
+  const pagesCommandDownloadActionStatus = pagesCommandDownloadDisabledReason
+    ? `Download JSON blocked: ${pagesCommandDownloadDisabledReason}`
+    : `Download JSON available for ${activeSiteId}.`;
+  const pagesCommandExportActionStatus = pagesCommandExportDisabledReason
+    ? `Export CSV blocked: ${pagesCommandExportDisabledReason}`
+    : `Export CSV available for ${filteredPages.length} filtered page${filteredPages.length === 1 ? '' : 's'}.`;
+  const pagesCommandSecondaryActionStatus = [
+    pagesCommandCopyActionStatus,
+    pagesCommandDownloadActionStatus,
+    pagesCommandExportActionStatus,
+  ].join(' ');
+  const pagesCommandSecondaryActionState = pagesCommandCopyDisabledReason &&
+    pagesCommandDownloadDisabledReason &&
+    pagesCommandExportDisabledReason
+    ? 'blocked'
+    : 'ready';
 
   const clearPageFilters = () => {
     if (isPageLibraryBusy) return;
@@ -3012,6 +3043,9 @@ function PagesListView() {
       <span id={createPageActionStatusId} className="sr-only" data-testid="pages-create-action-status" aria-live="polite">
         {createPageActionStatus}
       </span>
+      <span id={pagesCommandSecondaryActionStatusId} className="sr-only" data-testid="pages-command-secondary-action-status" aria-live="polite">
+        {pagesCommandSecondaryActionStatus}
+      </span>
 
       <section className="mb-5 rounded-lg border border-border bg-card shadow-sm" data-testid="pages-command-center">
         <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:p-5">
@@ -3074,7 +3108,13 @@ function PagesListView() {
               <RefreshCw className={cn('size-4', isRefreshingAllDeliveryHealth && 'animate-spin')} />
               Refresh delivery
             </button>
-            <details className="group relative" data-testid="pages-command-secondary-actions">
+            <details
+              className="group relative"
+              aria-describedby={pagesCommandSecondaryActionStatusId}
+              data-action-state={pagesCommandSecondaryActionState}
+              data-action-status={pagesCommandSecondaryActionStatus}
+              data-testid="pages-command-secondary-actions"
+            >
               <summary
                 aria-label="Show page export and handoff actions"
                 className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
@@ -3086,9 +3126,13 @@ function PagesListView() {
                 <button
                   type="button"
                   onClick={() => void copyPageApiText(pageHandoffText, 'Pages handoff manifest')}
-                  disabled={isPageLibraryBusy || !canViewPages}
-                  title={!canViewPages ? viewPermissionTitle : undefined}
+                  disabled={Boolean(pagesCommandCopyDisabledReason)}
+                  title={pagesCommandCopyDisabledReason || 'Copy pages handoff manifest'}
                   aria-label="Copy pages handoff manifest"
+                  aria-describedby={pagesCommandSecondaryActionStatusId}
+                  data-action-state={pagesCommandCopyDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={pagesCommandCopyActionStatus}
+                  data-disabled-reason={pagesCommandCopyDisabledReason || undefined}
                   data-testid="pages-command-copy-handoff"
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -3098,9 +3142,13 @@ function PagesListView() {
                 <button
                   type="button"
                   onClick={downloadPageHandoff}
-                  disabled={isPageLibraryBusy || !canViewPages}
-                  title={!canViewPages ? viewPermissionTitle : undefined}
+                  disabled={Boolean(pagesCommandDownloadDisabledReason)}
+                  title={pagesCommandDownloadDisabledReason || 'Download pages handoff JSON'}
                   aria-label="Download pages handoff JSON"
+                  aria-describedby={pagesCommandSecondaryActionStatusId}
+                  data-action-state={pagesCommandDownloadDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={pagesCommandDownloadActionStatus}
+                  data-disabled-reason={pagesCommandDownloadDisabledReason || undefined}
                   data-testid="pages-command-download-handoff"
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -3110,9 +3158,13 @@ function PagesListView() {
                 <button
                   type="button"
                   onClick={downloadPagesCsv}
-                  disabled={filteredPages.length === 0 || isPageLibraryBusy || !canViewPages}
-                  title={!canViewPages ? viewPermissionTitle : undefined}
+                  disabled={Boolean(pagesCommandExportDisabledReason)}
+                  title={pagesCommandExportDisabledReason || 'Export filtered pages CSV'}
                   aria-label="Export filtered pages CSV"
+                  aria-describedby={pagesCommandSecondaryActionStatusId}
+                  data-action-state={pagesCommandExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={pagesCommandExportActionStatus}
+                  data-disabled-reason={pagesCommandExportDisabledReason || undefined}
                   data-testid="pages-command-export-csv"
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
