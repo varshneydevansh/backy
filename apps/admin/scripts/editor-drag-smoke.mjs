@@ -748,7 +748,8 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-testid="editor-inspector-empty-open-layers"') &&
       source.includes('data-testid={`editor-inspector-empty-add-${key}`}') &&
       source.includes('handleAddLibraryItem(item)') &&
-      source.includes('data-empty-quick-add-types={!selectedElement && selectedIds.length <= 1 ? INSPECTOR_EMPTY_QUICK_ADD_TYPES : undefined}'),
+      source.includes('data-empty-quick-add-types={!selectedElement && selectedIds.length <= 1 ? INSPECTOR_EMPTY_QUICK_ADD_TYPES : undefined}') &&
+      source.includes(') : selectedElement ? ('),
     'Editor inspector empty state must expose actionable select/layers/quick-add controls instead of a passive no-selection message',
   );
   assert(
@@ -758,6 +759,7 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('layers opened from empty inspector') &&
       smokeSource.includes('editor-inspector-empty-add-text') &&
       smokeSource.includes('text quick-added from empty inspector') &&
+      smokeSource.includes('inspectorPassiveEmptyTextVisible') &&
       smokeSource.includes('Inspector empty state must expose select/layers/quick-add actions'),
     'Editor shortcut smoke must exercise actionable no-selection inspector select, layers, and quick-add controls',
   );
@@ -11144,6 +11146,9 @@ const readEditorShellPanelState = async (client, label) => {
     const inspectorEmptySelectFirst = document.querySelector('[data-testid="editor-inspector-empty-select-first-layer"]');
     const inspectorEmptyOpenLayers = document.querySelector('[data-testid="editor-inspector-empty-open-layers"]');
     const inspectorEmptyAddButtons = Array.from(document.querySelectorAll('[data-empty-add-key]'));
+    const inspectorPassiveEmptyTextVisible = Array.from(document.querySelectorAll('[data-testid="editor-inspector"] p')).some(
+      (node) => node.textContent?.replace(/\\s+/g, ' ').trim() === 'Select an element to edit its properties',
+    );
     const canvasElementIds = Array.from(document.querySelectorAll('[data-element-id]'))
       .map((node) => node.getAttribute('data-element-id') || '')
       .filter(Boolean);
@@ -11286,6 +11291,7 @@ const readEditorShellPanelState = async (client, label) => {
       inspectorEmptyOpenLayersVisible: Boolean(inspectorEmptyOpenLayers),
       inspectorEmptyAddButtonKeys: inspectorEmptyAddButtons.map((button) => button.getAttribute('data-empty-add-key') || '').join(','),
       inspectorEmptyAddButtonCount: inspectorEmptyAddButtons.length,
+      inspectorPassiveEmptyTextVisible,
       hasComponentLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
       hasInspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
       hasPropertiesTab: Boolean(document.querySelector('[data-testid="editor-tab-properties"]')),
@@ -11479,7 +11485,8 @@ const readEditorShellPanelState = async (client, label) => {
         state.inspectorEmptySelectFirstDisabled === false &&
         state.inspectorEmptySelectFirstVisibleCount === state.inspectorEmptyVisibleLayerCount &&
         state.inspectorEmptyOpenLayersVisible &&
-        state.inspectorEmptyAddButtonCount >= 3,
+        state.inspectorEmptyAddButtonCount >= 3 &&
+        state.inspectorPassiveEmptyTextVisible === false,
       `Inspector empty state must expose select/layers/quick-add actions during ${label}: ${JSON.stringify(state)}`,
     );
     for (const quickAddKey of ['heading', 'text', 'section']) {

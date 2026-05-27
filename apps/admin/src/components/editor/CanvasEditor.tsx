@@ -9816,7 +9816,7 @@ export function CanvasEditor({
                     embedded
                     hideHeader
                   />
-                ) : (
+                ) : selectedElement ? (
                   <PropertyPanel
                     element={selectedElement}
                     onChange={handleElementUpdate}
@@ -9836,7 +9836,7 @@ export function CanvasEditor({
                     embedded
                     hideHeader
                   />
-                )}
+                ) : null}
               </div>
             </aside>
           )}
