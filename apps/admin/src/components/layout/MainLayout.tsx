@@ -102,7 +102,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const mobileSidebarDialogRef = useRef<HTMLDivElement | null>(null);
   const previousMobileFocusRef = useRef<HTMLElement | null>(null);
   const sidebarCollapsed = isDenseAdminSurface ? denseSidebarCollapsed : standardSidebarCollapsed;
-  const effectiveSidebarCollapsed = isEditorWorkspace || sidebarCollapsed;
+  const effectiveSidebarCollapsed = sidebarCollapsed;
 
   useEffect(() => {
     if (!hasStoredSidebarPreference && !isDenseAdminSurface) {
@@ -134,8 +134,6 @@ export function MainLayout({ children }: MainLayoutProps) {
   }, [denseSidebarCollapsed, hasStoredDenseSidebarPreference]);
 
   const handleSidebarToggle = () => {
-    if (isEditorWorkspace) return;
-
     if (isDenseAdminSurface) {
       setHasStoredDenseSidebarPreference(true);
       setDenseSidebarCollapsed((current) => !current);
@@ -209,7 +207,6 @@ export function MainLayout({ children }: MainLayoutProps) {
         >
           <Sidebar
             collapsed={effectiveSidebarCollapsed}
-            collapseLocked={isEditorWorkspace}
             onToggle={handleSidebarToggle}
           />
         </div>

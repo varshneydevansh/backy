@@ -1406,9 +1406,29 @@ const assertCanvasFocusMode = async (client) => {
       publishPanel: Boolean(document.querySelector('#blog-create-publish')),
       adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
       adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
+      sidebarCollapsed: document.querySelector('[data-testid="admin-sidebar-shell"]')?.getAttribute('data-collapsed') || '',
+      sidebarMode: document.querySelector('[data-testid="admin-sidebar"]')?.getAttribute('data-nav-mode') || '',
+      sidebarToggleDisabled: document.querySelector('[data-testid="admin-sidebar-toggle"]') instanceof HTMLButtonElement
+        ? document.querySelector('[data-testid="admin-sidebar-toggle"]').disabled
+        : null,
+      sidebarToggleActionState: document.querySelector('[data-testid="admin-sidebar-toggle"]')?.getAttribute('data-action-state') || '',
+      sidebarToggleExpanded: document.querySelector('[data-testid="admin-sidebar-toggle"]')?.getAttribute('aria-expanded') || '',
     }))()`);
 
-    if (!normal.banner && normal.commandCenter && normal.draftPanel && normal.publishPanel && normal.adminSidebar && normal.adminHeader && !normal.search.includes('focus=canvas')) {
+    if (
+      !normal.banner &&
+      normal.commandCenter &&
+      normal.draftPanel &&
+      normal.publishPanel &&
+      normal.adminSidebar &&
+      normal.adminHeader &&
+      normal.sidebarCollapsed === 'true' &&
+      normal.sidebarMode === 'compact-rail' &&
+      normal.sidebarToggleDisabled === false &&
+      normal.sidebarToggleActionState === 'ready' &&
+      normal.sidebarToggleExpanded === 'false' &&
+      !normal.search.includes('focus=canvas')
+    ) {
       break;
     }
 

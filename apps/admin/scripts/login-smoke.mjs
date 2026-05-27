@@ -428,15 +428,16 @@ const assertAuthRecoverySource = () => {
       mainLayoutSource.includes("dialog?.querySelector<HTMLElement>('[data-testid=\"admin-mobile-sidebar-link-dashboard\"]')") &&
       mainLayoutSource.includes("'[data-testid=\"admin-mobile-sidebar-nav\"] a, [data-testid=\"admin-mobile-sidebar-nav\"] button'") &&
       mainLayoutSource.includes('previousMobileFocusRef.current?.focus();') &&
-      mainLayoutSource.includes('const effectiveSidebarCollapsed = isEditorWorkspace || sidebarCollapsed') &&
-      mainLayoutSource.includes('if (isEditorWorkspace) return;') &&
+      mainLayoutSource.includes('const effectiveSidebarCollapsed = sidebarCollapsed') &&
+      !mainLayoutSource.includes('collapseLocked={isEditorWorkspace}') &&
+      !mainLayoutSource.includes('if (isEditorWorkspace) return;') &&
       mainLayoutSource.includes('className="flex h-dvh min-h-0 min-w-0 overflow-hidden bg-background"') &&
       mainLayoutSource.includes('className="hidden h-dvh shrink-0 lg:flex"') &&
       mainLayoutSource.includes('data-dense-surface={String(isDenseAdminSurface)}') &&
       mainLayoutSource.includes("'min-h-0 flex-1 overflow-y-auto overflow-x-hidden'") &&
       mainLayoutSource.includes('Skip to content') &&
       mainLayoutSource.includes('data-testid="admin-main-content"'),
-    'Admin layout must preserve standard sidebar preference, keep dense work surfaces compact by default, keep editor workspaces compact, keep sidebar/main scrolling independent, and expose a keyboard skip target.',
+    'Admin layout must preserve standard sidebar preference, keep dense work surfaces compact by default, keep editor workspaces user-toggleable, keep sidebar/main scrolling independent, and expose a keyboard skip target.',
   );
 
   assert(
