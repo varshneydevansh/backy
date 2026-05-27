@@ -174,9 +174,28 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-testid="orders-command-import-csv"') &&
       source.includes('data-testid="orders-command-products"') &&
       source.includes('data-testid="orders-command-storefront-page"') &&
+      source.includes("const ordersCommandSecondaryActionStatusId = 'orders-command-secondary-action-status';") &&
+      source.includes('data-testid="orders-command-secondary-action-status"') &&
+      source.includes('data-testid="orders-command-secondary-action-menu"') &&
+      source.includes('aria-describedby={ordersCommandSecondaryActionStatusId}') &&
+      source.includes('data-action-state={ordersCommandSecondaryActionState}') &&
+      source.includes('data-action-status={ordersCommandSecondaryActionStatus}') &&
+      source.includes('data-action-status={ordersCommandCopyManifestActionStatus}') &&
+      source.includes('data-action-status={ordersCommandDownloadJsonActionStatus}') &&
+      source.includes('data-action-status={ordersCommandExportCsvActionStatus}') &&
+      source.includes('data-action-status={ordersCommandCsvTemplateActionStatus}') &&
+      source.includes('data-action-status={ordersCommandImportCsvActionStatus}') &&
+      source.includes('data-action-status={ordersCommandProductsActionStatus}') &&
+      source.includes('data-action-status={ordersCommandStorefrontPageActionStatus}') &&
+      source.includes('data-disabled-reason={ordersCommandExportDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={ordersCommandCsvExportDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={ordersCommandTemplateDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={ordersCommandImportDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={ordersCommandProductsDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={ordersCommandStorefrontPageDisabledReason || undefined}') &&
       source.includes('aria-label="More order actions"') &&
       source.indexOf('New order') < source.indexOf('data-testid="orders-command-secondary-actions"'),
-    'Orders command center must keep New order primary while grouping secondary actions and dense readiness/navigation details',
+    'Orders command center must keep New order primary while grouping secondary actions with inspectable action states and dense readiness/navigation details',
   );
   assert(
     source.includes('data-testid="orders-api-provider-details"') &&

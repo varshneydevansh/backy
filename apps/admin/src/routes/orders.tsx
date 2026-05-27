@@ -1773,6 +1773,66 @@ function OrdersRoute() {
     ordersBulkWorkflowDisabledReason ? `Record cancel selected unavailable: ${ordersBulkWorkflowDisabledReason}` : `Record cancel selected available for ${selectedOrderActionLabel}.`,
     ordersBulkClearDisabledReason ? `Clear selection unavailable: ${ordersBulkClearDisabledReason}` : `Clear selection available for ${selectedOrderActionLabel}.`,
   ].join(' ');
+  const ordersCommandSecondaryActionStatusId = 'orders-command-secondary-action-status';
+  const ordersCommandBusyDisabledReason = isOrdersAccessBusy ? 'Order queue is busy.' : '';
+  const ordersCommandExportPermissionDisabledReason = !canExportOrders
+    ? exportPermissionTitle || 'Your account cannot export orders.'
+    : '';
+  const ordersCommandEditPermissionDisabledReason = !canEditOrders
+    ? editPermissionTitle || 'Your account cannot edit orders.'
+    : '';
+  const ordersCommandExportDisabledReason = ordersCommandBusyDisabledReason || ordersCommandExportPermissionDisabledReason;
+  const ordersCommandCsvExportDisabledReason = filteredOrders.length === 0
+    ? 'No visible orders to export.'
+    : ordersCommandExportDisabledReason;
+  const ordersCommandTemplateDisabledReason = !ordersCollection
+    ? 'Set up orders before downloading a CSV template.'
+    : ordersCommandBusyDisabledReason || ordersCommandEditPermissionDisabledReason;
+  const ordersCommandImportDisabledReason = !ordersCollection
+    ? 'Set up orders before importing orders.'
+    : ordersCommandBusyDisabledReason || ordersCommandEditPermissionDisabledReason;
+  const ordersCommandProductsDisabledReason = ordersCommandBusyDisabledReason;
+  const ordersCommandStorefrontPageDisabledReason = ordersCommandBusyDisabledReason || (!canEditPages
+    ? pagesEditPermissionTitle || 'Your account cannot edit pages.'
+    : '');
+  const ordersCommandCopyManifestActionStatus = ordersCommandExportDisabledReason
+    ? `Copy manifest unavailable: ${ordersCommandExportDisabledReason}`
+    : `Copy manifest available for ${activeSiteId}.`;
+  const ordersCommandDownloadJsonActionStatus = ordersCommandExportDisabledReason
+    ? `Download JSON unavailable: ${ordersCommandExportDisabledReason}`
+    : `Download JSON available for ${activeSiteId}.`;
+  const ordersCommandExportCsvActionStatus = ordersCommandCsvExportDisabledReason
+    ? `Export CSV unavailable: ${ordersCommandCsvExportDisabledReason}`
+    : `Export CSV available for ${visibleOrderActionLabel}.`;
+  const ordersCommandCsvTemplateActionStatus = ordersCommandTemplateDisabledReason
+    ? `CSV template unavailable: ${ordersCommandTemplateDisabledReason}`
+    : 'CSV template available.';
+  const ordersCommandImportCsvActionStatus = ordersCommandImportDisabledReason
+    ? `Import CSV unavailable: ${ordersCommandImportDisabledReason}`
+    : 'Import CSV available.';
+  const ordersCommandProductsActionStatus = ordersCommandProductsDisabledReason
+    ? `Products workspace unavailable: ${ordersCommandProductsDisabledReason}`
+    : 'Products workspace available.';
+  const ordersCommandStorefrontPageActionStatus = ordersCommandStorefrontPageDisabledReason
+    ? `Storefront page unavailable: ${ordersCommandStorefrontPageDisabledReason}`
+    : 'Storefront page available.';
+  const ordersCommandSecondaryActionStatus = [
+    ordersCommandCopyManifestActionStatus,
+    ordersCommandDownloadJsonActionStatus,
+    ordersCommandExportCsvActionStatus,
+    ordersCommandCsvTemplateActionStatus,
+    ordersCommandImportCsvActionStatus,
+    ordersCommandProductsActionStatus,
+    ordersCommandStorefrontPageActionStatus,
+  ].join(' ');
+  const ordersCommandSecondaryActionState = ordersCommandExportDisabledReason &&
+    ordersCommandCsvExportDisabledReason &&
+    ordersCommandTemplateDisabledReason &&
+    ordersCommandImportDisabledReason &&
+    ordersCommandProductsDisabledReason &&
+    ordersCommandStorefrontPageDisabledReason
+    ? 'blocked'
+    : 'ready';
   const metrics = useMemo(() => ({
     orders: totalOrderCount,
     revenue: orders
@@ -4512,6 +4572,9 @@ function OrdersRoute() {
         aria-label="Import orders CSV"
         onChange={(event) => void importOrdersCsv(event)}
       />
+      <span id={ordersCommandSecondaryActionStatusId} className="sr-only" data-testid="orders-command-secondary-action-status" aria-live="polite">
+        {ordersCommandSecondaryActionStatus}
+      </span>
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="orders-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -4550,7 +4613,13 @@ function OrdersRoute() {
             <Button onClick={() => void loadOrders()} disabled={isOrdersAccessBusy || !canViewOrders} title={!canViewOrders ? viewPermissionTitle : undefined} iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}>
               Refresh
             </Button>
-            <details className="group relative" data-testid="orders-command-secondary-actions">
+            <details
+              className="group relative"
+              aria-describedby={ordersCommandSecondaryActionStatusId}
+              data-action-state={ordersCommandSecondaryActionState}
+              data-action-status={ordersCommandSecondaryActionStatus}
+              data-testid="orders-command-secondary-actions"
+            >
               <summary
                 className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
                 aria-label="More order actions"
@@ -4559,12 +4628,17 @@ function OrdersRoute() {
                 More actions
                 <span className="sr-only">Copy manifest, Download JSON, Export CSV, CSV template, Import CSV, Products, and Storefront page</span>
               </summary>
-              <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56">
+              <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56" data-testid="orders-command-secondary-action-menu">
                 <button
                   type="button"
                   onClick={() => void copyOrderHandoff()}
-                  disabled={isOrdersAccessBusy || !canExportOrders}
-                  title={!canExportOrders ? exportPermissionTitle : undefined}
+                  disabled={Boolean(ordersCommandExportDisabledReason)}
+                  title={ordersCommandExportDisabledReason || 'Copy order handoff manifest'}
+                  aria-label="Copy order handoff manifest"
+                  aria-describedby={ordersCommandSecondaryActionStatusId}
+                  data-action-state={ordersCommandExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={ordersCommandCopyManifestActionStatus}
+                  data-disabled-reason={ordersCommandExportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="orders-command-copy-manifest"
                 >
@@ -4574,8 +4648,13 @@ function OrdersRoute() {
                 <button
                   type="button"
                   onClick={downloadOrderHandoff}
-                  disabled={isOrdersAccessBusy || !canExportOrders}
-                  title={!canExportOrders ? exportPermissionTitle : undefined}
+                  disabled={Boolean(ordersCommandExportDisabledReason)}
+                  title={ordersCommandExportDisabledReason || 'Download order handoff JSON'}
+                  aria-label="Download order handoff JSON"
+                  aria-describedby={ordersCommandSecondaryActionStatusId}
+                  data-action-state={ordersCommandExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={ordersCommandDownloadJsonActionStatus}
+                  data-disabled-reason={ordersCommandExportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="orders-command-download-json"
                 >
@@ -4585,8 +4664,13 @@ function OrdersRoute() {
                 <button
                   type="button"
                   onClick={exportOrdersCsv}
-                  disabled={isOrdersAccessBusy || !canExportOrders || filteredOrders.length === 0}
-                  title={!canExportOrders ? exportPermissionTitle : undefined}
+                  disabled={Boolean(ordersCommandCsvExportDisabledReason)}
+                  title={ordersCommandCsvExportDisabledReason || 'Export filtered orders CSV'}
+                  aria-label="Export filtered orders CSV"
+                  aria-describedby={ordersCommandSecondaryActionStatusId}
+                  data-action-state={ordersCommandCsvExportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={ordersCommandExportCsvActionStatus}
+                  data-disabled-reason={ordersCommandCsvExportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="orders-command-export-csv"
                 >
@@ -4596,8 +4680,13 @@ function OrdersRoute() {
                 <button
                   type="button"
                   onClick={downloadOrderImportTemplate}
-                  disabled={!ordersCollection || isOrdersAccessBusy || !canEditOrders}
-                  title={!canEditOrders ? editPermissionTitle : undefined}
+                  disabled={Boolean(ordersCommandTemplateDisabledReason)}
+                  title={ordersCommandTemplateDisabledReason || 'Download order CSV template'}
+                  aria-label="Download order CSV template"
+                  aria-describedby={ordersCommandSecondaryActionStatusId}
+                  data-action-state={ordersCommandTemplateDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={ordersCommandCsvTemplateActionStatus}
+                  data-disabled-reason={ordersCommandTemplateDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="orders-command-csv-template"
                 >
@@ -4607,8 +4696,13 @@ function OrdersRoute() {
                 <button
                   type="button"
                   onClick={() => orderImportInputRef.current?.click()}
-                  disabled={!ordersCollection || isOrdersAccessBusy || !canEditOrders}
-                  title={!canEditOrders ? editPermissionTitle : undefined}
+                  disabled={Boolean(ordersCommandImportDisabledReason)}
+                  title={ordersCommandImportDisabledReason || 'Import orders CSV'}
+                  aria-label="Import orders CSV"
+                  aria-describedby={ordersCommandSecondaryActionStatusId}
+                  data-action-state={ordersCommandImportDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={ordersCommandImportCsvActionStatus}
+                  data-disabled-reason={ordersCommandImportDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="orders-command-import-csv"
                 >
@@ -4618,7 +4712,13 @@ function OrdersRoute() {
                 <button
                   type="button"
                   onClick={openProductsWorkspace}
-                  disabled={isOrdersBusy}
+                  disabled={Boolean(ordersCommandProductsDisabledReason)}
+                  title={ordersCommandProductsDisabledReason || 'Open products workspace'}
+                  aria-label="Open products workspace"
+                  aria-describedby={ordersCommandSecondaryActionStatusId}
+                  data-action-state={ordersCommandProductsDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={ordersCommandProductsActionStatus}
+                  data-disabled-reason={ordersCommandProductsDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="orders-command-products"
                 >
@@ -4628,8 +4728,13 @@ function OrdersRoute() {
                 <button
                   type="button"
                   onClick={openStorefrontPage}
-                  disabled={isOrdersAccessBusy || !canEditPages}
-                  title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                  disabled={Boolean(ordersCommandStorefrontPageDisabledReason)}
+                  title={ordersCommandStorefrontPageDisabledReason || 'Create storefront page'}
+                  aria-label="Create storefront page"
+                  aria-describedby={ordersCommandSecondaryActionStatusId}
+                  data-action-state={ordersCommandStorefrontPageDisabledReason ? 'blocked' : 'ready'}
+                  data-action-status={ordersCommandStorefrontPageActionStatus}
+                  data-disabled-reason={ordersCommandStorefrontPageDisabledReason || undefined}
                   className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   data-testid="orders-command-storefront-page"
                 >
