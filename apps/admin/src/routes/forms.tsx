@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -270,6 +270,7 @@ interface FormsSearch {
   readiness?: FormReadinessFilter;
   status?: SubmissionStatusFilter;
   submissionQ?: string;
+  quickCreate?: FormsQuickCreateIntent;
 }
 
 const FORM_SOURCE_FILTERS: FormSourceFilter[] = ['all', 'page', 'blog', 'embedded'];
@@ -393,6 +394,12 @@ const normalizedSearchString = (value: unknown): string | undefined => {
   return trimmed ? trimmed : undefined;
 };
 
+type FormsQuickCreateIntent = 'blank';
+
+const isFormsQuickCreateIntent = (value: unknown): value is FormsQuickCreateIntent => (
+  value === 'blank'
+);
+
 export const Route = createFileRoute('/forms')({
   validateSearch: (search: Record<string, unknown>): FormsSearch => ({
     siteId: normalizedSearchString(search.siteId),
@@ -405,6 +412,7 @@ export const Route = createFileRoute('/forms')({
     readiness: isFormReadinessFilter(search.readiness) ? search.readiness : undefined,
     status: isSubmissionStatusFilter(search.status) ? search.status : undefined,
     submissionQ: normalizedSearchString(search.submissionQ),
+    quickCreate: isFormsQuickCreateIntent(search.quickCreate) ? search.quickCreate : undefined,
   }),
   component: FormsRoute,
 });
@@ -916,6 +924,8 @@ function FormsRoute() {
   const [pendingDeleteForm, setPendingDeleteForm] = useState<FormDefinition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [preparedQuickCreate, setPreparedQuickCreate] = useState<FormsQuickCreateIntent | null>(null);
+  const handledQuickCreateRef = useRef('');
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -2115,6 +2125,7 @@ function FormsRoute() {
     setIsCreatingTemplateId('blank');
     setError(null);
     setNotice(null);
+    setPreparedQuickCreate(null);
 
     try {
       const created = await createForm(activeSiteId, {
@@ -2165,6 +2176,47 @@ function FormsRoute() {
       setIsCreatingTemplateId(null);
     }
   };
+
+  useEffect(() => {
+    if (routeSearch.quickCreate !== 'blank') {
+      handledQuickCreateRef.current = '';
+      return;
+    }
+    if (isPermissionMatrixPending || isFormsBusy) return;
+
+    const requestKey = `${activeSiteId}:${routeSearch.quickCreate}`;
+    if (handledQuickCreateRef.current === requestKey) return;
+    handledQuickCreateRef.current = requestKey;
+
+    setFormSearchQuery('');
+    setFormSourceFilter('all');
+    setFormStateFilter('all');
+    setFormDestinationFilter('all');
+    setFormReadinessFilter('all');
+    setSubmissionQuery('');
+    setStatusFilter('all');
+    setSelectedSubmissionIds([]);
+    setSelectedFormId(null);
+    setFormDraft(null);
+    setError(null);
+    setNotice('New blank form creation is ready. Choose New blank form to create and edit it.');
+    setPreparedQuickCreate('blank');
+    updateFormsRouteSearch({
+      formId: undefined,
+      q: undefined,
+      source: undefined,
+      state: undefined,
+      destination: undefined,
+      readiness: undefined,
+      status: undefined,
+      submissionQ: undefined,
+    });
+
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>('[data-testid="forms-create-blank-button"]')?.focus();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSiteId, isFormsBusy, isPermissionMatrixPending, routeSearch.quickCreate]);
 
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
@@ -3414,7 +3466,12 @@ function FormsRoute() {
         {formsCreateActionStatus}
       </span>
 
-      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="forms-command-center">
+      <section
+        className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm"
+        data-testid="forms-command-center"
+        data-quick-create-prepared={String(preparedQuickCreate === 'blank')}
+        data-quick-create-target={preparedQuickCreate || undefined}
+      >
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">

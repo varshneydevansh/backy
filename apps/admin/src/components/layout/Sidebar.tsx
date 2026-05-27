@@ -122,6 +122,12 @@ export function Sidebar({
   const activeSiteSearch = useMemo(() => (
     { siteId: activeSiteId }
   ), [activeSiteId]);
+  const getQuickCreateSearch = useMemo(() => (
+    (action: (typeof SIDEBAR_QUICK_CREATE_ACTIONS)[number]) => ({
+      ...activeSiteSearch,
+      ...(action.search || {}),
+    })
+  ), [activeSiteSearch]);
   const getNavSearch = useMemo(() => (
     (to: string) => (
       activeSiteSearch && SITE_SCOPED_NAV_ROUTES.has(to) ? activeSiteSearch : undefined
@@ -423,7 +429,7 @@ export function Sidebar({
                 <Link
                   key={action.id}
                   to={action.to}
-                  search={activeSiteSearch}
+                  search={getQuickCreateSearch(action)}
                   onClick={onNavigate}
                   onMouseOver={(event) => showRailTooltip(action, event.currentTarget)}
                   onMouseEnter={(event) => showRailTooltip(action, event.currentTarget)}

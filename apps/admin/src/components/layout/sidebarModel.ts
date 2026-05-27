@@ -43,7 +43,7 @@ export interface NavSection {
   items: NavItem[];
 }
 
-export type SidebarQuickCreatePermission = 'pages.edit';
+export type SidebarQuickCreatePermission = 'pages.edit' | 'commerce.edit' | 'forms.create';
 
 interface SidebarQuickCreateAction {
   /** Stable quick-create identifier */
@@ -52,6 +52,8 @@ interface SidebarQuickCreateAction {
   label: string;
   /** Route path */
   to: string;
+  /** Additional route search params for intent-driven create flows */
+  search?: Record<string, string>;
   /** Icon component */
   icon: ElementType;
   /** Navigation area required to expose the action */
@@ -114,10 +116,14 @@ export const NAV_SECTIONS: NavSection[] = [
 export const SIDEBAR_QUICK_CREATE_ACTIONS: SidebarQuickCreateAction[] = [
   { id: 'new-page', label: 'New page', to: '/pages/new', icon: FileText, area: 'pages', permissionKey: 'pages.edit' },
   { id: 'new-post', label: 'New post', to: '/blog/new', icon: Newspaper, area: 'blog', permissionKey: 'pages.edit' },
+  { id: 'new-product', label: 'New product', to: '/products', search: { quickCreate: 'product' }, icon: ShoppingBag, area: 'commerce', permissionKey: 'commerce.edit' },
+  { id: 'new-form', label: 'New form', to: '/forms', search: { quickCreate: 'blank' }, icon: ClipboardList, area: 'forms', permissionKey: 'forms.create' },
 ];
 
 export const SIDEBAR_QUICK_CREATE_PERMISSION_ROLE_DEFAULTS: Record<SidebarQuickCreatePermission, User['role'][]> = {
   'pages.edit': ['owner', 'admin', 'editor'],
+  'commerce.edit': ['owner', 'admin', 'editor'],
+  'forms.create': ['owner', 'admin', 'editor'],
 };
 
 export const SIDEBAR_SECTION_STORAGE_KEY = 'backy:admin-sidebar-section-state';

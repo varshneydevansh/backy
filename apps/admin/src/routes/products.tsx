@@ -859,6 +859,7 @@ interface ProductsSearch {
   q?: string;
   productId?: string;
   frontendTemplate?: string;
+  quickCreate?: ProductQuickCreateIntent;
 }
 
 interface ProductFormState {
@@ -933,6 +934,12 @@ const isProductStockFilter = (value: unknown): value is ProductStockFilter => (
   typeof value === 'string' && PRODUCT_STOCK_FILTERS.includes(value as ProductStockFilter)
 );
 
+type ProductQuickCreateIntent = 'product';
+
+const isProductQuickCreateIntent = (value: unknown): value is ProductQuickCreateIntent => (
+  value === 'product'
+);
+
 const normalizedSearchString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -949,6 +956,7 @@ export const Route = createFileRoute('/products')({
     q: normalizedSearchString(search.q),
     productId: normalizedSearchString(search.productId),
     frontendTemplate: normalizedSearchString(search.frontendTemplate),
+    quickCreate: isProductQuickCreateIntent(search.quickCreate) ? search.quickCreate : undefined,
   }),
   component: ProductsRoute,
 });
@@ -4024,6 +4032,42 @@ function ProductsRoute() {
     clearProductEditorState();
     updateProductsRouteSearch({ productId: undefined });
   };
+
+  useEffect(() => {
+    if (routeSearch.quickCreate !== 'product') return;
+    if (isPermissionMatrixPending || isProductsBusy) return;
+
+    if (!canEditProducts) {
+      setError(editPermissionTitle || 'Your account cannot edit products.');
+      updateProductsRouteSearch({ productId: undefined });
+      return;
+    }
+
+    setSearchQuery('');
+    setStatusFilter('all');
+    setProductTypeFilter('all');
+    setStockFilter('all');
+    setCategoryFilter('all');
+    setSelectedProductIds([]);
+    setPendingBulkDeleteProducts(false);
+    clearProductEditorState();
+    setError(null);
+    setNotice('New product draft ready. Add catalog details and save when ready.');
+    updateProductsRouteSearch({
+      status: undefined,
+      type: undefined,
+      stock: undefined,
+      category: undefined,
+      q: undefined,
+      productId: undefined,
+      frontendTemplate: undefined,
+    });
+
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLInputElement>('[data-testid="products-title-input"]')?.focus();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEditProducts, editPermissionTitle, isPermissionMatrixPending, isProductsBusy, routeSearch.quickCreate]);
 
   const selectProductForEditing = (productId: string) => {
     if (isProductsBusy) return;

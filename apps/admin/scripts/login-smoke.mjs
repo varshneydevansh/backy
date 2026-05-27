@@ -476,17 +476,22 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('const sidebarActionStatus = `${permissionSyncStatus} ${sidebarFilterSummary}') &&
       sidebarSource.includes('data-action-status={sidebarActionStatus}') &&
       sidebarSource.includes('data-action-state={collapseLocked ?') &&
-      sidebarModelSource.includes("type SidebarQuickCreatePermission = 'pages.edit';") &&
+      sidebarModelSource.includes("type SidebarQuickCreatePermission = 'pages.edit' | 'commerce.edit' | 'forms.create';") &&
       sidebarModelSource.includes('const SIDEBAR_QUICK_CREATE_ACTIONS') &&
       sidebarModelSource.includes("to: '/pages/new'") &&
       sidebarModelSource.includes("to: '/blog/new'") &&
+      sidebarModelSource.includes("to: '/products'") &&
+      sidebarModelSource.includes("quickCreate: 'product'") &&
+      sidebarModelSource.includes("to: '/forms'") &&
+      sidebarModelSource.includes("quickCreate: 'blank'") &&
       sidebarSource.includes('const quickCreateActions = useMemo(() => (') &&
+      sidebarSource.includes('const getQuickCreateSearch = useMemo(() => (') &&
       sidebarSource.includes('const quickCreateStatusId = `${navigationId}-quick-create-status`;') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-quick-create`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-quick-create-status`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-quick-create-${action.id}`}') &&
       sidebarSource.includes('data-quick-create-count={quickCreateActions.length}') &&
-      sidebarSource.includes('search={activeSiteSearch}') &&
+      sidebarSource.includes('search={getQuickCreateSearch(action)}') &&
       sidebarSource.includes('data-target-site-id={activeSiteId}') &&
       sidebarSource.includes('data-required-permission={action.permissionKey}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-nav`}') &&
@@ -2000,6 +2005,8 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const quickCreateStatus = document.querySelector('[data-testid="admin-sidebar-quick-create-status"]');
       const quickCreatePage = document.querySelector('[data-testid="admin-sidebar-quick-create-new-page"]');
       const quickCreatePost = document.querySelector('[data-testid="admin-sidebar-quick-create-new-post"]');
+      const quickCreateProduct = document.querySelector('[data-testid="admin-sidebar-quick-create-new-product"]');
+      const quickCreateForm = document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]');
       const activeSite = document.querySelector('[data-testid="admin-sidebar-active-site"]');
       const shellRect = shell?.getBoundingClientRect();
       const sidebarRect = sidebar?.getBoundingClientRect();
@@ -2068,7 +2075,7 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           quickCreateStatus instanceof HTMLElement &&
           quickCreate.getAttribute('aria-describedby') === quickCreateStatus.id &&
           quickCreate.getAttribute('data-action-status') === quickCreateStatusText &&
-          quickCreate.getAttribute('data-quick-create-count') === '2' &&
+          quickCreate.getAttribute('data-quick-create-count') === '4' &&
           quickCreatePage instanceof HTMLAnchorElement &&
           quickCreatePage.href.includes('/pages/new') &&
           quickCreatePage.href.includes('siteId=') &&
@@ -2084,7 +2091,25 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           quickCreatePost.getAttribute('data-action-state') === 'ready' &&
           quickCreatePost.getAttribute('data-nav-route') === '/blog/new' &&
           quickCreatePost.getAttribute('data-target-site-id') === quickCreateSiteId &&
-          quickCreatePost.getAttribute('data-required-permission') === 'pages.edit',
+          quickCreatePost.getAttribute('data-required-permission') === 'pages.edit' &&
+          quickCreateProduct instanceof HTMLAnchorElement &&
+          quickCreateProduct.href.includes('/products') &&
+          quickCreateProduct.href.includes('siteId=') &&
+          quickCreateProduct.href.includes('quickCreate=product') &&
+          quickCreateProduct.getAttribute('aria-describedby') === quickCreateStatus.id &&
+          quickCreateProduct.getAttribute('data-action-state') === 'ready' &&
+          quickCreateProduct.getAttribute('data-nav-route') === '/products' &&
+          quickCreateProduct.getAttribute('data-target-site-id') === quickCreateSiteId &&
+          quickCreateProduct.getAttribute('data-required-permission') === 'commerce.edit' &&
+          quickCreateForm instanceof HTMLAnchorElement &&
+          quickCreateForm.href.includes('/forms') &&
+          quickCreateForm.href.includes('siteId=') &&
+          quickCreateForm.href.includes('quickCreate=blank') &&
+          quickCreateForm.getAttribute('aria-describedby') === quickCreateStatus.id &&
+          quickCreateForm.getAttribute('data-action-state') === 'ready' &&
+          quickCreateForm.getAttribute('data-nav-route') === '/forms' &&
+          quickCreateForm.getAttribute('data-target-site-id') === quickCreateSiteId &&
+          quickCreateForm.getAttribute('data-required-permission') === 'forms.create',
         viewportHeight: window.innerHeight,
         documentScrollHeight: document.documentElement.scrollHeight,
         bodyScrollHeight: document.body?.scrollHeight || 0,
@@ -2142,6 +2167,16 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
         quickCreatePostStatus: quickCreatePost?.getAttribute('data-action-status') || '',
         quickCreatePostSiteId: quickCreatePost?.getAttribute('data-target-site-id') || '',
         quickCreatePostPermission: quickCreatePost?.getAttribute('data-required-permission') || '',
+        quickCreateProductHref: quickCreateProduct instanceof HTMLAnchorElement ? quickCreateProduct.href : '',
+        quickCreateProductState: quickCreateProduct?.getAttribute('data-action-state') || '',
+        quickCreateProductStatus: quickCreateProduct?.getAttribute('data-action-status') || '',
+        quickCreateProductSiteId: quickCreateProduct?.getAttribute('data-target-site-id') || '',
+        quickCreateProductPermission: quickCreateProduct?.getAttribute('data-required-permission') || '',
+        quickCreateFormHref: quickCreateForm instanceof HTMLAnchorElement ? quickCreateForm.href : '',
+        quickCreateFormState: quickCreateForm?.getAttribute('data-action-state') || '',
+        quickCreateFormStatus: quickCreateForm?.getAttribute('data-action-status') || '',
+        quickCreateFormSiteId: quickCreateForm?.getAttribute('data-target-site-id') || '',
+        quickCreateFormPermission: quickCreateForm?.getAttribute('data-required-permission') || '',
         sidebarDescribedBy: sidebar?.getAttribute('aria-describedby') || '',
         densityDescribedBy: density?.getAttribute('aria-describedby') || '',
         densityStatus: density?.getAttribute('data-action-status') || '',
@@ -2233,9 +2268,9 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       state.sectionToggleStatus.includes('group') &&
       state.dashboardLinkState === 'ready' &&
       state.dashboardLinkStatus.includes('Dashboard navigation available.') &&
-      state.quickCreateCount === 2 &&
+      state.quickCreateCount === 4 &&
       state.quickCreateDescribedBy === state.quickCreateStatusId &&
-      state.quickCreateStatusText.includes('2 create shortcuts available for') &&
+      state.quickCreateStatusText.includes('4 create shortcuts available for') &&
       state.quickCreatePageState === 'ready' &&
       state.quickCreatePageHref.includes('/pages/new') &&
       state.quickCreatePageHref.includes('siteId=') &&
@@ -2248,6 +2283,20 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       state.quickCreatePostSiteId === state.quickCreateSiteId &&
       state.quickCreatePostPermission === 'pages.edit' &&
       state.quickCreatePostStatus.includes('New post available for') &&
+      state.quickCreateProductState === 'ready' &&
+      state.quickCreateProductHref.includes('/products') &&
+      state.quickCreateProductHref.includes('siteId=') &&
+      state.quickCreateProductHref.includes('quickCreate=product') &&
+      state.quickCreateProductSiteId === state.quickCreateSiteId &&
+      state.quickCreateProductPermission === 'commerce.edit' &&
+      state.quickCreateProductStatus.includes('New product available for') &&
+      state.quickCreateFormState === 'ready' &&
+      state.quickCreateFormHref.includes('/forms') &&
+      state.quickCreateFormHref.includes('siteId=') &&
+      state.quickCreateFormHref.includes('quickCreate=blank') &&
+      state.quickCreateFormSiteId === state.quickCreateSiteId &&
+      state.quickCreateFormPermission === 'forms.create' &&
+      state.quickCreateFormStatus.includes('New form available for') &&
       state.toggleDisabled === false &&
       state.activeSiteText.trim().length > 0,
     `Sidebar should be usable while permission data hydrates and expose shared action status plus active-site context: ${JSON.stringify(state)}`,
@@ -2746,13 +2795,15 @@ const assertSidebarQuickCreateInteraction = async (client) => {
       const status = document.querySelector('[data-testid="admin-sidebar-quick-create-status"]');
       const page = document.querySelector('[data-testid="admin-sidebar-quick-create-new-page"]');
       const post = document.querySelector('[data-testid="admin-sidebar-quick-create-new-post"]');
+      const product = document.querySelector('[data-testid="admin-sidebar-quick-create-new-product"]');
+      const form = document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]');
       const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const siteId = quickCreate?.getAttribute('data-target-site-id') || '';
       return {
         ready: quickCreate instanceof HTMLElement &&
           status instanceof HTMLElement &&
           quickCreate.getAttribute('aria-describedby') === status.id &&
-          statusText.includes('2 create shortcuts available for') &&
+          statusText.includes('4 create shortcuts available for') &&
           page instanceof HTMLAnchorElement &&
           page.href.includes('/pages/new') &&
           page.href.includes('siteId=') &&
@@ -2764,7 +2815,21 @@ const assertSidebarQuickCreateInteraction = async (client) => {
           post.href.includes('siteId=') &&
           post.getAttribute('data-action-state') === 'ready' &&
           post.getAttribute('data-target-site-id') === siteId &&
-          post.getAttribute('data-required-permission') === 'pages.edit',
+          post.getAttribute('data-required-permission') === 'pages.edit' &&
+          product instanceof HTMLAnchorElement &&
+          product.href.includes('/products') &&
+          product.href.includes('siteId=') &&
+          product.href.includes('quickCreate=product') &&
+          product.getAttribute('data-action-state') === 'ready' &&
+          product.getAttribute('data-target-site-id') === siteId &&
+          product.getAttribute('data-required-permission') === 'commerce.edit' &&
+          form instanceof HTMLAnchorElement &&
+          form.href.includes('/forms') &&
+          form.href.includes('siteId=') &&
+          form.href.includes('quickCreate=blank') &&
+          form.getAttribute('data-action-state') === 'ready' &&
+          form.getAttribute('data-target-site-id') === siteId &&
+          form.getAttribute('data-required-permission') === 'forms.create',
         statusText,
         siteId,
         pageHref: page instanceof HTMLAnchorElement ? page.href : '',
@@ -2773,6 +2838,12 @@ const assertSidebarQuickCreateInteraction = async (client) => {
         postHref: post instanceof HTMLAnchorElement ? post.href : '',
         postState: post?.getAttribute('data-action-state') || '',
         postStatus: post?.getAttribute('data-action-status') || '',
+        productHref: product instanceof HTMLAnchorElement ? product.href : '',
+        productState: product?.getAttribute('data-action-state') || '',
+        productStatus: product?.getAttribute('data-action-status') || '',
+        formHref: form instanceof HTMLAnchorElement ? form.href : '',
+        formState: form?.getAttribute('data-action-state') || '',
+        formStatus: form?.getAttribute('data-action-status') || '',
         body: document.body?.innerText?.slice(0, 900) || '',
       };
     })()`,
@@ -2910,7 +2981,86 @@ const assertSidebarQuickCreateInteraction = async (client) => {
     'Sidebar quick create route to new post',
   );
 
-  return { initialState, pageRouteState, postRouteState };
+  const productClick = await evaluate(client, `(() => {
+    const product = document.querySelector('[data-testid="admin-sidebar-quick-create-new-product"]');
+    if (!(product instanceof HTMLAnchorElement)) return { ok: false, reason: 'new-product-missing' };
+    product.click();
+    return { ok: true, href: product.href };
+  })()`);
+  assert(productClick.ok, `Unable to click sidebar quick-create product shortcut: ${JSON.stringify(productClick)}`);
+
+  const productRouteState = await waitForState(
+    client,
+    `(() => {
+      const body = document.body?.innerText || '';
+      const titleInput = document.querySelector('[data-testid="products-title-input"]');
+      const editorPanel = document.querySelector('[data-testid="products-editor-panel"]');
+      const editorForm = document.querySelector('[data-testid="products-editor-form"]');
+      return {
+        ready: window.location.pathname === '/products' &&
+          window.location.search.includes('siteId=site-demo') &&
+          titleInput instanceof HTMLInputElement &&
+          titleInput.value === '' &&
+          editorPanel instanceof HTMLElement &&
+          editorPanel.textContent?.includes('New product') &&
+          editorForm instanceof HTMLFormElement &&
+          body.includes('New product draft ready. Add catalog details and save when ready.'),
+        path: window.location.pathname,
+        search: window.location.search,
+        hasTitleInput: titleInput instanceof HTMLInputElement,
+        titleValue: titleInput instanceof HTMLInputElement ? titleInput.value : '',
+        titleFocused: document.activeElement === titleInput,
+        hasEditorPanel: editorPanel instanceof HTMLElement,
+        editorText: editorPanel?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 500) || '',
+        hasEditorForm: editorForm instanceof HTMLFormElement,
+        body: body.slice(0, 900),
+      };
+    })()`,
+    'Sidebar quick create route to new product',
+  );
+
+  const formClick = await evaluate(client, `(() => {
+    const form = document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]');
+    if (!(form instanceof HTMLAnchorElement)) return { ok: false, reason: 'new-form-missing' };
+    form.click();
+    return { ok: true, href: form.href };
+  })()`);
+  assert(formClick.ok, `Unable to click sidebar quick-create form shortcut: ${JSON.stringify(formClick)}`);
+
+  const formRouteState = await waitForState(
+    client,
+    `(() => {
+      const body = document.body?.innerText || '';
+      const commandCenter = document.querySelector('[data-testid="forms-command-center"]');
+      const createButton = document.querySelector('[data-testid="forms-create-blank-button"]');
+      const status = document.querySelector('[data-testid="forms-create-action-status"]');
+      const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      return {
+        ready: window.location.pathname === '/forms' &&
+          window.location.search.includes('siteId=site-demo') &&
+          commandCenter instanceof HTMLElement &&
+          commandCenter.getAttribute('data-quick-create-prepared') === 'true' &&
+          commandCenter.getAttribute('data-quick-create-target') === 'blank' &&
+          createButton instanceof HTMLButtonElement &&
+          createButton.getAttribute('data-action-state') === 'ready' &&
+          createButton.getAttribute('aria-describedby') === status?.id &&
+          statusText.includes('New blank form available for site-demo'),
+        path: window.location.pathname,
+        search: window.location.search,
+        commandCenterPrepared: commandCenter?.getAttribute('data-quick-create-prepared') || '',
+        commandCenterTarget: commandCenter?.getAttribute('data-quick-create-target') || '',
+        hasCreateButton: createButton instanceof HTMLButtonElement,
+        createButtonFocused: document.activeElement === createButton,
+        createButtonState: createButton?.getAttribute('data-action-state') || '',
+        createButtonStatus: createButton?.getAttribute('data-action-status') || '',
+        statusText,
+        body: body.slice(0, 900),
+      };
+    })()`,
+    'Sidebar quick create route to new form',
+  );
+
+  return { initialState, pageRouteState, postRouteState, productRouteState, formRouteState };
 };
 
 const assertSessionSurvivesIdleReloadAndNavigation = async (client) => {
