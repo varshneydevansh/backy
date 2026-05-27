@@ -2469,6 +2469,30 @@ function OrdersRoute() {
     ordersProviderCertificationCommandDisabledReason ? `Copy guarded command unavailable: ${ordersProviderCertificationCommandDisabledReason}` : 'Copy guarded command available.',
     ordersProviderCertificationPacketDisabledReason ? `Copy evidence packet unavailable: ${ordersProviderCertificationPacketDisabledReason}` : 'Copy evidence packet available.',
   ].join(' ');
+  const ordersProviderCertificationControlProps = (
+    label: string,
+    disabledReason: string,
+    active: boolean,
+  ) => ({
+    'aria-describedby': ordersProviderCertificationActionStatusId,
+    'data-action-state': disabledReason ? 'blocked' : 'ready',
+    'data-action-status': disabledReason
+      ? `${label} unavailable: ${disabledReason}`
+      : `${label} ${active ? 'ready for this certification run.' : 'not selected for this certification run.'}`,
+    'data-disabled-reason': disabledReason || undefined,
+  });
+  const ordersProviderCertificationPaymentProviderDisabledReason = ordersProviderCertificationBusyDisabledReason
+    || (!providerCertificationCommandOptions.certifyPayment ? 'Enable Payment/refunds certification before choosing a payment provider.' : '');
+  const ordersProviderCertificationTaxProviderDisabledReason = ordersProviderCertificationBusyDisabledReason
+    || (!providerCertificationCommandOptions.certifyTax ? 'Enable Tax quotes certification before choosing a tax provider.' : '');
+  const ordersProviderCertificationShippingProviderDisabledReason = ordersProviderCertificationBusyDisabledReason
+    || (!providerCertificationCommandOptions.certifyShipping ? 'Enable Shipping/labels certification before choosing a shipping provider.' : '');
+  const ordersProviderCertificationDiscountProviderDisabledReason = ordersProviderCertificationBusyDisabledReason
+    || (!providerCertificationCommandOptions.certifyDiscount ? 'Enable Discount quotes certification before choosing a discount provider.' : '');
+  const ordersProviderCertificationSubscriptionProviderDisabledReason = ordersProviderCertificationBusyDisabledReason
+    || (!providerCertificationCommandOptions.certifySubscriptions ? 'Enable Subscriptions certification before choosing a subscription provider.' : '');
+  const ordersProviderCertificationWebhookProviderDisabledReason = ordersProviderCertificationBusyDisabledReason
+    || (!providerCertificationCommandOptions.certifyWebhooks ? 'Enable Webhooks certification before choosing a webhook provider.' : '');
   const providerCertificationSummary = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     schemaVersion: 'backy.commerce-provider-certification-handoff.v1',
@@ -5214,24 +5238,36 @@ function OrdersRoute() {
 	                        label: string;
 	                        env: string;
 	                        testId: string;
-	                      }>).map((item) => (
-	                        <label key={item.key} className="flex min-h-[88px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2">
-	                          <input
-	                            type="checkbox"
-	                            checked={providerCertificationCommandOptions[item.key]}
-	                            onChange={(event) => updateProviderCertificationCommandOptions({
-	                              [item.key]: event.target.checked,
-	                            } as Partial<OrderProviderCertificationCommandOptions>)}
-	                            disabled={isOrdersAccessBusy}
-	                            className="mt-1 size-4 rounded border-border"
-	                            data-testid={item.testId}
-	                          />
-	                          <span>
-	                            <span className="block font-semibold text-foreground">{item.label}</span>
-	                            <span className="mt-1 block break-words font-mono text-[10px] leading-4 text-muted-foreground">{item.env}</span>
-	                          </span>
-	                        </label>
-	                      ))}
+	                      }>).map((item) => {
+	                        const itemDisabledReason = ordersProviderCertificationBusyDisabledReason;
+	                        const itemControlProps = ordersProviderCertificationControlProps(item.label, itemDisabledReason, providerCertificationCommandOptions[item.key]);
+
+	                        return (
+	                          <label
+	                            key={item.key}
+	                            className="flex min-h-[88px] items-start gap-2 rounded-md border border-border bg-background px-3 py-2"
+	                            data-provider-certification-family={item.key}
+	                            {...itemControlProps}
+	                          >
+	                            <input
+	                              type="checkbox"
+	                              checked={providerCertificationCommandOptions[item.key]}
+	                              onChange={(event) => updateProviderCertificationCommandOptions({
+	                                [item.key]: event.target.checked,
+	                              } as Partial<OrderProviderCertificationCommandOptions>)}
+	                              disabled={Boolean(itemDisabledReason)}
+	                              className="mt-1 size-4 rounded border-border"
+	                              data-testid={item.testId}
+	                              data-provider-certification-family={item.key}
+	                              {...itemControlProps}
+	                            />
+	                            <span>
+	                              <span className="block font-semibold text-foreground">{item.label}</span>
+	                              <span className="mt-1 block break-words font-mono text-[10px] leading-4 text-muted-foreground">{item.env}</span>
+	                            </span>
+	                          </label>
+	                        );
+	                      })}
 	                    </div>
 	                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 	                      <label className="text-xs">
@@ -5241,9 +5277,11 @@ function OrdersRoute() {
 	                          onChange={(event) => updateProviderCertificationCommandOptions({
 	                            paymentProvider: event.target.value as OrderProviderCertificationPaymentProvider,
 	                          })}
-	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyPayment}
+	                          disabled={Boolean(ordersProviderCertificationPaymentProviderDisabledReason)}
 	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
 	                          data-testid="orders-provider-certification-payment-provider-select"
+	                          data-provider-certification-family="certifyPayment"
+	                          {...ordersProviderCertificationControlProps('Payment provider selector', ordersProviderCertificationPaymentProviderDisabledReason, providerCertificationCommandOptions.certifyPayment)}
 	                        >
 	                          {ORDER_PROVIDER_CERTIFICATION_PAYMENT_PROVIDER_OPTIONS.map((option) => (
 	                            <option key={option.value} value={option.value}>{option.label}</option>
@@ -5260,9 +5298,11 @@ function OrdersRoute() {
 	                          onChange={(event) => updateProviderCertificationCommandOptions({
 	                            taxProvider: event.target.value as OrderProviderCertificationTaxProvider,
 	                          })}
-	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyTax}
+	                          disabled={Boolean(ordersProviderCertificationTaxProviderDisabledReason)}
 	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
 	                          data-testid="orders-provider-certification-tax-provider-select"
+	                          data-provider-certification-family="certifyTax"
+	                          {...ordersProviderCertificationControlProps('Tax provider selector', ordersProviderCertificationTaxProviderDisabledReason, providerCertificationCommandOptions.certifyTax)}
 	                        >
 	                          {ORDER_PROVIDER_CERTIFICATION_TAX_PROVIDER_OPTIONS.map((option) => (
 	                            <option key={option.value} value={option.value}>{option.label}</option>
@@ -5279,9 +5319,11 @@ function OrdersRoute() {
 	                          onChange={(event) => updateProviderCertificationCommandOptions({
 	                            shippingProvider: event.target.value as OrderProviderCertificationShippingProvider,
 	                          })}
-	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyShipping}
+	                          disabled={Boolean(ordersProviderCertificationShippingProviderDisabledReason)}
 	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
 	                          data-testid="orders-provider-certification-shipping-provider-select"
+	                          data-provider-certification-family="certifyShipping"
+	                          {...ordersProviderCertificationControlProps('Shipping provider selector', ordersProviderCertificationShippingProviderDisabledReason, providerCertificationCommandOptions.certifyShipping)}
 	                        >
 	                          {ORDER_PROVIDER_CERTIFICATION_SHIPPING_PROVIDER_OPTIONS.map((option) => (
 	                            <option key={option.value} value={option.value}>{option.label}</option>
@@ -5298,9 +5340,11 @@ function OrdersRoute() {
 	                          onChange={(event) => updateProviderCertificationCommandOptions({
 	                            discountProvider: event.target.value as OrderProviderCertificationDiscountProvider,
 	                          })}
-	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyDiscount}
+	                          disabled={Boolean(ordersProviderCertificationDiscountProviderDisabledReason)}
 	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
 	                          data-testid="orders-provider-certification-discount-provider-select"
+	                          data-provider-certification-family="certifyDiscount"
+	                          {...ordersProviderCertificationControlProps('Discount provider selector', ordersProviderCertificationDiscountProviderDisabledReason, providerCertificationCommandOptions.certifyDiscount)}
 	                        >
 	                          {ORDER_PROVIDER_CERTIFICATION_DISCOUNT_PROVIDER_OPTIONS.map((option) => (
 	                            <option key={option.value} value={option.value}>{option.label}</option>
@@ -5317,9 +5361,11 @@ function OrdersRoute() {
 	                          onChange={(event) => updateProviderCertificationCommandOptions({
 	                            subscriptionProvider: event.target.value as OrderProviderCertificationSubscriptionProvider,
 	                          })}
-	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifySubscriptions}
+	                          disabled={Boolean(ordersProviderCertificationSubscriptionProviderDisabledReason)}
 	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
 	                          data-testid="orders-provider-certification-subscription-provider-select"
+	                          data-provider-certification-family="certifySubscriptions"
+	                          {...ordersProviderCertificationControlProps('Subscription provider selector', ordersProviderCertificationSubscriptionProviderDisabledReason, providerCertificationCommandOptions.certifySubscriptions)}
 	                        >
 	                          {ORDER_PROVIDER_CERTIFICATION_SUBSCRIPTION_PROVIDER_OPTIONS.map((option) => (
 	                            <option key={option.value} value={option.value}>{option.label}</option>
@@ -5336,9 +5382,11 @@ function OrdersRoute() {
 	                          onChange={(event) => updateProviderCertificationCommandOptions({
 	                            webhookProvider: event.target.value as OrderProviderCertificationWebhookProvider,
 	                          })}
-	                          disabled={isOrdersAccessBusy || !providerCertificationCommandOptions.certifyWebhooks}
+	                          disabled={Boolean(ordersProviderCertificationWebhookProviderDisabledReason)}
 	                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
 	                          data-testid="orders-provider-certification-webhook-provider-select"
+	                          data-provider-certification-family="certifyWebhooks"
+	                          {...ordersProviderCertificationControlProps('Webhook provider selector', ordersProviderCertificationWebhookProviderDisabledReason, providerCertificationCommandOptions.certifyWebhooks)}
 	                        >
 	                          {ORDER_PROVIDER_CERTIFICATION_WEBHOOK_PROVIDER_OPTIONS.map((option) => (
 	                            <option key={option.value} value={option.value}>{option.label}</option>

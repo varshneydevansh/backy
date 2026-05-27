@@ -381,9 +381,14 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-action-status={ordersProviderCertificationActionStatus}') &&
       source.includes('data-action-state={ordersProviderCertificationCommandDisabledReason ?') &&
       source.includes('data-disabled-reason={ordersProviderCertificationCommandDisabledReason || undefined}') &&
+      source.includes('const ordersProviderCertificationControlProps = (') &&
+      source.includes('data-provider-certification-family={item.key}') &&
+      source.includes('ordersProviderCertificationPaymentProviderDisabledReason') &&
+      source.includes('ordersProviderCertificationWebhookProviderDisabledReason') &&
+      source.includes("{...ordersProviderCertificationControlProps('Webhook provider selector'") &&
       source.includes('Copy provider handoff available.') &&
       source.includes('Copy evidence packet available.'),
-    'Orders provider certification actions must expose shared ready/blocked status metadata',
+    'Orders provider certification actions and selector controls must expose shared ready/blocked status metadata',
   );
   assert(
     source.includes('data-testid="orders-provider-certification-download-button"') &&
@@ -2519,6 +2524,34 @@ const assertOrdersLayout = async (client) => {
             disabled: Boolean(element?.disabled || element?.getAttribute('aria-disabled') === 'true'),
           };
         });
+        const controlTestIds = [
+          'orders-provider-certification-payment-toggle',
+          'orders-provider-certification-tax-toggle',
+          'orders-provider-certification-shipping-toggle',
+          'orders-provider-certification-discount-toggle',
+          'orders-provider-certification-subscriptions-toggle',
+          'orders-provider-certification-webhooks-toggle',
+          'orders-provider-certification-fulfillment-toggle',
+          'orders-provider-certification-payment-provider-select',
+          'orders-provider-certification-tax-provider-select',
+          'orders-provider-certification-shipping-provider-select',
+          'orders-provider-certification-discount-provider-select',
+          'orders-provider-certification-subscription-provider-select',
+          'orders-provider-certification-webhook-provider-select',
+        ];
+        const controls = controlTestIds.map((testId) => {
+          const element = document.querySelector('[data-testid="' + testId + '"]');
+
+          return {
+            testId,
+            state: element?.getAttribute('data-action-state') || '',
+            describedBy: element?.getAttribute('aria-describedby') || '',
+            status: element?.getAttribute('data-action-status') || '',
+            disabledReason: element?.getAttribute('data-disabled-reason') || '',
+            family: element?.getAttribute('data-provider-certification-family') || '',
+            disabled: Boolean(element?.disabled || element?.getAttribute('aria-disabled') === 'true'),
+          };
+        });
         const details = {
           wrapper: Boolean(root),
           wrapperLabel: root?.getAttribute('aria-label') === 'Orders provider certification actions',
@@ -2536,6 +2569,12 @@ const assertOrdersLayout = async (client) => {
           actionStatuses: actions.every((action) => action.status === actionStatusText),
           actionDisabledReasons: actions.every((action) => action.disabledReason === ''),
           actionEnabled: actions.every((action) => action.disabled === false),
+          controlStates: controls.length === 13 && controls.every((control) => control.state === 'ready'),
+          controlDescriptions: controls.every((control) => control.describedBy === actionStatusId),
+          controlStatuses: controls.every((control) => control.status.includes('ready for this certification run.')),
+          controlDisabledReasons: controls.every((control) => control.disabledReason === ''),
+          controlFamilies: controls.every((control) => control.family.length > 0),
+          controlEnabled: controls.every((control) => control.disabled === false),
           downloadButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-download-button"]')),
           copyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-copy-button"]')),
           commandCopyButton: Boolean(document.querySelector('[data-testid="orders-provider-certification-command-copy-button"]')),

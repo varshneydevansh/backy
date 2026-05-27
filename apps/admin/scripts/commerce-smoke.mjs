@@ -28,6 +28,9 @@ const COMMERCE_PROVIDER_MOCK_BASE_URL = `http://127.0.0.1:${COMMERCE_PROVIDER_MO
 const SOURCE_ONLY_MODE = process.env.BACKY_COMMERCE_SOURCE_ONLY === "1"
   || process.env.BACKY_PRODUCTS_SOURCE_ONLY === "1"
   || process.env.BACKY_COMMERCE_SMOKE_SOURCE_ONLY === "1";
+const PROVIDER_CERTIFICATION_RENDERED_ONLY_MODE =
+  process.env.BACKY_COMMERCE_PROVIDER_CERTIFICATION_RENDERED_ONLY === "1" ||
+  process.env.BACKY_PRODUCTS_PROVIDER_CERTIFICATION_RENDERED_ONLY === "1";
 
 const PRODUCT_COLLECTION_SLUG = "products";
 const ORDERS_COLLECTION_SLUG = "orders";
@@ -918,6 +921,10 @@ const assert = (condition, message) => {
 };
 
 const assertProductsApiContractsSource = () => {
+  const commerceSmokeSource = fs.readFileSync(
+    new URL("./commerce-smoke.mjs", import.meta.url),
+    "utf8",
+  );
   const source = fs.readFileSync(
     new URL("../src/routes/products.tsx", import.meta.url),
     "utf8",
@@ -1291,9 +1298,20 @@ const assertProductsApiContractsSource = () => {
       source.includes('data-action-status={productsProviderCertificationActionStatus}') &&
       source.includes('data-action-state={productsProviderCertificationCommandDisabledReason ?') &&
       source.includes('data-disabled-reason={productsProviderCertificationCommandDisabledReason || undefined}') &&
+      source.includes('const productsProviderCertificationControlProps = (') &&
+      source.includes('data-provider-certification-family={item.key}') &&
+      source.includes('productsProviderCertificationPaymentProviderDisabledReason') &&
+      source.includes('productsProviderCertificationCatalogProviderDisabledReason') &&
+      source.includes("{...productsProviderCertificationControlProps('Webhook provider selector'") &&
       source.includes('Copy provider handoff available.') &&
       source.includes('Copy evidence packet available.'),
-    "Products provider certification actions must expose shared ready/blocked status metadata",
+    "Products provider certification actions and family/provider controls must expose shared ready/blocked status metadata",
+  );
+  assert(
+    commerceSmokeSource.includes("PROVIDER_CERTIFICATION_RENDERED_ONLY_MODE") &&
+      commerceSmokeSource.includes("assertProductsProviderCertificationLayout") &&
+      commerceSmokeSource.includes("commerce-provider-certification-rendered-only"),
+    "Products commerce smoke must expose a focused rendered provider-certification mode",
   );
   assert(
     source.includes('data-testid="products-launch-readiness"') &&
@@ -8036,6 +8054,140 @@ const assertProductBulkActionStatus = async (client) => {
   return null;
 };
 
+const assertProductsProviderCertificationLayout = async (client) => {
+  await navigateToRoute(
+    client,
+    "/products",
+    "products-command-center",
+    "Catalog command center",
+  );
+  await clickByText(client, "Refresh", { exact: true }).catch(() => null);
+  await waitUntilIdle(client, "/products refresh before provider certification assertion");
+
+  let providerCertificationState = null;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    providerCertificationState = await evaluate(
+      client,
+      `(() => {
+        const providerCertification = document.querySelector('[data-testid="products-provider-certification"]');
+        const providerCertificationText = providerCertification?.textContent || '';
+        const actionStatus = document.querySelector('[data-testid="products-provider-certification-action-status"]');
+        const actionStatusId = actionStatus?.id || '';
+        const actionStatusText = actionStatus?.textContent || '';
+        const actionTestIds = [
+          'products-provider-certification-copy-button',
+          'products-provider-certification-command-copy-button',
+          'products-provider-certification-download-button',
+          'products-provider-certification-env-copy-button',
+          'products-provider-certification-command-builder-copy-button',
+          'products-provider-certification-evidence-packet-copy-button',
+        ];
+        const controlTestIds = [
+          'products-provider-certification-payment-toggle',
+          'products-provider-certification-tax-toggle',
+          'products-provider-certification-shipping-toggle',
+          'products-provider-certification-discount-toggle',
+          'products-provider-certification-catalog-toggle',
+          'products-provider-certification-subscriptions-toggle',
+          'products-provider-certification-webhooks-toggle',
+          'products-provider-certification-payment-provider-select',
+          'products-provider-certification-tax-provider-select',
+          'products-provider-certification-shipping-provider-select',
+          'products-provider-certification-discount-provider-select',
+          'products-provider-certification-catalog-provider-select',
+          'products-provider-certification-subscription-provider-select',
+          'products-provider-certification-webhook-provider-select',
+        ];
+        const collect = (testIds) => testIds.map((testId) => {
+          const element = document.querySelector('[data-testid="' + testId + '"]');
+
+          return {
+            testId,
+            state: element?.getAttribute('data-action-state') || '',
+            describedBy: element?.getAttribute('aria-describedby') || '',
+            status: element?.getAttribute('data-action-status') || '',
+            disabledReason: element?.getAttribute('data-disabled-reason') || '',
+            family: element?.getAttribute('data-provider-certification-family') || '',
+            disabled: Boolean(element?.disabled || element?.getAttribute('aria-disabled') === 'true'),
+          };
+        });
+        const actions = collect(actionTestIds);
+        const controls = collect(controlTestIds);
+
+        return {
+          wrapper: Boolean(providerCertification),
+          wrapperLabel: providerCertification?.getAttribute('aria-label') === 'Products provider certification actions',
+          wrapperDescribedBy: providerCertification?.getAttribute('aria-describedby') === actionStatusId,
+          wrapperStatus: providerCertification?.getAttribute('data-action-status') === actionStatusText,
+          actionStatus: Boolean(actionStatus),
+          actionStatusId: actionStatusId === 'products-provider-certification-action-status',
+          actionStatusText: actionStatusText.includes('Copy provider handoff available.') &&
+            actionStatusText.includes('Copy CI command available.') &&
+            actionStatusText.includes('Copy env template available.') &&
+            actionStatusText.includes('Copy guarded command available.') &&
+            actionStatusText.includes('Copy evidence packet available.'),
+          actionStates: actions.length === 6 && actions.every((action) => action.state === 'ready'),
+          actionDescriptions: actions.every((action) => action.describedBy === actionStatusId),
+          actionStatuses: actions.every((action) => action.status === actionStatusText),
+          actionDisabledReasons: actions.every((action) => action.disabledReason === ''),
+          actionEnabled: actions.every((action) => action.disabled === false),
+          controlStates: controls.length === 14 && controls.every((control) => control.state === 'ready'),
+          controlDescriptions: controls.every((control) => control.describedBy === actionStatusId),
+          controlStatuses: controls.every((control) => control.status.includes('ready for this certification run.')),
+          controlDisabledReasons: controls.every((control) => control.disabledReason === ''),
+          controlFamilies: controls.every((control) => control.family.length > 0),
+          controlEnabled: controls.every((control) => control.disabled === false),
+          commandBuilder: Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder"]')),
+          siteTarget: Boolean(document.querySelector('[data-testid="products-provider-certification-site-target"]')),
+          readinessSummary: Boolean(document.querySelector('[data-testid="products-provider-certification-readiness-summary"]')),
+          nextAction: Boolean(document.querySelector('[data-testid="products-provider-certification-next-action"]')),
+          evidence: Boolean(document.querySelector('[data-testid="products-provider-certification-evidence"]')),
+          text: providerCertificationText.slice(0, 1600),
+        };
+      })()`,
+    );
+
+    if (
+      providerCertificationState.wrapper &&
+      providerCertificationState.actionStatus &&
+      providerCertificationState.commandBuilder &&
+      providerCertificationState.controlStates
+    ) {
+      break;
+    }
+    await sleep(250);
+  }
+
+  assert(
+    providerCertificationState?.wrapper &&
+      providerCertificationState.wrapperLabel &&
+      providerCertificationState.wrapperDescribedBy &&
+      providerCertificationState.wrapperStatus &&
+      providerCertificationState.actionStatus &&
+      providerCertificationState.actionStatusId &&
+      providerCertificationState.actionStatusText &&
+      providerCertificationState.actionStates &&
+      providerCertificationState.actionDescriptions &&
+      providerCertificationState.actionStatuses &&
+      providerCertificationState.actionDisabledReasons &&
+      providerCertificationState.actionEnabled &&
+      providerCertificationState.controlStates &&
+      providerCertificationState.controlDescriptions &&
+      providerCertificationState.controlStatuses &&
+      providerCertificationState.controlDisabledReasons &&
+      providerCertificationState.controlFamilies &&
+      providerCertificationState.controlEnabled &&
+      providerCertificationState.commandBuilder &&
+      providerCertificationState.siteTarget &&
+      providerCertificationState.readinessSummary &&
+      providerCertificationState.nextAction &&
+      providerCertificationState.evidence,
+    `Products provider certification rendered contract failed: ${JSON.stringify(providerCertificationState)}`,
+  );
+
+  return providerCertificationState;
+};
+
 const assertProductsLayout = async (client) => {
   await clickByText(client, "Refresh", { exact: true }).catch(() => null);
   await waitUntilIdle(client, "/products refresh before layout assertion");
@@ -8097,6 +8249,35 @@ const assertProductsLayout = async (client) => {
             describedBy: element?.getAttribute('aria-describedby') || '',
             status: element?.getAttribute('data-action-status') || '',
             disabledReason: element?.getAttribute('data-disabled-reason') || '',
+            disabled: Boolean(element?.disabled || element?.getAttribute('aria-disabled') === 'true'),
+          };
+        });
+        const providerCertificationControlTestIds = [
+          'products-provider-certification-payment-toggle',
+          'products-provider-certification-tax-toggle',
+          'products-provider-certification-shipping-toggle',
+          'products-provider-certification-discount-toggle',
+          'products-provider-certification-catalog-toggle',
+          'products-provider-certification-subscriptions-toggle',
+          'products-provider-certification-webhooks-toggle',
+          'products-provider-certification-payment-provider-select',
+          'products-provider-certification-tax-provider-select',
+          'products-provider-certification-shipping-provider-select',
+          'products-provider-certification-discount-provider-select',
+          'products-provider-certification-catalog-provider-select',
+          'products-provider-certification-subscription-provider-select',
+          'products-provider-certification-webhook-provider-select',
+        ];
+        const providerCertificationControls = providerCertificationControlTestIds.map((testId) => {
+          const element = document.querySelector('[data-testid="' + testId + '"]');
+
+          return {
+            testId,
+            state: element?.getAttribute('data-action-state') || '',
+            describedBy: element?.getAttribute('aria-describedby') || '',
+            status: element?.getAttribute('data-action-status') || '',
+            disabledReason: element?.getAttribute('data-disabled-reason') || '',
+            family: element?.getAttribute('data-provider-certification-family') || '',
             disabled: Boolean(element?.disabled || element?.getAttribute('aria-disabled') === 'true'),
           };
         });
@@ -8284,6 +8465,13 @@ const assertProductsLayout = async (client) => {
           providerCertificationActions.every((action) => action.status === providerCertificationActionStatusText) &&
           providerCertificationActions.every((action) => action.disabledReason === '') &&
           providerCertificationActions.every((action) => action.disabled === false) &&
+          providerCertificationControls.length === 14 &&
+          providerCertificationControls.every((control) => control.state === 'ready') &&
+          providerCertificationControls.every((control) => control.describedBy === providerCertificationActionStatusId) &&
+          providerCertificationControls.every((control) => control.status.includes('ready for this certification run.')) &&
+          providerCertificationControls.every((control) => control.disabledReason === '') &&
+          providerCertificationControls.every((control) => control.family.length > 0) &&
+          providerCertificationControls.every((control) => control.disabled === false) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-download-button"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-copy-button"]')) &&
           Boolean(document.querySelector('[data-testid="products-provider-certification-command-builder"]')) &&
@@ -8831,10 +9019,12 @@ const main = async () => {
   let productSeedQuotaRestore = null;
 
   try {
-    commerceProviderMock = await startCommerceProviderMock();
-    stripeCheckoutMock = directCatalogProviderMockEnabled()
-      ? await startStripeCheckoutMock()
-      : null;
+    if (!PROVIDER_CERTIFICATION_RENDERED_ONLY_MODE) {
+      commerceProviderMock = await startCommerceProviderMock();
+      stripeCheckoutMock = directCatalogProviderMockEnabled()
+        ? await startStripeCheckoutMock()
+        : null;
+    }
     await waitForCdp();
     const page = (await fetchJson("/json/list")).find(
       (candidate) => candidate.type === "page",
@@ -8859,6 +9049,26 @@ const main = async () => {
     await client.send("Page.addScriptToEvaluateOnNewDocument", {
       source: authStorageScript(apiAdminSessionToken),
     });
+
+    if (PROVIDER_CERTIFICATION_RENDERED_ONLY_MODE) {
+      const providerCertificationLayout =
+        await assertProductsProviderCertificationLayout(client);
+      console.log(
+        JSON.stringify(
+          {
+            ok: true,
+            mode: "commerce-provider-certification-rendered-only",
+            siteId: SITE_ID,
+            route: `${ADMIN_BASE_URL}/products?siteId=${SITE_ID}`,
+            apiSchemaSetup,
+            providerCertificationLayout,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
 
     const ordersReady = await ensureOrdersReady(client);
     const productsReady = await ensureProductsReady(client);
