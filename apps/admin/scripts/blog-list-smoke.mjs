@@ -44,18 +44,21 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Blog permission error state must link to user access management');
   assert(
     source.includes("const canEditBlog = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'pages.edit', BLOG_PERMISSION_ROLE_DEFAULTS)") &&
-      source.includes('const isBlogMutationBusy = isBulkBusy || isPostMutationBusy || isTaxonomyBusy || isSeoBusy;') &&
       source.includes('const isBlogPreviewBusy = isPostPreviewBusy;') &&
-      source.includes('const isBlogWorkflowBusy = isBlogMutationBusy;') &&
-      source.includes('const isBlogBulkActionBusy = isBlogMutationBusy || isBlogPreviewBusy;') &&
-      source.includes('if (isBlogWorkflowBusy || isBlogPreviewBusy) return;') &&
+      source.includes('const isBlogWorkflowBusy = isBulkBusy;') &&
+      source.includes('const isBlogTaxonomyControlsBusy = isBulkBusy || isTaxonomyBusy;') &&
+      source.includes('const isBlogRowMutationBusy = isBulkBusy || isPostMutationBusy;') &&
+      source.includes('const isBlogSeoControlsBusy = isBulkBusy || isPostMutationBusy || isSeoBusy;') &&
+      source.includes('const isBlogBulkActionBusy = isBulkBusy || isPostMutationBusy || isPostPreviewBusy || isSeoBusy;') &&
+      source.includes('if (isBlogWorkflowBusy || isPostMutationBusy || isBlogPreviewBusy) return;') &&
       source.includes('const previewDisabledReason = !canPublishBlog') &&
+      source.includes('isBlogPreviewBusy || isBlogRowMutationBusy') &&
       source.includes('disabled={Boolean(previewDisabledReason)}') &&
       source.includes('disabled={!bulkAction || selectedPosts.length === 0 || isBlogBulkActionBusy || !canRunBulkAction}') &&
-      !source.includes('const isBlogWorkflowBusy = isBulkBusy || isPostMutationBusy || isPostPreviewBusy') &&
+      !source.includes('const isBlogWorkflowBusy = isBlogMutationBusy') &&
       !source.includes('const canEditBlog = !isPermissionMatrixPending') &&
       !source.includes('if (isPermissionMatrixPending) return;'),
-    'Blog list must keep New post, filters, handoffs, and unrelated editorial controls responsive with role-default permission fallback and scoped preview busy state.',
+    'Blog list must keep New post, filters, handoffs, taxonomy, SEO, previews, and unrelated row controls responsive with role-default permission fallback and scoped busy states.',
   );
   assert(
     source.includes('getPostScheduleSummary') &&

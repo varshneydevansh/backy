@@ -296,17 +296,19 @@ function BlogListView() {
   const isPostPreviewBusy = previewingPostId !== null;
   const isTaxonomyBusy = Boolean(mutatingTaxonomyKey);
   const isSeoBusy = Boolean(updatingSeoPostId);
-  const isBlogMutationBusy = isBulkBusy || isPostMutationBusy || isTaxonomyBusy || isSeoBusy;
   const isBlogPreviewBusy = isPostPreviewBusy;
-  const isBlogWorkflowBusy = isBlogMutationBusy;
-  const isBlogBulkActionBusy = isBlogMutationBusy || isBlogPreviewBusy;
-  const taxonomyEditDisabledReason = isBlogWorkflowBusy
-    ? 'Taxonomy actions are temporarily unavailable while Backy updates blog content.'
+  const isBlogWorkflowBusy = isBulkBusy;
+  const isBlogTaxonomyControlsBusy = isBulkBusy || isTaxonomyBusy;
+  const isBlogRowMutationBusy = isBulkBusy || isPostMutationBusy;
+  const isBlogSeoControlsBusy = isBulkBusy || isPostMutationBusy || isSeoBusy;
+  const isBlogBulkActionBusy = isBulkBusy || isPostMutationBusy || isPostPreviewBusy || isSeoBusy;
+  const taxonomyEditDisabledReason = isBlogTaxonomyControlsBusy
+    ? 'Taxonomy actions are temporarily unavailable while Backy updates blog taxonomy.'
     : !canEditBlog
       ? editBlogPermissionTitle || 'Your account needs pages.edit to change blog taxonomy.'
       : '';
-  const taxonomyDeleteDisabledReason = isBlogWorkflowBusy
-    ? 'Taxonomy actions are temporarily unavailable while Backy updates blog content.'
+  const taxonomyDeleteDisabledReason = isBlogTaxonomyControlsBusy
+    ? 'Taxonomy actions are temporarily unavailable while Backy updates blog taxonomy.'
     : !canDeleteBlog
       ? deleteBlogPermissionTitle || 'Your account needs pages.delete to remove blog taxonomy.'
       : '';
@@ -576,7 +578,7 @@ function BlogListView() {
   };
 
   const startEditCategory = (category: BlogCategory) => {
-    if (isBlogWorkflowBusy) return;
+    if (isBlogTaxonomyControlsBusy) return;
     if (!canEditBlog) {
       setError(editBlogDeniedMessage);
       return;
@@ -593,7 +595,7 @@ function BlogListView() {
   };
 
   const startEditTag = (tag: BlogTag) => {
-    if (isBlogWorkflowBusy) return;
+    if (isBlogTaxonomyControlsBusy) return;
     if (!canEditBlog) {
       setError(editBlogDeniedMessage);
       return;
@@ -622,7 +624,7 @@ function BlogListView() {
   };
 
   const saveCategoryDraft = async () => {
-    if (isBlogWorkflowBusy) return;
+    if (isBlogTaxonomyControlsBusy) return;
     if (!canEditBlog) {
       setError(editBlogDeniedMessage);
       setNotice(null);
@@ -665,7 +667,7 @@ function BlogListView() {
   };
 
   const saveTagDraft = async () => {
-    if (isBlogWorkflowBusy) return;
+    if (isBlogTaxonomyControlsBusy) return;
     if (!canEditBlog) {
       setError(editBlogDeniedMessage);
       setNotice(null);
@@ -707,7 +709,7 @@ function BlogListView() {
   };
 
   const deleteTaxonomyTarget = async () => {
-    if (!pendingTaxonomyDelete || isBlogWorkflowBusy) return;
+    if (!pendingTaxonomyDelete || isBlogTaxonomyControlsBusy) return;
     if (!canDeleteBlog) {
       setError(deleteBlogDeniedMessage);
       setNotice(null);
@@ -755,7 +757,7 @@ function BlogListView() {
   }, [isTaxonomyBusy, pendingTaxonomyDelete]);
 
   const togglePostSeoFlag = async (post: BlogPost, key: 'noIndex' | 'noFollow') => {
-    if (isBlogWorkflowBusy) return;
+    if (isBlogSeoControlsBusy) return;
     if (!canEditBlog) {
       setError(editBlogDeniedMessage);
       setNotice(null);
@@ -835,7 +837,7 @@ function BlogListView() {
   );
 
   const handlePreviewPost = async (post: BlogPost) => {
-    if (isBlogWorkflowBusy || isBlogPreviewBusy) return;
+    if (isBlogWorkflowBusy || isPostMutationBusy || isBlogPreviewBusy) return;
     if (!canPublishBlog) {
       setError(publishBlogDeniedMessage);
       setNotice(null);
@@ -857,7 +859,7 @@ function BlogListView() {
   };
 
   const handleDeletePost = async (post: BlogPost) => {
-    if (isBlogWorkflowBusy) return;
+    if (isBlogWorkflowBusy || isPostMutationBusy || isBlogPreviewBusy) return;
     if (!canDeleteBlog) {
       setError(deleteBlogDeniedMessage);
       setNotice(null);
@@ -1073,7 +1075,7 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => void togglePostSeoFlag(post, 'noIndex')}
-                disabled={isBlogWorkflowBusy || seoBusy || !canEditBlog}
+                disabled={isBlogSeoControlsBusy || seoBusy || !canEditBlog}
                 title={editBlogPermissionTitle}
                 data-testid={`blog-post-seo-noindex-${post.id}`}
                 className={cn(
@@ -1086,7 +1088,7 @@ function BlogListView() {
               <button
                 type="button"
                 onClick={() => void togglePostSeoFlag(post, 'noFollow')}
-                disabled={isBlogWorkflowBusy || seoBusy || !canEditBlog}
+                disabled={isBlogSeoControlsBusy || seoBusy || !canEditBlog}
                 title={editBlogPermissionTitle}
                 data-testid={`blog-post-seo-nofollow-${post.id}`}
                 className={cn(
@@ -1153,21 +1155,23 @@ function BlogListView() {
       label: '',
       render: (post) => {
         const postActionStatusId = `blog-post-actions-status-${post.id}`;
-        const workflowReason = isBlogWorkflowBusy
-          ? 'Blog actions are temporarily unavailable while Backy updates posts or taxonomy.'
+        const rowMutationReason = isBlogRowMutationBusy
+          ? 'Blog actions are temporarily unavailable while Backy updates posts.'
           : null;
-        const openDisabledReason = post.status === 'published' ? workflowReason : null;
+        const openDisabledReason = null;
         const previewDisabledReason = !canPublishBlog
           ? publishBlogPermissionTitle || 'Your account cannot preview blog posts.'
-          : isBlogPreviewBusy || isBlogWorkflowBusy
+          : isBlogPreviewBusy || isBlogRowMutationBusy
             ? 'Blog preview is temporarily unavailable while Backy updates posts.'
             : null;
         const editDisabledReason = !canViewBlog
           ? viewBlogPermissionTitle || 'Your account cannot open blog posts.'
-          : workflowReason;
+          : isBlogWorkflowBusy || mutatingPostId === post.id
+            ? 'Blog editing is temporarily unavailable while Backy updates posts.'
+            : null;
         const deleteDisabledReason = !canDeleteBlog
           ? deleteBlogPermissionTitle || 'Your account cannot delete blog posts.'
-          : workflowReason;
+          : rowMutationReason;
         const postActionStatus = [
           post.status === 'published'
             ? openDisabledReason
@@ -2319,7 +2323,7 @@ function BlogListView() {
               draft={categoryDraft}
               submitted={categoryDraftSubmitted}
               editingName={selectedCategory?.name || ''}
-              busy={isBlogWorkflowBusy || !canEditBlog}
+              busy={isBlogTaxonomyControlsBusy || !canEditBlog}
               colorEnabled
               onDraftChange={patchCategoryDraft}
               onSave={() => void saveCategoryDraft()}
@@ -2368,7 +2372,7 @@ function BlogListView() {
                       <button
                         type="button"
                         onClick={() => startEditCategory(category)}
-                        disabled={isBlogWorkflowBusy || !canEditBlog}
+                        disabled={isBlogTaxonomyControlsBusy || !canEditBlog}
                         title={taxonomyEditDisabledReason || `Edit category ${category.name}`}
                         aria-label={`Edit category ${category.name}`}
                         aria-describedby={actionStatusId}
@@ -2382,7 +2386,7 @@ function BlogListView() {
                       <button
                         type="button"
                         onClick={() => setPendingTaxonomyDelete({ type: 'category', id: category.id, name: category.name, postCount: category.postCount })}
-                        disabled={isBlogWorkflowBusy || !canDeleteBlog}
+                        disabled={isBlogTaxonomyControlsBusy || !canDeleteBlog}
                         title={taxonomyDeleteDisabledReason || `Delete category ${category.name}`}
                         aria-label={`Delete category ${category.name}`}
                         aria-describedby={actionStatusId}
@@ -2407,7 +2411,7 @@ function BlogListView() {
               draft={tagDraft}
               submitted={tagDraftSubmitted}
               editingName={selectedTag?.name || ''}
-              busy={isBlogWorkflowBusy || !canEditBlog}
+              busy={isBlogTaxonomyControlsBusy || !canEditBlog}
               onDraftChange={patchTagDraft}
               onSave={() => void saveTagDraft()}
               onCancel={resetTagDraft}
@@ -2450,7 +2454,7 @@ function BlogListView() {
                       <button
                         type="button"
                         onClick={() => startEditTag(tag)}
-                        disabled={isBlogWorkflowBusy || !canEditBlog}
+                        disabled={isBlogTaxonomyControlsBusy || !canEditBlog}
                         title={taxonomyEditDisabledReason || `Edit tag ${tag.name}`}
                         aria-label={`Edit tag ${tag.name}`}
                         aria-describedby={actionStatusId}
@@ -2464,7 +2468,7 @@ function BlogListView() {
                       <button
                         type="button"
                         onClick={() => setPendingTaxonomyDelete({ type: 'tag', id: tag.id, name: tag.name, postCount: tag.postCount })}
-                        disabled={isBlogWorkflowBusy || !canDeleteBlog}
+                        disabled={isBlogTaxonomyControlsBusy || !canDeleteBlog}
                         title={taxonomyDeleteDisabledReason || `Delete tag ${tag.name}`}
                         aria-label={`Delete tag ${tag.name}`}
                         aria-describedby={actionStatusId}
