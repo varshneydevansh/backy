@@ -11,6 +11,7 @@ const SITE_ID = process.env.BACKY_EDITOR_SMOKE_SITE_ID || 'site-demo';
 const EDITOR_PATH = process.env.BACKY_EDITOR_SMOKE_PATH || '';
 const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
 const INSPECTOR_SMOKE = process.env.BACKY_EDITOR_INSPECTOR_SMOKE === '1';
+const INSPECTOR_ACTION_SMOKE = process.env.BACKY_EDITOR_INSPECTOR_ACTION_SMOKE === '1';
 const REUSABLE_SECTION_SMOKE = process.env.BACKY_EDITOR_REUSABLE_SECTION_SMOKE === '1';
 const LIBRARY_SMOKE = process.env.BACKY_EDITOR_LIBRARY_SMOKE === '1';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
@@ -866,8 +867,17 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('aria-keyshortcuts="Control+C Meta+C"') && source.includes('aria-keyshortcuts="Control+X Meta+X"') && source.includes('aria-keyshortcuts="Control+V Meta+V"') && source.includes('aria-keyshortcuts="Control+D Meta+D"') && source.includes('aria-keyshortcuts="Delete Backspace"'), 'Editor clipboard and delete controls must expose keyboard shortcut metadata');
   assert(source.includes('type EditorClipboardItem = {') && source.includes('sourceParentId: string | null') && source.includes('sourceAbsoluteOffset: { x: number; y: number } | null'), 'Editor clipboard must retain source scope metadata for cross-parent nested paste placement');
   assert(source.includes("const clipboardLayerLabel = clipboardElements.length === 1 ? 'layer' : 'layers'") && source.includes("const pasteTargetMode = canPasteIntoSelectedContainer ? 'selected-container' : 'canvas-root'") && source.includes('`Paste ${clipboardLayerLabel} into ${selectedElementLabel}`') && source.includes('data-paste-target={pasteTargetMode}') && source.includes('data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement?.id : undefined}'), 'Editor paste control must expose whether paste targets the selected container or canvas root');
-  assert(source.includes('data-testid="editor-inspector-selection-actions"') && source.includes('data-testid="editor-inspector-copy-selection"') && source.includes('data-testid="editor-inspector-paste-selection"') && source.includes('data-testid="editor-inspector-delete-selection"'), 'Editor multi-selection inspector must expose copy, duplicate, cut, paste, and delete actions');
-  assert(source.includes('data-testid="editor-inspector-single-selection-actions"') && source.includes('data-testid="editor-inspector-single-copy-selection"') && source.includes('data-testid="editor-inspector-single-paste-selection"') && source.includes('data-testid="editor-inspector-single-delete-selection"') && source.includes('data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement.id : undefined}'), 'Editor single-selection inspector must expose local clipboard, paste-target, and delete actions');
+  assert(source.includes('data-testid="editor-inspector-selection-actions"') && source.includes('data-testid="editor-inspector-copy-selection"') && source.includes('data-testid="editor-inspector-duplicate-selection"') && source.includes('data-testid="editor-inspector-paste-selection"') && source.includes('data-testid="editor-inspector-delete-selection"'), 'Editor multi-selection inspector must expose copy, duplicate, cut, paste, and delete actions');
+  assert(source.includes('data-testid="editor-inspector-single-selection-actions"') && source.includes('data-testid="editor-inspector-single-copy-selection"') && source.includes('data-testid="editor-inspector-single-duplicate-selection"') && source.includes('data-testid="editor-inspector-single-paste-selection"') && source.includes('data-testid="editor-inspector-single-delete-selection"') && source.includes('data-paste-target-id={canPasteIntoSelectedContainer ? selectedElement.id : undefined}'), 'Editor single-selection inspector must expose local clipboard, paste-target, and delete actions');
+  assert(
+    smokeSource.includes('BACKY_EDITOR_INSPECTOR_ACTION_SMOKE') &&
+      smokeSource.includes('const testInspectorSelectionMutationActions = async') &&
+      smokeSource.includes("await clickEnabledControlByTestId(client, 'editor-inspector-single-duplicate-selection'") &&
+      smokeSource.includes("await clickEnabledControlByTestId(client, 'editor-inspector-single-delete-selection'") &&
+      smokeSource.includes("await clickEnabledControlByTestId(client, 'editor-inspector-duplicate-selection'") &&
+      smokeSource.includes("await clickEnabledControlByTestId(client, 'editor-inspector-delete-selection'"),
+    'Editor rendered smoke must click inspector duplicate/delete controls and prove they mutate single and multi-layer canvas selections',
+  );
   assert(source.includes('const canDeleteSelected') && source.includes('disabled={isCanvasMutationDisabled || !canDeleteSelected}'), 'Editor delete toolbar button must be disabled when selection has no unlocked deletable layers');
   assert(source.includes('handleSelectParentLayer') && source.includes('data-testid="editor-select-parent-layer"') && source.includes('aria-keyshortcuts="Shift+Enter"'), 'Editor inspector must expose a nested-layer parent selection action with shortcut metadata');
   assert(source.includes('handleSelectFirstChildLayer') && source.includes('data-testid="editor-select-child-layer"') && source.includes('aria-keyshortcuts="Enter"'), 'Editor inspector must expose a nested-layer child selection action with shortcut metadata');
@@ -14687,6 +14697,185 @@ const waitForPersistedElementPresence = async (pageId, expected) => {
   throw new Error(`Persisted delete state did not match: ${JSON.stringify({ expected, lastState })}`);
 };
 
+const readInspectorMutationState = async (client, elementIds, label) => (
+  evaluate(client, `(() => {
+    const ids = ${JSON.stringify(elementIds)};
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const shell = document.querySelector('[data-testid="editor-shell-layout"]');
+    const selectionCard = document.querySelector('[data-testid="editor-inspector-selection"]');
+    const multiSelectionCard = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
+    const emptyCard = document.querySelector('[data-testid="editor-inspector-empty"]');
+    const actionStatus = document.querySelector('[data-testid="editor-inspector-action-status"]');
+    const splitIds = (value) => value.split(',').map((id) => id.trim()).filter(Boolean);
+    const readButton = (testId) => {
+      const button = document.querySelector('[data-testid="' + testId + '"]');
+      return {
+        testId,
+        exists: button instanceof HTMLButtonElement,
+        disabled: button instanceof HTMLButtonElement ? button.disabled : null,
+        actionState: button?.getAttribute('data-action-state') || '',
+        actionStatus: button?.getAttribute('data-action-status') || '',
+        disabledReason: button?.getAttribute('data-disabled-reason') || '',
+        describedBy: button?.getAttribute('aria-describedby') || '',
+        ariaLabel: button?.getAttribute('aria-label') || '',
+      };
+    };
+    const canvasIds = Array.from(canvas?.querySelectorAll('[data-element-id]') || [])
+      .map((node) => node.getAttribute('data-element-id') || '')
+      .filter(Boolean);
+    const elements = {};
+    for (const id of ids) {
+      elements[id] = Boolean(canvas?.querySelector('[data-element-id="' + CSS.escape(id) + '"]'));
+    }
+
+    return {
+      label: ${JSON.stringify(label)},
+      canvasCount: canvasIds.length,
+      canvasUniqueCount: new Set(canvasIds).size,
+      canvasIds,
+      elements,
+      selectedId: shell?.getAttribute('data-selected-id') || '',
+      selectedIds: splitIds(shell?.getAttribute('data-selected-ids') || ''),
+      inspectorMode: multiSelectionCard ? 'multi' : selectionCard ? 'single' : emptyCard ? 'empty' : 'missing',
+      inspectorSelectedLayerCount: Number((multiSelectionCard || selectionCard || emptyCard)?.getAttribute('data-selected-layer-count') || 0),
+      inspectorActionStatus: actionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      actions: {
+        singleDuplicate: readButton('editor-inspector-single-duplicate-selection'),
+        singleDelete: readButton('editor-inspector-single-delete-selection'),
+        multiDuplicate: readButton('editor-inspector-duplicate-selection'),
+        multiDelete: readButton('editor-inspector-delete-selection'),
+      },
+    };
+  })()`)
+);
+
+const waitForInspectorMutationState = async (client, elementIds, predicate, label) => {
+  let lastState = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    lastState = await readInspectorMutationState(client, elementIds, label);
+    if (predicate(lastState)) {
+      return lastState;
+    }
+    await sleep(150);
+  }
+
+  throw new Error(`${label}: inspector mutation state did not settle: ${JSON.stringify(lastState)}`);
+};
+
+const testInspectorSelectionMutationActions = async (client) => {
+  const singleTargetId = 'smoke-quote';
+  const multiTargetIds = ['smoke-heading', 'smoke-image'];
+
+  await selectLayerIds(client, [singleTargetId]);
+  await switchToPropertiesPanel(client);
+  const singleBefore = await readInspectorMutationState(client, [singleTargetId], 'single before inspector duplicate');
+  assert(
+    singleBefore.inspectorMode === 'single' &&
+      singleBefore.selectedIds.length === 1 &&
+      singleBefore.selectedIds[0] === singleTargetId &&
+      singleBefore.elements[singleTargetId] === true &&
+      singleBefore.actions.singleDuplicate.exists &&
+      singleBefore.actions.singleDuplicate.disabled === false &&
+      singleBefore.actions.singleDuplicate.actionState === 'ready' &&
+      singleBefore.actions.singleDuplicate.describedBy.includes('editor-inspector-action-status') &&
+      singleBefore.actions.singleDelete.exists &&
+      singleBefore.actions.singleDelete.disabled === false &&
+      singleBefore.actions.singleDelete.actionState === 'ready',
+    `Inspector single-selection duplicate/delete actions were not ready: ${JSON.stringify(singleBefore)}`,
+  );
+
+  await clickEnabledControlByTestId(client, 'editor-inspector-single-duplicate-selection', 'inspector single duplicate selection');
+  const singleDuplicated = await waitForInspectorMutationState(
+    client,
+    [singleTargetId],
+    (state) => {
+      const duplicateIds = state.selectedIds.filter((id) => id !== singleTargetId);
+      return state.inspectorMode === 'single' &&
+        duplicateIds.length === 1 &&
+        state.elements[singleTargetId] === true &&
+        state.canvasIds.includes(duplicateIds[0]) &&
+        state.canvasUniqueCount === singleBefore.canvasUniqueCount + 1;
+    },
+    'after inspector single duplicate',
+  );
+  const singleDuplicateId = singleDuplicated.selectedIds.find((id) => id !== singleTargetId);
+  assert(singleDuplicateId, `Inspector single duplicate did not select a fresh layer: ${JSON.stringify(singleDuplicated)}`);
+
+  await clickEnabledControlByTestId(client, 'editor-inspector-single-delete-selection', 'inspector single delete duplicate');
+  const singleDeleted = await waitForInspectorMutationState(
+    client,
+    [singleTargetId, singleDuplicateId],
+    (state) => (
+      state.elements[singleTargetId] === true &&
+      state.elements[singleDuplicateId] === false &&
+      state.canvasUniqueCount === singleBefore.canvasUniqueCount
+    ),
+    'after inspector single delete',
+  );
+
+  await selectLayerIds(client, multiTargetIds);
+  await switchToPropertiesPanel(client);
+  const multiBefore = await readInspectorMutationState(client, multiTargetIds, 'multi before inspector duplicate');
+  assert(
+    multiBefore.inspectorMode === 'multi' &&
+      multiTargetIds.every((id) => multiBefore.selectedIds.includes(id)) &&
+      multiTargetIds.every((id) => multiBefore.elements[id] === true) &&
+      multiBefore.actions.multiDuplicate.exists &&
+      multiBefore.actions.multiDuplicate.disabled === false &&
+      multiBefore.actions.multiDuplicate.actionState === 'ready' &&
+      multiBefore.actions.multiDuplicate.describedBy.includes('editor-inspector-action-status') &&
+      multiBefore.actions.multiDelete.exists &&
+      multiBefore.actions.multiDelete.disabled === false &&
+      multiBefore.actions.multiDelete.actionState === 'ready',
+    `Inspector multi-selection duplicate/delete actions were not ready: ${JSON.stringify(multiBefore)}`,
+  );
+
+  await clickEnabledControlByTestId(client, 'editor-inspector-duplicate-selection', 'inspector multi duplicate selection');
+  const multiDuplicated = await waitForInspectorMutationState(
+    client,
+    multiTargetIds,
+    (state) => {
+      const duplicateIds = state.selectedIds.filter((id) => !multiTargetIds.includes(id));
+      return state.inspectorMode === 'multi' &&
+        duplicateIds.length === multiTargetIds.length &&
+        multiTargetIds.every((id) => state.elements[id] === true) &&
+        duplicateIds.every((id) => state.canvasIds.includes(id)) &&
+        state.canvasUniqueCount === multiBefore.canvasUniqueCount + multiTargetIds.length;
+    },
+    'after inspector multi duplicate',
+  );
+  const multiDuplicateIds = multiDuplicated.selectedIds.filter((id) => !multiTargetIds.includes(id));
+  assert(
+    multiDuplicateIds.length === multiTargetIds.length,
+    `Inspector multi duplicate did not select fresh duplicate layers: ${JSON.stringify(multiDuplicated)}`,
+  );
+
+  await clickEnabledControlByTestId(client, 'editor-inspector-delete-selection', 'inspector multi delete duplicates');
+  const multiDeleted = await waitForInspectorMutationState(
+    client,
+    [...multiTargetIds, ...multiDuplicateIds],
+    (state) => (
+      multiTargetIds.every((id) => state.elements[id] === true) &&
+      multiDuplicateIds.every((id) => state.elements[id] === false) &&
+      state.canvasUniqueCount === multiBefore.canvasUniqueCount
+    ),
+    'after inspector multi delete',
+  );
+
+  return {
+    singleTargetId,
+    singleBefore,
+    singleDuplicated,
+    singleDuplicateId,
+    singleDeleted,
+    multiTargetIds,
+    multiBefore,
+    multiDuplicated,
+    multiDuplicateIds,
+    multiDeleted,
+  };
+};
+
 const testDeleteEditingControls = async (client, pageId) => {
   const toolbarId = 'smoke-divider';
   const keyboardId = 'smoke-spacer';
@@ -23223,7 +23412,7 @@ const main = async () => {
     return;
   }
 
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   let client;
   let childProcess = null;
@@ -23352,6 +23541,26 @@ const main = async () => {
         mode: 'inspector',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         inspector,
+      }, null, 2));
+      return;
+    }
+
+    if (INSPECTOR_ACTION_SMOKE) {
+      assert(!EDITOR_PATH, 'Inspector action smoke currently requires an internally created smoke page');
+      const inspectorActions = await testInspectorSelectionMutationActions(client);
+      await clickSave(client);
+      const savedStatus = await waitForEditorSaveStatus(
+        client,
+        (status) => status.saveState === 'saved' && status.pendingChanges === 0 && status.lastError === '',
+        'after inspector action smoke save',
+      );
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'inspector-actions',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        inspectorActions,
+        savedStatus,
       }, null, 2));
       return;
     }
