@@ -347,6 +347,10 @@ const getNextDeterministicCloneId = (sourceId: string, usedElementIds: Set<strin
 const RULER_SIZE = 28;
 const RULER_MAJOR_STEP = 100;
 const RULER_MINOR_STEP = 50;
+const CANVAS_ZOOM_MIN = 0.25;
+const CANVAS_ZOOM_MAX = 2;
+const CANVAS_ZOOM_STEP = 0.1;
+const CANVAS_WHEEL_ZOOM_STEP = 0.08;
 const MIN_GRID_SIZE = 1;
 const MAX_GRID_SIZE = 100;
 const MIN_CANVAS_DIMENSION = 320;
@@ -1870,6 +1874,7 @@ export function CanvasEditor({
   const [clipboardElements, setClipboardElements] = useState<EditorClipboardItem[]>([]);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasZoom, setCanvasZoom] = useState(1);
+  const canvasZoomRef = useRef(1);
   const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
   const [isCanvasPanMode, setIsCanvasPanMode] = useState(false);
   const [isCanvasSpacePanning, setIsCanvasSpacePanning] = useState(false);
@@ -1885,6 +1890,7 @@ export function CanvasEditor({
     scrollLeft: number;
     scrollTop: number;
   } | null>(null);
+  const canvasGestureScaleRef = useRef(1);
   const activeCanvasScale = isPreview ? canvasScale : canvasZoom;
   const isCanvasPanActive = !isPreview && (isCanvasPanMode || isCanvasSpacePanning);
   const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
@@ -1902,6 +1908,11 @@ export function CanvasEditor({
     () => applyResponsiveOverridesToElements(elements, breakpoint),
     [breakpoint, elements],
   );
+
+  useEffect(() => {
+    canvasZoomRef.current = canvasZoom;
+  }, [canvasZoom]);
+
   const saveStatusMeta = useMemo(() => {
     const pendingLabel = formatChangeCount(pendingChangeCount);
 
@@ -1976,31 +1987,110 @@ export function CanvasEditor({
     if (!Number.isFinite(value)) {
       return 1;
     }
-    return Math.min(2, Math.max(0.25, value));
+    return Math.min(CANVAS_ZOOM_MAX, Math.max(CANVAS_ZOOM_MIN, value));
+  }, []);
+
+  const setCanvasZoomValue = useCallback((value: number) => {
+    const nextZoom = clampCanvasZoom(value);
+    canvasZoomRef.current = nextZoom;
+    setCanvasZoom(nextZoom);
+    return nextZoom;
+  }, [clampCanvasZoom]);
+
+  const zoomCanvasAtPoint = useCallback((
+    computeNextZoom: (currentZoom: number) => number,
+    anchor?: { clientX: number; clientY: number },
+  ) => {
+    const currentZoom = canvasZoomRef.current;
+    const nextZoom = clampCanvasZoom(Number(computeNextZoom(currentZoom).toFixed(2)));
+    const viewport = canvasViewportRef.current;
+
+    setIsCanvasAutoFit(false);
+    if (!viewport || Math.abs(nextZoom - currentZoom) < 0.001) {
+      setCanvasZoomValue(nextZoom);
+      return;
+    }
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const anchorX = Number.isFinite(anchor?.clientX)
+      ? Math.max(0, Math.min(viewport.clientWidth, (anchor?.clientX ?? viewportRect.left) - viewportRect.left))
+      : viewport.clientWidth / 2;
+    const anchorY = Number.isFinite(anchor?.clientY)
+      ? Math.max(0, Math.min(viewport.clientHeight, (anchor?.clientY ?? viewportRect.top) - viewportRect.top))
+      : viewport.clientHeight / 2;
+    const zoomRatio = nextZoom / Math.max(currentZoom, CANVAS_ZOOM_MIN);
+    const nextScrollLeft = (viewport.scrollLeft + anchorX) * zoomRatio - anchorX;
+    const nextScrollTop = (viewport.scrollTop + anchorY) * zoomRatio - anchorY;
+
+    setCanvasZoomValue(nextZoom);
+    window.requestAnimationFrame(() => {
+      viewport.scrollLeft = Math.max(0, nextScrollLeft);
+      viewport.scrollTop = Math.max(0, nextScrollTop);
+    });
+  }, [clampCanvasZoom, setCanvasZoomValue]);
+
+  const preventCanvasBrowserZoom = useCallback((event: Event) => {
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+    event.stopPropagation();
+    if ('stopImmediatePropagation' in event) {
+      event.stopImmediatePropagation();
+    }
   }, []);
 
   const handleZoomIn = useCallback(() => {
-    setIsCanvasAutoFit(false);
-    setCanvasZoom((current) => clampCanvasZoom(Number((current + 0.1).toFixed(2))));
-  }, [clampCanvasZoom]);
+    zoomCanvasAtPoint((current) => current + CANVAS_ZOOM_STEP);
+  }, [zoomCanvasAtPoint]);
 
   const handleZoomOut = useCallback(() => {
-    setIsCanvasAutoFit(false);
-    setCanvasZoom((current) => clampCanvasZoom(Number((current - 0.1).toFixed(2))));
-  }, [clampCanvasZoom]);
+    zoomCanvasAtPoint((current) => current - CANVAS_ZOOM_STEP);
+  }, [zoomCanvasAtPoint]);
 
   const handleCanvasWheelZoom = useCallback((event: WheelEvent) => {
     if (!(event.metaKey || event.ctrlKey)) {
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-    setIsCanvasAutoFit(false);
+    preventCanvasBrowserZoom(event);
     const direction = event.deltaY > 0 ? -1 : 1;
     const strength = Math.min(3, Math.max(1, Math.abs(event.deltaY) / 100));
-    setCanvasZoom((current) => clampCanvasZoom(Number((current + direction * 0.08 * strength).toFixed(2))));
-  }, [clampCanvasZoom]);
+    zoomCanvasAtPoint(
+      (current) => current + direction * CANVAS_WHEEL_ZOOM_STEP * strength,
+      { clientX: event.clientX, clientY: event.clientY },
+    );
+  }, [preventCanvasBrowserZoom, zoomCanvasAtPoint]);
+
+  const readGestureScale = useCallback((event: Event) => {
+    const scale = Number((event as Event & { scale?: number }).scale);
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }, []);
+
+  const handleCanvasGestureStart = useCallback((event: Event) => {
+    preventCanvasBrowserZoom(event);
+    canvasGestureScaleRef.current = readGestureScale(event);
+  }, [preventCanvasBrowserZoom, readGestureScale]);
+
+  const handleCanvasGestureChange = useCallback((event: Event) => {
+    preventCanvasBrowserZoom(event);
+    const nextGestureScale = readGestureScale(event);
+    const previousGestureScale = Math.max(0.01, canvasGestureScaleRef.current || 1);
+    const gestureRatio = nextGestureScale / previousGestureScale;
+
+    canvasGestureScaleRef.current = nextGestureScale;
+    zoomCanvasAtPoint(
+      (current) => current * gestureRatio,
+      {
+        clientX: Number((event as Event & { clientX?: number }).clientX),
+        clientY: Number((event as Event & { clientY?: number }).clientY),
+      },
+    );
+  }, [preventCanvasBrowserZoom, readGestureScale, zoomCanvasAtPoint]);
+
+  const handleCanvasGestureEnd = useCallback((event: Event) => {
+    preventCanvasBrowserZoom(event);
+    canvasGestureScaleRef.current = 1;
+  }, [preventCanvasBrowserZoom]);
 
   const handleToggleSnap = useCallback(() => {
     setSnapEnabled((current) => !current);
@@ -2074,12 +2164,24 @@ export function CanvasEditor({
       return undefined;
     }
 
-    viewport.addEventListener('wheel', handleCanvasWheelZoom, { passive: false });
+    viewport.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    viewport.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
+    viewport.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
+    viewport.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
 
     return () => {
-      viewport.removeEventListener('wheel', handleCanvasWheelZoom);
+      viewport.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
+      viewport.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
+      viewport.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
+      viewport.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
     };
-  }, [handleCanvasWheelZoom, isPreview]);
+  }, [
+    handleCanvasGestureChange,
+    handleCanvasGestureEnd,
+    handleCanvasGestureStart,
+    handleCanvasWheelZoom,
+    isPreview,
+  ]);
 
   const markChanges = useCallback(() => {
     changeSequenceRef.current += 1;
@@ -2092,15 +2194,15 @@ export function CanvasEditor({
   const applyFitCanvas = useCallback(() => {
     const container = canvasViewportRef.current;
     if (!container) {
-      setCanvasZoom(1);
+      setCanvasZoomValue(1);
       return;
     }
 
     const availableWidth = Math.max(container.clientWidth - 96, 1);
     const availableHeight = Math.max(container.clientHeight - 120, 1);
     const nextScale = Math.min(1.5, availableWidth / size.width, availableHeight / size.height);
-    setCanvasZoom(clampCanvasZoom(Number(nextScale.toFixed(2))));
-  }, [clampCanvasZoom, size.height, size.width]);
+    setCanvasZoomValue(Number(nextScale.toFixed(2)));
+  }, [setCanvasZoomValue, size.height, size.width]);
 
   const handleFitCanvas = useCallback(() => {
     setIsCanvasAutoFit(true);
@@ -8145,6 +8247,11 @@ export function CanvasEditor({
             data-canvas-wheel-zoom="enabled"
             data-wheel-zoom-modifier="meta-or-control"
             data-wheel-zoom-prevents-browser-zoom="true"
+            data-canvas-pinch-zoom="enabled"
+            data-pinch-zoom-prevents-browser-zoom="true"
+            data-zoom-scope="canvas"
+            data-canvas-zoom-min={CANVAS_ZOOM_MIN}
+            data-canvas-zoom-max={CANVAS_ZOOM_MAX}
             data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
             data-pan-active={isCanvasPanActive ? 'true' : 'false'}
             data-space-pan-active={isCanvasSpacePanning ? 'true' : 'false'}
