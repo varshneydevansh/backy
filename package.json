@@ -47,6 +47,7 @@
     "ci:commerce-provider-certification": "node scripts/commerce-provider-certification-ci.mjs",
     "ci:forms-postgres": "npm run test:forms-postgres-preflight-contract && npm run test:forms-postgres-disposable-guard && npm run test:forms-postgres --workspace @backy/db",
     "ci:settings-provider-certification": "node scripts/settings-provider-certification-ci.mjs",
+    "ci:provider-artifact-admission": "node scripts/provider-artifact-admission.mjs",
     "smoke": "npm run test:smoke:all",
     "clean": "turbo run clean && rm -rf node_modules",
     "db:generate": "cd packages/db && npx drizzle-kit generate",

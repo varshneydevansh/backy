@@ -42,6 +42,7 @@ const settingsProviderWorkflow = read('../.github/workflows/settings-provider-ce
 const commerceProviderWorkflow = read('../.github/workflows/commerce-provider-certification.yml');
 const doctor = read('./backy-release-certification-doctor.mjs');
 const doctorContract = read('./backy-release-certification-doctor-contract-smoke.mjs');
+const providerArtifactAdmission = read('./provider-artifact-admission.mjs');
 const rootPackage = read('../package.json');
 const rootPackageJson = JSON.parse(rootPackage);
 const publicPackage = read('../apps/public/package.json');
@@ -597,8 +598,27 @@ includesAll(
     '"ci:sdk-postgres-smoke"',
     '"ci:settings-provider-certification"',
     '"ci:commerce-provider-certification"',
+    '"ci:provider-artifact-admission"',
   ],
   'Root package release certification script wiring',
+);
+
+includesAll(
+  providerArtifactAdmission,
+  [
+    'backy.provider-artifact-admission.v1',
+    'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH',
+    'BACKY_SETTINGS_CERTIFICATION_ARTIFACT',
+    'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH',
+    'BACKY_COMMERCE_CERTIFICATION_ARTIFACT',
+    'npm run test:partial-gate-preflights',
+    'doctor:release-certification',
+    'BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED',
+    'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED',
+    'currentAuditMode',
+    'providerClosure',
+  ],
+  'Provider artifact admission command',
 );
 
 includesAll(
@@ -654,6 +674,8 @@ includesAll(
     'without connecting to live databases or providers or requiring an MFA-backed admin login',
     'without connecting to live databases or providers',
     'npm run doctor:release-certification',
+    'npm run ci:provider-artifact-admission',
+    'backy.provider-artifact-admission.v1',
     'Current Partial-to-gate map',
     '| Partial row | Gate | Aggregate preflight | Admin source guard | Standalone workflow or release input |',
     '| `/settings` | `npm run ci:settings-provider-certification` | `npm run test:partial-gate-preflights` | `npm run test:admin-contract-source` |',
@@ -1031,6 +1053,9 @@ includesAll(
     'ci:sdk-postgres-smoke',
     'ci:settings-provider-certification',
     'ci:commerce-provider-certification',
+    'Provider artifact admission command',
+    'ci:provider-artifact-admission',
+    'backy.provider-artifact-admission.v1',
     'Settings storage alias certification update',
     'runtime-compatible storage aliases',
     'Settings Vercel alias certification update',
