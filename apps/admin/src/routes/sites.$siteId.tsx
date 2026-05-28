@@ -5421,9 +5421,26 @@ function EditSitePage() {
   const publicApiBase = buildApiUrl("/api");
   const publicSiteApiUrl = `${publicApiBase}/sites/${encodeURIComponent(siteApiId || siteId)}`;
   const siteWorkspaceCommandActionStatusId = "site-workspace-command-action-status";
+  const siteWorkspaceCommandSecondaryActionStatusId = "site-workspace-command-secondary-action-status";
   const siteWorkspaceCommandDisabledReason = isSiteSettingsBusy
     ? "Site workspace is loading."
     : "";
+  const siteWorkspaceCommandActionState = siteWorkspaceCommandDisabledReason ? "blocked" : "ready";
+  const siteWorkspaceCommandSecondaryActionState = siteWorkspaceCommandDisabledReason ? "blocked" : "ready";
+  const siteWorkspaceCopyApiActionStatus = siteWorkspaceCommandDisabledReason
+    ? `Copy API URL unavailable: ${siteWorkspaceCommandDisabledReason}`
+    : "Copy API URL available.";
+  const siteWorkspaceCopyHandoffActionStatus = siteWorkspaceCommandDisabledReason
+    ? `Copy handoff unavailable: ${siteWorkspaceCommandDisabledReason}`
+    : "Copy handoff available.";
+  const siteWorkspaceDownloadHandoffActionStatus = siteWorkspaceCommandDisabledReason
+    ? `Download JSON unavailable: ${siteWorkspaceCommandDisabledReason}`
+    : "Download JSON available.";
+  const siteWorkspaceCommandSecondaryActionStatus = [
+    siteWorkspaceCopyApiActionStatus,
+    siteWorkspaceCopyHandoffActionStatus,
+    siteWorkspaceDownloadHandoffActionStatus,
+  ].join(" ");
   const siteWorkspaceCommandActionStatus = [
     siteWorkspaceCommandDisabledReason
       ? `Open public site unavailable: ${siteWorkspaceCommandDisabledReason}`
@@ -5431,15 +5448,9 @@ function EditSitePage() {
     siteWorkspaceCommandDisabledReason
       ? `Site settings unavailable: ${siteWorkspaceCommandDisabledReason}`
       : "Site settings available.",
-    siteWorkspaceCommandDisabledReason
-      ? `Copy API URL unavailable: ${siteWorkspaceCommandDisabledReason}`
-      : "Copy API URL available.",
-    siteWorkspaceCommandDisabledReason
-      ? `Copy handoff unavailable: ${siteWorkspaceCommandDisabledReason}`
-      : "Copy handoff available.",
-    siteWorkspaceCommandDisabledReason
-      ? `Download JSON unavailable: ${siteWorkspaceCommandDisabledReason}`
-      : "Download JSON available.",
+    siteWorkspaceCopyApiActionStatus,
+    siteWorkspaceCopyHandoffActionStatus,
+    siteWorkspaceDownloadHandoffActionStatus,
   ].join(" ");
   const domainActionDisabled =
     isSiteSettingsBusy || !canConfigureSite || !hasCustomDomain;
@@ -5985,6 +5996,7 @@ function EditSitePage() {
               aria-describedby={siteWorkspaceCommandActionStatusId}
               data-testid="site-workspace-command-actions"
               data-action-status={siteWorkspaceCommandActionStatus}
+              data-action-state={siteWorkspaceCommandActionState}
             >
               <span
                 id={siteWorkspaceCommandActionStatusId}
@@ -5993,6 +6005,14 @@ function EditSitePage() {
                 aria-live="polite"
               >
                 {siteWorkspaceCommandActionStatus}
+              </span>
+              <span
+                id={siteWorkspaceCommandSecondaryActionStatusId}
+                className="sr-only"
+                data-testid="site-workspace-command-secondary-action-status"
+                aria-live="polite"
+              >
+                {siteWorkspaceCommandSecondaryActionStatus}
               </span>
               <div className="flex flex-wrap items-center gap-2" data-testid="site-workspace-primary-actions">
                 <a
@@ -6003,7 +6023,7 @@ function EditSitePage() {
                   aria-describedby={siteWorkspaceCommandActionStatusId}
                   tabIndex={isSiteSettingsBusy ? -1 : undefined}
                   data-testid="site-workspace-open-public-site"
-                  data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
+                  data-action-state={siteWorkspaceCommandActionState}
                   data-action-status={siteWorkspaceCommandActionStatus}
                   data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
                   onClick={(event) => {
@@ -6025,7 +6045,7 @@ function EditSitePage() {
                   aria-describedby={siteWorkspaceCommandActionStatusId}
                   tabIndex={isSiteSettingsBusy ? -1 : undefined}
                   data-testid="site-workspace-site-settings"
-                  data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
+                  data-action-state={siteWorkspaceCommandActionState}
                   data-action-status={siteWorkspaceCommandActionStatus}
                   data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
                   onClick={(event) => {
@@ -6044,11 +6064,16 @@ function EditSitePage() {
               </div>
               <details
                 className="group relative"
+                aria-describedby={siteWorkspaceCommandSecondaryActionStatusId}
+                data-action-state={siteWorkspaceCommandSecondaryActionState}
+                data-action-status={siteWorkspaceCommandSecondaryActionStatus}
+                data-target-site-id={siteApiId || siteId}
                 data-testid="site-workspace-secondary-actions"
                 data-default-collapsed="true"
               >
                 <summary
                   className="inline-flex min-h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+                  aria-describedby={siteWorkspaceCommandSecondaryActionStatusId}
                   data-testid="site-workspace-more-actions"
                 >
                   <MoreHorizontal className="h-4 w-4" />
@@ -6062,11 +6087,12 @@ function EditSitePage() {
                     type="button"
                     onClick={() => void copySiteHandoffText(adminSiteUrl, "Site admin API URL")}
                     disabled={isSiteSettingsBusy}
-                    aria-describedby={siteWorkspaceCommandActionStatusId}
+                    aria-describedby={siteWorkspaceCommandSecondaryActionStatusId}
                     data-testid="site-workspace-copy-api-url"
-                    data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
-                    data-action-status={siteWorkspaceCommandActionStatus}
+                    data-action-state={siteWorkspaceCommandSecondaryActionState}
+                    data-action-status={siteWorkspaceCopyApiActionStatus}
                     data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
+                    data-target-site-id={siteApiId || siteId}
                     className="inline-flex items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Copy className="h-4 w-4" />
@@ -6081,11 +6107,12 @@ function EditSitePage() {
                       )
                     }
                     disabled={isSiteSettingsBusy}
-                    aria-describedby={siteWorkspaceCommandActionStatusId}
+                    aria-describedby={siteWorkspaceCommandSecondaryActionStatusId}
                     data-testid="site-workspace-copy-handoff"
-                    data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
-                    data-action-status={siteWorkspaceCommandActionStatus}
+                    data-action-state={siteWorkspaceCommandSecondaryActionState}
+                    data-action-status={siteWorkspaceCopyHandoffActionStatus}
                     data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
+                    data-target-site-id={siteApiId || siteId}
                     className="inline-flex items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Copy className="h-4 w-4" />
@@ -6095,11 +6122,12 @@ function EditSitePage() {
                     type="button"
                     onClick={downloadSiteHandoff}
                     disabled={isSiteSettingsBusy}
-                    aria-describedby={siteWorkspaceCommandActionStatusId}
+                    aria-describedby={siteWorkspaceCommandSecondaryActionStatusId}
                     data-testid="site-workspace-download-json"
-                    data-action-state={siteWorkspaceCommandDisabledReason ? "blocked" : "ready"}
-                    data-action-status={siteWorkspaceCommandActionStatus}
+                    data-action-state={siteWorkspaceCommandSecondaryActionState}
+                    data-action-status={siteWorkspaceDownloadHandoffActionStatus}
                     data-disabled-reason={siteWorkspaceCommandDisabledReason || undefined}
+                    data-target-site-id={siteApiId || siteId}
                     className="inline-flex items-center justify-start gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Download className="h-4 w-4" />

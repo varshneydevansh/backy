@@ -37,13 +37,18 @@ const assertSiteDetailSourceContract = () => {
   );
   assert(
     source.includes('const siteWorkspaceCommandActionStatusId = "site-workspace-command-action-status";') &&
+      source.includes('const siteWorkspaceCommandSecondaryActionStatusId = "site-workspace-command-secondary-action-status";') &&
       source.includes('const siteWorkspaceCommandActionStatus = [') &&
+      source.includes('const siteWorkspaceCommandSecondaryActionStatus = [') &&
       source.includes('data-testid="site-workspace-command-actions"') &&
       source.includes('data-testid="site-workspace-command-action-status"') &&
+      source.includes('data-testid="site-workspace-command-secondary-action-status"') &&
       source.includes('data-testid="site-workspace-primary-actions"') &&
       source.includes('data-testid="site-workspace-open-public-site"') &&
       source.includes('data-testid="site-workspace-site-settings"') &&
       source.includes('data-testid="site-workspace-secondary-actions"') &&
+      source.includes('data-action-status={siteWorkspaceCommandSecondaryActionStatus}') &&
+      source.includes('data-target-site-id={siteApiId || siteId}') &&
       source.includes('data-default-collapsed="true"') &&
       source.includes('data-testid="site-workspace-more-actions"') &&
       source.includes('data-testid="site-workspace-secondary-action-menu"') &&
@@ -1298,14 +1303,30 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasCommandCenter: Boolean(document.querySelector('[data-testid="site-workspace-command-center"]')) && body.includes('Site command center'),
       hasCommandActions: Boolean(document.querySelector('[data-testid="site-workspace-command-actions"]')),
       hasCommandStatus: Boolean(document.querySelector('[data-testid="site-workspace-command-action-status"]')),
+      commandActionState: document.querySelector('[data-testid="site-workspace-command-actions"]')?.getAttribute('data-action-state') || '',
       primaryActionLabels: Array.from(document.querySelectorAll('[data-testid="site-workspace-primary-actions"] a')).map((link) => (link.textContent || '').replace(/\\s+/g, ' ').trim()),
       openPublicState: document.querySelector('[data-testid="site-workspace-open-public-site"]')?.getAttribute('data-action-state') || '',
       siteSettingsState: document.querySelector('[data-testid="site-workspace-site-settings"]')?.getAttribute('data-action-state') || '',
+      secondaryStatusId: document.querySelector('[data-testid="site-workspace-command-secondary-action-status"]')?.id || '',
+      secondaryStatusText: (document.querySelector('[data-testid="site-workspace-command-secondary-action-status"]')?.textContent || '').replace(/\\s+/g, ' ').trim(),
       hasSecondaryActions: Boolean(document.querySelector('[data-testid="site-workspace-secondary-actions"]')),
       secondaryDefaultCollapsed: document.querySelector('[data-testid="site-workspace-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
       secondaryOpen: document.querySelector('[data-testid="site-workspace-secondary-actions"]')?.hasAttribute('open') || false,
+      secondaryDescribedBy: document.querySelector('[data-testid="site-workspace-secondary-actions"]')?.getAttribute('aria-describedby') || '',
+      secondaryActionState: document.querySelector('[data-testid="site-workspace-secondary-actions"]')?.getAttribute('data-action-state') || '',
+      secondaryActionStatus: document.querySelector('[data-testid="site-workspace-secondary-actions"]')?.getAttribute('data-action-status') || '',
+      secondaryTargetSiteId: document.querySelector('[data-testid="site-workspace-secondary-actions"]')?.getAttribute('data-target-site-id') || '',
       hasMoreActions: Boolean(document.querySelector('[data-testid="site-workspace-more-actions"]')),
+      moreActionsDescribedBy: document.querySelector('[data-testid="site-workspace-more-actions"]')?.getAttribute('aria-describedby') || '',
       secondaryActionLabels: Array.from(document.querySelectorAll('[data-testid="site-workspace-secondary-action-menu"] button')).map((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim()),
+      secondaryActionControls: Array.from(document.querySelectorAll('[data-testid="site-workspace-secondary-action-menu"] button')).map((button) => ({
+        testId: button.getAttribute('data-testid') || '',
+        describedBy: button.getAttribute('aria-describedby') || '',
+        state: button.getAttribute('data-action-state') || '',
+        status: button.getAttribute('data-action-status') || '',
+        disabledReason: button.getAttribute('data-disabled-reason') || '',
+        targetSiteId: button.getAttribute('data-target-site-id') || '',
+      })),
       primaryHasHandoffActions: Boolean(document.querySelector('[data-testid="site-workspace-primary-actions"] [data-testid="site-workspace-copy-api-url"], [data-testid="site-workspace-primary-actions"] [data-testid="site-workspace-copy-handoff"], [data-testid="site-workspace-primary-actions"] [data-testid="site-workspace-download-json"]')),
       hasReadiness: Boolean(document.querySelector('[data-testid="site-readiness-panel"]')) && body.includes('Publish readiness'),
       hasDomainVerification: Boolean(document.querySelector('[data-testid="site-domain-verification-panel"]')) &&
@@ -1343,7 +1364,12 @@ const assertSiteDetailLayout = async (client, siteName) => {
 
   assert(layout, 'Site detail page layout could not be evaluated');
   assert(layout.scrollWidth <= layout.width + 8, `Site detail page has horizontal overflow: ${JSON.stringify(layout)}`);
-  assert(layout.hasCommandActions && layout.hasCommandStatus, `Site detail command center should expose a named action-status contract: ${JSON.stringify(layout)}`);
+  assert(
+    layout.hasCommandActions &&
+      layout.hasCommandStatus &&
+      ['ready', 'blocked'].includes(layout.commandActionState),
+    `Site detail command center should expose a named action-status contract: ${JSON.stringify(layout)}`,
+  );
   assert(
     layout.primaryActionLabels[0] === 'Open public site' &&
       layout.primaryActionLabels[1] === 'Site settings' &&
@@ -1353,12 +1379,25 @@ const assertSiteDetailLayout = async (client, siteName) => {
   );
   assert(
     layout.hasSecondaryActions &&
+      layout.secondaryStatusId === 'site-workspace-command-secondary-action-status' &&
+      layout.secondaryDescribedBy === layout.secondaryStatusId &&
+      layout.secondaryActionStatus === layout.secondaryStatusText &&
+      ['ready', 'blocked'].includes(layout.secondaryActionState) &&
+      layout.secondaryTargetSiteId.length > 0 &&
       layout.secondaryDefaultCollapsed &&
       !layout.secondaryOpen &&
       layout.hasMoreActions &&
+      layout.moreActionsDescribedBy === layout.secondaryStatusId &&
       layout.secondaryActionLabels[0] === 'Copy API URL' &&
       layout.secondaryActionLabels.includes('Copy handoff') &&
       layout.secondaryActionLabels.includes('Download JSON') &&
+      layout.secondaryActionControls.length === 3 &&
+      layout.secondaryActionControls.every((control) => (
+        control.describedBy === layout.secondaryStatusId &&
+        control.state === layout.secondaryActionState &&
+        control.status.length > 0 &&
+        control.targetSiteId === layout.secondaryTargetSiteId
+      )) &&
       !layout.primaryHasHandoffActions,
     `Site detail API/handoff exports should stay nested behind collapsed More actions: ${JSON.stringify(layout)}`,
   );
