@@ -52,10 +52,13 @@ const assertDashboardSourceContracts = () => {
     'Start here',
     'Your current role has read-only dashboard access.',
     'const dashboardCommandActionStatusId =',
+    'const dashboardCommandSecondaryActionStatusId =',
     'data-testid="dashboard-command-actions"',
     'data-testid="dashboard-command-actions-status"',
+    'data-testid="dashboard-command-secondary-action-status"',
     'data-testid="dashboard-primary-actions"',
     'data-testid="dashboard-secondary-actions"',
+    'data-action-status={dashboardCommandSecondaryActionStatus}',
     'data-testid="dashboard-more-actions"',
     'data-testid="dashboard-secondary-action-menu"',
     "label: 'New product'",
@@ -68,7 +71,10 @@ const assertDashboardSourceContracts = () => {
     'data-testid="dashboard-command-copy-handoff"',
     'data-testid="dashboard-command-download-handoff"',
     'data-action-state={dashboardCommandActionState}',
+    'data-action-state={dashboardCommandSecondaryActionState}',
     'data-action-status={dashboardRefreshActionStatus}',
+    'data-action-status={dashboardCopyHandoffActionStatus}',
+    'data-action-status={dashboardDownloadHandoffActionStatus}',
     'data-disabled-reason={dashboardCommandDisabledReason || undefined}',
     'data-testid="dashboard-control-map-details"',
     'aria-label={`${area.title}: ${area.detail}`}',
@@ -95,7 +101,8 @@ const assertDashboardSourceContracts = () => {
         newSiteIndex > primaryIndex &&
         refreshIndex > newSiteIndex &&
         secondaryIndex > refreshIndex &&
-        commandCenterSource.includes('data-testid="dashboard-secondary-actions" data-default-collapsed="true"') &&
+        commandCenterSource.includes('data-testid="dashboard-secondary-actions"') &&
+        commandCenterSource.includes('data-default-collapsed="true"') &&
         moreIndex > secondaryIndex &&
         copyIndex > moreIndex &&
         downloadIndex > copyIndex,
@@ -745,6 +752,7 @@ const assertDashboardCommandActionStatus = async (client) => {
     state = await evaluate(client, `(() => {
       const group = document.querySelector('[data-testid="dashboard-command-actions"]');
       const status = document.querySelector('[data-testid="dashboard-command-actions-status"]');
+      const secondaryStatus = document.querySelector('[data-testid="dashboard-command-secondary-action-status"]');
       const primaryActions = document.querySelector('[data-testid="dashboard-primary-actions"]');
       const primaryActionText = Array.from(primaryActions?.querySelectorAll('a, button') || [])
         .map((node) => (node.textContent || '').replace(/\\s+/g, ' ').trim());
@@ -764,6 +772,7 @@ const assertDashboardCommandActionStatus = async (client) => {
           state: element?.getAttribute('data-action-state') || '',
           status: element?.getAttribute('data-action-status') || '',
           disabledReason: element?.getAttribute('data-disabled-reason') || '',
+          targetSite: element?.getAttribute('data-target-site-id') || '',
           disabled,
           nested: Boolean(secondaryMenu?.querySelector(\`[data-testid="\${testId}"]\`)),
           text: element?.textContent?.replace(/\\s+/g, ' ').trim() || '',
@@ -777,6 +786,12 @@ const assertDashboardCommandActionStatus = async (client) => {
         statusId: status?.id || '',
         statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         statusData: group?.getAttribute('data-action-status') || '',
+        secondaryStatusId: secondaryStatus?.id || '',
+        secondaryStatusText: secondaryStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        secondaryDescribedBy: secondaryActions?.getAttribute('aria-describedby') || '',
+        secondaryActionState: secondaryActions?.getAttribute('data-action-state') || '',
+        secondaryStatusData: secondaryActions?.getAttribute('data-action-status') || '',
+        secondaryTargetSite: secondaryActions?.getAttribute('data-target-site-id') || '',
         firstPrimaryActionText: primaryActionText[0] || '',
         primaryActionIds,
         secondaryCollapsed: secondaryActions instanceof HTMLDetailsElement &&
@@ -805,6 +820,16 @@ const assertDashboardCommandActionStatus = async (client) => {
   assert(state.describedBy === state.statusId, `Dashboard command action group must be described by its status: ${JSON.stringify(state)}`);
   assert(state.statusData === state.statusText, `Dashboard command action status data must mirror hidden copy: ${JSON.stringify(state)}`);
   assert(
+    state.secondaryStatusId === 'dashboard-command-secondary-action-status' &&
+      state.secondaryDescribedBy === state.secondaryStatusId &&
+      state.secondaryStatusData === state.secondaryStatusText &&
+      state.secondaryActionState === state.actionState &&
+      state.secondaryStatusText.includes('Copy handoff available.') &&
+      state.secondaryStatusText.includes('Download JSON available.') &&
+      state.secondaryTargetSite,
+    `Dashboard secondary action group must expose a dedicated handoff status: ${JSON.stringify(state)}`,
+  );
+  assert(
     state.statusText.includes('New site available.') &&
       state.statusText.includes('New page available.') &&
       state.statusText.includes('New post available.') &&
@@ -826,13 +851,16 @@ const assertDashboardCommandActionStatus = async (client) => {
   assert(state.newForm.href.includes('/forms') && state.newForm.href.includes('quickCreate=blank'), `Dashboard New form must route into quick form creation: ${JSON.stringify(state)}`);
   for (const [key, action] of Object.entries({ newSite: state.newSite, newPage: state.newPage, newPost: state.newPost, newProduct: state.newProduct, newForm: state.newForm, refresh: state.refresh, copy: state.copy, download: state.download })) {
     assert(action.found, `Dashboard ${key} command action was not found: ${JSON.stringify(state)}`);
-    assert(action.describedBy === state.statusId, `Dashboard ${key} command action must reference the shared status: ${JSON.stringify(state)}`);
+    const expectedStatusId = key === 'copy' || key === 'download' ? state.secondaryStatusId : state.statusId;
+    assert(action.describedBy === expectedStatusId, `Dashboard ${key} command action must reference the expected status: ${JSON.stringify(state)}`);
     assert(action.state === 'ready' && action.disabled === false && action.disabledReason === '', `Dashboard ${key} command action should be ready: ${JSON.stringify(state)}`);
     assert(action.status.length > 0, `Dashboard ${key} command action must publish action status: ${JSON.stringify(state)}`);
   }
   assert(state.refresh.label === 'Refresh dashboard command center data', `Dashboard refresh command label drifted: ${JSON.stringify(state)}`);
   assert(state.copy.label === 'Copy dashboard frontend handoff', `Dashboard copy command label drifted: ${JSON.stringify(state)}`);
   assert(state.download.label === 'Download dashboard frontend handoff JSON', `Dashboard download command label drifted: ${JSON.stringify(state)}`);
+  assert(state.copy.targetSite === state.secondaryTargetSite && state.download.targetSite === state.secondaryTargetSite, `Dashboard handoff commands must target the active site: ${JSON.stringify(state)}`);
+  assert(state.secondaryStatusText.includes(state.copy.status) && state.secondaryStatusText.includes(state.download.status), `Dashboard secondary status must include both handoff statuses: ${JSON.stringify(state)}`);
   assert(state.copy.nested && state.download.nested, `Dashboard handoff actions must be nested inside More actions: ${JSON.stringify(state)}`);
   return state;
 };

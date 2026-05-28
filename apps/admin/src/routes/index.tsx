@@ -2245,10 +2245,12 @@ function Index() {
                 : true
   ));
   const dashboardCommandActionStatusId = 'dashboard-command-actions-status';
+  const dashboardCommandSecondaryActionStatusId = 'dashboard-command-secondary-action-status';
   const dashboardCommandDisabledReason = isDashboardBusy
     ? 'Dashboard data is refreshing.'
     : '';
   const dashboardCommandActionState = dashboardCommandDisabledReason ? 'busy' : 'ready';
+  const dashboardCommandSecondaryActionState = dashboardCommandActionState;
   const dashboardPrimaryCommandActions = dashboardWorkflowActions.filter((action) => (
     action.label === 'New site' ||
     action.label === 'New page' ||
@@ -2268,6 +2270,10 @@ function Index() {
   const dashboardDownloadHandoffActionStatus = dashboardCommandDisabledReason
     ? `Download JSON unavailable: ${dashboardCommandDisabledReason}`
     : 'Download JSON available.';
+  const dashboardCommandSecondaryActionStatus = [
+    dashboardCopyHandoffActionStatus,
+    dashboardDownloadHandoffActionStatus,
+  ].join(' ');
   const dashboardCommandActionStatus = [
     dashboardPrimaryCommandActionStatus,
     dashboardRefreshActionStatus,
@@ -2343,6 +2349,13 @@ function Index() {
               >
                 {dashboardCommandActionStatus}
               </span>
+              <span
+                id={dashboardCommandSecondaryActionStatusId}
+                className="sr-only"
+                data-testid="dashboard-command-secondary-action-status"
+              >
+                {dashboardCommandSecondaryActionStatus}
+              </span>
               <div className="flex flex-wrap items-center gap-2 lg:justify-end" data-testid="dashboard-primary-actions">
                 {dashboardPrimaryCommandActions.map((action, index) => (
                   <Link
@@ -2382,7 +2395,15 @@ function Index() {
                   Refresh
                 </button>
               </div>
-              <details className="self-start lg:self-end" data-testid="dashboard-secondary-actions" data-default-collapsed="true">
+              <details
+                className="self-start lg:self-end"
+                aria-describedby={dashboardCommandSecondaryActionStatusId}
+                data-action-state={dashboardCommandSecondaryActionState}
+                data-action-status={dashboardCommandSecondaryActionStatus}
+                data-target-site-id={activeSiteId}
+                data-testid="dashboard-secondary-actions"
+                data-default-collapsed="true"
+              >
                 <summary
                   className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
                   data-testid="dashboard-more-actions"
@@ -2396,11 +2417,12 @@ function Index() {
                     onClick={() => void copyDashboardText(frontendHandoffText, 'Frontend handoff manifest')}
                     disabled={isDashboardBusy}
                     aria-label="Copy dashboard frontend handoff"
-                    aria-describedby={dashboardCommandActionStatusId}
+                    aria-describedby={dashboardCommandSecondaryActionStatusId}
                     data-testid="dashboard-command-copy-handoff"
-                    data-action-state={dashboardCommandActionState}
+                    data-action-state={dashboardCommandSecondaryActionState}
                     data-action-status={dashboardCopyHandoffActionStatus}
                     data-disabled-reason={dashboardCommandDisabledReason || undefined}
+                    data-target-site-id={activeSiteId}
                     title={dashboardCommandDisabledReason || 'Copy frontend handoff manifest'}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   >
@@ -2412,11 +2434,12 @@ function Index() {
                     onClick={downloadFrontendHandoff}
                     disabled={isDashboardBusy}
                     aria-label="Download dashboard frontend handoff JSON"
-                    aria-describedby={dashboardCommandActionStatusId}
+                    aria-describedby={dashboardCommandSecondaryActionStatusId}
                     data-testid="dashboard-command-download-handoff"
-                    data-action-state={dashboardCommandActionState}
+                    data-action-state={dashboardCommandSecondaryActionState}
                     data-action-status={dashboardDownloadHandoffActionStatus}
                     data-disabled-reason={dashboardCommandDisabledReason || undefined}
+                    data-target-site-id={activeSiteId}
                     title={dashboardCommandDisabledReason || 'Download frontend handoff JSON'}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                   >
