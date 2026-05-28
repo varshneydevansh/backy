@@ -228,9 +228,9 @@ const assertBlogCreateSourceContract = () => {
       'Blog create command center must keep primary create actions ahead of Copy handoff/Download JSON; handoff actions must be secondary or behind More actions.',
     );
     assert(
-      copyHandoffBlock.includes('aria-describedby={blogCreateCommandActionStatusId}') &&
-        downloadHandoffBlock.includes('aria-describedby={blogCreateCommandActionStatusId}'),
-      'Blog create quick-create handoff buttons must expose the primary command status for sidebar readiness and assistive feedback.',
+      copyHandoffBlock.includes('aria-describedby={blogCreateCommandSecondaryActionStatusId}') &&
+        downloadHandoffBlock.includes('aria-describedby={blogCreateCommandSecondaryActionStatusId}'),
+      'Blog create quick-create handoff buttons must expose the secondary handoff status for grouped action readiness and assistive feedback.',
     );
     const focusActionsBlockStart = source.indexOf('actions={isWorkspaceFocus');
     const focusActionsBlockEnd = source.indexOf('density={isWorkspaceFocus', focusActionsBlockStart);
