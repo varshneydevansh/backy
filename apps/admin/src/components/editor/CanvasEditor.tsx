@@ -11,8 +11,14 @@
  * @license MIT
  */
 
-import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
+import { useRef, useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
+import type {
+  CSSProperties,
+  FocusEvent as ReactFocusEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
 import {
   buildBackyThemeCssVariables,
   buildBackyThemeTokens,
@@ -1902,6 +1908,8 @@ export function CanvasEditor({
   } | null>(null);
   const canvasGestureScaleRef = useRef(1);
   const isCanvasGestureZoomActiveRef = useRef(false);
+  const isEditorShellPointerInsideRef = useRef(false);
+  const lastEditorShellPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const activeCanvasScale = isPreview ? canvasScale : canvasZoom;
   const isCanvasPanActive = !isPreview && (isCanvasPanMode || isCanvasSpacePanning);
   const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
@@ -2099,6 +2107,43 @@ export function CanvasEditor({
     );
   }, []);
 
+  const rememberEditorShellZoomPointer = useCallback((
+    event: ReactMouseEvent<HTMLDivElement> | ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    isEditorShellPointerInsideRef.current = true;
+    const nativeEvent = event.nativeEvent;
+    if (!Number.isFinite(nativeEvent.clientX) || !Number.isFinite(nativeEvent.clientY)) {
+      return;
+    }
+
+    lastEditorShellPointerRef.current = {
+      clientX: Number(nativeEvent.clientX),
+      clientY: Number(nativeEvent.clientY),
+    };
+  }, []);
+
+  const rememberEditorShellZoomFocus = useCallback((event: ReactFocusEvent<HTMLDivElement>) => {
+    const shell = editorShellRef.current;
+    if (shell && event.target instanceof HTMLElement && shell.contains(event.target)) {
+      isEditorShellPointerInsideRef.current = true;
+    }
+  }, []);
+
+  const clearEditorShellZoomPointer = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const shell = editorShellRef.current;
+    const relatedTarget = event.relatedTarget;
+    if (shell && relatedTarget instanceof Node && shell.contains(relatedTarget)) {
+      return;
+    }
+
+    isEditorShellPointerInsideRef.current = false;
+    lastEditorShellPointerRef.current = null;
+  }, []);
+
+  const hasRecentEditorShellZoomPointer = useCallback(() => (
+    isEditorShellPointerInsideRef.current || Boolean(lastEditorShellPointerRef.current)
+  ), []);
+
   const isEditorCanvasZoomEvent = useCallback((event: Event) => {
     if (isCanvasViewportEvent(event)) {
       return true;
@@ -2142,8 +2187,12 @@ export function CanvasEditor({
 
       const isZeroCoordinateGlobalEvent = isGlobalTarget && clientX === 0 && clientY === 0;
       if (!isZeroCoordinateGlobalEvent) {
-        return false;
+        return isGlobalTarget && hasRecentEditorShellZoomPointer();
       }
+    }
+
+    if (isGlobalTarget && hasRecentEditorShellZoomPointer()) {
+      return true;
     }
 
     const activeElement = document.activeElement;
@@ -2153,7 +2202,7 @@ export function CanvasEditor({
 
     // macOS browser pinch events can arrive without usable client coordinates.
     return isGlobalTarget && document.body.contains(viewport);
-  }, [isCanvasViewportEvent]);
+  }, [hasRecentEditorShellZoomPointer, isCanvasViewportEvent]);
 
   const handleZoomIn = useCallback(() => {
     zoomCanvasAtPoint((current) => current + CANVAS_ZOOM_STEP);
@@ -2327,7 +2376,7 @@ export function CanvasEditor({
     setIsCanvasPanning(true);
   }, [isCanvasPanActive]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isPreview) {
       return undefined;
     }
@@ -2340,7 +2389,8 @@ export function CanvasEditor({
     const surface = canvasScaleSurfaceRef.current;
     const root = document.documentElement;
     const body = document.body;
-    const maybeZoomTargets: Array<EventTarget | null> = [window, document, root, body, shell, viewport, surface];
+    const visualViewport = window.visualViewport ?? null;
+    const maybeZoomTargets: Array<EventTarget | null> = [window, visualViewport, document, root, body, shell, viewport, surface];
     const zoomTargets = maybeZoomTargets.filter(
       (target): target is EventTarget => target !== null,
     );
@@ -8443,6 +8493,7 @@ export function CanvasEditor({
           ref={editorShellRef}
           className="flex min-h-0 flex-1 overflow-hidden"
           data-testid="editor-shell-layout"
+          data-canvas-zoom-pointer-memory="editor-shell-global-events"
           data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
           data-component-panel-visible={!isPreview && !isCanvasFocusMode && showComponentPanel ? 'true' : 'false'}
           data-inspector-panel-visible={!isPreview && !isCanvasFocusMode && showInspectorPanel ? 'true' : 'false'}
@@ -8450,6 +8501,11 @@ export function CanvasEditor({
           data-selected-id={selectedId || ''}
           data-selected-ids={selectedIds.join(',')}
           data-shell-keyshortcuts="components:B;inspector:I;layers:L;focus:F"
+          onFocusCapture={rememberEditorShellZoomFocus}
+          onMouseMoveCapture={rememberEditorShellZoomPointer}
+          onPointerOverCapture={rememberEditorShellZoomPointer}
+          onPointerMoveCapture={rememberEditorShellZoomPointer}
+          onPointerOutCapture={clearEditorShellZoomPointer}
         >
           {/* Left Sidebar - Component Library */}
           {!isPreview && !isCanvasFocusMode && showComponentPanel && (
@@ -8483,11 +8539,13 @@ export function CanvasEditor({
             )}
             data-testid="editor-canvas-viewport"
             data-canvas-wheel-zoom="enabled"
-            data-canvas-zoom-listener-scope="window-document-root-body-shell-viewport-surface-capture"
+            data-canvas-zoom-listener-scope="window-visualviewport-document-root-body-shell-viewport-surface-capture"
+            data-canvas-zoom-native-phase="layout-effect-capture"
             data-canvas-zoom-hit-test="viewport-shell-or-active-editor"
             data-canvas-zoom-page-guard="editor-active"
             data-canvas-zoom-anchor-fallback="viewport-center"
             data-canvas-zoom-global-fallback="zero-coordinate-window-events"
+            data-canvas-zoom-recent-pointer-fallback="editor-shell-global-events"
             data-canvas-zoom-legacy-wheel-fallback="mousewheel"
             data-canvas-zoom-outside-shell-guard="non-editor-coordinate-less-events-pass-through"
             data-canvas-touch-action="pan-x pan-y"
