@@ -6484,6 +6484,9 @@ export function CanvasEditor({
     const handleCanvasBrowserZoomKeyDown = (e: KeyboardEvent) => {
       runCanvasZoomShortcut(e);
     };
+    const handleCanvasBrowserZoomKeyDownEvent: EventListener = (event) => {
+      handleCanvasBrowserZoomKeyDown(event as KeyboardEvent);
+    };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isSaving && ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
@@ -6719,10 +6722,25 @@ export function CanvasEditor({
       }
     };
 
-    window.addEventListener('keydown', handleCanvasBrowserZoomKeyDown, { capture: true });
+    const maybeKeyboardZoomTargets: Array<EventTarget | null> = [
+      document,
+      document.documentElement,
+      document.body,
+      editorShellRef.current,
+      canvasViewportRef.current,
+    ];
+    const keyboardZoomTargets = maybeKeyboardZoomTargets.filter((target): target is EventTarget => target !== null);
+
+    window.addEventListener('keydown', handleCanvasBrowserZoomKeyDownEvent, { capture: true });
+    keyboardZoomTargets.forEach((target) => {
+      target.addEventListener('keydown', handleCanvasBrowserZoomKeyDownEvent, { capture: true });
+    });
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleCanvasBrowserZoomKeyDown, { capture: true });
+      window.removeEventListener('keydown', handleCanvasBrowserZoomKeyDownEvent, { capture: true });
+      keyboardZoomTargets.forEach((target) => {
+        target.removeEventListener('keydown', handleCanvasBrowserZoomKeyDownEvent, { capture: true });
+      });
       window.removeEventListener('keydown', handleKeyDown);
     };
 
@@ -8554,6 +8572,7 @@ export function CanvasEditor({
             data-canvas-pinch-zoom="enabled"
             data-pinch-zoom-prevents-browser-zoom="true"
             data-zoom-scope="canvas"
+            data-keyboard-zoom-capture-targets="window-document-root-body-shell-viewport"
             data-canvas-zoom-min={CANVAS_ZOOM_MIN}
             data-canvas-zoom-max={CANVAS_ZOOM_MAX}
             data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
@@ -9221,6 +9240,7 @@ export function CanvasEditor({
                 data-pan-active={isCanvasPanActive ? 'true' : 'false'}
                 data-pan-keyshortcuts="toggle:H;temporary:Space"
                 data-keyboard-zoom-scope="editor-window"
+                data-keyboard-zoom-capture-targets="window-document-root-body-shell-viewport"
                 data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"
                 data-action-status={editorZoomActionStatus}
               >

@@ -606,8 +606,13 @@ const assertCanvasEditorShortcutSource = () => {
   assert(
     source.includes('const runCanvasZoomShortcut = (e: KeyboardEvent) =>') &&
       source.includes('const handleCanvasBrowserZoomKeyDown = (e: KeyboardEvent) =>') &&
-      source.includes("window.addEventListener('keydown', handleCanvasBrowserZoomKeyDown, { capture: true })") &&
-      source.includes("window.removeEventListener('keydown', handleCanvasBrowserZoomKeyDown, { capture: true })") &&
+      source.includes('const handleCanvasBrowserZoomKeyDownEvent: EventListener = (event) =>') &&
+      source.includes('const maybeKeyboardZoomTargets: Array<EventTarget | null> = [') &&
+      source.includes('const keyboardZoomTargets = maybeKeyboardZoomTargets.filter') &&
+      source.includes("window.addEventListener('keydown', handleCanvasBrowserZoomKeyDownEvent, { capture: true })") &&
+      source.includes("target.addEventListener('keydown', handleCanvasBrowserZoomKeyDownEvent, { capture: true });") &&
+      source.includes("window.removeEventListener('keydown', handleCanvasBrowserZoomKeyDownEvent, { capture: true })") &&
+      source.includes("target.removeEventListener('keydown', handleCanvasBrowserZoomKeyDownEvent, { capture: true });") &&
       source.includes('const isZoomInShortcut') &&
       source.includes('const isZoomOutShortcut') &&
       source.includes('const isFitCanvasShortcut') &&
@@ -890,6 +895,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-pinch-zoom-prevents-browser-zoom="true"') &&
       source.includes('data-zoom-scope="canvas"') &&
       source.includes('data-keyboard-zoom-scope="editor-window"') &&
+      source.includes('data-keyboard-zoom-capture-targets="window-document-root-body-shell-viewport"') &&
       source.includes('if (!isPreview && (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut))') &&
       smokeSource.includes('dispatchCanvasWheelZoom') &&
       smokeSource.includes('dispatchCdpCanvasWheelZoom') &&
@@ -902,6 +908,7 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('dispatchCanvasPinchZoom') &&
       smokeSource.includes("type: 'mouseWheel'") &&
       smokeSource.includes('pageZoomStable') &&
+      smokeSource.includes('afterFocusedInputMetaKeyboardZoomOutPageZoom') &&
       smokeSource.includes('focusedInputKeyboardZoom') &&
       smokeSource.includes("surfaceListener === 'native-capture'") &&
       smokeSource.includes('defaultPrevented') &&
@@ -1481,10 +1488,19 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('const groupedItems = useMemo(() => filteredItems.reduce') &&
       source.includes('const categoryItemCounts = useMemo(() => categories.reduce<Record<string, number>>') &&
       source.includes('data-component-library-density="compact"') &&
+      source.includes("const VIEW_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.viewMode';") &&
+      source.includes("type ComponentLibraryViewMode = 'tiles' | 'list';") &&
+      source.includes('data-component-library-view-mode={viewMode}') &&
+      source.includes('data-component-library-view-mode-storage={VIEW_MODE_STORAGE_KEY}') &&
+      source.includes('data-testid="editor-component-view-mode"') &&
+      source.includes('data-testid="editor-component-view-mode-tiles"') &&
+      source.includes('data-testid="editor-component-view-mode-list"') &&
       source.includes('data-component-library-filter-active={isComponentFilterActive ?') &&
       source.includes('data-category-layout="primary-plus-collapsed-secondary"') &&
       source.includes('data-testid="editor-component-list"') &&
-      source.includes('data-component-list-density="compact"') &&
+      source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
+      source.includes("data-component-category-layout={viewMode === 'tiles' ? 'tile-grid' : 'row-list'}") &&
+      source.includes('data-testid={`editor-component-preview-tile-${itemDomKey}`}') &&
       source.includes('data-component-library-item-actions="visible"') &&
       source.includes("const componentLibraryActionStatusId = 'editor-component-library-action-status';") &&
       source.includes('data-testid="editor-component-library-action-status"') &&
@@ -1499,6 +1515,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       smokeSource.includes('savedReusableAction') &&
       smokeSource.includes('testComponentLibraryControls(client, tempReusableSectionId)') &&
       smokeSource.includes('testComponentLibraryListReachability') &&
+      smokeSource.includes('viewModeControls') &&
       smokeSource.includes('lastAddHitTarget') &&
       smokeSource.includes('needsReusableSectionFixture') &&
       source.includes('const handleKeyboardAdd = (event: KeyboardEvent<HTMLDivElement>) =>') &&
@@ -12061,6 +12078,8 @@ const readZoomControlState = async (client, label) => {
       controlPercent: Number(controls?.getAttribute('data-zoom-percent') || 0),
       transform: style?.transform || '',
       autoFit: controls?.getAttribute('data-auto-fit') === 'true',
+      keyboardZoomScope: controls?.getAttribute('data-keyboard-zoom-scope') || '',
+      keyboardZoomCaptureTargets: controls?.getAttribute('data-keyboard-zoom-capture-targets') || '',
       hasAutoBadge: Boolean(auto),
       hasSlider: slider instanceof HTMLInputElement,
       sliderValue: slider instanceof HTMLInputElement ? Number(slider.value) : 0,
@@ -12085,6 +12104,7 @@ const readZoomControlState = async (client, label) => {
   assert(state.percentText === `${Math.round(state.scale * 100)}%`, `Zoom percent does not match scale during ${label}: ${JSON.stringify(state)}`);
   assert(state.hasSlider, `Zoom slider is missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.actionStatusId === 'editor-zoom-action-status' && state.controlsDescribedBy === state.actionStatusId, `Zoom controls must expose a shared action status during ${label}: ${JSON.stringify(state)}`);
+  assert(state.keyboardZoomScope === 'editor-window' && state.keyboardZoomCaptureTargets === 'window-document-root-body-shell-viewport', `Zoom controls must expose Mac/browser zoom capture metadata during ${label}: ${JSON.stringify(state)}`);
   assert(state.groupActionStatus === state.actionStatusText, `Zoom group action status should mirror the live status text during ${label}: ${JSON.stringify(state)}`);
   assert(state.actionStatusText.includes('Zoom out available') && state.actionStatusText.includes('Fit canvas available'), `Zoom shared action status is incomplete during ${label}: ${JSON.stringify(state)}`);
   assert(state.sliderMin === 25 && state.sliderMax === 200 && state.sliderStep === 5, `Zoom slider range metadata is invalid during ${label}: ${JSON.stringify(state)}`);
@@ -12999,25 +13019,55 @@ const testZoomControls = async (client) => {
   );
   assert(afterFocusedInputKeyboardZoom.autoFit === false, `Focused-input keyboard zoom should disable auto-fit: ${JSON.stringify(afterFocusedInputKeyboardZoom)}`);
 
+  const beforeFocusedInputMetaKeyboardZoomOutPageZoom = await readPageZoomState(client, 'before focused input Mac keyboard zoom out page zoom');
   await pressKey(client, '-', { metaKey: true });
   const afterFocusedInputMetaKeyboardZoomOut = await readZoomControlState(client, 'after focused input Mac keyboard zoom out');
+  const afterFocusedInputMetaKeyboardZoomOutPageZoom = await readPageZoomState(client, 'after focused input Mac keyboard zoom out page zoom');
+  const focusedInputMetaKeyboardZoomOutPageZoomStable = assertPageZoomStable(
+    beforeFocusedInputMetaKeyboardZoomOutPageZoom,
+    afterFocusedInputMetaKeyboardZoomOutPageZoom,
+    'focused input Mac keyboard zoom out',
+  );
   assert(
     afterFocusedInputMetaKeyboardZoomOut.scale < afterFocusedInputKeyboardZoom.scale,
     `Cmd+- from a focused editor input should zoom the canvas out instead of the browser page: ${JSON.stringify({ focusedInputKeyboardZoom, afterFocusedInputMetaKeyboardZoomOut })}`,
   );
-  assert(afterFocusedInputMetaKeyboardZoomOut.autoFit === false, `Focused-input Cmd+- should keep manual canvas zoom: ${JSON.stringify(afterFocusedInputMetaKeyboardZoomOut)}`);
+  assert(
+    afterFocusedInputMetaKeyboardZoomOut.autoFit === false && focusedInputMetaKeyboardZoomOutPageZoomStable === true,
+    `Focused-input Cmd+- should keep manual canvas zoom and stable browser zoom: ${JSON.stringify({ afterFocusedInputMetaKeyboardZoomOut, beforeFocusedInputMetaKeyboardZoomOutPageZoom, afterFocusedInputMetaKeyboardZoomOutPageZoom })}`,
+  );
 
+  const beforeFocusedInputMetaKeyboardZoomInPageZoom = await readPageZoomState(client, 'before focused input Mac keyboard zoom in page zoom');
   await pressKey(client, '=', { metaKey: true });
   const afterFocusedInputMetaKeyboardZoomIn = await readZoomControlState(client, 'after focused input Mac keyboard zoom in');
+  const afterFocusedInputMetaKeyboardZoomInPageZoom = await readPageZoomState(client, 'after focused input Mac keyboard zoom in page zoom');
+  const focusedInputMetaKeyboardZoomInPageZoomStable = assertPageZoomStable(
+    beforeFocusedInputMetaKeyboardZoomInPageZoom,
+    afterFocusedInputMetaKeyboardZoomInPageZoom,
+    'focused input Mac keyboard zoom in',
+  );
   assert(
     afterFocusedInputMetaKeyboardZoomIn.scale > afterFocusedInputMetaKeyboardZoomOut.scale,
     `Cmd+= from a focused editor input should zoom the canvas in instead of the browser page: ${JSON.stringify({ afterFocusedInputMetaKeyboardZoomOut, afterFocusedInputMetaKeyboardZoomIn })}`,
   );
-  assert(afterFocusedInputMetaKeyboardZoomIn.autoFit === false, `Focused-input Cmd+= should keep manual canvas zoom: ${JSON.stringify(afterFocusedInputMetaKeyboardZoomIn)}`);
+  assert(
+    afterFocusedInputMetaKeyboardZoomIn.autoFit === false && focusedInputMetaKeyboardZoomInPageZoomStable === true,
+    `Focused-input Cmd+= should keep manual canvas zoom and stable browser zoom: ${JSON.stringify({ afterFocusedInputMetaKeyboardZoomIn, beforeFocusedInputMetaKeyboardZoomInPageZoom, afterFocusedInputMetaKeyboardZoomInPageZoom })}`,
+  );
 
+  const beforeFocusedInputMetaKeyboardFitPageZoom = await readPageZoomState(client, 'before focused input Mac keyboard fit page zoom');
   await pressKey(client, '0', { metaKey: true });
   const afterFocusedInputMetaKeyboardFit = await readZoomControlState(client, 'after focused input Mac keyboard fit');
-  assert(afterFocusedInputMetaKeyboardFit.autoFit === true, `Cmd+0 from a focused editor input should fit the canvas instead of resetting browser zoom: ${JSON.stringify(afterFocusedInputMetaKeyboardFit)}`);
+  const afterFocusedInputMetaKeyboardFitPageZoom = await readPageZoomState(client, 'after focused input Mac keyboard fit page zoom');
+  const focusedInputMetaKeyboardFitPageZoomStable = assertPageZoomStable(
+    beforeFocusedInputMetaKeyboardFitPageZoom,
+    afterFocusedInputMetaKeyboardFitPageZoom,
+    'focused input Mac keyboard fit',
+  );
+  assert(
+    afterFocusedInputMetaKeyboardFit.autoFit === true && focusedInputMetaKeyboardFitPageZoomStable === true,
+    `Cmd+0 from a focused editor input should fit the canvas instead of resetting browser zoom: ${JSON.stringify({ afterFocusedInputMetaKeyboardFit, beforeFocusedInputMetaKeyboardFitPageZoom, afterFocusedInputMetaKeyboardFitPageZoom })}`,
+  );
   await blurActiveElement(client);
 
   const afterWheelZoomIn = await dispatchCanvasWheelZoom(client, -240, 'after canvas wheel zoom in');
@@ -14642,6 +14692,9 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
     const list = document.querySelector('[data-testid="editor-component-list"]');
     const summary = document.querySelector('[data-testid="editor-component-library-summary"]');
     const actionStatus = document.querySelector('[data-testid="editor-component-library-action-status"]');
+    const viewModeGroup = document.querySelector('[data-testid="editor-component-view-mode"]');
+    const viewModeTiles = document.querySelector('[data-testid="editor-component-view-mode-tiles"]');
+    const viewModeList = document.querySelector('[data-testid="editor-component-view-mode-list"]');
     const categoryRail = document.querySelector('[data-testid="editor-component-category-rail"]');
     const primaryCategories = document.querySelector('[data-testid="editor-component-primary-categories"]');
     const secondaryCategories = document.querySelector('[data-testid="editor-component-secondary-categories"]');
@@ -14655,6 +14708,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
     const categoryEssentials = document.querySelector('[data-testid="editor-component-category-essentials"]');
     const categoryAll = document.querySelector('[data-testid="editor-component-category-all"]');
     const dividerItem = document.querySelector('[data-testid="editor-component-item-divider"]');
+    const dividerTilePreview = document.querySelector('[data-testid="editor-component-preview-tile-divider"]');
     const dividerStatus = document.querySelector('[data-testid="editor-component-item-action-status-divider"]');
     const dividerAdd = document.querySelector('[data-testid="editor-component-add-divider"]');
     const dividerFavorite = document.querySelector('[data-testid="editor-component-favorite-divider"]');
@@ -14676,8 +14730,14 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
       label: ${JSON.stringify(label)},
       hasLibrary: Boolean(library),
       libraryDensity: library?.getAttribute('data-component-library-density') || '',
+      viewMode: library?.getAttribute('data-component-library-view-mode') || '',
+      viewModeStorageKey: library?.getAttribute('data-component-library-view-mode-storage') || '',
       librarySearchScope: library?.getAttribute('data-component-library-search-scope') || '',
       listDensity: list?.getAttribute('data-component-list-density') || '',
+      categoryLayouts: Array.from(document.querySelectorAll('[data-component-category-layout]')).map((node) => ({
+        layout: node.getAttribute('data-component-category-layout') || '',
+        itemCount: node.querySelectorAll('[data-component-library-item]').length,
+      })),
       listMetrics: list instanceof HTMLElement
         ? {
           scrollTop: Math.round(list.scrollTop),
@@ -14708,6 +14768,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
         savedTotal: summary?.getAttribute('data-component-library-saved-total') || '',
         savedHidden: summary?.getAttribute('data-component-library-saved-hidden') || '',
         category: summary?.getAttribute('data-component-library-category') || '',
+        viewMode: summary?.getAttribute('data-component-library-view-mode') || '',
         searchScope: summary?.getAttribute('data-component-library-search-scope') || '',
         filterActive: summary?.getAttribute('data-component-library-filter-active') || '',
         text: summary?.textContent || '',
@@ -14736,8 +14797,24 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
         allPressed: categoryAll?.getAttribute('aria-pressed') || '',
         allStatus: categoryAll?.getAttribute('data-action-status') || '',
       },
+      viewModeControls: {
+        exists: Boolean(viewModeGroup),
+        groupMode: viewModeGroup?.getAttribute('data-component-library-view-mode') || '',
+        groupStatus: viewModeGroup?.getAttribute('data-action-status') || '',
+        tilesPressed: viewModeTiles?.getAttribute('aria-pressed') || '',
+        tilesState: viewModeTiles?.getAttribute('data-action-state') || '',
+        tilesStatus: viewModeTiles?.getAttribute('data-action-status') || '',
+        tilesDescribedBy: viewModeTiles?.getAttribute('aria-describedby') || '',
+        listPressed: viewModeList?.getAttribute('aria-pressed') || '',
+        listState: viewModeList?.getAttribute('data-action-state') || '',
+        listStatus: viewModeList?.getAttribute('data-action-status') || '',
+        listDescribedBy: viewModeList?.getAttribute('aria-describedby') || '',
+        storedMode: window.localStorage.getItem('backy.editor.componentLibrary.viewMode') || '',
+      },
       dividerAction: {
         itemExists: Boolean(dividerItem),
+        itemViewMode: dividerItem?.getAttribute('data-component-library-view-mode') || '',
+        previewTileExists: Boolean(dividerTilePreview),
         itemDescribedBy: dividerItem?.getAttribute('aria-describedby') || '',
         itemState: dividerItem?.getAttribute('data-action-state') || '',
         itemStatus: dividerItem?.getAttribute('data-action-status') || '',
@@ -15317,13 +15394,18 @@ const testSavedReusableSectionLibraryActions = async (client, sectionId) => {
 };
 
 const testComponentLibraryControls = async (client, targetReusableSectionId = '') => {
+  await clickControlByTestId(client, 'editor-component-view-mode-tiles');
+  await sleep(100);
   const initial = await readComponentLibraryState(client, 'initial', targetReusableSectionId);
   assert(initial.hasLibrary, `Component library missing: ${JSON.stringify(initial)}`);
   assert(
     initial.summary.exists &&
       initial.libraryDensity === 'compact' &&
-      initial.listDensity === 'compact' &&
+      initial.viewMode === 'tiles' &&
+      initial.viewModeStorageKey === 'backy.editor.componentLibrary.viewMode' &&
+      initial.listDensity === 'visual-tiles' &&
       initial.summary.category === 'essentials' &&
+      initial.summary.viewMode === 'tiles' &&
       initial.summary.searchScope === 'selected-category' &&
       initial.librarySearchScope === 'selected-category' &&
       Number(initial.summary.shown) === initial.itemIds.length &&
@@ -15353,6 +15435,23 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       initial.categoryRail.secondaryCategoryIds.includes('editor-component-category-content') &&
       initial.categoryRail.secondaryCategoryIds.includes('editor-component-category-advanced'),
     `Component library essentials summary or compact primary/collapsed category rail missing: ${JSON.stringify(initial)}`,
+  );
+  assert(
+    initial.viewModeControls.exists &&
+      initial.viewModeControls.groupMode === 'tiles' &&
+      initial.viewModeControls.tilesPressed === 'true' &&
+      initial.viewModeControls.tilesState === 'selected' &&
+      initial.viewModeControls.listPressed === 'false' &&
+      initial.viewModeControls.listState === 'ready' &&
+      initial.viewModeControls.tilesDescribedBy.includes('editor-component-library-action-status') &&
+      initial.viewModeControls.listDescribedBy.includes('editor-component-library-action-status') &&
+      initial.viewModeControls.storedMode === 'tiles' &&
+      /Tile browse mode selected/.test(initial.viewModeControls.groupStatus) &&
+      initial.categoryLayouts.length > 0 &&
+      initial.categoryLayouts.every((category) => category.layout === 'tile-grid') &&
+      initial.dividerAction.itemViewMode === 'tiles' &&
+      initial.dividerAction.previewTileExists === true,
+    `Component library visual tile mode contract missing: ${JSON.stringify(initial)}`,
   );
   assert(initial.itemIds.includes('divider'), `Divider component missing from library: ${JSON.stringify(initial)}`);
   assert(initial.itemIds.includes('image'), `Image component missing from library: ${JSON.stringify(initial)}`);
@@ -15389,6 +15488,39 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   assert(
     !initial.itemIds.some((itemId) => itemId.startsWith('reusable-section:')),
     `Essentials view should stay compact and leave saved reusable sections in Saved/All/search: ${JSON.stringify(initial)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-component-view-mode-list');
+  await sleep(100);
+  const listMode = await readComponentLibraryState(client, 'list browse mode', targetReusableSectionId);
+  assert(
+    listMode.viewMode === 'list' &&
+      listMode.listDensity === 'compact' &&
+      listMode.summary.viewMode === 'list' &&
+      listMode.viewModeControls.tilesPressed === 'false' &&
+      listMode.viewModeControls.tilesState === 'ready' &&
+      listMode.viewModeControls.listPressed === 'true' &&
+      listMode.viewModeControls.listState === 'selected' &&
+      listMode.viewModeControls.storedMode === 'list' &&
+      /List browse mode selected/.test(listMode.viewModeControls.groupStatus) &&
+      listMode.categoryLayouts.every((category) => category.layout === 'row-list') &&
+      listMode.dividerAction.itemViewMode === 'list' &&
+      listMode.dividerAction.previewTileExists === false,
+    `Component library list mode did not switch to compact rows: ${JSON.stringify(listMode)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-component-view-mode-tiles');
+  await sleep(100);
+  const restoredTileMode = await readComponentLibraryState(client, 'restored tile browse mode', targetReusableSectionId);
+  assert(
+    restoredTileMode.viewMode === 'tiles' &&
+      restoredTileMode.listDensity === 'visual-tiles' &&
+      restoredTileMode.viewModeControls.tilesState === 'selected' &&
+      restoredTileMode.viewModeControls.listState === 'ready' &&
+      restoredTileMode.viewModeControls.storedMode === 'tiles' &&
+      restoredTileMode.categoryLayouts.every((category) => category.layout === 'tile-grid') &&
+      restoredTileMode.dividerAction.previewTileExists === true,
+    `Component library tile mode did not restore after list mode: ${JSON.stringify(restoredTileMode)}`,
   );
 
   await clickControlByTestId(client, 'editor-component-category-all');
@@ -15644,6 +15776,8 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
 
   return {
     initial,
+    listMode,
+    restoredTileMode,
     searchFiltered,
     layoutFiltered,
     allComponentsReachability,

@@ -57,6 +57,7 @@ const RECENT_CATEGORY_ID = 'recent';
 const FAVORITES_CATEGORY_ID = 'favorites';
 const RECENT_STORAGE_KEY = 'backy.editor.componentLibrary.recent';
 const FAVORITES_STORAGE_KEY = 'backy.editor.componentLibrary.favorites';
+const VIEW_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.viewMode';
 const RECENT_ITEM_LIMIT = 6;
 const ESSENTIAL_ITEM_KEYS = new Set([
   'heading',
@@ -85,6 +86,7 @@ const COMPONENT_LIBRARY_CATEGORIES = [
   { id: 'advanced', name: 'Advanced', color: 'bg-red-500' },
 ];
 type ComponentLibraryCategory = (typeof COMPONENT_LIBRARY_CATEGORIES)[number];
+type ComponentLibraryViewMode = 'tiles' | 'list';
 const PRIMARY_COMPONENT_CATEGORY_IDS = new Set<string>([
   RECENT_CATEGORY_ID,
   FAVORITES_CATEGORY_ID,
@@ -96,6 +98,7 @@ const SEARCH_NEUTRAL_CATEGORY_IDS = new Set<string>([
   FAVORITES_CATEGORY_ID,
 ]);
 const COMPONENT_CATEGORY_BUTTON_CLASS = 'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors';
+const COMPONENT_VIEW_MODE_BUTTON_CLASS = 'inline-flex h-7 min-w-7 items-center justify-center rounded-md border px-1.5 text-xs font-semibold transition-colors';
 
 const getLibraryCategory = (item: ComponentLibraryItem): string => item.category || 'basic';
 const getLibraryItemKey = (item: ComponentLibraryItem): string => String(item.id ?? item.type);
@@ -190,6 +193,17 @@ export function ComponentLibrary({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(ESSENTIALS_CATEGORY_ID);
   const [previewItemKey, setPreviewItemKey] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ComponentLibraryViewMode>(() => {
+    if (typeof window === 'undefined') {
+      return 'tiles';
+    }
+
+    try {
+      return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'tiles';
+    } catch {
+      return 'tiles';
+    }
+  });
   const [recentItemKeys, setRecentItemKeys] = useState<string[]>(() => {
     if (typeof window === 'undefined') {
       return [];
@@ -295,6 +309,18 @@ export function ComponentLibrary({
 
     window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteItemKeys));
   }, [favoriteItemKeys]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+    } catch {
+      // Keep browsing usable if storage is unavailable.
+    }
+  }, [viewMode]);
 
   const libraryItemByKey = useMemo(() => (
     new Map(libraryItems.map((item) => [getLibraryItemKey(item), item]))
@@ -443,6 +469,7 @@ export function ComponentLibrary({
   const componentLibraryActionStatus = [
     `${activeCategoryName} shows ${filteredItems.length} of ${totalSearchResultCount} components${componentLibrarySearchLabel}.`,
     'Search components available.',
+    viewMode === 'tiles' ? 'Tile browse mode selected.' : 'List browse mode selected.',
     isComponentFilterActive ? 'Reset filters available.' : 'Filter reset hidden until filters are active.',
     saveSelectionDisabledReason ? `Save selection unavailable: ${saveSelectionDisabledReason}` : 'Save selection available.',
     refreshReusableSectionsDisabledReason ? `Refresh saved sections unavailable: ${refreshReusableSectionsDisabledReason}` : 'Refresh saved sections available.',
@@ -515,6 +542,8 @@ export function ComponentLibrary({
       className="flex h-full w-[clamp(15rem,16vw,18rem)] min-w-[15rem] max-w-[18rem] flex-col border-r border-slate-200 bg-white"
       data-testid="editor-component-library"
       data-component-library-density="compact"
+      data-component-library-view-mode={viewMode}
+      data-component-library-view-mode-storage={VIEW_MODE_STORAGE_KEY}
       data-component-library-search-scope={isGlobalSearch ? 'global-catalog' : 'selected-category'}
       aria-describedby={componentLibraryActionStatusId}
       data-action-status={componentLibraryActionStatus}
@@ -562,6 +591,7 @@ export function ComponentLibrary({
           data-component-library-saved-total={reusableLibraryState.totalActiveCount}
           data-component-library-saved-hidden={reusableLibraryState.hiddenDuplicateCount}
           data-component-library-category={isGlobalSearch ? 'search' : selectedCategory || 'all'}
+          data-component-library-view-mode={viewMode}
           data-component-library-search-scope={isGlobalSearch ? 'global-catalog' : 'selected-category'}
           data-component-library-filter-active={isComponentFilterActive ? 'true' : 'false'}
         >
@@ -582,6 +612,55 @@ export function ComponentLibrary({
             )}
             <span>{filteredItems.length} / {totalSearchResultCount}</span>
           </span>
+        </div>
+
+        <div
+          className="mb-2 grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1"
+          role="group"
+          aria-label="Component library view mode"
+          aria-describedby={componentLibraryActionStatusId}
+          data-testid="editor-component-view-mode"
+          data-component-library-view-mode={viewMode}
+          data-action-status={componentLibraryActionStatus}
+        >
+          <button
+            type="button"
+            onClick={() => setViewMode('tiles')}
+            aria-label="Show components as visual tiles"
+            aria-pressed={viewMode === 'tiles'}
+            aria-describedby={componentLibraryActionStatusId}
+            data-testid="editor-component-view-mode-tiles"
+            data-action-state={viewMode === 'tiles' ? 'selected' : 'ready'}
+            data-action-status={componentLibraryActionStatus}
+            className={cn(
+              COMPONENT_VIEW_MODE_BUTTON_CLASS,
+              viewMode === 'tiles'
+                ? 'border-slate-950 bg-white text-slate-950 shadow-sm'
+                : 'border-transparent text-slate-500 hover:bg-white hover:text-slate-900',
+            )}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            <span className="ml-1">Tiles</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            aria-label="Show components as compact rows"
+            aria-pressed={viewMode === 'list'}
+            aria-describedby={componentLibraryActionStatusId}
+            data-testid="editor-component-view-mode-list"
+            data-action-state={viewMode === 'list' ? 'selected' : 'ready'}
+            data-action-status={componentLibraryActionStatus}
+            className={cn(
+              COMPONENT_VIEW_MODE_BUTTON_CLASS,
+              viewMode === 'list'
+                ? 'border-slate-950 bg-white text-slate-950 shadow-sm'
+                : 'border-transparent text-slate-500 hover:bg-white hover:text-slate-900',
+            )}
+          >
+            <List className="h-3.5 w-3.5" />
+            <span className="ml-1">List</span>
+          </button>
         </div>
 
         <div
@@ -701,7 +780,7 @@ export function ComponentLibrary({
       <div
         className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2"
         data-testid="editor-component-list"
-        data-component-list-density="compact"
+        data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}
       >
         {Object.entries(groupedItemsWithFavorites).map(([category, items]) => (
           items.length > 0 && (
@@ -709,11 +788,19 @@ export function ComponentLibrary({
               <h3 className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                 {category}
               </h3>
-              <div className="space-y-1">
+              <div
+                className={cn(
+                  viewMode === 'tiles'
+                    ? 'grid grid-cols-2 gap-2'
+                    : 'space-y-1',
+                )}
+                data-component-category-layout={viewMode === 'tiles' ? 'tile-grid' : 'row-list'}
+              >
                 {items.map((item) => (
                   <LibraryItem
                     key={item.id ?? item.type}
                     item={item}
+                    viewMode={viewMode}
                     disabled={disabled}
                     disabledReason={disabledReason}
                     canDeleteReusableSections={canDeleteReusableSections}
@@ -1023,6 +1110,7 @@ function ComponentPreviewArtwork({ item }: { item: ComponentLibraryItem }) {
 
 interface LibraryItemProps {
   item: ComponentLibraryItem;
+  viewMode: ComponentLibraryViewMode;
   disabled?: boolean;
   disabledReason?: string;
   canDeleteReusableSections?: boolean;
@@ -1040,6 +1128,7 @@ interface LibraryItemProps {
 
 function LibraryItem({
   item,
+  viewMode,
   disabled = false,
   disabledReason,
   canDeleteReusableSections = true,
@@ -1054,6 +1143,7 @@ function LibraryItem({
   onDeleteReusableSection,
   actionStatusId,
 }: LibraryItemProps) {
+  const isTileMode = viewMode === 'tiles';
   const getIcon = () => {
     switch (item.icon) {
       case 'Type':
@@ -1184,9 +1274,12 @@ function LibraryItem({
       data-action-status={itemActionStatus}
       data-disabled-reason={itemDisabledReason || undefined}
       data-reusable-section-duplicate-count={reusableDuplicateCount || undefined}
+      data-component-library-view-mode={viewMode}
       className={cn(
-        'group flex items-center gap-2 rounded-md border border-transparent bg-white/70 p-1.5 cursor-grab',
-        'hover:border-slate-200 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500',
+        'group cursor-grab rounded-md border bg-white/75 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500',
+        isTileMode
+          ? 'flex min-h-[9.25rem] flex-col gap-2 border-slate-200 p-2 shadow-sm hover:border-slate-300 hover:bg-white'
+          : 'flex items-center gap-2 border-transparent p-1.5 hover:border-slate-200 hover:bg-slate-50',
         'active:cursor-grabbing',
         disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent active:cursor-not-allowed'
       )}
@@ -1195,13 +1288,25 @@ function LibraryItem({
       <span id={itemActionStatusId} className="sr-only" data-testid={`editor-component-item-action-status-${itemDomKey}`}>
         {itemActionStatus}
       </span>
-      <div className="w-8 h-8 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0">
-        <Icon className="w-4 h-4 text-slate-500" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{item.name}</p>
+      {isTileMode ? (
+        <div
+          className="flex h-16 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50"
+          data-testid={`editor-component-preview-tile-${itemDomKey}`}
+          aria-hidden="true"
+        >
+          <div className="scale-[0.54]">
+            <ComponentPreviewArtwork item={item} />
+          </div>
+        </div>
+      ) : (
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-slate-100">
+          <Icon className="h-4 w-4 text-slate-500" />
+        </div>
+      )}
+      <div className={cn('min-w-0', isTileMode ? 'min-h-[2.4rem]' : 'flex-1')}>
+        <p className={cn('truncate font-medium', isTileMode ? 'text-xs text-slate-900' : 'text-sm')}>{item.name}</p>
         {item.description && (
-          <p className="text-xs text-muted-foreground truncate">
+          <p className={cn('text-muted-foreground', isTileMode ? 'line-clamp-2 text-[11px] leading-4' : 'truncate text-xs')}>
             {item.description}
           </p>
         )}
@@ -1211,58 +1316,10 @@ function LibraryItem({
           </p>
         )}
       </div>
-      <button
-        type="button"
-        onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (disabled) return;
-          onToggleFavorite?.();
-        }}
-        disabled={disabled}
-        className={cn(
-          'inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors',
-          isFavorite
-            ? 'text-yellow-500 hover:bg-yellow-50'
-            : 'text-slate-400 hover:bg-white hover:text-yellow-500',
-          disabled && 'cursor-not-allowed opacity-40'
-        )}
-        title={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
-        aria-label={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
-        aria-describedby={describedBy}
-        aria-pressed={isFavorite}
-        data-component-favorite={item.id ?? item.type}
-        data-testid={`editor-component-favorite-${itemDomKey}`}
-        data-action-state={disabled ? 'blocked' : 'ready'}
-        data-action-status={itemActionStatus}
-        data-disabled-reason={itemDisabledReason || undefined}
-      >
-        <Star className={cn('h-3.5 w-3.5', isFavorite && 'fill-current')} />
-      </button>
-      <button
-        type="button"
-        onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (disabled) return;
-          onAddItem?.();
-        }}
-        disabled={disabled}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
-        title={disabled ? disabledReason : `Add ${item.name} to canvas`}
-        aria-label={`Add ${item.name} to canvas`}
-        aria-describedby={describedBy}
-        data-component-add={item.id ?? item.type}
-        data-testid={`editor-component-add-${itemDomKey}`}
-        data-action-state={disabled ? 'blocked' : 'ready'}
-        data-action-status={itemActionStatus}
-        data-disabled-reason={itemDisabledReason || undefined}
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
-      {reusableSectionId && (
+      <div className={cn(
+        'flex items-center gap-1',
+        isTileMode ? 'mt-auto justify-between border-t border-slate-100 pt-1' : '',
+      )}>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -1271,20 +1328,27 @@ function LibraryItem({
               event.preventDefault();
               event.stopPropagation();
               if (disabled) return;
-              onRenameReusableSection?.(reusableSectionId);
+              onToggleFavorite?.();
             }}
             disabled={disabled}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
-            title={disabled ? disabledReason : 'Rename saved section'}
-            aria-label={`Rename ${item.name}`}
+            className={cn(
+              'inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+              isFavorite
+                ? 'text-yellow-500 hover:bg-yellow-50'
+                : 'text-slate-400 hover:bg-white hover:text-yellow-500',
+              disabled && 'cursor-not-allowed opacity-40'
+            )}
+            title={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+            aria-label={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
             aria-describedby={describedBy}
-            data-reusable-section-rename={reusableSectionId}
-            data-testid={`editor-component-rename-${itemDomKey}`}
+            aria-pressed={isFavorite}
+            data-component-favorite={item.id ?? item.type}
+            data-testid={`editor-component-favorite-${itemDomKey}`}
             data-action-state={disabled ? 'blocked' : 'ready'}
             data-action-status={itemActionStatus}
             data-disabled-reason={itemDisabledReason || undefined}
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Star className={cn('h-3.5 w-3.5', isFavorite && 'fill-current')} />
           </button>
           <button
             type="button"
@@ -1292,24 +1356,72 @@ function LibraryItem({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              if (isReusableDeleteDisabled) return;
-              onDeleteReusableSection?.(reusableSectionId);
+              if (disabled) return;
+              onAddItem?.();
             }}
-            disabled={isReusableDeleteDisabled}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
-            title={isReusableDeleteDisabled ? (deleteDisabledReason || disabledReason) : 'Delete saved section'}
-            aria-label={`Delete ${item.name}`}
+            disabled={disabled}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+            title={disabled ? disabledReason : `Add ${item.name} to canvas`}
+            aria-label={`Add ${item.name} to canvas`}
             aria-describedby={describedBy}
-            data-reusable-section-delete={reusableSectionId}
-            data-testid={`editor-component-delete-${itemDomKey}`}
-            data-action-state={isReusableDeleteDisabled ? 'blocked' : 'ready'}
+            data-component-add={item.id ?? item.type}
+            data-testid={`editor-component-add-${itemDomKey}`}
+            data-action-state={disabled ? 'blocked' : 'ready'}
             data-action-status={itemActionStatus}
-            data-disabled-reason={reusableDeleteDisabledReason || undefined}
+            data-disabled-reason={itemDisabledReason || undefined}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Plus className="h-3.5 w-3.5" />
           </button>
         </div>
-      )}
+        {reusableSectionId && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (disabled) return;
+                onRenameReusableSection?.(reusableSectionId);
+              }}
+              disabled={disabled}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+              title={disabled ? disabledReason : 'Rename saved section'}
+              aria-label={`Rename ${item.name}`}
+              aria-describedby={describedBy}
+              data-reusable-section-rename={reusableSectionId}
+              data-testid={`editor-component-rename-${itemDomKey}`}
+              data-action-state={disabled ? 'blocked' : 'ready'}
+              data-action-status={itemActionStatus}
+              data-disabled-reason={itemDisabledReason || undefined}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (isReusableDeleteDisabled) return;
+                onDeleteReusableSection?.(reusableSectionId);
+              }}
+              disabled={isReusableDeleteDisabled}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              title={isReusableDeleteDisabled ? (deleteDisabledReason || disabledReason) : 'Delete saved section'}
+              aria-label={`Delete ${item.name}`}
+              aria-describedby={describedBy}
+              data-reusable-section-delete={reusableSectionId}
+              data-testid={`editor-component-delete-${itemDomKey}`}
+              data-action-state={isReusableDeleteDisabled ? 'blocked' : 'ready'}
+              data-action-status={itemActionStatus}
+              data-disabled-reason={reusableDeleteDisabledReason || undefined}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
