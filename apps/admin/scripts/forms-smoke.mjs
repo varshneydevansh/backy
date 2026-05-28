@@ -562,6 +562,21 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("const ruleRecord = isPlainRecord(rule) ? rule : null") &&
       source.includes("const definition = FORM_VALIDATION_RULES.find((candidate) => candidate.type === type)") &&
       source.includes("definition.valueMode === 'number'") &&
+      source.includes("const formsFrontendTemplateActionStatusId = 'forms-frontend-template-action-status';") &&
+      source.includes('data-testid="forms-frontend-template-action-status"') &&
+      source.includes("const getFormFrontendTemplateCreateDisabledReason = (") &&
+      source.includes("const getFormFrontendTemplateCopyDisabledReason = (): string => formsExportDisabledReason") &&
+      source.includes("const getFormFrontendTemplateCardActionState = (") &&
+      source.includes("const getFormFrontendTemplateCreateActionStatus = (") &&
+      source.includes("const getFormFrontendTemplateCopyActionStatus = (template: SiteFrontendDesignTemplate)") &&
+      source.includes('data-testid={`forms-frontend-template-card-${template.id}`}') &&
+      source.includes('data-testid={`forms-frontend-template-copy-${template.id}`}') &&
+      source.includes("aria-describedby={formsFrontendTemplateActionStatusId}") &&
+      source.includes("data-action-state={cardActionState}") &&
+      source.includes("data-action-status={createFrontendTemplateActionStatus}") &&
+      source.includes("data-action-state={copyFrontendTemplateActionState}") &&
+      source.includes("data-target-template-id={template.id}") &&
+      source.includes("data-target-template-name={template.name}") &&
       source.includes('const contactShare = normalizeFormContactShare(') &&
       source.includes('return normalizeFormCollectionTarget({') &&
       source.includes('inferFrontendTemplateCollectionTarget(normalizedFields, fieldKeyAliases, content)') &&
@@ -3216,8 +3231,14 @@ const assertCreateActionsReady = async (client) => {
       const createStatusText = (createStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
       const commandCreate = document.querySelector('[data-testid="forms-create-blank-button"]');
       const templateCreate = document.querySelector('[data-testid="forms-template-create-blank-button"]');
+      const frontendStatus = document.querySelector('[data-testid="forms-frontend-template-action-status"]');
+      const frontendStatusId = frontendStatus?.id || '';
+      const frontendStatusText = (frontendStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const frontendSection = document.querySelector('[data-testid="forms-frontend-template-options"]');
+      const frontendCard = document.querySelector('[data-testid="forms-frontend-template-card-${FRONTEND_FORM_TEMPLATE_ID}"]');
       const frontendCreate = document.querySelector('[data-testid="forms-frontend-template-${FRONTEND_FORM_TEMPLATE_ID}"]');
-      const createButtons = [commandCreate, templateCreate, frontendCreate];
+      const frontendCopy = document.querySelector('[data-testid="forms-frontend-template-copy-${FRONTEND_FORM_TEMPLATE_ID}"]');
+      const createButtons = [commandCreate, templateCreate];
       const contracts = createButtons.map((button) => ({
         exists: button instanceof HTMLButtonElement,
         disabled: button instanceof HTMLButtonElement ? button.disabled : null,
@@ -3227,6 +3248,37 @@ const assertCreateActionsReady = async (client) => {
         disabledReason: button instanceof HTMLElement ? button.getAttribute('data-disabled-reason') || '' : '',
         targetSiteId: button instanceof HTMLElement ? button.getAttribute('data-target-site-id') || '' : '',
       }));
+      const frontendContract = {
+        section: Boolean(frontendSection),
+        sectionDescribedBy: frontendSection instanceof HTMLElement ? frontendSection.getAttribute('aria-describedby') || '' : '',
+        sectionState: frontendSection instanceof HTMLElement ? frontendSection.getAttribute('data-action-state') || '' : '',
+        sectionStatus: frontendSection instanceof HTMLElement ? frontendSection.getAttribute('data-action-status') || '' : '',
+        sectionTemplateCount: frontendSection instanceof HTMLElement ? frontendSection.getAttribute('data-template-count') || '' : '',
+        statusId: frontendStatusId,
+        statusText: frontendStatusText,
+        cardState: frontendCard instanceof HTMLElement ? frontendCard.getAttribute('data-action-state') || '' : '',
+        cardStatus: frontendCard instanceof HTMLElement ? frontendCard.getAttribute('data-action-status') || '' : '',
+        cardDisabledReason: frontendCard instanceof HTMLElement ? frontendCard.getAttribute('data-disabled-reason') || '' : '',
+        cardTargetTemplateId: frontendCard instanceof HTMLElement ? frontendCard.getAttribute('data-target-template-id') || '' : '',
+        createExists: frontendCreate instanceof HTMLButtonElement,
+        createDisabled: frontendCreate instanceof HTMLButtonElement ? frontendCreate.disabled : null,
+        createDescribedBy: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('aria-describedby') || '' : '',
+        createState: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-action-state') || '' : '',
+        createStatus: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-action-status') || '' : '',
+        createDisabledReason: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-disabled-reason') || '' : '',
+        createTargetTemplateId: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-target-template-id') || '' : '',
+        createTargetTemplateName: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-target-template-name') || '' : '',
+        createTargetSiteId: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-target-site-id') || '' : '',
+        copyExists: frontendCopy instanceof HTMLButtonElement,
+        copyDisabled: frontendCopy instanceof HTMLButtonElement ? frontendCopy.disabled : null,
+        copyDescribedBy: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('aria-describedby') || '' : '',
+        copyState: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-action-state') || '' : '',
+        copyStatus: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-action-status') || '' : '',
+        copyDisabledReason: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-disabled-reason') || '' : '',
+        copyTargetTemplateId: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-target-template-id') || '' : '',
+        copyTargetTemplateName: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-target-template-name') || '' : '',
+        copyTargetSiteId: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-target-site-id') || '' : '',
+      };
       return {
         ready: createStatus instanceof HTMLElement &&
           createStatusId === 'forms-create-action-status' &&
@@ -3239,9 +3291,39 @@ const assertCreateActionsReady = async (client) => {
             contract.disabledReason === '' &&
             contract.targetSiteId === '${SITE_ID}' &&
             contract.actionStatus.includes('available for ${SITE_ID}.')
-          )),
+          )) &&
+          frontendContract.section &&
+          frontendContract.sectionDescribedBy === 'forms-frontend-template-action-status' &&
+          frontendContract.sectionState === 'ready' &&
+          Number(frontendContract.sectionTemplateCount) >= 1 &&
+          frontendContract.sectionStatus === frontendContract.statusText &&
+          frontendContract.statusId === 'forms-frontend-template-action-status' &&
+          frontendContract.statusText.includes('frontend form template') &&
+          frontendContract.cardState === 'ready' &&
+          frontendContract.cardStatus.includes('${FRONTEND_FORM_TEMPLATE_NAME}') &&
+          frontendContract.cardDisabledReason === '' &&
+          frontendContract.cardTargetTemplateId === '${FRONTEND_FORM_TEMPLATE_ID}' &&
+          frontendContract.createExists &&
+          frontendContract.createDisabled === false &&
+          frontendContract.createDescribedBy === 'forms-frontend-template-action-status' &&
+          frontendContract.createState === 'ready' &&
+          frontendContract.createStatus.includes('${FRONTEND_FORM_TEMPLATE_NAME}') &&
+          frontendContract.createDisabledReason === '' &&
+          frontendContract.createTargetTemplateId === '${FRONTEND_FORM_TEMPLATE_ID}' &&
+          frontendContract.createTargetTemplateName === '${FRONTEND_FORM_TEMPLATE_NAME}' &&
+          frontendContract.createTargetSiteId === '${SITE_ID}' &&
+          frontendContract.copyExists &&
+          frontendContract.copyDisabled === false &&
+          frontendContract.copyDescribedBy === 'forms-frontend-template-action-status' &&
+          frontendContract.copyState === 'ready' &&
+          frontendContract.copyStatus.includes('${FRONTEND_FORM_TEMPLATE_NAME}') &&
+          frontendContract.copyDisabledReason === '' &&
+          frontendContract.copyTargetTemplateId === '${FRONTEND_FORM_TEMPLATE_ID}' &&
+          frontendContract.copyTargetTemplateName === '${FRONTEND_FORM_TEMPLATE_NAME}' &&
+          frontendContract.copyTargetSiteId === '${SITE_ID}',
         statusText: createStatusText,
         contracts,
+        frontendContract,
         body: document.body?.innerText?.slice(0, 900) || '',
       };
     })()`);
@@ -3285,8 +3367,13 @@ const assertLayout = async (client) => {
     };
     const commandCreate = document.querySelector('[data-testid="forms-create-blank-button"]');
     const templateCreate = document.querySelector('[data-testid="forms-template-create-blank-button"]');
+    const frontendTemplateOptions = document.querySelector('[data-testid="forms-frontend-template-options"]');
+    const frontendTemplateStatus = document.querySelector('[data-testid="forms-frontend-template-action-status"]');
+    const frontendTemplateStatusText = (frontendTemplateStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+    const frontendTemplateCard = document.querySelector('[data-testid="forms-frontend-template-card-${FRONTEND_FORM_TEMPLATE_ID}"]');
     const frontendCreate = document.querySelector('[data-testid="forms-frontend-template-${FRONTEND_FORM_TEMPLATE_ID}"]');
-    const createButtons = [commandCreate, templateCreate, frontendCreate];
+    const frontendCopy = document.querySelector('[data-testid="forms-frontend-template-copy-${FRONTEND_FORM_TEMPLATE_ID}"]');
+    const createButtons = [commandCreate, templateCreate];
     const createButtonContracts = createButtons.map((button) => ({
       exists: button instanceof HTMLButtonElement,
       disabled: button instanceof HTMLButtonElement ? button.disabled : null,
@@ -3296,6 +3383,39 @@ const assertLayout = async (client) => {
       disabledReason: button instanceof HTMLElement ? button.getAttribute('data-disabled-reason') || '' : '',
       targetSiteId: button instanceof HTMLElement ? button.getAttribute('data-target-site-id') || '' : '',
     }));
+    const frontendTemplateContract = {
+      section: Boolean(frontendTemplateOptions),
+      sectionDescribedBy: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('aria-describedby') || '' : '',
+      sectionState: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-action-state') || '' : '',
+      sectionStatus: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-action-status') || '' : '',
+      sectionTemplateCount: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-template-count') || '' : '',
+      statusId: frontendTemplateStatus?.id || '',
+      statusText: frontendTemplateStatusText,
+      cardState: frontendTemplateCard instanceof HTMLElement ? frontendTemplateCard.getAttribute('data-action-state') || '' : '',
+      cardStatus: frontendTemplateCard instanceof HTMLElement ? frontendTemplateCard.getAttribute('data-action-status') || '' : '',
+      cardDisabledReason: frontendTemplateCard instanceof HTMLElement ? frontendTemplateCard.getAttribute('data-disabled-reason') || '' : '',
+      cardTargetTemplateId: frontendTemplateCard instanceof HTMLElement ? frontendTemplateCard.getAttribute('data-target-template-id') || '' : '',
+      cardTargetTemplateName: frontendTemplateCard instanceof HTMLElement ? frontendTemplateCard.getAttribute('data-target-template-name') || '' : '',
+      cardTargetSiteId: frontendTemplateCard instanceof HTMLElement ? frontendTemplateCard.getAttribute('data-target-site-id') || '' : '',
+      createExists: frontendCreate instanceof HTMLButtonElement,
+      createDisabled: frontendCreate instanceof HTMLButtonElement ? frontendCreate.disabled : null,
+      createDescribedBy: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('aria-describedby') || '' : '',
+      createState: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-action-state') || '' : '',
+      createStatus: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-action-status') || '' : '',
+      createDisabledReason: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-disabled-reason') || '' : '',
+      createTargetTemplateId: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-target-template-id') || '' : '',
+      createTargetTemplateName: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-target-template-name') || '' : '',
+      createTargetSiteId: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-target-site-id') || '' : '',
+      copyExists: frontendCopy instanceof HTMLButtonElement,
+      copyDisabled: frontendCopy instanceof HTMLButtonElement ? frontendCopy.disabled : null,
+      copyDescribedBy: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('aria-describedby') || '' : '',
+      copyState: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-action-state') || '' : '',
+      copyStatus: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-action-status') || '' : '',
+      copyDisabledReason: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-disabled-reason') || '' : '',
+      copyTargetTemplateId: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-target-template-id') || '' : '',
+      copyTargetTemplateName: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-target-template-name') || '' : '',
+      copyTargetSiteId: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-target-site-id') || '' : '',
+    };
     const isCollapsedDetails = (element) => (
       element instanceof HTMLDetailsElement &&
       element.open === false &&
@@ -3375,6 +3495,52 @@ const assertLayout = async (client) => {
         )
       )),
     },
+    frontendTemplateActionStatus: {
+      ...frontendTemplateContract,
+      allConsistent: frontendTemplateContract.section &&
+        frontendTemplateContract.sectionDescribedBy === 'forms-frontend-template-action-status' &&
+        frontendTemplateContract.sectionState === 'ready' &&
+        Number(frontendTemplateContract.sectionTemplateCount) >= 1 &&
+        frontendTemplateContract.sectionStatus === frontendTemplateContract.statusText &&
+        frontendTemplateContract.statusId === 'forms-frontend-template-action-status' &&
+        frontendTemplateContract.statusText.includes('frontend form template') &&
+        ['ready', 'blocked'].includes(frontendTemplateContract.cardState) &&
+        frontendTemplateContract.cardStatus.includes('${FRONTEND_FORM_TEMPLATE_NAME}') &&
+        (
+          frontendTemplateContract.cardState === 'blocked'
+            ? frontendTemplateContract.cardDisabledReason.length > 0
+            : frontendTemplateContract.cardDisabledReason === ''
+        ) &&
+        frontendTemplateContract.cardTargetTemplateId === '${FRONTEND_FORM_TEMPLATE_ID}' &&
+        frontendTemplateContract.cardTargetTemplateName === '${FRONTEND_FORM_TEMPLATE_NAME}' &&
+        frontendTemplateContract.cardTargetSiteId === '${SITE_ID}' &&
+        frontendTemplateContract.createExists &&
+        frontendTemplateContract.createDescribedBy === 'forms-frontend-template-action-status' &&
+        ['ready', 'blocked'].includes(frontendTemplateContract.createState) &&
+        frontendTemplateContract.createDisabled === (frontendTemplateContract.createState === 'blocked') &&
+        frontendTemplateContract.createStatus.includes('${FRONTEND_FORM_TEMPLATE_NAME}') &&
+        (
+          frontendTemplateContract.createState === 'blocked'
+            ? frontendTemplateContract.createDisabledReason.length > 0 && frontendTemplateContract.createStatus.includes('unavailable:')
+            : frontendTemplateContract.createDisabledReason === '' && frontendTemplateContract.createStatus.includes('available for ${SITE_ID}.')
+        ) &&
+        frontendTemplateContract.createTargetTemplateId === '${FRONTEND_FORM_TEMPLATE_ID}' &&
+        frontendTemplateContract.createTargetTemplateName === '${FRONTEND_FORM_TEMPLATE_NAME}' &&
+        frontendTemplateContract.createTargetSiteId === '${SITE_ID}' &&
+        frontendTemplateContract.copyExists &&
+        frontendTemplateContract.copyDescribedBy === 'forms-frontend-template-action-status' &&
+        ['ready', 'blocked'].includes(frontendTemplateContract.copyState) &&
+        frontendTemplateContract.copyDisabled === (frontendTemplateContract.copyState === 'blocked') &&
+        frontendTemplateContract.copyStatus.includes('${FRONTEND_FORM_TEMPLATE_NAME}') &&
+        (
+          frontendTemplateContract.copyState === 'blocked'
+            ? frontendTemplateContract.copyDisabledReason.length > 0 && frontendTemplateContract.copyStatus.includes('unavailable:')
+            : frontendTemplateContract.copyDisabledReason === '' && frontendTemplateContract.copyStatus.includes('Copy ')
+        ) &&
+        frontendTemplateContract.copyTargetTemplateId === '${FRONTEND_FORM_TEMPLATE_ID}' &&
+        frontendTemplateContract.copyTargetTemplateName === '${FRONTEND_FORM_TEMPLATE_NAME}' &&
+        frontendTemplateContract.copyTargetSiteId === '${SITE_ID}',
+    },
     hasControlMap: isCollapsedDetails(controlMapDetails) &&
       Boolean(document.querySelector('[data-testid="forms-control-map"]')) &&
       Boolean(document.querySelector('[data-testid="forms-control-map"] a[href="#forms-inbox"]')),
@@ -3445,6 +3611,7 @@ const assertLayout = async (client) => {
     `Forms command center secondary actions missing ready action metadata: ${JSON.stringify(layout.secondaryActionStatus)}`,
   );
   assert(layout.createActionStatus.exists && layout.createActionStatus.statusExplainsState && layout.createActionStatus.allConsistent, `Forms create action status contract is missing or inconsistent: ${JSON.stringify(layout.createActionStatus)}`);
+  assert(layout.frontendTemplateActionStatus.allConsistent, `Forms frontend template action status contract is missing or inconsistent: ${JSON.stringify(layout.frontendTemplateActionStatus)}`);
   assert(layout.hasCommandCenter && layout.hasAnalytics && layout.hasAudit && layout.hasAccountContract && layout.hasPersistenceCertification && layout.hasLaunchReadiness && layout.hasDeliveryPanel && layout.hasTemplates && layout.hasInbox, `Forms page missing expected regions: ${JSON.stringify(layout)}`);
   return layout;
 };

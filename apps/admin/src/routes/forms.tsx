@@ -1259,6 +1259,64 @@ function FormsRoute() {
     formsCommandCopyDisabledReason,
     formsCommandDownloadDisabledReason,
   ].every(Boolean) ? 'blocked' : 'ready';
+  const activeFrontendFormTemplate = frontendFormTemplates.find((template) => template.id === activeFrontendTemplateId) || null;
+  const formsFrontendTemplateActionStatusId = 'forms-frontend-template-action-status';
+  const formsFrontendTemplateActionState = isCreatingTemplateId
+    ? 'busy'
+    : frontendDesignLoading
+      ? 'busy'
+      : frontendDesignError
+        ? 'blocked'
+        : frontendFormTemplates.length > 0
+          ? 'ready'
+          : 'blocked';
+  const getFormFrontendTemplateCreateDisabledReason = (
+    template: SiteFrontendDesignTemplate,
+    blueprint: FormTemplateBlueprint,
+  ): string => {
+    if (isCreatingTemplateId === `frontend:${template.id}`) {
+      return `${template.name} form is being created.`;
+    }
+    if (formsCreateDisabledReason) {
+      return formsCreateDisabledReason;
+    }
+    if (blueprint.collectionTarget?.enabled && !canUseCollectionTargets) {
+      return collectionTargetUnavailableReason || 'Template collection routing is unavailable.';
+    }
+    return '';
+  };
+  const getFormFrontendTemplateCopyDisabledReason = (): string => formsExportDisabledReason;
+  const getFormFrontendTemplateCardActionState = (
+    template: SiteFrontendDesignTemplate,
+    blueprint: FormTemplateBlueprint,
+  ) => {
+    const disabledReason = getFormFrontendTemplateCreateDisabledReason(template, blueprint);
+    if (disabledReason) {
+      return isCreatingTemplateId === `frontend:${template.id}` ? 'busy' : 'blocked';
+    }
+    return activeFrontendTemplateId === template.id ? 'selected' : 'ready';
+  };
+  const getFormFrontendTemplateCreateActionStatus = (
+    template: SiteFrontendDesignTemplate,
+    blueprint: FormTemplateBlueprint,
+  ) => {
+    const disabledReason = getFormFrontendTemplateCreateDisabledReason(template, blueprint);
+    return formCreateActionStatus(`${template.name} form`, disabledReason);
+  };
+  const getFormFrontendTemplateCopyActionStatus = (template: SiteFrontendDesignTemplate) => {
+    const disabledReason = getFormFrontendTemplateCopyDisabledReason();
+    if (disabledReason) {
+      return `${template.name} frontend form template schema unavailable: ${disabledReason}`;
+    }
+    return `Copy ${template.name} frontend form template schema.`;
+  };
+  const formsFrontendTemplateActionStatus = frontendDesignLoading
+    ? 'Loading captured frontend form templates.'
+    : frontendDesignError
+      ? `Frontend form templates unavailable: ${frontendDesignError}`
+      : frontendFormTemplates.length > 0
+        ? `${frontendFormTemplates.length} frontend form template${frontendFormTemplates.length === 1 ? '' : 's'} available${activeFrontendFormTemplate ? `; ${activeFrontendFormTemplate.name} selected.` : '.'}`
+        : 'No frontend form templates captured for this site.';
   const hasActiveFormFilters = Boolean(
     formSearchQuery.trim() ||
     formSourceFilter !== 'all' ||
@@ -4589,7 +4647,15 @@ function FormsRoute() {
         />
         <PanelContent>
           {frontendFormTemplates.length > 0 || frontendDesignLoading || frontendDesignError ? (
-            <div className="mb-5 rounded-lg border border-teal-200 bg-teal-50/50 p-4" data-testid="forms-frontend-template-options">
+            <div
+              className="mb-5 rounded-lg border border-teal-200 bg-teal-50/50 p-4"
+              aria-describedby={formsFrontendTemplateActionStatusId}
+              data-action-state={formsFrontendTemplateActionState}
+              data-action-status={formsFrontendTemplateActionStatus}
+              data-template-count={frontendFormTemplates.length}
+              data-active-template-id={activeFrontendTemplateId || undefined}
+              data-testid="forms-frontend-template-options"
+            >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">Frontend design forms</h3>
@@ -4601,6 +4667,9 @@ function FormsRoute() {
                   {frontendDesign?.source.label || frontendDesign?.source.type || 'Frontend contract'}
                 </span>
               </div>
+              <span id={formsFrontendTemplateActionStatusId} className="sr-only" data-testid="forms-frontend-template-action-status" aria-live="polite">
+                {formsFrontendTemplateActionStatus}
+              </span>
               {frontendDesignLoading ? (
                 <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                   <RefreshCw className="size-3.5 animate-spin" />
@@ -4618,15 +4687,15 @@ function FormsRoute() {
                   {frontendTemplateBlueprints.map(({ template, blueprint }) => {
                     const settings = buildFrontendFormTemplateSettings(template, frontendDesign, blueprint.frontendFieldKeyMap);
                     const collectionBackedTemplateUnavailable = Boolean(blueprint.collectionTarget?.enabled && !canUseCollectionTargets);
-                    const createFrontendTemplateTitle = !canCreateForms
-                      ? createPermissionTitle
-                      : collectionBackedTemplateUnavailable
-                        ? collectionTargetUnavailableReason || undefined
-                        : undefined;
-                    const createFrontendTemplateDisabledReason = formsCreateDisabledReason || (
-                      collectionBackedTemplateUnavailable ? collectionTargetUnavailableReason || 'Template collection routing is unavailable.' : ''
-                    );
-                    const createFrontendTemplateActionStatus = formCreateActionStatus(`${template.name} form`, createFrontendTemplateDisabledReason);
+                    const cardActionState = getFormFrontendTemplateCardActionState(template, blueprint);
+                    const createFrontendTemplateDisabledReason = getFormFrontendTemplateCreateDisabledReason(template, blueprint);
+                    const copyFrontendTemplateDisabledReason = getFormFrontendTemplateCopyDisabledReason();
+                    const createFrontendTemplateActionStatus = getFormFrontendTemplateCreateActionStatus(template, blueprint);
+                    const copyFrontendTemplateActionStatus = getFormFrontendTemplateCopyActionStatus(template);
+                    const createFrontendTemplateActionState = createFrontendTemplateDisabledReason
+                      ? isCreatingTemplateId === `frontend:${template.id}` ? 'busy' : 'blocked'
+                      : 'ready';
+                    const copyFrontendTemplateActionState = copyFrontendTemplateDisabledReason ? 'blocked' : 'ready';
                     const manifestText = JSON.stringify({
                       schemaVersion: 'backy.frontend-form-template.v1',
                       template,
@@ -4644,6 +4713,13 @@ function FormsRoute() {
                             : 'border-teal-200',
                         )}
                         data-active={activeFrontendTemplateId === template.id ? 'true' : 'false'}
+                        data-action-state={cardActionState}
+                        data-action-status={createFrontendTemplateActionStatus}
+                        data-disabled-reason={createFrontendTemplateDisabledReason || undefined}
+                        data-target-template-id={template.id}
+                        data-target-template-name={template.name}
+                        data-target-site-id={activeSiteId}
+                        data-testid={`forms-frontend-template-card-${template.id}`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -4679,17 +4755,19 @@ function FormsRoute() {
                             size="sm"
                             variant="primary"
                             onClick={() => void createFormFromFrontendTemplate(template, blueprint)}
-                            disabled={isFormsBusy || !canCreateForms || collectionBackedTemplateUnavailable}
-                            title={createFrontendTemplateDisabledReason || createFrontendTemplateTitle}
-                            aria-describedby={formsCreateActionStatusId}
+                            disabled={Boolean(createFrontendTemplateDisabledReason)}
+                            title={createFrontendTemplateDisabledReason || undefined}
+                            aria-describedby={formsFrontendTemplateActionStatusId}
                             iconStart={<FileInput className="size-4" />}
                             data-action="forms.create.frontendTemplate"
                             data-action-target={template.id}
                             data-action-route={template.routePattern || `/forms?siteId=${encodeURIComponent(activeSiteId)}`}
-                            data-action-state={createFrontendTemplateDisabledReason ? 'blocked' : 'ready'}
-                            data-state={createFrontendTemplateDisabledReason ? 'blocked' : 'ready'}
+                            data-action-state={createFrontendTemplateActionState}
+                            data-state={createFrontendTemplateActionState}
                             data-action-status={createFrontendTemplateActionStatus}
                             data-disabled-reason={createFrontendTemplateDisabledReason || undefined}
+                            data-target-template-id={template.id}
+                            data-target-template-name={template.name}
                             data-target-site-id={activeSiteId}
                             data-testid={`forms-frontend-template-${template.id}`}
                           >
@@ -4704,18 +4782,21 @@ function FormsRoute() {
                             size="sm"
                             variant="outline"
                             onClick={() => void copyFormApiText(manifestText, `${template.name} frontend form template`)}
-                            disabled={isFormsBusy}
-                            title={isFormsBusy ? formsViewDisabledReason : undefined}
-                            aria-describedby={formsViewActionStatusId}
+                            disabled={Boolean(copyFrontendTemplateDisabledReason)}
+                            title={copyFrontendTemplateDisabledReason || undefined}
+                            aria-describedby={formsFrontendTemplateActionStatusId}
                             iconStart={<Copy className="size-4" />}
                             data-action="forms.copy.frontendTemplateSchema"
                             data-action-target={template.id}
                             data-action-route={template.routePattern || `/forms?siteId=${encodeURIComponent(activeSiteId)}`}
-                            data-action-state={isFormsBusy ? 'blocked' : 'ready'}
-                            data-state={isFormsBusy ? 'blocked' : 'ready'}
-                            data-action-status={formsViewActionStatus}
-                            data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                            data-action-state={copyFrontendTemplateActionState}
+                            data-state={copyFrontendTemplateActionState}
+                            data-action-status={copyFrontendTemplateActionStatus}
+                            data-disabled-reason={copyFrontendTemplateDisabledReason || undefined}
+                            data-target-template-id={template.id}
+                            data-target-template-name={template.name}
                             data-target-site-id={activeSiteId}
+                            data-testid={`forms-frontend-template-copy-${template.id}`}
                           >
                             Copy schema
                           </Button>
