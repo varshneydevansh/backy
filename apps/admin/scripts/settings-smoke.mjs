@@ -48,6 +48,23 @@ const shippingParcelForSuffix = (suffix) => JSON.stringify({
   weight: 12,
   predefined_package: `parcel-${suffix}`,
 });
+const EXPECTED_COMPLETION_AUDIT = {
+  ready: 41,
+  partial: 4,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 91,
+};
+const EXPECTED_ARTIFACT_ACCEPTED_AUDIT = {
+  ready: 45,
+  partial: 0,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 100,
+};
+const EXPECTED_COMPLETION_PARTIAL_ROWS = ['/settings', 'Settings admin APIs', '/products', '/orders'];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -569,6 +586,10 @@ const assertSettingsSourceContracts = () => {
     'BACKY_SETTINGS_SOURCE_ONLY',
     'BACKY_SETTINGS_SMOKE_SOURCE_ONLY',
     'settings-source-only',
+    'assertCompletionStatusSurfaceConsistency',
+    'EXPECTED_COMPLETION_PARTIAL_ROWS',
+    '/api/sites/demo/manifest',
+    '/api/sites/demo/openapi',
   ];
   const missingSmokeSnippets = requiredSmokeSnippets.filter((snippet) => !smokeSource.includes(snippet));
   assert(
@@ -656,6 +677,22 @@ const requestApi = async (endpoint, options = {}) => {
   return payload;
 };
 
+const requestJson = async (endpoint, options = {}) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+    },
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(`${endpoint} returned ${response.status}: ${JSON.stringify(payload.error || payload).slice(0, 300)}`);
+  }
+
+  return payload;
+};
+
 const loginAdminApi = async () => {
   const login = (twoFactorCode) => fetch(`${API_BASE_URL}/api/admin/auth/login`, {
     method: 'POST',
@@ -694,6 +731,86 @@ const readSettings = async (sessionToken = apiAdminSessionToken) => {
   });
   assert(payload.data?.settings, 'Settings API returned no settings payload');
   return payload.data.settings;
+};
+
+const completionAuditSignature = (audit) => (
+  ['ready', 'partial', 'prototype', 'missing', 'total', 'readyPercent']
+    .map((key) => `${key}:${audit?.[key]}`)
+    .join('|')
+);
+
+const assertCompletionAudit = (audit, expected, label) => {
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    assert(
+      audit?.[key] === expectedValue,
+      `${label} completion audit expected ${key}=${expectedValue}, got ${JSON.stringify(audit)}`,
+    );
+  }
+};
+
+const summarizeCompletionStatus = (completionStatus, label) => {
+  assert(completionStatus?.schemaVersion === 'backy.completion-status.v1', `${label} completionStatus schema mismatch: ${JSON.stringify(completionStatus).slice(0, 500)}`);
+  assert(completionStatus.status === 'external-gates-required', `${label} completionStatus must remain externally gated without provider artifacts: ${JSON.stringify(completionStatus).slice(0, 500)}`);
+  assertCompletionAudit(completionStatus.audit, EXPECTED_COMPLETION_AUDIT, label);
+
+  const closure = completionStatus.partialClosureReadiness;
+  assert(closure?.schemaVersion === 'backy.partial-closure-readiness.v1', `${label} missing partial closure readiness: ${JSON.stringify(completionStatus).slice(0, 500)}`);
+  assert(closure.status === 'external-artifacts-required', `${label} closure status mismatch: ${JSON.stringify(closure).slice(0, 500)}`);
+  assert(closure.ready === false && closure.readyCount === 0 && closure.partialCount === 4, `${label} closure counts mismatch: ${JSON.stringify(closure).slice(0, 500)}`);
+  assert(closure.aggregatePreflight === 'npm run test:partial-gate-preflights', `${label} aggregate preflight mismatch: ${JSON.stringify(closure).slice(0, 500)}`);
+  assert(closure.artifactRequiredEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1', `${label} artifact required env mismatch: ${JSON.stringify(closure).slice(0, 500)}`);
+  assertCompletionAudit(closure.auditImpact?.defaultNoArtifactAudit, EXPECTED_COMPLETION_AUDIT, `${label} default no-artifact`);
+  assertCompletionAudit(closure.auditImpact?.artifactAcceptedAudit, EXPECTED_ARTIFACT_ACCEPTED_AUDIT, `${label} artifact accepted`);
+
+  const rows = Array.isArray(closure.rows) ? closure.rows : [];
+  const rowNames = rows.map((row) => row.row);
+  assert(JSON.stringify(rowNames) === JSON.stringify(EXPECTED_COMPLETION_PARTIAL_ROWS), `${label} partial rows mismatch: ${JSON.stringify(rowNames)}`);
+  for (const row of rows) {
+    assert(row.ready === false && row.status === 'partial' && row.artifactAcceptedStatus === 'ready', `${label} partial row readiness mismatch: ${JSON.stringify(row)}`);
+    assert(typeof row.artifactPathEnv === 'string' && row.artifactPathEnv.includes('ARTIFACT'), `${label} partial row missing artifact path env: ${JSON.stringify(row)}`);
+    assert(typeof row.artifactSchemaVersion === 'string' && row.artifactSchemaVersion.startsWith('backy.'), `${label} partial row missing artifact schema: ${JSON.stringify(row)}`);
+    assert(typeof row.sourceOnlyGuard === 'string' && row.sourceOnlyGuard.includes('SOURCE_ONLY'), `${label} partial row missing source-only guard: ${JSON.stringify(row)}`);
+  }
+
+  return {
+    label,
+    schemaVersion: completionStatus.schemaVersion,
+    status: completionStatus.status,
+    auditSignature: completionAuditSignature(completionStatus.audit),
+    defaultAuditSignature: completionAuditSignature(closure.auditImpact.defaultNoArtifactAudit),
+    artifactAuditSignature: completionAuditSignature(closure.auditImpact.artifactAcceptedAudit),
+    partialRows: rowNames,
+    aggregatePreflight: closure.aggregatePreflight,
+    artifactRequiredEnv: closure.artifactRequiredEnv,
+  };
+};
+
+const assertCompletionStatusSurfaceConsistency = async (settings = undefined) => {
+  const settingsPayload = settings || await readSettings();
+  const manifestPayload = await requestApi('/api/sites/demo/manifest');
+  const openApiPayload = await requestJson('/api/sites/demo/openapi');
+  const surfaces = [
+    summarizeCompletionStatus(settingsPayload.completionStatus, 'admin settings API'),
+    summarizeCompletionStatus(manifestPayload.data?.contract?.completionStatus, 'public manifest'),
+    summarizeCompletionStatus(openApiPayload['x-backy-completion-status'], 'site OpenAPI'),
+  ];
+  const [baseline] = surfaces;
+
+  for (const surface of surfaces.slice(1)) {
+    assert(surface.auditSignature === baseline.auditSignature, `Completion audit mismatch between ${baseline.label} and ${surface.label}: ${JSON.stringify(surfaces)}`);
+    assert(surface.defaultAuditSignature === baseline.defaultAuditSignature, `Completion default audit mismatch between ${baseline.label} and ${surface.label}: ${JSON.stringify(surfaces)}`);
+    assert(surface.artifactAuditSignature === baseline.artifactAuditSignature, `Completion artifact audit mismatch between ${baseline.label} and ${surface.label}: ${JSON.stringify(surfaces)}`);
+    assert(JSON.stringify(surface.partialRows) === JSON.stringify(baseline.partialRows), `Completion partial rows mismatch between ${baseline.label} and ${surface.label}: ${JSON.stringify(surfaces)}`);
+    assert(surface.aggregatePreflight === baseline.aggregatePreflight, `Completion aggregate preflight mismatch between ${baseline.label} and ${surface.label}: ${JSON.stringify(surfaces)}`);
+    assert(surface.artifactRequiredEnv === baseline.artifactRequiredEnv, `Completion artifact-required env mismatch between ${baseline.label} and ${surface.label}: ${JSON.stringify(surfaces)}`);
+  }
+
+  return {
+    surfaces,
+    audit: EXPECTED_COMPLETION_AUDIT,
+    artifactAcceptedAudit: EXPECTED_ARTIFACT_ACCEPTED_AUDIT,
+    partialRows: EXPECTED_COMPLETION_PARTIAL_ROWS,
+  };
 };
 
 const listSites = async () => {
@@ -3857,6 +3974,7 @@ const main = async () => {
   const suffix = `settings-smoke-${Date.now().toString(36)}`;
   const adminSession = await loginAdminApi();
   const originalSettings = await readSettings();
+  const completionStatusConsistency = await assertCompletionStatusSurfaceConsistency(originalSettings);
   const permissionDenials = await assertSettingsPermissionDenials(originalSettings);
   const baselineSettings = await normalizeSettingsSmokePreconditions(originalSettings);
   await setAdminPermissionOverrides({
@@ -3973,6 +4091,7 @@ const main = async () => {
       url: `${ADMIN_BASE_URL}/settings`,
       ui,
       ownerRotation,
+      completionStatusConsistency,
       permissionDenials,
       apiNormalization,
       secretStorage,
