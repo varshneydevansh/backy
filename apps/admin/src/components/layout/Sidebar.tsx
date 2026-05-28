@@ -171,6 +171,12 @@ export function Sidebar({
   const visibleItemCount = useMemo(() => (
     visibleSections.reduce((count, section) => count + section.items.length, 0)
   ), [visibleSections]);
+  const totalNavItemCount = useMemo(() => (
+    NAV_SECTIONS.reduce((count, section) => count + section.items.length, 0)
+  ), []);
+  const totalQuickCreateActionCount = SIDEBAR_QUICK_CREATE_ACTIONS.length;
+  const hiddenNavItemCount = Math.max(totalNavItemCount - visibleItemCount, 0);
+  const hiddenQuickCreateCount = Math.max(totalQuickCreateActionCount - quickCreateActions.length, 0);
   const renderedItemCount = useMemo(() => (
     renderedSections.reduce((count, section) => count + section.items.length, 0)
   ), [renderedSections]);
@@ -235,15 +241,18 @@ export function Sidebar({
   const sidebarControlStatus = collapsed
     ? 'Filter navigation and group density controls are available when expanded.'
     : 'Filter navigation available. Show active group available. Show all groups available.';
+  const sidebarRoleFilterStatus = hiddenNavItemCount > 0 || hiddenQuickCreateCount > 0
+    ? `Role filters hide ${hiddenNavItemCount} navigation tool${hiddenNavItemCount === 1 ? '' : 's'} and ${hiddenQuickCreateCount} create shortcut${hiddenQuickCreateCount === 1 ? '' : 's'}.`
+    : 'Role filters hide no navigation tools or create shortcuts.';
   const sidebarCollapseStatus = collapseLocked
     ? 'Sidebar collapse unavailable: Sidebar stays compact while editing.'
     : collapsed
       ? 'Expand sidebar available.'
       : 'Collapse sidebar available.';
-  const sidebarActionStatus = `${permissionSyncStatus} ${sidebarFilterSummary} ${sidebarControlStatus} ${sidebarCollapseStatus}`;
+  const sidebarActionStatus = `${permissionSyncStatus} ${sidebarFilterSummary} ${sidebarRoleFilterStatus} ${sidebarControlStatus} ${sidebarCollapseStatus}`;
   const quickCreateStatusId = `${navigationId}-quick-create-status`;
   const railTooltipId = `${navigationId}-rail-tooltip`;
-  const quickCreateActionStatus = `${quickCreateActions.length} create shortcut${quickCreateActions.length === 1 ? '' : 's'} available for ${activeSiteName}.`;
+  const quickCreateActionStatus = `${quickCreateActions.length} create shortcut${quickCreateActions.length === 1 ? '' : 's'} available for ${activeSiteName}. ${hiddenQuickCreateCount} hidden by role or permissions.`;
   const getQuickCreateIntent = (action: (typeof SIDEBAR_QUICK_CREATE_ACTIONS)[number]) => action.search?.quickCreate || action.id;
   const getRailDescribedBy = (baseId: string) => (
     collapsed ? `${baseId} ${railTooltipId}` : baseId
@@ -334,10 +343,14 @@ export function Sidebar({
       data-collapsed-section-count={collapsedSectionCount}
       data-active-nav-section={activeSectionId || ''}
       data-nav-item-count={visibleItemCount}
+      data-total-nav-item-count={totalNavItemCount}
+      data-hidden-nav-item-count={hiddenNavItemCount}
       data-rendered-nav-item-count={renderedItemCount}
       data-nav-filtered={String(Boolean(normalizedNavFilter))}
       data-nav-mode={sidebarNavigationMode}
       data-quick-create-count={quickCreateActions.length}
+      data-total-quick-create-count={totalQuickCreateActionCount}
+      data-hidden-quick-create-count={hiddenQuickCreateCount}
       data-section-state-version={SIDEBAR_SECTION_STORAGE_VERSION}
       data-section-state-source={sectionStateSource}
       data-legacy-section-state-count={legacySectionStateCount}
@@ -421,6 +434,8 @@ export function Sidebar({
           data-permission-source={permissionSource}
           data-permission-sync-state={permissionSyncState}
           data-quick-create-count={quickCreateActions.length}
+          data-total-quick-create-count={totalQuickCreateActionCount}
+          data-hidden-quick-create-count={hiddenQuickCreateCount}
         >
           <span id={quickCreateStatusId} className="sr-only" data-testid={`${testIdPrefix}-quick-create-status`}>
             {quickCreateActionStatus}

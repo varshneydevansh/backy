@@ -486,7 +486,9 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('navigation tools across ${visibleSections.length} groups in compact rail') &&
       sidebarSource.includes('Labels show on hover or focus.') &&
       sidebarSource.includes('Filter navigation and group density controls are available when expanded.') &&
-      sidebarSource.includes('const sidebarActionStatus = `${permissionSyncStatus} ${sidebarFilterSummary}') &&
+      sidebarSource.includes('const sidebarRoleFilterStatus = hiddenNavItemCount > 0 || hiddenQuickCreateCount > 0') &&
+      sidebarSource.includes('Role filters hide ${hiddenNavItemCount} navigation tool') &&
+      sidebarSource.includes('const sidebarActionStatus = `${permissionSyncStatus} ${sidebarFilterSummary} ${sidebarRoleFilterStatus}') &&
       sidebarSource.includes('data-action-status={sidebarActionStatus}') &&
       sidebarSource.includes('data-action-state={collapseLocked ?') &&
       sidebarModelSource.includes("type SidebarQuickCreatePermission = 'pages.edit' | 'commerce.edit' | 'forms.create';") &&
@@ -504,6 +506,8 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-testid={`${testIdPrefix}-quick-create-status`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-quick-create-${action.id}`}') &&
       sidebarSource.includes('data-quick-create-count={quickCreateActions.length}') &&
+      sidebarSource.includes('data-total-quick-create-count={totalQuickCreateActionCount}') &&
+      sidebarSource.includes('data-hidden-quick-create-count={hiddenQuickCreateCount}') &&
       sidebarSource.includes('search={quickCreateSearch}') &&
       sidebarSource.includes('const getQuickCreateIntent = (action: (typeof SIDEBAR_QUICK_CREATE_ACTIONS)[number]) => action.search?.quickCreate || action.id;') &&
       sidebarSource.includes('const quickCreateSearchValue = new URLSearchParams(quickCreateSearch).toString();') &&
@@ -527,6 +531,8 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-nav-filtered={String(Boolean(normalizedNavFilter))}') &&
       sidebarSource.includes('data-nav-mode={sidebarNavigationMode}') &&
       sidebarSource.includes('data-rendered-nav-item-count={renderedItemCount}') &&
+      sidebarSource.includes('data-total-nav-item-count={totalNavItemCount}') &&
+      sidebarSource.includes('data-hidden-nav-item-count={hiddenNavItemCount}') &&
       sidebarSource.includes('data-section-state-version={SIDEBAR_SECTION_STORAGE_VERSION}') &&
       sidebarSource.includes('data-section-state-source={sectionStateSource}') &&
       sidebarSource.includes('data-legacy-section-state-count={legacySectionStateCount}') &&
@@ -565,6 +571,13 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-permission-sync-state={permissionSyncState}') &&
       sidebarSource.includes('data-permission-sync-status={permissionSyncStatus}') &&
       sidebarSource.includes('data-permission-sync-error={permissionSyncError || undefined}') &&
+      navigationAccessSource.includes("'sites.view': ['owner', 'admin', 'editor', 'viewer']") &&
+      navigationAccessSource.includes("'pages.view': ['owner', 'admin', 'editor', 'viewer']") &&
+      navigationAccessSource.includes("'media.view': ['owner', 'admin', 'editor', 'viewer']") &&
+      navigationAccessSource.includes("'collections.view': ['owner', 'admin', 'editor', 'viewer']") &&
+      navigationAccessSource.includes("'commerce.view': ['owner', 'admin', 'editor', 'viewer']") &&
+      navigationAccessSource.includes("'forms.view': ['owner', 'admin', 'editor', 'viewer']") &&
+      navigationAccessSource.includes("'comments.view': ['owner', 'admin', 'editor', 'viewer']") &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-permission-sync-status`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-permission-sync-recovery`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-permission-sync-retry`}') &&

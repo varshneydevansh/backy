@@ -1013,18 +1013,64 @@ const assertDashboardRbacFiltering = async (client, viewerUser, siteName, preloa
       const apiText = document.querySelector('#dashboard-api')?.textContent || '';
       const workflowText = document.querySelector('#dashboard-workflows')?.textContent || '';
       const moduleText = document.querySelector('[data-testid="dashboard-command-center"]')?.textContent || '';
+      const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const expandAll = document.querySelector('[data-testid="admin-sidebar-expand-all-sections"]');
+      const sectionCount = Number(sidebar?.getAttribute('data-nav-section-count') || 0);
+      const expandedCount = Number(sidebar?.getAttribute('data-expanded-section-count') || 0);
+      if (
+        sidebar instanceof HTMLElement &&
+        expandAll instanceof HTMLButtonElement &&
+        sectionCount > 0 &&
+        expandedCount < sectionCount
+      ) {
+        expandAll.click();
+      }
       const deploymentButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
         (candidate.getAttribute('aria-label') || '') === 'Run dashboard deployment preflight'
       ));
       const infrastructureButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
         (candidate.getAttribute('aria-label') || '') === 'Run dashboard infrastructure check'
       ));
+      const currentExpandedCount = Number(sidebar?.getAttribute('data-expanded-section-count') || 0);
       return {
-        ready: Boolean(rbacPanel) && bodyText.includes(${JSON.stringify(siteName)}),
+        ready: Boolean(rbacPanel) &&
+          bodyText.includes(${JSON.stringify(siteName)}) &&
+          sidebar instanceof HTMLElement &&
+          sidebar.getAttribute('data-nav-ready') === 'true' &&
+          sectionCount > 0 &&
+          currentExpandedCount === sectionCount,
         rbacText,
         apiText,
         workflowText,
         moduleText,
+        sidebarPermissionSource: sidebar?.getAttribute('data-permission-source') || '',
+        sidebarPermissionSyncState: sidebar?.getAttribute('data-permission-sync-state') || '',
+        sidebarStatusText: document.querySelector('[data-testid="admin-sidebar-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        sidebarSectionCount: sectionCount,
+        sidebarExpandedCount: currentExpandedCount,
+        sidebarNavItemCount: Number(sidebar?.getAttribute('data-nav-item-count') || 0),
+        sidebarTotalNavItemCount: Number(sidebar?.getAttribute('data-total-nav-item-count') || 0),
+        sidebarHiddenNavItemCount: Number(sidebar?.getAttribute('data-hidden-nav-item-count') || 0),
+        quickCreateCount: Number(sidebar?.getAttribute('data-quick-create-count') || 0),
+        totalQuickCreateCount: Number(sidebar?.getAttribute('data-total-quick-create-count') || 0),
+        hiddenQuickCreateCount: Number(sidebar?.getAttribute('data-hidden-quick-create-count') || 0),
+        hasQuickCreateGroup: Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create"]')),
+        hasQuickCreatePage: Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create-new-page"]')),
+        hasQuickCreatePost: Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create-new-post"]')),
+        hasQuickCreateProduct: Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create-new-product"]')),
+        hasQuickCreateForm: Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]')),
+        hasPagesNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-pages"]')),
+        hasBlogNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-blog"]')),
+        hasMediaNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-media"]')),
+        hasCollectionsNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-collections"]')),
+        hasProductsNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-products"]')),
+        hasOrdersNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-orders"]')),
+        hasFormsNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-forms"]')),
+        hasContactsNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-contacts"]')),
+        hasCommentsNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-comments"]')),
+        hasUsersNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-users"]')),
+        hasTeamsNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-teams"]')),
+        hasSettingsNav: Boolean(document.querySelector('[data-testid="admin-sidebar-link-settings"]')),
         deploymentDisabled: deploymentButton instanceof HTMLButtonElement ? deploymentButton.disabled : null,
         infrastructureDisabled: infrastructureButton instanceof HTMLButtonElement ? infrastructureButton.disabled : null,
         hasSettingsEndpoint: apiText.includes('/settings'),
@@ -1046,6 +1092,38 @@ const assertDashboardRbacFiltering = async (client, viewerUser, siteName, preloa
       assert(!state.hasApiSetupAction && !state.hasNewSiteAction, `Viewer dashboard showed privileged creation/settings actions: ${JSON.stringify(state)}`);
       assert(!state.hasMemberAccessAction, `Viewer dashboard showed privileged member access action: ${JSON.stringify(state)}`);
       assert(!state.hasUsersModule && !state.hasInfrastructureModule, `Viewer dashboard showed privileged module cards: ${JSON.stringify(state)}`);
+      assert(
+        state.hasPagesNav &&
+          state.hasBlogNav &&
+          state.hasMediaNav &&
+          state.hasCollectionsNav &&
+          state.hasProductsNav &&
+          state.hasOrdersNav &&
+          state.hasFormsNav &&
+          state.hasContactsNav &&
+          state.hasCommentsNav,
+        `Viewer sidebar should expose read-only review surfaces after role/matrix filtering: ${JSON.stringify(state)}`,
+      );
+      assert(
+        !state.hasUsersNav &&
+          !state.hasTeamsNav &&
+          !state.hasSettingsNav &&
+          state.sidebarHiddenNavItemCount >= 3 &&
+          state.sidebarStatusText.includes('Role filters hide') &&
+          state.sidebarStatusText.includes('create shortcut'),
+        `Viewer sidebar should hide privileged admin navigation with explicit role-filter metadata: ${JSON.stringify(state)}`,
+      );
+      assert(
+        !state.hasQuickCreateGroup &&
+          !state.hasQuickCreatePage &&
+          !state.hasQuickCreatePost &&
+          !state.hasQuickCreateProduct &&
+          !state.hasQuickCreateForm &&
+          state.quickCreateCount === 0 &&
+          state.totalQuickCreateCount === 4 &&
+          state.hiddenQuickCreateCount === 4,
+        `Viewer sidebar must hide create shortcuts instead of rendering disabled-only buttons: ${JSON.stringify(state)}`,
+      );
       assert(state.deploymentDisabled === true && state.infrastructureDisabled === true, `Viewer dashboard did not disable settings-backed checks: ${JSON.stringify(state)}`);
       assert(!state.hasFrameworkOverlay, `Viewer dashboard rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
       return state;

@@ -575,8 +575,9 @@ Use this file as the persistent baseline before any implementation pass.
   - `/blog/:postId` now has a source-guarded publish-impact handoff (`backy.blog-publish-impact.v1`) that shows route verification, taxonomy/author state, featured media readiness, comment policy/moderation counts, readiness blockers, action disable reasons, and a no-canvas/no-raw-comment privacy boundary before publish/archive operations.
   - `/products` now has a source-guarded sellability-impact handoff (`backy.product-sellability-impact.v1`) inside the selected-product launch panel and storefront handoff. It shows publish/archive/provider-sync action safety, launch blockers, pricing, stock, delivery, checkout mode, custom frontend design readiness, provider-sync state, and no-secret/no-private-order privacy flags before a product is treated as storefront-launchable.
   - `/orders` now has a source-guarded operation-impact handoff (`backy.order-operation-impact.v1`) inside the selected-order status workspace. It shows provider-ready/manual/blocked operation counts, recommended action safety, customer-safe frontend projection readiness, safe/masked binding paths, boolean-only provider/payment references, and no-raw-contact/no-provider-payload privacy flags before quote, label, tracking, dispatch, refund, or fulfillment operations are treated as executable.
+  - Admin shell role-based navigation now hides unavailable actions instead of rendering dead controls: viewer role defaults match the backend permission matrix for read-only site/page/blog/media/collection/commerce/form/contact/comment navigation, users/teams/settings stay admin-only, quick-create shortcuts stay hidden unless their edit/create permissions are available, and the sidebar exposes hidden navigation/create counts for custom shells and smoke tests.
 - Confirm-delete patterns and action recovery paths.
-- Role-based UI filtering (hide unavailable actions instead of disabled-only).
+- Continue route-level role-filtering hardening for newly added controls; the global admin sidebar/quick-create shell is now covered.
 
 ## 10) Blog editor and template strategy
 

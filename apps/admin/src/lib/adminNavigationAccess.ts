@@ -42,13 +42,13 @@ const NAVIGATION_AREA_PERMISSIONS: Record<Exclude<AdminNavigationArea, 'dashboar
 };
 
 const NAVIGATION_PERMISSION_ROLE_DEFAULTS: Record<string, User['role'][]> = {
-  'sites.view': ['owner', 'admin', 'editor'],
-  'pages.view': ['owner', 'admin', 'editor'],
-  'media.view': ['owner', 'admin', 'editor'],
-  'collections.view': ['owner', 'admin', 'editor'],
-  'commerce.view': ['owner', 'admin', 'editor'],
-  'forms.view': ['owner', 'admin', 'editor'],
-  'comments.view': ['owner', 'admin', 'editor'],
+  'sites.view': ['owner', 'admin', 'editor', 'viewer'],
+  'pages.view': ['owner', 'admin', 'editor', 'viewer'],
+  'media.view': ['owner', 'admin', 'editor', 'viewer'],
+  'collections.view': ['owner', 'admin', 'editor', 'viewer'],
+  'commerce.view': ['owner', 'admin', 'editor', 'viewer'],
+  'forms.view': ['owner', 'admin', 'editor', 'viewer'],
+  'comments.view': ['owner', 'admin', 'editor', 'viewer'],
   'users.view': ['owner', 'admin'],
   'settings.view': ['owner', 'admin'],
 };
