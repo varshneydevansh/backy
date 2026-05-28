@@ -303,6 +303,9 @@ includesAll(
     'Verify Commerce provider certification artifact from Settings gate',
     'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-commerce-provider-certification.json',
     "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED: '1'",
+    'Verify combined provider closure artifacts from Settings gate',
+    'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-settings-provider-certification.json',
+    "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED: '1'",
     'Upload Commerce provider certification evidence from Settings gate',
     'backy-commerce-provider-certification-evidence',
     'artifacts/backy-commerce-provider-certification.json',
@@ -335,8 +338,9 @@ assert(
     workflow.indexOf('- name: Verify Settings provider certification artifact') < workflow.indexOf('- name: Upload Settings provider certification evidence') &&
     workflow.indexOf('- name: Upload Settings provider certification evidence') < workflow.indexOf('- name: Run Commerce provider certification from Settings provider gate') &&
     workflow.indexOf('- name: Run Commerce provider certification from Settings provider gate') < workflow.indexOf('- name: Verify Commerce provider certification artifact from Settings gate') &&
-    workflow.indexOf('- name: Verify Commerce provider certification artifact from Settings gate') < workflow.indexOf('- name: Upload Commerce provider certification evidence from Settings gate'),
-  'Settings provider certification workflow must run preflight before Settings certification, verify Settings artifact before upload, run Commerce certification, and verify Commerce artifact before final upload.',
+    workflow.indexOf('- name: Verify Commerce provider certification artifact from Settings gate') < workflow.indexOf('- name: Verify combined provider closure artifacts from Settings gate') &&
+    workflow.indexOf('- name: Verify combined provider closure artifacts from Settings gate') < workflow.indexOf('- name: Upload Commerce provider certification evidence from Settings gate'),
+  'Settings provider certification workflow must run preflight before Settings certification, verify Settings artifact before upload, run Commerce certification, verify Commerce artifact, and prove the combined artifact-backed closure before final upload.',
 );
 
 includesAll(

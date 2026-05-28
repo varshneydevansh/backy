@@ -198,6 +198,9 @@ includesAll(
     'Verify Commerce provider certification artifact',
     'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-commerce-provider-certification.json',
     "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED: '1'",
+    'Verify combined provider closure artifacts',
+    'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-settings-provider-certification.json',
+    'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED: \'1\'',
     'Upload Commerce provider certification evidence',
     'backy-commerce-provider-certification-evidence',
     'artifacts/backy-commerce-provider-certification.json',
@@ -290,8 +293,9 @@ assert(
     workflow.indexOf('- name: Verify Settings provider certification artifact') < workflow.indexOf('- name: Upload Settings provider certification evidence') &&
     workflow.indexOf('- name: Upload Settings provider certification evidence') < workflow.indexOf('- name: Run Commerce provider certification') &&
     workflow.indexOf('- name: Run Commerce provider certification') < workflow.indexOf('- name: Verify Commerce provider certification artifact') &&
-    workflow.indexOf('- name: Verify Commerce provider certification artifact') < workflow.indexOf('- name: Upload Commerce provider certification evidence'),
-  'Backy release certification workflow must run preflights, require the database URL before database gates, run provider gates, and upload Settings/Commerce evidence.',
+    workflow.indexOf('- name: Verify Commerce provider certification artifact') < workflow.indexOf('- name: Verify combined provider closure artifacts') &&
+    workflow.indexOf('- name: Verify combined provider closure artifacts') < workflow.indexOf('- name: Upload Commerce provider certification evidence'),
+  'Backy release certification workflow must run preflights, require the database URL before database gates, run provider gates, verify the combined artifact-backed closure, and upload Settings/Commerce evidence.',
 );
 
 excludesAll(

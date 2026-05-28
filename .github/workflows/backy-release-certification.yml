@@ -512,6 +512,14 @@ jobs:
           BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED: '1'
         run: npm run doctor:release-certification
 
+      - name: Verify combined provider closure artifacts
+        if: ${{ inputs.certify_settings_providers && inputs.certify_commerce_providers }}
+        env:
+          BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-settings-provider-certification.json
+          BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: artifacts/backy-commerce-provider-certification.json
+          BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED: '1'
+        run: npm run doctor:release-certification
+
       - name: Upload Commerce provider certification evidence
         if: ${{ inputs.certify_commerce_providers }}
         uses: actions/upload-artifact@v4
