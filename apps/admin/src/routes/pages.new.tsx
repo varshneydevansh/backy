@@ -1792,6 +1792,74 @@ function NewPageRoute() {
                     ? 'Choose a custom frontend template before creating this page.'
                     : 'No custom frontend page templates are captured for this site yet.'
         : `Backy canvas template selected: ${selectedTemplate.name}.`;
+    const pageTemplateSelectionActionStatusId = 'page-template-selection-action-status';
+    const templateSelectionControlDisabled = templateSelectionDisabled || !canEditPages;
+    const pageTemplateSelectionDisabledReason = templateSelectionDisabled
+        ? 'Page creation is already running.'
+        : !canEditPages
+            ? editPermissionTitle || 'Your account cannot change page templates.'
+            : '';
+    const getPageTemplateSelectionActionState = (selected: boolean) => pageTemplateSelectionDisabledReason
+        ? templateSelectionDisabled ? 'busy' : 'blocked'
+        : selected ? 'selected' : 'ready';
+    const getTemplateSourceActionStatus = (sourceMode: PageTemplateSourceMode) => {
+        if (pageTemplateSelectionDisabledReason) {
+            return `${sourceMode === 'backy-canvas' ? 'Backy canvas' : 'Custom frontend'} source unavailable: ${pageTemplateSelectionDisabledReason}`;
+        }
+
+        if (sourceMode === 'backy-canvas') {
+            return formData.templateSourceMode === 'backy-canvas'
+                ? `Backy canvas source selected with ${selectedTemplate.name}.`
+                : `Switch to Backy canvas source using ${selectedTemplate.name}.`;
+        }
+
+        if (formData.templateSourceMode === 'custom-frontend') {
+            return selectedFrontendTemplate
+                ? `Custom frontend source selected with ${selectedFrontendTemplate.name}.`
+                : frontendPageTemplates.length > 0
+                    ? `Custom frontend source selected. Choose one of ${frontendPageTemplates.length} captured page templates.`
+                    : 'Custom frontend source selected, but no captured page templates are available.';
+        }
+
+        return frontendPageTemplates.length > 0
+            ? `Switch to custom frontend source with ${frontendPageTemplates.length} captured page template${frontendPageTemplates.length === 1 ? '' : 's'}.`
+            : 'Switch to custom frontend source after capturing or importing a page template.';
+    };
+    const getFrontendTemplateActionStatus = (template: SiteFrontendDesignTemplate) => {
+        if (pageTemplateSelectionDisabledReason) {
+            return `${template.name} frontend template unavailable: ${pageTemplateSelectionDisabledReason}`;
+        }
+
+        return formData.designTemplateId === template.id
+            ? `${template.name} frontend template selected with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'}.`
+            : `Select ${template.name} frontend template with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'}.`;
+    };
+    const getTemplateCategoryActionStatus = (category: (typeof PAGE_TEMPLATE_LIBRARY_CATEGORIES)[number]) => {
+        if (pageTemplateSelectionDisabledReason) {
+            return `${category.label} template filter unavailable: ${pageTemplateSelectionDisabledReason}`;
+        }
+
+        const templateCount = category.templates?.length || TEMPLATE_OPTIONS.length;
+        return templateLibraryCategory === category.id
+            ? `${category.label} template filter selected with ${visibleTemplateOptions.length} visible template${visibleTemplateOptions.length === 1 ? '' : 's'}.`
+            : `Filter starter templates to ${category.label} (${templateCount} template${templateCount === 1 ? '' : 's'}).`;
+    };
+    const getStarterTemplateActionStatus = (template: (typeof TEMPLATE_OPTIONS)[number]) => {
+        if (pageTemplateSelectionDisabledReason) {
+            return `${template.name} starter template unavailable: ${pageTemplateSelectionDisabledReason}`;
+        }
+
+        return formData.template === template.id
+            ? `${template.name} starter template selected with ${template.sections.length} section${template.sections.length === 1 ? '' : 's'}.`
+            : `Select ${template.name} starter template with ${template.sections.length} section${template.sections.length === 1 ? '' : 's'}.`;
+    };
+    const pageTemplateSelectionActionStatus = [
+        getTemplateSourceActionStatus('backy-canvas'),
+        getTemplateSourceActionStatus('custom-frontend'),
+        isCustomFrontendTemplateSource
+            ? `${frontendPageTemplates.length} custom frontend page template${frontendPageTemplates.length === 1 ? '' : 's'} available.`
+            : `${visibleTemplateOptions.length} of ${TEMPLATE_OPTIONS.length} Backy canvas starter template${TEMPLATE_OPTIONS.length === 1 ? '' : 's'} visible.`,
+    ].join(' ');
 
     useEffect(() => {
         if (formData.templateSourceMode !== 'custom-frontend' && formData.designTemplateId) {
@@ -4264,16 +4332,25 @@ function NewPageRoute() {
                             className="rounded-lg border border-border bg-background p-3"
                             data-testid="page-template-source-switch"
                             data-active-source={formData.templateSourceMode}
+                            data-action-state={templateSourceReady ? 'ready' : 'blocked'}
                             data-action-status={templateSourceStatus}
+                            data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
                         >
+                            <span id={pageTemplateSelectionActionStatusId} className="sr-only" data-testid="page-template-selection-action-status" aria-live="polite">
+                                {pageTemplateSelectionActionStatus}
+                            </span>
                             <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Template source">
                                 <button
                                     type="button"
                                     onClick={() => handleTemplateSourceChange('backy-canvas')}
-                                    disabled={templateSelectionDisabled}
+                                    disabled={templateSelectionControlDisabled}
                                     aria-pressed={formData.templateSourceMode === 'backy-canvas'}
+                                    aria-describedby={pageTemplateSelectionActionStatusId}
                                     data-testid="page-template-source-backy-canvas"
                                     data-active={formData.templateSourceMode === 'backy-canvas'}
+                                    data-action-state={getPageTemplateSelectionActionState(formData.templateSourceMode === 'backy-canvas')}
+                                    data-action-status={getTemplateSourceActionStatus('backy-canvas')}
+                                    data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
                                     className={cn(
                                         'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
                                         formData.templateSourceMode === 'backy-canvas'
@@ -4287,11 +4364,15 @@ function NewPageRoute() {
                                 <button
                                     type="button"
                                     onClick={() => handleTemplateSourceChange('custom-frontend')}
-                                    disabled={templateSelectionDisabled}
+                                    disabled={templateSelectionControlDisabled}
                                     aria-pressed={formData.templateSourceMode === 'custom-frontend'}
+                                    aria-describedby={pageTemplateSelectionActionStatusId}
                                     data-testid="page-template-source-custom-frontend"
                                     data-active={formData.templateSourceMode === 'custom-frontend'}
                                     data-template-count={frontendPageTemplates.length}
+                                    data-action-state={getPageTemplateSelectionActionState(formData.templateSourceMode === 'custom-frontend')}
+                                    data-action-status={getTemplateSourceActionStatus('custom-frontend')}
+                                    data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
                                     className={cn(
                                         'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
                                         formData.templateSourceMode === 'custom-frontend'
@@ -4328,9 +4409,13 @@ function NewPageRoute() {
                                                 key={template.id}
                                                 type="button"
                                                 onClick={() => handleFrontendTemplateChange(template)}
-                                                disabled={templateSelectionDisabled}
+                                                disabled={templateSelectionControlDisabled}
+                                                aria-describedby={pageTemplateSelectionActionStatusId}
                                                 data-testid={`page-frontend-template-${template.id}`}
                                                 data-active={formData.designTemplateId === template.id}
+                                                data-action-state={getPageTemplateSelectionActionState(formData.designTemplateId === template.id)}
+                                                data-action-status={getFrontendTemplateActionStatus(template)}
+                                                data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
                                                 className={cn(
                                                     'min-w-0 rounded-lg border bg-white p-3 text-left transition hover:border-teal-400 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-70',
                                                     formData.designTemplateId === template.id ? 'border-teal-600 ring-1 ring-teal-600' : 'border-teal-200',
@@ -4403,10 +4488,14 @@ function NewPageRoute() {
                                                 key={category.id}
                                                 type="button"
                                                 onClick={() => setTemplateLibraryCategory(category.id)}
-                                                disabled={templateSelectionDisabled}
+                                                disabled={templateSelectionControlDisabled}
                                                 aria-pressed={templateLibraryCategory === category.id}
+                                                aria-describedby={pageTemplateSelectionActionStatusId}
                                                 data-testid={`page-template-category-${category.id}`}
                                                 data-active={templateLibraryCategory === category.id}
+                                                data-action-state={getPageTemplateSelectionActionState(templateLibraryCategory === category.id)}
+                                                data-action-status={getTemplateCategoryActionStatus(category)}
+                                                data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
                                                 className={cn(
                                                     'inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
                                                     templateLibraryCategory === category.id
@@ -4425,10 +4514,15 @@ function NewPageRoute() {
                                             {visibleTemplateOptions.map((tmpl) => (
                                                 <label
                                                     key={tmpl.id}
+                                                    data-testid={`page-template-option-${tmpl.id}`}
+                                                    data-active={formData.template === tmpl.id}
+                                                    data-action-state={getPageTemplateSelectionActionState(formData.template === tmpl.id)}
+                                                    data-action-status={getStarterTemplateActionStatus(tmpl)}
+                                                    data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
                                                     className={cn(
                                                         'min-w-0 cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm',
                                                         formData.template === tmpl.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
-                                                        templateSelectionDisabled && 'cursor-not-allowed opacity-70'
+                                                        templateSelectionControlDisabled && 'cursor-not-allowed opacity-70'
                                                     )}
                                                 >
                                                     <input
@@ -4437,7 +4531,11 @@ function NewPageRoute() {
                                                         value={tmpl.id}
                                                         checked={formData.template === tmpl.id}
                                                         onChange={(e) => handleTemplateChange(e.target.value as PageTemplate)}
-                                                        disabled={templateSelectionDisabled}
+                                                        disabled={templateSelectionControlDisabled}
+                                                        aria-describedby={pageTemplateSelectionActionStatusId}
+                                                        data-action-state={getPageTemplateSelectionActionState(formData.template === tmpl.id)}
+                                                        data-action-status={getStarterTemplateActionStatus(tmpl)}
+                                                        data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
                                                         className="sr-only"
                                                     />
                                                     <div className="mb-1 flex min-w-0 items-center gap-2">

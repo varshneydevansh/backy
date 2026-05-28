@@ -1319,6 +1319,17 @@ const assertPageCreateSourceContracts = () => {
       source.includes('const pageCreateBusyState = [') &&
       source.includes("data-busy-state={pageCreateBusyState}") &&
       source.includes("data-template-selection-disabled={String(templateSelectionDisabled)}") &&
+      source.includes("const pageTemplateSelectionActionStatusId = 'page-template-selection-action-status';") &&
+      source.includes('const templateSelectionControlDisabled = templateSelectionDisabled || !canEditPages;') &&
+      source.includes('const pageTemplateSelectionDisabledReason = templateSelectionDisabled') &&
+      source.includes('const getPageTemplateSelectionActionState = (selected: boolean) => pageTemplateSelectionDisabledReason') &&
+      source.includes('const getTemplateSourceActionStatus = (sourceMode: PageTemplateSourceMode) =>') &&
+      source.includes('const getFrontendTemplateActionStatus = (template: SiteFrontendDesignTemplate) =>') &&
+      source.includes('const getTemplateCategoryActionStatus = (category: (typeof PAGE_TEMPLATE_LIBRARY_CATEGORIES)[number]) =>') &&
+      source.includes('const getStarterTemplateActionStatus = (template: (typeof TEMPLATE_OPTIONS)[number]) =>') &&
+      source.includes('data-testid="page-template-selection-action-status"') &&
+      source.includes('aria-describedby={pageTemplateSelectionActionStatusId}') &&
+      source.includes('data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}') &&
       source.includes('const submitControlState = canSubmit ?') &&
       source.includes("const submitControlState = canSubmit ? 'ready' : isPageCreateStatusBusy ? 'busy' : 'blocked';") &&
       source.includes('data-testid="page-create-submit-blocker"') &&
@@ -1385,7 +1396,13 @@ const assertPageCreateSourceContracts = () => {
       source.includes('data-testid="page-template-library-filters"') &&
       source.includes('data-testid="page-template-library-search"') &&
       source.includes('data-testid={`page-template-category-${category.id}`}') &&
+      source.includes('data-action-status={getTemplateCategoryActionStatus(category)}') &&
       source.includes('visibleTemplateOptions.map((tmpl)') &&
+      source.includes('data-testid={`page-template-option-${tmpl.id}`}') &&
+      source.includes('data-action-status={getStarterTemplateActionStatus(tmpl)}') &&
+      source.includes('data-action-status={getTemplateSourceActionStatus(\'backy-canvas\')}') &&
+      source.includes('data-action-status={getTemplateSourceActionStatus(\'custom-frontend\')}') &&
+      source.includes('data-action-status={getFrontendTemplateActionStatus(template)}') &&
       source.includes('data-testid="page-template-library-empty"') &&
       source.includes('data-testid="page-template-library-scroll"') &&
       source.includes('max-h-[34rem] overflow-y-auto') &&
@@ -3577,8 +3594,15 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
       const previewButton = document.querySelector('[data-testid="page-create-preview-button"]');
       const submitStatus = document.querySelector('[data-testid="page-create-submit-action-status"]');
       const previewStatus = document.querySelector('[data-testid="page-create-preview-action-status"]');
+      const templateSelectionStatus = document.querySelector('[data-testid="page-template-selection-action-status"]');
+      const sourceSwitch = document.querySelector('[data-testid="page-template-source-switch"]');
+      const canvasSource = document.querySelector('[data-testid="page-template-source-backy-canvas"]');
+      const customSource = document.querySelector('[data-testid="page-template-source-custom-frontend"]');
+      const allCategory = document.querySelector('[data-testid="page-template-category-all"]');
+      const activeTemplateOption = document.querySelector('[data-testid="page-template-option-${testCase.template}"]');
       const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const previewStatusText = previewStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      const templateSelectionStatusText = templateSelectionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
@@ -3592,6 +3616,25 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
         payloadSiteChrome: payload.siteChrome || '',
         payloadForms: payload.forms || '',
         payloadDynamicData: payload.dynamicData || '',
+        sourceSwitchActionState: sourceSwitch?.getAttribute('data-action-state') || '',
+        sourceSwitchActionStatus: sourceSwitch?.getAttribute('data-action-status') || '',
+        sourceSwitchDisabledReason: sourceSwitch?.getAttribute('data-disabled-reason') || '',
+        templateSelectionStatusId: templateSelectionStatus?.id || '',
+        templateSelectionStatusText,
+        canvasSourceActionState: canvasSource?.getAttribute('data-action-state') || '',
+        canvasSourceActionStatus: canvasSource?.getAttribute('data-action-status') || '',
+        canvasSourceDescribedBy: canvasSource?.getAttribute('aria-describedby') || '',
+        canvasSourceDisabledReason: canvasSource?.getAttribute('data-disabled-reason') || '',
+        customSourceActionState: customSource?.getAttribute('data-action-state') || '',
+        customSourceActionStatus: customSource?.getAttribute('data-action-status') || '',
+        customSourceDescribedBy: customSource?.getAttribute('aria-describedby') || '',
+        customSourceDisabledReason: customSource?.getAttribute('data-disabled-reason') || '',
+        allCategoryActionState: allCategory?.getAttribute('data-action-state') || '',
+        allCategoryActionStatus: allCategory?.getAttribute('data-action-status') || '',
+        allCategoryDescribedBy: allCategory?.getAttribute('aria-describedby') || '',
+        activeTemplateOptionActionState: activeTemplateOption?.getAttribute('data-action-state') || '',
+        activeTemplateOptionActionStatus: activeTemplateOption?.getAttribute('data-action-status') || '',
+        activeTemplateOptionDisabledReason: activeTemplateOption?.getAttribute('data-disabled-reason') || '',
         createButtonDisabled: createButton instanceof HTMLButtonElement ? createButton.disabled : null,
         createButtonState: createButton?.getAttribute('data-state') || '',
         createButtonBlocker: createButton?.getAttribute('data-blocker') || '',
@@ -3628,6 +3671,25 @@ const waitForStarterTemplateCreateControls = async (client, testCase, slug, url)
       && state.activeTemplateBlockCount > 0
       && state.navPlacement === testCase.expectedNavigationPlacement
       && state.payloadTemplate === testCase.template
+      && state.sourceSwitchActionState === 'ready'
+      && state.sourceSwitchActionStatus.includes('Backy canvas template selected')
+      && state.sourceSwitchDisabledReason === ''
+      && state.templateSelectionStatusId === 'page-template-selection-action-status'
+      && state.templateSelectionStatusText.includes('Backy canvas source selected')
+      && state.canvasSourceActionState === 'selected'
+      && state.canvasSourceActionStatus.includes('Backy canvas source selected')
+      && state.canvasSourceDescribedBy === 'page-template-selection-action-status'
+      && state.canvasSourceDisabledReason === ''
+      && state.customSourceActionState === 'ready'
+      && state.customSourceActionStatus.includes('Switch to custom frontend source')
+      && state.customSourceDescribedBy === 'page-template-selection-action-status'
+      && state.customSourceDisabledReason === ''
+      && state.allCategoryActionState === 'selected'
+      && state.allCategoryActionStatus.includes('All template filter selected')
+      && state.allCategoryDescribedBy === 'page-template-selection-action-status'
+      && state.activeTemplateOptionActionState === 'selected'
+      && state.activeTemplateOptionActionStatus.includes('starter template selected')
+      && state.activeTemplateOptionDisabledReason === ''
       && state.createButtonDisabled === false
       && state.createButtonState === 'ready'
       && state.createButtonCanSubmit === 'true'
@@ -3678,18 +3740,41 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
       const payload = JSON.parse(document.querySelector('#page-payload pre')?.textContent || '{}');
       const createButton = document.querySelector('[data-testid="page-create-submit-button"]');
       const submitStatus = document.querySelector('[data-testid="page-create-submit-action-status"]');
+      const templateSelectionStatus = document.querySelector('[data-testid="page-template-selection-action-status"]');
+      const sourceSwitch = document.querySelector('[data-testid="page-template-source-switch"]');
+      const canvasSource = document.querySelector('[data-testid="page-template-source-backy-canvas"]');
+      const customSource = document.querySelector('[data-testid="page-template-source-custom-frontend"]');
+      const frontendTemplate = document.querySelector('[data-testid="page-frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}"]');
       const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      const templateSelectionStatusText = templateSelectionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
       return {
         ready: Boolean(document.querySelector('[data-testid="page-creation-command-center"]')),
         sourceSwitch: document.querySelector('[data-testid="page-template-source-switch"]')?.getAttribute('data-active-source') || '',
         sourceStatus: document.querySelector('[data-testid="page-template-source-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        sourceSwitchActionState: sourceSwitch?.getAttribute('data-action-state') || '',
+        sourceSwitchActionStatus: sourceSwitch?.getAttribute('data-action-status') || '',
+        sourceSwitchDisabledReason: sourceSwitch?.getAttribute('data-disabled-reason') || '',
+        templateSelectionStatusId: templateSelectionStatus?.id || '',
+        templateSelectionStatusText,
         canvasSourceActive: document.querySelector('[data-testid="page-template-source-backy-canvas"]')?.getAttribute('data-active') || '',
+        canvasSourceActionState: canvasSource?.getAttribute('data-action-state') || '',
+        canvasSourceActionStatus: canvasSource?.getAttribute('data-action-status') || '',
+        canvasSourceDescribedBy: canvasSource?.getAttribute('aria-describedby') || '',
+        canvasSourceDisabledReason: canvasSource?.getAttribute('data-disabled-reason') || '',
         customSourceActive: document.querySelector('[data-testid="page-template-source-custom-frontend"]')?.getAttribute('data-active') || '',
+        customSourceActionState: customSource?.getAttribute('data-action-state') || '',
+        customSourceActionStatus: customSource?.getAttribute('data-action-status') || '',
+        customSourceDescribedBy: customSource?.getAttribute('aria-describedby') || '',
+        customSourceDisabledReason: customSource?.getAttribute('data-disabled-reason') || '',
         customSourceTemplateCount: document.querySelector('[data-testid="page-template-source-custom-frontend"]')?.getAttribute('data-template-count') || '',
         canvasLibraryHidden: !document.querySelector('[data-testid="page-template-library-shell"]'),
         frontendPanel: Boolean(document.querySelector('[data-testid="page-frontend-template-options"]')),
         frontendButtonActive: document.querySelector('[data-testid="page-frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
+        frontendButtonActionState: frontendTemplate?.getAttribute('data-action-state') || '',
+        frontendButtonActionStatus: frontendTemplate?.getAttribute('data-action-status') || '',
+        frontendButtonDescribedBy: frontendTemplate?.getAttribute('aria-describedby') || '',
+        frontendButtonDisabledReason: frontendTemplate?.getAttribute('data-disabled-reason') || '',
         title: document.querySelector('#page-title')?.value || '',
         slug: document.querySelector('#page-slug')?.value || '',
         payloadTemplateSourceMode: payload.templateSource || '',
@@ -3719,12 +3804,29 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
       state.ready
       && state.sourceSwitch === 'custom-frontend'
       && state.sourceStatus.includes(FRONTEND_DESIGN_TEMPLATE_NAME)
+      && state.sourceSwitchActionState === 'ready'
+      && state.sourceSwitchActionStatus.includes(FRONTEND_DESIGN_TEMPLATE_NAME)
+      && state.sourceSwitchDisabledReason === ''
+      && state.templateSelectionStatusId === 'page-template-selection-action-status'
+      && state.templateSelectionStatusText.includes('Custom frontend source selected')
       && state.canvasSourceActive === 'false'
+      && state.canvasSourceActionState === 'ready'
+      && state.canvasSourceActionStatus.includes('Switch to Backy canvas source')
+      && state.canvasSourceDescribedBy === 'page-template-selection-action-status'
+      && state.canvasSourceDisabledReason === ''
       && state.customSourceActive === 'true'
+      && state.customSourceActionState === 'selected'
+      && state.customSourceActionStatus.includes(FRONTEND_DESIGN_TEMPLATE_NAME)
+      && state.customSourceDescribedBy === 'page-template-selection-action-status'
+      && state.customSourceDisabledReason === ''
       && state.customSourceTemplateCount !== '0'
       && state.canvasLibraryHidden
       && state.frontendPanel
       && state.frontendButtonActive === 'true'
+      && state.frontendButtonActionState === 'selected'
+      && state.frontendButtonActionStatus.includes(FRONTEND_DESIGN_TEMPLATE_NAME)
+      && state.frontendButtonDescribedBy === 'page-template-selection-action-status'
+      && state.frontendButtonDisabledReason === ''
       && state.title === title
       && state.slug === slug
       && state.payloadTemplateSourceMode === 'custom-frontend'
