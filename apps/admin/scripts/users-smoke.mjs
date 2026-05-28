@@ -168,10 +168,13 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
     assert(
       createSource.includes("const inviteHandoffActionStatusId = 'user-invite-handoff-action-status';") &&
         createSource.includes('data-testid="user-invite-handoff-action-status"') &&
+        createSource.includes('data-action-status={inviteHandoffActionStatus}') &&
+        createSource.includes('data-target-email={formData.email.trim().toLowerCase() || undefined}') &&
         primaryActionsIndex >= 0 &&
         submitIndex > primaryActionsIndex &&
         secondaryActionsIndex > submitIndex &&
-        inviteCommandCenterBlock.includes('data-testid="user-invite-secondary-actions" data-default-collapsed="true"') &&
+        inviteCommandCenterBlock.includes('data-testid="user-invite-secondary-actions"') &&
+        inviteCommandCenterBlock.includes('data-default-collapsed="true"') &&
         moreActionsIndex > secondaryActionsIndex &&
         copyIndex > moreActionsIndex &&
         downloadIndex > copyIndex,
@@ -329,6 +332,10 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       detailSource.includes('data-testid="user-detail-danger-action-status"') &&
       detailSource.includes('data-action-state={userDetailCommandActionState}') &&
       detailSource.includes('data-action-status={userDetailCommandActionStatus}') &&
+      detailSource.includes("const userDetailCommandSecondaryActionStatusId = 'user-detail-command-secondary-action-status';") &&
+      detailSource.includes('data-testid="user-detail-command-secondary-action-status"') &&
+      detailSource.includes('data-action-status={userDetailCommandSecondaryActionStatus}') &&
+      detailSource.includes('data-action-state={userDetailCommandSecondaryActionState}') &&
       detailSource.includes('data-action-status={userDetailApiActionStatus}') &&
       detailSource.includes('data-action-state={userDetailActivityActionState}') &&
       detailSource.includes('data-action-status={userDetailActivityActionStatus}') &&
@@ -1119,6 +1126,12 @@ const assertInviteCommandCenterLayout = async (client) => {
       secondaryCollapsed: secondaryActions instanceof HTMLDetailsElement &&
         secondaryActions.open === false &&
         secondaryActions.getAttribute('data-default-collapsed') === 'true',
+      secondaryDescribedBy: secondaryActions?.getAttribute('aria-describedby') || '',
+      secondaryActionState: secondaryActions?.getAttribute('data-action-state') || '',
+      secondaryActionStatus: secondaryActions?.getAttribute('data-action-status') || '',
+      secondaryTargetEmail: secondaryActions?.getAttribute('data-target-email') || '',
+      secondaryTargetRole: secondaryActions?.getAttribute('data-target-role') || '',
+      secondaryTargetStatus: secondaryActions?.getAttribute('data-target-status') || '',
       hasMoreActions: Boolean(document.querySelector('[data-testid="user-invite-more-actions"]')),
       handoffStatusId: handoffStatus?.id || '',
       handoffStatusText: handoffStatus?.textContent || '',
@@ -1135,6 +1148,15 @@ const assertInviteCommandCenterLayout = async (client) => {
     `Invite handoff controls must not be duplicated in primary actions: ${JSON.stringify(state)}`,
   );
   assert(state.secondaryCollapsed && state.hasMoreActions, `Invite handoff actions must live behind collapsed More actions: ${JSON.stringify(state)}`);
+  assert(
+    state.secondaryDescribedBy === state.handoffStatusId &&
+      state.secondaryActionState === 'ready' &&
+      state.secondaryActionStatus.includes('Copy manifest available.') &&
+      state.secondaryActionStatus.includes('Download JSON available.') &&
+      state.secondaryTargetRole.length > 0 &&
+      state.secondaryTargetStatus.length > 0,
+    `Invite secondary actions group is missing aggregate action metadata: ${JSON.stringify(state)}`,
+  );
   for (const action of [state.copy, state.download]) {
     assert(
       action.exists &&
@@ -1651,6 +1673,7 @@ const assertUserDetailActionStatusContracts = async (client) => {
         };
       };
       const command = readGroup('[data-testid="user-detail-command-center"]', '[data-testid="user-detail-command-action-status"]');
+      const secondary = readGroup('[data-testid="user-detail-secondary-actions"]', '[data-testid="user-detail-command-secondary-action-status"]');
       const commandCenterActionNodes = Array.from(document.querySelector('[data-testid="user-detail-command-center"]')?.querySelectorAll('button, summary, details') || []);
       const commandCenterActionNames = commandCenterActionNodes.map((node, index) => ({
         index,
@@ -1683,6 +1706,13 @@ const assertUserDetailActionStatusContracts = async (client) => {
       }));
       return {
         command,
+        secondary: {
+          ...secondary,
+          collapsed: document.querySelector('[data-testid="user-detail-secondary-actions"]') instanceof HTMLDetailsElement &&
+            document.querySelector('[data-testid="user-detail-secondary-actions"]').open === false &&
+            document.querySelector('[data-testid="user-detail-secondary-actions"]').getAttribute('data-default-collapsed') === 'true',
+          targetUserId: document.querySelector('[data-testid="user-detail-secondary-actions"]')?.getAttribute('data-target-user-id') || '',
+        },
         commandCenterActionNames,
         commandHierarchyReady,
         back: readControl('[data-testid="user-detail-back-to-users"]'),
@@ -1691,6 +1721,7 @@ const assertUserDetailActionStatusContracts = async (client) => {
         commandSave: readControl('[data-testid="user-detail-command-save"]'),
         footerSave: readControl('[data-testid="user-detail-footer-save"]'),
         footerCancel: readControl('[data-testid="user-detail-footer-cancel"]'),
+        moreActions: readControl('[data-testid="user-detail-more-actions"]'),
         api,
         apiCopyUrl: readControl('[data-testid="user-detail-api-copy-url"]'),
         apiCopyManifest: readControl('[data-testid="user-detail-api-copy-manifest"]'),
@@ -1720,6 +1751,7 @@ const assertUserDetailActionStatusContracts = async (client) => {
 
     const groupsReady =
       state.command.present &&
+      state.secondary.present &&
       state.api.present &&
       state.activity.present &&
       state.sessions.present &&
@@ -1753,11 +1785,19 @@ const assertUserDetailActionStatusContracts = async (client) => {
       state.command.statusText.includes('Download JSON available.') &&
       state.command.statusText.includes('Save changes unavailable: No account changes to save.') &&
       state.commandHierarchyReady === true &&
+      state.secondary.collapsed === true &&
+      state.secondary.describedBy === state.secondary.statusId &&
+      state.secondary.statusText.includes('Copy manifest available.') &&
+      state.secondary.statusText.includes('Download JSON available.') &&
+      state.secondary.statusAttr === state.secondary.statusText &&
+      state.secondary.state === 'ready' &&
+      state.secondary.targetUserId.length > 0 &&
+      state.moreActions.describedBy === state.secondary.statusId &&
       state.back.describedBy === state.command.statusId &&
       state.back.state === 'ready' &&
-      state.commandCopy.describedBy === state.command.statusId &&
+      state.commandCopy.describedBy === state.secondary.statusId &&
       state.commandCopy.state === 'ready' &&
-      state.commandDownload.describedBy === state.command.statusId &&
+      state.commandDownload.describedBy === state.secondary.statusId &&
       state.commandDownload.state === 'ready' &&
       state.commandSave.describedBy === state.command.statusId &&
       state.commandSave.state === 'blocked' &&

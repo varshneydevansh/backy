@@ -518,7 +518,17 @@ function NewUserPage() {
                   {submitLabel}
                 </Button>
               </div>
-              <details className="self-start xl:self-end" data-testid="user-invite-secondary-actions" data-default-collapsed="true">
+              <details
+                className="self-start xl:self-end"
+                aria-describedby={inviteHandoffActionStatusId}
+                data-action-state={inviteHandoffActionState}
+                data-action-status={inviteHandoffActionStatus}
+                data-target-email={formData.email.trim().toLowerCase() || undefined}
+                data-target-role={formData.role}
+                data-target-status={formData.status}
+                data-testid="user-invite-secondary-actions"
+                data-default-collapsed="true"
+              >
                 <summary
                   className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
                   data-testid="user-invite-more-actions"

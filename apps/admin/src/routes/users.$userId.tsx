@@ -621,6 +621,7 @@ function EditUserPage() {
     ? deletePermissionTitle || 'Your account cannot remove users.'
     : '';
   const userDetailCommandActionStatusId = 'user-detail-command-action-status';
+  const userDetailCommandSecondaryActionStatusId = 'user-detail-command-secondary-action-status';
   const userDetailApiActionStatusId = 'user-detail-api-action-status';
   const userDetailActivityActionStatusId = 'user-detail-activity-action-status';
   const userDetailSessionsActionStatusId = 'user-detail-sessions-action-status';
@@ -637,10 +638,21 @@ function EditUserPage() {
   const userDetailResetActionDisabledReason = userDetailManageDisabledReason ||
     userDetailBusyDisabledReason ||
     (!hasUnsavedChanges ? 'No unsaved account edits to reset.' : '');
+  const userDetailCommandSecondaryActionState = userDetailHandoffActionDisabledReason ? 'busy' : 'ready';
+  const userDetailCopyHandoffActionStatus = userDetailHandoffActionDisabledReason
+    ? `Copy manifest unavailable: ${userDetailHandoffActionDisabledReason}`
+    : 'Copy manifest available.';
+  const userDetailDownloadHandoffActionStatus = userDetailHandoffActionDisabledReason
+    ? `Download JSON unavailable: ${userDetailHandoffActionDisabledReason}`
+    : 'Download JSON available.';
+  const userDetailCommandSecondaryActionStatus = [
+    userDetailCopyHandoffActionStatus,
+    userDetailDownloadHandoffActionStatus,
+  ].join(' ');
   const userDetailCommandActionStatus = [
     userDetailBusyDisabledReason ? `Back to users unavailable: ${userDetailBusyDisabledReason}` : 'Back to users available.',
-    userDetailHandoffActionDisabledReason ? `Copy manifest unavailable: ${userDetailHandoffActionDisabledReason}` : 'Copy manifest available.',
-    userDetailHandoffActionDisabledReason ? `Download JSON unavailable: ${userDetailHandoffActionDisabledReason}` : 'Download JSON available.',
+    userDetailCopyHandoffActionStatus,
+    userDetailDownloadHandoffActionStatus,
     userDetailSaveActionDisabledReason ? `Save changes unavailable: ${userDetailSaveActionDisabledReason}` : 'Save changes available.',
     userDetailResetActionDisabledReason ? `Reset changes unavailable: ${userDetailResetActionDisabledReason}` : 'Reset changes available.',
   ].join(' ');
@@ -1369,6 +1381,9 @@ function EditUserPage() {
           <span id={userDetailCommandActionStatusId} className="sr-only" data-testid="user-detail-command-action-status" aria-live="polite">
             {userDetailCommandActionStatus}
           </span>
+          <span id={userDetailCommandSecondaryActionStatusId} className="sr-only" data-testid="user-detail-command-secondary-action-status" aria-live="polite">
+            {userDetailCommandSecondaryActionStatus}
+          </span>
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1412,10 +1427,18 @@ function EditUserPage() {
                   </Button>
                 )}
               </div>
-              <details className="group relative self-start xl:self-end" data-testid="user-detail-secondary-actions">
+              <details
+                className="group relative self-start xl:self-end"
+                aria-describedby={userDetailCommandSecondaryActionStatusId}
+                data-action-state={userDetailCommandSecondaryActionState}
+                data-action-status={userDetailCommandSecondaryActionStatus}
+                data-target-user-id={user.id}
+                data-testid="user-detail-secondary-actions"
+                data-default-collapsed="true"
+              >
                 <summary
                   className="inline-flex min-h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring group-open:bg-accent [&::-webkit-details-marker]:hidden"
-                  aria-describedby={userDetailCommandActionStatusId}
+                  aria-describedby={userDetailCommandSecondaryActionStatusId}
                   data-testid="user-detail-more-actions"
                 >
                   <MoreHorizontal className="size-4" />
@@ -1429,7 +1452,7 @@ function EditUserPage() {
                     onClick={() => void copyUserDetailText(userDetailHandoffText, 'User detail handoff manifest')}
                     disabled={isUserDetailBusy}
                     title={userDetailHandoffActionDisabledReason || undefined}
-                    {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailHandoffActionDisabledReason)}
+                    {...userDetailActionMetadata(userDetailCommandSecondaryActionStatusId, userDetailCopyHandoffActionStatus, userDetailHandoffActionDisabledReason)}
                     className="w-full justify-start"
                     iconStart={<Copy className="size-4" />}
                     data-testid="user-detail-command-copy-manifest"
@@ -1443,7 +1466,7 @@ function EditUserPage() {
                     onClick={downloadUserDetailHandoff}
                     disabled={isUserDetailBusy}
                     title={userDetailHandoffActionDisabledReason || undefined}
-                    {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailHandoffActionDisabledReason)}
+                    {...userDetailActionMetadata(userDetailCommandSecondaryActionStatusId, userDetailDownloadHandoffActionStatus, userDetailHandoffActionDisabledReason)}
                     className="w-full justify-start"
                     iconStart={<Download className="size-4" />}
                     data-testid="user-detail-command-download-json"
