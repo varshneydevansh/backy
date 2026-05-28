@@ -177,6 +177,11 @@ type EditorCommandRegistryItem = {
   state: EditorCommandState;
   reason: string;
 };
+type CanvasWheelZoomEvent = WheelEvent & {
+  detail?: number;
+  wheelDelta?: number;
+  wheelDeltaY?: number;
+};
 
 const CANVAS_CONTEXT_QUICK_ADD_KEYS = ['heading', 'text', 'image', 'button', 'section', 'form'] as const;
 
@@ -2167,8 +2172,35 @@ export function CanvasEditor({
     setCanvasZoomValue(parsed / 100);
   }, [setCanvasZoomValue]);
 
-  const handleCanvasWheelZoom = useCallback((event: WheelEvent) => {
-    if (!(event.metaKey || event.ctrlKey)) {
+  const readCanvasWheelDeltaY = useCallback((event: Event) => {
+    const wheelEvent = event as CanvasWheelZoomEvent;
+    if (Number.isFinite(wheelEvent.deltaY)) {
+      const deltaModeMultiplier = wheelEvent.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? CANVAS_WHEEL_DELTA_LINE_MULTIPLIER
+        : wheelEvent.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? CANVAS_WHEEL_DELTA_PAGE_MULTIPLIER
+          : 1;
+      return wheelEvent.deltaY * deltaModeMultiplier;
+    }
+
+    if (Number.isFinite(wheelEvent.wheelDeltaY)) {
+      return -Number(wheelEvent.wheelDeltaY) / 3;
+    }
+
+    if (Number.isFinite(wheelEvent.wheelDelta)) {
+      return -Number(wheelEvent.wheelDelta) / 3;
+    }
+
+    if (Number.isFinite(wheelEvent.detail)) {
+      return Number(wheelEvent.detail) * CANVAS_WHEEL_DELTA_LINE_MULTIPLIER;
+    }
+
+    return 0;
+  }, []);
+
+  const handleCanvasWheelZoom = useCallback((event: Event) => {
+    const wheelEvent = event as MouseEvent;
+    if (!(wheelEvent.metaKey || wheelEvent.ctrlKey)) {
       return;
     }
     if (!isEditorCanvasZoomEvent(event)) {
@@ -2176,12 +2208,7 @@ export function CanvasEditor({
     }
 
     preventCanvasBrowserZoom(event);
-    const deltaModeMultiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-      ? CANVAS_WHEEL_DELTA_LINE_MULTIPLIER
-      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-        ? CANVAS_WHEEL_DELTA_PAGE_MULTIPLIER
-        : 1;
-    const normalizedDeltaY = event.deltaY * deltaModeMultiplier;
+    const normalizedDeltaY = readCanvasWheelDeltaY(event);
     if (Math.abs(normalizedDeltaY) < 0.01) {
       return;
     }
@@ -2190,9 +2217,9 @@ export function CanvasEditor({
     const strength = Math.min(3, Math.max(0.35, Math.abs(normalizedDeltaY) / 100));
     zoomCanvasAtPoint(
       (current) => current + direction * CANVAS_WHEEL_ZOOM_STEP * strength,
-      getCanvasZoomAnchor(event),
+      getCanvasZoomAnchor(wheelEvent),
     );
-  }, [getCanvasZoomAnchor, isEditorCanvasZoomEvent, preventCanvasBrowserZoom, zoomCanvasAtPoint]);
+  }, [getCanvasZoomAnchor, isEditorCanvasZoomEvent, preventCanvasBrowserZoom, readCanvasWheelDeltaY, zoomCanvasAtPoint]);
 
   const readGestureScale = useCallback((event: Event) => {
     const scale = Number((event as Event & { scale?: number }).scale);
@@ -2308,32 +2335,60 @@ export function CanvasEditor({
     if (!viewport) {
       return undefined;
     }
+    const root = document.documentElement;
+    const body = document.body;
 
     window.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
     document.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    root.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    body.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
     viewport.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    window.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    document.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    root.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    body.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    viewport.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
     window.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
     document.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
+    root.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
+    body.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
     viewport.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
     window.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
     document.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
+    root.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
+    body.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
     viewport.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
     window.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
     document.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
+    root.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
+    body.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
     viewport.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
 
     return () => {
       window.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
       document.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
+      root.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
+      body.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
       viewport.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
+      window.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
+      document.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
+      root.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
+      body.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
+      viewport.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
       window.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
       document.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
+      root.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
+      body.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
       viewport.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
       window.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
       document.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
+      root.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
+      body.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
       viewport.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
       window.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
       document.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
+      root.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
+      body.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
       viewport.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
       isCanvasGestureZoomActiveRef.current = false;
     };
@@ -8426,11 +8481,12 @@ export function CanvasEditor({
             )}
             data-testid="editor-canvas-viewport"
             data-canvas-wheel-zoom="enabled"
-            data-canvas-zoom-listener-scope="window-document-viewport-capture"
+            data-canvas-zoom-listener-scope="window-document-root-body-viewport-capture"
             data-canvas-zoom-hit-test="viewport-shell-or-active-editor"
             data-canvas-zoom-page-guard="editor-active"
             data-canvas-zoom-anchor-fallback="viewport-center"
             data-canvas-zoom-global-fallback="zero-coordinate-window-events"
+            data-canvas-zoom-legacy-wheel-fallback="mousewheel"
             data-canvas-touch-action="pan-x pan-y"
             data-wheel-zoom-modifier="meta-or-control"
             data-wheel-zoom-prevents-browser-zoom="true"

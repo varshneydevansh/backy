@@ -802,13 +802,28 @@ const assertCanvasEditorShortcutSource = () => {
   assert(
     source.includes("window.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
       source.includes("document.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
+      source.includes("root.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
+      source.includes("body.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
       source.includes("viewport.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
+      source.includes("window.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
+      source.includes("document.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
+      source.includes("root.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
+      source.includes("body.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
+      source.includes("viewport.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
       source.includes("window.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
       source.includes("document.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
+      source.includes("root.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
+      source.includes("body.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
       source.includes("viewport.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
       source.includes("window.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
       source.includes("document.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
+      source.includes("root.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
+      source.includes("body.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
       source.includes("viewport.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
+      source.includes('const readCanvasWheelDeltaY = useCallback') &&
+      source.includes('wheelEvent.wheelDeltaY') &&
+      source.includes('wheelEvent.wheelDelta') &&
+      source.includes('wheelEvent.detail') &&
       source.includes('const isEditorCanvasZoomEvent = useCallback') &&
       source.includes('const getCanvasZoomAnchor = useCallback') &&
       source.includes('shell && path.includes(shell)') &&
@@ -818,16 +833,17 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('clientX >= rect.left') &&
       source.includes('isCanvasGestureZoomActiveRef') &&
       source.includes('event.preventDefault();') &&
-      source.includes('event.metaKey || event.ctrlKey') &&
+      source.includes('wheelEvent.metaKey || wheelEvent.ctrlKey') &&
       source.includes('CANVAS_WHEEL_DELTA_LINE_MULTIPLIER') &&
       source.includes('zoomCanvasAtPoint(') &&
       source.includes('data-canvas-wheel-zoom="enabled"') &&
-      source.includes('data-canvas-zoom-listener-scope="window-document-viewport-capture"') &&
+      source.includes('data-canvas-zoom-listener-scope="window-document-root-body-viewport-capture"') &&
       source.includes('data-canvas-zoom-hit-test="viewport-shell-or-active-editor"') &&
       source.includes('data-canvas-zoom-page-guard="editor-active"') &&
       source.includes('data-canvas-zoom-anchor-fallback="viewport-center"') &&
       source.includes('const isZeroCoordinateGlobalEvent = isGlobalTarget && clientX === 0 && clientY === 0') &&
       source.includes('data-canvas-zoom-global-fallback="zero-coordinate-window-events"') &&
+      source.includes('data-canvas-zoom-legacy-wheel-fallback="mousewheel"') &&
       source.includes("touchAction: 'pan-x pan-y'") &&
       source.includes('data-wheel-zoom-modifier="meta-or-control"') &&
       source.includes('data-wheel-zoom-prevents-browser-zoom="true"') &&
@@ -840,6 +856,7 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('dispatchCdpCanvasWheelZoom') &&
       smokeSource.includes('dispatchEditorShellWheelZoom') &&
       smokeSource.includes('dispatchCoordinateLessGlobalWheelZoom') &&
+      smokeSource.includes('dispatchLegacyRootMouseWheelZoom') &&
       smokeSource.includes('dispatchCoordinateLessGlobalPinchZoom') &&
       smokeSource.includes('dispatchCanvasPinchZoom') &&
       smokeSource.includes("type: 'mouseWheel'") &&
@@ -12171,7 +12188,7 @@ const dispatchCdpCanvasWheelZoom = async (client, deltaY, label, options = { ctr
   const pageZoomStable = assertPageZoomStable(beforePageZoom, afterPageZoom, label);
   assert(
     viewportPoint.wheelZoom === 'enabled' &&
-      viewportPoint.listenerScope === 'window-document-viewport-capture' &&
+      viewportPoint.listenerScope === 'window-document-root-body-viewport-capture' &&
       viewportPoint.pageGuard === 'editor-active' &&
       viewportPoint.zoomScope === 'canvas',
     `CDP wheel zoom metadata is incomplete during ${label}: ${JSON.stringify(viewportPoint)}`,
@@ -12217,6 +12234,7 @@ const dispatchCanvasWheelZoom = async (client, deltaY, label) => {
       pageGuard: viewport.getAttribute('data-canvas-zoom-page-guard'),
       anchorFallback: viewport.getAttribute('data-canvas-zoom-anchor-fallback'),
       touchAction: viewport.getAttribute('data-canvas-touch-action'),
+      legacyWheel: viewport.getAttribute('data-canvas-zoom-legacy-wheel-fallback'),
       modifier: viewport.getAttribute('data-wheel-zoom-modifier'),
       preventsBrowserZoom: viewport.getAttribute('data-wheel-zoom-prevents-browser-zoom'),
       pinchZoom: viewport.getAttribute('data-canvas-pinch-zoom'),
@@ -12230,11 +12248,12 @@ const dispatchCanvasWheelZoom = async (client, deltaY, label) => {
   assert(dispatched.dispatchReturned === false, `Canvas wheel zoom dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
   assert(
     dispatched.wheelZoom === 'enabled' &&
-      dispatched.listenerScope === 'window-document-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
       dispatched.touchAction === 'pan-x pan-y' &&
+      dispatched.legacyWheel === 'mousewheel' &&
       dispatched.modifier === 'meta-or-control' &&
       dispatched.preventsBrowserZoom === 'true' &&
       dispatched.pinchZoom === 'enabled' &&
@@ -12280,6 +12299,7 @@ const dispatchEditorShellWheelZoom = async (client, deltaY, label) => {
       hitTest: viewport.getAttribute('data-canvas-zoom-hit-test'),
       pageGuard: viewport.getAttribute('data-canvas-zoom-page-guard'),
       anchorFallback: viewport.getAttribute('data-canvas-zoom-anchor-fallback'),
+      legacyWheel: viewport.getAttribute('data-canvas-zoom-legacy-wheel-fallback'),
       modifier: viewport.getAttribute('data-wheel-zoom-modifier'),
       preventsBrowserZoom: viewport.getAttribute('data-wheel-zoom-prevents-browser-zoom'),
       zoomScope: viewport.getAttribute('data-zoom-scope'),
@@ -12291,10 +12311,11 @@ const dispatchEditorShellWheelZoom = async (client, deltaY, label) => {
   assert(dispatched.dispatchReturned === false, `Editor-shell wheel zoom dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
   assert(
     dispatched.wheelZoom === 'enabled' &&
-      dispatched.listenerScope === 'window-document-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
+      dispatched.legacyWheel === 'mousewheel' &&
       dispatched.modifier === 'meta-or-control' &&
       dispatched.preventsBrowserZoom === 'true' &&
       dispatched.zoomScope === 'canvas',
@@ -12336,6 +12357,7 @@ const dispatchCoordinateLessGlobalWheelZoom = async (client, deltaY, label) => {
       pageGuard: viewport.getAttribute('data-canvas-zoom-page-guard'),
       anchorFallback: viewport.getAttribute('data-canvas-zoom-anchor-fallback'),
       globalFallback: viewport.getAttribute('data-canvas-zoom-global-fallback'),
+      legacyWheel: viewport.getAttribute('data-canvas-zoom-legacy-wheel-fallback'),
       modifier: viewport.getAttribute('data-wheel-zoom-modifier'),
       preventsBrowserZoom: viewport.getAttribute('data-wheel-zoom-prevents-browser-zoom'),
       zoomScope: viewport.getAttribute('data-zoom-scope'),
@@ -12349,17 +12371,95 @@ const dispatchCoordinateLessGlobalWheelZoom = async (client, deltaY, label) => {
   assert(dispatched.dispatchReturned === false, `Coordinate-less global wheel zoom dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
   assert(
     dispatched.wheelZoom === 'enabled' &&
-      dispatched.listenerScope === 'window-document-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
       dispatched.globalFallback === 'zero-coordinate-window-events' &&
+      dispatched.legacyWheel === 'mousewheel' &&
       dispatched.modifier === 'meta-or-control' &&
       dispatched.preventsBrowserZoom === 'true' &&
       dispatched.zoomScope === 'canvas' &&
       dispatched.clientX === 0 &&
       dispatched.clientY === 0,
     `Coordinate-less global wheel zoom metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
+  );
+  await sleep(150);
+
+  const afterState = await readZoomControlState(client, label);
+  const afterPageZoom = await readPageZoomState(client, `${label} page zoom after`);
+  const pageZoomStable = assertPageZoomStable(beforePageZoom, afterPageZoom, label);
+
+  return {
+    beforeState,
+    afterState,
+    beforePageZoom,
+    afterPageZoom,
+    pageZoomStable,
+    dispatched,
+  };
+};
+
+const dispatchLegacyRootMouseWheelZoom = async (client, wheelDeltaY, label) => {
+  const beforePageZoom = await readPageZoomState(client, `${label} page zoom before`);
+  const beforeState = await readZoomControlState(client, `${label} before`);
+  const dispatched = await evaluate(client, `(() => {
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    const root = document.documentElement;
+    if (!(viewport instanceof HTMLElement) || !(root instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-viewport-or-root' };
+    }
+
+    const event = new Event('mousewheel', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, 'view', { configurable: true, value: window });
+    Object.defineProperty(event, 'metaKey', { configurable: true, value: true });
+    Object.defineProperty(event, 'wheelDeltaY', { configurable: true, value: ${JSON.stringify(wheelDeltaY)} });
+    Object.defineProperty(event, 'wheelDelta', { configurable: true, value: ${JSON.stringify(wheelDeltaY)} });
+    Object.defineProperty(event, 'clientX', { configurable: true, value: 0 });
+    Object.defineProperty(event, 'clientY', { configurable: true, value: 0 });
+    const dispatchReturned = root.dispatchEvent(event);
+
+    return {
+      ok: true,
+      dispatchReturned,
+      defaultPrevented: event.defaultPrevented,
+      wheelZoom: viewport.getAttribute('data-canvas-wheel-zoom'),
+      listenerScope: viewport.getAttribute('data-canvas-zoom-listener-scope'),
+      hitTest: viewport.getAttribute('data-canvas-zoom-hit-test'),
+      pageGuard: viewport.getAttribute('data-canvas-zoom-page-guard'),
+      anchorFallback: viewport.getAttribute('data-canvas-zoom-anchor-fallback'),
+      globalFallback: viewport.getAttribute('data-canvas-zoom-global-fallback'),
+      legacyWheel: viewport.getAttribute('data-canvas-zoom-legacy-wheel-fallback'),
+      modifier: viewport.getAttribute('data-wheel-zoom-modifier'),
+      preventsBrowserZoom: viewport.getAttribute('data-wheel-zoom-prevents-browser-zoom'),
+      zoomScope: viewport.getAttribute('data-zoom-scope'),
+      clientX: event.clientX,
+      clientY: event.clientY,
+      wheelDeltaY: event.wheelDeltaY,
+    };
+  })()`);
+
+  assert(dispatched?.ok, `Unable to dispatch legacy root mousewheel zoom during ${label}: ${JSON.stringify(dispatched)}`);
+  assert(dispatched.defaultPrevented === true, `Legacy root mousewheel zoom did not prevent browser zoom during ${label}: ${JSON.stringify(dispatched)}`);
+  assert(dispatched.dispatchReturned === false, `Legacy root mousewheel dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
+  assert(
+    dispatched.wheelZoom === 'enabled' &&
+      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
+      dispatched.hitTest === 'viewport-shell-or-active-editor' &&
+      dispatched.pageGuard === 'editor-active' &&
+      dispatched.anchorFallback === 'viewport-center' &&
+      dispatched.globalFallback === 'zero-coordinate-window-events' &&
+      dispatched.legacyWheel === 'mousewheel' &&
+      dispatched.modifier === 'meta-or-control' &&
+      dispatched.preventsBrowserZoom === 'true' &&
+      dispatched.zoomScope === 'canvas' &&
+      dispatched.clientX === 0 &&
+      dispatched.clientY === 0 &&
+      dispatched.wheelDeltaY === wheelDeltaY,
+    `Legacy root mousewheel zoom metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
   );
   await sleep(150);
 
@@ -12435,7 +12535,7 @@ const dispatchCanvasPinchZoom = async (client, scale, label) => {
   assert(
     dispatched.pinchZoom === 'enabled' &&
       dispatched.pinchPreventsBrowserZoom === 'true' &&
-      dispatched.listenerScope === 'window-document-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
@@ -12504,7 +12604,7 @@ const dispatchCoordinateLessGlobalPinchZoom = async (client, scale, label) => {
   assert(
     dispatched.pinchZoom === 'enabled' &&
       dispatched.pinchPreventsBrowserZoom === 'true' &&
-      dispatched.listenerScope === 'window-document-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
@@ -12690,10 +12790,20 @@ const testZoomControls = async (client) => {
     `Zero-coordinate Mac trackpad wheel zoom should keep manual canvas zoom and stable browser page zoom: ${JSON.stringify(afterCoordinateLessWheelZoom)}`,
   );
 
+  const afterLegacyMouseWheelZoom = await dispatchLegacyRootMouseWheelZoom(client, 360, 'after legacy root mousewheel zoom');
+  assert(
+    afterLegacyMouseWheelZoom.afterState.scale > afterCoordinateLessWheelZoom.afterState.scale,
+    `Legacy Mac/WebKit mousewheel zoom should zoom the canvas instead of the browser page: ${JSON.stringify({ afterCoordinateLessWheelZoom, afterLegacyMouseWheelZoom })}`,
+  );
+  assert(
+    afterLegacyMouseWheelZoom.afterState.autoFit === false && afterLegacyMouseWheelZoom.pageZoomStable === true,
+    `Legacy Mac/WebKit mousewheel zoom should keep manual canvas zoom and stable browser page zoom: ${JSON.stringify(afterLegacyMouseWheelZoom)}`,
+  );
+
   const afterPinchZoomIn = await dispatchCanvasPinchZoom(client, 1.22, 'after canvas pinch zoom in');
   assert(
-    afterPinchZoomIn.state.scale > afterCoordinateLessWheelZoom.afterState.scale,
-    `Mac-style pinch gesture did not increase canvas scale: ${JSON.stringify({ afterCoordinateLessWheelZoom, afterPinchZoomIn })}`,
+    afterPinchZoomIn.state.scale > afterLegacyMouseWheelZoom.afterState.scale,
+    `Mac-style pinch gesture did not increase canvas scale: ${JSON.stringify({ afterLegacyMouseWheelZoom, afterPinchZoomIn })}`,
   );
   assert(afterPinchZoomIn.state.autoFit === false, `Canvas pinch zoom should disable auto-fit: ${JSON.stringify(afterPinchZoomIn)}`);
 
@@ -12762,6 +12872,7 @@ const testZoomControls = async (client) => {
     afterCdpWheelZoom,
     afterEditorShellWheelZoom,
     afterCoordinateLessWheelZoom,
+    afterLegacyMouseWheelZoom,
     afterPinchZoomIn,
     afterPinchZoomOut,
     afterCoordinateLessPinchZoom,

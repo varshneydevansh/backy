@@ -94,6 +94,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Handle drop events
 - Grid background in edit mode, with G/S keyboard toggles for grid visibility and snapping covered by focused smoke.
 - Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface, including pointer and keyboard shortcuts covered by focused smoke.
+- Mac/browser zoom is guarded inside the editor canvas: Cmd/Ctrl wheel, root/body `mousewheel`, keyboard zoom, and gesture pinch paths update canvas scale while keeping browser page zoom stable.
 - Smart alignment guides render during drag, snap selected elements to peer/canvas edges, and clear after release.
 - Rulers render along the canvas edge with major/minor ticks.
 - Pan navigation works through the hand toggle, H keyboard toggle, and temporary Space-hold mode, with focused smoke coverage.
@@ -422,6 +423,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Verified route-level media management coverage for folders, storage configuration, upload intake, metadata, replacements/versioning, transforms, quarantine/release, signed URLs, analytics, activity, and deletion via `npm run test:media --workspace @backy-cms/admin`.
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
+- Hardened in-canvas Mac zoom by listening for modern `wheel`, legacy root/body `mousewheel`, keyboard zoom, and gesture pinch events with non-passive capture guards; the rendered zoom smoke now proves the legacy root `mousewheel` path changes only the canvas scale and keeps browser page zoom metrics stable.
 - Added canvas navigation coverage for ruler rendering, hand-toggle panning, drag-to-pan viewport scrolling, and temporary Space-hold pan mode through the zoom smoke path.
 - Added configurable grid size plus grid visibility and snap on/off controls, with focused browser coverage proving grid visibility plus snapped and unsnapped drag behavior via `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added component library favorites and hover/focus previews with local persistence, favorites-only filtering, search/category filtering, preview update/clear coverage, and empty-state coverage via `BACKY_EDITOR_LIBRARY_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
