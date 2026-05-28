@@ -1774,6 +1774,7 @@ function OrdersRoute() {
     ordersBulkClearDisabledReason ? `Clear selection unavailable: ${ordersBulkClearDisabledReason}` : `Clear selection available for ${selectedOrderActionLabel}.`,
   ].join(' ');
   const ordersCommandSecondaryActionStatusId = 'orders-command-secondary-action-status';
+  const ordersApiSecondaryActionStatusId = 'orders-api-secondary-action-status';
   const ordersCommandBusyDisabledReason = isOrdersAccessBusy ? 'Order queue is busy.' : '';
   const ordersCommandExportPermissionDisabledReason = !canExportOrders
     ? exportPermissionTitle || 'Your account cannot export orders.'
@@ -1816,6 +1817,28 @@ function OrdersRoute() {
   const ordersCommandStorefrontPageActionStatus = ordersCommandStorefrontPageDisabledReason
     ? `Storefront page unavailable: ${ordersCommandStorefrontPageDisabledReason}`
     : 'Storefront page available.';
+  const ordersApiCopyAdminDisabledReason = ordersCommandExportDisabledReason;
+  const ordersApiOpenAdminDisabledReason = ordersCommandExportDisabledReason;
+  const ordersApiCopyAdminActionStatus = ordersApiCopyAdminDisabledReason
+    ? `Copy admin API unavailable: ${ordersApiCopyAdminDisabledReason}`
+    : `Copy admin API available for ${activeSiteId}.`;
+  const ordersApiOpenAdminActionStatus = ordersApiOpenAdminDisabledReason
+    ? `Open admin API unavailable: ${ordersApiOpenAdminDisabledReason}`
+    : `Open admin API available for ${activeSiteId}.`;
+  const ordersApiSecondaryActionStatus = [
+    ordersCommandExportCsvActionStatus,
+    ordersApiCopyAdminActionStatus,
+    ordersCommandProductsActionStatus,
+    ordersCommandStorefrontPageActionStatus,
+    ordersApiOpenAdminActionStatus,
+  ].join(' ');
+  const ordersApiSecondaryActionState = ordersCommandCsvExportDisabledReason &&
+    ordersApiCopyAdminDisabledReason &&
+    ordersCommandProductsDisabledReason &&
+    ordersCommandStorefrontPageDisabledReason &&
+    ordersApiOpenAdminDisabledReason
+    ? 'blocked'
+    : 'ready';
   const ordersCommandSecondaryActionStatus = [
     ordersCommandCopyManifestActionStatus,
     ordersCommandDownloadJsonActionStatus,
@@ -4881,21 +4904,40 @@ function OrdersRoute() {
                 >
                   {isReconcilingOrders ? 'Reconciling...' : ordersApiReady ? 'Reconcile provider' : 'Sync & reconcile'}
                 </Button>
-                <details className="group relative" data-testid="orders-api-secondary-actions">
+                <details
+                  className="group relative"
+                  aria-describedby={ordersApiSecondaryActionStatusId}
+                  data-action-state={ordersApiSecondaryActionState}
+                  data-action-status={ordersApiSecondaryActionStatus}
+                  data-target-site-id={activeSiteId}
+                  data-testid="orders-api-secondary-actions"
+                  data-default-collapsed="true"
+                >
+                  <span id={ordersApiSecondaryActionStatusId} className="sr-only" data-testid="orders-api-secondary-action-status" aria-live="polite">
+                    {ordersApiSecondaryActionStatus}
+                  </span>
                   <summary
                     className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
                     aria-label="More order API actions"
+                    aria-describedby={ordersApiSecondaryActionStatusId}
+                    data-testid="orders-api-more-actions"
                   >
                     <MoreHorizontal className="size-4" />
                     More API actions
                     <span className="sr-only">Export CSV, Copy admin API, Products, Storefront page, and Open admin API</span>
                   </summary>
-                  <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56">
+                  <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-56" data-testid="orders-api-secondary-action-menu">
                     <button
                       type="button"
                       onClick={exportOrdersCsv}
                       disabled={isOrdersAccessBusy || !canExportOrders || filteredOrders.length === 0}
                       title={!canExportOrders ? exportPermissionTitle : undefined}
+                      aria-describedby={ordersApiSecondaryActionStatusId}
+                      data-testid="orders-api-export-csv"
+                      data-action-state={ordersCommandCsvExportDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={ordersCommandExportCsvActionStatus}
+                      data-disabled-reason={ordersCommandCsvExportDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Download className="size-4" />
@@ -4906,6 +4948,12 @@ function OrdersRoute() {
                       onClick={() => void copyOrdersApiUrl(adminOrdersApiUrl, 'Internal orders API URL')}
                       disabled={isOrdersAccessBusy || !canExportOrders}
                       title={!canExportOrders ? exportPermissionTitle : undefined}
+                      aria-describedby={ordersApiSecondaryActionStatusId}
+                      data-testid="orders-api-copy-admin-api"
+                      data-action-state={ordersApiCopyAdminDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={ordersApiCopyAdminActionStatus}
+                      data-disabled-reason={ordersApiCopyAdminDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Copy className="size-4" />
@@ -4915,6 +4963,12 @@ function OrdersRoute() {
                       type="button"
                       onClick={openProductsWorkspace}
                       disabled={isOrdersBusy}
+                      aria-describedby={ordersApiSecondaryActionStatusId}
+                      data-testid="orders-api-products"
+                      data-action-state={ordersCommandProductsDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={ordersCommandProductsActionStatus}
+                      data-disabled-reason={ordersCommandProductsDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <ShoppingCart className="size-4" />
@@ -4925,6 +4979,12 @@ function OrdersRoute() {
                       onClick={openStorefrontPage}
                       disabled={isOrdersAccessBusy || !canEditPages}
                       title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                      aria-describedby={ordersApiSecondaryActionStatusId}
+                      data-testid="orders-api-storefront-page"
+                      data-action-state={ordersCommandStorefrontPageDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={ordersCommandStorefrontPageActionStatus}
+                      data-disabled-reason={ordersCommandStorefrontPageDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <Sparkles className="size-4" />
@@ -4935,6 +4995,12 @@ function OrdersRoute() {
                       onClick={() => void openAdminOrdersApi()}
                       disabled={isOrdersAccessBusy || !canExportOrders}
                       title={!canExportOrders ? exportPermissionTitle : 'Fetch with your admin session and open the JSON response.'}
+                      aria-describedby={ordersApiSecondaryActionStatusId}
+                      data-testid="orders-api-open-admin-api"
+                      data-action-state={ordersApiOpenAdminDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={ordersApiOpenAdminActionStatus}
+                      data-disabled-reason={ordersApiOpenAdminDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <ExternalLink className="size-4" />

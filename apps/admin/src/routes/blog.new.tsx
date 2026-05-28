@@ -1993,6 +1993,7 @@ function NewBlogPostPage() {
     const blogCreateSubmitActionStatusId = 'blog-create-submit-action-status';
     const blogCreatePreviewActionStatusId = 'blog-create-preview-action-status';
     const blogCreateCommandActionStatusId = 'blog-create-command-action-status';
+    const blogCreateCommandSecondaryActionStatusId = 'blog-create-command-secondary-action-status';
     const blogCreatePermissionActionStatusId = 'blog-create-permission-action-status';
     const blogCreateRecoveryActionStatusId = 'blog-create-recovery-action-status';
     const blogCreateTemplateName = createPayloadPreview.template.name;
@@ -2051,6 +2052,10 @@ function NewBlogPostPage() {
         : !canViewBlog
             ? `Download blog creation handoff unavailable: ${viewBlogDeniedMessage}`
             : `Download blog creation handoff available for ${activeSiteId} at ${routePath}.`;
+    const blogCreateCommandSecondaryActionStatus = [
+        blogCreateCopyActionStatus,
+        blogCreateDownloadActionStatus,
+    ].join(' ');
     const blogCreateRouteRetryActionStatus = isCreateBusy
         ? 'Retry blog route check unavailable while blog post creation is running.'
         : `Retry blog route check available for ${activeSiteId}.`;
@@ -2206,6 +2211,9 @@ function NewBlogPostPage() {
             <div className={cn('w-full', isWorkspaceFocus ? 'h-full min-h-0 overflow-hidden pb-0' : 'pb-24')}>
                 <span id={blogCreateCommandActionStatusId} className="sr-only" data-testid="blog-create-command-action-status" aria-live="polite">
                     {blogCreateBackActionStatus} {blogCreateFocusActionStatus} {blogCreateCopyActionStatus} {blogCreateDownloadActionStatus} {blogCreateRouteRetryActionStatus}
+                </span>
+                <span id={blogCreateCommandSecondaryActionStatusId} className="sr-only" data-testid="blog-create-command-secondary-action-status" aria-live="polite">
+                    {blogCreateCommandSecondaryActionStatus}
                 </span>
                 {error && (
                     <Notice tone="warning" className="mb-4">
@@ -2402,10 +2410,19 @@ function NewBlogPostPage() {
                                         {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                                     </Button>
                                 </div>
-                                <details className="group relative self-start xl:self-end" data-testid="blog-create-secondary-actions">
+                                <details
+                                    className="group relative self-start xl:self-end"
+                                    aria-describedby={blogCreateCommandSecondaryActionStatusId}
+                                    data-action-state={blogCreateHandoffActionState}
+                                    data-action-status={blogCreateCommandSecondaryActionStatus}
+                                    data-target-site-id={activeSiteId || undefined}
+                                    data-target-route={routePath}
+                                    data-testid="blog-create-secondary-actions"
+                                    data-default-collapsed="true"
+                                >
                                     <summary
                                         className="inline-flex min-h-9 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-ring group-open:bg-accent [&::-webkit-details-marker]:hidden"
-                                        aria-describedby={blogCreateCommandActionStatusId}
+                                        aria-describedby={blogCreateCommandSecondaryActionStatusId}
                                         data-testid="blog-create-more-actions"
                                     >
                                         <MoreHorizontal className="size-4" />
@@ -2417,11 +2434,13 @@ function NewBlogPostPage() {
                                             size="sm"
                                             disabled={isCreateBusy || !canViewBlog}
                                             title={viewBlogPermissionTitle}
-                                            aria-describedby={blogCreateCommandActionStatusId}
+                                            aria-describedby={blogCreateCommandSecondaryActionStatusId}
                                             data-testid="blog-create-copy-handoff"
                                             data-action-state={blogCreateHandoffActionState}
                                             data-action-status={blogCreateCopyActionStatus}
                                             data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : !canViewBlog ? viewBlogDeniedMessage : undefined}
+                                            data-target-site-id={activeSiteId || undefined}
+                                            data-target-route={routePath}
                                             onClick={() => void copyCreationText(creationHandoffText, 'Blog creation handoff manifest')}
                                             variant="ghost"
                                             className="w-full justify-start"
@@ -2434,11 +2453,13 @@ function NewBlogPostPage() {
                                             size="sm"
                                             disabled={isCreateBusy || !canViewBlog}
                                             title={viewBlogPermissionTitle}
-                                            aria-describedby={blogCreateCommandActionStatusId}
+                                            aria-describedby={blogCreateCommandSecondaryActionStatusId}
                                             data-testid="blog-create-download-handoff"
                                             data-action-state={blogCreateHandoffActionState}
                                             data-action-status={blogCreateDownloadActionStatus}
                                             data-disabled-reason={isCreateBusy ? 'Blog post creation is already running.' : !canViewBlog ? viewBlogDeniedMessage : undefined}
+                                            data-target-site-id={activeSiteId || undefined}
+                                            data-target-route={routePath}
                                             onClick={downloadCreationHandoff}
                                             variant="ghost"
                                             className="w-full justify-start"

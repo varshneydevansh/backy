@@ -1076,15 +1076,20 @@ const assertProductsApiContractsSource = () => {
   );
   assert(
     source.includes("const productsStorefrontApiActionStatusId = 'products-storefront-api-action-status';") &&
+      source.includes("const productsStorefrontApiSecondaryActionStatusId = 'products-storefront-api-secondary-action-status';") &&
       source.includes('const productsStorefrontApiActionStatus = [') &&
+      source.includes('const productsStorefrontApiSecondaryActionStatus = [') &&
       source.includes('data-testid="products-storefront-api-actions"') &&
       source.includes('data-testid="products-storefront-api-action-status"') &&
+      source.includes('data-testid="products-storefront-api-secondary-action-status"') &&
       source.includes('data-testid="products-storefront-api-primary-actions"') &&
       source.includes('data-testid="products-storefront-api-sync-schema"') &&
       source.includes('data-testid="products-storefront-api-import-csv"') &&
       source.includes('data-testid="products-storefront-api-storefront-page"') &&
       source.includes('data-testid="products-storefront-api-open-api"') &&
       source.includes('data-testid="products-storefront-api-secondary-actions"') &&
+      source.includes('data-action-status={productsStorefrontApiSecondaryActionStatus}') &&
+      source.includes('data-target-site-id={activeSiteId}') &&
       source.includes('data-default-collapsed="true"') &&
       source.includes('data-testid="products-storefront-api-more-actions"') &&
       source.includes('data-testid="products-storefront-api-copy-url"') &&
@@ -8309,6 +8314,7 @@ const assertProductsLayout = async (client) => {
           describedBy: element.getAttribute('aria-describedby') || '',
           status: element.getAttribute('data-action-status') || '',
           disabledReason: element.getAttribute('data-disabled-reason') || '',
+          targetSiteId: element.getAttribute('data-target-site-id') || '',
           disabled: Boolean(element.disabled || element.getAttribute('aria-disabled') === 'true'),
         }));
         const storefrontApiPrimaryActions = storefrontActionMeta('[data-testid="products-storefront-api-primary-actions"] button, [data-testid="products-storefront-api-primary-actions"] a');
@@ -8377,13 +8383,20 @@ const assertProductsLayout = async (client) => {
           storefrontApiStatusId: document.querySelector('[data-testid="products-storefront-api-action-status"]')?.id || '',
           storefrontApiStatusText: (document.querySelector('[data-testid="products-storefront-api-action-status"]')?.textContent || '').replace(/\\s+/g, ' ').trim(),
           storefrontApiGroupStatus: document.querySelector('[data-testid="products-storefront-api-actions"]')?.getAttribute('data-action-status') || '',
+          storefrontApiSecondaryStatusId: document.querySelector('[data-testid="products-storefront-api-secondary-action-status"]')?.id || '',
+          storefrontApiSecondaryStatusText: (document.querySelector('[data-testid="products-storefront-api-secondary-action-status"]')?.textContent || '').replace(/\\s+/g, ' ').trim(),
           storefrontApiPrimaryActions,
           storefrontApiPrimaryLabels,
           storefrontApiPrimaryStates,
           hasStorefrontApiSecondaryActions: Boolean(document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')),
+          storefrontApiSecondaryDescribedBy: document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')?.getAttribute('aria-describedby') || '',
+          storefrontApiSecondaryStatusData: document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')?.getAttribute('data-action-status') || '',
+          storefrontApiSecondaryState: document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')?.getAttribute('data-action-state') || '',
+          storefrontApiSecondaryTargetSiteId: document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')?.getAttribute('data-target-site-id') || '',
           storefrontApiSecondaryDefaultCollapsed: document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
           storefrontApiSecondaryOpen: document.querySelector('[data-testid="products-storefront-api-secondary-actions"]')?.hasAttribute('open') || false,
           hasStorefrontApiMoreActions: Boolean(document.querySelector('[data-testid="products-storefront-api-more-actions"]')),
+          storefrontApiMoreActionsDescribedBy: document.querySelector('[data-testid="products-storefront-api-more-actions"]')?.getAttribute('aria-describedby') || '',
           storefrontApiSecondaryActions,
           storefrontApiSecondaryLabels,
           storefrontApiPrimaryHasSecondaryOnlyActions: Boolean(document.querySelector('[data-testid="products-storefront-api-primary-actions"] [data-testid="products-storefront-api-copy-url"], [data-testid="products-storefront-api-primary-actions"] [data-testid="products-storefront-api-copy-manifest"], [data-testid="products-storefront-api-primary-actions"] [data-testid="products-storefront-api-export-csv"], [data-testid="products-storefront-api-primary-actions"] [data-testid="products-storefront-api-csv-template"]')),
@@ -8648,16 +8661,24 @@ const assertProductsLayout = async (client) => {
   );
   assert(
     layout.hasStorefrontApiSecondaryActions &&
+      layout.storefrontApiSecondaryStatusId === 'products-storefront-api-secondary-action-status' &&
+      layout.storefrontApiSecondaryStatusText.length > 0 &&
+      layout.storefrontApiSecondaryDescribedBy === layout.storefrontApiSecondaryStatusId &&
+      layout.storefrontApiSecondaryStatusData === layout.storefrontApiSecondaryStatusText &&
+      (layout.storefrontApiSecondaryState === 'ready' || layout.storefrontApiSecondaryState === 'blocked') &&
+      layout.storefrontApiSecondaryTargetSiteId.length > 0 &&
       layout.storefrontApiSecondaryDefaultCollapsed &&
       !layout.storefrontApiSecondaryOpen &&
       layout.hasStorefrontApiMoreActions &&
+      layout.storefrontApiMoreActionsDescribedBy === layout.storefrontApiSecondaryStatusId &&
       layout.storefrontApiSecondaryLabels[0] === 'Copy URL' &&
       layout.storefrontApiSecondaryLabels.includes('Copy manifest') &&
       layout.storefrontApiSecondaryLabels.includes('Export CSV') &&
       layout.storefrontApiSecondaryLabels.includes('CSV template') &&
       layout.storefrontApiSecondaryActions.every((action) => action.state === 'ready' || action.state === 'blocked') &&
-      layout.storefrontApiSecondaryActions.every((action) => action.describedBy === 'products-storefront-api-action-status') &&
-      layout.storefrontApiSecondaryActions.every((action) => action.status === layout.storefrontApiStatusText) &&
+      layout.storefrontApiSecondaryActions.every((action) => action.describedBy === layout.storefrontApiSecondaryStatusId) &&
+      layout.storefrontApiSecondaryActions.every((action) => action.status.length > 0 && layout.storefrontApiSecondaryStatusText.includes(action.status)) &&
+      layout.storefrontApiSecondaryActions.every((action) => action.targetSiteId === layout.storefrontApiSecondaryTargetSiteId) &&
       layout.storefrontApiSecondaryActions.every((action) => action.state === 'blocked' ? Boolean(action.disabledReason) : action.disabledReason === '') &&
       layout.storefrontApiSecondaryActions.every((action) => action.disabled === (action.state === 'blocked')) &&
       !layout.storefrontApiPrimaryHasSecondaryOnlyActions,

@@ -109,15 +109,18 @@ const assertBlogCreateSourceContract = () => {
       source.includes("const blogCreateSubmitActionStatusId = 'blog-create-submit-action-status';") &&
       source.includes("const blogCreatePreviewActionStatusId = 'blog-create-preview-action-status';") &&
       source.includes("const blogCreateCommandActionStatusId = 'blog-create-command-action-status';") &&
+      source.includes("const blogCreateCommandSecondaryActionStatusId = 'blog-create-command-secondary-action-status';") &&
       source.includes("const blogCreateRecoveryActionStatusId = 'blog-create-recovery-action-status';") &&
       source.includes('const blogCreateBackActionStatus = isCreateBusy') &&
       source.includes('const blogCreateFocusActionStatus = isCreateBusy') &&
       source.includes('const blogCreateCopyActionStatus = isCreateBusy') &&
       source.includes('const blogCreateDownloadActionStatus = isCreateBusy') &&
+      source.includes('const blogCreateCommandSecondaryActionStatus = [') &&
       source.includes('const blogCreateRouteRetryActionStatus = isCreateBusy') &&
       source.includes('const blogCreateDiscardRecoveryActionStatus = isCreateBusy') &&
       source.includes('const blogCreateRestoreRecoveryActionStatus = isCreateBusy') &&
       source.includes('data-testid="blog-create-command-action-status"') &&
+      source.includes('data-testid="blog-create-command-secondary-action-status"') &&
       source.includes('data-testid="blog-create-back-to-blog"') &&
       source.includes('data-testid="blog-create-focus-toggle"') &&
       source.includes('data-testid="blog-create-copy-handoff"') &&
@@ -1040,6 +1043,13 @@ const navigateToBlogCreate = async (client) => {
       submitBlocker: document.querySelector('[data-testid="blog-create-submit-blocker"]')?.textContent || '',
       commandStatusId: document.querySelector('[data-testid="blog-create-command-action-status"]')?.id || '',
       commandStatusText: document.querySelector('[data-testid="blog-create-command-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      secondaryStatusId: document.querySelector('[data-testid="blog-create-command-secondary-action-status"]')?.id || '',
+      secondaryStatusText: document.querySelector('[data-testid="blog-create-command-secondary-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      secondaryGroupDescribedBy: document.querySelector('[data-testid="blog-create-secondary-actions"]')?.getAttribute('aria-describedby') || '',
+      secondaryGroupStatus: document.querySelector('[data-testid="blog-create-secondary-actions"]')?.getAttribute('data-action-status') || '',
+      secondaryGroupState: document.querySelector('[data-testid="blog-create-secondary-actions"]')?.getAttribute('data-action-state') || '',
+      secondaryTargetSiteId: document.querySelector('[data-testid="blog-create-secondary-actions"]')?.getAttribute('data-target-site-id') || '',
+      secondaryTargetRoute: document.querySelector('[data-testid="blog-create-secondary-actions"]')?.getAttribute('data-target-route') || '',
       backActionState: document.querySelector('[data-testid="blog-create-back-to-blog"]')?.getAttribute('data-action-state') || '',
       backActionStatus: document.querySelector('[data-testid="blog-create-back-to-blog"]')?.getAttribute('data-action-status') || '',
       backDescribedBy: document.querySelector('[data-testid="blog-create-back-to-blog"]')?.getAttribute('aria-describedby') || '',
@@ -1077,18 +1087,26 @@ const navigateToBlogCreate = async (client) => {
       && state.payloadTemplateSourceMode === 'custom-frontend'
       && state.payloadTemplateSourceLabel === 'Custom frontend'
       && state.commandStatusId === 'blog-create-command-action-status'
+      && state.secondaryStatusId === 'blog-create-command-secondary-action-status'
+      && state.secondaryGroupDescribedBy === state.secondaryStatusId
+      && state.secondaryGroupStatus === state.secondaryStatusText
+      && state.secondaryGroupState === 'ready'
+      && state.secondaryTargetSiteId === SITE_ID
+      && state.secondaryTargetRoute === '/blog/smoke-contract'
       && state.backActionState === 'ready'
       && state.focusActionState === 'ready'
       && state.copyActionState === 'ready'
       && state.downloadActionState === 'ready'
       && state.backDescribedBy === state.commandStatusId
       && state.focusDescribedBy === state.commandStatusId
-      && state.copyDescribedBy === state.commandStatusId
-      && state.downloadDescribedBy === state.commandStatusId
+      && state.copyDescribedBy === state.secondaryStatusId
+      && state.downloadDescribedBy === state.secondaryStatusId
       && state.backActionStatus.includes(`Back to Blog posts available for ${SITE_ID}`)
       && state.focusActionStatus.includes('Focus blog creation canvas available.')
       && state.copyActionStatus.includes(`Copy blog creation handoff available for ${SITE_ID}`)
       && state.downloadActionStatus.includes(`Download blog creation handoff available for ${SITE_ID}`)
+      && state.secondaryStatusText.includes(state.copyActionStatus)
+      && state.secondaryStatusText.includes(state.downloadActionStatus)
       && state.commandStatusText.includes(state.copyActionStatus)
       && state.commandStatusText.includes(state.downloadActionStatus)
       && state.routeRetryTextInStatus
@@ -1259,8 +1277,13 @@ const assertBlogCreateReadyActionStatus = async (client, slug) => {
         : copyHandoffNodeIndex > primaryActionMaxIndex && downloadHandoffNodeIndex > primaryActionMaxIndex;
       const submitStatus = document.querySelector('[data-testid="blog-create-submit-action-status"]');
       const previewStatus = document.querySelector('[data-testid="blog-create-preview-action-status"]');
+      const secondary = document.querySelector('[data-testid="blog-create-secondary-actions"]');
+      const secondaryStatus = document.querySelector('[data-testid="blog-create-command-secondary-action-status"]');
+      const copyHandoff = document.querySelector('[data-testid="blog-create-copy-handoff"]');
+      const downloadHandoff = document.querySelector('[data-testid="blog-create-download-handoff"]');
       const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const previewStatusText = previewStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      const secondaryStatusText = secondaryStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       return {
         ready: submit instanceof HTMLButtonElement &&
           preview instanceof HTMLButtonElement &&
@@ -1284,7 +1307,21 @@ const assertBlogCreateReadyActionStatus = async (client, slug) => {
           Boolean(submit.getAttribute('data-target-template')) &&
           Boolean(preview.getAttribute('data-target-template')) &&
           submitStatusText.includes(${JSON.stringify(`Save draft available for ${SITE_ID} at /blog/${slug}`)}) &&
-          previewStatusText.includes(${JSON.stringify(`Preview draft available for ${SITE_ID} at /blog/${slug}`)}),
+          previewStatusText.includes(${JSON.stringify(`Preview draft available for ${SITE_ID} at /blog/${slug}`)}) &&
+          secondary instanceof HTMLDetailsElement &&
+          secondary.open === false &&
+          secondary.getAttribute('data-default-collapsed') === 'true' &&
+          secondary.getAttribute('aria-describedby') === 'blog-create-command-secondary-action-status' &&
+          secondary.getAttribute('data-action-state') === 'ready' &&
+          secondary.getAttribute('data-action-status') === secondaryStatusText &&
+          secondary.getAttribute('data-target-site-id') === ${JSON.stringify(SITE_ID)} &&
+          secondary.getAttribute('data-target-route') === ${JSON.stringify(`/blog/${slug}`)} &&
+          copyHandoff?.getAttribute('aria-describedby') === 'blog-create-command-secondary-action-status' &&
+          downloadHandoff?.getAttribute('aria-describedby') === 'blog-create-command-secondary-action-status' &&
+          copyHandoff?.getAttribute('data-action-state') === 'ready' &&
+          downloadHandoff?.getAttribute('data-action-state') === 'ready' &&
+          secondaryStatusText.includes('Copy blog creation handoff available') &&
+          secondaryStatusText.includes('Download blog creation handoff available'),
         submitDisabled: submit instanceof HTMLButtonElement ? submit.disabled : null,
         previewDisabled: preview instanceof HTMLButtonElement ? preview.disabled : null,
         submitDescribedBy: submit?.getAttribute('aria-describedby') || '',

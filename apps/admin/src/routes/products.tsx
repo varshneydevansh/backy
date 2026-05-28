@@ -2322,6 +2322,7 @@ function ProductsRoute() {
     ? 'blocked'
     : 'ready';
   const productsStorefrontApiActionStatusId = 'products-storefront-api-action-status';
+  const productsStorefrontApiSecondaryActionStatusId = 'products-storefront-api-secondary-action-status';
   const productsStorefrontApiBusyDisabledReason = isProductsAccessBusy ? 'Product catalog is busy.' : '';
   const productsStorefrontApiSyncDisabledReason = productApiReady
     ? 'Product API schema is already synced.'
@@ -2344,15 +2345,31 @@ function ProductsRoute() {
     ? editPermissionTitle || 'Your account cannot edit products.'
     : '');
   const productsStorefrontApiHandoffDisabledReason = productsStorefrontApiBusyDisabledReason || productsBulkExportPermissionDisabledReason;
+  const productsStorefrontApiCopyUrlActionStatus = productsStorefrontApiViewDisabledReason ? `Copy URL unavailable: ${productsStorefrontApiViewDisabledReason}` : 'Copy URL available.';
+  const productsStorefrontApiCopyManifestActionStatus = productsStorefrontApiHandoffDisabledReason ? `Copy manifest unavailable: ${productsStorefrontApiHandoffDisabledReason}` : 'Copy manifest available.';
+  const productsStorefrontApiExportCsvActionStatus = productsStorefrontApiExportDisabledReason ? `Export CSV unavailable: ${productsStorefrontApiExportDisabledReason}` : `Export CSV available for ${visibleProductActionLabel}.`;
+  const productsStorefrontApiCsvTemplateActionStatus = productsStorefrontApiTemplateDisabledReason ? `CSV template unavailable: ${productsStorefrontApiTemplateDisabledReason}` : 'CSV template available.';
+  const productsStorefrontApiSecondaryActionStatus = [
+    productsStorefrontApiCopyUrlActionStatus,
+    productsStorefrontApiCopyManifestActionStatus,
+    productsStorefrontApiExportCsvActionStatus,
+    productsStorefrontApiCsvTemplateActionStatus,
+  ].join(' ');
+  const productsStorefrontApiSecondaryActionState = productsStorefrontApiViewDisabledReason &&
+    productsStorefrontApiHandoffDisabledReason &&
+    productsStorefrontApiExportDisabledReason &&
+    productsStorefrontApiTemplateDisabledReason
+    ? 'blocked'
+    : 'ready';
   const productsStorefrontApiActionStatus = [
     productApiReady ? 'Sync schema already complete.' : productsStorefrontApiSyncDisabledReason ? `Sync schema unavailable: ${productsStorefrontApiSyncDisabledReason}` : 'Sync schema available.',
     productsStorefrontApiImportDisabledReason ? `Import CSV unavailable: ${productsStorefrontApiImportDisabledReason}` : 'Import CSV available.',
     productsStorefrontApiStorefrontDisabledReason ? `Storefront page unavailable: ${productsStorefrontApiStorefrontDisabledReason}` : 'Storefront page available.',
     productsStorefrontApiViewDisabledReason ? `Open API unavailable: ${productsStorefrontApiViewDisabledReason}` : `Open API available at ${storefrontApiUrl}.`,
-    productsStorefrontApiViewDisabledReason ? `Copy URL unavailable: ${productsStorefrontApiViewDisabledReason}` : 'Copy URL available.',
-    productsStorefrontApiHandoffDisabledReason ? `Copy manifest unavailable: ${productsStorefrontApiHandoffDisabledReason}` : 'Copy manifest available.',
-    productsStorefrontApiExportDisabledReason ? `Export CSV unavailable: ${productsStorefrontApiExportDisabledReason}` : `Export CSV available for ${visibleProductActionLabel}.`,
-    productsStorefrontApiTemplateDisabledReason ? `CSV template unavailable: ${productsStorefrontApiTemplateDisabledReason}` : 'CSV template available.',
+    productsStorefrontApiCopyUrlActionStatus,
+    productsStorefrontApiCopyManifestActionStatus,
+    productsStorefrontApiExportCsvActionStatus,
+    productsStorefrontApiCsvTemplateActionStatus,
   ].join(' ');
   const productsProviderCertificationActionStatusId = 'products-provider-certification-action-status';
   const productsProviderCertificationBusyDisabledReason = isProductsAccessBusy ? 'Product catalog is busy.' : '';
@@ -5626,13 +5643,21 @@ function ProductsRoute() {
                 </div>
                 <details
                   className="group relative"
+                  aria-describedby={productsStorefrontApiSecondaryActionStatusId}
+                  data-action-state={productsStorefrontApiSecondaryActionState}
+                  data-action-status={productsStorefrontApiSecondaryActionStatus}
+                  data-target-site-id={activeSiteId}
                   data-testid="products-storefront-api-secondary-actions"
                   data-default-collapsed="true"
                 >
+                  <span id={productsStorefrontApiSecondaryActionStatusId} className="sr-only" data-testid="products-storefront-api-secondary-action-status" aria-live="polite">
+                    {productsStorefrontApiSecondaryActionStatus}
+                  </span>
                   <summary
                     className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
                     data-testid="products-storefront-api-more-actions"
                     aria-label="More storefront API actions"
+                    aria-describedby={productsStorefrontApiSecondaryActionStatusId}
                   >
                     <MoreHorizontal className="size-4" />
                     More actions
@@ -5644,11 +5669,12 @@ function ProductsRoute() {
                       onClick={() => void copyStorefrontApiUrl()}
                       disabled={Boolean(productsStorefrontApiViewDisabledReason)}
                       title={productsStorefrontApiViewDisabledReason || undefined}
-                      aria-describedby={productsStorefrontApiActionStatusId}
+                      aria-describedby={productsStorefrontApiSecondaryActionStatusId}
                       data-testid="products-storefront-api-copy-url"
                       data-action-state={productsStorefrontApiViewDisabledReason ? 'blocked' : 'ready'}
-                      data-action-status={productsStorefrontApiActionStatus}
+                      data-action-status={productsStorefrontApiCopyUrlActionStatus}
                       data-disabled-reason={productsStorefrontApiViewDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       iconStart={<Copy className="size-4" />}
                     >
                       Copy URL
@@ -5659,11 +5685,12 @@ function ProductsRoute() {
                       onClick={() => void copyProductHandoff()}
                       disabled={Boolean(productsStorefrontApiHandoffDisabledReason)}
                       title={productsStorefrontApiHandoffDisabledReason || undefined}
-                      aria-describedby={productsStorefrontApiActionStatusId}
+                      aria-describedby={productsStorefrontApiSecondaryActionStatusId}
                       data-testid="products-storefront-api-copy-manifest"
                       data-action-state={productsStorefrontApiHandoffDisabledReason ? 'blocked' : 'ready'}
-                      data-action-status={productsStorefrontApiActionStatus}
+                      data-action-status={productsStorefrontApiCopyManifestActionStatus}
                       data-disabled-reason={productsStorefrontApiHandoffDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       iconStart={<Copy className="size-4" />}
                     >
                       Copy manifest
@@ -5674,11 +5701,12 @@ function ProductsRoute() {
                       onClick={exportProductsCsv}
                       disabled={Boolean(productsStorefrontApiExportDisabledReason)}
                       title={productsStorefrontApiExportDisabledReason || undefined}
-                      aria-describedby={productsStorefrontApiActionStatusId}
+                      aria-describedby={productsStorefrontApiSecondaryActionStatusId}
                       data-testid="products-storefront-api-export-csv"
                       data-action-state={productsStorefrontApiExportDisabledReason ? 'blocked' : 'ready'}
-                      data-action-status={productsStorefrontApiActionStatus}
+                      data-action-status={productsStorefrontApiExportCsvActionStatus}
                       data-disabled-reason={productsStorefrontApiExportDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       iconStart={<Download className="size-4" />}
                     >
                       Export CSV
@@ -5689,11 +5717,12 @@ function ProductsRoute() {
                       onClick={downloadProductImportTemplate}
                       disabled={Boolean(productsStorefrontApiTemplateDisabledReason)}
                       title={productsStorefrontApiTemplateDisabledReason || undefined}
-                      aria-describedby={productsStorefrontApiActionStatusId}
+                      aria-describedby={productsStorefrontApiSecondaryActionStatusId}
                       data-testid="products-storefront-api-csv-template"
                       data-action-state={productsStorefrontApiTemplateDisabledReason ? 'blocked' : 'ready'}
-                      data-action-status={productsStorefrontApiActionStatus}
+                      data-action-status={productsStorefrontApiCsvTemplateActionStatus}
                       data-disabled-reason={productsStorefrontApiTemplateDisabledReason || undefined}
+                      data-target-site-id={activeSiteId}
                       iconStart={<FileText className="size-4" />}
                     >
                       CSV template

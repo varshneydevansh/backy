@@ -202,6 +202,20 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('Order APIs, provider readiness, and certification') &&
       source.includes('Checkout intake, admin contracts, provider readiness, reconciliation, cron, and live certification handoff.') &&
       source.includes('data-testid="orders-api-secondary-actions"') &&
+      source.includes("const ordersApiSecondaryActionStatusId = 'orders-api-secondary-action-status';") &&
+      source.includes('const ordersApiSecondaryActionStatus = [') &&
+      source.includes('data-testid="orders-api-secondary-action-status"') &&
+      source.includes('data-testid="orders-api-secondary-action-menu"') &&
+      source.includes('aria-describedby={ordersApiSecondaryActionStatusId}') &&
+      source.includes('data-action-state={ordersApiSecondaryActionState}') &&
+      source.includes('data-action-status={ordersApiSecondaryActionStatus}') &&
+      source.includes('data-testid="orders-api-export-csv"') &&
+      source.includes('data-testid="orders-api-copy-admin-api"') &&
+      source.includes('data-testid="orders-api-products"') &&
+      source.includes('data-testid="orders-api-storefront-page"') &&
+      source.includes('data-testid="orders-api-open-admin-api"') &&
+      source.includes('data-action-status={ordersApiCopyAdminActionStatus}') &&
+      source.includes('data-action-status={ordersApiOpenAdminActionStatus}') &&
       source.includes('aria-label="More order API actions"') &&
       source.includes('More API actions') &&
       source.indexOf('Copy manifest') < source.indexOf('data-testid="orders-api-secondary-actions"') &&
@@ -2417,6 +2431,27 @@ const assertOrdersLayout = async (client) => {
       const orderActionStates = orderActionControls.map((action) => action.getAttribute('data-action-state') || '');
       const orderActionDescriptions = orderActionControls.map((action) => action.getAttribute('aria-describedby') || '');
       const orderActionDisabledReasons = orderActionControls.map((action) => action.getAttribute('data-disabled-reason') || '');
+      const apiSecondaryActions = document.querySelector('[data-testid="orders-api-secondary-actions"]');
+      const apiSecondaryActionStatus = document.querySelector('[data-testid="orders-api-secondary-action-status"]');
+      const apiSecondaryActionStatusText = (apiSecondaryActionStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const apiSecondaryActionStatusId = apiSecondaryActionStatus?.id || '';
+      const apiSecondaryActionItems = Array.from(document.querySelectorAll('[data-testid="orders-api-secondary-action-menu"] button')).map((element) => ({
+        testId: element.getAttribute('data-testid') || '',
+        label: (element.textContent || '').replace(/\\s+/g, ' ').trim(),
+        state: element.getAttribute('data-action-state') || '',
+        describedBy: element.getAttribute('aria-describedby') || '',
+        status: element.getAttribute('data-action-status') || '',
+        disabledReason: element.getAttribute('data-disabled-reason') || '',
+        targetSiteId: element.getAttribute('data-target-site-id') || '',
+        disabled: Boolean(element.disabled || element.getAttribute('aria-disabled') === 'true'),
+      }));
+      const apiSecondaryActionExpectedTestIds = [
+        'orders-api-export-csv',
+        'orders-api-copy-admin-api',
+        'orders-api-products',
+        'orders-api-storefront-page',
+        'orders-api-open-admin-api',
+      ];
       return ({
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -2429,8 +2464,33 @@ const assertOrdersLayout = async (client) => {
       apiProviderDetailsCollapsed: apiRoot instanceof HTMLDetailsElement &&
         apiRoot.getAttribute('data-default-collapsed') === 'true' &&
         apiRoot.open === false,
-      apiSecondaryActionsCollapsed: document.querySelector('[data-testid="orders-api-secondary-actions"]') instanceof HTMLDetailsElement &&
-        document.querySelector('[data-testid="orders-api-secondary-actions"]')?.open === false,
+      apiSecondaryActionsCollapsed: apiSecondaryActions instanceof HTMLDetailsElement &&
+        apiSecondaryActions.open === false,
+      apiSecondaryActionStatusId,
+      apiSecondaryActionStatusText,
+      apiSecondaryActionsDescribedBy: apiSecondaryActions?.getAttribute('aria-describedby') || '',
+      apiSecondaryActionsStatus: apiSecondaryActions?.getAttribute('data-action-status') || '',
+      apiSecondaryActionsState: apiSecondaryActions?.getAttribute('data-action-state') || '',
+      apiSecondaryActionsTargetSiteId: apiSecondaryActions?.getAttribute('data-target-site-id') || '',
+      apiMoreActionsDescribedBy: document.querySelector('[data-testid="orders-api-more-actions"]')?.getAttribute('aria-describedby') || '',
+      apiSecondaryActionItems,
+      apiSecondaryActionContract: apiSecondaryActions instanceof HTMLDetailsElement &&
+        apiSecondaryActionStatusId === 'orders-api-secondary-action-status' &&
+        apiSecondaryActionStatusText.length > 0 &&
+        apiSecondaryActions.getAttribute('aria-describedby') === apiSecondaryActionStatusId &&
+        apiSecondaryActions.getAttribute('data-action-status') === apiSecondaryActionStatusText &&
+        ['ready', 'blocked'].includes(apiSecondaryActions.getAttribute('data-action-state') || '') &&
+        (apiSecondaryActions.getAttribute('data-target-site-id') || '').length > 0 &&
+        apiSecondaryActions.getAttribute('data-default-collapsed') === 'true' &&
+        apiSecondaryActions.open === false &&
+        document.querySelector('[data-testid="orders-api-more-actions"]')?.getAttribute('aria-describedby') === apiSecondaryActionStatusId &&
+        JSON.stringify(apiSecondaryActionItems.map((item) => item.testId)) === JSON.stringify(apiSecondaryActionExpectedTestIds) &&
+        apiSecondaryActionItems.every((item) => item.describedBy === apiSecondaryActionStatusId) &&
+        apiSecondaryActionItems.every((item) => item.state === 'ready' || item.state === 'blocked') &&
+        apiSecondaryActionItems.every((item) => item.status.length > 0 && apiSecondaryActionStatusText.includes(item.status)) &&
+        apiSecondaryActionItems.every((item) => item.targetSiteId === apiSecondaryActions.getAttribute('data-target-site-id')) &&
+        apiSecondaryActionItems.every((item) => item.state === 'blocked' ? Boolean(item.disabledReason) : item.disabledReason === '') &&
+        apiSecondaryActionItems.every((item) => item.disabled === (item.state === 'blocked')),
       metrics: Boolean(document.querySelector('#orders-metrics')),
       analytics: Boolean(analyticsRoot),
       analyticsDetailsCollapsed: analyticsDetails instanceof HTMLDetailsElement &&
@@ -2702,7 +2762,7 @@ const assertOrdersLayout = async (client) => {
     });
     })()`);
     assert(layout.scrollWidth <= layout.width + 8, `Orders page has horizontal overflow: ${JSON.stringify(layout)}`);
-    if (layout.command && layout.readinessDetailsCollapsed && layout.controlMapCollapsed && layout.api && layout.apiProviderDetailsCollapsed && layout.apiSecondaryActionsCollapsed && layout.metrics && layout.analytics && layout.analyticsDetailsCollapsed && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.editorActionBar && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.operationActionPlan && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.statusHandoff && layout.orderActionStatus && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
+    if (layout.command && layout.readinessDetailsCollapsed && layout.controlMapCollapsed && layout.api && layout.apiProviderDetailsCollapsed && layout.apiSecondaryActionsCollapsed && layout.apiSecondaryActionContract && layout.metrics && layout.analytics && layout.analyticsDetailsCollapsed && layout.providerAnalytics && layout.apiContracts && layout.notificationDelivery && layout.queue && layout.editor && layout.editorActionBar && layout.shippingLabelControls && layout.providerRefundControls && layout.providerReadiness && layout.operationActionPlan && layout.providerCertificationExport && layout.cronReadiness && layout.riskControls && layout.hasCustomerProfileManager && layout.statusHandoff && layout.orderActionStatus && layout.checkout && layout.privateContract && layout.analyticsEndpoint && layout.deliveryEndpoint && layout.hasImportControls && layout.hasBulkControls && layout.adminApiOpensWithButton) {
       return layout;
     }
     await sleep(250);
