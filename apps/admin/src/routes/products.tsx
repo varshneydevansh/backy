@@ -9699,6 +9699,10 @@ const cloneJsonArray = <T = unknown>(value: unknown): T[] | undefined => (
   Array.isArray(value) ? JSON.parse(JSON.stringify(value)) as T[] : undefined
 );
 
+const cloneJsonArrayOrRecord = (value: unknown): unknown[] | Record<string, unknown> | undefined => (
+  Array.isArray(value) ? cloneJsonArray(value) : cloneJsonRecord(value)
+);
+
 const productProviderSync = (product: CollectionRecord | null): CommerceProductProviderSyncResult | null => {
   const value = product ? readProductValue(product.values, 'providerSync') : null;
   return isPlainRecord(value) ? value as unknown as CommerceProductProviderSyncResult : null;
@@ -9738,6 +9742,19 @@ const optionalRecordFromRecord = (record: Record<string, unknown> | undefined, k
 const optionalArrayFromRecord = <T = unknown>(record: Record<string, unknown> | undefined, key: string): T[] | undefined => (
   cloneJsonArray<T>(record?.[key])
 );
+
+const optionalArrayOrRecordFromRecord = (
+  record: Record<string, unknown> | undefined,
+  key: string,
+): unknown[] | Record<string, unknown> | undefined => (
+  cloneJsonArrayOrRecord(record?.[key])
+);
+
+const designStateItemCount = (value: unknown): number => {
+  if (Array.isArray(value)) return value.length;
+  if (isPlainRecord(value)) return Object.keys(value).length;
+  return 0;
+};
 
 const optionalStringListFromRecord = (record: Record<string, unknown> | undefined, key: string): string[] | undefined => {
   const value = record?.[key];
@@ -9829,13 +9846,13 @@ const buildFrontendProductTemplateValues = (
 ): Record<string, unknown> => {
   const content = frontendTemplateContent(template);
   const metadata = optionalRecordFromRecord(content, 'metadata') || {};
-  const contentDocument = optionalRecordFromRecord(content, 'contentDocument');
-  const elements = optionalArrayFromRecord(content, 'elements');
-  const canvasSize = optionalRecordFromRecord(content, 'canvasSize') || optionalRecordFromRecord(metadata, 'canvasSize');
+  const contentDocument = optionalRecordFromRecord(content, 'contentDocument') || optionalRecordFromRecord(metadata, 'contentDocument');
+  const elements = optionalArrayFromRecord(content, 'elements') || optionalArrayFromRecord(metadata, 'elements');
+  const canvasSize = optionalRecordFromRecord(content, 'canvasSize') || optionalRecordFromRecord(metadata, 'canvasSize') || cloneJsonRecord(template.canvasSize);
   const themeTokenRefs = optionalRecordFromRecord(content, 'themeTokenRefs') || optionalRecordFromRecord(metadata, 'themeTokenRefs');
-  const assets = optionalArrayFromRecord(content, 'assets');
-  const animations = optionalArrayFromRecord(content, 'animations') || optionalArrayFromRecord(metadata, 'animations');
-  const interactions = optionalArrayFromRecord(content, 'interactions');
+  const assets = optionalArrayOrRecordFromRecord(content, 'assets') || optionalArrayOrRecordFromRecord(metadata, 'assets');
+  const animations = optionalArrayOrRecordFromRecord(content, 'animations') || optionalArrayOrRecordFromRecord(metadata, 'animations');
+  const interactions = optionalArrayOrRecordFromRecord(content, 'interactions') || optionalArrayOrRecordFromRecord(metadata, 'interactions');
   const dataBindings = optionalRecordFromRecord(content, 'dataBindings') || optionalRecordFromRecord(metadata, 'dataBindings');
   const editableMap = optionalRecordFromRecord(content, 'editableMap') || optionalRecordFromRecord(metadata, 'editableMap') || cloneJsonRecord(frontendDesign?.editableMap);
   const seo = optionalRecordFromRecord(content, 'seo') || optionalRecordFromRecord(metadata, 'seo');
@@ -9945,9 +9962,9 @@ const buildProductStorefrontDesign = (values: Record<string, unknown>): Record<s
   const elements = optionalArrayFromRecord(designValue('elements', 'frontendDesignElements'), 'frontendDesignElements');
   const canvasSize = optionalRecordFromRecord(designValue('canvasSize', 'frontendDesignCanvasSize'), 'frontendDesignCanvasSize');
   const themeTokenRefs = optionalRecordFromRecord(designValue('themeTokenRefs', 'frontendDesignThemeTokenRefs'), 'frontendDesignThemeTokenRefs');
-  const assets = optionalArrayFromRecord(designValue('assets', 'frontendDesignAssets'), 'frontendDesignAssets');
-  const animations = optionalArrayFromRecord(designValue('animations', 'frontendDesignAnimations'), 'frontendDesignAnimations');
-  const interactions = optionalArrayFromRecord(designValue('interactions', 'frontendDesignInteractions'), 'frontendDesignInteractions');
+  const assets = optionalArrayOrRecordFromRecord(designValue('assets', 'frontendDesignAssets'), 'frontendDesignAssets');
+  const animations = optionalArrayOrRecordFromRecord(designValue('animations', 'frontendDesignAnimations'), 'frontendDesignAnimations');
+  const interactions = optionalArrayOrRecordFromRecord(designValue('interactions', 'frontendDesignInteractions'), 'frontendDesignInteractions');
   const dataBindings = optionalRecordFromRecord(designValue('dataBindings', 'frontendDesignDataBindings'), 'frontendDesignDataBindings');
   const editableMap = optionalRecordFromRecord(designValue('editableMap', 'frontendDesignEditableMap'), 'frontendDesignEditableMap');
   const seo = optionalRecordFromRecord(designValue('seo', 'frontendDesignSeo'), 'frontendDesignSeo');
@@ -10167,12 +10184,10 @@ const buildProductDesignReadiness = (
   const designElements = optionalArrayFromRecord(design || undefined, 'elements')
     || optionalArrayFromRecord(design || undefined, 'frontendDesignElements')
     || [];
-  const designAnimations = optionalArrayFromRecord(design || undefined, 'animations')
-    || optionalArrayFromRecord(design || undefined, 'frontendDesignAnimations')
-    || [];
-  const designAssets = optionalArrayFromRecord(design || undefined, 'assets')
-    || optionalArrayFromRecord(design || undefined, 'frontendDesignAssets')
-    || [];
+  const designAnimations = optionalArrayOrRecordFromRecord(design || undefined, 'animations')
+    || optionalArrayOrRecordFromRecord(design || undefined, 'frontendDesignAnimations');
+  const designAssets = optionalArrayOrRecordFromRecord(design || undefined, 'assets')
+    || optionalArrayOrRecordFromRecord(design || undefined, 'frontendDesignAssets');
   const designEditableMap = optionalRecordFromRecord(design || undefined, 'editableMap')
     || optionalRecordFromRecord(design || undefined, 'frontendDesignEditableMap');
   const designDataBindings = optionalRecordFromRecord(design || undefined, 'dataBindings')
@@ -10188,6 +10203,8 @@ const buildProductDesignReadiness = (
   const hasDataBindings = Boolean(designDataBindings);
   const hasContentTree = hasContentDocument || designElements.length > 0;
   const hasEditableBindings = hasEditableMap || hasDataBindings || designBindingHints.length > 0;
+  const animationCount = designStateItemCount(designAnimations);
+  const assetCount = designStateItemCount(designAssets);
   const missing = [
     designTemplateId ? '' : 'templateId',
     hasContentTree ? '' : 'contentDocumentOrElements',
@@ -10207,13 +10224,13 @@ const buildProductDesignReadiness = (
     hasDataBindings,
     counts: {
       elements: designElements.length,
-      animations: designAnimations.length,
-      assets: designAssets.length,
+      animations: animationCount,
+      assets: assetCount,
       bindingHints: designBindingHints.length,
     },
     missing,
     detail: status === 'ready'
-      ? `Template ${designTemplateId} exposes ${designElements.length} element${designElements.length === 1 ? '' : 's'}, ${designAnimations.length} animation${designAnimations.length === 1 ? '' : 's'}, and editable product bindings.`
+      ? `Template ${designTemplateId} exposes ${designElements.length} element${designElements.length === 1 ? '' : 's'}, ${animationCount} animation${animationCount === 1 ? '' : 's'}, and editable product bindings.`
       : hasDesign
         ? 'Product has partial frontend design metadata but is missing a template, content tree, editable map, data binding, or binding hints.'
         : 'No product frontend design envelope is attached; custom frontends can render catalog data but cannot reopen an editable product design from this record.',
@@ -10221,8 +10238,8 @@ const buildProductDesignReadiness = (
     evidence: [
       `template=${designTemplateId || 'missing'}`,
       `elements=${designElements.length}`,
-      `animations=${designAnimations.length}`,
-      `assets=${designAssets.length}`,
+      `animations=${animationCount}`,
+      `assets=${assetCount}`,
       `contentDocument=${hasContentDocument ? 'present' : 'missing'}`,
       `editableMap=${hasEditableMap ? 'present' : 'missing'}`,
       `dataBindings=${hasDataBindings ? 'present' : 'missing'}`,

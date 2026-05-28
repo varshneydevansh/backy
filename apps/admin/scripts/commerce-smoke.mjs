@@ -1259,6 +1259,11 @@ const assertProductsApiContractsSource = () => {
       source.includes("frontendDesignEditableMap") &&
       source.includes("const designEnvelope = optionalRecordFromRecord(values, 'design');") &&
       source.includes("designValue('customJs', 'frontendDesignCustomJs')") &&
+      source.includes("const assets = optionalArrayOrRecordFromRecord(content, 'assets') || optionalArrayOrRecordFromRecord(metadata, 'assets');") &&
+      source.includes("const animations = optionalArrayOrRecordFromRecord(content, 'animations') || optionalArrayOrRecordFromRecord(metadata, 'animations');") &&
+      source.includes("const interactions = optionalArrayOrRecordFromRecord(content, 'interactions') || optionalArrayOrRecordFromRecord(metadata, 'interactions');") &&
+      source.includes("const animationCount = designStateItemCount(designAnimations);") &&
+      source.includes("const assetCount = designStateItemCount(designAssets);") &&
       commerceCatalogSource.includes("frontendDesignContentDocument") &&
       commerceCatalogSource.includes("frontendDesignCustomJs") &&
       commerceCatalogSource.includes("frontendDesignElements") &&
@@ -3235,28 +3240,28 @@ const smokeFrontendDesignContract = () => ({
         themeTokenRefs: {
           ctaColor: "colors.primary",
         },
-        assets: [
-          {
+        assets: {
+          hero: {
             id: "smoke-product-hero-asset",
             kind: "image",
             role: "hero",
           },
-        ],
-        animations: [
-          {
+        },
+        animations: {
+          intro: {
             id: "smoke-product-intro",
             trigger: "load",
             target: "smoke-product-hero",
             timeline: ["fade-up", "cta-pop"],
           },
-        ],
-        interactions: [
-          {
+        },
+        interactions: {
+          hoverPreview: {
             trigger: "hover",
             target: "smoke-product-card",
             action: "preview",
           },
-        ],
+        },
         dataBindings: {
           title: {
             source: "product.title",
@@ -4618,9 +4623,9 @@ const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
       record.values.frontendDesignContentDocument?.schemaVersion === "backy.content.v1" &&
       record.values.frontendDesignElements?.[0]?.animation?.preset === "fade-up" &&
       record.values.frontendDesignThemeTokenRefs?.ctaColor === "colors.primary" &&
-      record.values.frontendDesignAssets?.[0]?.id === "smoke-product-hero-asset" &&
-      record.values.frontendDesignAnimations?.[0]?.timeline?.includes("cta-pop") &&
-      record.values.frontendDesignInteractions?.[0]?.trigger === "hover" &&
+      record.values.frontendDesignAssets?.hero?.id === "smoke-product-hero-asset" &&
+      record.values.frontendDesignAnimations?.intro?.timeline?.includes("cta-pop") &&
+      record.values.frontendDesignInteractions?.hoverPreview?.trigger === "hover" &&
       record.values.frontendDesignDataBindings?.title?.source === "product.title" &&
       record.values.frontendDesignEditableMap?.["product.title"]?.elementId === "smoke-product-title" &&
       record.values.frontendDesignMetadata?.animationTimeline === "smoke-product-intro",
@@ -4694,12 +4699,17 @@ const assertFrontendTemplateProduct = async ({ productCollection, record }) => {
       product.design.frontendDesignContentDocument?.schemaVersion === "backy.content.v1" &&
       product.design.frontendDesignElements?.[0]?.animation?.preset === "fade-up" &&
       product.design.frontendDesignThemeTokenRefs?.ctaColor === "colors.primary" &&
-      product.design.frontendDesignAssets?.[0]?.id === "smoke-product-hero-asset" &&
-      product.design.frontendDesignAnimations?.[0]?.target === "smoke-product-hero" &&
-      product.design.frontendDesignInteractions?.[0]?.target === "smoke-product-card" &&
+      product.design.frontendDesignAssets?.hero?.id === "smoke-product-hero-asset" &&
+      product.design.frontendDesignAnimations?.intro?.target === "smoke-product-hero" &&
+      product.design.frontendDesignInteractions?.hoverPreview?.target === "smoke-product-card" &&
       product.design.frontendDesignEditableMap?.["product.title"]?.targetPath === "props.content" &&
       product.design.frontendDesignMetadata?.animationTimeline === "smoke-product-intro",
     `Public catalog did not expose product design state: ${JSON.stringify(product.design).slice(0, 1200)}`,
+  );
+  assert(
+    product.designReadiness?.counts?.assets === 1 &&
+      product.designReadiness?.counts?.animations === 1,
+    `Public catalog did not count record-shaped product design state: ${JSON.stringify(product.designReadiness).slice(0, 900)}`,
   );
 
   return product;
