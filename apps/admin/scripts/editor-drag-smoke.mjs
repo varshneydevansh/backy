@@ -615,6 +615,29 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("key === 's' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleSnap();'), 'Editor keyboard handler must support S as a snapping shortcut without intercepting Cmd/Ctrl+S save');
   assert(source.includes('data-testid="editor-grid-snap-controls"') && source.includes('data-grid-keyshortcuts="toggle:G"') && source.includes('data-snap-keyshortcuts="toggle:S"'), 'Editor grid/snap HUD must expose shortcut metadata for custom admin clients');
   assert(source.includes('data-testid="editor-grid-visibility-toggle"') && source.includes('aria-keyshortcuts="G"') && source.includes('data-testid="editor-snap-toggle"') && source.includes('aria-keyshortcuts="S"'), 'Editor grid and snap toggle controls must expose keyboard shortcut metadata');
+  assert(
+    source.includes("const editorGridSnapActionStatusId = 'editor-grid-snap-action-status';") &&
+      source.includes('data-testid="editor-grid-snap-action-status"') &&
+      source.includes('data-action-status={editorGridSnapActionStatus}') &&
+      source.includes('data-command-id={gridVisibilityCommand?.id}') &&
+      source.includes('data-action-state={gridVisibilityActionState}') &&
+      source.includes('data-command-id={snapCommand?.id}') &&
+      source.includes('data-action-state={snapActionState}') &&
+      source.includes('data-action-status={gridSizeActionStatus}'),
+    'Editor grid/snap HUD controls must expose shared action-status metadata and command-backed states',
+  );
+  assert(
+    source.includes("const editorZoomActionStatusId = 'editor-zoom-action-status';") &&
+      source.includes('data-testid="editor-zoom-action-status"') &&
+      source.includes('data-action-status={editorZoomActionStatus}') &&
+      source.includes('data-command-id={panCommand?.id}') &&
+      source.includes('data-action-state={panActionState}') &&
+      source.includes('data-command-id={zoomOutCommand?.id}') &&
+      source.includes('data-command-id={zoomInCommand?.id}') &&
+      source.includes('data-command-id={zoomFitCommand?.id}') &&
+      source.includes('data-action-status={zoomSliderActionStatus}'),
+    'Editor zoom HUD controls must expose shared action-status metadata and command-backed states',
+  );
   assert(source.includes('handleToggleComponentPanel') && source.includes('handleToggleInspectorPanel') && source.includes('handleToggleLayersPanel'), 'Editor shell panel controls must use explicit shared handlers');
   assert(source.includes("key === 'b' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleComponentPanel();'), 'Editor keyboard handler must support B as a component panel shortcut');
   assert(source.includes("key === 'i' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleInspectorPanel();'), 'Editor keyboard handler must support I as an inspector panel shortcut');
@@ -11983,14 +12006,32 @@ const readZoomControlState = async (client, label) => {
     const percent = document.querySelector('[data-testid="editor-zoom-percent"]');
     const auto = document.querySelector('[data-testid="editor-zoom-autofit"]');
     const slider = document.querySelector('[data-testid="editor-zoom-slider"]');
+    const actionStatus = document.querySelector('[data-testid="editor-zoom-action-status"]');
+    const pan = document.querySelector('[data-testid="editor-pan-toggle"]');
+    const zoomOut = document.querySelector('[data-testid="editor-zoom-out"]');
+    const zoomIn = document.querySelector('[data-testid="editor-zoom-in"]');
+    const zoomFit = document.querySelector('[data-testid="editor-zoom-fit"]');
     const style = surface instanceof HTMLElement ? window.getComputedStyle(surface) : null;
     const canvasStyle = canvas instanceof HTMLElement ? window.getComputedStyle(canvas) : null;
     const canvasRect = canvas instanceof HTMLElement ? canvas.getBoundingClientRect() : null;
     const cssCanvasWidth = Number.parseFloat(canvasStyle?.width || '0');
     const visualScale = cssCanvasWidth > 0 && canvasRect ? Number((canvasRect.width / cssCanvasWidth).toFixed(3)) : 0;
+    const statusId = actionStatus?.id || '';
+    const controlState = (control) => ({
+      hasControl: Boolean(control),
+      describedBy: control?.getAttribute('aria-describedby') || '',
+      commandId: control?.getAttribute('data-command-id') || '',
+      actionState: control?.getAttribute('data-action-state') || '',
+      actionStatus: control?.getAttribute('data-action-status') || '',
+      disabledReason: control?.getAttribute('data-disabled-reason') || '',
+    });
     return {
       label: ${JSON.stringify(label)},
       hasControls: Boolean(controls),
+      actionStatusText: (actionStatus?.textContent || '').trim(),
+      actionStatusId: statusId,
+      controlsDescribedBy: controls?.getAttribute('aria-describedby') || '',
+      groupActionStatus: controls?.getAttribute('data-action-status') || '',
       percentText: percent?.textContent || '',
       scale: Number(surface?.getAttribute('data-canvas-scale') || 0),
       controlScale: Number(controls?.getAttribute('data-canvas-scale') || 0),
@@ -12003,8 +12044,13 @@ const readZoomControlState = async (client, label) => {
       sliderMin: Number(slider?.getAttribute('data-zoom-min') || 0),
       sliderMax: Number(slider?.getAttribute('data-zoom-max') || 0),
       sliderStep: Number(slider?.getAttribute('data-zoom-step') || 0),
+      sliderDescribedBy: slider?.getAttribute('aria-describedby') || '',
       sliderActionState: slider?.getAttribute('data-action-state') || '',
       sliderActionStatus: slider?.getAttribute('data-action-status') || '',
+      pan: controlState(pan),
+      zoomOut: controlState(zoomOut),
+      zoomIn: controlState(zoomIn),
+      zoomFit: controlState(zoomFit),
       visualScale,
     };
   })()`);
@@ -12015,9 +12061,29 @@ const readZoomControlState = async (client, label) => {
   assert(state.controlPercent === Math.round(state.scale * 100), `Zoom control percent does not match scale during ${label}: ${JSON.stringify(state)}`);
   assert(state.percentText === `${Math.round(state.scale * 100)}%`, `Zoom percent does not match scale during ${label}: ${JSON.stringify(state)}`);
   assert(state.hasSlider, `Zoom slider is missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.actionStatusId === 'editor-zoom-action-status' && state.controlsDescribedBy === state.actionStatusId, `Zoom controls must expose a shared action status during ${label}: ${JSON.stringify(state)}`);
+  assert(state.groupActionStatus === state.actionStatusText, `Zoom group action status should mirror the live status text during ${label}: ${JSON.stringify(state)}`);
+  assert(state.actionStatusText.includes('Zoom out available') && state.actionStatusText.includes('Fit canvas available'), `Zoom shared action status is incomplete during ${label}: ${JSON.stringify(state)}`);
   assert(state.sliderMin === 25 && state.sliderMax === 200 && state.sliderStep === 5, `Zoom slider range metadata is invalid during ${label}: ${JSON.stringify(state)}`);
   assert(Math.abs(state.sliderValue - state.controlPercent) <= state.sliderStep, `Zoom slider value does not track control percent during ${label}: ${JSON.stringify(state)}`);
-  assert(state.sliderActionState === 'ready' && state.sliderActionStatus.includes(`${state.controlPercent}%`), `Zoom slider action status is incomplete during ${label}: ${JSON.stringify(state)}`);
+  assert(state.sliderDescribedBy === state.actionStatusId && state.sliderActionState === 'ready' && state.sliderActionStatus.includes(`${state.controlPercent}%`), `Zoom slider action status is incomplete during ${label}: ${JSON.stringify(state)}`);
+  [
+    ['pan', 'toggle-pan'],
+    ['zoomOut', 'zoom-out'],
+    ['zoomIn', 'zoom-in'],
+    ['zoomFit', 'zoom-fit'],
+  ].forEach(([key, commandId]) => {
+    const control = state[key];
+    assert(
+      control.hasControl &&
+        control.describedBy === state.actionStatusId &&
+        control.commandId === commandId &&
+        ['ready', 'selected'].includes(control.actionState) &&
+        control.actionStatus.includes('available') &&
+        control.disabledReason === '',
+      `Zoom ${key} action status is incomplete during ${label}: ${JSON.stringify(state)}`,
+    );
+  });
   assert(Math.abs(state.visualScale - state.scale) < 0.03, `Zoom visual scale does not match canvas scale during ${label}: ${JSON.stringify(state)}`);
   return state;
 };
@@ -12978,21 +13044,37 @@ const readGridSnapControlState = async (client, label) => {
     const toggle = document.querySelector('[data-testid="editor-snap-toggle"]');
     const gridToggle = document.querySelector('[data-testid="editor-grid-visibility-toggle"]');
     const input = document.querySelector('[data-testid="editor-grid-size"]');
+    const actionStatus = document.querySelector('[data-testid="editor-grid-snap-action-status"]');
     const grid = document.querySelector('[data-testid="editor-canvas-grid"]');
     const gridStyle = grid instanceof HTMLElement ? window.getComputedStyle(grid) : null;
     return {
       label: ${JSON.stringify(label)},
       hasControls: Boolean(controls),
+      actionStatusId: actionStatus?.id || '',
+      actionStatusText: (actionStatus?.textContent || '').trim(),
+      controlsDescribedBy: controls?.getAttribute('aria-describedby') || '',
       snapEnabled: controls?.getAttribute('data-snap-enabled') === 'true',
       gridVisible: controls?.getAttribute('data-grid-visible') === 'true',
       togglePressed: toggle?.getAttribute('aria-pressed') === 'true',
       gridTogglePressed: gridToggle?.getAttribute('aria-pressed') === 'true',
+      groupActionStatus: controls?.getAttribute('data-action-status') || '',
       gridKeyshortcuts: controls?.getAttribute('data-grid-keyshortcuts') || '',
       snapKeyshortcuts: controls?.getAttribute('data-snap-keyshortcuts') || '',
       gridToggleShortcut: gridToggle?.getAttribute('aria-keyshortcuts') || '',
       snapToggleShortcut: toggle?.getAttribute('aria-keyshortcuts') || '',
+      gridToggleCommandId: gridToggle?.getAttribute('data-command-id') || '',
+      snapCommandId: toggle?.getAttribute('data-command-id') || '',
+      gridToggleActionState: gridToggle?.getAttribute('data-action-state') || '',
+      snapActionState: toggle?.getAttribute('data-action-state') || '',
+      gridToggleActionStatus: gridToggle?.getAttribute('data-action-status') || '',
+      snapActionStatus: toggle?.getAttribute('data-action-status') || '',
+      gridToggleDescribedBy: gridToggle?.getAttribute('aria-describedby') || '',
+      snapDescribedBy: toggle?.getAttribute('aria-describedby') || '',
       gridSize: Number(controls?.getAttribute('data-grid-size') || 0),
       inputValue: input instanceof HTMLInputElement ? input.value : '',
+      inputDescribedBy: input?.getAttribute('aria-describedby') || '',
+      inputActionState: input?.getAttribute('data-action-state') || '',
+      inputActionStatus: input?.getAttribute('data-action-status') || '',
       hasGrid: Boolean(grid),
       gridDataSize: Number(grid?.getAttribute('data-grid-size') || 0),
       backgroundSize: gridStyle?.backgroundSize || '',
@@ -13000,11 +13082,28 @@ const readGridSnapControlState = async (client, label) => {
   })()`);
 
   assert(state.hasControls, `Grid/snap controls are missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.actionStatusId === 'editor-grid-snap-action-status' && state.controlsDescribedBy === state.actionStatusId, `Grid/snap controls must expose a shared action status during ${label}: ${JSON.stringify(state)}`);
+  assert(state.groupActionStatus === state.actionStatusText && state.actionStatusText.includes('Grid size control available'), `Grid/snap shared action status is incomplete during ${label}: ${JSON.stringify(state)}`);
   assert(state.snapEnabled === state.togglePressed, `Snap toggle state mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.gridVisible === state.gridTogglePressed, `Grid visibility toggle state mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.gridKeyshortcuts === 'toggle:G' && state.gridToggleShortcut === 'G', `Grid shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.snapKeyshortcuts === 'toggle:S' && state.snapToggleShortcut === 'S', `Snap shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.gridToggleCommandId === 'toggle-grid' &&
+      ['ready', 'selected'].includes(state.gridToggleActionState) &&
+      state.gridToggleActionStatus.includes('available') &&
+      state.gridToggleDescribedBy === state.actionStatusId,
+    `Grid toggle action status is incomplete during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.snapCommandId === 'toggle-snap' &&
+      ['ready', 'selected'].includes(state.snapActionState) &&
+      state.snapActionStatus.includes('available') &&
+      state.snapDescribedBy === state.actionStatusId,
+    `Snap toggle action status is incomplete during ${label}: ${JSON.stringify(state)}`,
+  );
   assert(state.gridSize === Number(state.inputValue), `Grid input does not match control state during ${label}: ${JSON.stringify(state)}`);
+  assert(state.inputDescribedBy === state.actionStatusId && state.inputActionState === 'ready' && state.inputActionStatus.includes(`${state.gridSize}px`), `Grid size action status is incomplete during ${label}: ${JSON.stringify(state)}`);
   if (state.gridVisible) {
     assert(state.hasGrid, `Canvas grid should be visible during ${label}: ${JSON.stringify(state)}`);
     assert(state.gridSize === state.gridDataSize, `Canvas grid data size does not match control state during ${label}: ${JSON.stringify(state)}`);

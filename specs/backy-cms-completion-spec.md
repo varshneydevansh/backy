@@ -488,6 +488,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Canvas zoom now supports Cmd/Ctrl+=, Cmd/Ctrl+-, and Cmd/Ctrl+0 for zoom in, zoom out, and fit canvas; the zoom HUD exposes the same shortcut metadata for accessible controls and custom admin clients.
 - Canvas pan navigation now exposes H for persistent hand mode plus hold-Space for temporary panning, with HUD metadata and source coverage beside zoom controls.
 - Grid visibility and snapping can now be toggled from the canvas with G and S, while preserving Cmd/Ctrl+S for save; the grid/snap HUD exposes matching shortcut metadata.
+- The bottom canvas grid/snap and zoom HUDs now expose shared action-status live regions, command ids, ready/selected metadata, and disabled reasons for custom admin shells, covering grid visibility, snap, grid size, pan, zoom out, direct zoom slider, zoom in, and fit canvas.
 - Focused browser smokes now exercise the keyboard paths for zoom, pan, grid visibility, and snapping, not only pointer-click controls.
 - Editor shell controls now expose stable actions and shortcuts for Components (B), Inspector (I), Layers (L), and Focus (F); Layers/Inspector commands exit focus mode when needed so the requested panel becomes visible.
 - Group/ungroup toolbar and inspector controls now expose stable action ids plus `aria-keyshortcuts` for Cmd/Ctrl+G and Shift+Cmd/Ctrl+G, with source-only editor smoke coverage for shortcut discoverability.

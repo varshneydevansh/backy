@@ -6935,6 +6935,12 @@ export function CanvasEditor({
   const reloadCommand = editorCommandsByTestId.get('editor-reload-page');
   const publishCommand = editorCommandsByTestId.get('editor-publish-page');
   const saveCommand = editorCommandsByTestId.get('editor-save-page');
+  const gridVisibilityCommand = editorCommandsByTestId.get('editor-grid-visibility-toggle');
+  const snapCommand = editorCommandsByTestId.get('editor-snap-toggle');
+  const panCommand = editorCommandsByTestId.get('editor-pan-toggle');
+  const zoomOutCommand = editorCommandsByTestId.get('editor-zoom-out');
+  const zoomInCommand = editorCommandsByTestId.get('editor-zoom-in');
+  const zoomFitCommand = editorCommandsByTestId.get('editor-zoom-fit');
   const contextEditTextCommand = editorCommandsById.get('edit-text');
   const contextDuplicateCommand = editorCommandsById.get('duplicate-selection');
   const contextSendToBackCommand = editorCommandsById.get('send-to-back');
@@ -7013,6 +7019,31 @@ export function CanvasEditor({
     .filter((command): command is EditorCommandRegistryItem => Boolean(command && command.state !== 'hidden'))
     .map(editorCommandStatusText)
     .join('. ');
+  const editorGridSnapActionStatusId = 'editor-grid-snap-action-status';
+  const gridVisibilityActionState = gridVisibilityCommand?.state !== 'ready'
+    ? editorCommandActionState(gridVisibilityCommand)
+    : showGrid ? 'selected' : 'ready';
+  const snapActionState = snapCommand?.state !== 'ready'
+    ? editorCommandActionState(snapCommand)
+    : snapEnabled ? 'selected' : 'ready';
+  const gridSizeActionStatus = `Grid size control available. Current grid size is ${gridSize}px`;
+  const editorGridSnapActionStatus = [
+    editorCommandStatusText(gridVisibilityCommand),
+    editorCommandStatusText(snapCommand),
+    gridSizeActionStatus,
+  ].join('. ');
+  const editorZoomActionStatusId = 'editor-zoom-action-status';
+  const panActionState = panCommand?.state !== 'ready'
+    ? editorCommandActionState(panCommand)
+    : isCanvasPanMode ? 'selected' : 'ready';
+  const zoomSliderActionStatus = `Canvas zoom slider set to ${zoomPercent}%. Range ${CANVAS_ZOOM_MIN * 100}-${CANVAS_ZOOM_MAX * 100}%`;
+  const editorZoomActionStatus = [
+    editorCommandStatusText(panCommand),
+    editorCommandStatusText(zoomOutCommand),
+    zoomSliderActionStatus,
+    editorCommandStatusText(zoomInCommand),
+    editorCommandStatusText(zoomFitCommand),
+  ].join('. ');
   const editorSecondaryToolbarStatusId = 'editor-secondary-toolbar-action-status';
   const editorSecondaryToolbarCommandIds = [
     'undo',
@@ -9038,12 +9069,17 @@ export function CanvasEditor({
               <div
                 className="absolute bottom-4 left-4 z-30 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
                 data-testid="editor-grid-snap-controls"
+                aria-describedby={editorGridSnapActionStatusId}
                 data-snap-enabled={snapEnabled ? 'true' : 'false'}
                 data-grid-visible={showGrid ? 'true' : 'false'}
                 data-grid-size={gridSize}
                 data-grid-keyshortcuts="toggle:G"
                 data-snap-keyshortcuts="toggle:S"
+                data-action-status={editorGridSnapActionStatus}
               >
+                <span id={editorGridSnapActionStatusId} className="sr-only" data-testid="editor-grid-snap-action-status" aria-live="polite">
+                  {editorGridSnapActionStatus}
+                </span>
                 <button
                   type="button"
                   onClick={handleToggleGridVisibility}
@@ -9058,6 +9094,11 @@ export function CanvasEditor({
                   aria-pressed={showGrid}
                   aria-keyshortcuts="G"
                   data-testid="editor-grid-visibility-toggle"
+                  aria-describedby={editorGridSnapActionStatusId}
+                  data-command-id={gridVisibilityCommand?.id}
+                  data-action-state={gridVisibilityActionState}
+                  data-action-status={editorCommandStatusText(gridVisibilityCommand)}
+                  data-disabled-reason={editorCommandDisabledReason(gridVisibilityCommand)}
                 >
                   {showGrid ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                 </button>
@@ -9075,11 +9116,22 @@ export function CanvasEditor({
                   aria-pressed={snapEnabled}
                   aria-keyshortcuts="S"
                   data-testid="editor-snap-toggle"
+                  aria-describedby={editorGridSnapActionStatusId}
+                  data-command-id={snapCommand?.id}
+                  data-action-state={snapActionState}
+                  data-action-status={editorCommandStatusText(snapCommand)}
+                  data-disabled-reason={editorCommandDisabledReason(snapCommand)}
                 >
                   <Magnet className="h-4 w-4" />
                   {snapEnabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
                 </button>
-                <label className="flex items-center gap-1.5" title="Grid size">
+                <label
+                  className="flex items-center gap-1.5"
+                  title="Grid size"
+                  aria-describedby={editorGridSnapActionStatusId}
+                  data-action-state="ready"
+                  data-action-status={gridSizeActionStatus}
+                >
                   <Ruler className="h-4 w-4 text-slate-500" />
                   <input
                     type="number"
@@ -9091,6 +9143,9 @@ export function CanvasEditor({
                     className="h-7 w-14 rounded-md border border-slate-200 bg-white px-2 text-right tabular-nums text-slate-700 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
                     aria-label="Grid size"
                     data-testid="editor-grid-size"
+                    aria-describedby={editorGridSnapActionStatusId}
+                    data-action-state="ready"
+                    data-action-status={gridSizeActionStatus}
                   />
                 </label>
               </div>
@@ -9100,6 +9155,7 @@ export function CanvasEditor({
               <div
                 className="absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
                 data-testid="editor-zoom-controls"
+                aria-describedby={editorZoomActionStatusId}
                 data-auto-fit={isCanvasAutoFit ? 'true' : 'false'}
                 data-canvas-scale={activeCanvasScale}
                 data-zoom-percent={zoomPercent}
@@ -9108,7 +9164,11 @@ export function CanvasEditor({
                 data-pan-keyshortcuts="toggle:H;temporary:Space"
                 data-keyboard-zoom-scope="editor-window"
                 data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"
+                data-action-status={editorZoomActionStatus}
               >
+                <span id={editorZoomActionStatusId} className="sr-only" data-testid="editor-zoom-action-status" aria-live="polite">
+                  {editorZoomActionStatus}
+                </span>
                 <button
                   type="button"
                   onClick={handleToggleCanvasPanMode}
@@ -9123,6 +9183,11 @@ export function CanvasEditor({
                   aria-pressed={isCanvasPanMode}
                   aria-keyshortcuts="H Space"
                   data-testid="editor-pan-toggle"
+                  aria-describedby={editorZoomActionStatusId}
+                  data-command-id={panCommand?.id}
+                  data-action-state={panActionState}
+                  data-action-status={editorCommandStatusText(panCommand)}
+                  data-disabled-reason={editorCommandDisabledReason(panCommand)}
                 >
                   <Hand className="h-4 w-4" />
                 </button>
@@ -9135,6 +9200,11 @@ export function CanvasEditor({
                   aria-label="Zoom out"
                   aria-keyshortcuts="Control+- Meta+-"
                   data-testid="editor-zoom-out"
+                  aria-describedby={editorZoomActionStatusId}
+                  data-command-id={zoomOutCommand?.id}
+                  data-action-state={editorCommandActionState(zoomOutCommand)}
+                  data-action-status={editorCommandStatusText(zoomOutCommand)}
+                  data-disabled-reason={editorCommandDisabledReason(zoomOutCommand)}
                 >
                   <ZoomOut className="h-4 w-4" />
                 </button>
@@ -9162,8 +9232,9 @@ export function CanvasEditor({
                     data-zoom-min={CANVAS_ZOOM_MIN * 100}
                     data-zoom-max={CANVAS_ZOOM_MAX * 100}
                     data-zoom-step={CANVAS_ZOOM_PERCENT_STEP}
+                    aria-describedby={editorZoomActionStatusId}
                     data-action-state="ready"
-                    data-action-status={`Canvas zoom slider set to ${zoomPercent}%.`}
+                    data-action-status={zoomSliderActionStatus}
                   />
                 </label>
                 <button
@@ -9174,6 +9245,11 @@ export function CanvasEditor({
                   aria-label="Zoom in"
                   aria-keyshortcuts="Control+= Meta+="
                   data-testid="editor-zoom-in"
+                  aria-describedby={editorZoomActionStatusId}
+                  data-command-id={zoomInCommand?.id}
+                  data-action-state={editorCommandActionState(zoomInCommand)}
+                  data-action-status={editorCommandStatusText(zoomInCommand)}
+                  data-disabled-reason={editorCommandDisabledReason(zoomInCommand)}
                 >
                   <ZoomIn className="h-4 w-4" />
                 </button>
@@ -9186,6 +9262,11 @@ export function CanvasEditor({
                   aria-label="Fit canvas"
                   aria-keyshortcuts="Control+0 Meta+0"
                   data-testid="editor-zoom-fit"
+                  aria-describedby={editorZoomActionStatusId}
+                  data-command-id={zoomFitCommand?.id}
+                  data-action-state={editorCommandActionState(zoomFitCommand)}
+                  data-action-status={editorCommandStatusText(zoomFitCommand)}
+                  data-disabled-reason={editorCommandDisabledReason(zoomFitCommand)}
                 >
                   <Maximize2 className="h-4 w-4" />
                 </button>
