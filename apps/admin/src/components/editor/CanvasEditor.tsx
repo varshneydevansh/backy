@@ -351,6 +351,8 @@ const CANVAS_ZOOM_MIN = 0.25;
 const CANVAS_ZOOM_MAX = 2;
 const CANVAS_ZOOM_STEP = 0.1;
 const CANVAS_WHEEL_ZOOM_STEP = 0.08;
+const CANVAS_WHEEL_DELTA_LINE_MULTIPLIER = 16;
+const CANVAS_WHEEL_DELTA_PAGE_MULTIPLIER = 800;
 const MIN_GRID_SIZE = 1;
 const MAX_GRID_SIZE = 100;
 const MIN_CANVAS_DIMENSION = 320;
@@ -1884,6 +1886,7 @@ export function CanvasEditor({
   const [showGrid, setShowGrid] = useState(true);
   const safeEditorGridSize = normalizeEditorGridSize(gridSize);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const editorShellRef = useRef<HTMLDivElement>(null);
   const canvasPanRef = useRef<{
     startX: number;
     startY: number;
@@ -2040,6 +2043,27 @@ export function CanvasEditor({
     }
   }, []);
 
+  const getCanvasZoomAnchor = useCallback((event?: Event) => {
+    const pointerEvent = event as Event & { clientX?: number; clientY?: number } | undefined;
+    if (Number.isFinite(pointerEvent?.clientX) && Number.isFinite(pointerEvent?.clientY)) {
+      return {
+        clientX: Number(pointerEvent?.clientX),
+        clientY: Number(pointerEvent?.clientY),
+      };
+    }
+
+    const viewport = canvasViewportRef.current;
+    if (!viewport) {
+      return undefined;
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    return {
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+    };
+  }, []);
+
   const isCanvasViewportEvent = useCallback((event: Event) => {
     const viewport = canvasViewportRef.current;
     if (!viewport) {
@@ -2068,6 +2092,48 @@ export function CanvasEditor({
     );
   }, []);
 
+  const isEditorCanvasZoomEvent = useCallback((event: Event) => {
+    if (isCanvasViewportEvent(event)) {
+      return true;
+    }
+
+    const viewport = canvasViewportRef.current;
+    if (!viewport) {
+      return false;
+    }
+
+    const shell = editorShellRef.current;
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    if (shell && path.includes(shell)) {
+      return true;
+    }
+
+    const pointerEvent = event as Event & { clientX?: number; clientY?: number };
+    if (Number.isFinite(pointerEvent.clientX) && Number.isFinite(pointerEvent.clientY)) {
+      if (!shell) {
+        return false;
+      }
+
+      const rect = shell.getBoundingClientRect();
+      const clientX = Number(pointerEvent.clientX);
+      const clientY = Number(pointerEvent.clientY);
+      return (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      );
+    }
+
+    const activeElement = document.activeElement;
+    if (shell && activeElement instanceof HTMLElement && shell.contains(activeElement)) {
+      return true;
+    }
+
+    // macOS browser pinch events can arrive without usable client coordinates.
+    return document.body.contains(viewport);
+  }, [isCanvasViewportEvent]);
+
   const handleZoomIn = useCallback(() => {
     zoomCanvasAtPoint((current) => current + CANVAS_ZOOM_STEP);
   }, [zoomCanvasAtPoint]);
@@ -2080,18 +2146,28 @@ export function CanvasEditor({
     if (!(event.metaKey || event.ctrlKey)) {
       return;
     }
-    if (!isCanvasViewportEvent(event)) {
+    if (!isEditorCanvasZoomEvent(event)) {
       return;
     }
 
     preventCanvasBrowserZoom(event);
-    const direction = event.deltaY > 0 ? -1 : 1;
-    const strength = Math.min(3, Math.max(1, Math.abs(event.deltaY) / 100));
+    const deltaModeMultiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+      ? CANVAS_WHEEL_DELTA_LINE_MULTIPLIER
+      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+        ? CANVAS_WHEEL_DELTA_PAGE_MULTIPLIER
+        : 1;
+    const normalizedDeltaY = event.deltaY * deltaModeMultiplier;
+    if (Math.abs(normalizedDeltaY) < 0.01) {
+      return;
+    }
+
+    const direction = normalizedDeltaY > 0 ? -1 : 1;
+    const strength = Math.min(3, Math.max(0.35, Math.abs(normalizedDeltaY) / 100));
     zoomCanvasAtPoint(
       (current) => current + direction * CANVAS_WHEEL_ZOOM_STEP * strength,
-      { clientX: event.clientX, clientY: event.clientY },
+      getCanvasZoomAnchor(event),
     );
-  }, [isCanvasViewportEvent, preventCanvasBrowserZoom, zoomCanvasAtPoint]);
+  }, [getCanvasZoomAnchor, isEditorCanvasZoomEvent, preventCanvasBrowserZoom, zoomCanvasAtPoint]);
 
   const readGestureScale = useCallback((event: Event) => {
     const scale = Number((event as Event & { scale?: number }).scale);
@@ -2099,7 +2175,7 @@ export function CanvasEditor({
   }, []);
 
   const handleCanvasGestureStart = useCallback((event: Event) => {
-    if (!isCanvasViewportEvent(event)) {
+    if (!isEditorCanvasZoomEvent(event)) {
       isCanvasGestureZoomActiveRef.current = false;
       return;
     }
@@ -2107,10 +2183,10 @@ export function CanvasEditor({
     preventCanvasBrowserZoom(event);
     isCanvasGestureZoomActiveRef.current = true;
     canvasGestureScaleRef.current = readGestureScale(event);
-  }, [isCanvasViewportEvent, preventCanvasBrowserZoom, readGestureScale]);
+  }, [isEditorCanvasZoomEvent, preventCanvasBrowserZoom, readGestureScale]);
 
   const handleCanvasGestureChange = useCallback((event: Event) => {
-    if (!isCanvasGestureZoomActiveRef.current && !isCanvasViewportEvent(event)) {
+    if (!isCanvasGestureZoomActiveRef.current && !isEditorCanvasZoomEvent(event)) {
       return;
     }
 
@@ -2122,22 +2198,19 @@ export function CanvasEditor({
     canvasGestureScaleRef.current = nextGestureScale;
     zoomCanvasAtPoint(
       (current) => current * gestureRatio,
-      {
-        clientX: Number((event as Event & { clientX?: number }).clientX),
-        clientY: Number((event as Event & { clientY?: number }).clientY),
-      },
+      getCanvasZoomAnchor(event),
     );
-  }, [isCanvasViewportEvent, preventCanvasBrowserZoom, readGestureScale, zoomCanvasAtPoint]);
+  }, [getCanvasZoomAnchor, isEditorCanvasZoomEvent, preventCanvasBrowserZoom, readGestureScale, zoomCanvasAtPoint]);
 
   const handleCanvasGestureEnd = useCallback((event: Event) => {
-    if (!isCanvasGestureZoomActiveRef.current && !isCanvasViewportEvent(event)) {
+    if (!isCanvasGestureZoomActiveRef.current && !isEditorCanvasZoomEvent(event)) {
       return;
     }
 
     preventCanvasBrowserZoom(event);
     canvasGestureScaleRef.current = 1;
     isCanvasGestureZoomActiveRef.current = false;
-  }, [isCanvasViewportEvent, preventCanvasBrowserZoom]);
+  }, [isEditorCanvasZoomEvent, preventCanvasBrowserZoom]);
 
   const handleToggleSnap = useCallback(() => {
     setSnapEnabled((current) => !current);
@@ -2212,15 +2285,31 @@ export function CanvasEditor({
     }
 
     window.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    document.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
+    viewport.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
     window.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
+    document.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
+    viewport.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
     window.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
+    document.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
+    viewport.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
     window.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
+    document.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
+    viewport.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
 
     return () => {
       window.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
+      document.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
+      viewport.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
       window.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
+      document.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
+      viewport.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
       window.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
+      document.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
+      viewport.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
       window.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
+      document.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
+      viewport.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
       isCanvasGestureZoomActiveRef.current = false;
     };
   }, [
@@ -6256,12 +6345,7 @@ export function CanvasEditor({
    * Keyboard shortcuts
    */
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isSaving && ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
-        e.preventDefault();
-        return;
-      }
-
+    const runCanvasZoomShortcut = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       const isZoomInShortcut = (e.ctrlKey || e.metaKey) && !e.altKey && (
         key === '+' ||
@@ -6280,16 +6364,34 @@ export function CanvasEditor({
         e.code === 'Numpad0'
       );
       if (!isPreview && (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut)) {
-        e.preventDefault();
+        preventCanvasBrowserZoom(e);
         if (isZoomOutShortcut) {
           handleZoomOut();
-          return;
+          return true;
         }
         if (isFitCanvasShortcut) {
           handleFitCanvas();
-          return;
+          return true;
         }
         handleZoomIn();
+        return true;
+      }
+
+      return false;
+    };
+
+    const handleCanvasBrowserZoomKeyDown = (e: KeyboardEvent) => {
+      runCanvasZoomShortcut(e);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isSaving && ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
+        e.preventDefault();
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      if (runCanvasZoomShortcut(e)) {
         return;
       }
 
@@ -6516,8 +6618,12 @@ export function CanvasEditor({
       }
     };
 
+    window.addEventListener('keydown', handleCanvasBrowserZoomKeyDown, { capture: true });
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleCanvasBrowserZoomKeyDown, { capture: true });
+      window.removeEventListener('keydown', handleKeyDown);
+    };
 
   }, [
     deleteElement,
@@ -6541,6 +6647,7 @@ export function CanvasEditor({
     handleToggleSnap,
     handleZoomIn,
     handleZoomOut,
+    preventCanvasBrowserZoom,
     handleSelectFirstChildLayer,
     handleSelectChildLayerScope,
     handleSelectParentLayer,
@@ -8251,6 +8358,7 @@ export function CanvasEditor({
 
         {/* Main Content */}
         <div
+          ref={editorShellRef}
           className="flex min-h-0 flex-1 overflow-hidden"
           data-testid="editor-shell-layout"
           data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
@@ -8293,8 +8401,11 @@ export function CanvasEditor({
             )}
             data-testid="editor-canvas-viewport"
             data-canvas-wheel-zoom="enabled"
-            data-canvas-zoom-listener-scope="window-capture"
-            data-canvas-zoom-hit-test="path-or-bounds"
+            data-canvas-zoom-listener-scope="window-document-viewport-capture"
+            data-canvas-zoom-hit-test="viewport-shell-or-active-editor"
+            data-canvas-zoom-page-guard="editor-active"
+            data-canvas-zoom-anchor-fallback="viewport-center"
+            data-canvas-touch-action="pan-x pan-y"
             data-wheel-zoom-modifier="meta-or-control"
             data-wheel-zoom-prevents-browser-zoom="true"
             data-canvas-pinch-zoom="enabled"
@@ -8310,6 +8421,7 @@ export function CanvasEditor({
             data-library-drag-type={libraryDragItem?.type ?? undefined}
             data-library-drag-name={libraryDragItem?.name ?? undefined}
             style={{
+              touchAction: 'pan-x pan-y',
               backgroundColor: '#eef2f7',
               backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(71,85,105,0.18) 1px, transparent 0)',
               backgroundSize: '20px 20px',
