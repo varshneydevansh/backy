@@ -2117,12 +2117,26 @@ export function CanvasEditor({
       const rect = shell.getBoundingClientRect();
       const clientX = Number(pointerEvent.clientX);
       const clientY = Number(pointerEvent.clientY);
-      return (
+      const isInsideEditorShell = (
         clientX >= rect.left &&
         clientX <= rect.right &&
         clientY >= rect.top &&
         clientY <= rect.bottom
       );
+      if (isInsideEditorShell) {
+        return true;
+      }
+
+      const target = event.target;
+      const isGlobalTarget =
+        target === window ||
+        target === document ||
+        target === document.documentElement ||
+        target === document.body;
+      const isZeroCoordinateGlobalEvent = isGlobalTarget && clientX === 0 && clientY === 0;
+      if (!isZeroCoordinateGlobalEvent) {
+        return false;
+      }
     }
 
     const activeElement = document.activeElement;
@@ -8405,6 +8419,7 @@ export function CanvasEditor({
             data-canvas-zoom-hit-test="viewport-shell-or-active-editor"
             data-canvas-zoom-page-guard="editor-active"
             data-canvas-zoom-anchor-fallback="viewport-center"
+            data-canvas-zoom-global-fallback="zero-coordinate-window-events"
             data-canvas-touch-action="pan-x pan-y"
             data-wheel-zoom-modifier="meta-or-control"
             data-wheel-zoom-prevents-browser-zoom="true"
