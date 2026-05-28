@@ -4345,6 +4345,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         hasCatalog: true,
         hasOrderIntake: true,
       });
+      const cacheRevision =
+        (await repositories.cacheInvalidations.latestRevision({
+          siteId: site.id,
+          scope: "content",
+        })) || undefined;
 
       return publicContractJson(
         {
@@ -4366,6 +4371,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           request,
           cache: "discovery",
           siteId: site.id,
+          cacheRevision,
+          schemaVersion: ORDER_CONTRACT_VERSION,
         },
       );
     }
@@ -4485,6 +4492,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         request,
         cache: "discovery",
         siteId: site.id,
+        schemaVersion: ORDER_CONTRACT_VERSION,
       },
     );
   } catch (error) {
@@ -4932,6 +4940,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           request,
           cache: "private",
           siteId: site.id,
+          schemaVersion: ORDER_CONTRACT_VERSION,
         },
       );
     }
@@ -5328,6 +5337,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         request,
         cache: "private",
         siteId: site.id,
+        schemaVersion: ORDER_CONTRACT_VERSION,
       },
     );
   } catch (error) {

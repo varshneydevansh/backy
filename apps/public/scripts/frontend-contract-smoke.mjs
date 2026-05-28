@@ -22,6 +22,7 @@ const publicBlogRoute = read('../src/app/api/sites/[siteId]/blog/route.ts');
 const publicFormsRoute = read('../src/app/api/sites/[siteId]/forms/route.ts');
 const publicFormDetailRoute = read('../src/app/api/sites/[siteId]/forms/[formId]/route.ts');
 const publicFormDefinitionRoute = read('../src/app/api/sites/[siteId]/forms/[formId]/definition/route.ts');
+const publicCommerceCatalogRoute = read('../src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 const publicCommerceOrdersRoute = read('../src/app/api/sites/[siteId]/commerce/orders/route.ts');
 const publicCollectionsRoute = read('../src/app/api/sites/[siteId]/collections/route.ts');
 const publicCollectionResourcesLib = read('../src/lib/publicCollectionResources.ts');
@@ -1566,6 +1567,22 @@ assert(
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceManagement') &&
     generatedSdkSmoke.includes('invalidGeneratedManifestCommerceRuntimeDiscovery'),
   'Frontend manifest and SDK must expose structured commerce runtime discovery for custom frontend product catalog and checkout UIs.',
+);
+
+assert(
+  publicCommerceCatalogRoute.includes("COMMERCE_CATALOG_SCHEMA_VERSION = 'backy.commerce-catalog.v1'") &&
+    publicCommerceCatalogRoute.includes('repositories.cacheInvalidations.latestRevision') &&
+    publicCommerceCatalogRoute.includes("scope: 'content'") &&
+    publicCommerceCatalogRoute.includes('cacheRevision,') &&
+    publicCommerceCatalogRoute.includes('schemaVersion: COMMERCE_CATALOG_SCHEMA_VERSION') &&
+    publicCommerceOrdersRoute.includes('ORDER_CONTRACT_VERSION = "backy.commerce-orders.v1"') &&
+    publicCommerceOrdersRoute.includes('repositories.cacheInvalidations.latestRevision') &&
+    publicCommerceOrdersRoute.includes('scope: "content"') &&
+    publicCommerceOrdersRoute.includes('cacheRevision,') &&
+    publicCommerceOrdersRoute.includes('schemaVersion: ORDER_CONTRACT_VERSION') &&
+    publicCommerceOrdersRoute.includes('schemaVersion: ORDER_STATUS_HANDOFF_SCHEMA_VERSION') &&
+    publicCommerceOrdersRoute.includes('cache: "private"'),
+  'Public commerce catalog and order discovery must expose schema and cache-revision headers while tokenized order-status handoff stays private.',
 );
 
 assert(

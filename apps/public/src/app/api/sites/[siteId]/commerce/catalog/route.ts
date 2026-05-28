@@ -76,6 +76,7 @@ const paginationFor = (total: number, limit: number, offset: number) => ({
 
 const CATALOG_RECORD_PAGE_SIZE = 100;
 const CATALOG_RECORD_MAX_PAGES = 1000;
+const COMMERCE_CATALOG_SCHEMA_VERSION = 'backy.commerce-catalog.v1';
 
 type CatalogRecordListOptions = {
   search?: string;
@@ -224,7 +225,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          schemaVersion: 'backy.commerce-catalog.v1',
+          schemaVersion: COMMERCE_CATALOG_SCHEMA_VERSION,
           collection,
           products,
           commerce,
@@ -244,6 +245,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         cache: 'discovery',
         siteId: site.id,
         cacheRevision,
+        schemaVersion: COMMERCE_CATALOG_SCHEMA_VERSION,
       });
     }
 
@@ -291,7 +293,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       requestId,
       data: {
-        schemaVersion: 'backy.commerce-catalog.v1',
+        schemaVersion: COMMERCE_CATALOG_SCHEMA_VERSION,
         collection,
         products,
         commerce,
@@ -310,6 +312,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       request,
       cache: 'discovery',
       siteId: site.id,
+      schemaVersion: COMMERCE_CATALOG_SCHEMA_VERSION,
     });
   } catch (error) {
     console.error('Public commerce catalog API error:', error);

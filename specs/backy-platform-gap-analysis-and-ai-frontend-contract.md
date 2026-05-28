@@ -65,6 +65,8 @@ Cache revision follow-up: global public site discovery (`GET /api/sites` and `GE
 
 Hosted RSS follow-up: `/sites/:siteSlug/blog/rss.xml` now uses the repository runtime in database mode, applies the same published/past-scheduled visibility rules as `/api/sites/:siteId/blog/rss`, includes database taxonomy/author joins, caps caller-provided feed limits, and emits content-scope `x-backy-cache-revision` plus ETag revalidation through the public contract response.
 
+Commerce cache/header follow-up: Public product catalog and order-intake discovery now emit schema-version headers and database `content` cache revisions for custom storefront cache coordination, while checkout creation and tokenized order-status handoff keep their private/no-store boundaries.
+
 ## 4. Gap against WordPress-like CMS
 
 Official WordPress docs describe a block editor, reusable/synced patterns, global styles, REST APIs for pages/posts/media/users/taxonomies/revisions/templates/comments, and authenticated access rules.
