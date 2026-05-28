@@ -51,13 +51,17 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes('data-testid="reusable-section-portability-action-plan"'), 'Reusable sections command center must keep the portability action-plan copy control');
   assert(
     source.includes("const reusableSectionsCommandActionStatusId = 'reusable-sections-command-action-status';") &&
+      source.includes("const reusableSectionsCommandSecondaryActionStatusId = 'reusable-sections-command-secondary-action-status';") &&
       source.includes("const reusableSectionsWorkflowActionStatusId = 'reusable-sections-workflow-action-status';") &&
       source.includes('data-testid="reusable-sections-command-action-status"') &&
+      source.includes('data-testid="reusable-sections-command-secondary-action-status"') &&
       source.includes('data-testid="reusable-sections-primary-actions"') &&
       source.includes('data-testid="reusable-sections-command-create"') &&
       source.includes('data-testid="reusable-sections-workflow-action-status"') &&
       source.includes('data-testid="reusable-sections-copy-manifest"') &&
       source.includes('data-testid="reusable-sections-secondary-actions"') &&
+      source.includes('aria-describedby={reusableSectionsCommandSecondaryActionStatusId}') &&
+      source.includes('data-action-status={reusableSectionsCommandSecondaryActionStatus}') &&
       source.includes('data-testid="reusable-sections-more-actions"') &&
       source.includes('data-testid="reusable-sections-secondary-action-menu"') &&
       source.includes('data-testid="reusable-sections-command-refresh"') &&
@@ -66,6 +70,10 @@ const assertReusableSectionsRouteSourceContract = () => {
       source.includes('data-testid="reusable-section-workflow-dry-run"') &&
       source.includes('data-testid="reusable-section-workflow-refresh-instances"') &&
       source.includes('data-testid={`reusable-section-version-restore-${version.version}`}') &&
+      source.includes('data-action-status={reusableSectionsCommandCopyManifestActionStatus}') &&
+      source.includes('data-action-status={reusableSectionsCommandCopyPortabilityPlanActionStatus}') &&
+      source.includes('data-action-status={reusableSectionsCommandExportVisibleActionStatus}') &&
+      source.includes('data-action-status={reusableSectionsCommandImportActionStatus}') &&
       source.includes('data-action-status={actionStatus(') &&
       source.includes('data-action-state={actionStateFromDisabledReason('),
     'Reusable sections command/workflow controls must publish explicit action status, state, and stable hooks instead of relying on disabled styling',
@@ -82,7 +90,8 @@ const assertReusableSectionsRouteSourceContract = () => {
   const importJsonIndex = commandCenterSource.indexOf('data-testid="reusable-sections-import"');
   assert(
     commandCenterSource.includes('data-testid="reusable-sections-primary-actions"') &&
-      commandCenterSource.includes('data-testid="reusable-sections-secondary-actions" data-default-collapsed="true"') &&
+      commandCenterSource.includes('data-testid="reusable-sections-secondary-actions"') &&
+      commandCenterSource.includes('data-default-collapsed="true"') &&
       createActionIndex >= 0 &&
       refreshActionIndex > createActionIndex &&
       moreActionsIndex > refreshActionIndex &&
@@ -776,10 +785,12 @@ const assertReusableSectionsLayout = async (client) => {
         state: element?.getAttribute('data-action-state') || '',
         status: element?.getAttribute('data-action-status') || '',
         reason: element?.getAttribute('data-disabled-reason') || '',
+        targetSite: element?.getAttribute('data-target-site-id') || '',
         disabled: element instanceof HTMLButtonElement ? element.disabled : null,
       };
     };
     const commandStatus = document.querySelector('[data-testid="reusable-sections-command-action-status"]');
+    const commandSecondaryStatus = document.querySelector('[data-testid="reusable-sections-command-secondary-action-status"]');
     const workflowStatus = document.querySelector('[data-testid="reusable-sections-workflow-action-status"]');
     const commandPrimaryActions = Array.from(document.querySelectorAll('[data-testid="reusable-sections-primary-actions"] button'))
       .map((button) => button.textContent?.replace(/\\s+/g, ' ').trim() || '');
@@ -791,11 +802,13 @@ const assertReusableSectionsLayout = async (client) => {
     const commandActions = [
       'reusable-sections-command-create',
       'reusable-sections-command-refresh',
+      'reusable-section-portability-action-plan',
+    ].map(readAction);
+    const commandSecondaryActions = [
       'reusable-sections-copy-manifest',
       'reusable-sections-copy-portability-plan',
       'reusable-sections-export-visible',
       'reusable-sections-import',
-      'reusable-section-portability-action-plan',
     ].map(readAction);
     const workflowActions = [
       'reusable-sections-workflow-export-visible',
@@ -811,15 +824,22 @@ const assertReusableSectionsLayout = async (client) => {
       hasCommandCenter: Boolean(document.querySelector('[data-testid="reusable-sections-command-center"]')),
       commandStatusId: commandStatus?.id || '',
       commandStatusText: commandStatus?.textContent?.trim() || '',
+      commandSecondaryStatusId: commandSecondaryStatus?.id || '',
+      commandSecondaryStatusText: commandSecondaryStatus?.textContent?.trim() || '',
       firstPrimaryCommandAction: commandPrimaryActions[0] || '',
       commandPrimaryActionIds,
       secondaryActionsCollapsed: commandSecondaryDetails instanceof HTMLDetailsElement &&
         commandSecondaryDetails.open === false &&
         commandSecondaryDetails.getAttribute('data-default-collapsed') === 'true',
+      secondaryActionsDescribedBy: commandSecondaryDetails?.getAttribute('aria-describedby') || '',
+      secondaryActionsState: commandSecondaryDetails?.getAttribute('data-action-state') || '',
+      secondaryActionsStatus: commandSecondaryDetails?.getAttribute('data-action-status') || '',
+      secondaryActionsTargetSite: commandSecondaryDetails?.getAttribute('data-target-site-id') || '',
       hasMoreActionsTrigger: Boolean(document.querySelector('[data-testid="reusable-sections-more-actions"]')),
       handoffActionsNested: ['reusable-sections-copy-manifest', 'reusable-sections-copy-portability-plan', 'reusable-sections-export-visible', 'reusable-sections-import']
         .every((testId) => Boolean(commandSecondaryMenu?.querySelector('[data-testid="' + testId + '"]'))),
       commandActions,
+      commandSecondaryActions,
       portabilityReadinessCollapsed: portabilityDetails instanceof HTMLDetailsElement &&
         portabilityDetails.open === false &&
         portabilityDetails.getAttribute('data-default-collapsed') === 'true',
@@ -882,6 +902,23 @@ const assertReusableSectionsLayout = async (client) => {
       layout.handoffActionsNested &&
       layout.commandActions.every((action) => actionContractOk(layout.commandStatusId, action)),
     `Reusable sections command actions are missing explicit ready/busy/blocked status: ${JSON.stringify(layout.commandActions)}`,
+  );
+  assert(
+    layout.commandSecondaryStatusId === 'reusable-sections-command-secondary-action-status' &&
+      layout.secondaryActionsDescribedBy === layout.commandSecondaryStatusId &&
+      layout.secondaryActionsStatus === layout.commandSecondaryStatusText &&
+      validActionStates.has(layout.secondaryActionsState) &&
+      layout.secondaryActionsTargetSite === SITE_ID &&
+      layout.commandSecondaryStatusText.includes('Copy manifest') &&
+      layout.commandSecondaryStatusText.includes('Copy portability plan') &&
+      layout.commandSecondaryStatusText.includes('Export visible reusable sections') &&
+      layout.commandSecondaryStatusText.includes('Import JSON') &&
+      layout.commandSecondaryActions.every((action) => (
+        actionContractOk(layout.commandSecondaryStatusId, action) &&
+        action.targetSite === SITE_ID &&
+        layout.commandSecondaryStatusText.includes(action.status)
+      )),
+    `Reusable sections secondary command actions are missing aggregate ready/busy/blocked metadata: ${JSON.stringify(layout.commandSecondaryActions)}`,
   );
   assert(
     layout.workflowStatusId === 'reusable-sections-workflow-action-status' &&

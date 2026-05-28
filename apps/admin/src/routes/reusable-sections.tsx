@@ -851,6 +851,7 @@ function ReusableSectionsRoute() {
   );
   const reusableSectionPortabilityReadiness = reusableSectionPortabilityPack.readiness;
   const reusableSectionsCommandActionStatusId = 'reusable-sections-command-action-status';
+  const reusableSectionsCommandSecondaryActionStatusId = 'reusable-sections-command-secondary-action-status';
   const reusableSectionsWorkflowActionStatusId = 'reusable-sections-workflow-action-status';
   const reusableSectionsBusyReason = isBusy ? 'Reusable section library is updating.' : '';
   const reusableSectionsWorkflowBusyReason = isWorkflowBusy ? 'Reusable section workflow is running.' : '';
@@ -883,13 +884,31 @@ function ReusableSectionsRoute() {
   const reusableSectionsMetadataSaveDisabledReason = reusableSectionsWorkflowEditDisabledReason || (!activeSection
     ? 'Select a reusable section before saving metadata.'
     : '');
+  const reusableSectionsCommandCopyManifestActionStatus = actionStatus('Copy manifest available.', reusableSectionsViewDisabledReason);
+  const reusableSectionsCommandCopyPortabilityPlanActionStatus = actionStatus('Copy portability plan available.', reusableSectionsViewDisabledReason);
+  const reusableSectionsCommandExportVisibleActionStatus = actionStatus('Export visible reusable sections available.', reusableSectionsExportVisibleDisabledReason);
+  const reusableSectionsCommandImportActionStatus = actionStatus('Import JSON available.', reusableSectionsImportDisabledReason);
+  const reusableSectionsCommandSecondaryActionStatus = [
+    reusableSectionsCommandCopyManifestActionStatus,
+    reusableSectionsCommandCopyPortabilityPlanActionStatus,
+    reusableSectionsCommandExportVisibleActionStatus,
+    reusableSectionsCommandImportActionStatus,
+  ].join(' ');
+  const reusableSectionsCommandSecondaryActionState = [
+    reusableSectionsViewDisabledReason,
+    reusableSectionsViewDisabledReason,
+    reusableSectionsExportVisibleDisabledReason,
+    reusableSectionsImportDisabledReason,
+  ].every(Boolean)
+    ? actionStateFromDisabledReason(reusableSectionsViewDisabledReason || reusableSectionsExportVisibleDisabledReason || reusableSectionsImportDisabledReason)
+    : 'ready';
   const reusableSectionsCommandActionStatus = [
     actionStatus('Create section available.', reusableSectionsCreateDisabledReason),
     actionStatus('Refresh reusable sections available.', reusableSectionsViewDisabledReason),
-    actionStatus('Copy manifest available.', reusableSectionsViewDisabledReason),
-    actionStatus('Copy portability plan available.', reusableSectionsViewDisabledReason),
-    actionStatus('Export visible reusable sections available.', reusableSectionsExportVisibleDisabledReason),
-    actionStatus('Import JSON available.', reusableSectionsImportDisabledReason),
+    reusableSectionsCommandCopyManifestActionStatus,
+    reusableSectionsCommandCopyPortabilityPlanActionStatus,
+    reusableSectionsCommandExportVisibleActionStatus,
+    reusableSectionsCommandImportActionStatus,
   ].join(' ');
   const reusableSectionsWorkflowActionStatus = [
     actionStatus('Export visible reusable sections available.', reusableSectionsExportVisibleDisabledReason),
@@ -1704,6 +1723,9 @@ function ReusableSectionsRoute() {
         <span id={reusableSectionsCommandActionStatusId} className="sr-only" data-testid="reusable-sections-command-action-status" aria-live="polite">
           {reusableSectionsCommandActionStatus}
         </span>
+        <span id={reusableSectionsCommandSecondaryActionStatusId} className="sr-only" data-testid="reusable-sections-command-secondary-action-status" aria-live="polite">
+          {reusableSectionsCommandSecondaryActionStatus}
+        </span>
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1748,7 +1770,15 @@ function ReusableSectionsRoute() {
                 Refresh
               </Button>
             </div>
-            <details className="self-start xl:self-end" data-testid="reusable-sections-secondary-actions" data-default-collapsed="true">
+            <details
+              className="self-start xl:self-end"
+              aria-describedby={reusableSectionsCommandSecondaryActionStatusId}
+              data-action-state={reusableSectionsCommandSecondaryActionState}
+              data-action-status={reusableSectionsCommandSecondaryActionStatus}
+              data-target-site-id={activeSiteId}
+              data-testid="reusable-sections-secondary-actions"
+              data-default-collapsed="true"
+            >
               <summary
                 className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
                 data-testid="reusable-sections-more-actions"
@@ -1762,11 +1792,12 @@ function ReusableSectionsRoute() {
                   onClick={() => void copyText(handoffText, 'Reusable sections handoff manifest')}
                   disabled={Boolean(reusableSectionsViewDisabledReason)}
                   title={reusableSectionsViewDisabledReason || undefined}
-                  aria-describedby={reusableSectionsCommandActionStatusId}
+                  aria-describedby={reusableSectionsCommandSecondaryActionStatusId}
                   data-testid="reusable-sections-copy-manifest"
                   data-action-state={actionStateFromDisabledReason(reusableSectionsViewDisabledReason)}
-                  data-action-status={actionStatus('Copy manifest available.', reusableSectionsViewDisabledReason)}
+                  data-action-status={reusableSectionsCommandCopyManifestActionStatus}
                   data-disabled-reason={reusableSectionsViewDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   iconStart={<Copy className="size-4" />}
                 >
                   Copy manifest
@@ -1776,11 +1807,12 @@ function ReusableSectionsRoute() {
                   onClick={() => void copyText(reusableSectionPortabilityText, 'Reusable section portability action plan')}
                   disabled={Boolean(reusableSectionsViewDisabledReason)}
                   title={reusableSectionsViewDisabledReason || undefined}
-                  aria-describedby={reusableSectionsCommandActionStatusId}
+                  aria-describedby={reusableSectionsCommandSecondaryActionStatusId}
                   data-testid="reusable-sections-copy-portability-plan"
                   data-action-state={actionStateFromDisabledReason(reusableSectionsViewDisabledReason)}
-                  data-action-status={actionStatus('Copy portability plan available.', reusableSectionsViewDisabledReason)}
+                  data-action-status={reusableSectionsCommandCopyPortabilityPlanActionStatus}
                   data-disabled-reason={reusableSectionsViewDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   iconStart={<Copy className="size-4" />}
                 >
                   Copy portability plan
@@ -1790,11 +1822,12 @@ function ReusableSectionsRoute() {
                   onClick={() => void downloadReusableSectionsExport(false)}
                   disabled={Boolean(reusableSectionsExportVisibleDisabledReason)}
                   title={reusableSectionsExportVisibleDisabledReason || undefined}
-                  aria-describedby={reusableSectionsCommandActionStatusId}
+                  aria-describedby={reusableSectionsCommandSecondaryActionStatusId}
                   data-testid="reusable-sections-export-visible"
                   data-action-state={actionStateFromDisabledReason(reusableSectionsExportVisibleDisabledReason)}
-                  data-action-status={actionStatus('Export visible reusable sections available.', reusableSectionsExportVisibleDisabledReason)}
+                  data-action-status={reusableSectionsCommandExportVisibleActionStatus}
                   data-disabled-reason={reusableSectionsExportVisibleDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   iconStart={<Download className="size-4" />}
                 >
                   Export visible
@@ -1804,11 +1837,12 @@ function ReusableSectionsRoute() {
                   onClick={() => importInputRef.current?.click()}
                   disabled={Boolean(reusableSectionsImportDisabledReason)}
                   title={reusableSectionsImportDisabledReason || undefined}
-                  aria-describedby={reusableSectionsCommandActionStatusId}
+                  aria-describedby={reusableSectionsCommandSecondaryActionStatusId}
                   data-testid="reusable-sections-import"
                   data-action-state={actionStateFromDisabledReason(reusableSectionsImportDisabledReason)}
-                  data-action-status={actionStatus('Import JSON available.', reusableSectionsImportDisabledReason)}
+                  data-action-status={reusableSectionsCommandImportActionStatus}
                   data-disabled-reason={reusableSectionsImportDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   iconStart={<Upload className="size-4" />}
                 >
                   Import JSON
