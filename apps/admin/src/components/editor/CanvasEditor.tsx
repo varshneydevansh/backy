@@ -2114,6 +2114,12 @@ export function CanvasEditor({
       return true;
     }
 
+    const target = event.target;
+    const isGlobalTarget =
+      target === window ||
+      target === document ||
+      target === document.documentElement ||
+      target === document.body;
     const pointerEvent = event as Event & { clientX?: number; clientY?: number };
     if (Number.isFinite(pointerEvent.clientX) && Number.isFinite(pointerEvent.clientY)) {
       if (!shell) {
@@ -2133,12 +2139,6 @@ export function CanvasEditor({
         return true;
       }
 
-      const target = event.target;
-      const isGlobalTarget =
-        target === window ||
-        target === document ||
-        target === document.documentElement ||
-        target === document.body;
       const isZeroCoordinateGlobalEvent = isGlobalTarget && clientX === 0 && clientY === 0;
       if (!isZeroCoordinateGlobalEvent) {
         return false;
@@ -2151,7 +2151,7 @@ export function CanvasEditor({
     }
 
     // macOS browser pinch events can arrive without usable client coordinates.
-    return document.body.contains(viewport);
+    return isGlobalTarget && document.body.contains(viewport);
   }, [isCanvasViewportEvent]);
 
   const handleZoomIn = useCallback(() => {
@@ -8487,6 +8487,7 @@ export function CanvasEditor({
             data-canvas-zoom-anchor-fallback="viewport-center"
             data-canvas-zoom-global-fallback="zero-coordinate-window-events"
             data-canvas-zoom-legacy-wheel-fallback="mousewheel"
+            data-canvas-zoom-outside-shell-guard="non-editor-coordinate-less-events-pass-through"
             data-canvas-touch-action="pan-x pan-y"
             data-wheel-zoom-modifier="meta-or-control"
             data-wheel-zoom-prevents-browser-zoom="true"

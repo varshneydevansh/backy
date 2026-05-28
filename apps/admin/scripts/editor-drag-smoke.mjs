@@ -827,7 +827,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('const isEditorCanvasZoomEvent = useCallback') &&
       source.includes('const getCanvasZoomAnchor = useCallback') &&
       source.includes('shell && path.includes(shell)') &&
-      source.includes('document.body.contains(viewport)') &&
+      source.includes('return isGlobalTarget && document.body.contains(viewport)') &&
       source.includes('isCanvasViewportEvent') &&
       source.includes('path.includes(viewport)') &&
       source.includes('clientX >= rect.left') &&
@@ -844,6 +844,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('const isZeroCoordinateGlobalEvent = isGlobalTarget && clientX === 0 && clientY === 0') &&
       source.includes('data-canvas-zoom-global-fallback="zero-coordinate-window-events"') &&
       source.includes('data-canvas-zoom-legacy-wheel-fallback="mousewheel"') &&
+      source.includes('data-canvas-zoom-outside-shell-guard="non-editor-coordinate-less-events-pass-through"') &&
       source.includes("touchAction: 'pan-x pan-y'") &&
       source.includes('data-wheel-zoom-modifier="meta-or-control"') &&
       source.includes('data-wheel-zoom-prevents-browser-zoom="true"') &&
@@ -858,6 +859,7 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('dispatchCoordinateLessGlobalWheelZoom') &&
       smokeSource.includes('dispatchLegacyRootMouseWheelZoom') &&
       smokeSource.includes('dispatchCoordinateLessGlobalPinchZoom') &&
+      smokeSource.includes('dispatchOutsideShellCoordinateLessGesture') &&
       smokeSource.includes('dispatchCanvasPinchZoom') &&
       smokeSource.includes("type: 'mouseWheel'") &&
       smokeSource.includes('pageZoomStable') &&
@@ -12619,6 +12621,81 @@ const dispatchCoordinateLessGlobalPinchZoom = async (client, scale, label) => {
   };
 };
 
+const dispatchOutsideShellCoordinateLessGesture = async (client, scale, label) => {
+  const beforeState = await readZoomControlState(client, `${label} before`);
+  const dispatched = await evaluate(client, `(() => {
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    const outsideTarget = document.querySelector('[data-testid="admin-header-shell"]') ||
+      document.querySelector('[data-testid="admin-sidebar-shell"]') ||
+      document.body;
+    if (!(viewport instanceof HTMLElement) || !(outsideTarget instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-viewport-or-outside-target' };
+    }
+    const createGestureEvent = (type, nextScale) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'scale', { configurable: true, value: nextScale });
+      return event;
+    };
+
+    const startEvent = createGestureEvent('gesturestart', 1);
+    const startReturned = outsideTarget.dispatchEvent(startEvent);
+    const changeEvent = createGestureEvent('gesturechange', ${JSON.stringify(scale)});
+    const changeReturned = outsideTarget.dispatchEvent(changeEvent);
+    const endEvent = createGestureEvent('gestureend', ${JSON.stringify(scale)});
+    const endReturned = outsideTarget.dispatchEvent(endEvent);
+
+    return {
+      ok: true,
+      targetTestId: outsideTarget.getAttribute('data-testid') || outsideTarget.tagName,
+      startReturned,
+      changeReturned,
+      endReturned,
+      startDefaultPrevented: startEvent.defaultPrevented,
+      changeDefaultPrevented: changeEvent.defaultPrevented,
+      endDefaultPrevented: endEvent.defaultPrevented,
+      outsideShellGuard: viewport.getAttribute('data-canvas-zoom-outside-shell-guard'),
+      globalFallback: viewport.getAttribute('data-canvas-zoom-global-fallback'),
+      pinchZoom: viewport.getAttribute('data-canvas-pinch-zoom'),
+      zoomScope: viewport.getAttribute('data-zoom-scope'),
+    };
+  })()`);
+
+  assert(dispatched?.ok, `Unable to dispatch outside-shell coordinate-less gesture during ${label}: ${JSON.stringify(dispatched)}`);
+  assert(
+    dispatched.startDefaultPrevented === false &&
+      dispatched.changeDefaultPrevented === false &&
+      dispatched.endDefaultPrevented === false,
+    `Outside-shell coordinate-less gesture should pass through without canvas interception during ${label}: ${JSON.stringify(dispatched)}`,
+  );
+  assert(
+    dispatched.startReturned === true &&
+      dispatched.changeReturned === true &&
+      dispatched.endReturned === true,
+    `Outside-shell coordinate-less gesture dispatch should not be cancelled during ${label}: ${JSON.stringify(dispatched)}`,
+  );
+  assert(
+    dispatched.outsideShellGuard === 'non-editor-coordinate-less-events-pass-through' &&
+      dispatched.globalFallback === 'zero-coordinate-window-events' &&
+      dispatched.pinchZoom === 'enabled' &&
+      dispatched.zoomScope === 'canvas',
+    `Outside-shell coordinate-less gesture metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
+  );
+  await sleep(150);
+
+  const afterState = await readZoomControlState(client, label);
+  assert(
+    Math.abs(afterState.scale - beforeState.scale) < 0.001 &&
+      afterState.autoFit === beforeState.autoFit,
+    `Outside-shell coordinate-less gesture should not change canvas zoom during ${label}: ${JSON.stringify({ beforeState, afterState, dispatched })}`,
+  );
+
+  return {
+    beforeState,
+    afterState,
+    dispatched,
+  };
+};
+
 const setCanvasZoomSlider = async (client, percent, label) => {
   const beforePageZoom = await readPageZoomState(client, `${label} page zoom before`);
   const changed = await evaluate(client, `(() => {
@@ -12820,6 +12897,12 @@ const testZoomControls = async (client) => {
     `Coordinate-less Mac pinch gesture should still zoom the canvas instead of the browser page: ${JSON.stringify({ afterPinchZoomOut, afterCoordinateLessPinchZoom })}`,
   );
   assert(afterCoordinateLessPinchZoom.state.autoFit === false, `Coordinate-less Mac pinch zoom should keep manual zoom mode: ${JSON.stringify(afterCoordinateLessPinchZoom)}`);
+
+  const afterOutsideShellGesture = await dispatchOutsideShellCoordinateLessGesture(client, 1.18, 'after outside-shell coordinate-less gesture');
+  assert(
+    Math.abs(afterOutsideShellGesture.afterState.scale - afterCoordinateLessPinchZoom.state.scale) < 0.001,
+    `Header/sidebar coordinate-less gestures should not zoom the editor canvas: ${JSON.stringify({ afterCoordinateLessPinchZoom, afterOutsideShellGesture })}`,
+  );
 
   await clickControlByTestId(client, 'editor-pan-toggle');
   const panEnabled = await readCanvasNavigationState(client, 'pan enabled');
