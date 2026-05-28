@@ -1296,6 +1296,8 @@ const assertPageCreateSourceContracts = () => {
   const mediaApiSource = fs.readFileSync(new URL('../src/lib/mediaApi.ts', import.meta.url), 'utf8');
   const chromeSource = fs.readFileSync(new URL('../src/lib/editorTemplateChrome.ts', import.meta.url), 'utf8');
   const templateLibrarySource = fs.readFileSync(new URL('../src/lib/pageCreateTemplateLibrary.ts', import.meta.url), 'utf8');
+  const editorCatalogSource = fs.readFileSync(new URL('../src/components/editor/editorCatalog.ts', import.meta.url), 'utf8');
+  const frontendDesignContractSource = fs.readFileSync(new URL('../../public/src/lib/frontendDesignContract.ts', import.meta.url), 'utf8');
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const pageCreateSubmitKeepsValidationReachable = /data-testid="page-create-submit-button"[\s\S]{0,500}disabled=\{isPageCreateBusy \|\| !canEditPages\}/.test(source);
   assert(
@@ -1499,7 +1501,13 @@ const assertPageCreateSourceContracts = () => {
       source.includes('frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions') &&
       source.includes('frontendDesignDataBindings: frontendTemplateDesignState?.provenance.dataBindings') &&
       source.includes('frontendDesignEditableMap: frontendTemplateDesignState?.provenance.editableMap') &&
-      source.includes('frontendDesignMetadata: frontendTemplateDesignState?.provenance.metadata'),
+      source.includes('frontendDesignMetadata: frontendTemplateDesignState?.provenance.metadata') &&
+      editorCatalogSource.includes('const templateProvenanceArrayOrRecord = (') &&
+      editorCatalogSource.includes('return record && Object.keys(record).length > 0 ? record : undefined;') &&
+      frontendDesignContractSource.includes('const assets = cloneArrayOrRecord(current.frontendDesignAssets)') &&
+      frontendDesignContractSource.includes('|| cloneArrayOrRecord(content.assets)') &&
+      frontendDesignContractSource.includes('const interactions = cloneArrayOrRecord(current.frontendDesignInteractions)') &&
+      frontendDesignContractSource.includes('|| cloneArrayOrRecord(content.interactions)'),
     'Page create frontend template seeding must preserve source mode, custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance',
   );
   assert(
@@ -2410,9 +2418,9 @@ const smokeFrontendDesignContract = () => ({
           media: [{ id: 'media-smoke-page-hero', role: 'hero-image', source: 'custom-frontend' }],
           fonts: [{ id: 'font-smoke-page-heading', family: 'Inter', source: 'custom-frontend' }],
         },
-        animations: [
-          { id: 'hero-enter-animation', target: 'page.title', timeline: ['hero-enter'], easing: 'ease-out' },
-        ],
+        animations: {
+          heroEnter: { id: 'hero-enter-animation', target: 'page.title', timeline: ['hero-enter'], easing: 'ease-out' },
+        },
         interactions: {
           timeline: [{ id: 'hero-enter', target: 'page.title', animation: 'fade-up' }],
         },
@@ -4183,9 +4191,9 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
   assert(Array.isArray(page.meta?.frontendDesignBindingHints) && page.meta.frontendDesignBindingHints.length === 2, `Created page did not store frontend binding hints: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.frontendDesignCustomJs?.includes('__backySmokePageTemplate'), `Created page did not store frontend custom JS provenance: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.frontendDesignThemeTokenRefs?.primary === 'tokens.colors.primary', `Created page did not store frontend theme token refs: ${JSON.stringify(page.meta)}`);
-  assert(Array.isArray(page.meta?.frontendDesignAssets) && page.meta.frontendDesignAssets[0]?.media?.[0]?.id === 'media-smoke-page-hero', `Created page did not store frontend asset provenance: ${JSON.stringify(page.meta)}`);
-  assert(Array.isArray(page.meta?.frontendDesignAnimations) && page.meta.frontendDesignAnimations[0]?.target === 'page.title', `Created page did not store frontend animation provenance: ${JSON.stringify(page.meta)}`);
-  assert(Array.isArray(page.meta?.frontendDesignInteractions) && page.meta.frontendDesignInteractions[0]?.timeline?.[0]?.animation === 'fade-up', `Created page did not store frontend interaction provenance: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignAssets?.media?.[0]?.id === 'media-smoke-page-hero', `Created page did not store keyed frontend asset provenance: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignAnimations?.heroEnter?.target === 'page.title', `Created page did not store keyed frontend animation provenance: ${JSON.stringify(page.meta)}`);
+  assert(page.meta?.frontendDesignInteractions?.timeline?.[0]?.animation === 'fade-up', `Created page did not store keyed frontend interaction provenance: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.frontendDesignEditableMap?.['page.hero.title']?.field === 'props.content', `Created page did not store frontend editable map provenance: ${JSON.stringify(page.meta)}`);
   assert(page.meta?.frontendDesignMetadata?.editableSurface === 'page-create-smoke', `Created page did not store frontend design metadata: ${JSON.stringify(page.meta)}`);
 

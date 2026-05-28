@@ -94,16 +94,6 @@ const cloneArrayOrRecord = (value: unknown): unknown[] | Record<string, unknown>
     : cloneRecord(value)
 );
 
-const cloneProvenanceArray = (value: unknown): unknown[] | undefined => {
-  if (Array.isArray(value)) {
-    const items = cloneArray(value);
-    return items.length > 0 ? items : undefined;
-  }
-
-  const record = cloneRecord(value);
-  return record && Object.keys(record).length > 0 ? [record] : undefined;
-};
-
 const cloneJsonValue = <T>(value: T): T => (
   JSON.parse(JSON.stringify(value)) as T
 );
@@ -1950,12 +1940,12 @@ const buildFrontendDesignProvenanceFields = (
   const themeTokenRefs = cloneRecord(current.frontendDesignThemeTokenRefs)
     || cloneRecord(content.themeTokenRefs)
     || cloneRecord(metadata.themeTokenRefs);
-  const assets = cloneProvenanceArray(current.frontendDesignAssets)
-    || cloneProvenanceArray(content.assets)
-    || cloneProvenanceArray(metadata.assets);
-  const interactions = cloneProvenanceArray(current.frontendDesignInteractions)
-    || cloneProvenanceArray(content.interactions)
-    || cloneProvenanceArray(metadata.interactions);
+  const assets = cloneArrayOrRecord(current.frontendDesignAssets)
+    || cloneArrayOrRecord(content.assets)
+    || cloneArrayOrRecord(metadata.assets);
+  const interactions = cloneArrayOrRecord(current.frontendDesignInteractions)
+    || cloneArrayOrRecord(content.interactions)
+    || cloneArrayOrRecord(metadata.interactions);
   const animations = cloneArrayOrRecord(current.frontendDesignAnimations)
     || cloneArrayOrRecord(content.animations)
     || cloneArrayOrRecord(metadata.animations);

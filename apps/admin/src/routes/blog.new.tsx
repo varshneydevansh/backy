@@ -278,15 +278,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function frontendDesignProvenanceArray(value: unknown): Array<Record<string, unknown>> | undefined {
-    if (Array.isArray(value)) {
-        const records = value.filter(isRecord);
-        return records.length > 0 ? records : undefined;
-    }
-
-    return isRecord(value) && Object.keys(value).length > 0 ? [value] : undefined;
-}
-
 function buildFrontendBlogTemplateElements(
     template: SiteFrontendDesignTemplate,
     input: { title: string; slug: string; excerpt: string },
@@ -1947,12 +1938,9 @@ function NewBlogPostPage() {
                 frontendDesignElements: frontendTemplateDesignState?.provenance.elements,
                 frontendDesignCanvasSize: frontendTemplateDesignState?.provenance.canvasSize,
                 frontendDesignThemeTokenRefs: frontendTemplateDesignState?.provenance.themeTokenRefs,
-                frontendDesignAssets: frontendTemplateDesignState?.provenance.assets
-                    && frontendDesignProvenanceArray(frontendTemplateDesignState.provenance.assets),
-                frontendDesignAnimations: frontendTemplateDesignState?.provenance.animations
-                    && frontendDesignProvenanceArray(frontendTemplateDesignState.provenance.animations),
-                frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions
-                    && frontendDesignProvenanceArray(frontendTemplateDesignState.provenance.interactions),
+                frontendDesignAssets: frontendTemplateDesignState?.provenance.assets,
+                frontendDesignAnimations: frontendTemplateDesignState?.provenance.animations,
+                frontendDesignInteractions: frontendTemplateDesignState?.provenance.interactions,
                 frontendDesignDataBindings: frontendTemplateDesignState?.provenance.dataBindings,
                 frontendDesignEditableMap: frontendTemplateDesignState?.provenance.editableMap,
                 frontendDesignSeo: frontendTemplateDesignState?.provenance.seo,

@@ -143,9 +143,9 @@ const firstTemplateRecord = <T = Record<string, unknown>>(...values: unknown[]):
   return undefined;
 };
 
-const templateProvenanceArray = (
+const templateProvenanceArrayOrRecord = (
   value: unknown,
-): Array<Record<string, unknown>> | undefined => {
+): Array<Record<string, unknown>> | Record<string, unknown> | undefined => {
   const array = cloneUnknownArray<Record<string, unknown>>(value);
   if (array) {
     const records = array.filter(isRecord);
@@ -153,7 +153,7 @@ const templateProvenanceArray = (
   }
 
   const record = cloneUnknownRecord<Record<string, unknown>>(value);
-  return record && Object.keys(record).length > 0 ? [record] : undefined;
+  return record && Object.keys(record).length > 0 ? record : undefined;
 };
 
 const RESPONSIVE_DEFAULT_BREAKPOINTS = ['desktop', 'tablet', 'mobile'] as const satisfies readonly EditorBreakpoint[];
@@ -2553,9 +2553,9 @@ export function extractFrontendTemplateDesignSerialization(
     contentDocument?.seo,
     metadata.seo,
   );
-  const animations = templateProvenanceArray(content.animations) || templateProvenanceArray(metadata.animations);
-  const interactionProvenance = templateProvenanceArray(content.interactions) || templateProvenanceArray(metadata.interactions);
-  const assetProvenance = templateProvenanceArray(content.assets) || templateProvenanceArray(metadata.assets);
+  const animations = templateProvenanceArrayOrRecord(content.animations) || templateProvenanceArrayOrRecord(metadata.animations);
+  const interactionProvenance = templateProvenanceArrayOrRecord(content.interactions) || templateProvenanceArrayOrRecord(metadata.interactions);
+  const assetProvenance = templateProvenanceArrayOrRecord(content.assets) || templateProvenanceArrayOrRecord(metadata.assets);
   const mergedMetadata: Record<string, unknown> = {
     ...metadata,
     ...(animations ? { animations } : {}),
