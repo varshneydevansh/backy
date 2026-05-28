@@ -2085,6 +2085,59 @@ function CollectionsPage() {
     ? `Import JSON unavailable: ${backupImportDisabledReason}`
     : `Import JSON available for ${activeSiteId}.`;
   const collectionActionStatus = `${newCollectionActionStatus} ${backupImportActionStatus}`;
+  const activeFrontendCollectionTemplate = frontendCollectionTemplates.find((template) => template.id === activeFrontendTemplateId) || null;
+  const collectionsFrontendTemplateActionStatusId = 'collections-frontend-template-action-status';
+  const collectionsFrontendTemplateActionState = frontendDesignLoading || Boolean(isCreatingFrontendTemplateId)
+    ? 'busy'
+    : frontendDesignError || frontendCollectionTemplates.length === 0
+      ? 'blocked'
+      : 'ready';
+  const collectionsFrontendTemplateActionStatus = frontendDesignLoading
+    ? `Loading frontend collection templates for ${activeSiteId}.`
+    : frontendDesignError
+      ? `Frontend collection templates unavailable: ${frontendDesignError}`
+      : frontendCollectionTemplates.length > 0
+        ? `${frontendCollectionTemplates.length} frontend collection template${frontendCollectionTemplates.length === 1 ? '' : 's'} available for ${activeSiteId}.${activeFrontendCollectionTemplate ? ` ${activeFrontendCollectionTemplate.name} is selected.` : ''}`
+        : `No frontend collection templates are available for ${activeSiteId}.`;
+  const getCollectionFrontendTemplateCreateDisabledReason = (template: SiteFrontendDesignTemplate): string => {
+    if (frontendDesignLoading) return 'Frontend design templates are loading.';
+    if (frontendDesignError) return frontendDesignError;
+    if (isLoading) return 'Collections are loading.';
+    if (isCreatingFrontendTemplateId === template.id) return 'This frontend template collection is being created.';
+    if (isCreatingFrontendTemplateId) return 'Another frontend template collection is being created.';
+    if (isSavingCollection) return 'A collection schema is saving.';
+    if (isImportingBackup) return 'A collection JSON import is running.';
+    if (isExportingBackup) return 'A collection JSON export is running.';
+    if (!canEditCollections) return editPermissionTitle || 'Your account cannot edit collections.';
+    return '';
+  };
+  const getCollectionFrontendTemplateCopyDisabledReason = (): string => {
+    if (frontendDesignLoading) return 'Frontend design templates are loading.';
+    if (frontendDesignError) return frontendDesignError;
+    if (isCollectionsBusy) return 'Collection handoff actions are temporarily unavailable while Backy updates collections.';
+    if (!canExportCollections) return exportPermissionTitle || 'Your account needs collections.export to export frontend collection template schemas.';
+    return '';
+  };
+  const getCollectionFrontendTemplateCardActionState = (template: SiteFrontendDesignTemplate) => {
+    const disabledReason = getCollectionFrontendTemplateCreateDisabledReason(template);
+    if (frontendDesignLoading || isCreatingFrontendTemplateId === template.id) return 'busy';
+    if (disabledReason) return 'blocked';
+    if (activeFrontendTemplateId === template.id) return 'selected';
+    return 'ready';
+  };
+  const getCollectionFrontendTemplateCreateActionStatus = (
+    template: SiteFrontendDesignTemplate,
+    blueprint: FrontendCollectionTemplateBlueprint,
+  ) => {
+    const disabledReason = getCollectionFrontendTemplateCreateDisabledReason(template);
+    if (disabledReason) return `Create ${template.name} collection unavailable: ${disabledReason}`;
+    return `Create ${blueprint.name} collection with ${blueprint.fields.length} fields and ${template.bindingHints?.length || 0} bindings for ${activeSiteId}.`;
+  };
+  const getCollectionFrontendTemplateCopyActionStatus = (template: SiteFrontendDesignTemplate) => {
+    const disabledReason = getCollectionFrontendTemplateCopyDisabledReason();
+    if (disabledReason) return `Copy ${template.name} frontend collection template schema unavailable: ${disabledReason}`;
+    return `Copy ${template.name} frontend collection template schema for ${activeSiteId}.`;
+  };
   const collectionsCommandSecondaryActionStatusId = 'collections-command-secondary-action-status';
   const collectionsCommandExportDisabledReason = isCollectionsBusy
     ? 'Collection handoff actions are temporarily unavailable while Backy updates collections.'
@@ -5164,7 +5217,23 @@ function CollectionsPage() {
         </div>
 
         {(frontendCollectionTemplates.length > 0 || frontendDesignLoading || frontendDesignError) && (
-          <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/50 p-4" data-testid="collections-frontend-template-options">
+          <div
+            className="mt-4 rounded-lg border border-teal-200 bg-teal-50/50 p-4"
+            data-testid="collections-frontend-template-options"
+            data-action-state={collectionsFrontendTemplateActionState}
+            data-action-status={collectionsFrontendTemplateActionStatus}
+            data-template-count={frontendCollectionTemplates.length}
+            data-active-template-id={activeFrontendTemplateId || undefined}
+            aria-describedby={collectionsFrontendTemplateActionStatusId}
+          >
+            <span
+              id={collectionsFrontendTemplateActionStatusId}
+              className="sr-only"
+              data-testid="collections-frontend-template-action-status"
+              aria-live="polite"
+            >
+              {collectionsFrontendTemplateActionStatus}
+            </span>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -5194,6 +5263,11 @@ function CollectionsPage() {
             {frontendCollectionTemplateBlueprints.length > 0 ? (
               <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {frontendCollectionTemplateBlueprints.map(({ template, blueprint }) => {
+                  const createFrontendTemplateDisabledReason = getCollectionFrontendTemplateCreateDisabledReason(template);
+                  const copyFrontendTemplateDisabledReason = getCollectionFrontendTemplateCopyDisabledReason();
+                  const cardActionState = getCollectionFrontendTemplateCardActionState(template);
+                  const createFrontendTemplateActionStatus = getCollectionFrontendTemplateCreateActionStatus(template, blueprint);
+                  const copyFrontendTemplateActionStatus = getCollectionFrontendTemplateCopyActionStatus(template);
                   const metadata = collectionMetadataWithDynamicTemplates(
                     buildFrontendCollectionTemplateMetadata(template, frontendDesign),
                     defaultDynamicTemplates(),
@@ -5218,6 +5292,13 @@ function CollectionsPage() {
                           : 'border-teal-200',
                       )}
                       data-active={activeFrontendTemplateId === template.id ? 'true' : 'false'}
+                      data-testid={`collections-frontend-template-card-${template.id}`}
+                      data-action-state={cardActionState}
+                      data-action-status={createFrontendTemplateActionStatus}
+                      data-disabled-reason={createFrontendTemplateDisabledReason || undefined}
+                      data-target-template-id={template.id}
+                      data-target-template-name={template.name}
+                      data-target-site-id={activeSiteId}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -5250,24 +5331,39 @@ function CollectionsPage() {
                         <button
                           type="button"
                           onClick={() => void createCollectionFromFrontendTemplate(template, blueprint)}
-                          disabled={schemaMutationDisabled}
-                          title={editPermissionTitle}
+                          disabled={Boolean(createFrontendTemplateDisabledReason)}
+                          title={createFrontendTemplateDisabledReason || undefined}
                           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                           data-testid={`collections-frontend-template-${template.id}`}
+                          aria-describedby={collectionsFrontendTemplateActionStatusId}
+                          data-action-state={isCreatingFrontendTemplateId === template.id ? 'busy' : actionState(createFrontendTemplateDisabledReason)}
+                          data-action-status={createFrontendTemplateActionStatus}
+                          data-disabled-reason={createFrontendTemplateDisabledReason || undefined}
+                          data-target-template-id={template.id}
+                          data-target-template-name={template.name}
+                          data-target-site-id={activeSiteId}
                         >
                           <Database className="h-4 w-4" />
                           {isCreatingFrontendTemplateId === template.id ? 'Creating...' : 'Create collection'}
                         </button>
-                          <button
-                            type="button"
-                            onClick={() => void copyCollectionApiText(manifestText, `${template.name} frontend collection template`, {
-                              key: 'collections.export',
-                              action: 'export frontend collection template schemas',
-                            })}
-                            disabled={isCollectionsBusy || !canExportCollections}
-                            title={!canExportCollections ? exportPermissionTitle : undefined}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                          >
+                        <button
+                          type="button"
+                          onClick={() => void copyCollectionApiText(manifestText, `${template.name} frontend collection template`, {
+                            key: 'collections.export',
+                            action: 'export frontend collection template schemas',
+                          })}
+                          disabled={Boolean(copyFrontendTemplateDisabledReason)}
+                          title={copyFrontendTemplateDisabledReason || undefined}
+                          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid={`collections-frontend-template-copy-${template.id}`}
+                          aria-describedby={collectionsFrontendTemplateActionStatusId}
+                          data-action-state={actionState(copyFrontendTemplateDisabledReason)}
+                          data-action-status={copyFrontendTemplateActionStatus}
+                          data-disabled-reason={copyFrontendTemplateDisabledReason || undefined}
+                          data-target-template-id={template.id}
+                          data-target-template-name={template.name}
+                          data-target-site-id={activeSiteId}
+                        >
                           <Copy className="h-4 w-4" />
                           Copy schema
                         </button>
