@@ -5901,6 +5901,7 @@ const partialClosureReadiness = {
   total: 4,
   aggregatePreflight: "npm run test:partial-gate-preflights",
   doctorCommand: "npm run doctor:release-certification",
+  artifactAdmissionCommand: "npm run ci:provider-artifact-admission",
   artifactRequiredEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1",
   artifactBackedDoctorCommand:
     "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1 BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH=artifacts/backy-settings-provider-certification.json BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH=artifacts/backy-commerce-provider-certification.json npm run doctor:release-certification",

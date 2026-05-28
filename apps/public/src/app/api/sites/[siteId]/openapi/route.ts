@@ -6766,6 +6766,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     "total",
                     "aggregatePreflight",
                     "doctorCommand",
+                    "artifactAdmissionCommand",
                     "artifactRequiredEnv",
                     "artifactBackedDoctorCommand",
                     "defaultNoArtifactMode",
@@ -6786,6 +6787,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     total: { const: 4 },
                     aggregatePreflight: { const: "npm run test:partial-gate-preflights" },
                     doctorCommand: { const: "npm run doctor:release-certification" },
+                    artifactAdmissionCommand: { const: "npm run ci:provider-artifact-admission" },
                     artifactRequiredEnv: { const: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
                     artifactBackedDoctorCommand: { type: "string" },
                     auditImpact: {

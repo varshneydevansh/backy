@@ -4,6 +4,7 @@ const SETTINGS_ARTIFACT_PATH_ENV = 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH o
 const COMMERCE_ARTIFACT_PATH_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT';
 const PROVIDER_ARTIFACT_REQUIRED_ENV = 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1';
 const DOCTOR_COMMAND = 'npm run doctor:release-certification';
+const ARTIFACT_ADMISSION_COMMAND = 'npm run ci:provider-artifact-admission';
 const AGGREGATE_PREFLIGHT = 'npm run test:partial-gate-preflights';
 const DEFAULT_AUDIT_COUNTS = {
   ready: 41,
@@ -92,6 +93,7 @@ export const buildBackyPartialClosureReadiness = () => ({
   total: closureRows.length,
   aggregatePreflight: AGGREGATE_PREFLIGHT,
   doctorCommand: DOCTOR_COMMAND,
+  artifactAdmissionCommand: ARTIFACT_ADMISSION_COMMAND,
   artifactRequiredEnv: PROVIDER_ARTIFACT_REQUIRED_ENV,
   artifactBackedDoctorCommand,
   auditImpact: {

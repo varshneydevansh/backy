@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const admissionCommand = 'npm run ci:provider-artifact-admission';
+const aggregatePreflightCommand = 'npm run test:partial-gate-preflights';
+const doctorCommand = 'npm run doctor:release-certification';
 
 const artifactInputs = [
   {
@@ -105,6 +108,9 @@ const runDoctor = () => {
   const summary = {
     ok: doctor.ok === true && readiness.ready === true,
     contract: 'backy.provider-artifact-admission.v1',
+    admissionCommand,
+    aggregatePreflightCommand,
+    doctorCommand,
     currentAuditMode: readiness.currentAuditMode || null,
     currentAudit: readiness.currentAudit || null,
     providerClosure: {

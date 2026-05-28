@@ -13442,6 +13442,7 @@ export interface BackyPartialClosureReadiness {
   total: 4;
   aggregatePreflight: "npm run test:partial-gate-preflights";
   doctorCommand: "npm run doctor:release-certification";
+  artifactAdmissionCommand: "npm run ci:provider-artifact-admission";
   artifactRequiredEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1";
   artifactBackedDoctorCommand: string;
   auditImpact?: {

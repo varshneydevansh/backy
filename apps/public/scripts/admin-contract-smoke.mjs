@@ -7962,10 +7962,11 @@ try {
       `${url} artifact-backed completion audit should explain the 45 Ready / 0 Partial closure view`,
     );
     assert(
+      completionStatus?.partialClosureReadiness?.artifactAdmissionCommand === 'npm run ci:provider-artifact-admission' &&
       completionStatus?.partialClosureReadiness?.artifactBackedDoctorCommand?.includes?.('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
         completionStatus.partialClosureReadiness.artifactBackedDoctorCommand.includes('artifacts/backy-settings-provider-certification.json') &&
         completionStatus.partialClosureReadiness.artifactBackedDoctorCommand.includes('artifacts/backy-commerce-provider-certification.json'),
-      `${url} missing artifact-backed release doctor command`,
+      `${url} missing artifact admission and artifact-backed release doctor commands`,
     );
     assert(
       completionStatus?.partialClosureReadiness?.rows?.some?.(

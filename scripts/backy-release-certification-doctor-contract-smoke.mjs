@@ -491,6 +491,8 @@ assert(
     normalJson.partialClosureReadiness?.missingCount === 0 &&
     normalJson.partialClosureReadiness?.total === 4 &&
     normalJson.partialClosureReadiness?.aggregatePreflight === 'npm run test:partial-gate-preflights' &&
+    normalJson.partialClosureReadiness?.doctorCommand === 'npm run doctor:release-certification' &&
+    normalJson.partialClosureReadiness?.artifactAdmissionCommand === 'npm run ci:provider-artifact-admission' &&
     normalJson.partialClosureReadiness?.artifactRequiredEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1' &&
     Array.isArray(normalJson.partialClosureReadiness?.rows) &&
     normalJson.partialClosureReadiness.rows.length === 4,

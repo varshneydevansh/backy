@@ -719,6 +719,8 @@ const failures = [
 
 const aggregatePreflight = 'npm run test:partial-gate-preflights';
 const adminSourceGuard = 'npm run test:admin-contract-source';
+const doctorCommand = 'npm run doctor:release-certification';
+const artifactAdmissionCommand = 'npm run ci:provider-artifact-admission';
 const artifactPathEnv = (artifact) => artifact.pathEnvNames.join(' or ');
 const defaultAuditCounts = {
   ready: 41,
@@ -902,6 +904,8 @@ const partialClosureReadiness = {
   missingCount: 0,
   total: partialClosureRows.length,
   aggregatePreflight,
+  doctorCommand,
+  artifactAdmissionCommand,
   artifactRequiredEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
   currentAuditMode: partialClosureReady ? 'artifactAcceptedMode' : 'defaultNoArtifactMode',
   currentAudit: partialClosureReady ? artifactAcceptedAuditCounts : defaultAuditCounts,

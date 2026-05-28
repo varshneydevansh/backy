@@ -421,6 +421,7 @@
 	              "total": { "const": 4 },
 	              "aggregatePreflight": { "const": "npm run test:partial-gate-preflights" },
 	              "doctorCommand": { "const": "npm run doctor:release-certification" },
+	              "artifactAdmissionCommand": { "const": "npm run ci:provider-artifact-admission" },
 	              "artifactRequiredEnv": { "const": "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
 	              "artifactBackedDoctorCommand": { "type": "string", "minLength": 1 },
 	              "auditImpact": {
@@ -552,7 +553,7 @@
 	                "required": ["includesSecretValues", "exposesOnlyArtifactPathsAndBooleans", "secretHandling"]
 	              }
 	            },
-	            "required": ["schemaVersion", "source", "status", "ready", "readyCount", "partialCount", "prototypeCount", "missingCount", "total", "aggregatePreflight", "doctorCommand", "artifactRequiredEnv", "artifactBackedDoctorCommand", "defaultNoArtifactMode", "artifactAcceptedMode", "rows", "privacy"]
+	            "required": ["schemaVersion", "source", "status", "ready", "readyCount", "partialCount", "prototypeCount", "missingCount", "total", "aggregatePreflight", "doctorCommand", "artifactAdmissionCommand", "artifactRequiredEnv", "artifactBackedDoctorCommand", "defaultNoArtifactMode", "artifactAcceptedMode", "rows", "privacy"]
 	          },
 	          "surfaceRunbooks": {
 	            "type": "array",
