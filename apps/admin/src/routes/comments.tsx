@@ -696,6 +696,26 @@ function CommentsRoute() {
   const commentsCommandHandoffDisabledReason = commentsBulkBusyDisabledReason || (!canExportActivity
     ? activityPermissionTitle || 'Your account cannot export comment activity.'
     : '');
+  const commentsCommandSecondaryActionStatusId = 'comments-command-secondary-action-status';
+  const commentsCommandExportCsvActionStatus = commentsBulkExportDisabledReason
+    ? `Export CSV unavailable: ${commentsBulkExportDisabledReason}`
+    : `Export CSV available for ${visibleCommentActionLabel}.`;
+  const commentsCommandCopyManifestActionStatus = commentsCommandHandoffDisabledReason
+    ? `Copy manifest unavailable: ${commentsCommandHandoffDisabledReason}`
+    : 'Copy manifest available.';
+  const commentsCommandDownloadJsonActionStatus = commentsCommandHandoffDisabledReason
+    ? `Download JSON unavailable: ${commentsCommandHandoffDisabledReason}`
+    : 'Download JSON available.';
+  const commentsCommandSecondaryActionStatus = [
+    commentsCommandExportCsvActionStatus,
+    commentsCommandCopyManifestActionStatus,
+    commentsCommandDownloadJsonActionStatus,
+  ].join(' ');
+  const commentsCommandSecondaryActionState = [
+    commentsBulkExportDisabledReason,
+    commentsCommandHandoffDisabledReason,
+    commentsCommandHandoffDisabledReason,
+  ].every(Boolean) ? 'blocked' : 'ready';
   const commentsBulkSelectionDisabledReason = filteredComments.length === 0
     ? 'No visible comments to select.'
     : commentsBulkBusyDisabledReason || commentsBulkManageDisabledReason;
@@ -719,13 +739,13 @@ function CommentsRoute() {
     : commentsBulkBusyDisabledReason || commentsBulkManageDisabledReason;
   const commentsCommandActionStatus = [
     commentsCommandReviewDisabledReason ? `Review pending unavailable: ${commentsCommandReviewDisabledReason}` : `Review pending available for ${metrics.pending} pending comment${metrics.pending === 1 ? '' : 's'}.`,
-    commentsBulkExportDisabledReason ? `Export CSV unavailable: ${commentsBulkExportDisabledReason}` : `Export CSV available for ${visibleCommentActionLabel}.`,
     commentsCommandRefreshDisabledReason ? `Refresh comments unavailable: ${commentsCommandRefreshDisabledReason}` : 'Refresh comments available.',
-    commentsCommandHandoffDisabledReason ? `Copy manifest unavailable: ${commentsCommandHandoffDisabledReason}` : 'Copy manifest available.',
-    commentsCommandHandoffDisabledReason ? `Download JSON unavailable: ${commentsCommandHandoffDisabledReason}` : 'Download JSON available.',
+    commentsCommandExportCsvActionStatus,
+    commentsCommandCopyManifestActionStatus,
+    commentsCommandDownloadJsonActionStatus,
   ].join(' ');
   const commentsBulkActionStatus = [
-    commentsBulkExportDisabledReason ? `Export CSV unavailable: ${commentsBulkExportDisabledReason}` : `Export CSV available for ${visibleCommentActionLabel}.`,
+    commentsCommandExportCsvActionStatus,
     commentsBulkSelectionDisabledReason ? `Select visible unavailable: ${commentsBulkSelectionDisabledReason}` : `Select visible available for ${visibleCommentActionLabel}.`,
     commentsBulkClearDisabledReason ? `Clear selection unavailable: ${commentsBulkClearDisabledReason}` : `Clear selection available for ${selectedCommentActionLabel}.`,
     commentsBulkApproveDisabledReason ? `Approve selected unavailable: ${commentsBulkApproveDisabledReason}` : `Approve selected available for ${selectedCommentActionLabel}.`,
@@ -2031,6 +2051,9 @@ function CommentsRoute() {
             <span id={commentsCommandActionStatusId} className="sr-only" data-testid="comments-command-action-status" aria-live="polite">
               {commentsCommandActionStatus}
             </span>
+            <span id={commentsCommandSecondaryActionStatusId} className="sr-only" data-testid="comments-command-secondary-action-status" aria-live="polite">
+              {commentsCommandSecondaryActionStatus}
+            </span>
             <div className="flex flex-wrap items-center gap-2" data-testid="comments-primary-actions">
               <Button
                 variant={statusFilter === 'pending' ? 'secondary' : 'outline'}
@@ -2066,6 +2089,10 @@ function CommentsRoute() {
             </div>
             <details
               className="group relative"
+              aria-describedby={commentsCommandSecondaryActionStatusId}
+              data-action-state={commentsCommandSecondaryActionState}
+              data-action-status={commentsCommandSecondaryActionStatus}
+              data-target-site-id={activeSiteId}
               data-testid="comments-secondary-actions"
               data-default-collapsed="true"
             >
@@ -2086,11 +2113,12 @@ function CommentsRoute() {
                   disabled={Boolean(commentsBulkExportDisabledReason)}
                   title={commentsBulkExportDisabledReason || undefined}
                   onClick={handleExportComments}
-                  aria-describedby={commentsCommandActionStatusId}
+                  aria-describedby={commentsCommandSecondaryActionStatusId}
                   data-testid="comments-export-csv"
                   data-action-state={commentsBulkExportDisabledReason ? 'blocked' : 'ready'}
-                  data-action-status={commentsCommandActionStatus}
+                  data-action-status={commentsCommandExportCsvActionStatus}
                   data-disabled-reason={commentsBulkExportDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   iconStart={<Download className="size-4" />}
                 >
                   Export CSV
@@ -2101,11 +2129,12 @@ function CommentsRoute() {
                   onClick={() => void copyCommentApiText(moderationHandoffText, 'Comment moderation handoff manifest')}
                   disabled={Boolean(commentsCommandHandoffDisabledReason)}
                   title={commentsCommandHandoffDisabledReason || undefined}
-                  aria-describedby={commentsCommandActionStatusId}
+                  aria-describedby={commentsCommandSecondaryActionStatusId}
                   data-testid="comments-copy-manifest"
                   data-action-state={commentsCommandHandoffDisabledReason ? 'blocked' : 'ready'}
-                  data-action-status={commentsCommandActionStatus}
+                  data-action-status={commentsCommandCopyManifestActionStatus}
                   data-disabled-reason={commentsCommandHandoffDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   iconStart={<Copy className="size-4" />}
                 >
                   Copy manifest
@@ -2116,11 +2145,12 @@ function CommentsRoute() {
                   onClick={downloadModerationHandoff}
                   disabled={Boolean(commentsCommandHandoffDisabledReason)}
                   title={commentsCommandHandoffDisabledReason || undefined}
-                  aria-describedby={commentsCommandActionStatusId}
+                  aria-describedby={commentsCommandSecondaryActionStatusId}
                   data-testid="comments-download-json"
                   data-action-state={commentsCommandHandoffDisabledReason ? 'blocked' : 'ready'}
-                  data-action-status={commentsCommandActionStatus}
+                  data-action-status={commentsCommandDownloadJsonActionStatus}
                   data-disabled-reason={commentsCommandHandoffDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   iconStart={<Download className="size-4" />}
                 >
                   Download JSON

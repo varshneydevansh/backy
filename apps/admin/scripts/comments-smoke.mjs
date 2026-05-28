@@ -73,22 +73,30 @@ const assertCommentsRouteSourceContract = () => {
   );
   assert(
     source.includes("const commentsCommandActionStatusId = 'comments-command-action-status';") &&
+      source.includes("const commentsCommandSecondaryActionStatusId = 'comments-command-secondary-action-status';") &&
       source.includes('const commentsCommandActionStatus = [') &&
+      source.includes('const commentsCommandSecondaryActionStatus = [') &&
       source.includes('data-testid="comments-command-actions"') &&
       source.includes('data-testid="comments-command-action-status"') &&
+      source.includes('data-testid="comments-command-secondary-action-status"') &&
       source.includes('data-testid="comments-primary-actions"') &&
       source.includes('data-testid="comments-review-pending"') &&
       source.includes('data-testid="comments-export-csv"') &&
       source.includes('data-testid="comments-command-refresh"') &&
       source.includes('data-testid="comments-secondary-actions"') &&
+      source.includes('aria-describedby={commentsCommandSecondaryActionStatusId}') &&
+      source.includes('data-action-status={commentsCommandSecondaryActionStatus}') &&
       source.includes('data-default-collapsed="true"') &&
       source.includes('data-testid="comments-more-actions"') &&
       source.includes('data-testid="comments-secondary-action-menu"') &&
       source.includes('data-testid="comments-copy-manifest"') &&
       source.includes('data-testid="comments-download-json"') &&
+      source.includes('data-action-status={commentsCommandExportCsvActionStatus}') &&
+      source.includes('data-action-status={commentsCommandCopyManifestActionStatus}') &&
+      source.includes('data-action-status={commentsCommandDownloadJsonActionStatus}') &&
       source.includes("data-action-state={commentsCommandReviewDisabledReason ? 'blocked' : 'ready'}") &&
       source.includes("data-action-state={commentsCommandHandoffDisabledReason ? 'blocked' : 'ready'}"),
-    'Comments command center must lead with daily moderation actions and move export/manifest/JSON handoff behind a default-collapsed More actions menu',
+    'Comments command center must lead with daily moderation actions and expose aggregate ready/blocked metadata for collapsed export/manifest/JSON handoff actions',
   );
   assert(
     source.includes('data-testid="comments-evidence-details"') &&
@@ -1634,6 +1642,29 @@ const assertLayout = async (client) => {
     hasMoreActions: Boolean(document.querySelector('[data-testid="comments-more-actions"]')),
     hasSecondaryMenu: Boolean(document.querySelector('[data-testid="comments-secondary-action-menu"]')),
     secondaryActionLabels: Array.from(document.querySelectorAll('[data-testid="comments-secondary-action-menu"] button')).map((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim()),
+    secondaryStatusId: document.querySelector('[data-testid="comments-command-secondary-action-status"]')?.id || '',
+    secondaryStatusText: (document.querySelector('[data-testid="comments-command-secondary-action-status"]')?.textContent || '').replace(/\\s+/g, ' ').trim(),
+    secondaryGroupDescribedBy: document.querySelector('[data-testid="comments-secondary-actions"]')?.getAttribute('aria-describedby') || '',
+    secondaryGroupStatus: document.querySelector('[data-testid="comments-secondary-actions"]')?.getAttribute('data-action-status') || '',
+    secondaryGroupState: document.querySelector('[data-testid="comments-secondary-actions"]')?.getAttribute('data-action-state') || '',
+    secondaryGroupTargetSite: document.querySelector('[data-testid="comments-secondary-actions"]')?.getAttribute('data-target-site-id') || '',
+    exportDescribedBy: document.querySelector('[data-testid="comments-export-csv"]')?.getAttribute('aria-describedby') || '',
+    exportStatus: document.querySelector('[data-testid="comments-export-csv"]')?.getAttribute('data-action-status') || '',
+    exportDisabledReason: document.querySelector('[data-testid="comments-export-csv"]')?.getAttribute('data-disabled-reason') || '',
+    exportTargetSite: document.querySelector('[data-testid="comments-export-csv"]')?.getAttribute('data-target-site-id') || '',
+    exportDisabled: document.querySelector('[data-testid="comments-export-csv"]') instanceof HTMLButtonElement ? document.querySelector('[data-testid="comments-export-csv"]').disabled : null,
+    copyDescribedBy: document.querySelector('[data-testid="comments-copy-manifest"]')?.getAttribute('aria-describedby') || '',
+    copyState: document.querySelector('[data-testid="comments-copy-manifest"]')?.getAttribute('data-action-state') || '',
+    copyStatus: document.querySelector('[data-testid="comments-copy-manifest"]')?.getAttribute('data-action-status') || '',
+    copyDisabledReason: document.querySelector('[data-testid="comments-copy-manifest"]')?.getAttribute('data-disabled-reason') || '',
+    copyTargetSite: document.querySelector('[data-testid="comments-copy-manifest"]')?.getAttribute('data-target-site-id') || '',
+    copyDisabled: document.querySelector('[data-testid="comments-copy-manifest"]') instanceof HTMLButtonElement ? document.querySelector('[data-testid="comments-copy-manifest"]').disabled : null,
+    downloadDescribedBy: document.querySelector('[data-testid="comments-download-json"]')?.getAttribute('aria-describedby') || '',
+    downloadState: document.querySelector('[data-testid="comments-download-json"]')?.getAttribute('data-action-state') || '',
+    downloadStatus: document.querySelector('[data-testid="comments-download-json"]')?.getAttribute('data-action-status') || '',
+    downloadDisabledReason: document.querySelector('[data-testid="comments-download-json"]')?.getAttribute('data-disabled-reason') || '',
+    downloadTargetSite: document.querySelector('[data-testid="comments-download-json"]')?.getAttribute('data-target-site-id') || '',
+    downloadDisabled: document.querySelector('[data-testid="comments-download-json"]') instanceof HTMLButtonElement ? document.querySelector('[data-testid="comments-download-json"]').disabled : null,
     primaryHasSecondaryOnlyActions: Boolean(document.querySelector('[data-testid="comments-primary-actions"] [data-testid="comments-export-csv"], [data-testid="comments-primary-actions"] [data-testid="comments-copy-manifest"], [data-testid="comments-primary-actions"] [data-testid="comments-download-json"]')),
     bulkActionLabels: Array.from(document.querySelectorAll('[data-testid="comments-bulk-action-group"] button')).map((button) => (button.textContent || '').replace(/\\s+/g, ' ').trim()),
     hasControlMapDetails: Boolean(document.querySelector('[data-testid="comments-control-map-details"]')),
@@ -1684,6 +1715,28 @@ const assertLayout = async (client) => {
       layout.secondaryActionLabels.includes('Download JSON') &&
       !layout.primaryHasSecondaryOnlyActions,
     `Comments export and manifest handoff should stay nested behind collapsed More actions: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.secondaryStatusId === 'comments-command-secondary-action-status' &&
+      layout.secondaryGroupDescribedBy === layout.secondaryStatusId &&
+      layout.secondaryGroupStatus === layout.secondaryStatusText &&
+      ['ready', 'blocked'].includes(layout.secondaryGroupState) &&
+      layout.secondaryGroupTargetSite === SITE_ID &&
+      layout.secondaryStatusText.includes('Export CSV') &&
+      layout.secondaryStatusText.includes('Copy manifest') &&
+      layout.secondaryStatusText.includes('Download JSON') &&
+      [layout.exportDescribedBy, layout.copyDescribedBy, layout.downloadDescribedBy].every((value) => value.includes(layout.secondaryStatusId)) &&
+      [layout.commandExportState, layout.copyState, layout.downloadState].every((value) => ['ready', 'blocked'].includes(value)) &&
+      layout.commandExportState === (layout.exportDisabled ? 'blocked' : 'ready') &&
+      layout.copyState === (layout.copyDisabled ? 'blocked' : 'ready') &&
+      layout.downloadState === (layout.downloadDisabled ? 'blocked' : 'ready') &&
+      [layout.exportTargetSite, layout.copyTargetSite, layout.downloadTargetSite].every((value) => value === SITE_ID) &&
+      [layout.exportStatus, layout.copyStatus, layout.downloadStatus].every((value) => layout.secondaryStatusText.includes(value)) &&
+      [layout.exportDisabledReason, layout.copyDisabledReason, layout.downloadDisabledReason].every((reason, index) => {
+        const disabled = [layout.exportDisabled, layout.copyDisabled, layout.downloadDisabled][index];
+        return disabled ? reason.length > 0 : reason === '';
+      }),
+    `Comments secondary actions should expose aggregate/per-command ready metadata: ${JSON.stringify(layout)}`,
   );
   assert(
     layout.bulkActionLabels[0] === 'Approve' &&
