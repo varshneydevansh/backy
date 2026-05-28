@@ -514,6 +514,24 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('buildFrontendFormTemplateSettings(template, frontendDesign, blueprint.frontendFieldKeyMap)') &&
       source.includes('frontendFieldKeyMap?: Record<string, string>,') &&
       source.includes('...(frontendFieldKeyMap ? { frontendFieldKeyMap } : {})') &&
+      source.includes('const customJs = firstFrontendTemplateString(content.customJS, content.customJs, metadata.customJS, metadata.customJs);') &&
+      source.includes('const contentDocument = firstFrontendTemplateRecord(content.contentDocument, metadata.contentDocument);') &&
+      source.includes('const themeTokenRefs = firstFrontendTemplateRecord(content.themeTokenRefs, metadata.themeTokenRefs);') &&
+      source.includes('const assets = firstFrontendTemplateArrayOrRecord(content.assets, metadata.assets);') &&
+      source.includes('const animations = firstFrontendTemplateArrayOrRecord(content.animations, metadata.animations);') &&
+      source.includes('const interactions = firstFrontendTemplateArrayOrRecord(content.interactions, metadata.interactions);') &&
+      source.includes('const dataBindings = firstFrontendTemplateRecord(content.dataBindings, metadata.dataBindings);') &&
+      source.includes('const editableMap = firstFrontendTemplateRecord(content.editableMap, metadata.editableMap);') &&
+      source.includes('frontendDesignCustomJs: customJs') &&
+      source.includes('frontendDesignContentDocument: contentDocument') &&
+      source.includes('frontendDesignThemeTokenRefs: themeTokenRefs') &&
+      source.includes('frontendDesignAssets: assets') &&
+      source.includes('frontendDesignAnimations: animations') &&
+      source.includes('frontendDesignInteractions: interactions') &&
+      source.includes('frontendDesignDataBindings: dataBindings') &&
+      source.includes('frontendDesignEditableMap: editableMap') &&
+      source.includes('frontendDesignSeo: seo') &&
+      source.includes('frontendDesignMetadata: designMetadata') &&
       source.includes('addFrontendTemplateFieldKeyAlias(fieldKeyAliases, field.label, field.key)') &&
       source.includes('return fieldKeyAliases.get(trimmed) || fieldKeyAliases.get(normalizeFieldKey(trimmed))') &&
       source.includes('const fieldKeyAliases = fields.length > 0') &&
@@ -914,6 +932,58 @@ const smokeFrontendDesignContract = () => ({
       routePattern: '/contact/smoke-intake',
       description: 'Frontend contract form template used by the forms smoke.',
       content: {
+        customJS: 'window.__backySmokeFormTemplate = true;',
+        contentDocument: {
+          schemaVersion: 'backy.content.v1',
+          kind: 'form',
+          id: 'smoke-form-template-document',
+          elements: [
+            {
+              id: 'smoke-form-shell',
+              type: 'form',
+              props: {
+                title: 'Smoke frontend intake',
+                fieldKeys: ['full_name', 'email', 'project_budget', 'message'],
+              },
+            },
+          ],
+          metadata: {
+            templateSource: 'custom-frontend',
+            templateKind: 'form',
+          },
+        },
+        canvasSize: { width: 1120, height: 760 },
+        themeTokenRefs: {
+          'form.heading.color': 'colors.text',
+          'form.submit.background': 'colors.primary',
+        },
+        assets: [
+          { id: 'smoke-form-hero-asset', role: 'form-hero', source: 'custom-frontend' },
+        ],
+        animations: [
+          { id: 'smoke-form-intro-animation', target: 'smoke-form-shell', timeline: 'form-intro' },
+        ],
+        interactions: [
+          { id: 'smoke-form-submit-interaction', target: 'smoke-form-submit', trigger: 'submit' },
+        ],
+        dataBindings: {
+          submitEndpoint: { source: 'form.submitUrl', targetPath: 'props.action' },
+          projectBudget: { source: 'submission.project_budget', targetPath: 'fields.project_budget.value' },
+        },
+        editableMap: {
+          'form.heading': {
+            elementId: 'smoke-form-shell',
+            targetPath: 'props.title',
+            field: 'props.title',
+          },
+        },
+        seo: {
+          title: 'Smoke frontend intake',
+        },
+        metadata: {
+          templateKind: 'form',
+          animationTimeline: 'smoke-form-intro',
+        },
         title: 'Smoke frontend intake',
         description: 'A custom frontend intake form seeded from the connected design contract.',
         successMessage: 'Smoke intake received.',
@@ -1638,6 +1708,17 @@ const assertFrontendTemplateForm = async (formId) => {
   assert(form?.settings?.frontendDesignChrome?.header?.component === 'SmokeFormsHeader', `Frontend chrome snapshot missing: ${JSON.stringify(form?.settings)}`);
   assert(form?.settings?.frontendDesignTokens?.fonts?.heading === 'Inter', `Frontend token snapshot missing: ${JSON.stringify(form?.settings)}`);
   assert(Array.isArray(form?.settings?.frontendDesignBindingHints) && form.settings.frontendDesignBindingHints.length === 3, `Frontend binding hints missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignCustomJs?.includes('__backySmokeFormTemplate'), `Frontend custom JS provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignContentDocument?.schemaVersion === 'backy.content.v1', `Frontend content document provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignCanvasSize?.width === 1120, `Frontend canvas size provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignThemeTokenRefs?.['form.submit.background'] === 'colors.primary', `Frontend theme-token refs missing: ${JSON.stringify(form?.settings)}`);
+  assert(Array.isArray(form?.settings?.frontendDesignAssets) && form.settings.frontendDesignAssets[0]?.id === 'smoke-form-hero-asset', `Frontend asset provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(Array.isArray(form?.settings?.frontendDesignAnimations) && form.settings.frontendDesignAnimations[0]?.timeline === 'form-intro', `Frontend animation provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(Array.isArray(form?.settings?.frontendDesignInteractions) && form.settings.frontendDesignInteractions[0]?.trigger === 'submit', `Frontend interaction provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignDataBindings?.submitEndpoint?.source === 'form.submitUrl', `Frontend data-binding provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignEditableMap?.['form.heading']?.targetPath === 'props.title', `Frontend editable-map provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignSeo?.title === 'Smoke frontend intake', `Frontend SEO provenance missing: ${JSON.stringify(form?.settings)}`);
+  assert(form?.settings?.frontendDesignMetadata?.animationTimeline === 'smoke-form-intro', `Frontend template metadata missing: ${JSON.stringify(form?.settings)}`);
   assert(
     form?.settings?.frontendFieldKeyMap?.['Full name'] === 'full_name' &&
       form.settings.frontendFieldKeyMap?.project_budget === 'project_budget',
@@ -1649,6 +1730,14 @@ const assertFrontendTemplateForm = async (formId) => {
     definition.data?.form?.frontendFieldKeyMap?.['Full name'] === 'full_name' &&
       definition.data.form.frontendDesign?.fieldKeyMap?.project_budget === 'project_budget',
     `Frontend public definition did not expose field key map: ${JSON.stringify(definition).slice(0, 1000)}`,
+  );
+  assert(
+    definition.data?.form?.frontendDesign?.customJs?.includes('__backySmokeFormTemplate') &&
+      definition.data.form.frontendDesign?.themeTokenRefs?.['form.submit.background'] === 'colors.primary' &&
+      Array.isArray(definition.data.form.frontendDesign?.animations) &&
+      definition.data.form.frontendDesign.animations[0]?.timeline === 'form-intro' &&
+      definition.data.form.frontendDesign?.editableMap?.['form.heading']?.targetPath === 'props.title',
+    `Frontend public definition did not expose rich design provenance: ${JSON.stringify(definition).slice(0, 1000)}`,
   );
   const aliasSubmission = await requestApi(`/api/sites/${SITE_ID}/forms/${form.id}/submissions`, {
     method: 'POST',

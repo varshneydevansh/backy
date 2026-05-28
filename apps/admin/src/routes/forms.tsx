@@ -8777,21 +8777,101 @@ const buildFrontendFormTemplateBlueprint = (template: SiteFrontendDesignTemplate
   };
 };
 
+const cloneFrontendTemplateValue = <T,>(value: T): T => (
+  JSON.parse(JSON.stringify(value)) as T
+);
+
+const cloneFrontendTemplateRecord = (value: unknown): Record<string, unknown> | undefined => (
+  isPlainRecord(value) ? cloneFrontendTemplateValue(value) as Record<string, unknown> : undefined
+);
+
+const cloneFrontendTemplateArray = (value: unknown): unknown[] | undefined => (
+  Array.isArray(value) ? cloneFrontendTemplateValue(value) as unknown[] : undefined
+);
+
+const cloneFrontendTemplateArrayOrRecord = (
+  value: unknown,
+): unknown[] | Record<string, unknown> | undefined => (
+  Array.isArray(value) ? cloneFrontendTemplateArray(value) : cloneFrontendTemplateRecord(value)
+);
+
+const firstFrontendTemplateString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+};
+
+const firstFrontendTemplateRecord = (...values: unknown[]): Record<string, unknown> | undefined => {
+  for (const value of values) {
+    const record = cloneFrontendTemplateRecord(value);
+    if (record && Object.keys(record).length > 0) return record;
+  }
+  return undefined;
+};
+
+const firstFrontendTemplateArrayOrRecord = (
+  ...values: unknown[]
+): unknown[] | Record<string, unknown> | undefined => {
+  for (const value of values) {
+    const cloned = cloneFrontendTemplateArrayOrRecord(value);
+    if (Array.isArray(cloned) && cloned.length > 0) return cloned;
+    if (isPlainRecord(cloned) && Object.keys(cloned).length > 0) return cloned;
+  }
+  return undefined;
+};
+
 const buildFrontendFormTemplateSettings = (
   template: SiteFrontendDesignTemplate,
   frontendDesign: SiteFrontendDesignContract | null,
   frontendFieldKeyMap?: Record<string, string>,
-): Record<string, unknown> => ({
-  frontendDesignTemplateId: template.id,
-  frontendDesignTemplateName: template.name,
-  frontendDesignSource: frontendDesign?.source,
-  frontendDesignBindingHints: template.bindingHints || [],
-  ...(frontendFieldKeyMap ? { frontendFieldKeyMap } : {}),
-  ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
-  ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
-  ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
-  ...(frontendDesign?.tokens?.customCss ? { frontendDesignCustomCss: frontendDesign.tokens.customCss } : {}),
-});
+): Record<string, unknown> => {
+  const content = isPlainRecord(template.content) ? template.content : {};
+  const metadata = isPlainRecord(content.metadata) ? content.metadata : {};
+  const customCss = firstFrontendTemplateString(
+    content.customCSS,
+    content.customCss,
+    metadata.customCSS,
+    metadata.customCss,
+    frontendDesign?.tokens?.customCss,
+  );
+  const customJs = firstFrontendTemplateString(content.customJS, content.customJs, metadata.customJS, metadata.customJs);
+  const contentDocument = firstFrontendTemplateRecord(content.contentDocument, metadata.contentDocument);
+  const elements = cloneFrontendTemplateArray(content.elements);
+  const canvasSize = firstFrontendTemplateRecord(content.canvasSize, metadata.canvasSize, template.canvasSize);
+  const themeTokenRefs = firstFrontendTemplateRecord(content.themeTokenRefs, metadata.themeTokenRefs);
+  const assets = firstFrontendTemplateArrayOrRecord(content.assets, metadata.assets);
+  const animations = firstFrontendTemplateArrayOrRecord(content.animations, metadata.animations);
+  const interactions = firstFrontendTemplateArrayOrRecord(content.interactions, metadata.interactions);
+  const dataBindings = firstFrontendTemplateRecord(content.dataBindings, metadata.dataBindings);
+  const editableMap = firstFrontendTemplateRecord(content.editableMap, metadata.editableMap);
+  const seo = firstFrontendTemplateRecord(content.seo, metadata.seo);
+  const designMetadata = cloneFrontendTemplateRecord(metadata);
+
+  return {
+    frontendDesignTemplateId: template.id,
+    frontendDesignTemplateName: template.name,
+    frontendDesignSource: frontendDesign?.source,
+    frontendDesignBindingHints: template.bindingHints || [],
+    ...(frontendFieldKeyMap ? { frontendFieldKeyMap } : {}),
+    ...(template.routePattern ? { frontendDesignRoutePattern: template.routePattern } : {}),
+    ...(frontendDesign?.tokens ? { frontendDesignTokens: frontendDesign.tokens } : {}),
+    ...(frontendDesign?.chrome ? { frontendDesignChrome: frontendDesign.chrome } : {}),
+    ...(customCss ? { frontendDesignCustomCss: customCss } : {}),
+    ...(customJs ? { frontendDesignCustomJs: customJs } : {}),
+    ...(contentDocument ? { frontendDesignContentDocument: contentDocument } : {}),
+    ...(elements ? { frontendDesignElements: elements } : {}),
+    ...(canvasSize ? { frontendDesignCanvasSize: canvasSize } : {}),
+    ...(themeTokenRefs ? { frontendDesignThemeTokenRefs: themeTokenRefs } : {}),
+    ...(assets ? { frontendDesignAssets: assets } : {}),
+    ...(animations ? { frontendDesignAnimations: animations } : {}),
+    ...(interactions ? { frontendDesignInteractions: interactions } : {}),
+    ...(dataBindings ? { frontendDesignDataBindings: dataBindings } : {}),
+    ...(editableMap ? { frontendDesignEditableMap: editableMap } : {}),
+    ...(seo ? { frontendDesignSeo: seo } : {}),
+    ...(designMetadata && Object.keys(designMetadata).length > 0 ? { frontendDesignMetadata: designMetadata } : {}),
+  };
+};
 
 const normalizeOptionalText = (value: string | null | undefined): string | null => {
   const trimmed = typeof value === 'string' ? value.trim() : '';
