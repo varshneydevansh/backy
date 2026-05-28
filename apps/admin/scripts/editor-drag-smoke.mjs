@@ -1080,10 +1080,23 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('dataBoundLayers') &&
       source.includes('assetBoundLayers') &&
       source.includes('interactiveLayers') &&
-      source.includes('data-design-state-layers={editorCompositionReadiness.metrics.designStateLayerCount}'),
+      source.includes('data-design-state-layers={editorCompositionReadiness.metrics.designStateLayerCount}') &&
+      source.includes('CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA') &&
+      source.includes('backy.custom-frontend-agent-handoff.v1') &&
+      source.includes('specs/custom-frontend-agent-handoff.md') &&
+      source.includes('const agentHandoff = buildEditorAgentHandoff(activeSiteId)') &&
+      source.includes('data-agent-handoff-schema={editorCompositionReadiness.agentHandoff.schemaVersion}') &&
+      source.includes('data-agent-handoff-manifest={editorCompositionReadiness.agentHandoff.endpoints.manifest}') &&
+      source.includes('data-agent-handoff-frontend-design-management={editorCompositionReadiness.agentHandoff.endpoints.frontendDesignManagement}'),
     'Editor inspector must expose a composition readiness contract for grouped, animated, data-bound, asset-bound, and interactive canvas trees',
   );
-  assert(source.includes('backy.editor-composition-action-plan.v1') && source.includes('copyEditorCompositionPlan') && source.includes('data-testid="editor-copy-composition-plan"'), 'Editor inspector must expose a copyable composition action plan for custom frontend and operator handoff');
+  assert(
+    source.includes('backy.editor-composition-action-plan.v1') &&
+      source.includes('agentHandoff,') &&
+      source.includes('copyEditorCompositionPlan') &&
+      source.includes('data-testid="editor-copy-composition-plan"'),
+    'Editor inspector must expose a copyable composition action plan for custom frontend and operator handoff',
+  );
   assert(
     source.includes('backy.editor-command-registry.v1') &&
       source.includes('type EditorCommandRegistryItem') &&
@@ -6214,6 +6227,14 @@ const readEditorCompositionReadiness = async (client, label) => {
       hasDesignMetrics: Boolean(designMetrics),
       schema: card?.getAttribute('data-composition-schema') || '',
       actionPlanSchema: card?.getAttribute('data-action-plan-schema') || '',
+      agentHandoffSchema: card?.getAttribute('data-agent-handoff-schema') || '',
+      agentHandoffDoc: card?.getAttribute('data-agent-handoff-doc') || '',
+      agentHandoffManifest: card?.getAttribute('data-agent-handoff-manifest') || '',
+      agentHandoffOpenapi: card?.getAttribute('data-agent-handoff-openapi') || '',
+      agentHandoffRender: card?.getAttribute('data-agent-handoff-render') || '',
+      agentHandoffFrontendDesign: card?.getAttribute('data-agent-handoff-frontend-design') || '',
+      agentHandoffFrontendDesignManagement: card?.getAttribute('data-agent-handoff-frontend-design-management') || '',
+      agentHandoffSdk: card?.getAttribute('data-agent-handoff-sdk') || '',
       totalLayers: Number(card?.getAttribute('data-total-layers') || 0),
       groupLayers: Number(card?.getAttribute('data-group-layers') || 0),
       nestedLayers: Number(card?.getAttribute('data-nested-layers') || 0),
@@ -6235,6 +6256,14 @@ const readEditorCompositionReadiness = async (client, label) => {
   assert(state.hasDesignMetrics, `Editor composition design-state metrics missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.schema === 'backy.editor-composition-readiness.v1', `Editor composition readiness schema mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.actionPlanSchema === 'backy.editor-composition-action-plan.v1', `Editor composition action-plan schema mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffSchema === 'backy.custom-frontend-agent-handoff.v1', `Editor agent handoff schema mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffDoc === 'specs/custom-frontend-agent-handoff.md', `Editor agent handoff doc mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffManifest.includes('/api/sites/') && state.agentHandoffManifest.endsWith('/manifest'), `Editor agent handoff manifest endpoint missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffOpenapi.includes('/api/sites/') && state.agentHandoffOpenapi.endsWith('/openapi'), `Editor agent handoff OpenAPI endpoint missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffRender.includes('/api/sites/') && state.agentHandoffRender.includes('/render?path=/'), `Editor agent handoff render endpoint missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffFrontendDesign.includes('/api/sites/') && state.agentHandoffFrontendDesign.endsWith('/frontend-design'), `Editor agent handoff frontend design endpoint missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffFrontendDesignManagement.includes('/api/admin/sites/') && state.agentHandoffFrontendDesignManagement.endsWith('/frontend-design'), `Editor agent handoff frontend design management endpoint missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffSdk === 'packages/sdk-js', `Editor agent handoff SDK pointer mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyDisabled === false, `Editor composition copy plan button disabled during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyTitle === 'Copy editor composition action plan', `Editor composition copy title mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyLabel === 'Copy editor composition action plan', `Editor composition copy label mismatch during ${label}: ${JSON.stringify(state)}`);

@@ -204,6 +204,24 @@ const CANVAS_CONTEXT_QUICK_ADD_ITEMS: Array<{ key: string; item: ComponentLibrar
 const CANVAS_CONTEXT_QUICK_ADD_TYPES = CANVAS_CONTEXT_QUICK_ADD_ITEMS
   .map(({ key }) => key)
   .join(',');
+const CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md';
+const CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent-handoff.v1';
+const CUSTOM_FRONTEND_AGENT_HANDOFF_FIELDS = [
+  'content.contentDocument',
+  'content.elements',
+  'content.canvas',
+  'content.customCSS',
+  'content.customJS',
+  'content.themeTokenRefs',
+  'content.assets',
+  'content.animations',
+  'content.interactions',
+  'content.dataBindings',
+  'content.editableMap',
+  'content.seo',
+  'content.metadata',
+  'meta.frontendDesign*',
+] as const;
 const INSPECTOR_EMPTY_QUICK_ADD_KEYS = ['heading', 'text', 'section'] as const;
 const INSPECTOR_EMPTY_QUICK_ADD_ITEMS = CANVAS_CONTEXT_QUICK_ADD_ITEMS.filter(({ key }) => (
   (INSPECTOR_EMPTY_QUICK_ADD_KEYS as readonly string[]).includes(key)
@@ -233,6 +251,38 @@ type EditorCommandRegistry = {
     }>;
   };
   commands: EditorCommandRegistryItem[];
+};
+
+const buildEditorAgentHandoff = (siteId?: string) => {
+  const sitePath = siteId || ':siteId';
+  return {
+    schemaVersion: CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA,
+    source: 'canvas-editor-composition-plan',
+    docs: [
+      CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,
+      'specs/backy-api-contracts.md',
+      'specs/editor_complete_spec.md',
+    ],
+    siteId: siteId || null,
+    endpoints: {
+      manifest: `/api/sites/${sitePath}/manifest`,
+      openapi: `/api/sites/${sitePath}/openapi`,
+      render: `/api/sites/${sitePath}/render?path=/...`,
+      frontendDesign: `/api/sites/${sitePath}/frontend-design`,
+      frontendDesignManagement: `/api/admin/sites/${sitePath}/frontend-design`,
+    },
+    sdk: {
+      package: 'packages/sdk-js',
+      generatedTypes: 'packages/sdk-js/src/generated-contract-types.ts',
+    },
+    roundTripFields: CUSTOM_FRONTEND_AGENT_HANDOFF_FIELDS,
+    rules: [
+      'Preserve the full Backy design envelope when creating or updating content.',
+      'Use frontendDesignTemplateId or designTemplateId for captured custom-frontend templates.',
+      'Do not flatten editable canvas content to plain HTML/text when the result must reopen in Backy.',
+      'Read manifest/OpenAPI before guessing route, media, form, commerce, or live-management API shapes.',
+    ],
+  };
 };
 
 const editorCommandActionState = (command?: EditorCommandRegistryItem) => (
@@ -5017,6 +5067,7 @@ export function CanvasEditor({
   ]);
   const editorCompositionReadiness = useMemo(() => {
     const metrics = collectEditorCompositionMetrics(elements);
+    const agentHandoff = buildEditorAgentHandoff(activeSiteId);
     const designStateLayerCount = metrics.animatedLayers +
       metrics.actionLayers +
       metrics.dataBoundLayers +
@@ -5085,6 +5136,7 @@ export function CanvasEditor({
         designStateLayerCount,
         topTypes,
       },
+      agentHandoff,
       selection: {
         selectedIds,
         selectedLayerCount: selectedIds.length,
@@ -5138,6 +5190,7 @@ export function CanvasEditor({
           canUngroup: canUngroupSelected,
           canSelectChildren: canSelectChildLayerScope,
         },
+        agentHandoff,
         commandRegistry: editorCommandRegistry,
         shortcuts: {
           group: 'Cmd/Ctrl+G',
@@ -5151,6 +5204,7 @@ export function CanvasEditor({
       },
     };
   }, [
+    activeSiteId,
     canGroupSelected,
     canSelectChildLayerScope,
     canUngroupSelected,
@@ -9394,24 +9448,32 @@ export function CanvasEditor({
 
                 <details
                   className="group mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs shadow-sm"
-	                  data-testid="editor-composition-readiness"
-	                  data-default-collapsed="true"
-	                  data-composition-schema={editorCompositionReadiness.schemaVersion}
-	                  data-action-plan-schema={editorCompositionReadiness.actionPlan.schemaVersion}
-	                  data-command-registry-schema={editorCompositionReadiness.commandRegistry.schemaVersion}
-	                  data-command-count={editorCompositionReadiness.commandRegistry.summary.totalCommandCount}
-	                  data-command-ready-count={editorCompositionReadiness.commandRegistry.summary.readyCommandCount}
-	                  data-command-disabled-count={editorCompositionReadiness.commandRegistry.summary.disabledCommandCount}
-	                  data-command-hidden-count={editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount}
-	                  data-total-layers={editorCompositionReadiness.metrics.totalLayers}
-	                  data-group-layers={editorCompositionReadiness.metrics.groupLayers}
+                  data-testid="editor-composition-readiness"
+                  data-default-collapsed="true"
+                  data-composition-schema={editorCompositionReadiness.schemaVersion}
+                  data-action-plan-schema={editorCompositionReadiness.actionPlan.schemaVersion}
+                  data-agent-handoff-schema={editorCompositionReadiness.agentHandoff.schemaVersion}
+                  data-agent-handoff-doc={CUSTOM_FRONTEND_AGENT_HANDOFF_DOC}
+                  data-agent-handoff-manifest={editorCompositionReadiness.agentHandoff.endpoints.manifest}
+                  data-agent-handoff-openapi={editorCompositionReadiness.agentHandoff.endpoints.openapi}
+                  data-agent-handoff-render={editorCompositionReadiness.agentHandoff.endpoints.render}
+                  data-agent-handoff-frontend-design={editorCompositionReadiness.agentHandoff.endpoints.frontendDesign}
+                  data-agent-handoff-frontend-design-management={editorCompositionReadiness.agentHandoff.endpoints.frontendDesignManagement}
+                  data-agent-handoff-sdk={editorCompositionReadiness.agentHandoff.sdk.package}
+                  data-command-registry-schema={editorCompositionReadiness.commandRegistry.schemaVersion}
+                  data-command-count={editorCompositionReadiness.commandRegistry.summary.totalCommandCount}
+                  data-command-ready-count={editorCompositionReadiness.commandRegistry.summary.readyCommandCount}
+                  data-command-disabled-count={editorCompositionReadiness.commandRegistry.summary.disabledCommandCount}
+                  data-command-hidden-count={editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount}
+                  data-total-layers={editorCompositionReadiness.metrics.totalLayers}
+                  data-group-layers={editorCompositionReadiness.metrics.groupLayers}
                   data-nested-layers={editorCompositionReadiness.metrics.nestedLayers}
                   data-animated-layers={editorCompositionReadiness.metrics.animatedLayers}
                   data-data-bound-layers={editorCompositionReadiness.metrics.dataBoundLayers}
                   data-asset-bound-layers={editorCompositionReadiness.metrics.assetBoundLayers}
-	                  data-interactive-layers={editorCompositionReadiness.metrics.interactiveLayers}
-	                  data-design-state-layers={editorCompositionReadiness.metrics.designStateLayerCount}
-	                  data-selected-layers={editorCompositionReadiness.selection.selectedLayerCount}
+                  data-interactive-layers={editorCompositionReadiness.metrics.interactiveLayers}
+                  data-design-state-layers={editorCompositionReadiness.metrics.designStateLayerCount}
+                  data-selected-layers={editorCompositionReadiness.selection.selectedLayerCount}
                 >
                   <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-slate-300 [&::-webkit-details-marker]:hidden">
                     <div className="min-w-0">
@@ -9435,7 +9497,7 @@ export function CanvasEditor({
                       <div className="min-w-0">
                         <div className="text-[11px] font-semibold uppercase text-slate-500">Advanced export contract</div>
                         <div className="mt-1 text-[11px] leading-4 text-slate-500">
-                          Composition metrics and command metadata for custom editor clients.
+                          Composition metrics, command metadata, and custom frontend agent API handoff.
                         </div>
                       </div>
                       <button
