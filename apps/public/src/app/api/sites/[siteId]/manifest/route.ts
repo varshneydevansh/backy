@@ -53,6 +53,7 @@ import { buildInteractiveComponentManifestContract } from '@/lib/interactiveComp
 import { localizedRoutePatternVariants, normalizeSiteLocalization, type PublicRoutePattern } from '@/lib/siteLocalization';
 import { liveManagementEditorCommandRegistry } from '@/lib/liveManagementEditorCommandRegistry';
 import { buildBackyPartialClosureReadiness } from '@/lib/completionStatusClosure';
+import { buildCustomFrontendAgentHandoff } from '@/lib/customFrontendAgentHandoff';
 
 interface RouteParams {
   params: Promise<{
@@ -3348,6 +3349,7 @@ const buildRepositoryManifest = (
         databaseCertification: frontendDatabaseCertification,
         frontendLaunchReadiness: null as ReturnType<typeof buildFrontendLaunchReadiness> | null,
         completionStatus: buildBackyCompletionStatus(),
+        customFrontendAgentHandoff: buildCustomFrontendAgentHandoff(input.site.id),
         schemas: {
           manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
           renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
@@ -3355,6 +3357,7 @@ const buildRepositoryManifest = (
           elementActions: 'https://backy.dev/schemas/ai-frontend-contract/element-actions.schema.json',
           dataBindings: 'https://backy.dev/schemas/ai-frontend-contract/data-bindings.schema.json',
           editableMap: 'https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json',
+          customFrontendAgentHandoff: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json#/$defs/customFrontendAgentHandoff',
         },
       },
       capabilities: {
@@ -3710,6 +3713,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           databaseCertification: frontendDatabaseCertification,
           frontendLaunchReadiness: null as ReturnType<typeof buildFrontendLaunchReadiness> | null,
           completionStatus: buildBackyCompletionStatus(),
+          customFrontendAgentHandoff: buildCustomFrontendAgentHandoff(site.id),
           schemas: {
             manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
             renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
@@ -3717,6 +3721,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             elementActions: 'https://backy.dev/schemas/ai-frontend-contract/element-actions.schema.json',
             dataBindings: 'https://backy.dev/schemas/ai-frontend-contract/data-bindings.schema.json',
             editableMap: 'https://backy.dev/schemas/ai-frontend-contract/editable-map.schema.json',
+            customFrontendAgentHandoff: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json#/$defs/customFrontendAgentHandoff',
           },
         },
         capabilities: {

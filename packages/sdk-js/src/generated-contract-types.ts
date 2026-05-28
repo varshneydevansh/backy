@@ -21,6 +21,7 @@ export interface GeneratedBackyOpenApiDocument {
   "x-backy-database-certification"?: GeneratedBackyFrontendManifestDatabaseCertification;
   "x-backy-frontend-launch-readiness"?: GeneratedBackyFrontendManifestLaunchReadiness;
   "x-backy-completion-status"?: GeneratedBackyOpenApiBackyCompletionStatus;
+  "x-backy-custom-frontend-agent-handoff"?: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff;
   "x-backy-media-file-categories"?: GeneratedBackyOpenApiMediaFileCategoryDiscovery;
   "x-backy-forms-management"?: GeneratedBackyOpenApiFormsManagementPolicy;
   "x-backy-commerce-management"?: GeneratedBackyOpenApiCommerceManagementPolicy;
@@ -5255,6 +5256,59 @@ export type GeneratedBackyPublicRenderPayloadEnvelope = {
   };
 };
 
+export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
+  schemaVersion: "backy.custom-frontend-agent-handoff.v1";
+  source: "public-manifest-openapi-contract";
+  docs: Array<{
+    label: string;
+    path: string;
+    [key: string]: unknown;
+  }>;
+  endpoints: {
+    manifest: string;
+    openapi: string;
+    resolve: string;
+    render: string;
+    frontendDesign: string;
+    frontendDesignManagement: string;
+    templates: string;
+    pages: string;
+    blog: string;
+    forms: string;
+    collections: string;
+    products: string;
+    reusableSections: string;
+    [key: string]: unknown;
+  };
+  sdk: {
+    package: "packages/sdk-js";
+    generatedTypes: "packages/sdk-js/src/generated-contract-types.ts";
+    helpers: Array<string>;
+    [key: string]: unknown;
+  };
+  contentCreation: {
+    templateCloneFields: Array<"frontendDesignTemplateId" | "designTemplateId">;
+    backyCanvasTemplateField: "templateId";
+    customFrontendTemplateField: "frontendDesignTemplateId";
+    rule: string;
+    [key: string]: unknown;
+  };
+  designState: {
+    roundTripFields: Array<string>;
+    preserves: Array<string>;
+    [key: string]: unknown;
+  };
+  rules: Array<string>;
+  privacy: {
+    includesSecretValues: false;
+    publicDiscoveryOnly: true;
+    adminWritesRequireAuth: true;
+    secretHandling: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export type GeneratedBackyFrontendManifestDatabaseCertification = {
   schemaVersion: "backy.frontend-database-certification.v1";
   status: "external-database-gate";
@@ -5761,6 +5815,7 @@ export type GeneratedBackyFrontendManifestEnvelope = {
       databaseCertification: GeneratedBackyFrontendManifestDatabaseCertification;
       frontendLaunchReadiness: GeneratedBackyFrontendManifestLaunchReadiness;
       completionStatus: GeneratedBackyFrontendManifestCompletionStatus;
+      customFrontendAgentHandoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff;
       schemas: {
         manifest: string;
         renderPayload: string;
@@ -5768,6 +5823,7 @@ export type GeneratedBackyFrontendManifestEnvelope = {
         elementActions: string;
         dataBindings: string;
         editableMap: string;
+        customFrontendAgentHandoff: string;
         [key: string]: unknown;
       };
       [key: string]: unknown;

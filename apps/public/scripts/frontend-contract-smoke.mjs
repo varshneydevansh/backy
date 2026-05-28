@@ -28,6 +28,7 @@ const publicCollectionsRoute = read('../src/app/api/sites/[siteId]/collections/r
 const publicCollectionResourcesLib = read('../src/lib/publicCollectionResources.ts');
 const commerceCatalogLib = read('../src/lib/commerceCatalog.ts');
 const completionStatusClosureLib = read('../src/lib/completionStatusClosure.ts');
+const customFrontendAgentHandoffLib = read('../src/lib/customFrontendAgentHandoff.ts');
 const routeResolverLib = read('../src/lib/routeResolver.ts');
 const repositoryRouteResolverLib = read('../src/lib/repositoryRouteResolver.ts');
 const renderPayloadLib = read('../src/lib/renderPayload.ts');
@@ -237,7 +238,25 @@ assert(
     openApiRoute.includes('"orderApiHandoffTargetSiteId"') &&
     openApiRoute.includes('"orderApiHandoffReady"') &&
     openApiRoute.includes('"commerceApiHandoffSiteSelectorEnv"') &&
+    manifestRoute.includes('buildCustomFrontendAgentHandoff') &&
+    manifestRoute.includes('customFrontendAgentHandoff: buildCustomFrontendAgentHandoff') &&
+    openApiRoute.includes('"x-backy-custom-frontend-agent-handoff": customFrontendAgentHandoff') &&
+    customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent-handoff.v1'") &&
+    customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md'") &&
+    customFrontendAgentHandoffLib.includes('frontendDesignManagement') &&
+    customFrontendAgentHandoffLib.includes('buildBackyContentDesignPayload') &&
+    customFrontendAgentHandoffLib.includes('frontendDesignTemplateId') &&
     frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
+    frontendManifestSchema.includes('"customFrontendAgentHandoff": { "$ref": "#/$defs/customFrontendAgentHandoff" }') &&
+    frontendManifestSchema.includes('"backy.custom-frontend-agent-handoff.v1"') &&
+    frontendManifestSchema.includes('"frontendDesignManagement"') &&
+    frontendManifestSchema.includes('"templateCloneFields"') &&
+    generatedSdkTypes.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
+    generatedSdkTypes.includes('"x-backy-custom-frontend-agent-handoff"?: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
+    sdkSource.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
+    sdkSource.includes('customFrontendAgentHandoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
+    sdkSmoke.includes('customFrontendAgentHandoff') &&
+    generatedSdkSmoke.includes('customFrontendAgentHandoff') &&
     frontendManifestSchema.includes('"backy.completion-status.v1"') &&
     frontendManifestSchema.includes('"backy.partial-closure-readiness.v1"') &&
     frontendManifestSchema.includes('"auditImpact"') &&
@@ -254,6 +273,7 @@ assert(
 	    frontendManifestSchema.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS') &&
 	    frontendManifestSchema.includes('"producerEnv"') &&
 	    apiContracts.includes('surfaceRunbooks[].artifactVerifier') &&
+	    apiContracts.includes('customFrontendAgentHandoff') &&
 	    apiContracts.includes('partialClosureReadiness') &&
 	    apiContracts.includes('noRawSecretValuesReady') &&
 	    apiContracts.includes('artifactFreshReady') &&

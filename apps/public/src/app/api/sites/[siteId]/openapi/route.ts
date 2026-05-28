@@ -26,6 +26,7 @@ import { getSiteCanonicalBaseUrl } from "@/lib/seoDiscovery";
 import { normalizeSiteLocalization } from "@/lib/siteLocalization";
 import { liveManagementEditorCommandRegistry } from "@/lib/liveManagementEditorCommandRegistry";
 import { buildBackyPartialClosureReadiness } from "@/lib/completionStatusClosure";
+import { buildCustomFrontendAgentHandoff } from "@/lib/customFrontendAgentHandoff";
 
 interface RouteParams {
   params: Promise<{
@@ -2455,6 +2456,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const formsManagementDiscoveryContract = formsManagementDiscovery(site.id);
     const commerceManagementDiscoveryContract = commerceManagementDiscovery(site.id);
     const liveManagementDiscoveryContract = liveManagementDiscovery(site.id);
+    const customFrontendAgentHandoff = buildCustomFrontendAgentHandoff(site.id);
     const completionStatusContract = buildBackyCompletionStatus();
     const delivery = deliveryDiscovery(origin, site);
     const frontendLaunchReadiness = buildFrontendLaunchReadiness({
@@ -2494,6 +2496,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         "x-backy-database-certification": frontendDatabaseCertification,
         "x-backy-frontend-launch-readiness": frontendLaunchReadiness,
         "x-backy-completion-status": completionStatusContract,
+        "x-backy-custom-frontend-agent-handoff": customFrontendAgentHandoff,
         "x-backy-media-file-categories": mediaFileCategoryDiscoveryContract,
         "x-backy-forms-management": formsManagementDiscoveryContract,
         "x-backy-commerce-management": commerceManagementDiscoveryContract,

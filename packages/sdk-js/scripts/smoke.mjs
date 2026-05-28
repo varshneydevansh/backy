@@ -1828,6 +1828,24 @@ assert(
     manifest.data.contract.databaseCertification.secretHandling.includes('Database URLs and service credentials stay in CI/runtime environment'),
   'manifest() missing non-secret database certification boundary',
 );
+const customFrontendAgentHandoff = manifest.data.contract?.customFrontendAgentHandoff;
+assert(customFrontendAgentHandoff?.schemaVersion === 'backy.custom-frontend-agent-handoff.v1', 'manifest() missing custom frontend agent handoff schema');
+assert(customFrontendAgentHandoff?.source === 'public-manifest-openapi-contract', 'manifest() custom frontend agent handoff source drifted');
+assert(customFrontendAgentHandoff.docs?.some?.((doc) => doc.path === 'specs/custom-frontend-agent-handoff.md'), 'manifest() custom frontend agent handoff missing docs pointer');
+assert(customFrontendAgentHandoff.endpoints?.manifest === manifest.data.endpoints.manifest, 'manifest() custom frontend agent handoff manifest endpoint drifted');
+assert(customFrontendAgentHandoff.endpoints?.openapi === manifest.data.endpoints.openapi, 'manifest() custom frontend agent handoff OpenAPI endpoint drifted');
+assert(customFrontendAgentHandoff.endpoints?.render?.includes('/render?path=/'), 'manifest() custom frontend agent handoff missing render endpoint');
+assert(customFrontendAgentHandoff.endpoints?.frontendDesign === manifest.data.endpoints.frontendDesign, 'manifest() custom frontend agent handoff frontend-design endpoint drifted');
+assert(customFrontendAgentHandoff.endpoints?.frontendDesignManagement === `/api/admin/sites/${client.getSiteId()}/frontend-design`, 'manifest() custom frontend agent handoff missing admin frontend-design endpoint');
+assert(customFrontendAgentHandoff.endpoints?.templates === `/api/admin/sites/${client.getSiteId()}/templates`, 'manifest() custom frontend agent handoff missing templates endpoint');
+assert(customFrontendAgentHandoff.endpoints?.products?.includes('/collections/products/records'), 'manifest() custom frontend agent handoff missing product design endpoint');
+assert(customFrontendAgentHandoff.sdk?.package === 'packages/sdk-js', 'manifest() custom frontend agent handoff SDK package drifted');
+assert(customFrontendAgentHandoff.sdk?.helpers?.includes('buildBackyContentDesignPayload'), 'manifest() custom frontend agent handoff missing design payload helper');
+assert(customFrontendAgentHandoff.contentCreation?.templateCloneFields?.includes('frontendDesignTemplateId'), 'manifest() custom frontend agent handoff missing frontendDesignTemplateId creation field');
+assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
+assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('meta.frontendDesign*'), 'manifest() custom frontend agent handoff missing frontend design provenance round-trip field');
+assert(customFrontendAgentHandoff.privacy?.includesSecretValues === false, 'manifest() custom frontend agent handoff must not include secret values');
+assert(customFrontendAgentHandoff.privacy?.adminWritesRequireAuth === true, 'manifest() custom frontend agent handoff missing admin auth boundary');
 assert(manifest.data.contract?.frontendLaunchReadiness?.schemaVersion === 'backy.frontend-launch-readiness.v1', 'manifest() missing frontend launch readiness schema');
 assert(['ready', 'attention', 'blocked'].includes(manifest.data.contract.frontendLaunchReadiness.status), 'manifest() frontend launch readiness status drifted');
 assert(typeof manifest.data.contract.frontendLaunchReadiness.score === 'number', 'manifest() missing frontend launch readiness score');
@@ -2107,6 +2125,10 @@ assert(
     openapi['x-backy-database-certification'].secretHandling.includes('OpenAPI exposes only non-secret gate names and requirements'),
   'openapi() missing non-secret database certification boundary',
 );
+assert(openapi['x-backy-custom-frontend-agent-handoff']?.schemaVersion === manifest.data.contract.customFrontendAgentHandoff.schemaVersion, 'openapi() custom frontend agent handoff schema drifted from manifest');
+assert(openapi['x-backy-custom-frontend-agent-handoff']?.endpoints?.frontendDesignManagement === manifest.data.contract.customFrontendAgentHandoff.endpoints.frontendDesignManagement, 'openapi() custom frontend agent handoff admin design endpoint drifted from manifest');
+assert(openapi['x-backy-custom-frontend-agent-handoff']?.designState?.roundTripFields?.includes?.('content.elements'), 'openapi() custom frontend agent handoff missing design round-trip fields');
+assert(openapi['x-backy-custom-frontend-agent-handoff']?.privacy?.includesSecretValues === false, 'openapi() custom frontend agent handoff leaked secret boundary');
 assert(openapi['x-backy-frontend-launch-readiness']?.schemaVersion === manifest.data.contract.frontendLaunchReadiness.schemaVersion, 'openapi() missing frontend launch readiness extension');
 assert(openapi['x-backy-frontend-launch-readiness']?.actionPlan?.schemaVersion === 'backy.frontend-launch-action-plan.v1', 'openapi() missing frontend launch action plan extension');
 const openApiLaunchCheckKeys = new Set((openapi['x-backy-frontend-launch-readiness']?.checks || []).map((check) => check.key));

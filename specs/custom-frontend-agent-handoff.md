@@ -10,9 +10,11 @@ This is the short entry point for AI agents or external teams building a custom 
 2. `GET /api/sites/:siteId/manifest`
    - Bootstrap the custom frontend. This is the primary machine-readable contract for routes, modules, media/font policy, site frontend design, template registry, live-management capability, launch readiness, and completion status.
    - Schema source: `specs/ai-frontend-contract/frontend-manifest.schema.json`.
+   - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
 
 3. `GET /api/sites/:siteId/openapi`
    - Generate typed clients from the site-scoped OpenAPI document. This mirrors the manifest and exposes the endpoint/component names custom agents should use instead of guessing URL shapes.
+   - The same handoff is mirrored as `x-backy-custom-frontend-agent-handoff`.
 
 4. `GET /api/sites/:siteId/render?path=/...`
    - Render a page/blog/product/collection route using Backy's normalized payload. Use this when building the live website renderer.

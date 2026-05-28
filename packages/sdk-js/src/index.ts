@@ -3,6 +3,7 @@ import type {
   BackyContentElement,
 } from "@backy-cms/core/content-contract";
 import type {
+  GeneratedBackyFrontendManifestCustomFrontendAgentHandoff,
   GeneratedBackyOpenApiAdminSettings,
   GeneratedBackyOpenApiAdminSettingsActionEnvelope,
   GeneratedBackyOpenApiAdminSettingsActionRequest,
@@ -50,6 +51,7 @@ export type {
   GeneratedBackyFrontendManifest,
   GeneratedBackyFrontendManifestCompletionStatus,
   GeneratedBackyFrontendManifestCommerceProviderCertification,
+  GeneratedBackyFrontendManifestCustomFrontendAgentHandoff,
   GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
   GeneratedBackyFrontendManifestLaunchReadiness,
@@ -13625,6 +13627,7 @@ export interface BackyFrontendManifestContract {
   databaseCertification: BackyFrontendDatabaseCertification;
   frontendLaunchReadiness: BackyFrontendLaunchReadiness;
   completionStatus: BackyCompletionStatus;
+  customFrontendAgentHandoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff;
   [key: string]: unknown;
 }
 

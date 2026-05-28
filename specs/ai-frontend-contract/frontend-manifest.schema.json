@@ -5,6 +5,107 @@
   "type": "object",
   "additionalProperties": true,
   "$defs": {
+    "customFrontendAgentHandoff": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "schemaVersion": { "const": "backy.custom-frontend-agent-handoff.v1" },
+        "source": { "const": "public-manifest-openapi-contract" },
+        "docs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "path": { "type": "string", "minLength": 1 }
+            },
+            "required": ["label", "path"]
+          }
+        },
+        "endpoints": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "properties": {
+            "manifest": { "type": "string", "minLength": 1 },
+            "openapi": { "type": "string", "minLength": 1 },
+            "resolve": { "type": "string", "minLength": 1 },
+            "render": { "type": "string", "minLength": 1 },
+            "frontendDesign": { "type": "string", "minLength": 1 },
+            "frontendDesignManagement": { "type": "string", "minLength": 1 },
+            "templates": { "type": "string", "minLength": 1 },
+            "pages": { "type": "string", "minLength": 1 },
+            "blog": { "type": "string", "minLength": 1 },
+            "forms": { "type": "string", "minLength": 1 },
+            "collections": { "type": "string", "minLength": 1 },
+            "products": { "type": "string", "minLength": 1 },
+            "reusableSections": { "type": "string", "minLength": 1 }
+          },
+          "required": ["manifest", "openapi", "resolve", "render", "frontendDesign", "frontendDesignManagement", "templates", "pages", "blog", "forms", "collections", "products", "reusableSections"]
+        },
+        "sdk": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "package": { "const": "packages/sdk-js" },
+            "generatedTypes": { "const": "packages/sdk-js/src/generated-contract-types.ts" },
+            "helpers": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "contains": { "const": "buildBackyContentDesignPayload" }
+            }
+          },
+          "required": ["package", "generatedTypes", "helpers"]
+        },
+        "contentCreation": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "templateCloneFields": {
+              "type": "array",
+              "items": { "enum": ["frontendDesignTemplateId", "designTemplateId"] },
+              "contains": { "const": "frontendDesignTemplateId" }
+            },
+            "backyCanvasTemplateField": { "const": "templateId" },
+            "customFrontendTemplateField": { "const": "frontendDesignTemplateId" },
+            "rule": { "type": "string", "minLength": 1 }
+          },
+          "required": ["templateCloneFields", "backyCanvasTemplateField", "customFrontendTemplateField", "rule"]
+        },
+        "designState": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "roundTripFields": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "contains": { "const": "content.elements" }
+            },
+            "preserves": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "required": ["roundTripFields", "preserves"]
+        },
+        "rules": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "privacy": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "includesSecretValues": { "const": false },
+            "publicDiscoveryOnly": { "const": true },
+            "adminWritesRequireAuth": { "const": true },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["includesSecretValues", "publicDiscoveryOnly", "adminWritesRequireAuth", "secretHandling"]
+        }
+      },
+      "required": ["schemaVersion", "source", "docs", "endpoints", "sdk", "contentCreation", "designState", "rules", "privacy"]
+    },
     "databaseCertification": {
       "type": "object",
       "additionalProperties": true,
@@ -926,6 +1027,7 @@
               "databaseCertification": { "$ref": "#/$defs/databaseCertification" },
               "frontendLaunchReadiness": { "$ref": "#/$defs/launchReadiness" },
               "completionStatus": { "$ref": "#/$defs/completionStatus" },
+              "customFrontendAgentHandoff": { "$ref": "#/$defs/customFrontendAgentHandoff" },
               "schemas": {
               "type": "object",
               "additionalProperties": { "type": "string" },
@@ -935,12 +1037,13 @@
                 "themeTokens": { "type": "string", "minLength": 1 },
                 "elementActions": { "type": "string", "minLength": 1 },
                 "dataBindings": { "type": "string", "minLength": 1 },
-                "editableMap": { "type": "string", "minLength": 1 }
+                "editableMap": { "type": "string", "minLength": 1 },
+                "customFrontendAgentHandoff": { "type": "string", "minLength": 1 }
               },
-              "required": ["manifest", "renderPayload", "themeTokens", "elementActions", "dataBindings", "editableMap"]
+              "required": ["manifest", "renderPayload", "themeTokens", "elementActions", "dataBindings", "editableMap", "customFrontendAgentHandoff"]
             }
           },
-            "required": ["version", "schemas", "databaseCertification", "frontendLaunchReadiness", "completionStatus"]
+            "required": ["version", "schemas", "databaseCertification", "frontendLaunchReadiness", "completionStatus", "customFrontendAgentHandoff"]
           },
         "capabilities": {
           "type": "object",

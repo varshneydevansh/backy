@@ -252,6 +252,7 @@ import type {
     GeneratedBackyFrontendManifest,
     GeneratedBackyFrontendManifestCompletionStatus,
     GeneratedBackyFrontendManifestCommerceProviderCertification,
+  GeneratedBackyFrontendManifestCustomFrontendAgentHandoff,
   GeneratedBackyFrontendManifestDatabaseCertification,
   GeneratedBackyFrontendManifestEnvelope,
   GeneratedBackyFrontendManifestLaunchReadiness,
@@ -7752,6 +7753,57 @@ const sdkManifestBlogManagementPolicy = {
   },
 } satisfies BackyManifestContentManagementPolicy;
 
+const customFrontendAgentHandoff = {
+  schemaVersion: "backy.custom-frontend-agent-handoff.v1",
+  source: "public-manifest-openapi-contract",
+  docs: [
+    { label: "Custom frontend agent handoff", path: "specs/custom-frontend-agent-handoff.md" },
+    { label: "API contracts", path: "specs/backy-api-contracts.md" },
+    { label: "Editor contract", path: "specs/editor_complete_spec.md" },
+  ],
+  endpoints: {
+    manifest: "/api/sites/site_demo/manifest",
+    openapi: "/api/sites/site_demo/openapi",
+    resolve: "/api/sites/site_demo/resolve?path=/",
+    render: "/api/sites/site_demo/render?path=/...",
+    frontendDesign: "/api/sites/site_demo/frontend-design",
+    frontendDesignManagement: "/api/admin/sites/site_demo/frontend-design",
+    templates: "/api/admin/sites/site_demo/templates",
+    pages: "/api/admin/sites/site_demo/pages",
+    blog: "/api/admin/sites/site_demo/blog",
+    forms: "/api/admin/sites/site_demo/forms",
+    collections: "/api/admin/sites/site_demo/collections",
+    products: "/api/admin/sites/site_demo/collections/products/records",
+    reusableSections: "/api/admin/sites/site_demo/reusable-sections",
+  },
+  sdk: {
+    package: "packages/sdk-js",
+    generatedTypes: "packages/sdk-js/src/generated-contract-types.ts",
+    helpers: ["manifest", "openapi", "render", "buildBackyContentDesignPayload"],
+  },
+  contentCreation: {
+    templateCloneFields: ["frontendDesignTemplateId", "designTemplateId"],
+    backyCanvasTemplateField: "templateId",
+    customFrontendTemplateField: "frontendDesignTemplateId",
+    rule: "Create content through Backy APIs so every result can reopen in the canvas editor.",
+  },
+  designState: {
+    roundTripFields: ["content.contentDocument", "content.elements", "content.canvas", "content.editableMap", "meta.frontendDesign*"],
+    preserves: ["layer geometry", "responsive overrides", "theme token references", "media and font asset identities"],
+  },
+  rules: [
+    "Read manifest and OpenAPI before guessing API shapes.",
+    "Preserve the full Backy design envelope when creating or updating editable content.",
+    "Use authenticated admin endpoints for writes and public endpoints for read/render discovery.",
+  ],
+  privacy: {
+    includesSecretValues: false,
+    publicDiscoveryOnly: true,
+    adminWritesRequireAuth: true,
+    secretHandling: "This handoff exposes endpoint templates and field names only.",
+  },
+} satisfies GeneratedBackyFrontendManifestCustomFrontendAgentHandoff;
+
 const manifest = {
   schemaVersion: "backy.frontend-manifest.v1",
   site: {
@@ -7784,6 +7836,7 @@ const manifest = {
       databaseCertification: frontendDatabaseCertification,
       frontendLaunchReadiness,
       completionStatus,
+      customFrontendAgentHandoff,
       schemas: {
       manifest: "frontend-manifest.schema.json",
       renderPayload: "content-payload.schema.json",
@@ -7791,6 +7844,7 @@ const manifest = {
       elementActions: "element-actions.schema.json",
       dataBindings: "data-bindings.schema.json",
       editableMap: "editable-map.schema.json",
+      customFrontendAgentHandoff: "frontend-manifest.schema.json#/$defs/customFrontendAgentHandoff",
     },
   },
   capabilities: {
@@ -10609,6 +10663,7 @@ const siteListEnvelope = {
 const openApi = {
   openapi: "3.1.0",
   "x-backy-database-certification": frontendDatabaseCertification,
+  "x-backy-custom-frontend-agent-handoff": customFrontendAgentHandoff,
   "x-backy-completion-status": completionStatus,
   "x-backy-media-file-categories": openApiMediaFileCategories,
   "x-backy-forms-management": sdkManifestFormsManagementPolicy,
