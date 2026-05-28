@@ -56,6 +56,15 @@ const assert = (condition, message) => {
   }
 };
 
+const assertGeneratedId = (value, prefix, message) => {
+  assert(typeof value === 'string' && value.startsWith(`${prefix}_`), message);
+};
+
+const isUuid = (value) => (
+  typeof value === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+);
+
 const tableName = (table) => {
   if (table === activityLogs) return 'activityLogs';
   if (table === cacheInvalidationEvents) return 'cacheInvalidationEvents';
@@ -146,8 +155,16 @@ const createFakeDb = () => {
   };
 
   const now = () => new Date().toISOString();
+  const uuidTableCodes = {
+    sites: '0001',
+    pages: '0002',
+    blogPosts: '0003',
+  };
   const nextId = (name) => {
     counters[name] += 1;
+    if (uuidTableCodes[name]) {
+      return `00000000-0000-4000-8000-${uuidTableCodes[name]}${String(counters[name]).padStart(8, '0')}`;
+    }
     return `${name}_${counters[name]}`;
   };
   const withDefaults = (name, values) => {
@@ -797,6 +814,32 @@ const repositorySet = createDatabaseRepositories({
     close: async () => undefined,
   },
 });
+const expectedRepositoryKeys = [
+  'auditLogs',
+  'blogTaxonomy',
+  'cacheInvalidations',
+  'collections',
+  'comments',
+  'contentWorkflows',
+  'forms',
+  'interactiveComponents',
+  'media',
+  'pages',
+  'posts',
+  'reusableSections',
+  'settings',
+  'sites',
+  'teams',
+  'users',
+];
+const actualRepositoryKeys = Object.keys(repositorySet).sort();
+assert(
+  JSON.stringify(actualRepositoryKeys) === JSON.stringify(expectedRepositoryKeys),
+  `Database repository factory must return the full BackyRepositories contract: ${JSON.stringify({ expectedRepositoryKeys, actualRepositoryKeys })}`,
+);
+for (const key of expectedRepositoryKeys) {
+  assert(repositorySet[key] && typeof repositorySet[key] === 'object', `Expected ${key} repository implementation`);
+}
 assert(repositorySet.sites && repositorySet.pages && repositorySet.posts, 'Expected repository set factories');
 assert(repositorySet.blogTaxonomy, 'Expected blog taxonomy repository factory');
 assert(repositorySet.media, 'Expected media repository factory');
@@ -836,7 +879,7 @@ const site = (await siteRepository.create({
   status: 'published',
 })).item;
 
-assert(site.id === 'sites_1', 'Expected fake site id');
+assert(site.id === '00000000-0000-4000-8000-000100000001' && isUuid(site.id), 'Expected fake site UUID id');
 assert(site.isPublished, 'Expected published site to be marked published');
 assert(site.publishedAt, 'Expected published site timestamp');
 assert((await siteRepository.getById(site.id))?.slug === 'repo-contract', 'Expected site getById');
@@ -1216,7 +1259,7 @@ const collection = (await collectionRepository.create({
     publicCreate: true,
   },
 })).item;
-assert(collection.id === 'contentCollections_1', 'Expected fake collection id');
+assertGeneratedId(collection.id, 'contentCollections', 'Expected fake collection id');
 assert(collection.permissions.publicCreate, 'Expected collection permissions');
 assert((await collectionRepository.getBySlug(site.id, 'products'))?.id === collection.id, 'Expected collection getBySlug');
 assert((await collectionRepository.list({ siteId: site.id })).items.length === 1, 'Expected published collection list');
@@ -1246,7 +1289,7 @@ const record = (await collectionRepository.createRecord({
     price: 49,
   },
 })).item;
-assert(record.id === 'contentCollectionRecords_1', 'Expected fake collection record id');
+assertGeneratedId(record.id, 'contentCollectionRecords', 'Expected fake collection record id');
 assert((await collectionRepository.listRecords({ siteId: site.id, collectionId: collection.id })).items.length === 0, 'Expected draft records hidden by default');
 const publishedRecord = (await collectionRepository.updateRecord(site.id, collection.id, record.id, {
   status: 'published',
@@ -1395,7 +1438,7 @@ const form = (await formRepository.create({
   createdBy: 'user_admin',
   updatedBy: 'user_admin',
 })).item;
-assert(form.id === 'formDefinitions_1', 'Expected fake form id');
+assertGeneratedId(form.id, 'formDefinitions', 'Expected fake form id');
 assert(form.spamSettings?.minFillMs === 1500, 'Expected form spam settings to roundtrip through repository settings');
 assert(form.consentSettings?.policyLabel === 'Repository consent policy', 'Expected form consent settings to roundtrip through repository settings');
 assert(db.state.formDefinitions[0].settings?.spam?.blockedTerms?.includes('blocked'), 'Expected form spam settings to persist in DB settings JSON');
@@ -1435,7 +1478,7 @@ const submission = (await formRepository.createSubmission({
   collectionRecord: null,
   collectionRecordErrors: [],
 })).item;
-assert(submission.id === 'formSubmissions_1', 'Expected fake submission id');
+assertGeneratedId(submission.id, 'formSubmissions', 'Expected fake submission id');
 assert((await formRepository.listSubmissions({ siteId: site.id, formId: form.id, requestId: 'req_form_contract' })).items.length === 1, 'Expected submission request filter');
 const approvedSubmission = (await formRepository.updateSubmission(site.id, submission.id, {
   status: 'approved',
@@ -1460,7 +1503,7 @@ const contact = (await formRepository.createContact({
   requestId: approvedSubmission.requestId,
   sourceIpHash: approvedSubmission.ipHash,
 })).item;
-assert(contact.id === 'formContacts_1', 'Expected fake contact id');
+assertGeneratedId(contact.id, 'formContacts', 'Expected fake contact id');
 assert((await formRepository.listContacts({ siteId: site.id, formId: form.id, requestId: 'req_form_contract' })).items.length === 1, 'Expected contact request filter');
 const qualifiedContact = (await formRepository.updateContact(site.id, contact.id, { status: 'qualified' })).item;
 assert(qualifiedContact.status === 'qualified', 'Expected contact update');
@@ -1570,7 +1613,7 @@ const rootComment = (await commentRepository.create({
   requestId: 'req_comment_contract',
   ipHash: '127.0.0.1',
 })).item;
-assert(rootComment.id === 'comments_1', 'Expected fake comment id');
+assertGeneratedId(rootComment.id, 'comments', 'Expected fake comment id');
 assert(rootComment.status === 'approved', 'Expected comment status');
 assert((await commentRepository.list({
   siteId: site.id,
@@ -1659,7 +1702,7 @@ const auditEntry = await auditLogRepository.record({
   },
   requestId: 'req_audit_contract',
 });
-assert(auditEntry.id === 'activityLogs_1', 'Expected fake audit log id');
+assertGeneratedId(auditEntry.id, 'activityLogs', 'Expected fake audit log id');
 assert(auditEntry.entity === 'comment' && auditEntry.action === 'comment-status', 'Expected audit log mapping');
 assert((await auditLogRepository.list({
   siteId: site.id,
@@ -1731,7 +1774,7 @@ const cacheInvalidation = await cacheInvalidationRepository.record({
     requestId: 'req_cache_contract',
   },
 });
-assert(cacheInvalidation.id === 'cacheInvalidationEvents_1', 'Expected fake cache invalidation id');
+assertGeneratedId(cacheInvalidation.id, 'cacheInvalidationEvents', 'Expected fake cache invalidation id');
 assert(cacheInvalidation.revision === 'rev_contract_seo', 'Expected cache invalidation revision');
 assert((await cacheInvalidationRepository.list({
   siteId: site.id,
@@ -1750,7 +1793,7 @@ const user = (await userRepository.create({
   role: 'editor',
   status: 'invited',
 })).item;
-assert(user.id === 'profiles_1', 'Expected fake user id');
+assert(isUuid(user.id), 'Expected user UUID id');
 assert(user.email === 'repository.user@example.com', 'Expected user email normalization');
 assert((await userRepository.getByEmail(user.email))?.id === user.id, 'Expected user getByEmail');
 assert((await userRepository.list({ role: 'editor', status: 'invited', search: 'repository.user' })).items.length === 1, 'Expected user list filters');
@@ -1777,7 +1820,8 @@ const team = (await teamRepository.create({
   ownerId: activeUser.id,
   settings: { plan: 'pro' },
 })).item;
-assert(team.id === 'teams_1' && team.ownerId === activeUser.id, 'Expected team create');
+assertGeneratedId(team.id, 'teams', 'Expected fake team id');
+assert(team.ownerId === activeUser.id, 'Expected team owner id');
 assert((await teamRepository.getBySlug('repository-team'))?.id === team.id, 'Expected team getBySlug');
 assert((await teamRepository.list({ ownerId: activeUser.id, search: 'repository' })).items.length === 1, 'Expected team list filters');
 const updatedTeam = (await teamRepository.update(team.id, {
@@ -1855,7 +1899,7 @@ const reusableSection = (await reusableSectionRepository.create({
   sourceElementId: 'hero_root',
   createdBy: 'user_admin',
 })).item;
-assert(reusableSection.id === 'reusableSections_1', 'Expected fake reusable section id');
+assertGeneratedId(reusableSection.id, 'reusableSections', 'Expected fake reusable section id');
 assert((await reusableSectionRepository.getBySlug(site.id, 'saved-hero'))?.id === reusableSection.id, 'Expected reusable section getBySlug');
 assert((await reusableSectionRepository.list({ siteId: site.id, category: 'hero', tag: 'landing', search: 'saved' })).items.length === 1, 'Expected reusable section filters');
 const reusableSectionAuditEntry = await auditLogRepository.record({
@@ -1924,7 +1968,7 @@ const interactiveComponent = (await interactiveComponentRepository.create({
   changelog: 'Initial repository contract component.',
   createdBy: 'user_admin',
 })).item;
-assert(interactiveComponent.id === 'interactiveComponents_1', 'Expected fake interactive component id');
+assertGeneratedId(interactiveComponent.id, 'interactiveComponents', 'Expected fake interactive component id');
 assert(interactiveComponent.security.adminApiAccess === false, 'Expected interactive component repository to force admin API access off');
 assert((await interactiveComponentRepository.getByKeyVersion(site.id, 'repo.contract.figure', '1.0.0'))?.id === interactiveComponent.id, 'Expected interactive component getByKeyVersion');
 assert((await interactiveComponentRepository.list({
@@ -2006,7 +2050,7 @@ const revision = await contentWorkflowRepository.createRevision({
   note: 'Before workflow change',
   createdBy: 'user_admin',
 });
-assert(revision.id === 'contentRevisions_1', 'Expected fake content revision id');
+assertGeneratedId(revision.id, 'contentRevisions', 'Expected fake content revision id');
 assert((await contentWorkflowRepository.listRevisions({
   siteId: site.id,
   targetType: 'page',

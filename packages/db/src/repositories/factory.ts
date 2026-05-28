@@ -19,16 +19,14 @@ import {
     createSiteRepository,
 } from './site-page-post';
 
-type ImplementedBackyRepositories = Pick<BackyRepositories, 'teams' | 'sites' | 'pages' | 'posts' | 'blogTaxonomy' | 'media' | 'collections' | 'forms' | 'comments' | 'reusableSections' | 'interactiveComponents' | 'contentWorkflows' | 'users' | 'settings' | 'auditLogs' | 'cacheInvalidations'>;
-
 export interface DatabaseRepositoryFactoryInput {
     adapter: DatabaseAdapter;
 }
 
 export function createDatabaseRepositories(
     input: DatabaseRepositoryFactoryInput,
-): ImplementedBackyRepositories {
-    return {
+): BackyRepositories {
+    const repositories = {
         teams: createTeamRepository(input.adapter.db),
         sites: createSiteRepository(input.adapter.db),
         pages: createPageRepository(input.adapter.db),
@@ -45,7 +43,9 @@ export function createDatabaseRepositories(
         settings: createSettingsRepository(input.adapter.db),
         auditLogs: createAuditLogRepository(input.adapter.db),
         cacheInvalidations: createCacheInvalidationRepository(input.adapter.db),
-    };
+    } satisfies BackyRepositories;
+
+    return repositories;
 }
 
 export function createUnimplementedRepositoryProxy(repositoryName: string): never {
