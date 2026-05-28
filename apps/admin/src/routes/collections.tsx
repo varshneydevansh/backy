@@ -2085,6 +2085,46 @@ function CollectionsPage() {
     ? `Import JSON unavailable: ${backupImportDisabledReason}`
     : `Import JSON available for ${activeSiteId}.`;
   const collectionActionStatus = `${newCollectionActionStatus} ${backupImportActionStatus}`;
+  const collectionsCommandSecondaryActionStatusId = 'collections-command-secondary-action-status';
+  const collectionsCommandExportDisabledReason = isCollectionsBusy
+    ? 'Collection handoff actions are temporarily unavailable while Backy updates collections.'
+    : !canExportCollections
+      ? exportPermissionTitle || 'Your account needs collections.export to export collection handoffs.'
+      : '';
+  const collectionsCommandCopyDisabledReason = collectionsCommandExportDisabledReason;
+  const collectionsCommandDownloadDisabledReason = collectionsCommandExportDisabledReason;
+  const collectionsCommandBackupExportDisabledReason = isCollectionsBusy
+    ? 'Collection backup export is temporarily unavailable while Backy updates collections.'
+    : !canExportCollections
+      ? exportPermissionTitle || 'Your account needs collections.export to export collection backups.'
+      : collections.length === 0
+        ? 'Create or import a collection before exporting a JSON backup.'
+        : '';
+  const collectionsCommandImportDisabledReason = backupImportDisabledReason;
+  const collectionsCommandCopyActionStatus = collectionsCommandCopyDisabledReason
+    ? `Copy manifest unavailable: ${collectionsCommandCopyDisabledReason}`
+    : `Copy manifest available for ${activeSiteId}.`;
+  const collectionsCommandDownloadActionStatus = collectionsCommandDownloadDisabledReason
+    ? `Download JSON unavailable: ${collectionsCommandDownloadDisabledReason}`
+    : `Download JSON available for ${activeSiteId}.`;
+  const collectionsCommandBackupExportActionStatus = collectionsCommandBackupExportDisabledReason
+    ? `Export JSON unavailable: ${collectionsCommandBackupExportDisabledReason}`
+    : `Export JSON available for ${activeSiteId}.`;
+  const collectionsCommandImportActionStatus = collectionsCommandImportDisabledReason
+    ? `Import JSON unavailable: ${collectionsCommandImportDisabledReason}`
+    : `Import JSON available for ${activeSiteId}.`;
+  const collectionsCommandSecondaryActionStatus = [
+    collectionsCommandCopyActionStatus,
+    collectionsCommandDownloadActionStatus,
+    collectionsCommandBackupExportActionStatus,
+    collectionsCommandImportActionStatus,
+  ].join(' ');
+  const collectionsCommandSecondaryActionState = [
+    collectionsCommandCopyDisabledReason,
+    collectionsCommandDownloadDisabledReason,
+    collectionsCommandBackupExportDisabledReason,
+    collectionsCommandImportDisabledReason,
+  ].every(Boolean) ? 'blocked' : 'ready';
   const activeSchemaFields = activeCollection?.fields.length
     ? activeCollection.fields
     : collectionForm.fields.filter((field) => field.key.trim() && field.label.trim());
@@ -3841,7 +3881,12 @@ function CollectionsPage() {
     }));
   };
 
+  const markCollectionFormInteraction = () => {
+    collectionInteractionVersionRef.current += 1;
+  };
+
   const updateVisitorWritePolicy = (updates: Partial<CollectionVisitorWritePolicyForm>) => {
+    markCollectionFormInteraction();
     setCollectionForm((prev) => ({
       ...prev,
       visitorWritePolicy: {
@@ -3852,6 +3897,7 @@ function CollectionsPage() {
   };
 
   const toggleVisitorCreateField = (fieldKey: string, checked: boolean) => {
+    markCollectionFormInteraction();
     setCollectionForm((prev) => {
       const allowedCreateFields = new Set(prev.visitorWritePolicy.allowedCreateFields);
       if (checked) {
@@ -3871,6 +3917,7 @@ function CollectionsPage() {
   };
 
   const toggleVisitorUpdateField = (fieldKey: string, checked: boolean) => {
+    markCollectionFormInteraction();
     setCollectionForm((prev) => {
       const allowedUpdateFields = new Set(prev.visitorWritePolicy.allowedUpdateFields);
       if (checked) {
@@ -4558,6 +4605,9 @@ function CollectionsPage() {
       <span id={collectionActionStatusId} className="sr-only" data-testid="collections-collection-action-status" aria-live="polite">
         {collectionActionStatus}
       </span>
+      <span id={collectionsCommandSecondaryActionStatusId} className="sr-only" data-testid="collections-command-secondary-action-status" aria-live="polite">
+        {collectionsCommandSecondaryActionStatus}
+      </span>
 
       {isCollectionDraftMode && !activeCollection && canEditCollections && (
         <div
@@ -4727,7 +4777,14 @@ function CollectionsPage() {
                 </p>
               )}
             </div>
-            <details className="self-start xl:self-end" data-testid="collections-secondary-actions" data-default-collapsed="true">
+            <details
+              className="self-start xl:self-end"
+              aria-describedby={collectionsCommandSecondaryActionStatusId}
+              data-action-state={collectionsCommandSecondaryActionState}
+              data-action-status={collectionsCommandSecondaryActionStatus}
+              data-testid="collections-secondary-actions"
+              data-default-collapsed="true"
+            >
               <summary
                 className="inline-flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted/60 focus-ring"
                 data-testid="collections-more-actions"
@@ -4742,9 +4799,14 @@ function CollectionsPage() {
                     key: 'collections.export',
                     action: 'copy collection handoff manifests',
                   })}
-                  disabled={isCollectionsBusy || !canExportCollections}
-                  title={exportPermissionTitle}
+                  disabled={Boolean(collectionsCommandCopyDisabledReason)}
+                  title={collectionsCommandCopyDisabledReason || 'Copy collections handoff manifest'}
                   className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-describedby={collectionsCommandSecondaryActionStatusId}
+                  data-action-state={actionState(collectionsCommandCopyDisabledReason)}
+                  data-action-status={collectionsCommandCopyActionStatus}
+                  data-disabled-reason={collectionsCommandCopyDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   data-testid="collections-command-copy-manifest"
                 >
                   <Copy className="h-4 w-4" />
@@ -4753,9 +4815,14 @@ function CollectionsPage() {
                 <button
                   type="button"
                   onClick={downloadCollectionHandoff}
-                  disabled={isCollectionsBusy || !canExportCollections}
-                  title={exportPermissionTitle}
+                  disabled={Boolean(collectionsCommandDownloadDisabledReason)}
+                  title={collectionsCommandDownloadDisabledReason || 'Download collections handoff JSON'}
                   className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-describedby={collectionsCommandSecondaryActionStatusId}
+                  data-action-state={actionState(collectionsCommandDownloadDisabledReason)}
+                  data-action-status={collectionsCommandDownloadActionStatus}
+                  data-disabled-reason={collectionsCommandDownloadDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   data-testid="collections-command-download-json"
                 >
                   <Download className="h-4 w-4" />
@@ -4764,9 +4831,14 @@ function CollectionsPage() {
                 <button
                   type="button"
                   onClick={() => void downloadCollectionsBackup()}
-                  disabled={collections.length === 0 || isCollectionsBusy || !canExportCollections}
-                  title={exportPermissionTitle}
+                  disabled={Boolean(collectionsCommandBackupExportDisabledReason)}
+                  title={collectionsCommandBackupExportDisabledReason || 'Export collections JSON backup'}
                   className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  aria-describedby={collectionsCommandSecondaryActionStatusId}
+                  data-action-state={actionState(collectionsCommandBackupExportDisabledReason)}
+                  data-action-status={collectionsCommandBackupExportActionStatus}
+                  data-disabled-reason={collectionsCommandBackupExportDisabledReason || undefined}
+                  data-target-site-id={activeSiteId}
                   data-testid="collections-export-backup"
                 >
                   <Download className="h-4 w-4" />
@@ -4779,24 +4851,24 @@ function CollectionsPage() {
                   className="hidden"
                   onChange={(event) => void handleImportCollectionsBackup(event)}
                   aria-label="Import collections JSON backup"
-                  aria-describedby={collectionActionStatusId}
-                  disabled={Boolean(backupImportDisabledReason)}
-                  data-action-state={actionState(backupImportDisabledReason)}
-                  data-action-status={backupImportActionStatus}
-                  data-disabled-reason={backupImportDisabledReason || undefined}
+                  aria-describedby={`${collectionActionStatusId} ${collectionsCommandSecondaryActionStatusId}`}
+                  disabled={Boolean(collectionsCommandImportDisabledReason)}
+                  data-action-state={actionState(collectionsCommandImportDisabledReason)}
+                  data-action-status={collectionsCommandImportActionStatus}
+                  data-disabled-reason={collectionsCommandImportDisabledReason || undefined}
                   data-target-site-id={activeSiteId}
                   data-testid="collections-import-backup-input"
                 />
                 <button
                   type="button"
                   onClick={() => backupImportInputRef.current?.click()}
-                  disabled={Boolean(backupImportDisabledReason)}
-                  title={backupImportDisabledReason || undefined}
-                  aria-describedby={collectionActionStatusId}
+                  disabled={Boolean(collectionsCommandImportDisabledReason)}
+                  title={collectionsCommandImportDisabledReason || 'Import collections JSON backup'}
+                  aria-describedby={`${collectionActionStatusId} ${collectionsCommandSecondaryActionStatusId}`}
                   className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                  data-action-state={actionState(backupImportDisabledReason)}
-                  data-action-status={backupImportActionStatus}
-                  data-disabled-reason={backupImportDisabledReason || undefined}
+                  data-action-state={actionState(collectionsCommandImportDisabledReason)}
+                  data-action-status={collectionsCommandImportActionStatus}
+                  data-disabled-reason={collectionsCommandImportDisabledReason || undefined}
                   data-target-site-id={activeSiteId}
                   data-testid="collections-import-backup"
                 >
@@ -6030,13 +6102,16 @@ function CollectionsPage() {
                     checked={collectionForm.permissions.publicRead}
                     disabled={schemaMutationDisabled}
                     testId="collections-public-read-toggle"
-                    onChange={(checked) => setCollectionForm((prev) => ({
-                      ...prev,
-                      permissions: {
-                        ...prev.permissions,
-                        publicRead: checked,
-                      },
-                    }))}
+                    onChange={(checked) => {
+                      markCollectionFormInteraction();
+                      setCollectionForm((prev) => ({
+                        ...prev,
+                        permissions: {
+                          ...prev.permissions,
+                          publicRead: checked,
+                        },
+                      }));
+                    }}
                   />
                   <PermissionSwitch
                     label="Visitor create"
@@ -6044,13 +6119,16 @@ function CollectionsPage() {
                     checked={collectionForm.permissions.publicCreate}
                     disabled={schemaMutationDisabled}
                     testId="collections-public-create-toggle"
-                    onChange={(checked) => setCollectionForm((prev) => ({
-                      ...prev,
-                      permissions: {
-                        ...prev.permissions,
-                        publicCreate: checked,
-                      },
-                    }))}
+                    onChange={(checked) => {
+                      markCollectionFormInteraction();
+                      setCollectionForm((prev) => ({
+                        ...prev,
+                        permissions: {
+                          ...prev.permissions,
+                          publicCreate: checked,
+                        },
+                      }));
+                    }}
                   />
                   <PermissionSwitch
                     label="Visitor update"
@@ -6058,13 +6136,16 @@ function CollectionsPage() {
                     checked={collectionForm.permissions.publicUpdate}
                     disabled={schemaMutationDisabled}
                     testId="collections-public-update-toggle"
-                    onChange={(checked) => setCollectionForm((prev) => ({
-                      ...prev,
-                      permissions: {
-                        ...prev.permissions,
-                        publicUpdate: checked,
-                      },
-                    }))}
+                    onChange={(checked) => {
+                      markCollectionFormInteraction();
+                      setCollectionForm((prev) => ({
+                        ...prev,
+                        permissions: {
+                          ...prev.permissions,
+                          publicUpdate: checked,
+                        },
+                      }));
+                    }}
                   />
                   <PermissionSwitch
                     label="Visitor delete"
@@ -6072,13 +6153,16 @@ function CollectionsPage() {
                     checked={collectionForm.permissions.publicDelete}
                     disabled={schemaMutationDisabled}
                     testId="collections-public-delete-toggle"
-                    onChange={(checked) => setCollectionForm((prev) => ({
-                      ...prev,
-                      permissions: {
-                        ...prev.permissions,
-                        publicDelete: checked,
-                      },
-                    }))}
+                    onChange={(checked) => {
+                      markCollectionFormInteraction();
+                      setCollectionForm((prev) => ({
+                        ...prev,
+                        permissions: {
+                          ...prev.permissions,
+                          publicDelete: checked,
+                        },
+                      }));
+                    }}
                   />
                 </div>
                 <div

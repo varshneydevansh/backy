@@ -95,6 +95,21 @@ const assertCollectionsRouteSourceContract = () => {
     );
   }
   assert(
+    source.includes("const collectionsCommandSecondaryActionStatusId = 'collections-command-secondary-action-status';") &&
+      source.includes('data-testid="collections-command-secondary-action-status"') &&
+      source.includes('aria-describedby={collectionsCommandSecondaryActionStatusId}') &&
+      source.includes('data-action-status={collectionsCommandSecondaryActionStatus}') &&
+      source.includes('data-action-status={collectionsCommandCopyActionStatus}') &&
+      source.includes('data-action-status={collectionsCommandDownloadActionStatus}') &&
+      source.includes('data-action-status={collectionsCommandBackupExportActionStatus}') &&
+      source.includes('data-action-status={collectionsCommandImportActionStatus}') &&
+      source.includes('data-disabled-reason={collectionsCommandCopyDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={collectionsCommandDownloadDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={collectionsCommandBackupExportDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={collectionsCommandImportDisabledReason || undefined}'),
+    'Collections command center secondary actions must expose aggregate and per-command ready/blocked metadata.',
+  );
+  assert(
     source.includes('data-testid="collections-audit-details"') &&
       source.includes('data-testid="collections-audit-panel"') &&
       source.includes('data-default-collapsed="true"') &&
@@ -111,13 +126,13 @@ const assertCollectionsRouteSourceContract = () => {
       source.includes('const collectionActionStatus = `${newCollectionActionStatus} ${backupImportActionStatus}`;') &&
       source.includes('data-testid="collections-collection-action-status"') &&
       source.includes('data-action-status={newCollectionActionStatus}') &&
-      source.includes('data-action-status={backupImportActionStatus}') &&
+      source.includes('data-action-status={collectionsCommandImportActionStatus}') &&
       source.includes('data-action-state={actionState(newCollectionDisabledReason || \'\')}') &&
-      source.includes('data-action-state={actionState(backupImportDisabledReason)}') &&
+      source.includes('data-action-state={actionState(collectionsCommandImportDisabledReason)}') &&
       source.includes('data-disabled-reason={newCollectionDisabledReason || undefined}') &&
-      source.includes('data-disabled-reason={backupImportDisabledReason || undefined}') &&
+      source.includes('data-disabled-reason={collectionsCommandImportDisabledReason || undefined}') &&
       source.includes('data-target-site-id={activeSiteId}') &&
-      source.includes('disabled={Boolean(backupImportDisabledReason)}') &&
+      source.includes('disabled={Boolean(collectionsCommandImportDisabledReason)}') &&
       source.includes('data-testid="collections-new-collection-button"') &&
       source.includes('data-testid="collections-library-new-collection-button"') &&
       source.includes('data-testid="collections-empty-new-collection-button"') &&
@@ -159,6 +174,17 @@ const assertCollectionsRouteSourceContract = () => {
   );
   assert(source.includes('data-testid="collections-slug-policy-copy-plan"'), 'Collections schema editor must expose a copy slug policy plan action');
   assert(source.includes('Slug policy'), 'Collections readiness must include slug policy status');
+  assert(
+    source.includes('const markCollectionFormInteraction = () => {') &&
+      source.includes('collectionInteractionVersionRef.current += 1;') &&
+      source.includes('markCollectionFormInteraction();') &&
+      source.includes('testId="collections-public-update-toggle"') &&
+      source.includes('testId="collections-public-delete-toggle"') &&
+      source.includes('const updateVisitorWritePolicy = (updates: Partial<CollectionVisitorWritePolicyForm>) => {') &&
+      source.includes('const toggleVisitorCreateField = (fieldKey: string, checked: boolean) => {') &&
+      source.includes('const toggleVisitorUpdateField = (fieldKey: string, checked: boolean) => {'),
+    'Collections visitor mutation policy edits must invalidate pending collection loads before saving.',
+  );
   assert(
     source.includes('listAllCollectionRecords') &&
       source.includes('const selectedRecordIdSet = useMemo') &&
@@ -981,6 +1007,21 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
     const auditDetails = document.querySelector('[data-testid="collections-audit-details"]');
     const firstPrimaryActionText = (document.querySelector('[data-testid="collections-primary-actions"] button')?.textContent || '').replace(/\\s+/g, ' ').trim();
     const secondaryActions = document.querySelector('[data-testid="collections-secondary-actions"]');
+    const secondaryStatus = document.querySelector('[data-testid="collections-command-secondary-action-status"]');
+    const secondaryStatusId = secondaryStatus?.id || '';
+    const readSecondaryAction = (testId) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      const canDisable = control instanceof HTMLButtonElement || control instanceof HTMLInputElement;
+      return {
+        exists: control instanceof HTMLElement,
+        disabled: canDisable ? control.disabled : null,
+        describedBy: control?.getAttribute('aria-describedby') || '',
+        actionState: control?.getAttribute('data-action-state') || '',
+        actionStatus: control?.getAttribute('data-action-status') || '',
+        disabledReason: control?.getAttribute('data-disabled-reason') || '',
+        targetSiteId: control?.getAttribute('data-target-site-id') || '',
+      };
+    };
     const controlMapText = controlMapDetails?.textContent || '';
     const connectedWorkflowsText = connectedWorkflowsDetails?.textContent || '';
     const auditText = auditDetails?.textContent || '';
@@ -1017,6 +1058,19 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         document.querySelector('[data-testid="collections-secondary-action-menu"] [data-testid="collections-export-backup"]') &&
         document.querySelector('[data-testid="collections-secondary-action-menu"] [data-testid="collections-import-backup"]')
       ),
+      secondaryActionStatus: {
+        exists: secondaryStatus instanceof HTMLElement,
+        statusId: secondaryStatusId,
+        statusText: (secondaryStatus?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        groupState: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('data-action-state') || '' : '',
+        groupStatus: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('data-action-status') || '' : '',
+        groupDescribedBy: secondaryActions instanceof HTMLElement ? secondaryActions.getAttribute('aria-describedby') || '' : '',
+        copy: readSecondaryAction('collections-command-copy-manifest'),
+        download: readSecondaryAction('collections-command-download-json'),
+        exportBackup: readSecondaryAction('collections-export-backup'),
+        importBackup: readSecondaryAction('collections-import-backup'),
+        importInput: readSecondaryAction('collections-import-backup-input'),
+      },
       controlMapCollapsed: controlMapDetails instanceof HTMLDetailsElement &&
         controlMapDetails.open === false &&
         controlMapDetails.getAttribute('data-default-collapsed') === 'true',
@@ -1146,9 +1200,35 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       layout.secondaryActionsCollapsed &&
       layout.hasMoreActionsTrigger &&
       layout.hasCommandHandoffActionsNested;
+    const secondaryActionReady = layout.secondaryActionStatus.exists &&
+      layout.secondaryActionStatus.statusId === 'collections-command-secondary-action-status' &&
+      layout.secondaryActionStatus.groupDescribedBy === layout.secondaryActionStatus.statusId &&
+      ['ready', 'blocked'].includes(layout.secondaryActionStatus.groupState) &&
+      layout.secondaryActionStatus.groupStatus === layout.secondaryActionStatus.statusText &&
+      layout.secondaryActionStatus.statusText.includes('Copy manifest') &&
+      layout.secondaryActionStatus.statusText.includes('Download JSON') &&
+      layout.secondaryActionStatus.statusText.includes('Export JSON') &&
+      layout.secondaryActionStatus.statusText.includes('Import JSON') &&
+      [layout.secondaryActionStatus.copy, layout.secondaryActionStatus.download, layout.secondaryActionStatus.exportBackup, layout.secondaryActionStatus.importBackup].every((action) => (
+        action.exists &&
+        action.describedBy.includes(layout.secondaryActionStatus.statusId) &&
+        ['ready', 'blocked'].includes(action.actionState) &&
+        action.actionState === (action.disabled ? 'blocked' : 'ready') &&
+        action.targetSiteId === SITE_ID &&
+        (
+          action.disabled
+            ? action.actionStatus.includes('unavailable:') && action.disabledReason.length > 0
+            : action.actionStatus.includes(`available for ${SITE_ID}.`) && action.disabledReason === ''
+        )
+      )) &&
+      layout.secondaryActionStatus.importInput.exists &&
+      layout.secondaryActionStatus.importInput.describedBy.includes(layout.secondaryActionStatus.statusId) &&
+      layout.secondaryActionStatus.importInput.actionState === layout.secondaryActionStatus.importBackup.actionState &&
+      layout.secondaryActionStatus.importInput.actionStatus === layout.secondaryActionStatus.importBackup.actionStatus;
     const layoutReady = layout.path === '/collections' &&
       layout.hasCommandCenter &&
       actionHierarchyReady &&
+      secondaryActionReady &&
       layout.controlMapCollapsed &&
       layout.connectedWorkflowsCollapsed &&
       layout.auditCollapsed &&
@@ -1179,7 +1259,7 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       layout.collectionActionStatus.libraryDescribedBy.includes(layout.collectionActionStatus.statusId) &&
       layout.collectionActionStatus.libraryStatus === layout.collectionActionStatus.headerStatus &&
       layout.collectionActionStatus.libraryState === 'ready' &&
-      layout.collectionActionStatus.backupDescribedBy === layout.collectionActionStatus.statusId &&
+      layout.collectionActionStatus.backupDescribedBy.includes(layout.collectionActionStatus.statusId) &&
       layout.collectionActionStatus.backupStatus.includes('Import JSON available') &&
       layout.collectionActionStatus.backupState === 'ready' &&
       layout.collectionActionStatus.backupTargetSite === SITE_ID &&
@@ -1268,6 +1348,7 @@ const assertCollectionBackupControls = async (client, collectionId) => {
       const input = document.querySelector('[data-testid="collections-import-backup-input"]');
       const button = document.querySelector('[data-testid="collections-import-backup"]');
       const status = document.querySelector('[data-testid="collections-collection-action-status"]');
+      const secondaryStatus = document.querySelector('[data-testid="collections-command-secondary-action-status"]');
       if (!(input instanceof HTMLInputElement)) {
         return { ok: false, reason: 'backup-import-input-missing', body: document.body?.innerText?.slice(0, 1000) || '' };
       }
@@ -1280,15 +1361,20 @@ const assertCollectionBackupControls = async (client, collectionId) => {
         buttonDescribedBy: button?.getAttribute('aria-describedby') || '',
         buttonStatus: button?.getAttribute('data-action-status') || '',
         buttonState: button?.getAttribute('data-action-state') || '',
+        secondaryStatusId: secondaryStatus?.id || '',
         disabledReason: button?.getAttribute('data-disabled-reason') || '',
         targetSiteId: button?.getAttribute('data-target-site-id') || '',
       };
       if (
         !(status instanceof HTMLElement) ||
+        !(secondaryStatus instanceof HTMLElement) ||
         !(button instanceof HTMLButtonElement) ||
         actionState.statusId !== 'collections-collection-action-status' ||
-        actionState.inputDescribedBy !== actionState.statusId ||
-        actionState.buttonDescribedBy !== actionState.statusId ||
+        actionState.secondaryStatusId !== 'collections-command-secondary-action-status' ||
+        !actionState.inputDescribedBy.includes(actionState.statusId) ||
+        !actionState.inputDescribedBy.includes(actionState.secondaryStatusId) ||
+        !actionState.buttonDescribedBy.includes(actionState.statusId) ||
+        !actionState.buttonDescribedBy.includes(actionState.secondaryStatusId) ||
         !actionState.statusText.includes(actionState.buttonStatus) ||
         actionState.buttonStatus !== actionState.inputStatus ||
         !actionState.buttonStatus.includes('Import JSON available') ||
@@ -1981,7 +2067,13 @@ const copyDraftCollectionSlugPolicyPlanThroughUi = async (client, expected) => {
   assert(plan.fallbackField === expected.fallbackField, `Slug policy copy plan fallback field mismatch: ${JSON.stringify(plan)}`);
   assert(plan.updateBehavior === expected.updateBehavior, `Slug policy copy plan update behavior mismatch: ${JSON.stringify(plan)}`);
   assert(plan.transform === 'lowercase-dashes' && plan.conflictStrategy === 'reject-duplicates', `Slug policy copy plan strategy mismatch: ${JSON.stringify(plan)}`);
-  assert(String(plan.exampleItemPath || '').includes('example-record'), `Slug policy copy plan example path missing: ${JSON.stringify(plan)}`);
+  assert(
+    String(plan.routeTemplate || '').includes(':recordSlug') &&
+      String(plan.exampleItemPath || '').startsWith('/smoke-draft-schema-') &&
+      !String(plan.exampleItemPath || '').includes(':recordSlug') &&
+      String(plan.exampleItemPath || '').split('/').filter(Boolean).length >= 2,
+    `Slug policy copy plan example path missing: ${JSON.stringify(plan)}`,
+  );
 
   return {
     plan,
