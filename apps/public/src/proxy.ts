@@ -96,6 +96,12 @@ const getProvidedAdminApiKey = (request: NextRequest) => {
   return match?.[1]?.trim() || '';
 };
 
+const requestHeadersWithRequestId = (request: NextRequest, requestId: string) => {
+  const headers = new Headers(request.headers);
+  headers.set('x-request-id', requestId);
+  return headers;
+};
+
 const adminAuthError = (
   status: number,
   code: string,
@@ -159,13 +165,17 @@ export function proxy(request: NextRequest) {
   if (isUploadRequest(request)) {
     const url = request.nextUrl.clone();
     url.pathname = `/api${url.pathname}`;
-    return NextResponse.rewrite(url);
+    return NextResponse.rewrite(url, {
+      request: {
+        headers: requestHeadersWithRequestId(request, requestId),
+      },
+    });
   }
 
   const seoMatch = hostedSeoMatch(request.nextUrl.pathname);
   if (seoMatch) {
     const [, siteId, file] = seoMatch;
-    const headers = new Headers(request.headers);
+    const headers = requestHeadersWithRequestId(request, requestId);
     headers.set('x-backy-seo-format', file === 'sitemap.xml' ? 'sitemap' : 'robots');
     const url = request.nextUrl.clone();
     url.pathname = `/api/sites/${siteId}/seo`;
@@ -209,7 +219,11 @@ export function proxy(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next();
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeadersWithRequestId(request, requestId),
+    },
+  });
   applyCorsHeaders(response.headers, origin);
   if (isAdminApiRequest(request)) {
     applyAdminHeaders(response.headers);

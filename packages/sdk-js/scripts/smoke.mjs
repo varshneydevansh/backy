@@ -1608,6 +1608,10 @@ assert(manifestLiveManagement?.schemaVersion === 'backy.live-management.v1', 'ma
 assert(manifestLiveManagement.endpoints?.page === manifest.data.endpoints.liveManagePage, 'manifest() live-management page endpoint drifted');
 assert(manifestLiveManagement.endpoints?.post === manifest.data.endpoints.liveManagePost, 'manifest() live-management blog post endpoint drifted');
 assert(manifestLiveManagement.methods?.read === 'GET' && manifestLiveManagement.methods?.update === 'PATCH', 'manifest() live-management methods drifted');
+assert(manifestLiveManagement.responseHeaders?.page?.schemaVersion === 'backy.live-management-page.v1', 'manifest() live-management missing page response schema header contract');
+assert(manifestLiveManagement.responseHeaders?.page?.cacheScope === 'private', 'manifest() live-management page response cache scope must be private');
+assert(manifestLiveManagement.responseHeaders?.post?.schemaVersion === 'backy.live-management-blog-post.v1', 'manifest() live-management missing blog response schema header contract');
+assert(manifestLiveManagement.responseHeaders?.post?.resource === 'blog-post', 'manifest() live-management blog response resource header drifted');
 assert(manifestLiveManagement.auth?.requiredPermissions?.read === 'pages.view', 'manifest() live-management missing read permission');
 assert(manifestLiveManagement.auth?.requiredPermissions?.update === 'pages.edit', 'manifest() live-management missing update permission');
 assert(manifestLiveManagement.auth?.siteScope === true, 'manifest() live-management missing site scope requirement');
@@ -1985,6 +1989,12 @@ assert(openapi['x-backy-live-management']?.editorComposition?.commands?.some?.((
 assert(openapi['x-backy-live-management']?.editorComposition?.commands?.some?.((command) => command.id === 'ungroup' && command.shortcut === 'Shift+Cmd/Ctrl+G'), 'openapi() missing live-management ungroup command metadata');
 assert(openapi['x-backy-live-management']?.editorComposition?.commandRegistry?.schemaVersion === 'backy.editor-command-registry.v1', 'openapi() missing live-management editor command registry');
 assert(openapi['x-backy-live-management']?.editorComposition?.commandRegistry?.commands?.some?.((command) => command.id === 'toggle-grid' && command.testId === 'editor-grid-visibility-toggle'), 'openapi() command registry missing grid toggle metadata');
+const openApiLivePageRead = openapi.paths?.[`/api/sites/${client.getSiteId()}/manage/pages/{pageId}`]?.get;
+assert(openApiLivePageRead?.responses?.['200']?.headers?.['x-backy-schema-version']?.schema?.const === 'backy.live-management-page.v1', 'openapi() live page management missing response schema header contract');
+assert(openApiLivePageRead?.responses?.['401']?.headers?.['x-backy-cache-scope']?.schema?.const === 'private', 'openapi() live page management auth errors must advertise private cache scope');
+const openApiLiveBlogPatch = openapi.paths?.[`/api/sites/${client.getSiteId()}/manage/blog/{postId}`]?.patch;
+assert(openApiLiveBlogPatch?.responses?.['200']?.headers?.['x-backy-live-management-resource']?.schema?.const === 'blog-post', 'openapi() live blog management missing resource response header contract');
+assert(openApiLiveBlogPatch?.responses?.['409']?.headers?.['x-backy-schema-version']?.schema?.const === 'backy.live-management-blog-post.v1', 'openapi() live blog conflict response schema header drifted');
 assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('props.downloadMediaIds'), 'openapi() live-management missing download media ids editable target');
 assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('props.backgroundColor'), 'openapi() live-management missing prop background color editable target');
 assert(openapi['x-backy-live-management']?.editableTargets?.includes?.('styles.boxShadow'), 'openapi() live-management missing style box shadow editable target');

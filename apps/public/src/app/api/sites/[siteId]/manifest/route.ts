@@ -2066,6 +2066,28 @@ const buildManifestLiveManagementDiscovery = (siteId: string) => ({
     revisions: 'GET',
     rollback: 'POST',
   },
+  responseHeaders: {
+    page: {
+      contractVersion: 'x-backy-contract-version',
+      schemaVersion: 'backy.live-management-page.v1',
+      cacheScope: 'private',
+      cacheHeader: 'cache-control',
+      siteIdHeader: 'x-backy-site-id',
+      requestIdHeader: 'x-backy-request-id',
+      resourceHeader: 'x-backy-live-management-resource',
+      resource: 'page',
+    },
+    post: {
+      contractVersion: 'x-backy-contract-version',
+      schemaVersion: 'backy.live-management-blog-post.v1',
+      cacheScope: 'private',
+      cacheHeader: 'cache-control',
+      siteIdHeader: 'x-backy-site-id',
+      requestIdHeader: 'x-backy-request-id',
+      resourceHeader: 'x-backy-live-management-resource',
+      resource: 'blog-post',
+    },
+  },
   auth: {
     modes: ['session', 'api-key'],
     headers: ['Authorization', 'x-backy-admin-session', 'x-backy-admin-key', 'x-api-key'],

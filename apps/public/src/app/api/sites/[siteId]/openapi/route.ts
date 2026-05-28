@@ -970,6 +970,50 @@ const sandboxResponseHeaders = {
   },
 };
 
+const liveManagementResponseHeaders = (
+  schemaVersion: "backy.live-management-page.v1" | "backy.live-management-blog-post.v1",
+  resource: "page" | "blog-post",
+) => ({
+  "x-backy-contract-version": {
+    description: "Backy public contract version for authenticated live-management bridges.",
+    schema: { type: "string", const: "backy.ai-frontend.v1" },
+  },
+  "x-backy-schema-version": {
+    description: "Live-management resource response schema version.",
+    schema: { type: "string", const: schemaVersion },
+  },
+  "x-backy-cache-scope": {
+    description: "Live-management responses are private and must not be shared by public caches.",
+    schema: { type: "string", const: "private" },
+  },
+  "x-backy-request-id": {
+    description: "Request id echoed for support and audit correlation.",
+    schema: { type: "string" },
+  },
+  "x-backy-site-id": {
+    description: "Resolved Backy site id when the request reaches a site-scoped live-management boundary.",
+    schema: { type: "string" },
+  },
+  "x-backy-live-management": {
+    description: "Marks the response as part of Backy's authenticated live-management bridge.",
+    schema: { type: "string", const: "true" },
+  },
+  "x-backy-live-management-resource": {
+    description: "Live-management resource kind returned by this bridge.",
+    schema: { type: "string", const: resource },
+  },
+});
+
+const liveManagementPageResponseHeaders = liveManagementResponseHeaders(
+  "backy.live-management-page.v1",
+  "page",
+);
+
+const liveManagementBlogPostResponseHeaders = liveManagementResponseHeaders(
+  "backy.live-management-blog-post.v1",
+  "blog-post",
+);
+
 const mediaFileResponseHeaders = {
   ETag: {
     description: "Stable media file delivery validator for If-None-Match revalidation.",
@@ -3375,6 +3419,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               responses: {
                 "200": {
                   description: "Authenticated page detail",
+                  headers: liveManagementPageResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/PageEnvelope" },
@@ -3383,6 +3428,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "401": {
                   description: "Admin session or API key required",
+                  headers: liveManagementPageResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3391,6 +3437,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "403": {
                   description: "Missing page permission or site team-scope access",
+                  headers: liveManagementPageResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3399,6 +3446,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "404": {
                   description: "Site or page not found",
+                  headers: liveManagementPageResponseHeaders,
                 },
               },
             },
@@ -3423,6 +3471,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               responses: {
                 "200": {
                   description: "Updated page detail",
+                  headers: liveManagementPageResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/PageEnvelope" },
@@ -3431,6 +3480,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "400": {
                   description: "Invalid page payload or readiness blocked",
+                  headers: liveManagementPageResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3439,6 +3489,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "401": {
                   description: "Admin session or API key required",
+                  headers: liveManagementPageResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3447,6 +3498,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "403": {
                   description: "Missing page permission or site team-scope access",
+                  headers: liveManagementPageResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3455,6 +3507,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "409": {
                   description: "Slug or page version conflict",
+                  headers: liveManagementPageResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3478,6 +3531,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               responses: {
                 "200": {
                   description: "Authenticated blog post detail",
+                  headers: liveManagementBlogPostResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/BlogPostEnvelope" },
@@ -3486,6 +3540,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "401": {
                   description: "Admin session or API key required",
+                  headers: liveManagementBlogPostResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3494,6 +3549,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "403": {
                   description: "Missing page permission or site team-scope access",
+                  headers: liveManagementBlogPostResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3502,6 +3558,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "404": {
                   description: "Site or blog post not found",
+                  headers: liveManagementBlogPostResponseHeaders,
                 },
               },
             },
@@ -3526,6 +3583,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               responses: {
                 "200": {
                   description: "Updated blog post detail",
+                  headers: liveManagementBlogPostResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/BlogPostEnvelope" },
@@ -3534,6 +3592,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "400": {
                   description: "Invalid blog post payload or readiness blocked",
+                  headers: liveManagementBlogPostResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3542,6 +3601,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "401": {
                   description: "Admin session or API key required",
+                  headers: liveManagementBlogPostResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3550,6 +3610,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "403": {
                   description: "Missing page permission or site team-scope access",
+                  headers: liveManagementBlogPostResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },
@@ -3558,6 +3619,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 "409": {
                   description: "Slug or blog post version conflict",
+                  headers: liveManagementBlogPostResponseHeaders,
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/ErrorEnvelope" },

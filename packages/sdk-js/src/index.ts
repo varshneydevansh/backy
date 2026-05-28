@@ -12259,6 +12259,31 @@ export interface BackyManifestLiveManagementModule {
     update: "PATCH";
     [key: string]: unknown;
   };
+  responseHeaders?: {
+    page?: {
+      contractVersion?: string;
+      schemaVersion: "backy.live-management-page.v1" | string;
+      cacheScope: "private" | string;
+      cacheHeader?: string;
+      siteIdHeader?: string;
+      requestIdHeader?: string;
+      resourceHeader?: string;
+      resource: "page" | string;
+      [key: string]: unknown;
+    };
+    post?: {
+      contractVersion?: string;
+      schemaVersion: "backy.live-management-blog-post.v1" | string;
+      cacheScope: "private" | string;
+      cacheHeader?: string;
+      siteIdHeader?: string;
+      requestIdHeader?: string;
+      resourceHeader?: string;
+      resource: "blog-post" | string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   auth: {
     modes: Array<"session" | "api-key">;
     headers: string[];

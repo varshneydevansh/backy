@@ -1191,6 +1191,42 @@
                   },
                   "required": ["read", "update"]
                 },
+                "responseHeaders": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "page": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "schemaVersion": { "const": "backy.live-management-page.v1" },
+                        "cacheScope": { "const": "private" },
+                        "resource": { "const": "page" },
+                        "contractVersion": { "type": "string", "minLength": 1 },
+                        "cacheHeader": { "type": "string", "minLength": 1 },
+                        "siteIdHeader": { "type": "string", "minLength": 1 },
+                        "requestIdHeader": { "type": "string", "minLength": 1 },
+                        "resourceHeader": { "type": "string", "minLength": 1 }
+                      },
+                      "required": ["schemaVersion", "cacheScope", "resource"]
+                    },
+                    "post": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "schemaVersion": { "const": "backy.live-management-blog-post.v1" },
+                        "cacheScope": { "const": "private" },
+                        "resource": { "const": "blog-post" },
+                        "contractVersion": { "type": "string", "minLength": 1 },
+                        "cacheHeader": { "type": "string", "minLength": 1 },
+                        "siteIdHeader": { "type": "string", "minLength": 1 },
+                        "requestIdHeader": { "type": "string", "minLength": 1 },
+                        "resourceHeader": { "type": "string", "minLength": 1 }
+                      },
+                      "required": ["schemaVersion", "cacheScope", "resource"]
+                    }
+                  }
+                },
                 "auth": {
                   "type": "object",
                   "additionalProperties": true,

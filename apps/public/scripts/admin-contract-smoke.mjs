@@ -645,12 +645,18 @@ function assertAdminPageContentValidationSource() {
   assert(publicLiveManagePageRoute.includes('requireAdminTeamScopeAccess'), 'live manage page route must enforce site team scope');
   assert(publicLiveManagePageRoute.includes('FORBIDDEN_LIVE_MANAGE_SITE_SCOPE'), 'live manage page route must return a distinct live-management scope error');
   assert(publicLiveManagePageRoute.includes('getAdminPage') && publicLiveManagePageRoute.includes('patchAdminPage'), 'live manage page route must delegate to the admin page detail behavior');
+  assert(publicLiveManagePageRoute.includes('withLiveManagementContractHeaders') && publicLiveManagePageRoute.includes("resource: 'page'"), 'live manage page route must wrap delegated responses with page live-management contract headers');
+  assert(publicLiveManagePageRoute.includes('LiveManagePageAccessResult') && publicLiveManagePageRoute.includes('ok: false') && publicLiveManagePageRoute.includes('isAdminAccessContext'), 'live manage page route must use a stable access result shape for auth failures');
+  assert(!publicLiveManagePageRoute.includes('instanceof NextResponse'), 'live manage page route must not rely on brittle NextResponse instance checks');
   assert(hostedPageRoute.includes('backyManage') && hostedPageRoute.includes('LivePageManagementOverlay'), 'hosted page route must expose opt-in live management overlay wiring');
   assert(publicLiveManageBlogRoute.includes("'pages.view'"), 'live manage blog route must require pages.view for reads');
   assert(publicLiveManageBlogRoute.includes("'pages.edit'"), 'live manage blog route must require pages.edit for mutations');
   assert(publicLiveManageBlogRoute.includes('requireAdminTeamScopeAccess'), 'live manage blog route must enforce site team scope');
   assert(publicLiveManageBlogRoute.includes('FORBIDDEN_LIVE_MANAGE_BLOG_SCOPE'), 'live manage blog route must return a distinct live-management blog scope error');
   assert(publicLiveManageBlogRoute.includes('getAdminPost') && publicLiveManageBlogRoute.includes('patchAdminPost'), 'live manage blog route must delegate to the admin blog detail behavior');
+  assert(publicLiveManageBlogRoute.includes('withLiveManagementContractHeaders') && publicLiveManageBlogRoute.includes("resource: 'blog-post'"), 'live manage blog route must wrap delegated responses with blog live-management contract headers');
+  assert(publicLiveManageBlogRoute.includes('LiveManageBlogAccessResult') && publicLiveManageBlogRoute.includes('ok: false') && publicLiveManageBlogRoute.includes('isAdminAccessContext'), 'live manage blog route must use a stable access result shape for auth failures');
+  assert(!publicLiveManageBlogRoute.includes('instanceof NextResponse'), 'live manage blog route must not rely on brittle NextResponse instance checks');
   assert(hostedBlogPostRoute.includes('backyManage') && hostedBlogPostRoute.includes('LivePageManagementOverlay'), 'hosted blog route must expose opt-in live management overlay wiring');
   assert(hostedBlogPostRoute.includes('resourceType="post"') && hostedBlogPostRoute.includes('postId={post.id}'), 'hosted blog route must wire the overlay to the selected blog post resource');
   assert(liveManageOverlay.includes("credentials: 'include'"), 'live management overlay must rely on admin session credentials');
@@ -697,6 +703,9 @@ function assertAdminPageContentValidationSource() {
   );
   assert(publicOpenApiRouteSource.includes('/manage/pages/{pageId}'), 'OpenAPI route must advertise the live page management endpoint');
   assert(publicOpenApiRouteSource.includes('/manage/blog/{postId}'), 'OpenAPI route must advertise the live blog management endpoint');
+  assert(publicManifestRoute.includes("schemaVersion: 'backy.live-management-page.v1'") && publicManifestRoute.includes("schemaVersion: 'backy.live-management-blog-post.v1'"), 'frontend manifest must advertise live-management response schema headers');
+  assert(publicOpenApiRouteSource.includes('liveManagementPageResponseHeaders') && publicOpenApiRouteSource.includes('liveManagementBlogPostResponseHeaders'), 'OpenAPI route must advertise live-management response headers');
+  assert(publicOpenApiRouteSource.includes('"backy.live-management-page.v1"') && publicOpenApiRouteSource.includes('"backy.live-management-blog-post.v1"'), 'OpenAPI route must include live-management resource schema header constants');
   assert(publicOpenApiRouteSource.includes('PageUpdateRequest'), 'OpenAPI route must document the live page update payload');
   assert(publicOpenApiRouteSource.includes('BlogPostUpdateRequest'), 'OpenAPI route must document the live blog update payload');
   assert(publicOpenApiRouteSource.includes('getBackyLiveManagedPage') && publicOpenApiRouteSource.includes('updateBackyLiveManagedPage'), 'OpenAPI route must name live page management operations');

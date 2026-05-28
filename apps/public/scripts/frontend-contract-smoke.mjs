@@ -128,6 +128,8 @@ assert(
     publicProxy.includes("'x-backy-cache-revision'") &&
     publicProxy.includes("'x-backy-supported-schema-versions'") &&
     publicProxy.includes("'ETag'") &&
+    publicProxy.includes('requestHeadersWithRequestId') &&
+    publicProxy.includes("headers.set('x-request-id', requestId)") &&
     publicProxy.includes("headers.append('Vary', 'Origin')"),
   'Public proxy CORS must allow exact configured origins and expose Backy contract/cache/request headers to browser-based custom frontends.',
 );
@@ -528,7 +530,10 @@ assert(
 assert(
   manifestRoute.includes('buildManifestLiveManagementDiscovery') &&
     manifestRoute.includes("schemaVersion: 'backy.live-management.v1'") &&
+    manifestRoute.includes("schemaVersion: 'backy.live-management-page.v1'") &&
+    manifestRoute.includes("schemaVersion: 'backy.live-management-blog-post.v1'") &&
     manifestRoute.includes("post: `/api/sites/${siteId}/manage/blog/{postId}`") &&
+    manifestRoute.includes("resourceHeader: 'x-backy-live-management-resource'") &&
     manifestRoute.includes("requiredPermissions:") &&
 	    manifestRoute.includes("read: 'pages.view'") &&
 	    manifestRoute.includes("update: 'pages.edit'") &&
@@ -776,6 +781,8 @@ assert(
     sdkSource.includes('GeneratedBackyOpenApiLiveManagementDiscovery') &&
     generatedSdkTypes.includes('"x-backy-live-management"?: GeneratedBackyOpenApiLiveManagementDiscovery') &&
     sdkSmoke.includes('manifest() missing live-management discovery module') &&
+    sdkSmoke.includes('manifest() live-management missing page response schema header contract') &&
+    sdkSmoke.includes('manifest() live-management missing blog response schema header contract') &&
     sdkSmoke.includes('manifest() live-management missing form id editable target') &&
     sdkSmoke.includes('manifest() live-management missing media id editable target') &&
     sdkSmoke.includes('manifest() live-management missing plural media ids editable target') &&
@@ -793,7 +800,9 @@ assert(
     sdkSmoke.includes('manifest() live-management missing element binding slots editable target') &&
 	    sdkSmoke.includes('manifest() live-management missing page create lifecycle endpoint') &&
 	    sdkSmoke.includes('manifest() live-management missing editor command registry contract') &&
-	    sdkSmoke.includes('openapi() missing live-management editor command registry') &&
+    sdkSmoke.includes('openapi() missing live-management editor command registry') &&
+    sdkSmoke.includes('openapi() live page management missing response schema header contract') &&
+    sdkSmoke.includes('openapi() live blog management missing resource response header contract') &&
 	    sdkSmoke.includes('evaluateBackyEditorCommandRegistry() did not mark sibling grouping ready') &&
 	    sdkSmoke.includes('evaluateBackyEditorCommandRegistry() did not mark selected editor group ungroup ready') &&
     sdkSmoke.includes('manifest() pages runtime missing management create helper') &&

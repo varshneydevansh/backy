@@ -5877,6 +5877,31 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           update: "PATCH";
           [key: string]: unknown;
         };
+        responseHeaders?: {
+          page?: {
+            schemaVersion: "backy.live-management-page.v1";
+            cacheScope: "private";
+            resource: "page";
+            contractVersion?: string;
+            cacheHeader?: string;
+            siteIdHeader?: string;
+            requestIdHeader?: string;
+            resourceHeader?: string;
+            [key: string]: unknown;
+          };
+          post?: {
+            schemaVersion: "backy.live-management-blog-post.v1";
+            cacheScope: "private";
+            resource: "blog-post";
+            contractVersion?: string;
+            cacheHeader?: string;
+            siteIdHeader?: string;
+            requestIdHeader?: string;
+            resourceHeader?: string;
+            [key: string]: unknown;
+          };
+          [key: string]: unknown;
+        };
         auth: {
           modes: Array<"session" | "api-key">;
           headers: Array<string>;

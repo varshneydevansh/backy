@@ -5,7 +5,7 @@
  * PATCH /api/sites/[siteId]/manage/blog/[postId]
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, type NextResponse } from 'next/server';
 import type { Site } from '@backy-cms/core';
 import {
   GET as getAdminPost,
@@ -19,6 +19,7 @@ import {
   type AdminTeamScopedResource,
 } from '@/lib/adminAccess';
 import { getSiteByIdOrSlug, type StoreSite } from '@/lib/backyStore';
+import { withLiveManagementContractHeaders } from '@/lib/liveManagementContract';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -31,10 +32,23 @@ interface RouteParams {
 }
 
 type LiveManageAction = 'view' | 'content';
+type LiveManageSite = (Site | StoreSite) & AdminTeamScopedResource;
+type LiveManageBlogAccessResult =
+  | { ok: true; site: LiveManageSite }
+  | { ok: false; response: NextResponse };
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-const resolveSite = async (siteId: string): Promise<(Site | StoreSite) & AdminTeamScopedResource | null> => {
+const isAdminAccessContext = (value: unknown): value is AdminAccessContext => {
+  if (!value || typeof value !== 'object' || !('session' in value)) {
+    return false;
+  }
+
+  const accessType = (value as { type?: unknown }).type;
+  return accessType === 'session' || accessType === 'api-key';
+};
+
+const resolveSite = async (siteId: string): Promise<LiveManageSite | null> => {
   if (!shouldUseDemoStoreFallback()) {
     const repositories = await getRequiredDatabaseRepositories();
     return await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -49,15 +63,32 @@ const requireLiveManageBlogAccess = async (
   siteId: string,
   permission: 'pages.view' | 'pages.edit',
   action: LiveManageAction,
-): Promise<AdminAccessContext | NextResponse> => {
+): Promise<LiveManageBlogAccessResult> => {
   const access = await requireAdminAccess(request, requestId, { permission });
-  if (access instanceof NextResponse) {
-    return access;
+  if (!isAdminAccessContext(access)) {
+    return {
+      ok: false,
+      response: withLiveManagementContractHeaders(access, {
+        request,
+        requestId,
+        resource: 'blog-post',
+      }),
+    };
   }
 
   const site = await resolveSite(siteId);
   if (!site) {
-    return adminAccessError(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    return {
+      ok: false,
+      response: withLiveManagementContractHeaders(
+        adminAccessError(404, 'SITE_NOT_FOUND', 'Site not found', requestId),
+        {
+          request,
+          requestId,
+          resource: 'blog-post',
+        },
+      ),
+    };
   }
 
   const scopeError = await requireAdminTeamScopeAccess(access, requestId, site, {
@@ -66,27 +97,49 @@ const requireLiveManageBlogAccess = async (
     message: 'This admin account cannot live-manage blog posts for this site.',
   });
 
-  return scopeError || access;
+  if (scopeError) {
+    return {
+      ok: false,
+      response: withLiveManagementContractHeaders(scopeError, {
+        request,
+        requestId,
+        siteId: site.id,
+        resource: 'blog-post',
+      }),
+    };
+  }
+
+  return { ok: true, site };
 };
 
 export async function GET(request: NextRequest, route: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const { siteId } = await route.params;
   const access = await requireLiveManageBlogAccess(request, requestId, siteId, 'pages.view', 'view');
-  if (access instanceof NextResponse) {
-    return access;
+  if (!access.ok) {
+    return access.response;
   }
 
-  return getAdminPost(request, route);
+  return withLiveManagementContractHeaders(await getAdminPost(request, route), {
+    request,
+    requestId,
+    siteId: access.site.id,
+    resource: 'blog-post',
+  });
 }
 
 export async function PATCH(request: NextRequest, route: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const { siteId } = await route.params;
   const access = await requireLiveManageBlogAccess(request, requestId, siteId, 'pages.edit', 'content');
-  if (access instanceof NextResponse) {
-    return access;
+  if (!access.ok) {
+    return access.response;
   }
 
-  return patchAdminPost(request, route);
+  return withLiveManagementContractHeaders(await patchAdminPost(request, route), {
+    request,
+    requestId,
+    siteId: access.site.id,
+    resource: 'blog-post',
+  });
 }
