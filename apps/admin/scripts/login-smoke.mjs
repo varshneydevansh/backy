@@ -712,6 +712,7 @@ const assertAuthRecoverySource = () => {
       loginSmokeSource.includes('assertMobileQuickCreateInteraction') &&
       loginSmokeSource.includes('BACKY_LOGIN_MOBILE_QUICK_CREATE_SMOKE') &&
       loginSmokeSource.includes('Mobile quick create route to new page') &&
+      loginSmokeSource.includes('Mobile quick create route to new post') &&
       loginSmokeSource.includes('Mobile quick create route to new product') &&
       loginSmokeSource.includes('Mobile quick create route to new form') &&
       loginSmokeSource.includes('Sidebar quick create route to new page') &&
@@ -2193,9 +2194,96 @@ const assertMobileQuickCreateInteraction = async (client) => {
       'Mobile quick create route to new page',
     );
 
-    const reopenProductClick = await evaluate(client, `(() => {
+    const reopenPostClick = await evaluate(client, `(() => {
       const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
       if (!(toggle instanceof HTMLButtonElement)) return { ok: false, reason: 'mobile-toggle-missing-after-page-route' };
+      toggle.focus();
+      toggle.click();
+      return { ok: true };
+    })()`);
+    assert(reopenPostClick.ok, `Unable to reopen mobile navigation for post quick-create: ${JSON.stringify(reopenPostClick)}`);
+
+    await waitForState(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="admin-mobile-sidebar-dialog"]');
+        const post = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-post"]');
+        return {
+          ready: dialog instanceof HTMLElement &&
+            post instanceof HTMLAnchorElement &&
+            post.getAttribute('data-target-route') === '/blog/new' &&
+            post.getAttribute('data-target-search')?.includes('siteId=') &&
+            document.body.style.overflow === 'hidden',
+          hasDialog: dialog instanceof HTMLElement,
+          postHref: post instanceof HTMLAnchorElement ? post.href : '',
+          postTargetSearch: post?.getAttribute('data-target-search') || '',
+          bodyOverflow: document.body.style.overflow || '',
+        };
+      })()`,
+      'Mobile quick create post shortcut ready after page route',
+    );
+
+    const postClick = await evaluate(client, `(() => {
+      const post = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-post"]');
+      if (!(post instanceof HTMLAnchorElement)) return { ok: false, reason: 'mobile-new-post-missing' };
+      post.click();
+      return { ok: true, href: post.href };
+    })()`);
+    assert(postClick.ok, `Unable to click mobile quick-create post shortcut: ${JSON.stringify(postClick)}`);
+
+    const postRouteState = await waitForState(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="admin-mobile-sidebar-dialog"]');
+        const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+        const commandCenter = document.querySelector('[data-testid="blog-create-command-center"]');
+        const titleInput = document.querySelector('[data-testid="blog-create-title-input"]');
+        const commandStatus = document.querySelector('[data-testid="blog-create-command-action-status"]');
+        const back = document.querySelector('[data-testid="blog-create-back-to-blog"]');
+        const focus = document.querySelector('[data-testid="blog-create-focus-toggle"]');
+        const stored = JSON.parse(localStorage.getItem('backy-auth-storage') || '{}');
+        const body = document.body?.innerText || '';
+        const commandStatusText = commandStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+        return {
+          ready: window.location.pathname === '/blog/new' &&
+            window.location.search.includes('siteId=site-demo') &&
+            !(dialog instanceof HTMLElement) &&
+            document.body.style.overflow !== 'hidden' &&
+            toggle instanceof HTMLButtonElement &&
+            toggle.getAttribute('aria-expanded') === 'false' &&
+            commandCenter instanceof HTMLElement &&
+            titleInput instanceof HTMLInputElement &&
+            commandStatus instanceof HTMLElement &&
+            back instanceof HTMLButtonElement &&
+            focus instanceof HTMLButtonElement &&
+            back.getAttribute('data-action-state') === 'ready' &&
+            focus.getAttribute('data-action-state') === 'ready' &&
+            commandStatusText.includes('Back to Blog posts available for site-demo') &&
+            commandStatusText.includes('Focus blog creation canvas available.') &&
+            stored?.state?.user?.email === 'admin@backy.io' &&
+            Boolean(stored?.state?.session?.expiresAt) &&
+            !body.includes('Authenticated admin access'),
+          path: window.location.pathname,
+          search: window.location.search,
+          hasDialog: dialog instanceof HTMLElement,
+          bodyOverflow: document.body.style.overflow || '',
+          toggleExpanded: toggle?.getAttribute('aria-expanded') || '',
+          hasCommandCenter: commandCenter instanceof HTMLElement,
+          hasTitleInput: titleInput instanceof HTMLInputElement,
+          commandStatusText,
+          backState: back?.getAttribute('data-action-state') || '',
+          focusState: focus?.getAttribute('data-action-state') || '',
+          userEmail: stored?.state?.user?.email || '',
+          hasSession: Boolean(stored?.state?.session?.expiresAt),
+          body: body.slice(0, 900),
+        };
+      })()`,
+      'Mobile quick create route to new post',
+    );
+
+    const reopenProductClick = await evaluate(client, `(() => {
+      const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+      if (!(toggle instanceof HTMLButtonElement)) return { ok: false, reason: 'mobile-toggle-missing-after-post-route' };
       toggle.focus();
       toggle.click();
       return { ok: true };
@@ -2219,7 +2307,7 @@ const assertMobileQuickCreateInteraction = async (client) => {
           bodyOverflow: document.body.style.overflow || '',
         };
       })()`,
-      'Mobile quick create product shortcut ready after page route',
+      'Mobile quick create product shortcut ready after post route',
     );
 
     const productClick = await evaluate(client, `(() => {
@@ -2359,7 +2447,7 @@ const assertMobileQuickCreateInteraction = async (client) => {
       'Mobile quick create route to new form',
     );
 
-    return { readyState, pageRouteState, productRouteState, formRouteState };
+    return { readyState, pageRouteState, postRouteState, productRouteState, formRouteState };
   } finally {
     await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
     await evaluate(client, `(() => {
