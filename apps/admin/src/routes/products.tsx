@@ -1824,6 +1824,23 @@ function ProductsRoute() {
   const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', PRODUCT_PERMISSION_ROLE_DEFAULTS);
   const isProductsAccessBusy = isProductsBusy;
   const isProductPageTemplateActionDisabled = !canEditPages;
+  const productDeleteConfirmTitleId = 'products-delete-confirm-title';
+  const productDeleteConfirmDescriptionId = 'products-delete-confirm-description';
+  const productDeleteConfirmImpactId = 'products-delete-confirm-impact';
+  const productDeleteConfirmActionStatusId = 'products-delete-confirm-action-status';
+  const productBulkDeleteConfirmTitleId = 'products-bulk-delete-confirm-title';
+  const productBulkDeleteConfirmDescriptionId = 'products-bulk-delete-confirm-description';
+  const productBulkDeleteConfirmImpactId = 'products-bulk-delete-confirm-impact';
+  const productBulkDeleteConfirmActionStatusId = 'products-bulk-delete-confirm-action-status';
+  const productDeleteConfirmDisabledReason = isProductsAccessBusy
+    ? 'Product catalog is busy.'
+    : !canDeleteProducts
+      ? deletePermissionTitle || 'Your account cannot delete products.'
+      : '';
+  const productDeleteConfirmActionState = isProductsAccessBusy ? 'busy' : productDeleteConfirmDisabledReason ? 'blocked' : 'ready';
+  const productDeleteConfirmActionStatus = productDeleteConfirmDisabledReason
+    ? `Delete product unavailable: ${productDeleteConfirmDisabledReason}`
+    : 'Delete product confirmation ready. Cancel or press Escape to keep the product.';
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -2330,6 +2347,10 @@ function ProductsRoute() {
   const productsBulkDeleteDisabledReason = productsBulkNoSelectionDisabledReason ||
     productsBulkBusyDisabledReason ||
     productsBulkDeletePermissionDisabledReason;
+  const productBulkDeleteConfirmActionState = isProductsAccessBusy ? 'busy' : productsBulkDeleteDisabledReason ? 'blocked' : 'ready';
+  const productBulkDeleteConfirmActionStatus = productsBulkDeleteDisabledReason
+    ? `Bulk delete unavailable: ${productsBulkDeleteDisabledReason}`
+    : `Bulk delete confirmation ready for ${selectedLoadedProducts.length} selected product${selectedLoadedProducts.length === 1 ? '' : 's'}. Cancel or press Escape to keep them.`;
   const productsBulkActionStatus = [
     productsBulkSelectionDisabledReason ? `Select visible unavailable: ${productsBulkSelectionDisabledReason}` : `Select visible available for ${visibleProductActionLabel}.`,
     productsBulkStatusDisabledReason ? `Publish selected unavailable: ${productsBulkStatusDisabledReason}` : `Publish selected available for ${selectedProductActionLabel}.`,
@@ -4028,6 +4049,7 @@ function ProductsRoute() {
       setSelectedSiteId(nextSiteId);
       clearProductEditorState();
       setSelectedProductIds([]);
+      setPendingDeleteProduct(null);
       setPendingBulkDeleteProducts(false);
     }
 
@@ -4048,6 +4070,22 @@ function ProductsRoute() {
     selectedSiteId,
     sites,
   ]);
+
+  useEffect(() => {
+    if (!pendingDeleteProduct && !pendingBulkDeleteProducts) return;
+
+    const handleProductDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isProductsAccessBusy) return;
+      setPendingDeleteProduct(null);
+      setPendingBulkDeleteProducts(false);
+    };
+
+    window.addEventListener('keydown', handleProductDeleteDialogKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleProductDeleteDialogKeyDown);
+    };
+  }, [isProductsAccessBusy, pendingBulkDeleteProducts, pendingDeleteProduct]);
 
   useEffect(() => {
     void loadProducts();
@@ -9040,20 +9078,33 @@ function ProductsRoute() {
       )}
 
       {pendingDeleteProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={productDeleteConfirmTitleId}
+          aria-describedby={`${productDeleteConfirmDescriptionId} ${productDeleteConfirmImpactId} ${productDeleteConfirmActionStatusId}`}
+          data-testid="products-delete-confirm-dialog"
+          data-action-state={productDeleteConfirmActionState}
+          data-action-status={productDeleteConfirmActionStatus}
+          data-target-product-id={pendingDeleteProduct.id}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <span id={productDeleteConfirmActionStatusId} className="sr-only" data-testid="products-delete-confirm-action-status" aria-live="polite">
+              {productDeleteConfirmActionStatus}
+            </span>
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Delete {String(pendingDeleteProduct.values.title || pendingDeleteProduct.slug)}?</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <h2 id={productDeleteConfirmTitleId} className="text-lg font-semibold text-foreground">Delete {String(pendingDeleteProduct.values.title || pendingDeleteProduct.slug)}?</h2>
+                <p id={productDeleteConfirmDescriptionId} className="mt-1 text-sm text-muted-foreground">
                   This removes the product record from Backy and from storefront API responses. Archive it instead if you only want it hidden.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id={productDeleteConfirmImpactId} className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               SKU: <span className="font-medium text-foreground">{String(pendingDeleteProduct.values.sku || pendingDeleteProduct.slug)}</span>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -9061,6 +9112,11 @@ function ProductsRoute() {
                 type="button"
                 onClick={() => setPendingDeleteProduct(null)}
                 disabled={isProductsAccessBusy}
+                aria-describedby={productDeleteConfirmActionStatusId}
+                data-testid="products-delete-confirm-cancel"
+                data-action-state={isProductsAccessBusy ? 'busy' : 'ready'}
+                data-action-status={isProductsAccessBusy ? 'Product delete is running.' : 'Cancel product delete and keep the product.'}
+                data-disabled-reason={isProductsAccessBusy ? 'Product catalog is busy.' : undefined}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -9070,6 +9126,12 @@ function ProductsRoute() {
                 onClick={() => void removeProduct(pendingDeleteProduct)}
                 disabled={isProductsAccessBusy || !canDeleteProducts}
                 title={!canDeleteProducts ? deletePermissionTitle : undefined}
+                aria-describedby={productDeleteConfirmActionStatusId}
+                data-testid="products-delete-confirm-button"
+                data-action-state={productDeleteConfirmActionState}
+                data-action-status={productDeleteConfirmActionStatus}
+                data-disabled-reason={productDeleteConfirmDisabledReason || undefined}
+                data-target-product-id={pendingDeleteProduct.id}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? 'Deleting...' : 'Delete product'}
@@ -9080,22 +9142,36 @@ function ProductsRoute() {
       )}
 
       {pendingBulkDeleteProducts && selectedLoadedProducts.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm" data-testid="products-bulk-delete-modal">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={productBulkDeleteConfirmTitleId}
+          aria-describedby={`${productBulkDeleteConfirmDescriptionId} ${productBulkDeleteConfirmImpactId} ${productBulkDeleteConfirmActionStatusId}`}
+          data-testid="products-bulk-delete-modal"
+          data-confirm-dialog-id="products-bulk-delete-confirm-dialog"
+          data-action-state={productBulkDeleteConfirmActionState}
+          data-action-status={productBulkDeleteConfirmActionStatus}
+          data-selected-product-count={selectedLoadedProducts.length}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <span id={productBulkDeleteConfirmActionStatusId} className="sr-only" data-testid="products-bulk-delete-confirm-action-status" aria-live="polite">
+              {productBulkDeleteConfirmActionStatus}
+            </span>
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">
+                <h2 id={productBulkDeleteConfirmTitleId} className="text-lg font-semibold text-foreground">
                   Delete {selectedLoadedProducts.length} selected product{selectedLoadedProducts.length === 1 ? '' : 's'}?
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p id={productBulkDeleteConfirmDescriptionId} className="mt-1 text-sm text-muted-foreground">
                   This removes selected product records from Backy and storefront API responses. Archive them instead if you only want them hidden.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id={productBulkDeleteConfirmImpactId} className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Includes {selectedVisibleProducts.length} visible selected product{selectedVisibleProducts.length === 1 ? '' : 's'}
               {hiddenSelectedProductCount > 0 ? ` and ${hiddenSelectedProductCount} selected outside this filtered view` : ''}.
             </div>
@@ -9104,6 +9180,11 @@ function ProductsRoute() {
                 type="button"
                 onClick={() => setPendingBulkDeleteProducts(false)}
                 disabled={isProductsAccessBusy}
+                aria-describedby={productBulkDeleteConfirmActionStatusId}
+                data-testid="products-bulk-delete-confirm-cancel"
+                data-action-state={isProductsAccessBusy ? 'busy' : 'ready'}
+                data-action-status={isProductsAccessBusy ? 'Bulk product delete is running.' : 'Cancel bulk product delete and keep selected products.'}
+                data-disabled-reason={isProductsAccessBusy ? 'Product catalog is busy.' : undefined}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -9113,6 +9194,12 @@ function ProductsRoute() {
                 onClick={() => void bulkDeleteProducts()}
                 disabled={isProductsAccessBusy || !canDeleteProducts}
                 title={!canDeleteProducts ? deletePermissionTitle : undefined}
+                aria-describedby={productBulkDeleteConfirmActionStatusId}
+                data-testid="products-bulk-delete-confirm-button"
+                data-action-state={productBulkDeleteConfirmActionState}
+                data-action-status={productBulkDeleteConfirmActionStatus}
+                data-disabled-reason={productsBulkDeleteDisabledReason || undefined}
+                data-selected-product-count={selectedLoadedProducts.length}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isBulkUpdatingProducts ? 'Deleting...' : 'Delete products'}

@@ -1529,6 +1529,37 @@ const assertProductsApiContractsSource = () => {
     "Products catalog must expose selected-row bulk publish, archive, delete, and selected CSV export controls",
   );
   assert(
+    source.includes("const productDeleteConfirmActionStatusId = 'products-delete-confirm-action-status';") &&
+      source.includes("const productBulkDeleteConfirmActionStatusId = 'products-bulk-delete-confirm-action-status';") &&
+      source.includes('data-testid="products-delete-confirm-dialog"') &&
+      source.includes('data-testid="products-delete-confirm-action-status"') &&
+      source.includes('data-testid="products-delete-confirm-cancel"') &&
+      source.includes('data-testid="products-delete-confirm-button"') &&
+      source.includes('aria-labelledby={productDeleteConfirmTitleId}') &&
+      source.includes('aria-describedby={`${productDeleteConfirmDescriptionId} ${productDeleteConfirmImpactId} ${productDeleteConfirmActionStatusId}`}') &&
+      source.includes('data-action-state={productDeleteConfirmActionState}') &&
+      source.includes('data-action-status={productDeleteConfirmActionStatus}') &&
+      source.includes('data-disabled-reason={productDeleteConfirmDisabledReason || undefined}') &&
+      source.includes("event.key !== 'Escape' || isProductsAccessBusy") &&
+      source.includes('handleProductDeleteDialogKeyDown') &&
+      source.includes('setPendingDeleteProduct(null)'),
+    'Products single-delete confirmation must expose labelled dialog semantics, action status metadata, and Escape recovery.',
+  );
+  assert(
+    source.includes('data-confirm-dialog-id="products-bulk-delete-confirm-dialog"') &&
+      source.includes('data-testid="products-bulk-delete-confirm-action-status"') &&
+      source.includes('data-testid="products-bulk-delete-confirm-cancel"') &&
+      source.includes('data-testid="products-bulk-delete-confirm-button"') &&
+      source.includes('aria-labelledby={productBulkDeleteConfirmTitleId}') &&
+      source.includes('aria-describedby={`${productBulkDeleteConfirmDescriptionId} ${productBulkDeleteConfirmImpactId} ${productBulkDeleteConfirmActionStatusId}`}') &&
+      source.includes('data-selected-product-count={selectedLoadedProducts.length}') &&
+      source.includes('data-action-state={productBulkDeleteConfirmActionState}') &&
+      source.includes('data-action-status={productBulkDeleteConfirmActionStatus}') &&
+      source.includes('data-disabled-reason={productsBulkDeleteDisabledReason || undefined}') &&
+      source.includes('setPendingBulkDeleteProducts(false)'),
+    'Products bulk-delete confirmation must expose labelled dialog semantics, selected-count metadata, and cancel/Escape recovery.',
+  );
+  assert(
     publicOrderRouteSource.includes("firstCheckoutItemArray") &&
       publicOrderRouteSource.includes("items.length > 0") &&
       publicOrderRouteSource.includes("body.lineItems") &&
@@ -4088,6 +4119,23 @@ const evaluate = async (client, expression) => {
   }
 
   return result.result.value;
+};
+
+const pressEscape = async (client) => {
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    code: "Escape",
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  });
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Escape",
+    code: "Escape",
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  });
 };
 
 const navigateToRoute = async (client, route, testId, expectedText) => {
@@ -8067,6 +8115,72 @@ const assertProductBulkActionStatus = async (client) => {
     const state = await evaluate(
       client,
       `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const trigger = document.querySelector('[data-testid="products-bulk-delete"]');
+      if (!(trigger instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'bulk-delete-trigger-missing' };
+      }
+      if (trigger.disabled) {
+        return { ok: false, reason: 'bulk-delete-trigger-disabled', disabledReason: trigger.getAttribute('data-disabled-reason') || '' };
+      }
+      trigger.click();
+      const dialog = document.querySelector('[data-testid="products-bulk-delete-modal"]');
+      const status = document.querySelector('[data-testid="products-bulk-delete-confirm-action-status"]');
+      const cancel = document.querySelector('[data-testid="products-bulk-delete-confirm-cancel"]');
+      const confirm = document.querySelector('[data-testid="products-bulk-delete-confirm-button"]');
+      const statusText = normalize(status?.textContent);
+      const opened = dialog?.getAttribute('role') === 'dialog' &&
+        dialog?.getAttribute('aria-modal') === 'true' &&
+        dialog?.getAttribute('aria-labelledby') === 'products-bulk-delete-confirm-title' &&
+        dialog?.getAttribute('aria-describedby') === 'products-bulk-delete-confirm-description products-bulk-delete-confirm-impact products-bulk-delete-confirm-action-status' &&
+        dialog?.getAttribute('data-action-state') === 'ready' &&
+        dialog?.getAttribute('data-action-status') === statusText &&
+        dialog?.getAttribute('data-selected-product-count') === '1' &&
+        statusText.includes('Bulk delete confirmation ready for 1 selected product') &&
+        cancel instanceof HTMLButtonElement &&
+        cancel.getAttribute('aria-describedby') === 'products-bulk-delete-confirm-action-status' &&
+        cancel.getAttribute('data-action-state') === 'ready' &&
+        confirm instanceof HTMLButtonElement &&
+        confirm.getAttribute('aria-describedby') === 'products-bulk-delete-confirm-action-status' &&
+        confirm.getAttribute('data-action-state') === 'ready' &&
+        confirm.getAttribute('data-selected-product-count') === '1' &&
+        confirm.disabled === false;
+      return {
+        ok: opened,
+        reason: 'bulk-delete-dialog-contract-mismatch',
+        opened,
+        statusText,
+        dialogRole: dialog?.getAttribute('role') || '',
+        dialogLabelledBy: dialog?.getAttribute('aria-labelledby') || '',
+        dialogDescribedBy: dialog?.getAttribute('aria-describedby') || '',
+        dialogState: dialog?.getAttribute('data-action-state') || '',
+        confirmState: confirm?.getAttribute('data-action-state') || '',
+      };
+    })()`,
+    );
+    if (state.ok) {
+      await sleep(100);
+      await pressEscape(client);
+      const closeState = await evaluate(
+        client,
+        `(() => ({
+          closed: !document.querySelector('[data-testid="products-bulk-delete-modal"]'),
+          body: document.body?.innerText?.slice(0, 800) || '',
+        }))()`,
+      );
+      assert(closeState.closed, `Products bulk delete confirmation did not close on Escape: ${JSON.stringify(closeState)}`);
+      break;
+    }
+    if (attempt === 59) {
+      throw new Error(`Products bulk delete confirmation recovery failed: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const state = await evaluate(
+      client,
+      `(() => {
       const clear = document.querySelector('[data-testid="products-bulk-clear-selection"]');
       if (!(clear instanceof HTMLButtonElement)) return { ok: false, reason: 'clear-missing' };
       if (clear.disabled) return { ok: false, reason: 'clear-disabled' };
@@ -8098,6 +8212,79 @@ const assertProductBulkActionStatus = async (client) => {
     if (state.ok) return state;
     if (attempt === 59) {
       throw new Error(`Products bulk selection did not clear: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertProductDeleteConfirmationRecovery = async (client) => {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const state = await evaluate(
+      client,
+      `(() => {
+      const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+      const card = document.querySelector('[data-testid="products-product-card"]');
+      const trigger = card?.querySelector('[data-testid="products-delete-product"]');
+      if (!(trigger instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'delete-trigger-missing' };
+      }
+      if (trigger.disabled) {
+        return { ok: false, reason: 'delete-trigger-disabled', disabledReason: trigger.getAttribute('data-disabled-reason') || '' };
+      }
+      trigger.click();
+      const dialog = document.querySelector('[data-testid="products-delete-confirm-dialog"]');
+      const status = document.querySelector('[data-testid="products-delete-confirm-action-status"]');
+      const cancel = document.querySelector('[data-testid="products-delete-confirm-cancel"]');
+      const confirm = document.querySelector('[data-testid="products-delete-confirm-button"]');
+      const statusText = normalize(status?.textContent);
+      const targetProductId = dialog?.getAttribute('data-target-product-id') || '';
+      const opened = dialog?.getAttribute('role') === 'dialog' &&
+        dialog?.getAttribute('aria-modal') === 'true' &&
+        dialog?.getAttribute('aria-labelledby') === 'products-delete-confirm-title' &&
+        dialog?.getAttribute('aria-describedby') === 'products-delete-confirm-description products-delete-confirm-impact products-delete-confirm-action-status' &&
+        dialog?.getAttribute('data-action-state') === 'ready' &&
+        dialog?.getAttribute('data-action-status') === statusText &&
+        targetProductId.length > 0 &&
+        statusText.includes('Delete product confirmation ready') &&
+        cancel instanceof HTMLButtonElement &&
+        cancel.getAttribute('aria-describedby') === 'products-delete-confirm-action-status' &&
+        cancel.getAttribute('data-action-state') === 'ready' &&
+        confirm instanceof HTMLButtonElement &&
+        confirm.getAttribute('aria-describedby') === 'products-delete-confirm-action-status' &&
+        confirm.getAttribute('data-action-state') === 'ready' &&
+        confirm.getAttribute('data-target-product-id') === targetProductId &&
+        confirm.disabled === false;
+      return {
+        ok: opened,
+        reason: 'product-delete-dialog-contract-mismatch',
+        opened,
+        statusText,
+        targetProductId,
+        dialogRole: dialog?.getAttribute('role') || '',
+        dialogLabelledBy: dialog?.getAttribute('aria-labelledby') || '',
+        dialogDescribedBy: dialog?.getAttribute('aria-describedby') || '',
+        dialogState: dialog?.getAttribute('data-action-state') || '',
+        confirmState: confirm?.getAttribute('data-action-state') || '',
+      };
+    })()`,
+    );
+    if (state.ok) {
+      await sleep(100);
+      await pressEscape(client);
+      const closeState = await evaluate(
+        client,
+        `(() => ({
+          closed: !document.querySelector('[data-testid="products-delete-confirm-dialog"]'),
+          body: document.body?.innerText?.slice(0, 800) || '',
+        }))()`,
+      );
+      assert(closeState.closed, `Products delete confirmation did not close on Escape: ${JSON.stringify(closeState)}`);
+      return state;
+    }
+    if (attempt === 59) {
+      throw new Error(`Products delete confirmation recovery failed: ${JSON.stringify(state)}`);
     }
     await sleep(250);
   }
@@ -8811,6 +8998,7 @@ const assertProductsLayout = async (client) => {
     `Products page missing expected regions: ${JSON.stringify(layout)}`,
   );
   await assertProductBulkActionStatus(client);
+  await assertProductDeleteConfirmationRecovery(client);
   return layout;
 };
 

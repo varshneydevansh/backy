@@ -1559,6 +1559,19 @@ function OrdersRoute() {
     : adminPermissionReason(permissionMatrix, currentAdmin, !canDeleteCommerce ? 'commerce.delete' : 'collections.delete', ORDER_PERMISSION_ROLE_DEFAULTS);
   const pagesEditPermissionTitle = canEditPages ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', ORDER_PERMISSION_ROLE_DEFAULTS);
   const isOrdersAccessBusy = isOrdersBusy;
+  const orderDeleteConfirmTitleId = 'orders-delete-confirm-title';
+  const orderDeleteConfirmDescriptionId = 'orders-delete-confirm-description';
+  const orderDeleteConfirmImpactId = 'orders-delete-confirm-impact';
+  const orderDeleteConfirmActionStatusId = 'orders-delete-confirm-action-status';
+  const orderDeleteConfirmDisabledReason = isOrdersAccessBusy
+    ? 'Order queue is busy.'
+    : !canDeleteOrders
+      ? deletePermissionTitle || 'Your account cannot delete orders.'
+      : '';
+  const orderDeleteConfirmActionState = isOrdersAccessBusy ? 'busy' : orderDeleteConfirmDisabledReason ? 'blocked' : 'ready';
+  const orderDeleteConfirmActionStatus = orderDeleteConfirmDisabledReason
+    ? `Delete order unavailable: ${orderDeleteConfirmDisabledReason}`
+    : 'Delete order confirmation ready. Cancel or press Escape to keep the order.';
   const orderTotalValue = Number(formState.total || 0);
   const orderNumberMissing = !formState.orderNumber.trim();
   const orderCustomerMissing = !formState.customerName.trim();
@@ -3252,6 +3265,7 @@ function OrdersRoute() {
     if (siteChanged) {
       setSelectedSiteId(nextSiteId);
       clearOrderEditorState();
+      setPendingDeleteOrder(null);
     }
 
     setSelectedOrderId(routeSearch.orderId || null);
@@ -3271,6 +3285,21 @@ function OrdersRoute() {
     selectedSiteId,
     sites,
   ]);
+
+  useEffect(() => {
+    if (!pendingDeleteOrder) return;
+
+    const handleOrderDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isOrdersAccessBusy) return;
+      setPendingDeleteOrder(null);
+    };
+
+    window.addEventListener('keydown', handleOrderDeleteDialogKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleOrderDeleteDialogKeyDown);
+    };
+  }, [isOrdersAccessBusy, pendingDeleteOrder]);
 
   useEffect(() => {
     void loadOrders();
@@ -7847,22 +7876,35 @@ function OrdersRoute() {
       )}
 
       {pendingDeleteOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={orderDeleteConfirmTitleId}
+          aria-describedby={`${orderDeleteConfirmDescriptionId} ${orderDeleteConfirmImpactId} ${orderDeleteConfirmActionStatusId}`}
+          data-testid="orders-delete-confirm-dialog"
+          data-action-state={orderDeleteConfirmActionState}
+          data-action-status={orderDeleteConfirmActionStatus}
+          data-target-order-id={pendingDeleteOrder.id}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
+        >
           <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl">
+            <span id={orderDeleteConfirmActionStatusId} className="sr-only" data-testid="orders-delete-confirm-action-status" aria-live="polite">
+              {orderDeleteConfirmActionStatus}
+            </span>
             <div className="flex items-start gap-3">
               <span className="rounded-lg bg-red-50 p-2 text-red-600">
                 <Trash2 className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold text-foreground">
+                <h2 id={orderDeleteConfirmTitleId} className="text-lg font-semibold text-foreground">
                   Delete {String(readOrderValue(pendingDeleteOrder.values, 'ordernumber', pendingDeleteOrder.slug))}?
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p id={orderDeleteConfirmDescriptionId} className="mt-1 text-sm text-muted-foreground">
                   This permanently removes the order record from Backy. Keep it archived if you need the sale history for reporting.
                 </p>
               </div>
             </div>
-            <div className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <div id={orderDeleteConfirmImpactId} className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               Customer: <span className="font-medium text-foreground">{String(readOrderValue(pendingDeleteOrder.values, 'customername', 'Unknown customer'))}</span>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -7870,6 +7912,11 @@ function OrdersRoute() {
                 type="button"
                 onClick={() => setPendingDeleteOrder(null)}
                 disabled={isOrdersAccessBusy}
+                aria-describedby={orderDeleteConfirmActionStatusId}
+                data-testid="orders-delete-confirm-cancel"
+                data-action-state={isOrdersAccessBusy ? 'busy' : 'ready'}
+                data-action-status={isOrdersAccessBusy ? 'Order delete is running.' : 'Cancel order delete and keep the order.'}
+                data-disabled-reason={isOrdersAccessBusy ? 'Order queue is busy.' : undefined}
                 className="rounded-lg border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
@@ -7879,6 +7926,12 @@ function OrdersRoute() {
                 onClick={() => void removeOrder(pendingDeleteOrder)}
                 disabled={isOrdersAccessBusy || !canDeleteOrders}
                 title={!canDeleteOrders ? deletePermissionTitle : undefined}
+                aria-describedby={orderDeleteConfirmActionStatusId}
+                data-testid="orders-delete-confirm-button"
+                data-action-state={orderDeleteConfirmActionState}
+                data-action-status={orderDeleteConfirmActionStatus}
+                data-disabled-reason={orderDeleteConfirmDisabledReason || undefined}
+                data-target-order-id={pendingDeleteOrder.id}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? 'Deleting...' : 'Delete order'}

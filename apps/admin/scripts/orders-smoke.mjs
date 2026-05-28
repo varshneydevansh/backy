@@ -356,6 +356,23 @@ const assertOrdersBulkWorkflowHandlesPartialResults = () => {
       source.includes('data-disabled-reason={providerRefundDisabledReason || undefined}'),
     'Orders action buttons must expose action-plan recommendations, named action groups, status summaries, and explicit disabled reasons',
   );
+  assert(
+    !source.includes('window.confirm') &&
+      source.includes("const orderDeleteConfirmActionStatusId = 'orders-delete-confirm-action-status';") &&
+      source.includes('data-testid="orders-delete-confirm-dialog"') &&
+      source.includes('data-testid="orders-delete-confirm-action-status"') &&
+      source.includes('data-testid="orders-delete-confirm-cancel"') &&
+      source.includes('data-testid="orders-delete-confirm-button"') &&
+      source.includes('aria-labelledby={orderDeleteConfirmTitleId}') &&
+      source.includes('aria-describedby={`${orderDeleteConfirmDescriptionId} ${orderDeleteConfirmImpactId} ${orderDeleteConfirmActionStatusId}`}') &&
+      source.includes('data-action-state={orderDeleteConfirmActionState}') &&
+      source.includes('data-action-status={orderDeleteConfirmActionStatus}') &&
+      source.includes('data-disabled-reason={orderDeleteConfirmDisabledReason || undefined}') &&
+      source.includes("event.key !== 'Escape' || isOrdersAccessBusy") &&
+      source.includes('handleOrderDeleteDialogKeyDown') &&
+      source.includes('setPendingDeleteOrder(null)'),
+    'Orders delete confirmation must expose labelled dialog semantics, action status metadata, and Escape recovery without browser confirm.',
+  );
   assert(source.includes('data-testid="orders-status-handoff"'), 'Orders page must render the selected-order customer status handoff');
   assert(
     source.includes("schemaVersion: 'backy.order-status-handoff.v1'") &&
@@ -2089,6 +2106,23 @@ const evaluate = async (client, expression) => {
   }
 
   return result.result.value;
+};
+
+const pressEscape = async (client) => {
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  });
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  });
 };
 
 const setBrowserSession = async (client, sessionToken) => {
@@ -3906,6 +3940,53 @@ const waitForReconciliationPanel = async (client) => {
 };
 
 const deleteOrderThroughUi = async (client, orderNumber) => {
+  await clickOrderCardButton(client, orderNumber, 'Delete');
+  const firstDialog = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const dialog = document.querySelector('[data-testid="orders-delete-confirm-dialog"]');
+    const status = document.querySelector('[data-testid="orders-delete-confirm-action-status"]');
+    const cancel = document.querySelector('[data-testid="orders-delete-confirm-cancel"]');
+    const confirm = document.querySelector('[data-testid="orders-delete-confirm-button"]');
+    const statusText = normalize(status?.textContent);
+    const targetOrderId = dialog?.getAttribute('data-target-order-id') || '';
+    const opened = dialog?.getAttribute('role') === 'dialog' &&
+      dialog?.getAttribute('aria-modal') === 'true' &&
+      dialog?.getAttribute('aria-labelledby') === 'orders-delete-confirm-title' &&
+      dialog?.getAttribute('aria-describedby') === 'orders-delete-confirm-description orders-delete-confirm-impact orders-delete-confirm-action-status' &&
+      dialog?.getAttribute('data-action-state') === 'ready' &&
+      dialog?.getAttribute('data-action-status') === statusText &&
+      targetOrderId.length > 0 &&
+      statusText.includes('Delete order confirmation ready') &&
+      cancel instanceof HTMLButtonElement &&
+      cancel.getAttribute('aria-describedby') === 'orders-delete-confirm-action-status' &&
+      cancel.getAttribute('data-action-state') === 'ready' &&
+      confirm instanceof HTMLButtonElement &&
+      confirm.getAttribute('aria-describedby') === 'orders-delete-confirm-action-status' &&
+      confirm.getAttribute('data-action-state') === 'ready' &&
+      confirm.getAttribute('data-target-order-id') === targetOrderId &&
+      confirm.disabled === false;
+    return {
+      ok: opened,
+      reason: 'order-delete-dialog-contract-mismatch',
+      opened,
+      statusText,
+      targetOrderId,
+      dialogRole: dialog?.getAttribute('role') || '',
+      dialogLabelledBy: dialog?.getAttribute('aria-labelledby') || '',
+      dialogDescribedBy: dialog?.getAttribute('aria-describedby') || '',
+      dialogState: dialog?.getAttribute('data-action-state') || '',
+      confirmState: confirm?.getAttribute('data-action-state') || '',
+    };
+  })()`);
+  assert(firstDialog.ok, `Order delete confirmation Escape recovery failed: ${JSON.stringify(firstDialog)}`);
+  await sleep(100);
+  await pressEscape(client);
+  const closeState = await evaluate(client, `(() => ({
+      closed: !document.querySelector('[data-testid="orders-delete-confirm-dialog"]'),
+      body: document.body?.innerText?.slice(0, 800) || '',
+    }))()`);
+  assert(closeState.closed, `Order delete confirmation did not close on Escape: ${JSON.stringify(closeState)}`);
+
   await clickOrderCardButton(client, orderNumber, 'Delete');
   await clickByText(client, 'Delete order', { exact: true });
 
