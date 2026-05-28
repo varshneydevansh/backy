@@ -778,23 +778,32 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-toggle-layers-panel"') && source.includes('aria-keyshortcuts="L"') && source.includes('data-testid="editor-toggle-focus-mode"') && source.includes('aria-keyshortcuts="F"'), 'Editor layers and focus toggles must expose keyboard shortcut metadata');
   assert(smokeSource.includes("await pressKey(client, '-', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '=', { ctrlKey: true })") && smokeSource.includes("await pressKey(client, '0', { ctrlKey: true })"), 'Editor zoom browser smoke must exercise keyboard zoom shortcuts');
   assert(
-    source.includes("viewport.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("viewport.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
-      source.includes("viewport.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
+    source.includes("window.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
+      source.includes("window.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
+      source.includes("window.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
+      source.includes('isCanvasViewportEvent') &&
+      source.includes('path.includes(viewport)') &&
+      source.includes('clientX >= rect.left') &&
+      source.includes('isCanvasGestureZoomActiveRef') &&
       source.includes('event.preventDefault();') &&
       source.includes('event.metaKey || event.ctrlKey') &&
       source.includes('zoomCanvasAtPoint(') &&
       source.includes('data-canvas-wheel-zoom="enabled"') &&
+      source.includes('data-canvas-zoom-listener-scope="window-capture"') &&
+      source.includes('data-canvas-zoom-hit-test="path-or-bounds"') &&
       source.includes('data-wheel-zoom-modifier="meta-or-control"') &&
       source.includes('data-wheel-zoom-prevents-browser-zoom="true"') &&
       source.includes('data-canvas-pinch-zoom="enabled"') &&
       source.includes('data-pinch-zoom-prevents-browser-zoom="true"') &&
       source.includes('data-zoom-scope="canvas"') &&
+      source.includes('data-keyboard-zoom-scope="editor-window"') &&
+      source.includes('if (!isPreview && (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut))') &&
       smokeSource.includes('dispatchCanvasWheelZoom') &&
       smokeSource.includes('dispatchCanvasPinchZoom') &&
+      smokeSource.includes('focusedInputKeyboardZoom') &&
       smokeSource.includes('defaultPrevented') &&
       smokeSource.includes('dispatchReturned === false'),
-    'Editor canvas viewport must intercept Cmd/Ctrl wheel and Mac pinch zoom with capture-phase non-passive listeners so browser/page zoom is not triggered',
+    'Editor canvas viewport must intercept Cmd/Ctrl wheel, Mac pinch zoom, and focused-input zoom shortcuts before browser/page zoom is triggered',
   );
   assert(smokeSource.includes("await pressKey(client, 'h')") && smokeSource.includes('keyboardPanEnabled') && smokeSource.includes('keyboardPanDisabled'), 'Editor zoom browser smoke must exercise the H pan toggle shortcut');
   assert(smokeSource.includes('keyboardGridHidden') && smokeSource.includes('keyboardGridRestored') && smokeSource.includes('keyboardSnapOff') && smokeSource.includes('keyboardSnapRestored'), 'Editor grid/snap browser smoke must exercise G and S shortcuts');
@@ -12076,6 +12085,8 @@ const dispatchCanvasWheelZoom = async (client, deltaY, label) => {
       dispatchReturned,
       defaultPrevented: event.defaultPrevented,
       wheelZoom: viewport.getAttribute('data-canvas-wheel-zoom'),
+      listenerScope: viewport.getAttribute('data-canvas-zoom-listener-scope'),
+      hitTest: viewport.getAttribute('data-canvas-zoom-hit-test'),
       modifier: viewport.getAttribute('data-wheel-zoom-modifier'),
       preventsBrowserZoom: viewport.getAttribute('data-wheel-zoom-prevents-browser-zoom'),
       pinchZoom: viewport.getAttribute('data-canvas-pinch-zoom'),
@@ -12089,6 +12100,8 @@ const dispatchCanvasWheelZoom = async (client, deltaY, label) => {
   assert(dispatched.dispatchReturned === false, `Canvas wheel zoom dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
   assert(
     dispatched.wheelZoom === 'enabled' &&
+      dispatched.listenerScope === 'window-capture' &&
+      dispatched.hitTest === 'path-or-bounds' &&
       dispatched.modifier === 'meta-or-control' &&
       dispatched.preventsBrowserZoom === 'true' &&
       dispatched.pinchZoom === 'enabled' &&
@@ -12137,6 +12150,8 @@ const dispatchCanvasPinchZoom = async (client, scale, label) => {
       endDefaultPrevented: endEvent.defaultPrevented,
       pinchZoom: viewport.getAttribute('data-canvas-pinch-zoom'),
       pinchPreventsBrowserZoom: viewport.getAttribute('data-pinch-zoom-prevents-browser-zoom'),
+      listenerScope: viewport.getAttribute('data-canvas-zoom-listener-scope'),
+      hitTest: viewport.getAttribute('data-canvas-zoom-hit-test'),
       wheelZoom: viewport.getAttribute('data-canvas-wheel-zoom'),
       zoomScope: viewport.getAttribute('data-zoom-scope'),
     };
@@ -12158,6 +12173,8 @@ const dispatchCanvasPinchZoom = async (client, scale, label) => {
   assert(
     dispatched.pinchZoom === 'enabled' &&
       dispatched.pinchPreventsBrowserZoom === 'true' &&
+      dispatched.listenerScope === 'window-capture' &&
+      dispatched.hitTest === 'path-or-bounds' &&
       dispatched.wheelZoom === 'enabled' &&
       dispatched.zoomScope === 'canvas',
     `Canvas pinch zoom metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
@@ -12205,10 +12222,44 @@ const testZoomControls = async (client) => {
   assert(afterKeyboardFit.autoFit === true, `Ctrl/Cmd+0 did not enable auto-fit: ${JSON.stringify(afterKeyboardFit)}`);
   assert(afterKeyboardFit.scale > 0 && afterKeyboardFit.scale <= 2, `Ctrl/Cmd+0 produced out-of-range scale: ${JSON.stringify(afterKeyboardFit)}`);
 
+  const focusedInputKeyboardZoom = await evaluate(client, `(() => {
+    const candidates = Array.from(document.querySelectorAll('[data-testid="editor-canvas-compact-width-input"], input[placeholder="Search components..."], input[type="search"], input[type="text"]'));
+    const target = candidates.find((input) => (
+      input instanceof HTMLInputElement &&
+      !input.disabled &&
+      !input.readOnly &&
+      input.offsetParent !== null
+    ));
+    if (!(target instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'missing-input' };
+    }
+    target.focus();
+    const controls = document.querySelector('[data-testid="editor-zoom-controls"]');
+    return {
+      ok: document.activeElement === target,
+      activeTag: document.activeElement?.tagName || '',
+      targetTestId: target.getAttribute('data-testid') || '',
+      keyboardZoomScope: controls?.getAttribute('data-keyboard-zoom-scope') || '',
+    };
+  })()`);
+  assert(
+    focusedInputKeyboardZoom?.ok && focusedInputKeyboardZoom.keyboardZoomScope === 'editor-window',
+    `Unable to focus an editor input before keyboard zoom: ${JSON.stringify(focusedInputKeyboardZoom)}`,
+  );
+
+  await pressKey(client, '=', { ctrlKey: true });
+  const afterFocusedInputKeyboardZoom = await readZoomControlState(client, 'after focused input keyboard zoom');
+  assert(
+    afterFocusedInputKeyboardZoom.scale > afterKeyboardFit.scale,
+    `Ctrl/Cmd+= from a focused editor input should zoom the canvas instead of the browser page: ${JSON.stringify({ focusedInputKeyboardZoom, afterKeyboardFit, afterFocusedInputKeyboardZoom })}`,
+  );
+  assert(afterFocusedInputKeyboardZoom.autoFit === false, `Focused-input keyboard zoom should disable auto-fit: ${JSON.stringify(afterFocusedInputKeyboardZoom)}`);
+  await blurActiveElement(client);
+
   const afterWheelZoomIn = await dispatchCanvasWheelZoom(client, -240, 'after canvas wheel zoom in');
   assert(
-    afterWheelZoomIn.state.scale > afterKeyboardFit.scale,
-    `Ctrl/Cmd wheel up did not increase canvas scale: ${JSON.stringify({ afterKeyboardFit, afterWheelZoomIn })}`,
+    afterWheelZoomIn.state.scale > afterFocusedInputKeyboardZoom.scale,
+    `Ctrl/Cmd wheel up did not increase canvas scale: ${JSON.stringify({ afterFocusedInputKeyboardZoom, afterWheelZoomIn })}`,
   );
   assert(afterWheelZoomIn.state.autoFit === false, `Ctrl/Cmd wheel zoom should disable auto-fit: ${JSON.stringify(afterWheelZoomIn)}`);
 
