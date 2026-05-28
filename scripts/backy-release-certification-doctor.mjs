@@ -720,6 +720,22 @@ const failures = [
 const aggregatePreflight = 'npm run test:partial-gate-preflights';
 const adminSourceGuard = 'npm run test:admin-contract-source';
 const artifactPathEnv = (artifact) => artifact.pathEnvNames.join(' or ');
+const defaultAuditCounts = {
+  ready: 41,
+  partial: 4,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 91,
+};
+const artifactAcceptedAuditCounts = {
+  ready: 45,
+  partial: 0,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 100,
+};
 
 const partialGateMap = [
   {
@@ -871,18 +887,49 @@ const partialClosureDetailsByRow = {
 };
 
 const partialClosureRows = partialGateMap.map(partialClosureRow);
+const partialClosureReady = partialClosureRows.every((row) => row.ready);
+const partialClosureReadyCount = partialClosureRows.filter((row) => row.ready).length;
+const partialClosurePartialCount = partialClosureRows.filter((row) => !row.ready).length;
 
 const partialClosureReadiness = {
   schemaVersion: 'backy.partial-closure-readiness.v1',
   source: 'release-certification-doctor',
-  ready: partialClosureRows.every((row) => row.ready),
-  readyCount: partialClosureRows.filter((row) => row.ready).length,
-  partialCount: partialClosureRows.filter((row) => !row.ready).length,
+  status: partialClosureReady ? 'artifact-accepted' : 'external-artifacts-required',
+  ready: partialClosureReady,
+  readyCount: partialClosureReadyCount,
+  partialCount: partialClosurePartialCount,
   prototypeCount: 0,
   missingCount: 0,
   total: partialClosureRows.length,
   aggregatePreflight,
   artifactRequiredEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+  currentAuditMode: partialClosureReady ? 'artifactAcceptedMode' : 'defaultNoArtifactMode',
+  currentAudit: partialClosureReady ? artifactAcceptedAuditCounts : defaultAuditCounts,
+  auditImpact: {
+    schemaVersion: 'backy.partial-closure-audit-impact.v1',
+    defaultNoArtifactAudit: defaultAuditCounts,
+    artifactAcceptedAudit: artifactAcceptedAuditCounts,
+    readyRowsAdded: partialClosureRows.length,
+    partialRowsClosed: partialClosureRows.length,
+  },
+  defaultNoArtifactMode: {
+    active: !partialClosureReady,
+    ready: false,
+    readyCount: 0,
+    partialCount: partialClosureRows.length,
+    status: 'partial',
+    audit: defaultAuditCounts,
+    description: 'Without accepted redacted Settings and Commerce provider artifacts, the current full audit remains 41 Ready / 4 Partial / 0 Prototype / 0 Missing.',
+  },
+  artifactAcceptedMode: {
+    active: partialClosureReady,
+    ready: partialClosureReady,
+    readyCount: partialClosureRows.length,
+    partialCount: 0,
+    status: partialClosureReady ? 'ready' : 'awaiting-artifacts',
+    audit: artifactAcceptedAuditCounts,
+    description: 'When fresh no-secret Settings and Commerce artifacts pass the artifact-required release doctor, the artifact-backed audit view is 45 Ready / 0 Partial / 0 Prototype / 0 Missing.',
+  },
   rows: partialClosureRows,
 };
 

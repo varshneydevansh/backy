@@ -39,6 +39,63 @@ const parseJson = (result, label) => {
   }
 };
 
+const DEFAULT_AUDIT_COUNTS = {
+  ready: 41,
+  partial: 4,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 91,
+};
+
+const ARTIFACT_ACCEPTED_AUDIT_COUNTS = {
+  ready: 45,
+  partial: 0,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 100,
+};
+
+const sameJson = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+
+const assertDoctorAuditModes = (json, artifactAccepted, label) => {
+  const readiness = json.partialClosureReadiness;
+  assert(readiness?.auditImpact?.schemaVersion === 'backy.partial-closure-audit-impact.v1', `${label} should expose auditImpact schema.`);
+  assert(
+    sameJson(readiness.auditImpact.defaultNoArtifactAudit, DEFAULT_AUDIT_COUNTS) &&
+      sameJson(readiness.auditImpact.artifactAcceptedAudit, ARTIFACT_ACCEPTED_AUDIT_COUNTS) &&
+      readiness.auditImpact.readyRowsAdded === 4 &&
+      readiness.auditImpact.partialRowsClosed === 4,
+    `${label} should expose default 41/4 and artifact-backed 45/0 audit counts: ${JSON.stringify(readiness?.auditImpact)}`,
+  );
+  assert(
+    readiness.defaultNoArtifactMode?.active === !artifactAccepted &&
+      readiness.defaultNoArtifactMode?.ready === false &&
+      readiness.defaultNoArtifactMode?.readyCount === 0 &&
+      readiness.defaultNoArtifactMode?.partialCount === 4 &&
+      readiness.defaultNoArtifactMode?.status === 'partial' &&
+      sameJson(readiness.defaultNoArtifactMode?.audit, DEFAULT_AUDIT_COUNTS) &&
+      readiness.defaultNoArtifactMode?.description.includes('41 Ready / 4 Partial'),
+    `${label} should expose default no-artifact mode: ${JSON.stringify(readiness?.defaultNoArtifactMode)}`,
+  );
+  assert(
+    readiness.artifactAcceptedMode?.active === artifactAccepted &&
+      readiness.artifactAcceptedMode?.ready === artifactAccepted &&
+      readiness.artifactAcceptedMode?.readyCount === 4 &&
+      readiness.artifactAcceptedMode?.partialCount === 0 &&
+      readiness.artifactAcceptedMode?.status === (artifactAccepted ? 'ready' : 'awaiting-artifacts') &&
+      sameJson(readiness.artifactAcceptedMode?.audit, ARTIFACT_ACCEPTED_AUDIT_COUNTS) &&
+      readiness.artifactAcceptedMode?.description.includes('45 Ready / 0 Partial'),
+    `${label} should expose artifact-accepted mode: ${JSON.stringify(readiness?.artifactAcceptedMode)}`,
+  );
+  assert(
+    readiness.currentAuditMode === (artifactAccepted ? 'artifactAcceptedMode' : 'defaultNoArtifactMode') &&
+      sameJson(readiness.currentAudit, artifactAccepted ? ARTIFACT_ACCEPTED_AUDIT_COUNTS : DEFAULT_AUDIT_COUNTS),
+    `${label} should expose the active audit mode and counts: ${JSON.stringify({ currentAuditMode: readiness?.currentAuditMode, currentAudit: readiness?.currentAudit })}`,
+  );
+};
+
 const assertMissingProvider = async ({ label, env, failure }) => {
   const result = await runDoctor({
     BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
@@ -426,6 +483,7 @@ assert(
 assert(
   normalJson.partialClosureReadiness?.schemaVersion === 'backy.partial-closure-readiness.v1' &&
     normalJson.partialClosureReadiness?.source === 'release-certification-doctor' &&
+    normalJson.partialClosureReadiness?.status === 'external-artifacts-required' &&
     normalJson.partialClosureReadiness?.ready === false &&
     normalJson.partialClosureReadiness?.readyCount === 0 &&
     normalJson.partialClosureReadiness?.partialCount === 4 &&
@@ -438,6 +496,7 @@ assert(
     normalJson.partialClosureReadiness.rows.length === 4,
   'Doctor default mode should expose explicit Partial closure readiness separate from diagnostic ok=true.',
 );
+assertDoctorAuditModes(normalJson, false, 'Doctor default mode');
 for (const row of ['/settings', 'Settings admin APIs', '/products', '/orders']) {
   const closure = normalJson.partialClosureReadiness.rows.find((item) => item.row === row);
   assert(closure, `Doctor Partial closure readiness missing ${row}.`);
@@ -617,11 +676,13 @@ assert(
 );
 assert(
   missingCertificationArtifactsJson.partialClosureReadiness?.ready === false &&
+    missingCertificationArtifactsJson.partialClosureReadiness?.status === 'external-artifacts-required' &&
     missingCertificationArtifactsJson.partialClosureReadiness?.readyCount === 0 &&
     missingCertificationArtifactsJson.partialClosureReadiness?.partialCount === 4 &&
     missingCertificationArtifactsJson.partialClosureReadiness?.rows.every((row) => row.status === 'partial'),
   'Doctor artifact-required mode should keep all four Partial closure rows unready when artifacts are missing.',
 );
+assertDoctorAuditModes(missingCertificationArtifactsJson, false, 'Doctor artifact-required missing-artifact mode');
 
 const validCertificationArtifacts = await runDoctor({
   BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED: '1',
@@ -637,6 +698,7 @@ const validCertificationArtifactsJson = parseJson(validCertificationArtifacts, '
 assert(validCertificationArtifactsJson.ok === true, 'Doctor valid artifact mode should report ok=true.');
 assert(
   validCertificationArtifactsJson.partialClosureReadiness?.ready === true &&
+    validCertificationArtifactsJson.partialClosureReadiness?.status === 'artifact-accepted' &&
     validCertificationArtifactsJson.partialClosureReadiness?.readyCount === 4 &&
     validCertificationArtifactsJson.partialClosureReadiness?.partialCount === 0 &&
     validCertificationArtifactsJson.partialClosureReadiness?.rows.every((row) => row.ready === true && row.status === 'ready' && row.nextAction.includes('Archive')) &&
@@ -644,8 +706,9 @@ assert(
     validCertificationArtifactsJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'commerce').length === 2,
   'Doctor valid artifact mode should mark all four remaining Partial closure rows ready.',
 );
+assertDoctorAuditModes(validCertificationArtifactsJson, true, 'Doctor valid artifact mode');
 assert(
-    validCertificationArtifactsJson.certificationArtifacts.settings.ready === true &&
+  validCertificationArtifactsJson.certificationArtifacts.settings.ready === true &&
     validCertificationArtifactsJson.certificationArtifacts.settings.schemaReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.settings.certifiedAtReady === true &&
     validCertificationArtifactsJson.certificationArtifacts.settings.artifactFreshReady === true &&
