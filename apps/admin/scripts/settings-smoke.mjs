@@ -394,6 +394,7 @@ const assertSettingsSourceContracts = () => {
     'includesSecretValues: false',
     "copySettingsHandoffText(settingsLaunchReadinessText, 'Settings launch readiness handoff')",
     'data-testid="settings-backy-completion-status"',
+    'data-testid="settings-backy-completion-artifact-audit-badge"',
     'data-testid="settings-backy-completion-closure-summary"',
     'settings-backy-completion-closure-gate-${gate.key}',
     'settings-backy-completion-closure-copy-${gate.key}',
@@ -413,6 +414,8 @@ const assertSettingsSourceContracts = () => {
     'completionStatus.surfaceRunbooks',
     'BACKY_COMPLETION_AUDIT',
     'BACKY_COMPLETION_SURFACES',
+    'BACKY_COMPLETION_ARTIFACT_ACCEPTED_AUDIT',
+    'artifactAcceptedAudit: BACKY_COMPLETION_ARTIFACT_ACCEPTED_AUDIT',
     'SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS',
     'COMMERCE_COMPLETION_EVIDENCE_ARTIFACTS',
     'SETTINGS_COMPLETION_ARTIFACT_VERIFIER',
@@ -2593,11 +2596,16 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasBackyCompletionStatus: Boolean(document.querySelector('[data-testid="settings-backy-completion-status"]')) &&
       completionStatusText.includes('Backy completion status') &&
       completionStatusText.includes('41 Ready / 4 Partial') &&
+      completionStatusText.includes('Artifacts accepted: 45 Ready / 0 Partial') &&
       completionStatusText.includes('backy.completion-status.v1') &&
       completionStatusText.includes('data.contract.completionStatus') &&
       completionStatusText.includes('x-backy-completion-status'),
     hasBackyCompletionClosureSummary: Boolean(document.querySelector('[data-testid="settings-backy-completion-closure-summary"]')) &&
       document.querySelector('[data-testid="settings-backy-completion-closure-summary"]')?.getAttribute('data-partial-count') === '4' &&
+      document.querySelector('[data-testid="settings-backy-completion-closure-summary"]')?.getAttribute('data-artifact-accepted-ready-count') === '45' &&
+      document.querySelector('[data-testid="settings-backy-completion-closure-summary"]')?.getAttribute('data-artifact-accepted-partial-count') === '0' &&
+      document.querySelector('[data-testid="settings-backy-completion-artifact-audit-badge"]')?.getAttribute('data-ready-count') === '45' &&
+      document.querySelector('[data-testid="settings-backy-completion-artifact-audit-badge"]')?.getAttribute('data-partial-count') === '0' &&
       completionClosureText.includes('Settings live provider certification') &&
       completionClosureText.includes('Commerce live provider certification') &&
       completionClosureText.includes('Closes /settings, Settings admin APIs') &&

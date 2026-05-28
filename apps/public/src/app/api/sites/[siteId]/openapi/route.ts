@@ -6788,6 +6788,39 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     doctorCommand: { const: "npm run doctor:release-certification" },
                     artifactRequiredEnv: { const: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
                     artifactBackedDoctorCommand: { type: "string" },
+                    auditImpact: {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: {
+                        schemaVersion: { const: "backy.partial-closure-audit-impact.v1" },
+                        defaultNoArtifactAudit: {
+                          type: "object",
+                          additionalProperties: true,
+                          properties: {
+                            ready: { const: 41 },
+                            partial: { const: 4 },
+                            prototype: { const: 0 },
+                            missing: { const: 0 },
+                            total: { const: 45 },
+                            readyPercent: { const: 91 },
+                          },
+                        },
+                        artifactAcceptedAudit: {
+                          type: "object",
+                          additionalProperties: true,
+                          properties: {
+                            ready: { const: 45 },
+                            partial: { const: 0 },
+                            prototype: { const: 0 },
+                            missing: { const: 0 },
+                            total: { const: 45 },
+                            readyPercent: { const: 100 },
+                          },
+                        },
+                        readyRowsAdded: { const: 4 },
+                        partialRowsClosed: { const: 4 },
+                      },
+                    },
                     defaultNoArtifactMode: {
                       type: "object",
                       required: ["ready", "readyCount", "partialCount", "status"],
@@ -6797,6 +6830,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                         readyCount: { const: 0 },
                         partialCount: { const: 4 },
                         status: { const: "partial" },
+                        audit: {
+                          type: "object",
+                          additionalProperties: true,
+                          properties: {
+                            ready: { const: 41 },
+                            partial: { const: 4 },
+                            prototype: { const: 0 },
+                            missing: { const: 0 },
+                            total: { const: 45 },
+                            readyPercent: { const: 91 },
+                          },
+                        },
                       },
                     },
                     artifactAcceptedMode: {
@@ -6808,6 +6853,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                         readyCount: { const: 4 },
                         partialCount: { const: 0 },
                         status: { const: "ready" },
+                        audit: {
+                          type: "object",
+                          additionalProperties: true,
+                          properties: {
+                            ready: { const: 45 },
+                            partial: { const: 0 },
+                            prototype: { const: 0 },
+                            missing: { const: 0 },
+                            total: { const: 45 },
+                            readyPercent: { const: 100 },
+                          },
+                        },
                       },
                     },
                     rows: {

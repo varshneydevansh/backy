@@ -5,6 +5,22 @@ const COMMERCE_ARTIFACT_PATH_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH o
 const PROVIDER_ARTIFACT_REQUIRED_ENV = 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1';
 const DOCTOR_COMMAND = 'npm run doctor:release-certification';
 const AGGREGATE_PREFLIGHT = 'npm run test:partial-gate-preflights';
+const DEFAULT_AUDIT_COUNTS = {
+  ready: 41,
+  partial: 4,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 91,
+} as const;
+const ARTIFACT_ACCEPTED_AUDIT_COUNTS = {
+  ready: 45,
+  partial: 0,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 100,
+} as const;
 
 const artifactBackedDoctorCommand = [
   PROVIDER_ARTIFACT_REQUIRED_ENV,
@@ -78,11 +94,19 @@ export const buildBackyPartialClosureReadiness = () => ({
   doctorCommand: DOCTOR_COMMAND,
   artifactRequiredEnv: PROVIDER_ARTIFACT_REQUIRED_ENV,
   artifactBackedDoctorCommand,
+  auditImpact: {
+    schemaVersion: 'backy.partial-closure-audit-impact.v1',
+    defaultNoArtifactAudit: DEFAULT_AUDIT_COUNTS,
+    artifactAcceptedAudit: ARTIFACT_ACCEPTED_AUDIT_COUNTS,
+    readyRowsAdded: closureRows.length,
+    partialRowsClosed: closureRows.length,
+  },
   defaultNoArtifactMode: {
     ready: false,
     readyCount: 0,
     partialCount: closureRows.length,
     status: 'partial',
+    audit: DEFAULT_AUDIT_COUNTS,
     description: 'The public completion-status audit stays at 41 Ready / 4 Partial until saved redacted Settings and Commerce artifacts are supplied to the release doctor.',
   },
   artifactAcceptedMode: {
@@ -90,7 +114,8 @@ export const buildBackyPartialClosureReadiness = () => ({
     readyCount: closureRows.length,
     partialCount: 0,
     status: 'ready',
-    description: 'When fresh no-secret Settings and Commerce artifacts pass the artifact-required release doctor, the provider closure block is 4 Ready / 0 Partial without changing the default no-artifact audit baseline.',
+    audit: ARTIFACT_ACCEPTED_AUDIT_COUNTS,
+    description: 'When fresh no-secret Settings and Commerce artifacts pass the artifact-required release doctor, the provider closure block is 4 Ready / 0 Partial and the artifact-backed audit view is 45 Ready / 0 Partial.',
   },
   rows: closureRows.map((row) => ({
     ...row,

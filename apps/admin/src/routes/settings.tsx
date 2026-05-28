@@ -311,6 +311,16 @@ const BACKY_COMPLETION_SURFACES = [
   { key: 'settings-admin-apis', label: 'Settings admin APIs', status: 'partial', blocker: 'settings-provider-certification', gate: 'npm run ci:settings-provider-certification' },
 ] as const;
 
+const BACKY_COMPLETION_ARTIFACT_ACCEPTED_AUDIT = {
+  source: 'npm run doctor:release-certification with Settings and Commerce provider artifacts',
+  ready: 45,
+  partial: 0,
+  prototype: 0,
+  missing: 0,
+  total: 45,
+  readyPercent: 100,
+} as const;
+
 const SETTINGS_COMPLETION_EVIDENCE_ARTIFACTS: BackyCompletionEvidenceArtifact[] = [
   {
     key: 'settings-provider-certification-json',
@@ -3676,6 +3686,7 @@ function SettingsPage() {
         ...gates.map((gate) => gate.command),
       ]),
       localPreflight: 'npm run test:partial-gate-preflights',
+      artifactAcceptedAudit: BACKY_COMPLETION_ARTIFACT_ACCEPTED_AUDIT,
       linkedContracts: {
         publicManifest: '/api/sites/{siteId}/manifest#data.contract.completionStatus',
         openApi: '/api/sites/{siteId}/openapi#x-backy-completion-status',
@@ -4507,12 +4518,20 @@ function SettingsPage() {
                     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                       {settingsBackyCompletionStatus.audit.ready} Ready / {settingsBackyCompletionStatus.audit.partial} Partial
                     </span>
+                    <span
+                      className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700"
+                      data-testid="settings-backy-completion-artifact-audit-badge"
+                      data-ready-count={settingsBackyCompletionStatus.artifactAcceptedAudit.ready}
+                      data-partial-count={settingsBackyCompletionStatus.artifactAcceptedAudit.partial}
+                    >
+                      Artifacts accepted: {settingsBackyCompletionStatus.artifactAcceptedAudit.ready} Ready / {settingsBackyCompletionStatus.artifactAcceptedAudit.partial} Partial
+                    </span>
                     <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                       {settingsBackyCompletionStatus.status}
                     </span>
                   </div>
                   <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-                    This is the same non-secret completion handoff exposed to custom admin clients through the public manifest and OpenAPI. It names the remaining Partial pages, proving gates, workflows, and env aliases without exposing database URLs, provider keys, order records, or form submissions.
+                    This is the same non-secret completion handoff exposed to custom admin clients through the public manifest and OpenAPI. The default diagnostic view stays at 41/4 until artifacts are supplied; the artifact-backed release doctor view is 45/0 without exposing database URLs, provider keys, order records, or form submissions.
                   </p>
                 </div>
                 <Button
@@ -4532,6 +4551,7 @@ function SettingsPage() {
                 {[
                   { label: 'Schema', value: settingsBackyCompletionStatus.schemaVersion },
                   { label: 'Audit', value: `${settingsBackyCompletionStatus.audit.readyPercent}% ready` },
+                  { label: 'Artifact closure', value: `${settingsBackyCompletionStatus.artifactAcceptedAudit.readyPercent}% ready` },
                   { label: 'Partial surfaces', value: `${settingsBackyCompletionStatus.surfaces.length}` },
                   { label: 'Local preflight', value: settingsBackyCompletionStatus.localPreflight },
                   { label: 'Public contract', value: 'data.contract.completionStatus' },
@@ -4546,6 +4566,8 @@ function SettingsPage() {
                 className="mt-3 grid gap-2 lg:grid-cols-2"
                 data-testid="settings-backy-completion-closure-summary"
                 data-partial-count={settingsBackyCompletionStatus.audit.partial}
+                data-artifact-accepted-ready-count={settingsBackyCompletionStatus.artifactAcceptedAudit.ready}
+                data-artifact-accepted-partial-count={settingsBackyCompletionStatus.artifactAcceptedAudit.partial}
               >
                 {settingsBackyCompletionStatus.gates.map((gate) => {
                   const affectedSurfaces = settingsBackyCompletionStatus.surfaces

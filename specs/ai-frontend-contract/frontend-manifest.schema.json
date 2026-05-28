@@ -423,6 +423,39 @@
 	              "doctorCommand": { "const": "npm run doctor:release-certification" },
 	              "artifactRequiredEnv": { "const": "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
 	              "artifactBackedDoctorCommand": { "type": "string", "minLength": 1 },
+	              "auditImpact": {
+	                "type": "object",
+	                "additionalProperties": true,
+	                "properties": {
+	                  "schemaVersion": { "const": "backy.partial-closure-audit-impact.v1" },
+	                  "defaultNoArtifactAudit": {
+	                    "type": "object",
+	                    "additionalProperties": true,
+	                    "properties": {
+	                      "ready": { "const": 41 },
+	                      "partial": { "const": 4 },
+	                      "prototype": { "const": 0 },
+	                      "missing": { "const": 0 },
+	                      "total": { "const": 45 },
+	                      "readyPercent": { "const": 91 }
+	                    }
+	                  },
+	                  "artifactAcceptedAudit": {
+	                    "type": "object",
+	                    "additionalProperties": true,
+	                    "properties": {
+	                      "ready": { "const": 45 },
+	                      "partial": { "const": 0 },
+	                      "prototype": { "const": 0 },
+	                      "missing": { "const": 0 },
+	                      "total": { "const": 45 },
+	                      "readyPercent": { "const": 100 }
+	                    }
+	                  },
+	                  "readyRowsAdded": { "const": 4 },
+	                  "partialRowsClosed": { "const": 4 }
+	                }
+	              },
 	              "defaultNoArtifactMode": {
 	                "type": "object",
 	                "additionalProperties": true,
@@ -430,7 +463,19 @@
 	                  "ready": { "const": false },
 	                  "readyCount": { "const": 0 },
 	                  "partialCount": { "const": 4 },
-	                  "status": { "const": "partial" }
+	                  "status": { "const": "partial" },
+	                  "audit": {
+	                    "type": "object",
+	                    "additionalProperties": true,
+	                    "properties": {
+	                      "ready": { "const": 41 },
+	                      "partial": { "const": 4 },
+	                      "prototype": { "const": 0 },
+	                      "missing": { "const": 0 },
+	                      "total": { "const": 45 },
+	                      "readyPercent": { "const": 91 }
+	                    }
+	                  }
 	                },
 	                "required": ["ready", "readyCount", "partialCount", "status"]
 	              },
@@ -441,7 +486,19 @@
 	                  "ready": { "const": true },
 	                  "readyCount": { "const": 4 },
 	                  "partialCount": { "const": 0 },
-	                  "status": { "const": "ready" }
+	                  "status": { "const": "ready" },
+	                  "audit": {
+	                    "type": "object",
+	                    "additionalProperties": true,
+	                    "properties": {
+	                      "ready": { "const": 45 },
+	                      "partial": { "const": 0 },
+	                      "prototype": { "const": 0 },
+	                      "missing": { "const": 0 },
+	                      "total": { "const": 45 },
+	                      "readyPercent": { "const": 100 }
+	                    }
+	                  }
 	                },
 	                "required": ["ready", "readyCount", "partialCount", "status"]
 	              },

@@ -13444,11 +13444,44 @@ export interface BackyPartialClosureReadiness {
   doctorCommand: "npm run doctor:release-certification";
   artifactRequiredEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1";
   artifactBackedDoctorCommand: string;
+  auditImpact?: {
+    schemaVersion: "backy.partial-closure-audit-impact.v1";
+    defaultNoArtifactAudit: {
+      ready: 41;
+      partial: 4;
+      prototype: 0;
+      missing: 0;
+      total: 45;
+      readyPercent: 91;
+      [key: string]: unknown;
+    };
+    artifactAcceptedAudit: {
+      ready: 45;
+      partial: 0;
+      prototype: 0;
+      missing: 0;
+      total: 45;
+      readyPercent: 100;
+      [key: string]: unknown;
+    };
+    readyRowsAdded: 4;
+    partialRowsClosed: 4;
+    [key: string]: unknown;
+  };
   defaultNoArtifactMode: {
     ready: false;
     readyCount: 0;
     partialCount: 4;
     status: "partial";
+    audit?: {
+      ready: 41;
+      partial: 4;
+      prototype: 0;
+      missing: 0;
+      total: 45;
+      readyPercent: 91;
+      [key: string]: unknown;
+    };
     description?: string;
     [key: string]: unknown;
   };
@@ -13457,6 +13490,15 @@ export interface BackyPartialClosureReadiness {
     readyCount: 4;
     partialCount: 0;
     status: "ready";
+    audit?: {
+      ready: 45;
+      partial: 0;
+      prototype: 0;
+      missing: 0;
+      total: 45;
+      readyPercent: 100;
+      [key: string]: unknown;
+    };
     description?: string;
     [key: string]: unknown;
   };

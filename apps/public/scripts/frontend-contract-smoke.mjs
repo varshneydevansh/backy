@@ -240,6 +240,8 @@ assert(
     frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
     frontendManifestSchema.includes('"backy.completion-status.v1"') &&
     frontendManifestSchema.includes('"backy.partial-closure-readiness.v1"') &&
+    frontendManifestSchema.includes('"auditImpact"') &&
+    frontendManifestSchema.includes('"artifactAcceptedAudit"') &&
     frontendManifestSchema.includes('"artifactAcceptedMode"') &&
     frontendManifestSchema.includes('"surfaceRunbooks"') &&
     frontendManifestSchema.includes('"evidenceArtifacts"') &&
@@ -273,6 +275,8 @@ assert(
 	    completionSpec.includes('partialClosureReadiness') &&
 	    sdkSource.includes('BackyCompletionStatus') &&
     sdkSource.includes('BackyPartialClosureReadiness') &&
+    sdkSource.includes('artifactAcceptedAudit') &&
+    sdkSource.includes('readyRowsAdded: 4') &&
     sdkSource.includes('BackyCompletionArtifactVerifier') &&
     sdkSource.includes('BackyCompletionEvidenceArtifact') &&
     sdkSource.includes('surfaceRunbooks: Array<') &&
@@ -292,6 +296,7 @@ assert(
     sdkSmoke.includes('orderApiHandoffSiteTargetReady') &&
     sdkSmoke.includes('manifest() completion status missing Settings runbook') &&
     sdkSmoke.includes('manifest() completion status missing partial closure readiness handoff') &&
+    sdkSmoke.includes('manifest() completion status artifact-backed audit should close all partial rows') &&
     sdkSmoke.includes('completionStatus.audit?.ready === 41') &&
     sdkSmoke.includes('completionStatus.audit?.partial === 4') &&
     sdkSmoke.includes('completionStatus.audit?.readyPercent === 91') &&
@@ -301,6 +306,8 @@ assert(
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestCompletionStatus') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiBackyCompletionStatus') &&
     generatedSdkTypes.includes('partialClosureReadiness?') &&
+    generatedSdkTypes.includes('auditImpact?:') &&
+    generatedSdkTypes.includes('artifactAcceptedAudit?:') &&
     generatedSdkTypes.includes('surfaceRunbooks: Array<') &&
     generatedSdkTypes.includes('evidenceArtifacts: Array<') &&
     generatedSdkTypes.includes('artifactVerifier: {') &&
@@ -316,7 +323,9 @@ assert(
 
 assert(
   completionStatusClosureLib.includes("schemaVersion: 'backy.partial-closure-readiness.v1'") &&
+    completionStatusClosureLib.includes("schemaVersion: 'backy.partial-closure-audit-impact.v1'") &&
     completionStatusClosureLib.includes('artifactBackedDoctorCommand') &&
+    completionStatusClosureLib.includes('artifactAcceptedAudit: ARTIFACT_ACCEPTED_AUDIT_COUNTS') &&
     completionStatusClosureLib.includes('artifactAcceptedMode') &&
     completionStatusClosureLib.includes("artifactAcceptedStatus: 'ready'") &&
     completionStatusClosureLib.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
