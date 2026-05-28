@@ -29,6 +29,20 @@ const assertSiteDetailSourceContract = () => {
   assert(source.includes('data-testid="site-template-prepare-version-metadata"'), 'Site detail template registry must expose a version metadata preparation action');
   assert(source.includes('data-testid="site-template-copy-version-plan"'), 'Site detail template registry must expose a copyable template version action plan');
   assert(source.includes('backy.template-registry-version-action-plan.v1'), 'Site detail template version handoff must use a named action-plan schema');
+  assert(
+    source.includes('buildCustomFrontendAgentHandoff') &&
+      source.includes('const buildAdminSiteCustomFrontendAgentHandoff =') &&
+      source.includes('const siteCustomFrontendAgentHandoff = useMemo') &&
+      source.includes('source: "admin-site-workspace-handoff"') &&
+      source.includes('customFrontendAgentHandoff: siteCustomFrontendAgentHandoff') &&
+      source.includes('data-testid="site-custom-frontend-agent-handoff"') &&
+      source.includes('data-testid="site-copy-custom-frontend-agent-handoff"') &&
+      source.includes('data-testid="site-agent-canvas-entry-points"') &&
+      source.includes('pageCustomFrontend: `/pages/new?siteId=${siteIdParam}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`') &&
+      source.includes('blogCustomFrontend: `/blog/new?siteId=${siteIdParam}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`') &&
+      source.includes('CUSTOM_FRONTEND_AGENT_HANDOFF_DOC'),
+    'Site detail must expose the custom frontend agent handoff with docs, endpoint metadata, and page/blog canvas entry points.',
+  );
   assert(source.includes('Template versioning'), 'Site workspace readiness must include template versioning as a publish/handoff check');
   assert(
     source.includes('frontendDesignTemplateId: template.id') &&
@@ -1354,6 +1368,16 @@ const assertSiteDetailLayout = async (client, siteName) => {
       hasCommentPolicy: Boolean(document.querySelector('[data-testid="site-comment-policy-panel"]')) && body.includes('Site comment policy') && body.includes('Save comment policy'),
       hasFormBuilder: Boolean(document.querySelector('[data-testid="site-form-builder-panel"]')) && body.includes('Site form builder') && body.includes('New form') && body.includes('Save form'),
       hasHandoff: body.includes('Frontend handoff') && body.includes('Public render') && body.includes('OpenAPI'),
+      customFrontendAgentHandoff: {
+        visible: Boolean(document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')),
+        copyAction: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-agent-handoff"]')),
+        canvasEntryPoints: Boolean(document.querySelector('[data-testid="site-agent-canvas-entry-points"]')),
+        schema: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-schema') || '',
+        doc: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-doc') || '',
+        manifest: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-manifest') || '',
+        openapi: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-openapi') || '',
+        text: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.textContent || '',
+      },
     };
     })()`);
     if (layout.hasFrontendDesign) {
@@ -1420,6 +1444,19 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.hasFormBuilder &&
       layout.hasHandoff,
     `Site detail page missing expected regions: ${JSON.stringify(layout)}`,
+  );
+  assert(
+    layout.customFrontendAgentHandoff.visible &&
+      layout.customFrontendAgentHandoff.copyAction &&
+      layout.customFrontendAgentHandoff.canvasEntryPoints &&
+      layout.customFrontendAgentHandoff.schema === 'backy.custom-frontend-agent-handoff.v1' &&
+      layout.customFrontendAgentHandoff.doc === 'specs/custom-frontend-agent-handoff.md' &&
+      layout.customFrontendAgentHandoff.manifest.includes('/api/sites/') &&
+      layout.customFrontendAgentHandoff.openapi.includes('/openapi') &&
+      layout.customFrontendAgentHandoff.text.includes('Agent handoff') &&
+      layout.customFrontendAgentHandoff.text.includes('frontendDesignTemplateId=:templateId') &&
+      layout.customFrontendAgentHandoff.text.includes('templateSource=backy-canvas'),
+    `Site detail custom frontend agent handoff is incomplete: ${JSON.stringify(layout.customFrontendAgentHandoff)}`,
   );
   return layout;
 };

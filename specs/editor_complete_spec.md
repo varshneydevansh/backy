@@ -519,6 +519,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - The dedicated blog edit route now exposes template provenance for frontend-design-backed posts, including template id/name, route pattern, binding count, canvas badge, and editor handoff JSON.
 - Template-backed blog posts render through the same `CanvasEditor` workspace, post-scoped media context, readiness/publish/taxonomy/comment/revision panels, and focus canvas mode as normal posts.
 - Blog create now accepts `designTemplate`, `frontendDesignTemplateId`, and `frontendTemplate` query aliases for captured frontend-design blog templates. Template canvas application waits for blog-create edit readiness, so deep-linked custom frontend templates insert their wrapper/content into the canvas instead of only selecting the panel card.
+- The Site detail Frontend handoff panel now exposes a copyable `backy.custom-frontend-agent-handoff.v1` agent block with docs, manifest/OpenAPI/render/frontend-design endpoints, and page/blog canvas entry points for Backy-canvas or custom-frontend template sources.
 - Covered by `npm run test:blog-editor --workspace @backy-cms/admin` and `npm run typecheck --workspace @backy-cms/admin`.
 
 ### ✅ Page creation preview draft flow

@@ -24,6 +24,17 @@ This is the short entry point for AI agents or external teams building a custom 
 
 Long-form details live in `specs/backy-api-contracts.md` and `specs/editor_complete_spec.md`.
 
+## Admin handoff surface
+
+The same contract is visible inside the site detail workspace under **Frontend handoff** as an **Agent handoff** block. It exposes:
+
+- `backy.custom-frontend-agent-handoff.v1`
+- `specs/custom-frontend-agent-handoff.md`
+- site-specific manifest, OpenAPI, render, frontend-design, and admin template endpoints
+- copyable page/blog canvas entry points for both `templateSource=backy-canvas` and `templateSource=custom-frontend`
+
+This is the human-facing place to copy into another AI/frontend agent before it builds or edits a website on top of Backy.
+
 ## Editable design state rule
 
 When an agent creates or updates pages, blog posts, products, forms, collections, or reusable sections, it must preserve the full Backy design envelope. In practice that means keeping these fields when present:

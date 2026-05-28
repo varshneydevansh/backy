@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Code,
   MinusCircle,
   CircleSlash,
   CornerDownRight,
@@ -92,6 +93,10 @@ import type { Page, Site } from "@/stores/mockStore";
 import { useAuthStore, type User } from "@/stores/authStore";
 import { siteMatchesIdentifier } from "@/lib/siteSelection";
 import { getLocalBackendOrigin } from "@/lib/localBackendOrigin";
+import {
+  CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,
+  buildCustomFrontendAgentHandoff,
+} from "@backy-cms/core";
 import type {
   Comment,
   CommentReportReason,
@@ -1086,6 +1091,58 @@ const buildFrontendTemplateVersionActionPlan = (
         issues: versionState.issues,
       };
     }),
+  };
+};
+
+const buildAdminSiteCustomFrontendAgentHandoff = ({
+  siteId,
+  siteIdParam,
+  adminSiteUrl,
+  publicSiteApiUrl,
+}: {
+  siteId: string;
+  siteIdParam: string;
+  adminSiteUrl: string;
+  publicSiteApiUrl: string;
+}) => {
+  const baseHandoff = buildCustomFrontendAgentHandoff(siteId);
+  const canvasEntryPoints = {
+    pageBackyCanvas: `/pages/new?siteId=${siteIdParam}&templateSource=backy-canvas`,
+    pageCustomFrontend: `/pages/new?siteId=${siteIdParam}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`,
+    blogBackyCanvas: `/blog/new?siteId=${siteIdParam}&templateSource=backy-canvas`,
+    blogCustomFrontend: `/blog/new?siteId=${siteIdParam}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`,
+  };
+
+  return {
+    ...baseHandoff,
+    source: "admin-site-workspace-handoff",
+    endpoints: {
+      ...baseHandoff.endpoints,
+      manifest: `${publicSiteApiUrl}/manifest`,
+      openapi: `${publicSiteApiUrl}/openapi`,
+      resolve: `${publicSiteApiUrl}/resolve?path=/`,
+      render: `${publicSiteApiUrl}/render?path=/...`,
+      frontendDesign: `${publicSiteApiUrl}/frontend-design`,
+      frontendDesignManagement: `${adminSiteUrl}/frontend-design`,
+      templates: `${adminSiteUrl}/templates`,
+      pages: `${adminSiteUrl}/pages`,
+      blog: `${adminSiteUrl}/blog`,
+      forms: `${adminSiteUrl}/forms`,
+      collections: `${adminSiteUrl}/collections`,
+      products: `${adminSiteUrl}/collections/products/records`,
+      reusableSections: `${adminSiteUrl}/reusable-sections`,
+    },
+    adminSurface: {
+      route: `/sites/${siteIdParam}`,
+      panel: "#site-handoff",
+      frontendDesignPanel: "#site-frontend-design",
+      templateRegistryPanel: "#site-frontend-design",
+      canvasEntryPoints,
+    },
+    contentCreation: {
+      ...baseHandoff.contentCreation,
+      canvasEntryPoints,
+    },
   };
 };
 
@@ -5417,9 +5474,11 @@ function EditSitePage() {
   ]);
 
   const publicSiteUrl = `https://${formData.customDomain || site?.customDomain || `${formData.slug || site?.slug || siteId}.backy.app`}`;
-  const adminSiteUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(siteApiId || siteId)}`;
+  const siteHandoffId = siteApiId || siteId;
+  const siteHandoffIdParam = encodeURIComponent(siteHandoffId);
+  const adminSiteUrl = `${getAdminApiBase()}/sites/${siteHandoffIdParam}`;
   const publicApiBase = buildApiUrl("/api");
-  const publicSiteApiUrl = `${publicApiBase}/sites/${encodeURIComponent(siteApiId || siteId)}`;
+  const publicSiteApiUrl = `${publicApiBase}/sites/${siteHandoffIdParam}`;
   const siteWorkspaceCommandActionStatusId = "site-workspace-command-action-status";
   const siteWorkspaceCommandSecondaryActionStatusId = "site-workspace-command-secondary-action-status";
   const siteWorkspaceCommandDisabledReason = isSiteSettingsBusy
@@ -5459,6 +5518,16 @@ function EditSitePage() {
     : canConfigureSite
       ? undefined
       : configureSitePermissionTitle;
+  const siteCustomFrontendAgentHandoff = useMemo(
+    () =>
+      buildAdminSiteCustomFrontendAgentHandoff({
+        siteId: siteHandoffId,
+        siteIdParam: siteHandoffIdParam,
+        adminSiteUrl,
+        publicSiteApiUrl,
+      }),
+    [adminSiteUrl, publicSiteApiUrl, siteHandoffId, siteHandoffIdParam],
+  );
   const siteWorkspaceHandoff = useMemo(
     () => ({
       generatedAt: new Date().toISOString(),
@@ -5529,6 +5598,7 @@ function EditSitePage() {
         editableBindings: frontendDesignState.frontendDesign.editableMap,
         notes: frontendDesignState.frontendDesign.notes || "",
       },
+      customFrontendAgentHandoff: siteCustomFrontendAgentHandoff,
       theme: siteThemeDraftToTheme(themeDraft),
       navigation: {
         primaryItems: navigationState.navigation.primary.length,
@@ -5613,6 +5683,7 @@ function EditSitePage() {
         "Public frontends should use resolve/render/OpenAPI endpoints and public interaction endpoints.",
         "Navigation, redirects, SEO, and readiness must be refreshed before publishing major route changes.",
         "Forms, contacts, comments, and request events are site-scoped automation queues.",
+        "Custom frontend agents should start from customFrontendAgentHandoff before writing pages, posts, templates, or render payloads.",
       ],
     }),
     [
@@ -5649,6 +5720,7 @@ function EditSitePage() {
       seoState.seo.routeOverrides,
       seoState.seo.sitemap,
       seoState.seo.titleTemplate,
+      siteCustomFrontendAgentHandoff,
       site?.customDomain,
       site?.id,
       site?.name,
@@ -6272,6 +6344,83 @@ function EditSitePage() {
                   <Copy className="h-4 w-4" />
                   Copy handoff
                 </button>
+              </div>
+            </div>
+            <div
+              className="mt-4 rounded-lg border border-teal-200 bg-teal-50/60 p-4"
+              data-testid="site-custom-frontend-agent-handoff"
+              data-agent-handoff-schema={siteCustomFrontendAgentHandoff.schemaVersion}
+              data-agent-handoff-doc={CUSTOM_FRONTEND_AGENT_HANDOFF_DOC}
+              data-agent-handoff-manifest={siteCustomFrontendAgentHandoff.endpoints.manifest}
+              data-agent-handoff-openapi={siteCustomFrontendAgentHandoff.endpoints.openapi}
+              data-agent-handoff-render={siteCustomFrontendAgentHandoff.endpoints.render}
+              data-agent-handoff-frontend-design={siteCustomFrontendAgentHandoff.endpoints.frontendDesign}
+              data-agent-handoff-frontend-design-management={siteCustomFrontendAgentHandoff.endpoints.frontendDesignManagement}
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Code className="h-4 w-4 text-teal-700" />
+                    <h4 className="text-sm font-semibold text-teal-950">
+                      Agent handoff
+                    </h4>
+                  </div>
+                  <p className="mt-1 max-w-3xl text-sm text-teal-900/80">
+                    Give this block to any frontend-building agent. It points to the docs,
+                    manifest, OpenAPI, render payloads, frontend-design contract, and
+                    canvas clone entry points for Backy-generated or custom-frontend templates.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void copySiteHandoffText(
+                      JSON.stringify(siteCustomFrontendAgentHandoff, null, 2),
+                      "Custom frontend agent handoff",
+                    )
+                  }
+                  disabled={isSiteSettingsBusy}
+                  data-testid="site-copy-custom-frontend-agent-handoff"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-teal-300 bg-background px-3 py-2 text-sm font-medium text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy agent handoff
+                </button>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                <SiteHandoffEndpoint
+                  label="Read first"
+                  value={CUSTOM_FRONTEND_AGENT_HANDOFF_DOC}
+                />
+                <SiteHandoffEndpoint
+                  label="Manifest"
+                  value={siteCustomFrontendAgentHandoff.endpoints.manifest}
+                />
+                <SiteHandoffEndpoint
+                  label="OpenAPI"
+                  value={siteCustomFrontendAgentHandoff.endpoints.openapi}
+                />
+                <SiteHandoffEndpoint
+                  label="Canvas clone field"
+                  value={siteCustomFrontendAgentHandoff.contentCreation.customFrontendTemplateField}
+                />
+              </div>
+              <div
+                className="mt-3 grid gap-2 text-xs md:grid-cols-2"
+                data-testid="site-agent-canvas-entry-points"
+              >
+                <code className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
+                  {siteCustomFrontendAgentHandoff.contentCreation.canvasEntryPoints.pageBackyCanvas}
+                </code>
+                <code className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
+                  {siteCustomFrontendAgentHandoff.contentCreation.canvasEntryPoints.pageCustomFrontend}
+                </code>
+                <code className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
+                  {siteCustomFrontendAgentHandoff.contentCreation.canvasEntryPoints.blogBackyCanvas}
+                </code>
+                <code className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
+                  {siteCustomFrontendAgentHandoff.contentCreation.canvasEntryPoints.blogCustomFrontend}
+                </code>
               </div>
             </div>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
