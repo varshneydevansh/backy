@@ -712,6 +712,7 @@ const assertAuthRecoverySource = () => {
       loginSmokeSource.includes('assertMobileQuickCreateInteraction') &&
       loginSmokeSource.includes('BACKY_LOGIN_MOBILE_QUICK_CREATE_SMOKE') &&
       loginSmokeSource.includes('Mobile quick create route to new page') &&
+      loginSmokeSource.includes('Mobile quick create route to new form') &&
       loginSmokeSource.includes('Sidebar quick create route to new page') &&
       loginSmokeSource.includes('Collapsed sidebar rail tooltip') &&
       loginSmokeSource.includes('Sidebar expand layout restore'),
@@ -2191,7 +2192,93 @@ const assertMobileQuickCreateInteraction = async (client) => {
       'Mobile quick create route to new page',
     );
 
-    return { readyState, pageRouteState };
+    const reopenClick = await evaluate(client, `(() => {
+      const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+      if (!(toggle instanceof HTMLButtonElement)) return { ok: false, reason: 'mobile-toggle-missing-after-page-route' };
+      toggle.focus();
+      toggle.click();
+      return { ok: true };
+    })()`);
+    assert(reopenClick.ok, `Unable to reopen mobile navigation for form quick-create: ${JSON.stringify(reopenClick)}`);
+
+    await waitForState(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="admin-mobile-sidebar-dialog"]');
+        const form = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-form"]');
+        return {
+          ready: dialog instanceof HTMLElement &&
+            form instanceof HTMLAnchorElement &&
+            form.getAttribute('data-target-route') === '/forms' &&
+            form.getAttribute('data-target-search')?.includes('quickCreate=blank') &&
+            document.body.style.overflow === 'hidden',
+          hasDialog: dialog instanceof HTMLElement,
+          formHref: form instanceof HTMLAnchorElement ? form.href : '',
+          formTargetSearch: form?.getAttribute('data-target-search') || '',
+          bodyOverflow: document.body.style.overflow || '',
+        };
+      })()`,
+      'Mobile quick create form shortcut ready after page route',
+    );
+
+    const formClick = await evaluate(client, `(() => {
+      const form = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-form"]');
+      if (!(form instanceof HTMLAnchorElement)) return { ok: false, reason: 'mobile-new-form-missing' };
+      form.click();
+      return { ok: true, href: form.href };
+    })()`);
+    assert(formClick.ok, `Unable to click mobile quick-create form shortcut: ${JSON.stringify(formClick)}`);
+
+    const formRouteState = await waitForState(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="admin-mobile-sidebar-dialog"]');
+        const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+        const routeParams = new URLSearchParams(window.location.search);
+        const builderPanel = document.querySelector('[data-testid="form-builder-panel"]');
+        const nameInput = document.querySelector('[data-testid="form-builder-name-input"]');
+        const saveButton = document.querySelector('[data-testid="form-builder-save-button"]');
+        const commandCenter = document.querySelector('[data-testid="forms-command-center"]');
+        const stored = JSON.parse(localStorage.getItem('backy-auth-storage') || '{}');
+        const body = document.body?.innerText || '';
+        return {
+          ready: window.location.pathname === '/forms' &&
+            window.location.search.includes('siteId=site-demo') &&
+            routeParams.get('formId')?.length > 0 &&
+            !(dialog instanceof HTMLElement) &&
+            document.body.style.overflow !== 'hidden' &&
+            toggle instanceof HTMLButtonElement &&
+            toggle.getAttribute('aria-expanded') === 'false' &&
+            builderPanel instanceof HTMLElement &&
+            nameInput instanceof HTMLInputElement &&
+            nameInput.value.startsWith('blank-form-') &&
+            saveButton instanceof HTMLButtonElement &&
+            commandCenter instanceof HTMLElement &&
+            commandCenter.getAttribute('data-quick-create-prepared') === 'false' &&
+            body.includes('Blank standalone form created. Add fields or save changes in the builder.') &&
+            stored?.state?.user?.email === 'admin@backy.io' &&
+            Boolean(stored?.state?.session?.expiresAt),
+          path: window.location.pathname,
+          search: window.location.search,
+          formId: routeParams.get('formId') || '',
+          hasDialog: dialog instanceof HTMLElement,
+          bodyOverflow: document.body.style.overflow || '',
+          toggleExpanded: toggle?.getAttribute('aria-expanded') || '',
+          hasBuilderPanel: builderPanel instanceof HTMLElement,
+          builderText: builderPanel?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 500) || '',
+          hasNameInput: nameInput instanceof HTMLInputElement,
+          nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : '',
+          hasSaveButton: saveButton instanceof HTMLButtonElement,
+          commandCenterPrepared: commandCenter?.getAttribute('data-quick-create-prepared') || '',
+          userEmail: stored?.state?.user?.email || '',
+          hasSession: Boolean(stored?.state?.session?.expiresAt),
+          body: body.slice(0, 900),
+        };
+      })()`,
+      'Mobile quick create route to new form',
+    );
+
+    return { readyState, pageRouteState, formRouteState };
   } finally {
     await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
     await evaluate(client, `(() => {
