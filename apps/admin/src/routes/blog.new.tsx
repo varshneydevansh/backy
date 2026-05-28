@@ -2434,7 +2434,7 @@ function NewBlogPostPage() {
                                             size="sm"
                                             disabled={isCreateBusy || !canViewBlog}
                                             title={viewBlogPermissionTitle}
-                                            aria-describedby={blogCreateCommandSecondaryActionStatusId}
+                                            aria-describedby={blogCreateCommandActionStatusId}
                                             data-testid="blog-create-copy-handoff"
                                             data-action-state={blogCreateHandoffActionState}
                                             data-action-status={blogCreateCopyActionStatus}
@@ -2453,7 +2453,7 @@ function NewBlogPostPage() {
                                             size="sm"
                                             disabled={isCreateBusy || !canViewBlog}
                                             title={viewBlogPermissionTitle}
-                                            aria-describedby={blogCreateCommandSecondaryActionStatusId}
+                                            aria-describedby={blogCreateCommandActionStatusId}
                                             data-testid="blog-create-download-handoff"
                                             data-action-state={blogCreateHandoffActionState}
                                             data-action-status={blogCreateDownloadActionStatus}

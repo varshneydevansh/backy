@@ -204,6 +204,16 @@ const assertBlogCreateSourceContract = () => {
     const commandCenterCopyHandoffIndex = commandCenterBlock.indexOf('data-testid="blog-create-copy-handoff"');
     const commandCenterDownloadHandoffIndex = commandCenterBlock.indexOf('data-testid="blog-create-download-handoff"');
     const commandCenterMoreActionsIndex = commandCenterBlock.indexOf('More actions');
+    const copyHandoffBlockStart = commandCenterBlock.lastIndexOf('<Button', commandCenterCopyHandoffIndex);
+    const copyHandoffBlockEnd = commandCenterBlock.indexOf('</Button>', commandCenterCopyHandoffIndex);
+    const copyHandoffBlock = copyHandoffBlockStart >= 0 && copyHandoffBlockEnd > copyHandoffBlockStart
+      ? commandCenterBlock.slice(copyHandoffBlockStart, copyHandoffBlockEnd)
+      : '';
+    const downloadHandoffBlockStart = commandCenterBlock.lastIndexOf('<Button', commandCenterDownloadHandoffIndex);
+    const downloadHandoffBlockEnd = commandCenterBlock.indexOf('</Button>', commandCenterDownloadHandoffIndex);
+    const downloadHandoffBlock = downloadHandoffBlockStart >= 0 && downloadHandoffBlockEnd > downloadHandoffBlockStart
+      ? commandCenterBlock.slice(downloadHandoffBlockStart, downloadHandoffBlockEnd)
+      : '';
     const commandCenterPrimaryActionMaxIndex = Math.max(commandCenterSubmitButtonIndex, commandCenterPreviewButtonIndex);
     const handoffHierarchyMode = commandCenterMoreActionsIndex >= 0
       ? commandCenterMoreActionsIndex > commandCenterPrimaryActionMaxIndex && commandCenterCopyHandoffIndex > commandCenterMoreActionsIndex && commandCenterDownloadHandoffIndex > commandCenterMoreActionsIndex
@@ -216,6 +226,11 @@ const assertBlogCreateSourceContract = () => {
         commandCenterDownloadHandoffIndex >= 0 &&
         handoffHierarchyMode,
       'Blog create command center must keep primary create actions ahead of Copy handoff/Download JSON; handoff actions must be secondary or behind More actions.',
+    );
+    assert(
+      copyHandoffBlock.includes('aria-describedby={blogCreateCommandActionStatusId}') &&
+        downloadHandoffBlock.includes('aria-describedby={blogCreateCommandActionStatusId}'),
+      'Blog create quick-create handoff buttons must expose the primary command status for sidebar readiness and assistive feedback.',
     );
     const focusActionsBlockStart = source.indexOf('actions={isWorkspaceFocus');
     const focusActionsBlockEnd = source.indexOf('density={isWorkspaceFocus', focusActionsBlockStart);
