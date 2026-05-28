@@ -800,26 +800,18 @@ const assertCanvasEditorShortcutSource = () => {
     'Editor zoom browser smoke must exercise Ctrl and Mac Cmd keyboard zoom shortcuts',
   );
   assert(
-    source.includes("window.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("document.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("root.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("body.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("viewport.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("window.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("document.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("root.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("body.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("viewport.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false })") &&
-      source.includes("window.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
-      source.includes("document.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
-      source.includes("root.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
-      source.includes("body.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
-      source.includes("viewport.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false })") &&
-      source.includes("window.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
-      source.includes("document.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
-      source.includes("root.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
-      source.includes("body.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
-      source.includes("viewport.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false })") &&
+      source.includes('const canvasScaleSurfaceRef = useRef<HTMLDivElement>(null);') &&
+      source.includes('const surface = canvasScaleSurfaceRef.current;') &&
+      source.includes('const maybeZoomTargets: Array<EventTarget | null> = [window, document, root, body, shell, viewport, surface];') &&
+      source.includes('const zoomTargets = maybeZoomTargets.filter') &&
+      source.includes('(target): target is EventTarget => target !== null') &&
+      source.includes("target.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });") &&
+      source.includes("target.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });") &&
+      source.includes("target.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });") &&
+      source.includes("target.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });") &&
+      source.includes("target.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });") &&
+      source.includes("target.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });") &&
+      source.includes("target.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });") &&
       source.includes('const readCanvasWheelDeltaY = useCallback') &&
       source.includes('wheelEvent.wheelDeltaY') &&
       source.includes('wheelEvent.wheelDelta') &&
@@ -837,7 +829,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('CANVAS_WHEEL_DELTA_LINE_MULTIPLIER') &&
       source.includes('zoomCanvasAtPoint(') &&
       source.includes('data-canvas-wheel-zoom="enabled"') &&
-      source.includes('data-canvas-zoom-listener-scope="window-document-root-body-viewport-capture"') &&
+      source.includes('data-canvas-zoom-listener-scope="window-document-root-body-shell-viewport-surface-capture"') &&
       source.includes('data-canvas-zoom-hit-test="viewport-shell-or-active-editor"') &&
       source.includes('data-canvas-zoom-page-guard="editor-active"') &&
       source.includes('data-canvas-zoom-anchor-fallback="viewport-center"') &&
@@ -845,6 +837,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-canvas-zoom-global-fallback="zero-coordinate-window-events"') &&
       source.includes('data-canvas-zoom-legacy-wheel-fallback="mousewheel"') &&
       source.includes('data-canvas-zoom-outside-shell-guard="non-editor-coordinate-less-events-pass-through"') &&
+      source.includes('data-canvas-zoom-surface-listener="native-capture"') &&
       source.includes("touchAction: 'pan-x pan-y'") &&
       source.includes('data-wheel-zoom-modifier="meta-or-control"') &&
       source.includes('data-wheel-zoom-prevents-browser-zoom="true"') &&
@@ -864,6 +857,7 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes("type: 'mouseWheel'") &&
       smokeSource.includes('pageZoomStable') &&
       smokeSource.includes('focusedInputKeyboardZoom') &&
+      smokeSource.includes("surfaceListener === 'native-capture'") &&
       smokeSource.includes('defaultPrevented') &&
       smokeSource.includes('dispatchReturned === false'),
     'Editor canvas viewport must intercept Cmd/Ctrl wheel, Mac pinch zoom, and focused-input zoom shortcuts before browser/page zoom is triggered',
@@ -1007,7 +1001,8 @@ const assertCanvasEditorShortcutSource = () => {
       componentLibrarySource.includes('window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recentItemKeys))') &&
       componentLibrarySource.includes('const recentItems = useMemo') &&
       componentLibrarySource.includes('if (selectedCategory === RECENT_CATEGORY_ID)') &&
-      componentLibrarySource.includes('return recentItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery));') &&
+      componentLibrarySource.includes('? libraryItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery))') &&
+      componentLibrarySource.includes(': recentItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery));') &&
       componentLibrarySource.includes('const rememberRecentItem = (item: ComponentLibraryItem)') &&
       componentLibrarySource.includes('data-component-library-recent-count={recentItems.length}') &&
       componentLibrarySource.includes('data-component-library-recent-keys={recentItemKeys.join(\',\')}') &&
@@ -1421,6 +1416,9 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes("const RECENT_CATEGORY_ID = 'recent'") &&
       source.includes('const ESSENTIAL_ITEM_KEYS = new Set') &&
       source.includes('const PRIMARY_COMPONENT_CATEGORY_IDS = new Set') &&
+      source.includes('const SEARCH_NEUTRAL_CATEGORY_IDS = new Set') &&
+      source.includes('const isSearchNeutralCategory = selectedCategory === null || SEARCH_NEUTRAL_CATEGORY_IDS.has(selectedCategory);') &&
+      source.includes('data-component-library-search-scope={isGlobalSearch ?') &&
       source.includes('data-testid="editor-component-category-essentials"') &&
       source.includes('data-testid={`editor-component-category-${cat.id}`}') &&
       source.includes('data-testid="editor-component-primary-categories"') &&
@@ -1432,7 +1430,8 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-component-library-shown={filteredItems.length}') &&
       source.includes('const itemMatchesSearch = (item: ComponentLibraryItem, normalizedSearchQuery: string): boolean') &&
       source.includes('const filteredItems = useMemo(() => {') &&
-      source.includes('return recentItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery));') &&
+      source.includes('? libraryItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery))') &&
+      source.includes('return isGlobalSearch ? true : favoriteKeySet.has(getLibraryItemKey(item));') &&
       source.includes('const groupedItems = useMemo(() => filteredItems.reduce') &&
       source.includes('const categoryItemCounts = useMemo(() => categories.reduce<Record<string, number>>') &&
       source.includes('data-component-library-density="compact"') &&
@@ -12190,7 +12189,7 @@ const dispatchCdpCanvasWheelZoom = async (client, deltaY, label, options = { ctr
   const pageZoomStable = assertPageZoomStable(beforePageZoom, afterPageZoom, label);
   assert(
     viewportPoint.wheelZoom === 'enabled' &&
-      viewportPoint.listenerScope === 'window-document-root-body-viewport-capture' &&
+      viewportPoint.listenerScope === 'window-document-root-body-shell-viewport-surface-capture' &&
       viewportPoint.pageGuard === 'editor-active' &&
       viewportPoint.zoomScope === 'canvas',
     `CDP wheel zoom metadata is incomplete during ${label}: ${JSON.stringify(viewportPoint)}`,
@@ -12242,6 +12241,7 @@ const dispatchCanvasWheelZoom = async (client, deltaY, label) => {
       pinchZoom: viewport.getAttribute('data-canvas-pinch-zoom'),
       pinchPreventsBrowserZoom: viewport.getAttribute('data-pinch-zoom-prevents-browser-zoom'),
       zoomScope: viewport.getAttribute('data-zoom-scope'),
+      surfaceListener: target instanceof HTMLElement ? target.getAttribute('data-canvas-zoom-surface-listener') : '',
     };
   })()`);
 
@@ -12250,7 +12250,7 @@ const dispatchCanvasWheelZoom = async (client, deltaY, label) => {
   assert(dispatched.dispatchReturned === false, `Canvas wheel zoom dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
   assert(
     dispatched.wheelZoom === 'enabled' &&
-      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-shell-viewport-surface-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
@@ -12260,7 +12260,8 @@ const dispatchCanvasWheelZoom = async (client, deltaY, label) => {
       dispatched.preventsBrowserZoom === 'true' &&
       dispatched.pinchZoom === 'enabled' &&
       dispatched.pinchPreventsBrowserZoom === 'true' &&
-      dispatched.zoomScope === 'canvas',
+      dispatched.zoomScope === 'canvas' &&
+      dispatched.surfaceListener === 'native-capture',
     `Canvas wheel zoom metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
   );
   await sleep(150);
@@ -12313,7 +12314,7 @@ const dispatchEditorShellWheelZoom = async (client, deltaY, label) => {
   assert(dispatched.dispatchReturned === false, `Editor-shell wheel zoom dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
   assert(
     dispatched.wheelZoom === 'enabled' &&
-      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-shell-viewport-surface-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
@@ -12373,7 +12374,7 @@ const dispatchCoordinateLessGlobalWheelZoom = async (client, deltaY, label) => {
   assert(dispatched.dispatchReturned === false, `Coordinate-less global wheel zoom dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
   assert(
     dispatched.wheelZoom === 'enabled' &&
-      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-shell-viewport-surface-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
@@ -12449,7 +12450,7 @@ const dispatchLegacyRootMouseWheelZoom = async (client, wheelDeltaY, label) => {
   assert(dispatched.dispatchReturned === false, `Legacy root mousewheel dispatch should report a cancelled default during ${label}: ${JSON.stringify(dispatched)}`);
   assert(
     dispatched.wheelZoom === 'enabled' &&
-      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-shell-viewport-surface-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
@@ -12518,6 +12519,7 @@ const dispatchCanvasPinchZoom = async (client, scale, label) => {
       anchorFallback: viewport.getAttribute('data-canvas-zoom-anchor-fallback'),
       wheelZoom: viewport.getAttribute('data-canvas-wheel-zoom'),
       zoomScope: viewport.getAttribute('data-zoom-scope'),
+      surfaceListener: target instanceof HTMLElement ? target.getAttribute('data-canvas-zoom-surface-listener') : '',
     };
   })()`);
 
@@ -12537,12 +12539,13 @@ const dispatchCanvasPinchZoom = async (client, scale, label) => {
   assert(
     dispatched.pinchZoom === 'enabled' &&
       dispatched.pinchPreventsBrowserZoom === 'true' &&
-      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-shell-viewport-surface-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
       dispatched.wheelZoom === 'enabled' &&
-      dispatched.zoomScope === 'canvas',
+      dispatched.zoomScope === 'canvas' &&
+      dispatched.surfaceListener === 'native-capture',
     `Canvas pinch zoom metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
   );
   await sleep(150);
@@ -12606,7 +12609,7 @@ const dispatchCoordinateLessGlobalPinchZoom = async (client, scale, label) => {
   assert(
     dispatched.pinchZoom === 'enabled' &&
       dispatched.pinchPreventsBrowserZoom === 'true' &&
-      dispatched.listenerScope === 'window-document-root-body-viewport-capture' &&
+      dispatched.listenerScope === 'window-document-root-body-shell-viewport-surface-capture' &&
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
@@ -14442,6 +14445,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
       label: ${JSON.stringify(label)},
       hasLibrary: Boolean(library),
       libraryDensity: library?.getAttribute('data-component-library-density') || '',
+      librarySearchScope: library?.getAttribute('data-component-library-search-scope') || '',
       listDensity: list?.getAttribute('data-component-list-density') || '',
       listMetrics: list instanceof HTMLElement
         ? {
@@ -14473,6 +14477,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
         savedTotal: summary?.getAttribute('data-component-library-saved-total') || '',
         savedHidden: summary?.getAttribute('data-component-library-saved-hidden') || '',
         category: summary?.getAttribute('data-component-library-category') || '',
+        searchScope: summary?.getAttribute('data-component-library-search-scope') || '',
         filterActive: summary?.getAttribute('data-component-library-filter-active') || '',
         text: summary?.textContent || '',
       },
@@ -15088,6 +15093,8 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       initial.libraryDensity === 'compact' &&
       initial.listDensity === 'compact' &&
       initial.summary.category === 'essentials' &&
+      initial.summary.searchScope === 'selected-category' &&
+      initial.librarySearchScope === 'selected-category' &&
       Number(initial.summary.shown) === initial.itemIds.length &&
       Number(initial.summary.total) > initial.itemIds.length &&
       Number(initial.summary.essentials) === initial.itemIds.length &&
@@ -15223,6 +15230,12 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   const searchFiltered = await readComponentLibraryState(client, 'search divider');
   assert(searchFiltered.searchValue === 'divider', `Component search value mismatch: ${JSON.stringify(searchFiltered)}`);
   assert(
+    searchFiltered.summary.category === 'search' &&
+      searchFiltered.summary.searchScope === 'global-catalog' &&
+      searchFiltered.librarySearchScope === 'global-catalog',
+    `Component search from All did not enter global catalog search mode: ${JSON.stringify(searchFiltered)}`,
+  );
+  assert(
     /for "divider"/.test(searchFiltered.actionStatus.text) &&
       searchFiltered.actionStatus.searchStatus === searchFiltered.actionStatus.text,
     `Component search action status did not announce the active query: ${JSON.stringify(searchFiltered.actionStatus)}`,
@@ -15244,6 +15257,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   await sleep(150);
   const layoutFiltered = await readComponentLibraryState(client, 'layout filtered');
   assert(layoutFiltered.itemIds.includes('divider'), `Layout category did not retain divider search result: ${JSON.stringify(layoutFiltered)}`);
+  assert(layoutFiltered.summary.searchScope === 'selected-category', `Explicit Layout category search should stay scoped to layout: ${JSON.stringify(layoutFiltered.summary)}`);
   assert(layoutFiltered.categories.every((category) => category.id === 'layout'), `Layout category rendered unexpected groups: ${JSON.stringify(layoutFiltered)}`);
   assert(
     layoutFiltered.categoryRail.secondaryOpen === true &&
@@ -15296,6 +15310,20 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   assert(favoritesFiltered.itemIds.includes('divider'), `Favorites category did not show favorited divider: ${JSON.stringify(favoritesFiltered)}`);
   assert(favoritesFiltered.categories.length === 1 && favoritesFiltered.categories[0].id === 'favorites', `Favorites category rendered unexpected groups: ${JSON.stringify(favoritesFiltered)}`);
 
+  await setFormControlByTestId(client, 'editor-component-search', 'image');
+  await sleep(150);
+  const favoritesGlobalSearch = await readComponentLibraryState(client, 'favorites tab global search');
+  assert(
+    favoritesGlobalSearch.searchValue === 'image' &&
+      favoritesGlobalSearch.summary.category === 'search' &&
+      favoritesGlobalSearch.summary.searchScope === 'global-catalog' &&
+      favoritesGlobalSearch.librarySearchScope === 'global-catalog' &&
+      favoritesGlobalSearch.itemIds.includes('image') &&
+      favoritesGlobalSearch.categories.some((category) => category.itemIds.includes('image')) &&
+      favoritesGlobalSearch.storedFavorites.includes('divider'),
+    `Searching from Favorites should search the full component catalog while preserving favorites state: ${JSON.stringify(favoritesGlobalSearch)}`,
+  );
+
   await setFormControlByTestId(client, 'editor-component-search', 'zz-no-component');
   await sleep(150);
   const emptySearch = await readComponentLibraryState(client, 'empty search');
@@ -15303,9 +15331,11 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
     emptySearch.hasEmpty === true &&
       emptySearch.itemIds.length === 0 &&
       emptySearch.empty.exists === true &&
-      emptySearch.empty.category === 'favorites' &&
+      emptySearch.empty.category === 'search' &&
       emptySearch.empty.search === 'zz-no-component' &&
       /zz-no-component/.test(emptySearch.empty.text) &&
+      /full catalog/.test(emptySearch.empty.text) &&
+      emptySearch.summary.searchScope === 'global-catalog' &&
       emptySearch.empty.resetLabel === 'Show all components' &&
       emptySearch.empty.headerResetExists === true &&
       emptySearch.actionStatus.text.includes('Reset filters available.') &&
@@ -15391,6 +15421,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
     clearedPreview,
     favorited,
     favoritesFiltered,
+    favoritesGlobalSearch,
     emptySearch,
     restored,
     savedSelectionReusableSection,

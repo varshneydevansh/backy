@@ -1892,6 +1892,7 @@ export function CanvasEditor({
   const [showGrid, setShowGrid] = useState(true);
   const safeEditorGridSize = normalizeEditorGridSize(gridSize);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const canvasScaleSurfaceRef = useRef<HTMLDivElement>(null);
   const editorShellRef = useRef<HTMLDivElement>(null);
   const canvasPanRef = useRef<{
     startX: number;
@@ -2335,61 +2336,31 @@ export function CanvasEditor({
     if (!viewport) {
       return undefined;
     }
+    const shell = editorShellRef.current;
+    const surface = canvasScaleSurfaceRef.current;
     const root = document.documentElement;
     const body = document.body;
+    const maybeZoomTargets: Array<EventTarget | null> = [window, document, root, body, shell, viewport, surface];
+    const zoomTargets = maybeZoomTargets.filter(
+      (target): target is EventTarget => target !== null,
+    );
 
-    window.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    document.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    root.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    body.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    viewport.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    window.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    document.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    root.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    body.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    viewport.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
-    window.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
-    document.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
-    root.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
-    body.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
-    viewport.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
-    window.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
-    document.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
-    root.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
-    body.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
-    viewport.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
-    window.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
-    document.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
-    root.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
-    body.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
-    viewport.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
+    zoomTargets.forEach((target) => {
+      target.addEventListener('wheel', handleCanvasWheelZoom, { capture: true, passive: false });
+      target.addEventListener('mousewheel', handleCanvasWheelZoom, { capture: true, passive: false });
+      target.addEventListener('gesturestart', handleCanvasGestureStart, { capture: true, passive: false });
+      target.addEventListener('gesturechange', handleCanvasGestureChange, { capture: true, passive: false });
+      target.addEventListener('gestureend', handleCanvasGestureEnd, { capture: true, passive: false });
+    });
 
     return () => {
-      window.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
-      document.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
-      root.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
-      body.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
-      viewport.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
-      window.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
-      document.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
-      root.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
-      body.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
-      viewport.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
-      window.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
-      document.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
-      root.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
-      body.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
-      viewport.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
-      window.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
-      document.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
-      root.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
-      body.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
-      viewport.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
-      window.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
-      document.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
-      root.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
-      body.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
-      viewport.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
+      zoomTargets.forEach((target) => {
+        target.removeEventListener('wheel', handleCanvasWheelZoom, { capture: true });
+        target.removeEventListener('mousewheel', handleCanvasWheelZoom, { capture: true });
+        target.removeEventListener('gesturestart', handleCanvasGestureStart, { capture: true });
+        target.removeEventListener('gesturechange', handleCanvasGestureChange, { capture: true });
+        target.removeEventListener('gestureend', handleCanvasGestureEnd, { capture: true });
+      });
       isCanvasGestureZoomActiveRef.current = false;
     };
   }, [
@@ -8481,7 +8452,7 @@ export function CanvasEditor({
             )}
             data-testid="editor-canvas-viewport"
             data-canvas-wheel-zoom="enabled"
-            data-canvas-zoom-listener-scope="window-document-root-body-viewport-capture"
+            data-canvas-zoom-listener-scope="window-document-root-body-shell-viewport-surface-capture"
             data-canvas-zoom-hit-test="viewport-shell-or-active-editor"
             data-canvas-zoom-page-guard="editor-active"
             data-canvas-zoom-anchor-fallback="viewport-center"
@@ -8919,15 +8890,19 @@ export function CanvasEditor({
                 )}
                 {isPreview ? (
                   <div
+                    ref={canvasScaleSurfaceRef}
                     className="overflow-hidden shadow-[0_28px_70px_rgba(15,23,42,0.18)]"
                     data-testid="editor-canvas-scale-surface"
                     data-canvas-scale={activeCanvasScale}
+                    data-canvas-zoom-surface="true"
+                    data-canvas-zoom-surface-listener="native-capture"
                     style={{
                       ...editorThemeCssVariables,
                       width: size.width,
                       height: size.height,
                       transform: `scale(${activeCanvasScale})`,
                       transformOrigin: 'top left',
+                      touchAction: 'pan-x pan-y',
                     }}
                   >
                     <Canvas
@@ -9011,14 +8986,18 @@ export function CanvasEditor({
                     </div>
                     <div className="relative overflow-visible bg-white">
                       <div
+                        ref={canvasScaleSurfaceRef}
                         data-testid="editor-canvas-scale-surface"
                         data-canvas-scale={activeCanvasScale}
+                        data-canvas-zoom-surface="true"
+                        data-canvas-zoom-surface-listener="native-capture"
                         style={{
                           ...editorThemeCssVariables,
                           width: size.width,
                           height: size.height,
                           transform: `scale(${activeCanvasScale})`,
                           transformOrigin: 'top left',
+                          touchAction: 'pan-x pan-y',
                         }}
                       >
                         <Canvas

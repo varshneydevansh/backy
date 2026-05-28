@@ -90,6 +90,11 @@ const PRIMARY_COMPONENT_CATEGORY_IDS = new Set<string>([
   FAVORITES_CATEGORY_ID,
   'saved',
 ]);
+const SEARCH_NEUTRAL_CATEGORY_IDS = new Set<string>([
+  ESSENTIALS_CATEGORY_ID,
+  RECENT_CATEGORY_ID,
+  FAVORITES_CATEGORY_ID,
+]);
 const COMPONENT_CATEGORY_BUTTON_CLASS = 'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors';
 
 const getLibraryCategory = (item: ComponentLibraryItem): string => item.category || 'basic';
@@ -320,7 +325,8 @@ export function ComponentLibrary({
     ))
   ), [categories]);
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const isGlobalSearch = normalizedSearchQuery.length > 0 && selectedCategory === ESSENTIALS_CATEGORY_ID;
+  const isSearchNeutralCategory = selectedCategory === null || SEARCH_NEUTRAL_CATEGORY_IDS.has(selectedCategory);
+  const isGlobalSearch = normalizedSearchQuery.length > 0 && isSearchNeutralCategory;
 
   const toggleFavorite = (item: ComponentLibraryItem) => {
     const itemKey = getLibraryItemKey(item);
@@ -344,7 +350,9 @@ export function ComponentLibrary({
   // Filter items
   const filteredItems = useMemo(() => {
     if (selectedCategory === RECENT_CATEGORY_ID) {
-      return recentItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery));
+      return isGlobalSearch
+        ? libraryItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery))
+        : recentItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery));
     }
 
     return libraryItems.filter((item) => {
@@ -355,7 +363,7 @@ export function ComponentLibrary({
       }
 
       if (selectedCategory === FAVORITES_CATEGORY_ID) {
-        return favoriteKeySet.has(getLibraryItemKey(item));
+        return isGlobalSearch ? true : favoriteKeySet.has(getLibraryItemKey(item));
       }
 
       return !selectedCategory || getLibraryCategory(item) === selectedCategory;
@@ -441,6 +449,9 @@ export function ComponentLibrary({
   ].join(' ');
   const emptyStateDescription = useMemo(() => {
     const trimmedSearch = searchQuery.trim();
+    if (trimmedSearch && isGlobalSearch) {
+      return `No components match "${trimmedSearch}" across the full catalog. Show all components to keep building.`;
+    }
     if (trimmedSearch && selectedCategory) {
       return `No ${activeCategoryName.toLowerCase()} match "${trimmedSearch}". Show all components to keep building.`;
     }
@@ -457,7 +468,7 @@ export function ComponentLibrary({
       return 'Saved sections appear here after you save a selected layer or section. Show all components to keep building.';
     }
     return 'Show all components or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.';
-  }, [activeCategoryName, searchQuery, selectedCategory]);
+  }, [activeCategoryName, isGlobalSearch, searchQuery, selectedCategory]);
 
   const favoriteSearchItems = useMemo(() => (
     favoriteItems.filter((item) => itemMatchesSearch(item, normalizedSearchQuery))
@@ -504,6 +515,7 @@ export function ComponentLibrary({
       className="flex h-full w-[clamp(15rem,16vw,18rem)] min-w-[15rem] max-w-[18rem] flex-col border-r border-slate-200 bg-white"
       data-testid="editor-component-library"
       data-component-library-density="compact"
+      data-component-library-search-scope={isGlobalSearch ? 'global-catalog' : 'selected-category'}
       aria-describedby={componentLibraryActionStatusId}
       data-action-status={componentLibraryActionStatus}
     >
@@ -550,6 +562,7 @@ export function ComponentLibrary({
           data-component-library-saved-total={reusableLibraryState.totalActiveCount}
           data-component-library-saved-hidden={reusableLibraryState.hiddenDuplicateCount}
           data-component-library-category={isGlobalSearch ? 'search' : selectedCategory || 'all'}
+          data-component-library-search-scope={isGlobalSearch ? 'global-catalog' : 'selected-category'}
           data-component-library-filter-active={isComponentFilterActive ? 'true' : 'false'}
         >
           <span className="truncate">{activeCategoryName}</span>

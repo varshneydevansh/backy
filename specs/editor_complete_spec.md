@@ -80,6 +80,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Core and saved element types available
 - Organized by categories (favorites, basic, media, layout, form, saved, advanced)
 - Search/filter components work across categories
+- Search from neutral primary tabs (`All`, `Essentials`, `Recent`, and `Favorites`) searches the full catalog while explicit secondary categories remain scoped; the panel exposes `data-component-library-search-scope="global-catalog|selected-category"` for custom shells and smoke guards.
 - Favorites section persists locally and supports favorites-only filtering
 - Filtered no-match states show the active search/category and expose Reset plus Show all components recovery back to the full catalog
 - Hover/focus preview shows component metadata and preview artwork
@@ -94,7 +95,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Handle drop events
 - Grid background in edit mode, with G/S keyboard toggles for grid visibility and snapping covered by focused smoke.
 - Zoom out, zoom in, and fit-to-canvas controls are wired to the scaled editor surface, including pointer and keyboard shortcuts covered by focused smoke.
-- Mac/browser zoom is guarded inside the editor canvas: Cmd/Ctrl wheel, root/body `mousewheel`, keyboard zoom, and gesture pinch paths update canvas scale while keeping browser page zoom stable; coordinate-less gestures from outside the editor shell pass through without changing canvas zoom.
+- Mac/browser zoom is guarded inside the editor canvas: Cmd/Ctrl wheel, root/body/shell/viewport/surface `mousewheel`, keyboard zoom, and gesture pinch paths update canvas scale while keeping browser page zoom stable; coordinate-less gestures from outside the editor shell pass through without changing canvas zoom, and the scaled canvas surface carries its own native non-passive capture listener.
 - Smart alignment guides render during drag, snap selected elements to peer/canvas edges, and clear after release.
 - Rulers render along the canvas edge with major/minor ticks.
 - Pan navigation works through the hand toggle, H keyboard toggle, and temporary Space-hold mode, with focused smoke coverage.
@@ -423,11 +424,12 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Verified route-level media management coverage for folders, storage configuration, upload intake, metadata, replacements/versioning, transforms, quarantine/release, signed URLs, analytics, activity, and deletion via `npm run test:media --workspace @backy-cms/admin`.
 - Added focused alignment guide coverage for visible vertical/horizontal guides during drag, smart snap to peer edges, and guide cleanup after release via `BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added zoom control test hooks plus focused coverage for zoom out, zoom in, fit-to-canvas, auto-fit state, and visual canvas scale via `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
-- Hardened in-canvas Mac zoom by listening for modern `wheel`, legacy root/body `mousewheel`, keyboard zoom, and gesture pinch events with non-passive capture guards; the rendered zoom smoke now proves the legacy root `mousewheel` path changes only the canvas scale, keeps browser page zoom metrics stable, and leaves coordinate-less header/sidebar gestures outside the editor shell uncancelled without changing canvas scale.
+- Hardened in-canvas Mac zoom by listening for modern `wheel`, legacy root/body/shell/viewport/surface `mousewheel`, keyboard zoom, and gesture pinch events with non-passive capture guards; the rendered zoom smoke now proves the legacy root `mousewheel` path changes only the canvas scale, keeps browser page zoom metrics stable, leaves coordinate-less header/sidebar gestures outside the editor shell uncancelled, and verifies the scaled canvas surface advertises `native-capture` zoom handling.
 - Added canvas navigation coverage for ruler rendering, hand-toggle panning, drag-to-pan viewport scrolling, and temporary Space-hold pan mode through the zoom smoke path.
 - Added configurable grid size plus grid visibility and snap on/off controls, with focused browser coverage proving grid visibility plus snapped and unsnapped drag behavior via `BACKY_EDITOR_GRID_SNAP_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added component library favorites and hover/focus previews with local persistence, favorites-only filtering, search/category filtering, preview update/clear coverage, and empty-state coverage via `BACKY_EDITOR_LIBRARY_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Made component library no-match category/search states actionable: empty Favorites/Recent/Saved/search results expose Show all components and header Reset controls, with rendered component-library smoke proving query/category reset and catalog restoration.
+- Component library neutral-tab search now behaves like a full Add Elements catalog search from `All`, `Essentials`, `Recent`, and `Favorites`, while explicit category tabs remain scoped; source and rendered smokes verify the `global-catalog` versus `selected-category` search-scope metadata.
 - Added full resize handle coverage for eight handles, single-axis edge resizing, Shift aspect-ratio resize, and Alt center resize via `BACKY_EDITOR_RESIZE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added Property Panel applied-change feedback with focused coverage in the heading component smoke via `BACKY_EDITOR_COMPONENT_SMOKE=heading npm run test:editor-drag --workspace @backy-cms/admin`.
 - Added Property Panel rich-text blockquote and table controls with semantic editor table rendering, persisted table nodes, and focused browser coverage via `BACKY_EDITOR_RICH_TEXT_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin`.
