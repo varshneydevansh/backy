@@ -1534,6 +1534,16 @@ type MarqueeSelection = {
   currentY: number;
 };
 
+type CanvasInteractionInput = {
+  clientX: number;
+  clientY: number;
+  shiftKey: boolean;
+  altKey: boolean;
+  isPointerEvent: boolean;
+  pointerId?: number;
+  pointerType?: string;
+};
+
 const getPointerDetails = (event: React.PointerEvent | React.MouseEvent) => {
   if ('pointerId' in event && event.pointerId !== undefined) {
     if (event.pointerType === 'mouse') {
@@ -1555,15 +1565,29 @@ const getPointerDetails = (event: React.PointerEvent | React.MouseEvent) => {
   };
 };
 
+const getNativeInteractionInput = (event: MouseEvent | PointerEvent): CanvasInteractionInput => {
+  const isPointerEvent = typeof PointerEvent !== 'undefined' && event instanceof PointerEvent;
+
+  return {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    isPointerEvent,
+    pointerId: isPointerEvent ? event.pointerId : undefined,
+    pointerType: isPointerEvent ? event.pointerType : undefined,
+  };
+};
+
 const matchesInteractionInput = (
-  event: MouseEvent | PointerEvent,
+  event: CanvasInteractionInput,
   interaction: Pick<DragInteraction | ResizeInteraction, 'inputType' | 'pointerId'>,
 ) => {
   if (interaction.inputType === 'mouse') {
-    return !('pointerId' in event) || (event instanceof PointerEvent && event.pointerType === 'mouse');
+    return !event.isPointerEvent || event.pointerType === 'mouse';
   }
 
-  if (!('pointerId' in event)) {
+  if (!event.isPointerEvent) {
     return true;
   }
 
@@ -1641,6 +1665,8 @@ export function Canvas({
   const dragStateRef = useRef<DragInteraction | null>(null);
   const resizeStateRef = useRef<ResizeInteraction | null>(null);
   const marqueeSelectionRef = useRef<MarqueeSelection | null>(null);
+  const pendingCanvasMoveFrameRef = useRef<number | null>(null);
+  const pendingCanvasMoveInputRef = useRef<CanvasInteractionInput | null>(null);
   const suppressCanvasClickRef = useRef(false);
   const debugTextInteraction = useCallback((..._args: unknown[]) => {
   }, []);
@@ -2026,7 +2052,7 @@ export function Canvas({
     [disabled, elements, exitTextEditingForTransform, isPreview, selectedIds, size.height, size.width]
   );
 
-  const handleGlobalElementMove = useCallback((event: MouseEvent | PointerEvent) => {
+  const applyGlobalElementMove = useCallback((event: CanvasInteractionInput) => {
     if (isPreview || disabled) {
       return;
     }
@@ -2202,10 +2228,51 @@ export function Canvas({
     onElementsChange(nextElements, { transient: true, selectedId: activeDragState.elementId });
   }, [disabled, getCanvasPoint, isPreview, onElementsChange, safeGridSize, size.height, size.width, snapEnabled, toCanvasDelta]);
 
+  const flushPendingCanvasMove = useCallback(() => {
+    if (pendingCanvasMoveFrameRef.current !== null) {
+      window.cancelAnimationFrame(pendingCanvasMoveFrameRef.current);
+      pendingCanvasMoveFrameRef.current = null;
+    }
+
+    const pendingInput = pendingCanvasMoveInputRef.current;
+    pendingCanvasMoveInputRef.current = null;
+
+    if (pendingInput) {
+      applyGlobalElementMove(pendingInput);
+    }
+  }, [applyGlobalElementMove]);
+
+  const handleGlobalElementMove = useCallback((event: MouseEvent | PointerEvent) => {
+    if (isPreview || disabled) {
+      return;
+    }
+
+    if (!dragStateRef.current && !resizeStateRef.current && !marqueeSelectionRef.current) {
+      return;
+    }
+
+    pendingCanvasMoveInputRef.current = getNativeInteractionInput(event);
+    if (pendingCanvasMoveFrameRef.current !== null) {
+      return;
+    }
+
+    pendingCanvasMoveFrameRef.current = window.requestAnimationFrame(() => {
+      pendingCanvasMoveFrameRef.current = null;
+      const pendingInput = pendingCanvasMoveInputRef.current;
+      pendingCanvasMoveInputRef.current = null;
+
+      if (pendingInput) {
+        applyGlobalElementMove(pendingInput);
+      }
+    });
+  }, [applyGlobalElementMove, disabled, isPreview]);
+
   const handleGlobalElementUp = useCallback((event?: MouseEvent | PointerEvent) => {
+    flushPendingCanvasMove();
+    const input = event ? getNativeInteractionInput(event) : null;
     const activeMarqueeSelection = marqueeSelectionRef.current;
     if (activeMarqueeSelection) {
-      if (event && !matchesInteractionInput(event, activeMarqueeSelection)) {
+      if (input && !matchesInteractionInput(input, activeMarqueeSelection)) {
         return;
       }
 
@@ -2240,7 +2307,7 @@ export function Canvas({
     const activeResizeState = resizeStateRef.current;
     const activeInteraction = activeDragState || activeResizeState;
 
-    if (event && activeInteraction && !matchesInteractionInput(event, activeInteraction)) {
+    if (input && activeInteraction && !matchesInteractionInput(input, activeInteraction)) {
       return;
     }
 
@@ -2258,7 +2325,7 @@ export function Canvas({
       exitTextEditingForTransform();
       onElementsChange(elementsRef.current, { commit: true, selectedId: activeElementId });
     }
-  }, [exitTextEditingForTransform, onElementsChange, onSelect, onSelectMany, selectedId, selectedIds]);
+  }, [exitTextEditingForTransform, flushPendingCanvasMove, onElementsChange, onSelect, onSelectMany, selectedId, selectedIds]);
 
   useEffect(() => {
     if (isPreview || disabled) {
@@ -2278,6 +2345,14 @@ export function Canvas({
       window.removeEventListener('mouseup', handleGlobalElementUp);
     };
   }, [disabled, handleGlobalElementMove, handleGlobalElementUp, isPreview]);
+
+  useEffect(() => () => {
+    if (pendingCanvasMoveFrameRef.current !== null) {
+      window.cancelAnimationFrame(pendingCanvasMoveFrameRef.current);
+      pendingCanvasMoveFrameRef.current = null;
+    }
+    pendingCanvasMoveInputRef.current = null;
+  }, []);
 
   const handleCanvasElementDrop = useCallback(
     (event: React.DragEvent, forcedParentId?: string) => {
@@ -2599,12 +2674,12 @@ export function Canvas({
         minWidth: size.width,
         minHeight: size.height,
       }}
+      data-canvas-move-listener-scope="window-rAF"
+      data-canvas-transform-frame-policy="latest-event-per-animation-frame"
       onMouseUp={handleMouseUp}
       onPointerDown={handleCanvasPointerDown}
-      onPointerMove={(event) => handleGlobalElementMove(event.nativeEvent)}
       onPointerUp={(event) => handleGlobalElementUp(event.nativeEvent)}
       onPointerCancel={(event) => handleGlobalElementUp(event.nativeEvent)}
-      onMouseMove={(event) => handleGlobalElementMove(event.nativeEvent)}
       onClick={handleCanvasClick}
       onDoubleClick={handleCanvasDoubleClick}
       onDragOver={(event) => {

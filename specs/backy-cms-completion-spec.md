@@ -614,7 +614,7 @@ Use this file as the persistent baseline before any implementation pass.
 - Continued editor regression coverage for nested blocks and rich text selection flows.
 
 ### 11.3 Medium
-- Slower interactions due to rerenders on each canvas move.
+- Continue profiling dense-canvas sessions; drag/resize/marquee moves now use window-scoped latest-event-per-animation-frame coalescing, but large documents still need ongoing render-cost checks as new editor controls ship.
 - Continue auditing empty/404/403 UX coverage only for newly added admin/public surfaces; the current core admin lists and hosted public 404/401/403/500 route states are source-guarded.
 
 ## 12) Final quality bar before release

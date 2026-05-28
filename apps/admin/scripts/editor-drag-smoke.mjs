@@ -477,6 +477,18 @@ const assertCanvasEditorShortcutSource = () => {
   const deterministicCloneSource = deterministicCloneStart >= 0 && deterministicCloneEnd > deterministicCloneStart
     ? source.slice(deterministicCloneStart, deterministicCloneEnd)
     : '';
+  assert(
+    canvasSource.includes('const pendingCanvasMoveFrameRef = useRef<number | null>(null);') &&
+      canvasSource.includes('const pendingCanvasMoveInputRef = useRef<CanvasInteractionInput | null>(null);') &&
+      canvasSource.includes('pendingCanvasMoveFrameRef.current = window.requestAnimationFrame(() => {') &&
+      canvasSource.includes('window.cancelAnimationFrame(pendingCanvasMoveFrameRef.current);') &&
+      canvasSource.includes('flushPendingCanvasMove();') &&
+      canvasSource.includes('data-canvas-move-listener-scope="window-rAF"') &&
+      canvasSource.includes('data-canvas-transform-frame-policy="latest-event-per-animation-frame"') &&
+      !canvasSource.includes('onPointerMove={(event) => handleGlobalElementMove(event.nativeEvent)}') &&
+      !canvasSource.includes('onMouseMove={(event) => handleGlobalElementMove(event.nativeEvent)}'),
+    'Canvas drag, resize, and marquee movement must be window-scoped and coalesced to one latest move per animation frame instead of duplicating local and global move handlers.',
+  );
   assert(source.includes("['x', 'v', 'd', 'g', 'y', 'z']"), 'Editor mutation shortcut guard must include redo shortcut key Y');
   assert(source.includes("key === 'y' || (key === 'z' && e.shiftKey)") && source.includes('handleRedo();'), 'Editor keyboard handler must support Ctrl/Cmd+Y redo alongside Shift+Ctrl/Cmd+Z');
   assert(source.includes('Redo (Cmd/Ctrl+Y or Shift+Cmd/Ctrl+Z)'), 'Editor redo toolbar title must advertise both redo shortcuts');
