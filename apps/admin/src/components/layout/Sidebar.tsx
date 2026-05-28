@@ -244,6 +244,7 @@ export function Sidebar({
   const quickCreateStatusId = `${navigationId}-quick-create-status`;
   const railTooltipId = `${navigationId}-rail-tooltip`;
   const quickCreateActionStatus = `${quickCreateActions.length} create shortcut${quickCreateActions.length === 1 ? '' : 's'} available for ${activeSiteName}.`;
+  const getQuickCreateIntent = (action: (typeof SIDEBAR_QUICK_CREATE_ACTIONS)[number]) => action.search?.quickCreate || action.id;
   const getRailDescribedBy = (baseId: string) => (
     collapsed ? `${baseId} ${railTooltipId}` : baseId
   );
@@ -412,8 +413,13 @@ export function Sidebar({
           aria-describedby={quickCreateStatusId}
           data-testid={`${testIdPrefix}-quick-create`}
           data-collapsed={String(collapsed)}
+          data-action-state="ready"
           data-action-status={quickCreateActionStatus}
           data-target-site-id={activeSiteId}
+          data-target-site-name={activeSiteName}
+          data-target-site-status={activeSiteStatus}
+          data-permission-source={permissionSource}
+          data-permission-sync-state={permissionSyncState}
           data-quick-create-count={quickCreateActions.length}
         >
           <span id={quickCreateStatusId} className="sr-only" data-testid={`${testIdPrefix}-quick-create-status`}>
@@ -424,12 +430,15 @@ export function Sidebar({
               const Icon = action.icon;
               const isActive = isNavRouteActive(location.pathname, action.to);
               const actionStatus = `${action.label} available for ${activeSiteName}.`;
+              const quickCreateSearch = getQuickCreateSearch(action);
+              const quickCreateSearchValue = new URLSearchParams(quickCreateSearch).toString();
+              const quickCreateIntent = getQuickCreateIntent(action);
 
               return (
                 <Link
                   key={action.id}
                   to={action.to}
-                  search={getQuickCreateSearch(action)}
+                  search={quickCreateSearch}
                   onClick={onNavigate}
                   onMouseOver={(event) => showRailTooltip(action, event.currentTarget)}
                   onMouseEnter={(event) => showRailTooltip(action, event.currentTarget)}
@@ -459,7 +468,11 @@ export function Sidebar({
                   data-nav-area={action.area}
                   data-nav-route={action.to}
                   data-nav-active={String(isActive)}
+                  data-target-route={action.to}
+                  data-target-search={quickCreateSearchValue}
                   data-target-site-id={activeSiteId}
+                  data-target-site-status={activeSiteStatus}
+                  data-create-intent={quickCreateIntent}
                   data-required-permission={action.permissionKey}
                   data-action-state="ready"
                   data-action-status={actionStatus}

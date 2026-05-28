@@ -502,8 +502,15 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-testid={`${testIdPrefix}-quick-create-status`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-quick-create-${action.id}`}') &&
       sidebarSource.includes('data-quick-create-count={quickCreateActions.length}') &&
-      sidebarSource.includes('search={getQuickCreateSearch(action)}') &&
+      sidebarSource.includes('search={quickCreateSearch}') &&
+      sidebarSource.includes('const getQuickCreateIntent = (action: (typeof SIDEBAR_QUICK_CREATE_ACTIONS)[number]) => action.search?.quickCreate || action.id;') &&
+      sidebarSource.includes('const quickCreateSearchValue = new URLSearchParams(quickCreateSearch).toString();') &&
+      sidebarSource.includes('data-target-route={action.to}') &&
+      sidebarSource.includes('data-target-search={quickCreateSearchValue}') &&
+      sidebarSource.includes('data-create-intent={quickCreateIntent}') &&
       sidebarSource.includes('data-target-site-id={activeSiteId}') &&
+      sidebarSource.includes('data-target-site-status={activeSiteStatus}') &&
+      sidebarSource.includes('data-permission-sync-state={permissionSyncState}') &&
       sidebarSource.includes('data-required-permission={action.permissionKey}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-nav`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-density-controls`}') &&
@@ -2039,6 +2046,10 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const permissionSyncStatusText = permissionSyncStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const quickCreateStatusText = quickCreateStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const quickCreateSiteId = quickCreate?.getAttribute('data-target-site-id') || '';
+      const quickCreateSiteName = quickCreate?.getAttribute('data-target-site-name') || '';
+      const quickCreateSiteStatus = quickCreate?.getAttribute('data-target-site-status') || '';
+      const quickCreatePermissionSource = quickCreate?.getAttribute('data-permission-source') || '';
+      const quickCreatePermissionSyncState = quickCreate?.getAttribute('data-permission-sync-state') || '';
       const permissionSyncStateReady = [
         'synced',
         'syncing-role-defaults',
@@ -2085,15 +2096,25 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           quickCreate instanceof HTMLElement &&
           quickCreateStatus instanceof HTMLElement &&
           quickCreate.getAttribute('aria-describedby') === quickCreateStatus.id &&
+          quickCreate.getAttribute('data-action-state') === 'ready' &&
           quickCreate.getAttribute('data-action-status') === quickCreateStatusText &&
           quickCreate.getAttribute('data-quick-create-count') === '4' &&
+          quickCreateSiteId.length > 0 &&
+          quickCreateSiteName.length > 0 &&
+          quickCreateSiteStatus.length > 0 &&
+          quickCreatePermissionSource === permissionSource &&
+          quickCreatePermissionSyncState === permissionSyncState &&
           quickCreatePage instanceof HTMLAnchorElement &&
           quickCreatePage.href.includes('/pages/new') &&
           quickCreatePage.href.includes('siteId=') &&
           quickCreatePage.getAttribute('aria-describedby') === quickCreateStatus.id &&
           quickCreatePage.getAttribute('data-action-state') === 'ready' &&
           quickCreatePage.getAttribute('data-nav-route') === '/pages/new' &&
+          quickCreatePage.getAttribute('data-target-route') === '/pages/new' &&
+          quickCreatePage.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId &&
           quickCreatePage.getAttribute('data-target-site-id') === quickCreateSiteId &&
+          quickCreatePage.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
+          quickCreatePage.getAttribute('data-create-intent') === 'new-page' &&
           quickCreatePage.getAttribute('data-required-permission') === 'pages.edit' &&
           quickCreatePost instanceof HTMLAnchorElement &&
           quickCreatePost.href.includes('/blog/new') &&
@@ -2101,7 +2122,11 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           quickCreatePost.getAttribute('aria-describedby') === quickCreateStatus.id &&
           quickCreatePost.getAttribute('data-action-state') === 'ready' &&
           quickCreatePost.getAttribute('data-nav-route') === '/blog/new' &&
+          quickCreatePost.getAttribute('data-target-route') === '/blog/new' &&
+          quickCreatePost.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId &&
           quickCreatePost.getAttribute('data-target-site-id') === quickCreateSiteId &&
+          quickCreatePost.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
+          quickCreatePost.getAttribute('data-create-intent') === 'new-post' &&
           quickCreatePost.getAttribute('data-required-permission') === 'pages.edit' &&
           quickCreateProduct instanceof HTMLAnchorElement &&
           quickCreateProduct.href.includes('/products') &&
@@ -2110,7 +2135,11 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           quickCreateProduct.getAttribute('aria-describedby') === quickCreateStatus.id &&
           quickCreateProduct.getAttribute('data-action-state') === 'ready' &&
           quickCreateProduct.getAttribute('data-nav-route') === '/products' &&
+          quickCreateProduct.getAttribute('data-target-route') === '/products' &&
+          quickCreateProduct.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId + '&quickCreate=product' &&
           quickCreateProduct.getAttribute('data-target-site-id') === quickCreateSiteId &&
+          quickCreateProduct.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
+          quickCreateProduct.getAttribute('data-create-intent') === 'product' &&
           quickCreateProduct.getAttribute('data-required-permission') === 'commerce.edit' &&
           quickCreateForm instanceof HTMLAnchorElement &&
           quickCreateForm.href.includes('/forms') &&
@@ -2119,7 +2148,11 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           quickCreateForm.getAttribute('aria-describedby') === quickCreateStatus.id &&
           quickCreateForm.getAttribute('data-action-state') === 'ready' &&
           quickCreateForm.getAttribute('data-nav-route') === '/forms' &&
+          quickCreateForm.getAttribute('data-target-route') === '/forms' &&
+          quickCreateForm.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId + '&quickCreate=blank' &&
           quickCreateForm.getAttribute('data-target-site-id') === quickCreateSiteId &&
+          quickCreateForm.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
+          quickCreateForm.getAttribute('data-create-intent') === 'blank' &&
           quickCreateForm.getAttribute('data-required-permission') === 'forms.create',
         viewportHeight: window.innerHeight,
         documentScrollHeight: document.documentElement.scrollHeight,
@@ -2168,25 +2201,42 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
         quickCreateStatusText,
         quickCreateDescribedBy: quickCreate?.getAttribute('aria-describedby') || '',
         quickCreateSiteId,
+        quickCreateSiteName,
+        quickCreateSiteStatus,
+        quickCreatePermissionSource,
+        quickCreatePermissionSyncState,
+        quickCreateActionState: quickCreate?.getAttribute('data-action-state') || '',
         quickCreatePageHref: quickCreatePage instanceof HTMLAnchorElement ? quickCreatePage.href : '',
         quickCreatePageState: quickCreatePage?.getAttribute('data-action-state') || '',
         quickCreatePageStatus: quickCreatePage?.getAttribute('data-action-status') || '',
         quickCreatePageSiteId: quickCreatePage?.getAttribute('data-target-site-id') || '',
+        quickCreatePageTargetRoute: quickCreatePage?.getAttribute('data-target-route') || '',
+        quickCreatePageTargetSearch: quickCreatePage?.getAttribute('data-target-search') || '',
+        quickCreatePageIntent: quickCreatePage?.getAttribute('data-create-intent') || '',
         quickCreatePagePermission: quickCreatePage?.getAttribute('data-required-permission') || '',
         quickCreatePostHref: quickCreatePost instanceof HTMLAnchorElement ? quickCreatePost.href : '',
         quickCreatePostState: quickCreatePost?.getAttribute('data-action-state') || '',
         quickCreatePostStatus: quickCreatePost?.getAttribute('data-action-status') || '',
         quickCreatePostSiteId: quickCreatePost?.getAttribute('data-target-site-id') || '',
+        quickCreatePostTargetRoute: quickCreatePost?.getAttribute('data-target-route') || '',
+        quickCreatePostTargetSearch: quickCreatePost?.getAttribute('data-target-search') || '',
+        quickCreatePostIntent: quickCreatePost?.getAttribute('data-create-intent') || '',
         quickCreatePostPermission: quickCreatePost?.getAttribute('data-required-permission') || '',
         quickCreateProductHref: quickCreateProduct instanceof HTMLAnchorElement ? quickCreateProduct.href : '',
         quickCreateProductState: quickCreateProduct?.getAttribute('data-action-state') || '',
         quickCreateProductStatus: quickCreateProduct?.getAttribute('data-action-status') || '',
         quickCreateProductSiteId: quickCreateProduct?.getAttribute('data-target-site-id') || '',
+        quickCreateProductTargetRoute: quickCreateProduct?.getAttribute('data-target-route') || '',
+        quickCreateProductTargetSearch: quickCreateProduct?.getAttribute('data-target-search') || '',
+        quickCreateProductIntent: quickCreateProduct?.getAttribute('data-create-intent') || '',
         quickCreateProductPermission: quickCreateProduct?.getAttribute('data-required-permission') || '',
         quickCreateFormHref: quickCreateForm instanceof HTMLAnchorElement ? quickCreateForm.href : '',
         quickCreateFormState: quickCreateForm?.getAttribute('data-action-state') || '',
         quickCreateFormStatus: quickCreateForm?.getAttribute('data-action-status') || '',
         quickCreateFormSiteId: quickCreateForm?.getAttribute('data-target-site-id') || '',
+        quickCreateFormTargetRoute: quickCreateForm?.getAttribute('data-target-route') || '',
+        quickCreateFormTargetSearch: quickCreateForm?.getAttribute('data-target-search') || '',
+        quickCreateFormIntent: quickCreateForm?.getAttribute('data-create-intent') || '',
         quickCreateFormPermission: quickCreateForm?.getAttribute('data-required-permission') || '',
         sidebarDescribedBy: sidebar?.getAttribute('aria-describedby') || '',
         densityDescribedBy: density?.getAttribute('aria-describedby') || '',
@@ -2810,22 +2860,38 @@ const assertSidebarQuickCreateInteraction = async (client) => {
       const form = document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]');
       const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const siteId = quickCreate?.getAttribute('data-target-site-id') || '';
+      const siteStatus = quickCreate?.getAttribute('data-target-site-status') || '';
       return {
         ready: quickCreate instanceof HTMLElement &&
           status instanceof HTMLElement &&
           quickCreate.getAttribute('aria-describedby') === status.id &&
+          quickCreate.getAttribute('data-action-state') === 'ready' &&
+          quickCreate.getAttribute('data-action-status') === statusText &&
+          quickCreate.getAttribute('data-permission-source') &&
+          quickCreate.getAttribute('data-permission-sync-state') &&
+          quickCreate.getAttribute('data-target-site-name') &&
+          siteId.length > 0 &&
+          siteStatus.length > 0 &&
           statusText.includes('4 create shortcuts available for') &&
           page instanceof HTMLAnchorElement &&
           page.href.includes('/pages/new') &&
           page.href.includes('siteId=') &&
           page.getAttribute('data-action-state') === 'ready' &&
           page.getAttribute('data-target-site-id') === siteId &&
+          page.getAttribute('data-target-site-status') === siteStatus &&
+          page.getAttribute('data-target-route') === '/pages/new' &&
+          page.getAttribute('data-target-search') === 'siteId=' + siteId &&
+          page.getAttribute('data-create-intent') === 'new-page' &&
           page.getAttribute('data-required-permission') === 'pages.edit' &&
           post instanceof HTMLAnchorElement &&
           post.href.includes('/blog/new') &&
           post.href.includes('siteId=') &&
           post.getAttribute('data-action-state') === 'ready' &&
           post.getAttribute('data-target-site-id') === siteId &&
+          post.getAttribute('data-target-site-status') === siteStatus &&
+          post.getAttribute('data-target-route') === '/blog/new' &&
+          post.getAttribute('data-target-search') === 'siteId=' + siteId &&
+          post.getAttribute('data-create-intent') === 'new-post' &&
           post.getAttribute('data-required-permission') === 'pages.edit' &&
           product instanceof HTMLAnchorElement &&
           product.href.includes('/products') &&
@@ -2833,6 +2899,10 @@ const assertSidebarQuickCreateInteraction = async (client) => {
           product.href.includes('quickCreate=product') &&
           product.getAttribute('data-action-state') === 'ready' &&
           product.getAttribute('data-target-site-id') === siteId &&
+          product.getAttribute('data-target-site-status') === siteStatus &&
+          product.getAttribute('data-target-route') === '/products' &&
+          product.getAttribute('data-target-search') === 'siteId=' + siteId + '&quickCreate=product' &&
+          product.getAttribute('data-create-intent') === 'product' &&
           product.getAttribute('data-required-permission') === 'commerce.edit' &&
           form instanceof HTMLAnchorElement &&
           form.href.includes('/forms') &&
@@ -2840,21 +2910,41 @@ const assertSidebarQuickCreateInteraction = async (client) => {
           form.href.includes('quickCreate=blank') &&
           form.getAttribute('data-action-state') === 'ready' &&
           form.getAttribute('data-target-site-id') === siteId &&
+          form.getAttribute('data-target-site-status') === siteStatus &&
+          form.getAttribute('data-target-route') === '/forms' &&
+          form.getAttribute('data-target-search') === 'siteId=' + siteId + '&quickCreate=blank' &&
+          form.getAttribute('data-create-intent') === 'blank' &&
           form.getAttribute('data-required-permission') === 'forms.create',
         statusText,
         siteId,
+        siteStatus,
+        permissionSource: quickCreate?.getAttribute('data-permission-source') || '',
+        permissionSyncState: quickCreate?.getAttribute('data-permission-sync-state') || '',
+        actionState: quickCreate?.getAttribute('data-action-state') || '',
         pageHref: page instanceof HTMLAnchorElement ? page.href : '',
         pageState: page?.getAttribute('data-action-state') || '',
         pageStatus: page?.getAttribute('data-action-status') || '',
+        pageTargetRoute: page?.getAttribute('data-target-route') || '',
+        pageTargetSearch: page?.getAttribute('data-target-search') || '',
+        pageIntent: page?.getAttribute('data-create-intent') || '',
         postHref: post instanceof HTMLAnchorElement ? post.href : '',
         postState: post?.getAttribute('data-action-state') || '',
         postStatus: post?.getAttribute('data-action-status') || '',
+        postTargetRoute: post?.getAttribute('data-target-route') || '',
+        postTargetSearch: post?.getAttribute('data-target-search') || '',
+        postIntent: post?.getAttribute('data-create-intent') || '',
         productHref: product instanceof HTMLAnchorElement ? product.href : '',
         productState: product?.getAttribute('data-action-state') || '',
         productStatus: product?.getAttribute('data-action-status') || '',
+        productTargetRoute: product?.getAttribute('data-target-route') || '',
+        productTargetSearch: product?.getAttribute('data-target-search') || '',
+        productIntent: product?.getAttribute('data-create-intent') || '',
         formHref: form instanceof HTMLAnchorElement ? form.href : '',
         formState: form?.getAttribute('data-action-state') || '',
         formStatus: form?.getAttribute('data-action-status') || '',
+        formTargetRoute: form?.getAttribute('data-target-route') || '',
+        formTargetSearch: form?.getAttribute('data-target-search') || '',
+        formIntent: form?.getAttribute('data-create-intent') || '',
         body: document.body?.innerText?.slice(0, 900) || '',
       };
     })()`,
@@ -2938,19 +3028,29 @@ const assertSidebarQuickCreateInteraction = async (client) => {
       const stored = JSON.parse(localStorage.getItem('backy-auth-storage') || '{}');
       const commandStatus = document.querySelector('[data-testid="blog-create-command-action-status"]');
       const commandStatusText = commandStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      const secondaryStatus = document.querySelector('[data-testid="blog-create-command-secondary-action-status"]');
+      const secondaryStatusText = secondaryStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const back = document.querySelector('[data-testid="blog-create-back-to-blog"]');
       const focus = document.querySelector('[data-testid="blog-create-focus-toggle"]');
+      const secondaryActions = document.querySelector('[data-testid="blog-create-secondary-actions"]');
+      const moreActions = document.querySelector('[data-testid="blog-create-more-actions"]');
       const copy = document.querySelector('[data-testid="blog-create-copy-handoff"]');
       const download = document.querySelector('[data-testid="blog-create-download-handoff"]');
       const blogCommandActionsReady = commandStatus instanceof HTMLElement &&
+        secondaryStatus instanceof HTMLElement &&
         back instanceof HTMLButtonElement &&
         focus instanceof HTMLButtonElement &&
+        secondaryActions instanceof HTMLElement &&
+        moreActions instanceof HTMLElement &&
         copy instanceof HTMLButtonElement &&
         download instanceof HTMLButtonElement &&
         back.getAttribute('aria-describedby') === commandStatus.id &&
         focus.getAttribute('aria-describedby') === commandStatus.id &&
-        copy.getAttribute('aria-describedby') === commandStatus.id &&
-        download.getAttribute('aria-describedby') === commandStatus.id &&
+        secondaryActions.getAttribute('aria-describedby') === secondaryStatus.id &&
+        secondaryActions.getAttribute('data-action-state') === 'ready' &&
+        moreActions.getAttribute('aria-describedby') === secondaryStatus.id &&
+        copy.getAttribute('aria-describedby') === secondaryStatus.id &&
+        download.getAttribute('aria-describedby') === secondaryStatus.id &&
         back.getAttribute('data-action-state') === 'ready' &&
         focus.getAttribute('data-action-state') === 'ready' &&
         copy.getAttribute('data-action-state') === 'ready' &&
@@ -2959,8 +3059,10 @@ const assertSidebarQuickCreateInteraction = async (client) => {
         (focus.getAttribute('data-action-status') || '').includes('Focus blog creation canvas available.') &&
         (copy.getAttribute('data-action-status') || '').includes('Copy blog creation handoff available for site-demo') &&
         (download.getAttribute('data-action-status') || '').includes('Download blog creation handoff available for site-demo') &&
-        commandStatusText.includes(copy.getAttribute('data-action-status') || '') &&
-        commandStatusText.includes(download.getAttribute('data-action-status') || '');
+        commandStatusText.includes('Copy blog creation handoff available for site-demo') &&
+        commandStatusText.includes('Download blog creation handoff available for site-demo') &&
+        secondaryStatusText.includes('Copy blog creation handoff available for site-demo') &&
+        secondaryStatusText.includes('Download blog creation handoff available for site-demo');
       return {
         ready: window.location.pathname === '/blog/new' &&
           window.location.search.includes('siteId=site-demo') &&
@@ -2976,8 +3078,13 @@ const assertSidebarQuickCreateInteraction = async (client) => {
         hasTitle: Boolean(document.querySelector('[data-testid="blog-create-title-input"]')),
         commandStatusId: commandStatus?.id || '',
         commandStatusText,
+        secondaryStatusId: secondaryStatus?.id || '',
+        secondaryStatusText,
         backState: back?.getAttribute('data-action-state') || '',
         focusState: focus?.getAttribute('data-action-state') || '',
+        secondaryActionsState: secondaryActions?.getAttribute('data-action-state') || '',
+        secondaryActionsStatus: secondaryActions?.getAttribute('data-action-status') || '',
+        moreActionsDescribedBy: moreActions?.getAttribute('aria-describedby') || '',
         copyState: copy?.getAttribute('data-action-state') || '',
         downloadState: download?.getAttribute('data-action-state') || '',
         backStatus: back?.getAttribute('data-action-status') || '',
