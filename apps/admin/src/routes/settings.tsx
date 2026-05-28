@@ -2778,6 +2778,7 @@ function SettingsPage() {
   const saveButtonDisabled = isSaving || !canSaveActiveSettingsTab || !hasUnsavedChanges || activeBlockingValidationIssues.length > 0;
   const saveButtonLabel = saved ? 'Saved' : isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save changes' : 'No changes';
   const settingsWorkbarActionStatusId = 'settings-workbar-action-status';
+  const settingsHeaderSecondaryActionStatusId = 'settings-header-secondary-action-status';
   const settingsBusyReason = isSaving ? 'Settings are saving.' : null;
   const settingsConfigureDisabledReason = settingsBusyReason || (!canConfigureSettings ? configurePermissionTitle || 'Your account cannot configure settings.' : null);
   const settingsDiscardDisabledReason = settingsBusyReason
@@ -2799,6 +2800,11 @@ function SettingsPage() {
   const settingsSaveActionStatus = settingsSaveDisabledReason
     ? `${saveButtonLabel} unavailable: ${settingsSaveDisabledReason}`
     : `${saveButtonLabel} available.`;
+  const settingsHeaderSecondaryActionState = settingsConfigureDisabledReason ? 'blocked' : 'ready';
+  const settingsHeaderSecondaryActionStatus = [
+    settingsCopyHandoffActionStatus,
+    settingsDownloadJsonActionStatus,
+  ].join(' ');
   const getSettingsCompletionGateCopyActionStatus = (gate: BackyCompletionGate) => (
     settingsConfigureDisabledReason
       ? `Copy ${gate.label} command unavailable: ${settingsConfigureDisabledReason}`
@@ -4100,6 +4106,13 @@ function SettingsPage() {
           >
             {settingsWorkbarActionStatus}
           </span>
+          <span
+            id={settingsHeaderSecondaryActionStatusId}
+            className="sr-only"
+            data-testid="settings-header-secondary-action-status"
+          >
+            {settingsHeaderSecondaryActionStatus}
+          </span>
           {hasUnsavedChanges && (
             <Button
               variant="ghost"
@@ -4115,25 +4128,36 @@ function SettingsPage() {
               Discard changes
             </Button>
           )}
-          <details className="group relative" data-testid="settings-header-secondary-actions">
+          <details
+            className="group relative"
+            aria-describedby={settingsHeaderSecondaryActionStatusId}
+            data-action-state={settingsHeaderSecondaryActionState}
+            data-action-status={settingsHeaderSecondaryActionStatus}
+            data-target-settings-tab={activeTab}
+            data-testid="settings-header-secondary-actions"
+            data-default-collapsed="true"
+          >
             <summary
               className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
               aria-label="More settings actions"
+              aria-describedby={settingsHeaderSecondaryActionStatusId}
+              data-testid="settings-header-more-actions"
             >
               <MoreHorizontal className="size-4" />
               More actions
               <span className="sr-only">Copy handoff and Download JSON</span>
             </summary>
-            <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-52">
+            <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-52" data-testid="settings-header-secondary-action-menu">
               <button
                 type="button"
                 disabled={Boolean(settingsConfigureDisabledReason)}
                 title={settingsConfigureDisabledReason || undefined}
                 onClick={() => void copySettingsHandoffText(settingsHandoffText, 'Settings handoff manifest')}
-                aria-describedby={settingsWorkbarActionStatusId}
-                data-action-state={settingsConfigureDisabledReason ? 'blocked' : 'ready'}
+                aria-describedby={settingsHeaderSecondaryActionStatusId}
+                data-action-state={settingsHeaderSecondaryActionState}
                 data-action-status={settingsCopyHandoffActionStatus}
                 data-disabled-reason={settingsConfigureDisabledReason || undefined}
+                data-target-settings-tab={activeTab}
                 className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="settings-header-copy-handoff"
               >
@@ -4145,10 +4169,11 @@ function SettingsPage() {
                 disabled={Boolean(settingsConfigureDisabledReason)}
                 title={settingsConfigureDisabledReason || undefined}
                 onClick={downloadSettingsHandoff}
-                aria-describedby={settingsWorkbarActionStatusId}
-                data-action-state={settingsConfigureDisabledReason ? 'blocked' : 'ready'}
+                aria-describedby={settingsHeaderSecondaryActionStatusId}
+                data-action-state={settingsHeaderSecondaryActionState}
                 data-action-status={settingsDownloadJsonActionStatus}
                 data-disabled-reason={settingsConfigureDisabledReason || undefined}
+                data-target-settings-tab={activeTab}
                 className="inline-flex min-h-10 items-center justify-start gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
                 data-testid="settings-header-download-json"
               >

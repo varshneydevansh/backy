@@ -145,14 +145,21 @@ const assertSettingsSourceContracts = () => {
 	    'Copy media handoff',
 	    'Copy design impact',
     'data-testid="settings-header-secondary-actions"',
+    'data-testid="settings-header-secondary-action-status"',
+    'data-testid="settings-header-more-actions"',
+    'data-testid="settings-header-secondary-action-menu"',
     'data-testid="settings-header-copy-handoff"',
     'data-testid="settings-header-download-json"',
     'data-testid="settings-header-discard"',
     'data-testid="settings-header-save"',
     "const settingsWorkbarActionStatusId = 'settings-workbar-action-status';",
+    "const settingsHeaderSecondaryActionStatusId = 'settings-header-secondary-action-status';",
     'const settingsWorkbarActionStatus = [',
+    'const settingsHeaderSecondaryActionStatus = [',
     'data-testid="settings-header-action-group"',
     'data-testid="settings-workbar-action-status"',
+    'data-action-status={settingsHeaderSecondaryActionStatus}',
+    'data-target-settings-tab={activeTab}',
     'data-action-status={settingsWorkbarActionStatus}',
     'data-action-status={settingsCopyHandoffActionStatus}',
     'data-action-status={settingsDownloadJsonActionStatus}',
@@ -471,13 +478,18 @@ const assertSettingsSourceContracts = () => {
   );
   assert(
     settingsRoute.includes("const settingsWorkbarActionStatusId = 'settings-workbar-action-status';") &&
+      settingsRoute.includes("const settingsHeaderSecondaryActionStatusId = 'settings-header-secondary-action-status';") &&
       settingsRoute.includes('const settingsWorkbarActionStatus = [') &&
+      settingsRoute.includes('const settingsHeaderSecondaryActionStatus = [') &&
       settingsRoute.includes('data-testid="settings-header-action-group"') &&
       settingsRoute.includes('data-testid="settings-workbar-action-status"') &&
+      settingsRoute.includes('data-testid="settings-header-secondary-action-status"') &&
       settingsRoute.includes('aria-describedby={settingsWorkbarActionStatusId}') &&
       settingsRoute.includes('data-action-status={settingsWorkbarActionStatus}') &&
+      settingsRoute.includes('data-action-status={settingsHeaderSecondaryActionStatus}') &&
       settingsRoute.includes('data-action-status={settingsCopyHandoffActionStatus}') &&
       settingsRoute.includes('data-action-status={settingsDownloadJsonActionStatus}') &&
+      settingsRoute.includes('data-target-settings-tab={activeTab}') &&
       settingsRoute.includes('data-action-status={settingsDiscardActionStatus}') &&
       settingsRoute.includes('data-action-status={settingsSaveActionStatus}') &&
       settingsRoute.includes('data-disabled-reason={settingsSaveDisabledReason || undefined}'),
@@ -1210,6 +1222,8 @@ const navigateToSettings = async (client) => {
 	      launchReadinessText: document.querySelector('[data-testid="settings-launch-readiness"]')?.textContent || '',
 	      workbarActionStatusId: document.querySelector('[data-testid="settings-workbar-action-status"]')?.id || '',
 	      workbarActionStatusText: document.querySelector('[data-testid="settings-workbar-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+	      headerSecondaryActionStatusId: document.querySelector('[data-testid="settings-header-secondary-action-status"]')?.id || '',
+	      headerSecondaryActionStatusText: document.querySelector('[data-testid="settings-header-secondary-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
 	      headerActionGroupRole: document.querySelector('[data-testid="settings-header-action-group"]')?.getAttribute('role') || '',
 	      headerActionGroupLabel: document.querySelector('[data-testid="settings-header-action-group"]')?.getAttribute('aria-label') || '',
 	      headerActionGroupDescribedBy: document.querySelector('[data-testid="settings-header-action-group"]')?.getAttribute('aria-describedby') || '',
@@ -1219,12 +1233,23 @@ const navigateToSettings = async (client) => {
 	      headerSaveStatus: document.querySelector('[data-testid="settings-header-save"]')?.getAttribute('data-action-status') || '',
 	      headerSaveReason: document.querySelector('[data-testid="settings-header-save"]')?.getAttribute('data-disabled-reason') || '',
 	      headerSaveDescribedBy: document.querySelector('[data-testid="settings-header-save"]')?.getAttribute('aria-describedby') || '',
+	      headerSecondaryCollapsed: document.querySelector('[data-testid="settings-header-secondary-actions"]') instanceof HTMLDetailsElement &&
+	        document.querySelector('[data-testid="settings-header-secondary-actions"]')?.open === false &&
+	        document.querySelector('[data-testid="settings-header-secondary-actions"]')?.getAttribute('data-default-collapsed') === 'true',
+	      headerSecondaryDescribedBy: document.querySelector('[data-testid="settings-header-secondary-actions"]')?.getAttribute('aria-describedby') || '',
+	      headerSecondaryState: document.querySelector('[data-testid="settings-header-secondary-actions"]')?.getAttribute('data-action-state') || '',
+	      headerSecondaryStatus: document.querySelector('[data-testid="settings-header-secondary-actions"]')?.getAttribute('data-action-status') || '',
+	      headerSecondaryTargetTab: document.querySelector('[data-testid="settings-header-secondary-actions"]')?.getAttribute('data-target-settings-tab') || '',
+	      headerMoreActionsDescribedBy: document.querySelector('[data-testid="settings-header-more-actions"]')?.getAttribute('aria-describedby') || '',
+	      headerSecondaryMenu: Boolean(document.querySelector('[data-testid="settings-header-secondary-action-menu"]')),
 	      headerCopyState: document.querySelector('[data-testid="settings-header-copy-handoff"]')?.getAttribute('data-action-state') || '',
 	      headerCopyStatus: document.querySelector('[data-testid="settings-header-copy-handoff"]')?.getAttribute('data-action-status') || '',
 	      headerCopyDescribedBy: document.querySelector('[data-testid="settings-header-copy-handoff"]')?.getAttribute('aria-describedby') || '',
+	      headerCopyTargetTab: document.querySelector('[data-testid="settings-header-copy-handoff"]')?.getAttribute('data-target-settings-tab') || '',
 	      headerDownloadState: document.querySelector('[data-testid="settings-header-download-json"]')?.getAttribute('data-action-state') || '',
 	      headerDownloadStatus: document.querySelector('[data-testid="settings-header-download-json"]')?.getAttribute('data-action-status') || '',
 	      headerDownloadDescribedBy: document.querySelector('[data-testid="settings-header-download-json"]')?.getAttribute('aria-describedby') || '',
+	      headerDownloadTargetTab: document.querySelector('[data-testid="settings-header-download-json"]')?.getAttribute('data-target-settings-tab') || '',
 	      workbar: Boolean(document.querySelector('[data-testid="settings-sticky-workbar"]')),
 	      workbarDescribedBy: document.querySelector('[data-testid="settings-sticky-workbar"]')?.getAttribute('aria-describedby') || '',
 	      workbarActionStatusData: document.querySelector('[data-testid="settings-sticky-workbar"]')?.getAttribute('data-action-status') || '',
@@ -1294,6 +1319,7 @@ const navigateToSettings = async (client) => {
       state.launchReadinessText.includes('Database gate') &&
 	      state.launchReadinessText.includes('Provider gate') &&
 	      state.workbarActionStatusId === 'settings-workbar-action-status' &&
+	      state.headerSecondaryActionStatusId === 'settings-header-secondary-action-status' &&
 	      state.workbarActionStatusText.includes('Previous section available') &&
 	      state.workbarActionStatusText.includes('Next section available') &&
 	      state.workbarActionStatusText.includes('Copy handoff available.') &&
@@ -1308,12 +1334,23 @@ const navigateToSettings = async (client) => {
 	      state.headerSaveStatus.includes('No changes unavailable') &&
 	      state.headerSaveReason === 'Make a settings change before saving.' &&
 	      state.headerSaveDescribedBy === state.workbarActionStatusId &&
+	      state.headerSecondaryCollapsed &&
+	      state.headerSecondaryDescribedBy === state.headerSecondaryActionStatusId &&
+	      state.headerSecondaryState === 'ready' &&
+	      state.headerSecondaryStatus === state.headerSecondaryActionStatusText &&
+	      state.headerSecondaryStatus.includes('Copy handoff available.') &&
+	      state.headerSecondaryStatus.includes('Download JSON available.') &&
+	      state.headerSecondaryTargetTab === 'general' &&
+	      state.headerMoreActionsDescribedBy === state.headerSecondaryActionStatusId &&
+	      state.headerSecondaryMenu &&
 	      state.headerCopyState === 'ready' &&
 	      state.headerCopyStatus === 'Copy handoff available.' &&
-	      state.headerCopyDescribedBy === state.workbarActionStatusId &&
+	      state.headerCopyDescribedBy === state.headerSecondaryActionStatusId &&
+	      state.headerCopyTargetTab === state.headerSecondaryTargetTab &&
 	      state.headerDownloadState === 'ready' &&
 	      state.headerDownloadStatus === 'Download JSON available.' &&
-	      state.headerDownloadDescribedBy === state.workbarActionStatusId &&
+	      state.headerDownloadDescribedBy === state.headerSecondaryActionStatusId &&
+	      state.headerDownloadTargetTab === state.headerSecondaryTargetTab &&
 	      state.workbar &&
 	      state.workbarDescribedBy === state.workbarActionStatusId &&
 	      state.workbarActionStatusData === state.workbarActionStatusText &&
