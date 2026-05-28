@@ -5290,6 +5290,21 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
     templateCloneFields: Array<"frontendDesignTemplateId" | "designTemplateId">;
     backyCanvasTemplateField: "templateId";
     customFrontendTemplateField: "frontendDesignTemplateId";
+    adminEntryPoints: {
+      pageBackyCanvas: string;
+      pageCustomFrontend: string;
+      blogBackyCanvas: string;
+      blogCustomFrontend: string;
+      productBackyCanvas: string;
+      productCustomFrontend: string;
+      formBackyCanvas: string;
+      formCustomFrontend: string;
+      collectionBackyCanvas: string;
+      collectionCustomFrontend: string;
+      reusableSectionBackyCanvas: string;
+      reusableSectionCustomFrontend: string;
+      [key: string]: unknown;
+    };
     rule: string;
     [key: string]: unknown;
   };

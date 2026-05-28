@@ -68,9 +68,41 @@
             },
             "backyCanvasTemplateField": { "const": "templateId" },
             "customFrontendTemplateField": { "const": "frontendDesignTemplateId" },
+            "adminEntryPoints": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "properties": {
+                "pageBackyCanvas": { "type": "string", "minLength": 1 },
+                "pageCustomFrontend": { "type": "string", "minLength": 1 },
+                "blogBackyCanvas": { "type": "string", "minLength": 1 },
+                "blogCustomFrontend": { "type": "string", "minLength": 1 },
+                "productBackyCanvas": { "type": "string", "minLength": 1 },
+                "productCustomFrontend": { "type": "string", "minLength": 1 },
+                "formBackyCanvas": { "type": "string", "minLength": 1 },
+                "formCustomFrontend": { "type": "string", "minLength": 1 },
+                "collectionBackyCanvas": { "type": "string", "minLength": 1 },
+                "collectionCustomFrontend": { "type": "string", "minLength": 1 },
+                "reusableSectionBackyCanvas": { "type": "string", "minLength": 1 },
+                "reusableSectionCustomFrontend": { "type": "string", "minLength": 1 }
+              },
+              "required": [
+                "pageBackyCanvas",
+                "pageCustomFrontend",
+                "blogBackyCanvas",
+                "blogCustomFrontend",
+                "productBackyCanvas",
+                "productCustomFrontend",
+                "formBackyCanvas",
+                "formCustomFrontend",
+                "collectionBackyCanvas",
+                "collectionCustomFrontend",
+                "reusableSectionBackyCanvas",
+                "reusableSectionCustomFrontend"
+              ]
+            },
             "rule": { "type": "string", "minLength": 1 }
           },
-          "required": ["templateCloneFields", "backyCanvasTemplateField", "customFrontendTemplateField", "rule"]
+          "required": ["templateCloneFields", "backyCanvasTemplateField", "customFrontendTemplateField", "adminEntryPoints", "rule"]
         },
         "designState": {
           "type": "object",

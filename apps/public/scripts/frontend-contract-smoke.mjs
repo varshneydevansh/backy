@@ -246,10 +246,20 @@ assert(
     customFrontendAgentHandoffLib.includes('frontendDesignManagement') &&
     customFrontendAgentHandoffLib.includes('buildBackyContentDesignPayload') &&
     customFrontendAgentHandoffLib.includes('frontendDesignTemplateId') &&
+    customFrontendAgentHandoffLib.includes('adminEntryPoints') &&
+    customFrontendAgentHandoffLib.includes('productCustomFrontend') &&
+    customFrontendAgentHandoffLib.includes('formCustomFrontend') &&
+    customFrontendAgentHandoffLib.includes('collectionCustomFrontend') &&
+    customFrontendAgentHandoffLib.includes('reusableSectionCustomFrontend') &&
     frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
     frontendManifestSchema.includes('"customFrontendAgentHandoff": { "$ref": "#/$defs/customFrontendAgentHandoff" }') &&
     frontendManifestSchema.includes('"backy.custom-frontend-agent-handoff.v1"') &&
     frontendManifestSchema.includes('"frontendDesignManagement"') &&
+    frontendManifestSchema.includes('"adminEntryPoints"') &&
+    frontendManifestSchema.includes('"productCustomFrontend"') &&
+    frontendManifestSchema.includes('"formCustomFrontend"') &&
+    frontendManifestSchema.includes('"collectionCustomFrontend"') &&
+    frontendManifestSchema.includes('"reusableSectionCustomFrontend"') &&
     frontendManifestSchema.includes('"templateCloneFields"') &&
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     generatedSdkTypes.includes('"x-backy-custom-frontend-agent-handoff"?: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&

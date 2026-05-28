@@ -95,6 +95,7 @@ import { siteMatchesIdentifier } from "@/lib/siteSelection";
 import { getLocalBackendOrigin } from "@/lib/localBackendOrigin";
 import {
   CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,
+  buildCustomFrontendAgentAdminEntryPoints,
   buildCustomFrontendAgentHandoff,
 } from "@backy-cms/core";
 import type {
@@ -1106,12 +1107,7 @@ const buildAdminSiteCustomFrontendAgentHandoff = ({
   publicSiteApiUrl: string;
 }) => {
   const baseHandoff = buildCustomFrontendAgentHandoff(siteId);
-  const canvasEntryPoints = {
-    pageBackyCanvas: `/pages/new?siteId=${siteIdParam}&templateSource=backy-canvas`,
-    pageCustomFrontend: `/pages/new?siteId=${siteIdParam}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`,
-    blogBackyCanvas: `/blog/new?siteId=${siteIdParam}&templateSource=backy-canvas`,
-    blogCustomFrontend: `/blog/new?siteId=${siteIdParam}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`,
-  };
+  const adminEntryPoints = buildCustomFrontendAgentAdminEntryPoints(siteIdParam);
 
   return {
     ...baseHandoff,
@@ -1137,11 +1133,11 @@ const buildAdminSiteCustomFrontendAgentHandoff = ({
       panel: "#site-handoff",
       frontendDesignPanel: "#site-frontend-design",
       templateRegistryPanel: "#site-frontend-design",
-      canvasEntryPoints,
+      adminEntryPoints,
     },
     contentCreation: {
       ...baseHandoff.contentCreation,
-      canvasEntryPoints,
+      adminEntryPoints,
     },
   };
 };
@@ -6368,7 +6364,7 @@ function EditSitePage() {
                   <p className="mt-1 max-w-3xl text-sm text-teal-900/80">
                     Give this block to any frontend-building agent. It points to the docs,
                     manifest, OpenAPI, render payloads, frontend-design contract, and
-                    canvas clone entry points for Backy-generated or custom-frontend templates.
+                    creation entry points for Backy-generated or custom-frontend templates.
                   </p>
                 </div>
                 <button
@@ -6407,20 +6403,13 @@ function EditSitePage() {
               </div>
               <div
                 className="mt-3 grid gap-2 text-xs md:grid-cols-2"
-                data-testid="site-agent-canvas-entry-points"
+                data-testid="site-agent-content-entry-points"
               >
-                <code className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
-                  {siteCustomFrontendAgentHandoff.contentCreation.canvasEntryPoints.pageBackyCanvas}
-                </code>
-                <code className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
-                  {siteCustomFrontendAgentHandoff.contentCreation.canvasEntryPoints.pageCustomFrontend}
-                </code>
-                <code className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
-                  {siteCustomFrontendAgentHandoff.contentCreation.canvasEntryPoints.blogBackyCanvas}
-                </code>
-                <code className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
-                  {siteCustomFrontendAgentHandoff.contentCreation.canvasEntryPoints.blogCustomFrontend}
-                </code>
+                {Object.entries(siteCustomFrontendAgentHandoff.contentCreation.adminEntryPoints).map(([entryKey, entryPoint]) => (
+                  <code key={entryKey} className="break-all rounded-md bg-background px-2 py-1 text-teal-950">
+                    {entryPoint}
+                  </code>
+                ))}
               </div>
             </div>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">

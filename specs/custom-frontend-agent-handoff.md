@@ -31,7 +31,7 @@ The same contract is visible inside the site detail workspace under **Frontend h
 - `backy.custom-frontend-agent-handoff.v1`
 - `specs/custom-frontend-agent-handoff.md`
 - site-specific manifest, OpenAPI, render, frontend-design, and admin template endpoints
-- copyable page/blog canvas entry points for both `templateSource=backy-canvas` and `templateSource=custom-frontend`
+- copyable admin entry points for page, blog, product, form, collection, and reusable-section creation from either Backy-canvas starters or captured custom-frontend templates
 
 This is the human-facing place to copy into another AI/frontend agent before it builds or edits a website on top of Backy.
 
@@ -60,8 +60,8 @@ Do not flatten a Backy canvas page into plain HTML/text unless the target is a t
 
 Backy supports both Backy-canvas templates and captured custom-frontend templates. New content should use the same template source contract instead of inventing a parallel creation path.
 
-- Pages/blog posts: use the admin create APIs with `frontendDesignTemplateId`, `designTemplateId`, or the Backy canvas starter template fields advertised by the manifest/OpenAPI.
-- Forms/collections/products/sections: use the captured frontend design template registry exposed from the site frontend-design contract when available.
+- Pages/blog posts: use the admin create APIs with `frontendDesignTemplateId`, `designTemplateId`, or the Backy canvas starter template fields advertised by the manifest/OpenAPI. Admin routes are exposed under `contentCreation.adminEntryPoints.page*` and `contentCreation.adminEntryPoints.blog*`.
+- Forms/collections/products/sections: use the captured frontend design template registry exposed from the site frontend-design contract when available. Admin routes are exposed under `contentCreation.adminEntryPoints.product*`, `form*`, `collection*`, and `reusableSection*`.
 - After creation, persist editable content through the Backy APIs, not through a frontend-local JSON file.
 
 The expected behavior is Wix-like: every created page or post should open in the Backy canvas editor, retain the selected site's fonts/colors/chrome, and allow precise element-level edits.

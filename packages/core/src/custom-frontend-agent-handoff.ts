@@ -19,6 +19,21 @@ export const CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS = [
   'meta.frontendDesign*',
 ] as const;
 
+export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
+  pageBackyCanvas: `/pages/new?siteId=${siteId}&templateSource=backy-canvas`,
+  pageCustomFrontend: `/pages/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`,
+  blogBackyCanvas: `/blog/new?siteId=${siteId}&templateSource=backy-canvas`,
+  blogCustomFrontend: `/blog/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`,
+  productBackyCanvas: `/products?siteId=${siteId}&quickCreate=product`,
+  productCustomFrontend: `/products?siteId=${siteId}&frontendTemplate=:templateId`,
+  formBackyCanvas: `/forms?siteId=${siteId}&quickCreate=blank`,
+  formCustomFrontend: `/forms?siteId=${siteId}&frontendTemplate=:templateId`,
+  collectionBackyCanvas: `/collections?siteId=${siteId}&draft=new`,
+  collectionCustomFrontend: `/collections?siteId=${siteId}&frontendTemplate=:templateId`,
+  reusableSectionBackyCanvas: `/reusable-sections?siteId=${siteId}`,
+  reusableSectionCustomFrontend: `/reusable-sections?siteId=${siteId}&frontendTemplate=:templateId`,
+});
+
 export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
   schemaVersion: CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA,
   source: 'public-manifest-openapi-contract',
@@ -76,6 +91,7 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
     templateCloneFields: ['frontendDesignTemplateId', 'designTemplateId'],
     backyCanvasTemplateField: 'templateId',
     customFrontendTemplateField: 'frontendDesignTemplateId',
+    adminEntryPoints: buildCustomFrontendAgentAdminEntryPoints(siteId),
     rule: 'Create page, blog, product, form, collection, and section content through Backy APIs so every result can reopen in the canvas editor.',
   },
   designState: {
