@@ -226,6 +226,21 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes('createTemplateActionStatus'),
     'Forms primary create actions must expose a shared action-status contract with ready/blocked state and target-site metadata.',
   );
+  {
+    const quickCreateEffectStart = source.indexOf("if (routeSearch.quickCreate !== 'blank')");
+    const quickCreateEffectEnd = source.indexOf('}, [activeSiteId, isFormsBusy, isPermissionMatrixPending, routeSearch.quickCreate]);', quickCreateEffectStart);
+    const quickCreateEffectBlock = quickCreateEffectStart >= 0
+      ? source.slice(quickCreateEffectStart, quickCreateEffectEnd >= 0 ? quickCreateEffectEnd : quickCreateEffectStart + 2200)
+      : '';
+    assert(
+      quickCreateEffectBlock.includes('void createBlankStandaloneForm();') &&
+        quickCreateEffectBlock.includes('setSelectedFormId(null);') &&
+        quickCreateEffectBlock.includes('setFormDraft(null);') &&
+        !quickCreateEffectBlock.includes('New blank form creation is ready') &&
+        !quickCreateEffectBlock.includes("document.querySelector<HTMLButtonElement>('[data-testid=\"forms-create-blank-button\"]')?.focus()"),
+      'Forms sidebar quick-create blank route must create the standalone form immediately instead of preparing a second click.',
+    );
+  }
   assert(source.includes('title="No forms match this library view"'), 'Forms library filter empty state must keep the shared title visible');
   assert(source.includes('Change the search, source, state, destination, or readiness filters to broaden the form library.'), 'Forms library filter empty state must explain filter recovery');
   assert(source.includes('title="No consent fields detected"'), 'Forms consent export panel must keep the no-consent-fields empty-state title visible');

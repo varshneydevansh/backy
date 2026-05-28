@@ -3351,29 +3351,33 @@ const assertSidebarQuickCreateInteraction = async (client) => {
     client,
     `(() => {
       const body = document.body?.innerText || '';
+      const routeParams = new URLSearchParams(window.location.search);
+      const builderPanel = document.querySelector('[data-testid="form-builder-panel"]');
+      const nameInput = document.querySelector('[data-testid="form-builder-name-input"]');
+      const saveButton = document.querySelector('[data-testid="form-builder-save-button"]');
       const commandCenter = document.querySelector('[data-testid="forms-command-center"]');
-      const createButton = document.querySelector('[data-testid="forms-create-blank-button"]');
-      const status = document.querySelector('[data-testid="forms-create-action-status"]');
-      const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       return {
         ready: window.location.pathname === '/forms' &&
           window.location.search.includes('siteId=site-demo') &&
+          routeParams.get('formId')?.length > 0 &&
+          builderPanel instanceof HTMLElement &&
+          nameInput instanceof HTMLInputElement &&
+          nameInput.value.startsWith('blank-form-') &&
+          saveButton instanceof HTMLButtonElement &&
+          body.includes('Blank standalone form created. Add fields or save changes in the builder.') &&
           commandCenter instanceof HTMLElement &&
-          commandCenter.getAttribute('data-quick-create-prepared') === 'true' &&
-          commandCenter.getAttribute('data-quick-create-target') === 'blank' &&
-          createButton instanceof HTMLButtonElement &&
-          createButton.getAttribute('data-action-state') === 'ready' &&
-          createButton.getAttribute('aria-describedby') === status?.id &&
-          statusText.includes('New blank form available for site-demo'),
+          commandCenter.getAttribute('data-quick-create-prepared') === 'false',
         path: window.location.pathname,
         search: window.location.search,
+        formId: routeParams.get('formId') || '',
+        hasBuilderPanel: builderPanel instanceof HTMLElement,
+        builderText: builderPanel?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 500) || '',
+        hasNameInput: nameInput instanceof HTMLInputElement,
+        nameValue: nameInput instanceof HTMLInputElement ? nameInput.value : '',
+        hasSaveButton: saveButton instanceof HTMLButtonElement,
+        saveButtonState: saveButton?.getAttribute('data-action-state') || '',
         commandCenterPrepared: commandCenter?.getAttribute('data-quick-create-prepared') || '',
         commandCenterTarget: commandCenter?.getAttribute('data-quick-create-target') || '',
-        hasCreateButton: createButton instanceof HTMLButtonElement,
-        createButtonFocused: document.activeElement === createButton,
-        createButtonState: createButton?.getAttribute('data-action-state') || '',
-        createButtonStatus: createButton?.getAttribute('data-action-status') || '',
-        statusText,
         body: body.slice(0, 900),
       };
     })()`,

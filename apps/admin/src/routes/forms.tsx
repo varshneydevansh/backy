@@ -2264,8 +2264,6 @@ function FormsRoute() {
     setSelectedFormId(null);
     setFormDraft(null);
     setError(null);
-    setNotice('New blank form creation is ready. Choose New blank form to create and edit it.');
-    setPreparedQuickCreate('blank');
     updateFormsRouteSearch({
       formId: undefined,
       q: undefined,
@@ -2277,9 +2275,7 @@ function FormsRoute() {
       submissionQ: undefined,
     });
 
-    window.requestAnimationFrame(() => {
-      document.querySelector<HTMLButtonElement>('[data-testid="forms-create-blank-button"]')?.focus();
-    });
+    void createBlankStandaloneForm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSiteId, isFormsBusy, isPermissionMatrixPending, routeSearch.quickCreate]);
 
