@@ -350,6 +350,7 @@ const RULER_MINOR_STEP = 50;
 const CANVAS_ZOOM_MIN = 0.25;
 const CANVAS_ZOOM_MAX = 2;
 const CANVAS_ZOOM_STEP = 0.1;
+const CANVAS_ZOOM_PERCENT_STEP = 5;
 const CANVAS_WHEEL_ZOOM_STEP = 0.08;
 const CANVAS_WHEEL_DELTA_LINE_MULTIPLIER = 16;
 const CANVAS_WHEEL_DELTA_PAGE_MULTIPLIER = 800;
@@ -2155,6 +2156,16 @@ export function CanvasEditor({
   const handleZoomOut = useCallback(() => {
     zoomCanvasAtPoint((current) => current - CANVAS_ZOOM_STEP);
   }, [zoomCanvasAtPoint]);
+
+  const handleCanvasZoomPercentChange = useCallback((value: string) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    setIsCanvasAutoFit(false);
+    setCanvasZoomValue(parsed / 100);
+  }, [setCanvasZoomValue]);
 
   const handleCanvasWheelZoom = useCallback((event: WheelEvent) => {
     if (!(event.metaKey || event.ctrlKey)) {
@@ -9100,6 +9111,25 @@ export function CanvasEditor({
                     Auto
                   </span>
                 )}
+                <label className="hidden h-7 items-center sm:flex" title="Canvas zoom">
+                  <span className="sr-only">Canvas zoom</span>
+                  <input
+                    type="range"
+                    min={CANVAS_ZOOM_MIN * 100}
+                    max={CANVAS_ZOOM_MAX * 100}
+                    step={CANVAS_ZOOM_PERCENT_STEP}
+                    value={zoomPercent}
+                    onChange={(event) => handleCanvasZoomPercentChange(event.target.value)}
+                    className="h-7 w-24 accent-sky-600"
+                    aria-label="Canvas zoom"
+                    data-testid="editor-zoom-slider"
+                    data-zoom-min={CANVAS_ZOOM_MIN * 100}
+                    data-zoom-max={CANVAS_ZOOM_MAX * 100}
+                    data-zoom-step={CANVAS_ZOOM_PERCENT_STEP}
+                    data-action-state="ready"
+                    data-action-status={`Canvas zoom slider set to ${zoomPercent}%.`}
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={handleZoomIn}

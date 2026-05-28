@@ -607,6 +607,7 @@ const assertCanvasEditorShortcutSource = () => {
   );
   assert(source.includes('data-testid="editor-zoom-controls"') && source.includes('data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"'), 'Editor zoom controls must expose shortcut metadata for custom admin clients');
   assert(source.includes('data-testid="editor-zoom-out"') && source.includes('aria-keyshortcuts="Control+- Meta+-"') && source.includes('data-testid="editor-zoom-in"') && source.includes('aria-keyshortcuts="Control+= Meta+="') && source.includes('data-testid="editor-zoom-fit"') && source.includes('aria-keyshortcuts="Control+0 Meta+0"'), 'Editor zoom buttons must expose keyboard shortcut metadata');
+  assert(source.includes('const CANVAS_ZOOM_PERCENT_STEP = 5') && source.includes('handleCanvasZoomPercentChange') && source.includes('data-testid="editor-zoom-slider"') && source.includes('data-zoom-min={CANVAS_ZOOM_MIN * 100}') && source.includes('data-zoom-max={CANVAS_ZOOM_MAX * 100}') && smokeSource.includes('setCanvasZoomSlider'), 'Editor zoom controls must expose a direct canvas zoom slider with rendered smoke coverage');
   assert(source.includes("key === 'h' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleCanvasPanMode();'), 'Editor keyboard handler must support H as a persistent pan-mode shortcut');
   assert(source.includes("event.key !== ' ' || event.repeat") && source.includes('setIsCanvasSpacePanning(true)') && source.includes('setIsCanvasSpacePanning(false)'), 'Editor keyboard handler must preserve hold-Space temporary panning');
   assert(source.includes('data-testid="editor-pan-toggle"') && source.includes('data-pan-keyshortcuts="toggle:H;temporary:Space"') && source.includes('aria-keyshortcuts="H Space"'), 'Editor pan toggle must expose H and Space pan shortcut metadata');
@@ -11963,6 +11964,7 @@ const readZoomControlState = async (client, label) => {
     const canvas = document.querySelector('[data-testid="editor-canvas"]');
     const percent = document.querySelector('[data-testid="editor-zoom-percent"]');
     const auto = document.querySelector('[data-testid="editor-zoom-autofit"]');
+    const slider = document.querySelector('[data-testid="editor-zoom-slider"]');
     const style = surface instanceof HTMLElement ? window.getComputedStyle(surface) : null;
     const canvasStyle = canvas instanceof HTMLElement ? window.getComputedStyle(canvas) : null;
     const canvasRect = canvas instanceof HTMLElement ? canvas.getBoundingClientRect() : null;
@@ -11978,6 +11980,13 @@ const readZoomControlState = async (client, label) => {
       transform: style?.transform || '',
       autoFit: controls?.getAttribute('data-auto-fit') === 'true',
       hasAutoBadge: Boolean(auto),
+      hasSlider: slider instanceof HTMLInputElement,
+      sliderValue: slider instanceof HTMLInputElement ? Number(slider.value) : 0,
+      sliderMin: Number(slider?.getAttribute('data-zoom-min') || 0),
+      sliderMax: Number(slider?.getAttribute('data-zoom-max') || 0),
+      sliderStep: Number(slider?.getAttribute('data-zoom-step') || 0),
+      sliderActionState: slider?.getAttribute('data-action-state') || '',
+      sliderActionStatus: slider?.getAttribute('data-action-status') || '',
       visualScale,
     };
   })()`);
@@ -11987,6 +11996,10 @@ const readZoomControlState = async (client, label) => {
   assert(Math.abs(state.controlScale - state.scale) < 0.001, `Zoom control scale does not match canvas surface during ${label}: ${JSON.stringify(state)}`);
   assert(state.controlPercent === Math.round(state.scale * 100), `Zoom control percent does not match scale during ${label}: ${JSON.stringify(state)}`);
   assert(state.percentText === `${Math.round(state.scale * 100)}%`, `Zoom percent does not match scale during ${label}: ${JSON.stringify(state)}`);
+  assert(state.hasSlider, `Zoom slider is missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.sliderMin === 25 && state.sliderMax === 200 && state.sliderStep === 5, `Zoom slider range metadata is invalid during ${label}: ${JSON.stringify(state)}`);
+  assert(Math.abs(state.sliderValue - state.controlPercent) <= state.sliderStep, `Zoom slider value does not track control percent during ${label}: ${JSON.stringify(state)}`);
+  assert(state.sliderActionState === 'ready' && state.sliderActionStatus.includes(`${state.controlPercent}%`), `Zoom slider action status is incomplete during ${label}: ${JSON.stringify(state)}`);
   assert(Math.abs(state.visualScale - state.scale) < 0.03, `Zoom visual scale does not match canvas scale during ${label}: ${JSON.stringify(state)}`);
   return state;
 };
@@ -12506,6 +12519,46 @@ const dispatchCoordinateLessGlobalPinchZoom = async (client, scale, label) => {
   };
 };
 
+const setCanvasZoomSlider = async (client, percent, label) => {
+  const beforePageZoom = await readPageZoomState(client, `${label} page zoom before`);
+  const changed = await evaluate(client, `(() => {
+    const slider = document.querySelector('[data-testid="editor-zoom-slider"]');
+    if (!(slider instanceof HTMLInputElement)) {
+      return { ok: false, reason: 'missing-slider' };
+    }
+
+    slider.focus();
+    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    valueSetter?.call(slider, String(${JSON.stringify(percent)}));
+    slider.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+
+    return {
+      ok: true,
+      value: Number(slider.value),
+      min: Number(slider.getAttribute('data-zoom-min') || 0),
+      max: Number(slider.getAttribute('data-zoom-max') || 0),
+      step: Number(slider.getAttribute('data-zoom-step') || 0),
+      actionStatus: slider.getAttribute('data-action-status') || '',
+    };
+  })()`);
+  assert(changed?.ok, `Unable to set canvas zoom slider during ${label}: ${JSON.stringify(changed)}`);
+  assert(changed.value === percent, `Canvas zoom slider did not accept target value during ${label}: ${JSON.stringify(changed)}`);
+  assert(changed.min === 25 && changed.max === 200 && changed.step === 5, `Canvas zoom slider metadata is incomplete during ${label}: ${JSON.stringify(changed)}`);
+  await sleep(180);
+
+  const afterPageZoom = await readPageZoomState(client, `${label} page zoom after`);
+  const pageZoomStable = assertPageZoomStable(beforePageZoom, afterPageZoom, label);
+
+  return {
+    changed,
+    beforePageZoom,
+    afterPageZoom,
+    pageZoomStable,
+    state: await readZoomControlState(client, label),
+  };
+};
+
 const testZoomControls = async (client) => {
   const initial = await readZoomControlState(client, 'initial');
   const initialNavigation = await readCanvasNavigationState(client, 'initial navigation');
@@ -12519,6 +12572,10 @@ const testZoomControls = async (client) => {
   const afterZoomIn = await readZoomControlState(client, 'after zoom in');
   assert(afterZoomIn.scale > afterZoomOut.scale, `Zoom in did not increase canvas scale: ${JSON.stringify({ afterZoomOut, afterZoomIn })}`);
   assert(afterZoomIn.autoFit === false, `Zoom in should keep manual zoom mode: ${JSON.stringify(afterZoomIn)}`);
+
+  const afterSliderZoom = await setCanvasZoomSlider(client, 125, 'after zoom slider');
+  assert(afterSliderZoom.state.scale >= 1.24 && afterSliderZoom.state.scale <= 1.26, `Zoom slider did not set canvas scale to 125%: ${JSON.stringify(afterSliderZoom)}`);
+  assert(afterSliderZoom.state.autoFit === false && afterSliderZoom.pageZoomStable === true, `Zoom slider should keep manual canvas zoom and stable browser page zoom: ${JSON.stringify(afterSliderZoom)}`);
 
   await clickControlByTestId(client, 'editor-zoom-fit');
   const afterFit = await readZoomControlState(client, 'after fit');
@@ -12691,6 +12748,7 @@ const testZoomControls = async (client) => {
     initialNavigation,
     afterZoomOut,
     afterZoomIn,
+    afterSliderZoom,
     afterFit,
     afterKeyboardZoomOut,
     afterKeyboardZoomIn,
