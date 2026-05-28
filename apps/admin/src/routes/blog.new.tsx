@@ -1101,6 +1101,53 @@ function NewBlogPostPage() {
                     ? 'Choose a custom frontend blog template before creating this post.'
                     : 'No custom frontend blog templates are captured for this site yet.'
         : 'Backy canvas blog article template selected.';
+    const blogTemplateSelectionActionStatusId = 'blog-template-selection-action-status';
+    const blogTemplateSelectionDisabledReason = isCreateBusy
+        ? 'Blog post creation is already running.'
+        : !canEditBlog
+            ? editBlogDeniedMessage
+            : '';
+    const blogTemplateSelectionControlDisabled = Boolean(blogTemplateSelectionDisabledReason);
+    const getBlogTemplateSelectionActionState = (selected: boolean) => blogTemplateSelectionDisabledReason
+        ? isCreateBusy ? 'busy' : 'blocked'
+        : selected ? 'selected' : 'ready';
+    const getBlogTemplateSourceActionStatus = (sourceMode: BlogTemplateSourceMode) => {
+        if (blogTemplateSelectionDisabledReason) {
+            return `${sourceMode === 'backy-canvas' ? 'Backy canvas' : 'Custom frontend'} blog template source unavailable: ${blogTemplateSelectionDisabledReason}`;
+        }
+
+        if (sourceMode === 'backy-canvas') {
+            return templateSourceMode === 'backy-canvas'
+                ? 'Backy canvas blog template source selected.'
+                : 'Switch to Backy canvas blog article template.';
+        }
+
+        if (templateSourceMode === 'custom-frontend') {
+            return effectiveFrontendTemplate
+                ? `Custom frontend blog template source selected with ${effectiveFrontendTemplate.name}.`
+                : frontendBlogTemplates.length > 0
+                    ? `Custom frontend blog template source selected. Choose one of ${frontendBlogTemplates.length} captured blog template${frontendBlogTemplates.length === 1 ? '' : 's'}.`
+                    : 'Custom frontend blog template source selected, but no captured blog templates are available.';
+        }
+
+        return frontendBlogTemplates.length > 0
+            ? `Switch to custom frontend blog template source with ${frontendBlogTemplates.length} captured blog template${frontendBlogTemplates.length === 1 ? '' : 's'}.`
+            : 'Switch to custom frontend blog template source after capturing or importing a blog post template.';
+    };
+    const getBlogFrontendTemplateActionStatus = (template: SiteFrontendDesignTemplate) => {
+        if (blogTemplateSelectionDisabledReason) {
+            return `${template.name} blog frontend template unavailable: ${blogTemplateSelectionDisabledReason}`;
+        }
+
+        return designTemplateId === template.id
+            ? `${template.name} blog frontend template selected with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'}.`
+            : `Select ${template.name} blog frontend template with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'}.`;
+    };
+    const blogTemplateSelectionActionStatus = [
+        getBlogTemplateSourceActionStatus('backy-canvas'),
+        getBlogTemplateSourceActionStatus('custom-frontend'),
+        `${visibleFrontendBlogTemplates.length} custom frontend blog template${visibleFrontendBlogTemplates.length === 1 ? '' : 's'} available.`,
+    ].join(' ');
     const effectiveFrontendDesignSource = effectiveFrontendTemplate
         ? frontendDesign?.source || recoveredFrontendDesignSnapshot?.source || { type: 'custom-frontend' as const, label: 'Recovered frontend design contract' }
         : undefined;
@@ -2856,16 +2903,25 @@ function NewBlogPostPage() {
                                         className="rounded-lg border border-border bg-background p-3"
                                         data-testid="blog-template-source-switch"
                                         data-active-source={templateSourceMode}
+                                        data-action-state={templateSourceReady ? 'ready' : 'blocked'}
                                         data-action-status={templateSourceStatus}
+                                        data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
                                     >
+                                        <span id={blogTemplateSelectionActionStatusId} className="sr-only" data-testid="blog-template-selection-action-status" aria-live="polite">
+                                            {blogTemplateSelectionActionStatus}
+                                        </span>
                                         <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Blog template source">
                                             <button
                                                 type="button"
                                                 onClick={() => handleTemplateSourceChange('backy-canvas')}
-                                                disabled={isCreateBusy}
+                                                disabled={blogTemplateSelectionControlDisabled}
                                                 aria-pressed={templateSourceMode === 'backy-canvas'}
+                                                aria-describedby={blogTemplateSelectionActionStatusId}
                                                 data-testid="blog-template-source-backy-canvas"
                                                 data-active={templateSourceMode === 'backy-canvas'}
+                                                data-action-state={getBlogTemplateSelectionActionState(templateSourceMode === 'backy-canvas')}
+                                                data-action-status={getBlogTemplateSourceActionStatus('backy-canvas')}
+                                                data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
                                                 className={cn(
                                                     'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
                                                     templateSourceMode === 'backy-canvas'
@@ -2879,11 +2935,15 @@ function NewBlogPostPage() {
                                             <button
                                                 type="button"
                                                 onClick={() => handleTemplateSourceChange('custom-frontend')}
-                                                disabled={isCreateBusy}
+                                                disabled={blogTemplateSelectionControlDisabled}
                                                 aria-pressed={templateSourceMode === 'custom-frontend'}
+                                                aria-describedby={blogTemplateSelectionActionStatusId}
                                                 data-testid="blog-template-source-custom-frontend"
                                                 data-active={templateSourceMode === 'custom-frontend'}
                                                 data-template-count={frontendBlogTemplates.length}
+                                                data-action-state={getBlogTemplateSelectionActionState(templateSourceMode === 'custom-frontend')}
+                                                data-action-status={getBlogTemplateSourceActionStatus('custom-frontend')}
+                                                data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
                                                 className={cn(
                                                     'min-h-11 rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
                                                     templateSourceMode === 'custom-frontend'
@@ -2917,10 +2977,14 @@ function NewBlogPostPage() {
                                                     key={template.id}
                                                     type="button"
                                                     onClick={() => applyFrontendTemplate(template, { syncRoute: true })}
-                                                    disabled={createFormDisabled}
+                                                    disabled={blogTemplateSelectionControlDisabled}
                                                     title={editBlogPermissionTitle || viewSitePermissionTitle}
+                                                    aria-describedby={blogTemplateSelectionActionStatusId}
                                                     data-testid={`blog-frontend-template-${template.id}`}
                                                     data-active={designTemplateId === template.id}
+                                                    data-action-state={getBlogTemplateSelectionActionState(designTemplateId === template.id)}
+                                                    data-action-status={getBlogFrontendTemplateActionStatus(template)}
+                                                    data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
                                                     className={cn(
                                                         'rounded-lg border bg-background p-3 text-left transition hover:border-teal-400 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-70',
                                                         designTemplateId === template.id ? 'border-teal-600 ring-1 ring-teal-600' : 'border-border',

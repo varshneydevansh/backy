@@ -15,7 +15,7 @@ const SCREENSHOT_PATH = process.env.BACKY_BLOG_CREATE_SCREENSHOT || path.join(os
 const VISUAL_SCREENSHOT_DIR = process.env.BACKY_BLOG_CREATE_VISUAL_DIR || path.join(os.tmpdir(), 'backy-blog-create-visual');
 const DESKTOP_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-blog-create-desktop.png');
 const FOCUS_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-blog-create-focus.png');
-const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-contract-template';
+const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-create-contract-template';
 const FRONTEND_BLOG_TEMPLATE_NAME = 'Smoke Blog Contract';
 const BLOG_CREATE_CONTROL_WAIT_ATTEMPTS = Number(process.env.BACKY_BLOG_CREATE_CONTROL_WAIT_ATTEMPTS || 240);
 let apiAdminSessionToken = '';
@@ -49,6 +49,18 @@ const assertBlogCreateSourceContract = () => {
       source.includes('data-testid="blog-template-source-backy-canvas"') &&
       source.includes('data-testid="blog-template-source-custom-frontend"') &&
       source.includes('data-testid="blog-template-source-status"') &&
+      source.includes("const blogTemplateSelectionActionStatusId = 'blog-template-selection-action-status';") &&
+      source.includes('const blogTemplateSelectionDisabledReason = isCreateBusy') &&
+      source.includes('const blogTemplateSelectionControlDisabled = Boolean(blogTemplateSelectionDisabledReason);') &&
+      source.includes('const getBlogTemplateSelectionActionState = (selected: boolean) => blogTemplateSelectionDisabledReason') &&
+      source.includes('const getBlogTemplateSourceActionStatus = (sourceMode: BlogTemplateSourceMode) =>') &&
+      source.includes('const getBlogFrontendTemplateActionStatus = (template: SiteFrontendDesignTemplate) =>') &&
+      source.includes('data-testid="blog-template-selection-action-status"') &&
+      source.includes('aria-describedby={blogTemplateSelectionActionStatusId}') &&
+      source.includes('data-action-status={getBlogTemplateSourceActionStatus(\'backy-canvas\')}') &&
+      source.includes('data-action-status={getBlogTemplateSourceActionStatus(\'custom-frontend\')}') &&
+      source.includes('data-action-status={getBlogFrontendTemplateActionStatus(template)}') &&
+      source.includes('data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}') &&
       source.includes('const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(effectiveFrontendTemplate);') &&
       source.includes("templateSource: effectiveFrontendTemplate ? 'custom-frontend' : templateSourceMode") &&
       source.includes("templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas'") &&
@@ -1058,9 +1070,26 @@ const navigateToBlogCreate = async (client) => {
       frontendTemplateRoot: Boolean(document.querySelector('[data-element-id="frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')),
       frontendPanel: Boolean(document.querySelector('[data-testid="blog-frontend-template-options"]')),
       frontendTemplateActive: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
+      frontendTemplateActionState: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('data-action-state') || '',
+      frontendTemplateActionStatus: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('data-action-status') || '',
+      frontendTemplateDescribedBy: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('aria-describedby') || '',
+      frontendTemplateDisabledReason: document.querySelector('[data-testid="blog-frontend-template-${FRONTEND_BLOG_TEMPLATE_ID}"]')?.getAttribute('data-disabled-reason') || '',
       templateSourceSwitch: Boolean(document.querySelector('[data-testid="blog-template-source-switch"]')),
       templateSourceActive: document.querySelector('[data-testid="blog-template-source-switch"]')?.getAttribute('data-active-source') || '',
+      templateSourceSwitchActionState: document.querySelector('[data-testid="blog-template-source-switch"]')?.getAttribute('data-action-state') || '',
+      templateSourceSwitchActionStatus: document.querySelector('[data-testid="blog-template-source-switch"]')?.getAttribute('data-action-status') || '',
+      templateSourceSwitchDisabledReason: document.querySelector('[data-testid="blog-template-source-switch"]')?.getAttribute('data-disabled-reason') || '',
+      templateSelectionStatusId: document.querySelector('[data-testid="blog-template-selection-action-status"]')?.id || '',
+      templateSelectionStatusText: document.querySelector('[data-testid="blog-template-selection-action-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      templateSourceBackyActionState: document.querySelector('[data-testid="blog-template-source-backy-canvas"]')?.getAttribute('data-action-state') || '',
+      templateSourceBackyActionStatus: document.querySelector('[data-testid="blog-template-source-backy-canvas"]')?.getAttribute('data-action-status') || '',
+      templateSourceBackyDescribedBy: document.querySelector('[data-testid="blog-template-source-backy-canvas"]')?.getAttribute('aria-describedby') || '',
+      templateSourceBackyDisabledReason: document.querySelector('[data-testid="blog-template-source-backy-canvas"]')?.getAttribute('data-disabled-reason') || '',
       templateSourceCustomActive: document.querySelector('[data-testid="blog-template-source-custom-frontend"]')?.getAttribute('data-active') || '',
+      templateSourceCustomActionState: document.querySelector('[data-testid="blog-template-source-custom-frontend"]')?.getAttribute('data-action-state') || '',
+      templateSourceCustomActionStatus: document.querySelector('[data-testid="blog-template-source-custom-frontend"]')?.getAttribute('data-action-status') || '',
+      templateSourceCustomDescribedBy: document.querySelector('[data-testid="blog-template-source-custom-frontend"]')?.getAttribute('aria-describedby') || '',
+      templateSourceCustomDisabledReason: document.querySelector('[data-testid="blog-template-source-custom-frontend"]')?.getAttribute('data-disabled-reason') || '',
       templateSourceStatus: document.querySelector('[data-testid="blog-template-source-status"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       submitState: document.querySelector('[data-testid="blog-create-submit-button"]')?.getAttribute('data-state') || '',
       submitCanSubmit: document.querySelector('[data-testid="blog-create-submit-button"]')?.getAttribute('data-can-submit') || '',
@@ -1103,9 +1132,26 @@ const navigateToBlogCreate = async (client) => {
       && state.frontendTemplateRoot
       && state.frontendPanel
       && state.frontendTemplateActive === 'true'
+      && state.frontendTemplateActionState === 'selected'
+      && state.frontendTemplateActionStatus.includes(FRONTEND_BLOG_TEMPLATE_NAME)
+      && state.frontendTemplateDescribedBy === 'blog-template-selection-action-status'
+      && state.frontendTemplateDisabledReason === ''
       && state.templateSourceSwitch
       && state.templateSourceActive === 'custom-frontend'
+      && state.templateSourceSwitchActionState === 'ready'
+      && state.templateSourceSwitchActionStatus.includes(FRONTEND_BLOG_TEMPLATE_NAME)
+      && state.templateSourceSwitchDisabledReason === ''
+      && state.templateSelectionStatusId === 'blog-template-selection-action-status'
+      && state.templateSelectionStatusText.includes('Custom frontend blog template source selected')
+      && state.templateSourceBackyActionState === 'ready'
+      && state.templateSourceBackyActionStatus.includes('Switch to Backy canvas blog article template')
+      && state.templateSourceBackyDescribedBy === 'blog-template-selection-action-status'
+      && state.templateSourceBackyDisabledReason === ''
       && state.templateSourceCustomActive === 'true'
+      && state.templateSourceCustomActionState === 'selected'
+      && state.templateSourceCustomActionStatus.includes(FRONTEND_BLOG_TEMPLATE_NAME)
+      && state.templateSourceCustomDescribedBy === 'blog-template-selection-action-status'
+      && state.templateSourceCustomDisabledReason === ''
       && state.payloadTemplateId === FRONTEND_BLOG_TEMPLATE_ID
       && state.payloadTemplateSource === 'frontend-design'
       && state.payloadTemplateSourceMode === 'custom-frontend'
