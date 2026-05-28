@@ -15,6 +15,8 @@ const SOURCE_ONLY_MODE = process.env.BACKY_LOGIN_SOURCE_ONLY === '1'
 const LOGIN_FORM_STATUS_SMOKE = process.env.BACKY_LOGIN_FORM_STATUS_SMOKE === '1';
 const SIDEBAR_CREATE_SMOKE = process.env.BACKY_LOGIN_SIDEBAR_CREATE_SMOKE === '1'
   || process.env.BACKY_SIDEBAR_CREATE_SMOKE === '1';
+const MOBILE_QUICK_CREATE_SMOKE = process.env.BACKY_LOGIN_MOBILE_QUICK_CREATE_SMOKE === '1'
+  || process.env.BACKY_MOBILE_QUICK_CREATE_SMOKE === '1';
 const ADMIN_MFA_CODE = process.env.BACKY_LOGIN_SMOKE_MFA_CODE || process.env.BACKY_ADMIN_MFA_CODE || process.env.BACKY_ADMIN_2FA_CODE || 'backy-dev-mfa';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -707,6 +709,9 @@ const assertAuthRecoverySource = () => {
       loginSmokeSource.includes('assertSidebarLegacySectionStateMigration') &&
       loginSmokeSource.includes('assertSidebarQuickCreateInteraction') &&
       loginSmokeSource.includes('BACKY_LOGIN_SIDEBAR_CREATE_SMOKE') &&
+      loginSmokeSource.includes('assertMobileQuickCreateInteraction') &&
+      loginSmokeSource.includes('BACKY_LOGIN_MOBILE_QUICK_CREATE_SMOKE') &&
+      loginSmokeSource.includes('Mobile quick create route to new page') &&
       loginSmokeSource.includes('Sidebar quick create route to new page') &&
       loginSmokeSource.includes('Collapsed sidebar rail tooltip') &&
       loginSmokeSource.includes('Sidebar expand layout restore'),
@@ -1850,9 +1855,18 @@ const assertMobileNavigationInteraction = async (client) => {
         const sidebar = document.querySelector('[data-testid="admin-mobile-sidebar"]');
         const nav = document.querySelector('[data-testid="admin-mobile-sidebar-nav"]');
         const activeSite = document.querySelector('[data-testid="admin-mobile-sidebar-active-site"]');
+        const quickCreate = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create"]');
+        const quickCreateStatus = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-status"]');
+        const quickCreatePage = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-page"]');
+        const quickCreatePost = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-post"]');
+        const quickCreateProduct = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-product"]');
+        const quickCreateForm = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-form"]');
         const backdrop = document.querySelector('[data-testid="admin-mobile-sidebar-backdrop"]');
         const activeElement = document.activeElement;
         const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+        const quickCreateStatusText = quickCreateStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+        const quickCreateSiteId = quickCreate?.getAttribute('data-target-site-id') || '';
+        const quickCreateSiteStatus = quickCreate?.getAttribute('data-target-site-status') || '';
         return {
           ready: toggle instanceof HTMLButtonElement &&
             toggle.getAttribute('aria-expanded') === 'true' &&
@@ -1872,6 +1886,36 @@ const assertMobileNavigationInteraction = async (client) => {
             sidebar.getAttribute('data-nav-ready') === 'true' &&
             nav instanceof HTMLElement &&
             activeSite instanceof HTMLElement &&
+            quickCreate instanceof HTMLElement &&
+            quickCreateStatus instanceof HTMLElement &&
+            quickCreate.getAttribute('aria-describedby') === quickCreateStatus.id &&
+            quickCreate.getAttribute('data-action-state') === 'ready' &&
+            quickCreate.getAttribute('data-action-status') === quickCreateStatusText &&
+            quickCreate.getAttribute('data-quick-create-count') === '4' &&
+            quickCreate.getAttribute('data-permission-source') &&
+            quickCreate.getAttribute('data-permission-sync-state') &&
+            quickCreateSiteId.length > 0 &&
+            quickCreateSiteStatus.length > 0 &&
+            quickCreatePage instanceof HTMLAnchorElement &&
+            quickCreatePage.getAttribute('data-target-route') === '/pages/new' &&
+            quickCreatePage.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId &&
+            quickCreatePage.getAttribute('data-create-intent') === 'new-page' &&
+            quickCreatePage.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
+            quickCreatePost instanceof HTMLAnchorElement &&
+            quickCreatePost.getAttribute('data-target-route') === '/blog/new' &&
+            quickCreatePost.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId &&
+            quickCreatePost.getAttribute('data-create-intent') === 'new-post' &&
+            quickCreatePost.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
+            quickCreateProduct instanceof HTMLAnchorElement &&
+            quickCreateProduct.getAttribute('data-target-route') === '/products' &&
+            quickCreateProduct.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId + '&quickCreate=product' &&
+            quickCreateProduct.getAttribute('data-create-intent') === 'product' &&
+            quickCreateProduct.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
+            quickCreateForm instanceof HTMLAnchorElement &&
+            quickCreateForm.getAttribute('data-target-route') === '/forms' &&
+            quickCreateForm.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId + '&quickCreate=blank' &&
+            quickCreateForm.getAttribute('data-create-intent') === 'blank' &&
+            quickCreateForm.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
             backdrop instanceof HTMLButtonElement &&
             document.body.style.overflow === 'hidden' &&
             activeElement instanceof HTMLElement &&
@@ -1892,6 +1936,23 @@ const assertMobileNavigationInteraction = async (client) => {
           activeElementTestId: activeElement instanceof HTMLElement ? activeElement.getAttribute('data-testid') || '' : '',
           navReady: sidebar?.getAttribute('data-nav-ready') || '',
           activeSiteText: activeSite?.textContent?.replace(/\\s+/g, '') || '',
+          quickCreateStatusText,
+          quickCreateSiteId,
+          quickCreateSiteStatus,
+          quickCreatePermissionSource: quickCreate?.getAttribute('data-permission-source') || '',
+          quickCreatePermissionSyncState: quickCreate?.getAttribute('data-permission-sync-state') || '',
+          quickCreatePageTargetRoute: quickCreatePage?.getAttribute('data-target-route') || '',
+          quickCreatePageTargetSearch: quickCreatePage?.getAttribute('data-target-search') || '',
+          quickCreatePageIntent: quickCreatePage?.getAttribute('data-create-intent') || '',
+          quickCreatePostTargetRoute: quickCreatePost?.getAttribute('data-target-route') || '',
+          quickCreatePostTargetSearch: quickCreatePost?.getAttribute('data-target-search') || '',
+          quickCreatePostIntent: quickCreatePost?.getAttribute('data-create-intent') || '',
+          quickCreateProductTargetRoute: quickCreateProduct?.getAttribute('data-target-route') || '',
+          quickCreateProductTargetSearch: quickCreateProduct?.getAttribute('data-target-search') || '',
+          quickCreateProductIntent: quickCreateProduct?.getAttribute('data-create-intent') || '',
+          quickCreateFormTargetRoute: quickCreateForm?.getAttribute('data-target-route') || '',
+          quickCreateFormTargetSearch: quickCreateForm?.getAttribute('data-target-search') || '',
+          quickCreateFormIntent: quickCreateForm?.getAttribute('data-create-intent') || '',
           hasBackdrop: backdrop instanceof HTMLButtonElement,
           body: dialog?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 700) || '',
         };
@@ -1990,6 +2051,147 @@ const assertMobileNavigationInteraction = async (client) => {
     );
 
     return { initialState, openedState, escapeClosedState, closedState };
+  } finally {
+    await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
+    await evaluate(client, `(() => {
+      window.dispatchEvent(new Event('resize'));
+      return { width: window.innerWidth, height: window.innerHeight };
+    })()`).catch(() => undefined);
+  }
+};
+
+const assertMobileQuickCreateInteraction = async (client) => {
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 2,
+    mobile: true,
+  });
+  await evaluate(client, `(() => {
+    window.dispatchEvent(new Event('resize'));
+    return { width: window.innerWidth, height: window.innerHeight };
+  })()`);
+
+  try {
+    const openClick = await evaluate(client, `(() => {
+      const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+      if (!(toggle instanceof HTMLButtonElement)) return { ok: false, reason: 'mobile-toggle-missing' };
+      toggle.focus();
+      toggle.click();
+      return { ok: true };
+    })()`);
+    assert(openClick.ok, `Unable to open mobile navigation for quick create: ${JSON.stringify(openClick)}`);
+
+    const readyState = await waitForState(
+      client,
+      `(() => {
+        const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+        const dialog = document.querySelector('[data-testid="admin-mobile-sidebar-dialog"]');
+        const quickCreate = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create"]');
+        const status = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-status"]');
+        const page = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-page"]');
+        const post = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-post"]');
+        const product = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-product"]');
+        const form = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-form"]');
+        const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+        const siteId = quickCreate?.getAttribute('data-target-site-id') || '';
+        const siteStatus = quickCreate?.getAttribute('data-target-site-status') || '';
+        return {
+          ready: window.innerWidth <= 430 &&
+            toggle instanceof HTMLButtonElement &&
+            toggle.getAttribute('aria-expanded') === 'true' &&
+            dialog instanceof HTMLElement &&
+            quickCreate instanceof HTMLElement &&
+            status instanceof HTMLElement &&
+            quickCreate.getAttribute('aria-describedby') === status.id &&
+            quickCreate.getAttribute('data-action-state') === 'ready' &&
+            quickCreate.getAttribute('data-action-status') === statusText &&
+            quickCreate.getAttribute('data-quick-create-count') === '4' &&
+            quickCreate.getAttribute('data-permission-source') &&
+            quickCreate.getAttribute('data-permission-sync-state') &&
+            siteId.length > 0 &&
+            siteStatus.length > 0 &&
+            page instanceof HTMLAnchorElement &&
+            page.href.includes('/pages/new') &&
+            page.href.includes('siteId=') &&
+            page.getAttribute('data-target-route') === '/pages/new' &&
+            page.getAttribute('data-target-search') === 'siteId=' + siteId &&
+            page.getAttribute('data-create-intent') === 'new-page' &&
+            page.getAttribute('data-target-site-status') === siteStatus &&
+            post instanceof HTMLAnchorElement &&
+            post.getAttribute('data-target-route') === '/blog/new' &&
+            post.getAttribute('data-target-search') === 'siteId=' + siteId &&
+            post.getAttribute('data-create-intent') === 'new-post' &&
+            product instanceof HTMLAnchorElement &&
+            product.getAttribute('data-target-route') === '/products' &&
+            product.getAttribute('data-target-search') === 'siteId=' + siteId + '&quickCreate=product' &&
+            product.getAttribute('data-create-intent') === 'product' &&
+            form instanceof HTMLAnchorElement &&
+            form.getAttribute('data-target-route') === '/forms' &&
+            form.getAttribute('data-target-search') === 'siteId=' + siteId + '&quickCreate=blank' &&
+            form.getAttribute('data-create-intent') === 'blank',
+          width: window.innerWidth,
+          dialogOpen: dialog instanceof HTMLElement,
+          toggleExpanded: toggle?.getAttribute('aria-expanded') || '',
+          statusText,
+          siteId,
+          siteStatus,
+          permissionSource: quickCreate?.getAttribute('data-permission-source') || '',
+          permissionSyncState: quickCreate?.getAttribute('data-permission-sync-state') || '',
+          pageHref: page instanceof HTMLAnchorElement ? page.href : '',
+          pageTargetSearch: page?.getAttribute('data-target-search') || '',
+          postTargetSearch: post?.getAttribute('data-target-search') || '',
+          productTargetSearch: product?.getAttribute('data-target-search') || '',
+          formTargetSearch: form?.getAttribute('data-target-search') || '',
+          body: dialog?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 700) || '',
+        };
+      })()`,
+      'Mobile quick create launcher ready',
+    );
+
+    const pageClick = await evaluate(client, `(() => {
+      const page = document.querySelector('[data-testid="admin-mobile-sidebar-quick-create-new-page"]');
+      if (!(page instanceof HTMLAnchorElement)) return { ok: false, reason: 'mobile-new-page-missing' };
+      page.click();
+      return { ok: true, href: page.href };
+    })()`);
+    assert(pageClick.ok, `Unable to click mobile quick-create page shortcut: ${JSON.stringify(pageClick)}`);
+
+    const pageRouteState = await waitForState(
+      client,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="admin-mobile-sidebar-dialog"]');
+        const toggle = document.querySelector('[data-testid="header-mobile-navigation-toggle"]');
+        const titleInput = document.querySelector('[data-testid="page-create-title-input"]');
+        const submit = document.querySelector('[data-testid="page-create-primary-submit"]');
+        const stored = JSON.parse(localStorage.getItem('backy-auth-storage') || '{}');
+        return {
+          ready: window.location.pathname === '/pages/new' &&
+            window.location.search.includes('siteId=site-demo') &&
+            !(dialog instanceof HTMLElement) &&
+            document.body.style.overflow !== 'hidden' &&
+            toggle instanceof HTMLButtonElement &&
+            toggle.getAttribute('aria-expanded') === 'false' &&
+            titleInput instanceof HTMLInputElement &&
+            submit instanceof HTMLButtonElement &&
+            stored?.state?.user?.email === 'admin@backy.io' &&
+            Boolean(stored?.state?.session?.expiresAt),
+          path: window.location.pathname,
+          search: window.location.search,
+          hasDialog: dialog instanceof HTMLElement,
+          bodyOverflow: document.body.style.overflow || '',
+          toggleExpanded: toggle?.getAttribute('aria-expanded') || '',
+          hasTitleInput: titleInput instanceof HTMLInputElement,
+          hasSubmit: submit instanceof HTMLButtonElement,
+          userEmail: stored?.state?.user?.email || '',
+          hasSession: Boolean(stored?.state?.session?.expiresAt),
+          body: document.body?.innerText?.slice(0, 900) || '',
+        };
+      })()`,
+      'Mobile quick create route to new page',
+    );
+
+    return { readyState, pageRouteState };
   } finally {
     await client.send('Emulation.clearDeviceMetricsOverride').catch(() => undefined);
     await evaluate(client, `(() => {
@@ -3623,6 +3825,16 @@ const main = async () => {
         mode: 'sidebar-quick-create',
         route: '/login',
         sidebarQuickCreate,
+      }, null, 2));
+      return;
+    }
+    if (MOBILE_QUICK_CREATE_SMOKE) {
+      const mobileQuickCreate = await assertMobileQuickCreateInteraction(client);
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'mobile-quick-create',
+        route: '/login',
+        mobileQuickCreate,
       }, null, 2));
       return;
     }
