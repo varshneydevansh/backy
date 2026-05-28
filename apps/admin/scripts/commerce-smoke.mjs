@@ -1286,6 +1286,23 @@ const assertProductsApiContractsSource = () => {
       frontendDesignContractSource.includes("frontendDesignAnimations") &&
       frontendDesignContractSource.includes("frontendDesignMetadata") &&
       source.includes('data-testid="products-frontend-template-options"') &&
+      source.includes("const productsFrontendTemplateActionStatusId = 'products-frontend-template-action-status';") &&
+      source.includes("const getProductFrontendTemplateCreateDisabledReason = (template: SiteFrontendDesignTemplate): string =>") &&
+      source.includes("const getProductFrontendTemplateCopyDisabledReason = (): string =>") &&
+      source.includes("const getProductFrontendTemplateCardActionState = (template: SiteFrontendDesignTemplate)") &&
+      source.includes("const getProductFrontendTemplateCreateActionStatus = (") &&
+      source.includes("const getProductFrontendTemplateCopyActionStatus = (template: SiteFrontendDesignTemplate)") &&
+      source.includes('data-testid="products-frontend-template-action-status"') &&
+      source.includes('data-testid={`products-frontend-template-card-${template.id}`}') &&
+      source.includes("aria-describedby={productsFrontendTemplateActionStatusId}") &&
+      source.includes("data-action-state={cardActionState}") &&
+      source.includes("data-action-status={createActionStatus}") &&
+      source.includes("data-action-state={createDisabledReason ?") &&
+      source.includes("data-action-state={copyDisabledReason ?") &&
+      source.includes('data-testid={`products-frontend-template-copy-${template.id}`}') &&
+      source.includes("data-target-template-id={template.id}") &&
+      source.includes("data-target-template-name={template.name}") &&
+      source.includes("data-target-site-id={activeSiteId}") &&
       source.includes("Show templates") &&
       source.includes('data-testid="products-frontend-template-design-readiness"') &&
       source.includes("const designValues = buildFrontendProductTemplateValues(template, frontendDesign);") &&
@@ -8351,6 +8368,11 @@ const assertProductsLayout = async (client) => {
 	      const productsReadinessDetails = document.querySelector('[data-testid="products-readiness-details"]');
 	      const productsControlMap = document.querySelector('[data-testid="products-control-map"]');
 	      const frontendTemplateOptions = document.querySelector('[data-testid="products-frontend-template-options"]');
+        const frontendTemplateActionStatus = document.querySelector('[data-testid="products-frontend-template-action-status"]');
+        const frontendTemplateActionStatusText = (frontendTemplateActionStatus?.textContent || '').replace(/\\s+/g, ' ').trim();
+        const frontendTemplateCard = document.querySelector('[data-testid="products-frontend-template-card-${FRONTEND_PRODUCT_TEMPLATE_ID}"]');
+        const frontendTemplateCreate = document.querySelector('[data-testid="products-frontend-template-${FRONTEND_PRODUCT_TEMPLATE_ID}"]');
+        const frontendTemplateCopy = document.querySelector('[data-testid="products-frontend-template-copy-${FRONTEND_PRODUCT_TEMPLATE_ID}"]');
 	      const providerCertificationOperatorDetails = document.querySelector('[data-testid="products-provider-certification-operator-details"]');
         const productEditorPanel = document.querySelector('[data-testid="products-editor-panel"]');
         const productEditorPanelClass = productEditorPanel?.getAttribute('class') || '';
@@ -8387,6 +8409,43 @@ const assertProductsLayout = async (client) => {
 	        readinessDetailsCollapsed: productsReadinessDetails instanceof HTMLDetailsElement && productsReadinessDetails.open === false,
 	        controlMapCollapsed: productsControlMap instanceof HTMLDetailsElement && productsControlMap.open === false,
 	        frontendTemplateOptionsCollapsed: frontendTemplateOptions instanceof HTMLDetailsElement && frontendTemplateOptions.open === false,
+          frontendTemplateOptionsDescribedBy: frontendTemplateOptions?.getAttribute('aria-describedby') || '',
+          frontendTemplateOptionsActionState: frontendTemplateOptions?.getAttribute('data-action-state') || '',
+          frontendTemplateOptionsActionStatus: frontendTemplateOptions?.getAttribute('data-action-status') || '',
+          frontendTemplateOptionsTemplateCount: frontendTemplateOptions?.getAttribute('data-template-count') || '',
+          frontendTemplateOptionsActiveTemplateId: frontendTemplateOptions?.getAttribute('data-active-template-id') || '',
+          frontendTemplateActionStatusId: frontendTemplateActionStatus?.id || '',
+          frontendTemplateActionStatusText,
+          frontendTemplateCardActionState: frontendTemplateCard?.getAttribute('data-action-state') || '',
+          frontendTemplateCardActionStatus: frontendTemplateCard?.getAttribute('data-action-status') || '',
+          frontendTemplateCardDisabledReason: frontendTemplateCard?.getAttribute('data-disabled-reason') || '',
+          frontendTemplateCardTargetTemplateId: frontendTemplateCard?.getAttribute('data-target-template-id') || '',
+          frontendTemplateCardTargetTemplateName: frontendTemplateCard?.getAttribute('data-target-template-name') || '',
+          frontendTemplateCardTargetSiteId: frontendTemplateCard?.getAttribute('data-target-site-id') || '',
+          frontendTemplateCreateActionState: frontendTemplateCreate?.getAttribute('data-action-state') || '',
+          frontendTemplateCreateActionStatus: frontendTemplateCreate?.getAttribute('data-action-status') || '',
+          frontendTemplateCreateDescribedBy: frontendTemplateCreate?.getAttribute('aria-describedby') || '',
+          frontendTemplateCreateDisabledReason: frontendTemplateCreate?.getAttribute('data-disabled-reason') || '',
+          frontendTemplateCreateDisabled: frontendTemplateCreate instanceof HTMLButtonElement ? frontendTemplateCreate.disabled : null,
+          frontendTemplateCreateTargetTemplateId: frontendTemplateCreate?.getAttribute('data-target-template-id') || '',
+          frontendTemplateCreateTargetTemplateName: frontendTemplateCreate?.getAttribute('data-target-template-name') || '',
+          frontendTemplateCreateTargetSiteId: frontendTemplateCreate?.getAttribute('data-target-site-id') || '',
+          frontendTemplateCopyActionState: frontendTemplateCopy?.getAttribute('data-action-state') || '',
+          frontendTemplateCopyActionStatus: frontendTemplateCopy?.getAttribute('data-action-status') || '',
+          frontendTemplateCopyDescribedBy: frontendTemplateCopy?.getAttribute('aria-describedby') || '',
+          frontendTemplateCopyDisabledReason: frontendTemplateCopy?.getAttribute('data-disabled-reason') || '',
+          frontendTemplateCopyDisabled: frontendTemplateCopy instanceof HTMLButtonElement ? frontendTemplateCopy.disabled : null,
+          frontendTemplateCopyTargetTemplateId: frontendTemplateCopy?.getAttribute('data-target-template-id') || '',
+          frontendTemplateCopyTargetTemplateName: frontendTemplateCopy?.getAttribute('data-target-template-name') || '',
+          frontendTemplateCopyTargetSiteId: frontendTemplateCopy?.getAttribute('data-target-site-id') || '',
+          hasFrontendTemplateActionContract: Boolean(frontendTemplateOptions) &&
+            frontendTemplateOptions?.getAttribute('aria-describedby') === 'products-frontend-template-action-status' &&
+            frontendTemplateActionStatus?.id === 'products-frontend-template-action-status' &&
+            frontendTemplateActionStatusText.includes('frontend product template') &&
+            frontendTemplateOptions?.getAttribute('data-action-status') === frontendTemplateActionStatusText &&
+            frontendTemplateCard?.getAttribute('data-action-status')?.includes(${JSON.stringify(FRONTEND_PRODUCT_TEMPLATE_NAME)}) &&
+            frontendTemplateCreate?.getAttribute('data-action-status')?.includes(${JSON.stringify(FRONTEND_PRODUCT_TEMPLATE_NAME)}) &&
+            frontendTemplateCopy?.getAttribute('data-action-status')?.includes(${JSON.stringify(FRONTEND_PRODUCT_TEMPLATE_NAME)}),
 	        storefrontApiDetailsCollapsed: productsStorefrontApiDetails instanceof HTMLDetailsElement && productsStorefrontApiDetails.open === false,
           hasStorefrontApiActions: Boolean(document.querySelector('[data-testid="products-storefront-api-actions"]')),
           hasStorefrontApiStatus: Boolean(document.querySelector('[data-testid="products-storefront-api-action-status"]')),
@@ -8694,11 +8753,40 @@ const assertProductsLayout = async (client) => {
       !layout.storefrontApiPrimaryHasSecondaryOnlyActions,
     `Products storefront API URL/export/handoff actions should stay nested behind collapsed More actions: ${JSON.stringify(layout)}`,
   );
+  assert(
+    layout.hasFrontendTemplateActionContract &&
+      layout.frontendTemplateOptionsDescribedBy === 'products-frontend-template-action-status' &&
+      layout.frontendTemplateOptionsActionState === 'ready' &&
+      Number(layout.frontendTemplateOptionsTemplateCount) >= 1 &&
+      layout.frontendTemplateActionStatusId === 'products-frontend-template-action-status' &&
+      layout.frontendTemplateOptionsActionStatus === layout.frontendTemplateActionStatusText &&
+      layout.frontendTemplateCardActionState === 'ready' &&
+      layout.frontendTemplateCardDisabledReason === '' &&
+      layout.frontendTemplateCardTargetTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID &&
+      layout.frontendTemplateCardTargetTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME &&
+      layout.frontendTemplateCardTargetSiteId === SITE_ID &&
+      layout.frontendTemplateCreateActionState === 'ready' &&
+      layout.frontendTemplateCreateDescribedBy === 'products-frontend-template-action-status' &&
+      layout.frontendTemplateCreateDisabledReason === '' &&
+      layout.frontendTemplateCreateDisabled === false &&
+      layout.frontendTemplateCreateTargetTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID &&
+      layout.frontendTemplateCreateTargetTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME &&
+      layout.frontendTemplateCreateTargetSiteId === SITE_ID &&
+      layout.frontendTemplateCopyActionState === 'ready' &&
+      layout.frontendTemplateCopyDescribedBy === 'products-frontend-template-action-status' &&
+      layout.frontendTemplateCopyDisabledReason === '' &&
+      layout.frontendTemplateCopyDisabled === false &&
+      layout.frontendTemplateCopyTargetTemplateId === FRONTEND_PRODUCT_TEMPLATE_ID &&
+      layout.frontendTemplateCopyTargetTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME &&
+      layout.frontendTemplateCopyTargetSiteId === SITE_ID,
+    `Products frontend product template actions should expose ready metadata for create/copy/template cards: ${JSON.stringify(layout)}`,
+  );
 	  assert(
 	      layout.hasCommandCenter &&
 	      layout.readinessDetailsCollapsed &&
 	      layout.controlMapCollapsed &&
 	      layout.frontendTemplateOptionsCollapsed &&
+      layout.hasFrontendTemplateActionContract &&
 	      layout.storefrontApiDetailsCollapsed &&
 	      layout.providerCertificationOperatorDetailsCollapsed &&
 	      layout.hasApiPanel &&

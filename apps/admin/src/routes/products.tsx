@@ -2097,6 +2097,72 @@ function ProductsRoute() {
     })),
     [frontendProductTemplates],
   );
+  const activeFrontendProductTemplate = frontendProductTemplates.find((template) => template.id === activeFrontendTemplateId) || null;
+  const productsFrontendTemplateActionStatusId = 'products-frontend-template-action-status';
+  const productsFrontendTemplateActionState = isCreatingTemplateId
+    ? 'busy'
+    : frontendDesignLoading
+      ? 'busy'
+      : frontendDesignError
+      ? 'blocked'
+      : frontendProductTemplates.length > 0
+        ? 'ready'
+        : 'blocked';
+  const getProductFrontendTemplateCreateDisabledReason = (template: SiteFrontendDesignTemplate): string => {
+    if (isCreatingTemplateId === `frontend:${template.id}`) {
+      return `${template.name} product is being created.`;
+    }
+    if (!productCollection) {
+      return 'Set up products before creating catalog records from frontend templates.';
+    }
+    if (isProductsAccessBusy) {
+      return 'Products workflow is busy.';
+    }
+    if (!canEditProducts) {
+      return editPermissionTitle || 'Your account cannot create products.';
+    }
+    return '';
+  };
+  const getProductFrontendTemplateCopyDisabledReason = (): string => {
+    if (isProductsAccessBusy) {
+      return 'Products workflow is busy.';
+    }
+    if (!canExportProducts) {
+      return exportPermissionTitle || 'Your account cannot export product templates.';
+    }
+    return '';
+  };
+  const getProductFrontendTemplateCardActionState = (template: SiteFrontendDesignTemplate) => {
+    const disabledReason = getProductFrontendTemplateCreateDisabledReason(template);
+    if (disabledReason) {
+      return isCreatingTemplateId === `frontend:${template.id}` ? 'busy' : 'blocked';
+    }
+    return activeFrontendTemplateId === template.id ? 'selected' : 'ready';
+  };
+  const getProductFrontendTemplateCreateActionStatus = (
+    template: SiteFrontendDesignTemplate,
+    designReadiness: ProductDesignReadiness,
+  ) => {
+    const disabledReason = getProductFrontendTemplateCreateDisabledReason(template);
+    if (disabledReason) {
+      return `${template.name} product template unavailable: ${disabledReason}`;
+    }
+    return `Create draft product from ${template.name} with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'} and ${formatProductLaunchReadinessStatus(designReadiness.status)} design readiness.`;
+  };
+  const getProductFrontendTemplateCopyActionStatus = (template: SiteFrontendDesignTemplate) => {
+    const disabledReason = getProductFrontendTemplateCopyDisabledReason();
+    if (disabledReason) {
+      return `${template.name} product template schema unavailable: ${disabledReason}`;
+    }
+    return `Copy ${template.name} frontend product template schema.`;
+  };
+  const productsFrontendTemplateActionStatus = frontendDesignLoading
+    ? 'Loading captured frontend product templates.'
+    : frontendDesignError
+      ? `Frontend product templates unavailable: ${frontendDesignError}`
+      : frontendProductTemplates.length > 0
+        ? `${frontendProductTemplates.length} frontend product template${frontendProductTemplates.length === 1 ? '' : 's'} available${activeFrontendProductTemplate ? `; ${activeFrontendProductTemplate.name} selected.` : '.'}`
+        : 'No frontend product templates captured for this site.';
   const galleryImageUrls = useMemo(
     () => parseGalleryImages(formState.galleryImages),
     [formState.galleryImages],
@@ -5381,10 +5447,20 @@ function ProductsRoute() {
         {(frontendProductTemplates.length > 0 || frontendDesignLoading || frontendDesignError) && (
           <details
             className="group mt-4 overflow-hidden rounded-lg border border-teal-200 bg-teal-50/50"
+            aria-describedby={productsFrontendTemplateActionStatusId}
+            data-action-state={productsFrontendTemplateActionState}
+            data-action-status={productsFrontendTemplateActionStatus}
             data-default-collapsed="true"
+            data-template-count={frontendProductTemplates.length}
+            data-active-template-id={activeFrontendTemplateId || undefined}
             data-testid="products-frontend-template-options"
           >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <summary
+              className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-teal-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+              aria-describedby={productsFrontendTemplateActionStatusId}
+              data-action-state={productsFrontendTemplateActionState}
+              data-action-status={productsFrontendTemplateActionStatus}
+            >
               <span>
                 <span className="block text-sm font-semibold text-foreground">Frontend design products</span>
                 <span className="mt-1 block max-w-3xl text-sm text-muted-foreground">
@@ -5399,6 +5475,9 @@ function ProductsRoute() {
                 <span className="hidden rounded-md bg-background px-2 py-1 text-xs font-medium text-teal-700 group-open:inline-flex">Hide templates</span>
               </span>
             </summary>
+            <span id={productsFrontendTemplateActionStatusId} className="sr-only" data-testid="products-frontend-template-action-status" aria-live="polite">
+              {productsFrontendTemplateActionStatus}
+            </span>
             <div className="border-t border-teal-200 p-4">
               {frontendDesignLoading ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -5421,6 +5500,11 @@ function ProductsRoute() {
                     ...designValues,
                   };
                   const designReadiness = buildProductDesignReadiness(designValues);
+                  const cardActionState = getProductFrontendTemplateCardActionState(template);
+                  const createDisabledReason = getProductFrontendTemplateCreateDisabledReason(template);
+                  const copyDisabledReason = getProductFrontendTemplateCopyDisabledReason();
+                  const createActionStatus = getProductFrontendTemplateCreateActionStatus(template, designReadiness);
+                  const copyActionStatus = getProductFrontendTemplateCopyActionStatus(template);
                   const manifestText = JSON.stringify({
                     schemaVersion: 'backy.frontend-product-template.v1',
                     template,
@@ -5442,6 +5526,13 @@ function ProductsRoute() {
                           : 'border-teal-200',
                       )}
                       data-active={activeFrontendTemplateId === template.id ? 'true' : 'false'}
+                      data-action-state={cardActionState}
+                      data-action-status={createActionStatus}
+                      data-disabled-reason={createDisabledReason || undefined}
+                      data-target-template-id={template.id}
+                      data-target-template-name={template.name}
+                      data-target-site-id={activeSiteId}
+                      data-testid={`products-frontend-template-card-${template.id}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -5497,10 +5588,17 @@ function ProductsRoute() {
                           size="sm"
                           variant="primary"
                           onClick={() => void createProductFromFrontendTemplate(template, blueprint)}
-                          disabled={!productCollection || isProductsAccessBusy || !canEditProducts}
-                          title={!canEditProducts ? editPermissionTitle : undefined}
+                          disabled={Boolean(createDisabledReason)}
+                          title={createDisabledReason || undefined}
+                          aria-describedby={productsFrontendTemplateActionStatusId}
                           iconStart={<Package className="size-4" />}
                           data-testid={`products-frontend-template-${template.id}`}
+                          data-action-state={createDisabledReason ? isCreatingTemplateId === `frontend:${template.id}` ? 'busy' : 'blocked' : 'ready'}
+                          data-action-status={createActionStatus}
+                          data-disabled-reason={createDisabledReason || undefined}
+                          data-target-template-id={template.id}
+                          data-target-template-name={template.name}
+                          data-target-site-id={activeSiteId}
                         >
                           {isCreatingTemplateId === `frontend:${template.id}` ? 'Creating...' : 'Create product'}
                         </Button>
@@ -5508,9 +5606,17 @@ function ProductsRoute() {
                           size="sm"
                           variant="outline"
                           onClick={() => void copyText(manifestText, `${template.name} frontend product template`)}
-                          disabled={isProductsAccessBusy || !canExportProducts}
-                          title={!canExportProducts ? exportPermissionTitle : undefined}
+                          disabled={Boolean(copyDisabledReason)}
+                          title={copyDisabledReason || undefined}
+                          aria-describedby={productsFrontendTemplateActionStatusId}
                           iconStart={<Copy className="size-4" />}
+                          data-testid={`products-frontend-template-copy-${template.id}`}
+                          data-action-state={copyDisabledReason ? 'blocked' : 'ready'}
+                          data-action-status={copyActionStatus}
+                          data-disabled-reason={copyDisabledReason || undefined}
+                          data-target-template-id={template.id}
+                          data-target-template-name={template.name}
+                          data-target-site-id={activeSiteId}
                         >
                           Copy schema
                         </Button>
