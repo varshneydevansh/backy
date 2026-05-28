@@ -148,6 +148,10 @@ function assertSourceGuards() {
 
   assert(sandboxRoute.includes("'Content-Security-Policy': contentSecurityPolicy"), 'sandbox route must return a response CSP header');
   assert(sandboxRoute.includes("'Permissions-Policy': sandboxPermissionsPolicy"), 'sandbox route must return an explicit permissions policy header');
+  assert(sandboxRoute.includes("SANDBOX_SCHEMA_VERSION = 'backy.interactive-component-sandbox.v1'"), 'sandbox route must expose a stable schema version');
+  assert(sandboxRoute.includes('publicContractResponse('), 'sandbox route must use the public contract response wrapper');
+  assert(sandboxRoute.includes("cache: 'discovery'") && sandboxRoute.includes("cache: 'error'"), 'sandbox route must distinguish active discovery cache from error no-store cache');
+  assert(sandboxRoute.includes('etagSeed') && sandboxRoute.includes('schemaVersion: SANDBOX_SCHEMA_VERSION'), 'sandbox route must expose ETag and schema headers');
   for (const directive of ['camera=()', 'microphone=()', 'geolocation=()', 'payment=()', 'usb=()', 'serial=()', 'clipboard-read=()', 'clipboard-write=()']) {
     assert(sandboxRoute.includes(directive), `sandbox permissions policy must deny ${directive}`);
   }

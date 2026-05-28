@@ -84,6 +84,12 @@ function assertInteractiveSandboxRouteSource() {
   assert(source.includes("form-action 'none'"), 'Interactive sandbox route must restrict form actions');
   assert(source.includes("'X-Content-Type-Options': 'nosniff'"), 'Interactive sandbox route must set nosniff');
   assert(source.includes("'Referrer-Policy': 'no-referrer'"), 'Interactive sandbox route must set no-referrer');
+  assert(source.includes("SANDBOX_SCHEMA_VERSION = 'backy.interactive-component-sandbox.v1'"), 'Interactive sandbox route must define a stable schema version');
+  assert(source.includes('publicContractResponse('), 'Interactive sandbox route must use the public contract response wrapper');
+  assert(source.includes("cache: 'discovery'"), 'Interactive sandbox route must use discovery cache for active sandbox HTML');
+  assert(source.includes("cache: 'error'"), 'Interactive sandbox route must use error cache for hidden/disabled sandbox HTML');
+  assert(source.includes('etagSeed'), 'Interactive sandbox route must expose ETag revalidation for active sandbox HTML');
+  assert(source.includes('schemaVersion: SANDBOX_SCHEMA_VERSION'), 'Interactive sandbox route must emit sandbox schema headers');
   assert(source.includes('parent.postMessage'), 'Interactive sandbox route must use postMessage lifecycle communication');
   assert(!source.includes('/api/admin/'), 'Interactive sandbox route must not call admin APIs');
   assert(!source.includes('document.cookie'), 'Interactive sandbox route must not read cookies');
@@ -107,6 +113,8 @@ function assertInteractiveContractSource() {
   );
 
   assert(registrySource.includes('responseHeaders'), 'Interactive manifest contract must expose sandbox response headers');
+  assert(registrySource.includes("schemaVersion: 'backy.interactive-component-sandbox.v1'"), 'Interactive manifest contract must expose sandbox schema response header metadata');
+  assert(registrySource.includes("cacheRevisionHeader: 'x-backy-cache-revision'"), 'Interactive manifest contract must expose sandbox cache revision header metadata');
   assert(registrySource.includes("default-src 'none'"), 'Interactive manifest contract must expose sandbox CSP directives');
   assert(registrySource.includes('camera=()') && registrySource.includes('microphone=()'), 'Interactive manifest contract must expose denied browser permissions');
   assert(registrySource.includes("key: 'accentColor'") && registrySource.includes("type: 'color'"), 'Interactive registry must expose sandbox color controls');
@@ -118,11 +126,15 @@ function assertInteractiveContractSource() {
   assert(openApiSource.includes('"checkbox"') && openApiSource.includes('"toggle"'), 'OpenAPI must declare boolean interactive control aliases');
   assert(openApiSource.includes('"Content-Security-Policy"') || openApiSource.includes("'Content-Security-Policy'"), 'OpenAPI must declare sandbox CSP response header');
   assert(openApiSource.includes('"Permissions-Policy"') || openApiSource.includes("'Permissions-Policy'"), 'OpenAPI must declare sandbox permissions response header');
+  assert(openApiSource.includes('"x-backy-schema-version"') && openApiSource.includes('"backy.interactive-component-sandbox.v1"'), 'OpenAPI must declare sandbox Backy schema response header');
+  assert(openApiSource.includes('"x-backy-cache-revision"'), 'OpenAPI must declare sandbox cache revision response header');
   assert(openApiSource.includes('"403":') && openApiSource.includes('description: "Component disabled"') && openApiSource.includes('headers: sandboxResponseHeaders'), 'OpenAPI disabled sandbox response must carry header contract');
   assert(openApiSource.includes('"404":') && openApiSource.includes('description: "Site or component not found"') && openApiSource.includes('headers: sandboxResponseHeaders'), 'OpenAPI missing sandbox response must carry header contract');
   assert(sdkSource.includes('responseHeaders: {'), 'SDK manifest type must require sandbox response headers');
   assert(sdkSource.includes('contentSecurityPolicy: string[]'), 'SDK manifest type must expose sandbox CSP directives');
   assert(sdkSource.includes('permissionsPolicy: string[]'), 'SDK manifest type must expose sandbox permissions policy directives');
+  assert(sdkSource.includes('schemaVersion: "backy.interactive-component-sandbox.v1"'), 'SDK manifest type must expose sandbox schema response header metadata');
+  assert(sdkSource.includes('cacheRevisionHeader: "x-backy-cache-revision"'), 'SDK manifest type must expose sandbox cache revision response header metadata');
   assert(sdkSource.includes('export type BackyInteractiveControlType') && sdkSource.includes('export type BackyInteractiveControlOption'), 'SDK must expose typed interactive control helper shapes');
 }
 
@@ -6509,6 +6521,8 @@ try {
       assert(frontendManifest.json?.data?.modules?.interactiveComponents?.security?.adminApiAccess === false, `${frontendManifest.url} interactive contract must deny admin API access`);
       assert(frontendManifest.json?.data?.modules?.interactiveComponents?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("default-src 'none'"), `${frontendManifest.url} missing interactive sandbox CSP contract`);
       assert(frontendManifest.json?.data?.modules?.interactiveComponents?.sandbox?.responseHeaders?.permissionsPolicy?.includes('camera=()'), `${frontendManifest.url} missing interactive sandbox permissions contract`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.sandbox?.responseHeaders?.schemaVersion === 'backy.interactive-component-sandbox.v1', `${frontendManifest.url} missing interactive sandbox schema header contract`);
+      assert(frontendManifest.json?.data?.modules?.interactiveComponents?.sandbox?.responseHeaders?.etagHeader === 'etag', `${frontendManifest.url} missing interactive sandbox ETag header contract`);
       const publicInteractiveComponents = await request(`/api/sites/${createdSiteId}/interactive-components`);
       assert(publicInteractiveComponents.response.status === 200, `${publicInteractiveComponents.url} expected 200, got ${publicInteractiveComponents.response.status}`);
       assert(publicInteractiveComponents.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicInteractiveComponents.url} missing discovery cache scope`);
@@ -6517,6 +6531,8 @@ try {
       assert(publicInteractiveComponents.json?.data?.contract?.schemaVersion === 'backy.interactive-components.v1', `${publicInteractiveComponents.url} missing interactive component contract`);
       assert(publicInteractiveComponents.json?.data?.contract?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("object-src 'none'"), `${publicInteractiveComponents.url} missing sandbox CSP response header contract`);
       assert(publicInteractiveComponents.json?.data?.contract?.sandbox?.responseHeaders?.permissionsPolicy?.includes('microphone=()'), `${publicInteractiveComponents.url} missing sandbox permissions response header contract`);
+      assert(publicInteractiveComponents.json?.data?.contract?.sandbox?.responseHeaders?.schemaVersion === 'backy.interactive-component-sandbox.v1', `${publicInteractiveComponents.url} missing sandbox schema response header contract`);
+      assert(publicInteractiveComponents.json?.data?.contract?.sandbox?.responseHeaders?.cacheRevisionHeader === 'x-backy-cache-revision', `${publicInteractiveComponents.url} missing sandbox cache-revision response header contract`);
       assert(publicInteractiveComponents.json?.data?.components?.some((component) => component.componentKey === 'backy.figure.rounds' && component.type === 'interactiveFigure'), `${publicInteractiveComponents.url} missing communication rounds figure component`);
       for (const componentKey of ['backy.figure.timeline', 'backy.simulation.parameter', 'backy.data.explorer', 'backy.canvas.sandboxed']) {
         assert(publicInteractiveComponents.json?.data?.components?.some((component) => component.componentKey === componentKey), `${publicInteractiveComponents.url} missing ${componentKey} registry component`);
@@ -6543,6 +6559,9 @@ try {
       const expectedSandboxStatus = sandboxedInteractiveComponent.status === 'active' ? 200 : 403;
       assert(sandboxRuntime.response.status === expectedSandboxStatus, `${sandboxRuntime.url} expected sandbox status ${expectedSandboxStatus}, got ${sandboxRuntime.response.status}`);
       assert(sandboxRuntime.response.headers.get('content-type')?.includes('text/html'), `${sandboxRuntime.url} expected HTML sandbox response`);
+      assert(sandboxRuntime.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${sandboxRuntime.url} missing sandbox contract version header`);
+      assert(sandboxRuntime.response.headers.get('x-backy-schema-version') === 'backy.interactive-component-sandbox.v1', `${sandboxRuntime.url} missing sandbox schema version header`);
+      assert(sandboxRuntime.response.headers.get('x-backy-site-id') === createdSiteId, `${sandboxRuntime.url} missing sandbox site id header`);
       assert(sandboxRuntime.response.headers.get('referrer-policy') === 'no-referrer', `${sandboxRuntime.url} missing no-referrer policy`);
       assert(sandboxRuntime.response.headers.get('x-content-type-options') === 'nosniff', `${sandboxRuntime.url} missing nosniff header`);
       assert(sandboxCsp.includes("default-src 'none'"), `${sandboxRuntime.url} missing default-src none CSP`);
@@ -6553,6 +6572,9 @@ try {
         assert(sandboxPermissionsPolicy.includes(directive), `${sandboxRuntime.url} missing sandbox permissions policy directive ${directive}`);
       }
       if (sandboxedInteractiveComponent.status === 'active') {
+        assert(sandboxRuntime.response.headers.get('x-backy-cache-scope') === 'discovery', `${sandboxRuntime.url} missing sandbox discovery cache scope`);
+        assert(sandboxRuntime.response.headers.get('x-backy-cache-revision'), `${sandboxRuntime.url} missing sandbox cache revision`);
+        assert(sandboxRuntime.response.headers.get('etag')?.startsWith('"backy-'), `${sandboxRuntime.url} missing sandbox etag`);
         assert(sandboxCsp.includes("script-src 'unsafe-inline'"), `${sandboxRuntime.url} missing bootstrap script CSP`);
         assert(sandboxRuntime.text.includes('backy.interactive-component.ready'), `${sandboxRuntime.url} missing ready lifecycle bootstrap`);
         assert(sandboxRuntime.text.includes('backy.interactive-component.init'), `${sandboxRuntime.url} missing init lifecycle bootstrap`);
@@ -6565,10 +6587,14 @@ try {
       const missingSandboxRuntime = await request(`/api/sites/${createdSiteId}/interactive-components/backy.custom.sandboxed/9.9.9/sandbox`);
       assert(missingSandboxRuntime.response.status === 404, `${missingSandboxRuntime.url} expected unknown sandbox version 404`);
       assert(missingSandboxRuntime.response.headers.get('cache-control') === 'no-store', `${missingSandboxRuntime.url} expected unknown sandbox to be no-store`);
+      assert(missingSandboxRuntime.response.headers.get('x-backy-cache-scope') === 'error', `${missingSandboxRuntime.url} expected unknown sandbox error cache scope`);
+      assert(missingSandboxRuntime.response.headers.get('x-backy-schema-version') === 'backy.interactive-component-sandbox.v1', `${missingSandboxRuntime.url} missing unknown sandbox schema version`);
       assert(missingSandboxRuntime.response.headers.get('content-security-policy')?.includes("default-src 'none'"), `${missingSandboxRuntime.url} missing unknown sandbox CSP`);
       assert(missingSandboxRuntime.response.headers.get('permissions-policy')?.includes('camera=()'), `${missingSandboxRuntime.url} missing unknown sandbox permissions policy`);
       const contractRegistrySandbox = await request(contractRegistryComponent.runtime.sandboxUrl);
       assert(contractRegistrySandbox.response.status === 200, `${contractRegistrySandbox.url} expected admin-created sandbox 200, got ${contractRegistrySandbox.response.status}`);
+      assert(contractRegistrySandbox.response.headers.get('x-backy-schema-version') === 'backy.interactive-component-sandbox.v1', `${contractRegistrySandbox.url} missing admin-created sandbox schema version`);
+      assert(contractRegistrySandbox.response.headers.get('etag')?.startsWith('"backy-'), `${contractRegistrySandbox.url} missing admin-created sandbox etag`);
       assert(contractRegistrySandbox.response.headers.get('content-security-policy')?.includes("default-src 'none'"), `${contractRegistrySandbox.url} missing admin-created sandbox CSP`);
       assert(contractRegistrySandbox.response.headers.get('permissions-policy')?.includes('microphone=()'), `${contractRegistrySandbox.url} missing admin-created sandbox permissions policy`);
       assert(contractRegistrySandbox.text.includes('Contract custom figure'), `${contractRegistrySandbox.url} missing admin-created sandbox display name`);

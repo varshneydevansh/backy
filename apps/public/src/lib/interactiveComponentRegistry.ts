@@ -91,6 +91,12 @@ export const buildInteractiveComponentManifestContract = () => {
       allowedConnectSrc,
       requiresDedicatedOrigin: customCodeEnabled,
       responseHeaders: {
+        schemaVersion: 'backy.interactive-component-sandbox.v1',
+        contractVersionHeader: 'x-backy-contract-version',
+        schemaVersionHeader: 'x-backy-schema-version',
+        cacheScopeHeader: 'x-backy-cache-scope',
+        cacheRevisionHeader: 'x-backy-cache-revision',
+        etagHeader: 'etag',
         contentSecurityPolicy,
         permissionsPolicy,
         referrerPolicy: 'no-referrer',

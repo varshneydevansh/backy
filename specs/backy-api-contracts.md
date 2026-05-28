@@ -70,7 +70,8 @@ This document defines how custom frontends, admin UI, and public renderer intera
 - `GET /api/sites/:siteId/interactive-components/:componentKey/:version/sandbox`
   - Site-scoped sandbox bootstrap for registered `codeComponent` entries.
   - Serves a constrained HTML iframe shell with CSP, `no-referrer`, no admin data, and the `backy.interactive-component.v1` `postMessage` ready/init/resize protocol.
-  - Only published sites and active sandbox iframe components are served; unknown, disabled, or unpublished components return a static error shell.
+  - Active sandbox shells use Backy public contract/cache headers with `x-backy-schema-version: backy.interactive-component-sandbox.v1`, `x-backy-cache-scope: discovery`, ETag/304 revalidation, `x-backy-cache-revision`, and `x-backy-site-id` while keeping the CSP and Permissions-Policy response headers advertised by the manifest.
+  - Only published sites and active sandbox iframe components are served; unknown, disabled, or unpublished components return a static `no-store` error shell with the same sandbox schema/CSP/permission header boundary.
 - `POST /api/sites/:siteId/interactive-components/runtime-events`
   - Public runtime telemetry endpoint used by the hosted renderer and SDK to record sandbox lifecycle failures.
   - Accepts bounded `componentKey`, `version`, `elementId`, `pageId`, `postId`, `type`, and `message` fields, then stores an `interactive-runtime` event in the existing interaction event/audit stream.

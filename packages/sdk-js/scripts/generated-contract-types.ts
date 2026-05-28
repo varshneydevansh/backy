@@ -9061,6 +9061,12 @@ const manifest = {
         allowedConnectSrc: "'self'",
         requiresDedicatedOrigin: true,
         responseHeaders: {
+          schemaVersion: "backy.interactive-component-sandbox.v1",
+          contractVersionHeader: "x-backy-contract-version",
+          schemaVersionHeader: "x-backy-schema-version",
+          cacheScopeHeader: "x-backy-cache-scope",
+          cacheRevisionHeader: "x-backy-cache-revision",
+          etagHeader: "etag",
           contentSecurityPolicy: [
             "default-src 'none'",
             "script-src 'unsafe-inline'",
@@ -13703,6 +13709,12 @@ const interactiveRegistryEnvelope = {
         allowedConnectSrc: "'self'",
         requiresDedicatedOrigin: true,
         responseHeaders: {
+          schemaVersion: "backy.interactive-component-sandbox.v1",
+          contractVersionHeader: "x-backy-contract-version",
+          schemaVersionHeader: "x-backy-schema-version",
+          cacheScopeHeader: "x-backy-cache-scope",
+          cacheRevisionHeader: "x-backy-cache-revision",
+          etagHeader: "etag",
           contentSecurityPolicy: [
             "default-src 'none'",
             "script-src 'unsafe-inline'",

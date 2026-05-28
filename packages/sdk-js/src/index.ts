@@ -3012,6 +3012,12 @@ export interface BackyInteractiveComponentsContract {
     allowedConnectSrc: string;
     requiresDedicatedOrigin: boolean;
     responseHeaders: {
+      schemaVersion: "backy.interactive-component-sandbox.v1" | string;
+      contractVersionHeader: "x-backy-contract-version" | string;
+      schemaVersionHeader: "x-backy-schema-version" | string;
+      cacheScopeHeader: "x-backy-cache-scope" | string;
+      cacheRevisionHeader: "x-backy-cache-revision" | string;
+      etagHeader: "etag" | string;
       contentSecurityPolicy: string[];
       permissionsPolicy: string[];
       referrerPolicy: "no-referrer" | string;

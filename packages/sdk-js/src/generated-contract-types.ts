@@ -898,6 +898,12 @@ export type GeneratedBackyOpenApiInteractiveComponentManifestContract = {
     allowedConnectSrc: string;
     requiresDedicatedOrigin: boolean;
     responseHeaders: {
+      schemaVersion: "backy.interactive-component-sandbox.v1";
+      contractVersionHeader: "x-backy-contract-version";
+      schemaVersionHeader: "x-backy-schema-version";
+      cacheScopeHeader: "x-backy-cache-scope";
+      cacheRevisionHeader: "x-backy-cache-revision";
+      etagHeader: "etag";
       contentSecurityPolicy: Array<string>;
       permissionsPolicy: Array<string>;
       referrerPolicy: "no-referrer";

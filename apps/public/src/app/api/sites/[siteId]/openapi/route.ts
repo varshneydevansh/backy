@@ -925,6 +925,31 @@ const queryParameter = (
 });
 
 const sandboxResponseHeaders = {
+  ETag: {
+    description:
+      "Stable sandbox shell validator for If-None-Match revalidation.",
+    schema: { type: "string" },
+  },
+  "x-backy-contract-version": {
+    description: "Backy public contract version.",
+    schema: { type: "string", const: "backy.ai-frontend.v1" },
+  },
+  "x-backy-schema-version": {
+    description: "Interactive sandbox response schema version.",
+    schema: { type: "string", const: "backy.interactive-component-sandbox.v1" },
+  },
+  "x-backy-cache-scope": {
+    description: "Public sandbox cache scope.",
+    schema: { type: "string", enum: ["discovery", "error"] },
+  },
+  "x-backy-cache-revision": {
+    description: "Cache revision for active sandbox shell responses.",
+    schema: { type: "string" },
+  },
+  "x-backy-site-id": {
+    description: "Resolved Backy site id for site-scoped sandbox responses.",
+    schema: { type: "string" },
+  },
   "Content-Security-Policy": {
     description:
       "Deny-by-default iframe CSP for Backy-owned interactive component sandboxes.",
@@ -7460,6 +7485,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     responseHeaders: {
                       type: "object",
                       required: [
+                        "schemaVersion",
+                        "contractVersionHeader",
+                        "schemaVersionHeader",
+                        "cacheScopeHeader",
+                        "cacheRevisionHeader",
+                        "etagHeader",
                         "contentSecurityPolicy",
                         "permissionsPolicy",
                         "referrerPolicy",
@@ -7467,6 +7498,22 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       ],
                       additionalProperties: false,
                       properties: {
+                        schemaVersion: {
+                          const: "backy.interactive-component-sandbox.v1",
+                        },
+                        contractVersionHeader: {
+                          const: "x-backy-contract-version",
+                        },
+                        schemaVersionHeader: {
+                          const: "x-backy-schema-version",
+                        },
+                        cacheScopeHeader: {
+                          const: "x-backy-cache-scope",
+                        },
+                        cacheRevisionHeader: {
+                          const: "x-backy-cache-revision",
+                        },
+                        etagHeader: { const: "etag" },
                         contentSecurityPolicy: {
                           type: "array",
                           items: { type: "string" },

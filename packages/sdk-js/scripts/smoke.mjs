@@ -1263,11 +1263,15 @@ assert(manifest.data.modules?.interactiveComponents?.renderContract?.fallbackReq
 assert(manifest.data.modules?.interactiveComponents?.security?.adminApiAccess === false, 'manifest() interactive contract should deny admin API access');
 assert(manifest.data.modules?.interactiveComponents?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("default-src 'none'"), 'manifest() missing sandbox CSP response-header contract');
 assert(manifest.data.modules?.interactiveComponents?.sandbox?.responseHeaders?.permissionsPolicy?.includes('camera=()'), 'manifest() missing sandbox permissions response-header contract');
+assert(manifest.data.modules?.interactiveComponents?.sandbox?.responseHeaders?.schemaVersion === 'backy.interactive-component-sandbox.v1', 'manifest() missing sandbox schema response-header contract');
+assert(manifest.data.modules?.interactiveComponents?.sandbox?.responseHeaders?.etagHeader === 'etag', 'manifest() missing sandbox ETag response-header contract');
 const interactiveComponents = await client.interactiveComponents();
 assert(interactiveComponents.data.schemaVersion === 'backy.interactive-component-registry.v1', 'interactiveComponents() missing registry schema');
 assert(interactiveComponents.data.contract?.schemaVersion === 'backy.interactive-components.v1', 'interactiveComponents() missing manifest contract');
 assert(interactiveComponents.data.contract?.sandbox?.responseHeaders?.contentSecurityPolicy?.includes("object-src 'none'"), 'interactiveComponents() missing sandbox CSP response-header contract');
 assert(interactiveComponents.data.contract?.sandbox?.responseHeaders?.permissionsPolicy?.includes('microphone=()'), 'interactiveComponents() missing sandbox permissions response-header contract');
+assert(interactiveComponents.data.contract?.sandbox?.responseHeaders?.schemaVersion === 'backy.interactive-component-sandbox.v1', 'interactiveComponents() missing sandbox schema response-header contract');
+assert(interactiveComponents.data.contract?.sandbox?.responseHeaders?.cacheRevisionHeader === 'x-backy-cache-revision', 'interactiveComponents() missing sandbox cache-revision response-header contract');
 assert(interactiveComponents.data.components?.some?.((component) => component.componentKey === 'backy.figure.rounds'), 'interactiveComponents() missing communication rounds figure');
 const canvasInteractiveComponent = interactiveComponents.data.components?.find?.((component) => component.componentKey === 'backy.canvas.sandboxed');
 assert(canvasInteractiveComponent?.controls?.some?.((control) => control.key === 'accentColor' && control.type === 'color'), 'interactiveComponents() missing sandbox color control');

@@ -8,6 +8,7 @@
 
 import { getSiteByIdOrSlug, listInteractiveComponents } from '@/lib/backyStore';
 import { buildPublicInteractiveComponentRegistry, type BackyInteractiveComponentRegistryEntry } from '@/lib/interactiveComponentRegistry';
+import { publicContractResponse } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 interface RouteParams {
@@ -24,6 +25,9 @@ const escapeHtml = (value: unknown): string => String(value ?? '')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+
+const SANDBOX_SCHEMA_VERSION = 'backy.interactive-component-sandbox.v1';
+const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const sandboxPermissionsPolicy = [
   'accelerometer=()',
@@ -66,10 +70,31 @@ const sandboxErrorHeaders = (contentSecurityPolicy: string) => ({
   'Cache-Control': 'no-store',
 });
 
-const sandboxError = (status: number, title: string, detail: string) => new Response(
+const sandboxError = ({
+  status,
+  title,
+  detail,
+  request,
+  requestId,
+  siteId,
+}: {
+  status: number;
+  title: string;
+  detail: string;
+  request: Request;
+  requestId: string;
+  siteId?: string;
+}) => publicContractResponse(
   `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></body></html>`,
   {
     status,
+    requestId,
+    request,
+    cache: 'error',
+    siteId,
+    schemaVersion: SANDBOX_SCHEMA_VERSION,
+  },
+  {
     headers: sandboxErrorHeaders([
       "default-src 'none'",
       "style-src 'unsafe-inline'",
@@ -243,12 +268,19 @@ const buildSandboxHtml = ({
 </body>
 </html>`;
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
   const { siteId, componentKey, version } = await params;
   const resolvedSiteId = await resolvePublishedSiteId(siteId);
 
   if (!resolvedSiteId) {
-    return sandboxError(404, 'Site not found', 'The requested site is not published or does not exist.');
+    return sandboxError({
+      status: 404,
+      title: 'Site not found',
+      detail: 'The requested site is not published or does not exist.',
+      request,
+      requestId,
+    });
   }
 
   const registryEntries = shouldUseDemoStoreFallback()
@@ -266,11 +298,25 @@ export async function GET(_request: Request, { params }: RouteParams) {
   ));
 
   if (!component || component.type !== 'codeComponent' || component.renderMode !== 'sandbox-iframe') {
-    return sandboxError(404, 'Component not found', 'The requested sandbox component is not registered for this site.');
+    return sandboxError({
+      status: 404,
+      title: 'Component not found',
+      detail: 'The requested sandbox component is not registered for this site.',
+      request,
+      requestId,
+      siteId: resolvedSiteId,
+    });
   }
 
   if (component.status !== 'active') {
-    return sandboxError(403, 'Component disabled', 'Custom code components are disabled for this site runtime.');
+    return sandboxError({
+      status: 403,
+      title: 'Component disabled',
+      detail: 'Custom code components are disabled for this site runtime.',
+      request,
+      requestId,
+      siteId: resolvedSiteId,
+    });
   }
 
   const csp = [
@@ -290,13 +336,34 @@ export async function GET(_request: Request, { params }: RouteParams) {
     "form-action 'none'",
   ].join('; ');
 
-  return new Response(buildSandboxHtml({
+  const html = buildSandboxHtml({
     componentKey: component.componentKey,
     displayName: component.displayName,
     version: component.version,
     protocol: component.runtime?.postMessageProtocol || registry.contract.renderContract.postMessageProtocol,
-  }), {
-    status: 200,
-    headers: sandboxHeaders(csp),
   });
+
+  return publicContractResponse(
+    html,
+    {
+      requestId,
+      request,
+      cache: 'discovery',
+      siteId: resolvedSiteId,
+      schemaVersion: SANDBOX_SCHEMA_VERSION,
+      etagSeed: {
+        siteId: resolvedSiteId,
+        componentKey: component.componentKey,
+        version: component.version,
+        status: component.status,
+        displayName: component.displayName,
+        protocol: component.runtime?.postMessageProtocol || registry.contract.renderContract.postMessageProtocol,
+        html,
+      },
+    },
+    {
+      status: 200,
+      headers: sandboxHeaders(csp),
+    },
+  );
 }
