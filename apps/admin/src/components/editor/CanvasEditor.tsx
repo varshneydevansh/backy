@@ -243,7 +243,6 @@ const buildEditorAgentHandoff = (siteId?: string) => {
 
   return {
     ...canonicalHandoff,
-    source: 'canvas-editor-composition-plan',
     siteId: siteId || null,
     editorSurface: {
       schemaVersion: 'backy.editor-canvas-agent-surface.v1',
@@ -251,7 +250,7 @@ const buildEditorAgentHandoff = (siteId?: string) => {
       agentReadStart: canonicalHandoff.endpoints.agentHandoff,
       manifestReadStart: 'manifest.data.contract.customFrontendAgentHandoff',
       openApiReadStart: 'x-backy-custom-frontend-agent-handoff',
-      copyablePayload: 'editorCompositionReadiness.actionPlan.agentHandoff',
+      copyablePayload: 'editorCompositionReadiness.agentHandoff',
       canvasFirst: canonicalHandoff.contentCreation.canvasFirst,
       adminEntryPoints: canonicalHandoff.contentCreation.adminEntryPoints,
       designState: canonicalHandoff.designState,
@@ -5203,6 +5202,15 @@ export function CanvasEditor({
       setEditorNotice('Unable to copy the editor composition action plan.');
     }
   }, [editorCompositionReadiness.actionPlan]);
+  const copyEditorAgentHandoff = useCallback(async () => {
+    const handoff = JSON.stringify(editorCompositionReadiness.agentHandoff, null, 2);
+    try {
+      await navigator.clipboard.writeText(handoff);
+      setEditorNotice('Custom frontend agent handoff copied.');
+    } catch {
+      setEditorNotice('Unable to copy the custom frontend agent handoff.');
+    }
+  }, [editorCompositionReadiness.agentHandoff]);
   const copyEditorCommandRegistry = useCallback(async () => {
     const registry = JSON.stringify(editorCompositionReadiness.commandRegistry, null, 2);
     try {
@@ -9433,6 +9441,7 @@ export function CanvasEditor({
                   data-composition-schema={editorCompositionReadiness.schemaVersion}
                   data-action-plan-schema={editorCompositionReadiness.actionPlan.schemaVersion}
                   data-agent-handoff-schema={editorCompositionReadiness.agentHandoff.schemaVersion}
+                  data-agent-handoff-source={editorCompositionReadiness.agentHandoff.source}
                   data-agent-handoff-doc={CUSTOM_FRONTEND_AGENT_HANDOFF_DOC}
                   data-agent-handoff-direct={editorCompositionReadiness.agentHandoff.endpoints.agentHandoff}
                   data-agent-handoff-manifest={editorCompositionReadiness.agentHandoff.endpoints.manifest}
@@ -9545,17 +9554,47 @@ export function CanvasEditor({
                     <div
                       className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2"
                       data-testid="editor-agent-handoff-brief"
+                      data-agent-handoff-schema={editorCompositionReadiness.agentHandoff.schemaVersion}
+                      data-agent-handoff-source={editorCompositionReadiness.agentHandoff.source}
                       data-agent-read-start={editorCompositionReadiness.agentHandoff.editorSurface.agentReadStart}
+                      data-agent-api-alignment-schema={editorCompositionReadiness.agentHandoff.apiAlignment.schemaVersion}
                       data-manifest-read-start={editorCompositionReadiness.agentHandoff.editorSurface.manifestReadStart}
                       data-openapi-read-start={editorCompositionReadiness.agentHandoff.editorSurface.openApiReadStart}
                       data-read-order={editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(',')}
                       data-canvas-first-value={editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.backyCanvasValue}
                       data-custom-frontend-value={editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.customFrontendValue}
+                      data-agent-preserve-fields={editorCompositionReadiness.agentHandoff.apiAlignment.preserveFields.join(',')}
+                      data-agent-no-local-forks={editorCompositionReadiness.agentHandoff.apiAlignment.writeBoundary.noFrontendLocalJsonForks ? 'true' : 'false'}
                     >
-                      <div className="font-semibold text-slate-950">Agent handoff</div>
-                      <div className="mt-1 text-[11px] leading-4 text-slate-500">
-                        {editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(' -> ')}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-semibold text-slate-950">Agent handoff</div>
+                          <div className="mt-1 text-[11px] leading-4 text-slate-500">
+                            {editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(' -> ')}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void copyEditorAgentHandoff()}
+                          title="Copy custom frontend agent handoff"
+                          aria-label="Copy custom frontend agent handoff"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                          data-testid="editor-copy-agent-handoff"
+                          data-agent-read-start={editorCompositionReadiness.agentHandoff.editorSurface.agentReadStart}
+                          data-api-alignment-schema={editorCompositionReadiness.agentHandoff.apiAlignment.schemaVersion}
+                          data-action-state="ready"
+                          data-action-status="Copy custom frontend agent handoff available."
+                        >
+                          <Copy className="h-3 w-3" />
+                          Copy handoff
+                        </button>
                       </div>
+                      <code
+                        className="mt-2 block break-all rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-[10px] leading-4 text-slate-600"
+                        data-testid="editor-agent-handoff-direct-endpoint"
+                      >
+                        {editorCompositionReadiness.agentHandoff.editorSurface.agentReadStart}
+                      </code>
                       <div className="mt-1 text-[11px] leading-4 text-slate-600">
                         {editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.editorOutcome}
                       </div>

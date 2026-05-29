@@ -1089,8 +1089,10 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('buildCustomFrontendAgentHandoff,') &&
       source.includes('CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,') &&
       source.includes('const canonicalHandoff = buildCustomFrontendAgentHandoff(sitePath)') &&
+      !source.includes("source: 'canvas-editor-composition-plan'") &&
       source.includes("schemaVersion: 'backy.editor-canvas-agent-surface.v1'") &&
       source.includes('agentReadStart: canonicalHandoff.endpoints.agentHandoff') &&
+      source.includes("copyablePayload: 'editorCompositionReadiness.agentHandoff'") &&
       source.includes("manifestReadStart: 'manifest.data.contract.customFrontendAgentHandoff'") &&
       source.includes("openApiReadStart: 'x-backy-custom-frontend-agent-handoff'") &&
       source.includes('const agentHandoff = buildEditorAgentHandoff(activeSiteId)') &&
@@ -1104,7 +1106,13 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-agent-handoff-read-order={editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(\',\')}') &&
       source.includes('data-agent-handoff-route-reveal={editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.routeRevealGuarantee}') &&
       source.includes('data-agent-handoff-site-style-sources={editorCompositionReadiness.agentHandoff.designState.siteStyleSources.join(\',\')}') &&
-      source.includes('data-testid="editor-agent-handoff-brief"'),
+      source.includes('data-testid="editor-agent-handoff-brief"') &&
+      source.includes('data-agent-handoff-source={editorCompositionReadiness.agentHandoff.source}') &&
+      source.includes('data-testid="editor-copy-agent-handoff"') &&
+      source.includes('data-testid="editor-agent-handoff-direct-endpoint"') &&
+      source.includes('copyEditorAgentHandoff') &&
+      source.includes('editorCompositionReadiness.agentHandoff.apiAlignment.preserveFields.join(\',\')') &&
+      source.includes('data-action-status="Copy custom frontend agent handoff available."'),
     'Editor inspector must expose a composition readiness contract for grouped, animated, data-bound, asset-bound, and interactive canvas trees',
   );
   assert(
@@ -6253,6 +6261,8 @@ const readEditorCompositionReadiness = async (client, label) => {
     const designMetrics = document.querySelector('[data-testid="editor-composition-design-state-metrics"]');
     const handoffBrief = document.querySelector('[data-testid="editor-agent-handoff-brief"]');
     const copyButton = document.querySelector('[data-testid="editor-copy-composition-plan"]');
+    const copyAgentHandoffButton = document.querySelector('[data-testid="editor-copy-agent-handoff"]');
+    const directEndpoint = document.querySelector('[data-testid="editor-agent-handoff-direct-endpoint"]');
     return {
       label: ${JSON.stringify(label)},
       hasCard: Boolean(card),
@@ -6262,6 +6272,7 @@ const readEditorCompositionReadiness = async (client, label) => {
       schema: card?.getAttribute('data-composition-schema') || '',
       actionPlanSchema: card?.getAttribute('data-action-plan-schema') || '',
       agentHandoffSchema: card?.getAttribute('data-agent-handoff-schema') || '',
+      agentHandoffSource: card?.getAttribute('data-agent-handoff-source') || '',
       agentHandoffDoc: card?.getAttribute('data-agent-handoff-doc') || '',
       agentHandoffDirect: card?.getAttribute('data-agent-handoff-direct') || '',
       agentHandoffManifest: card?.getAttribute('data-agent-handoff-manifest') || '',
@@ -6284,12 +6295,25 @@ const readEditorCompositionReadiness = async (client, label) => {
       agentHandoffBlogCanvasEntry: card?.getAttribute('data-agent-handoff-blog-canvas-entry') || '',
       agentHandoffBlogCustomEntry: card?.getAttribute('data-agent-handoff-blog-custom-entry') || '',
       handoffBriefReadStart: handoffBrief?.getAttribute('data-agent-read-start') || '',
+      handoffBriefSchema: handoffBrief?.getAttribute('data-agent-handoff-schema') || '',
+      handoffBriefSource: handoffBrief?.getAttribute('data-agent-handoff-source') || '',
+      handoffBriefApiAlignmentSchema: handoffBrief?.getAttribute('data-agent-api-alignment-schema') || '',
       handoffBriefManifestReadStart: handoffBrief?.getAttribute('data-manifest-read-start') || '',
       handoffBriefOpenapiReadStart: handoffBrief?.getAttribute('data-openapi-read-start') || '',
       handoffBriefReadOrder: handoffBrief?.getAttribute('data-read-order') || '',
       handoffBriefCanvasValue: handoffBrief?.getAttribute('data-canvas-first-value') || '',
       handoffBriefCustomFrontendValue: handoffBrief?.getAttribute('data-custom-frontend-value') || '',
+      handoffBriefPreserveFields: handoffBrief?.getAttribute('data-agent-preserve-fields') || '',
+      handoffBriefNoLocalForks: handoffBrief?.getAttribute('data-agent-no-local-forks') || '',
       handoffBriefText: handoffBrief?.textContent || '',
+      directEndpointText: directEndpoint?.textContent || '',
+      copyAgentHandoffTitle: copyAgentHandoffButton?.getAttribute('title') || '',
+      copyAgentHandoffLabel: copyAgentHandoffButton?.getAttribute('aria-label') || '',
+      copyAgentHandoffReadStart: copyAgentHandoffButton?.getAttribute('data-agent-read-start') || '',
+      copyAgentHandoffApiAlignmentSchema: copyAgentHandoffButton?.getAttribute('data-api-alignment-schema') || '',
+      copyAgentHandoffActionState: copyAgentHandoffButton?.getAttribute('data-action-state') || '',
+      copyAgentHandoffActionStatus: copyAgentHandoffButton?.getAttribute('data-action-status') || '',
+      copyAgentHandoffDisabled: copyAgentHandoffButton instanceof HTMLButtonElement ? copyAgentHandoffButton.disabled : null,
       totalLayers: Number(card?.getAttribute('data-total-layers') || 0),
       groupLayers: Number(card?.getAttribute('data-group-layers') || 0),
       nestedLayers: Number(card?.getAttribute('data-nested-layers') || 0),
@@ -6313,6 +6337,7 @@ const readEditorCompositionReadiness = async (client, label) => {
   assert(state.schema === 'backy.editor-composition-readiness.v1', `Editor composition readiness schema mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.actionPlanSchema === 'backy.editor-composition-action-plan.v1', `Editor composition action-plan schema mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffSchema === 'backy.custom-frontend-agent-handoff.v1', `Editor agent handoff schema mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffSource === 'public-manifest-openapi-contract', `Editor agent handoff source mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffDoc === 'specs/custom-frontend-agent-handoff.md', `Editor agent handoff doc mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffDirect.includes('/api/sites/') && state.agentHandoffDirect.endsWith('/agent-handoff'), `Editor agent handoff direct endpoint missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffManifest.includes('/api/sites/') && state.agentHandoffManifest.endsWith('/manifest'), `Editor agent handoff manifest endpoint missing during ${label}: ${JSON.stringify(state)}`);
@@ -6354,10 +6379,135 @@ const readEditorCompositionReadiness = async (client, label) => {
   );
   assert(state.handoffBriefReadOrder === state.agentHandoffReadOrder && state.handoffBriefCanvasValue === 'backy-canvas' && state.handoffBriefCustomFrontendValue === 'custom-frontend', `Editor handoff brief metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.handoffBriefText.includes('agent-handoff -> manifest -> openapi -> frontend-design -> templates -> render') && state.handoffBriefText.includes('Backy canvas editor'), `Editor handoff brief text mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.handoffBriefSchema === state.agentHandoffSchema &&
+      state.handoffBriefSource === state.agentHandoffSource &&
+      state.handoffBriefApiAlignmentSchema === 'backy.custom-frontend-api-alignment.v1' &&
+      state.handoffBriefPreserveFields.includes('content.elements') &&
+      state.handoffBriefPreserveFields.includes('content.editableMap') &&
+      state.handoffBriefNoLocalForks === 'true',
+    `Editor handoff brief API-alignment metadata mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.directEndpointText.trim() === state.agentHandoffReadStart &&
+      state.copyAgentHandoffReadStart === state.agentHandoffReadStart &&
+      state.copyAgentHandoffApiAlignmentSchema === 'backy.custom-frontend-api-alignment.v1' &&
+      state.copyAgentHandoffActionState === 'ready' &&
+      state.copyAgentHandoffActionStatus === 'Copy custom frontend agent handoff available.' &&
+      state.copyAgentHandoffDisabled === false,
+    `Editor copyable agent handoff endpoint mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(state.copyAgentHandoffTitle === 'Copy custom frontend agent handoff', `Editor agent handoff copy title mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.copyAgentHandoffLabel === 'Copy custom frontend agent handoff', `Editor agent handoff copy label mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyDisabled === false, `Editor composition copy plan button disabled during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyTitle === 'Copy editor composition action plan', `Editor composition copy title mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyLabel === 'Copy editor composition action plan', `Editor composition copy label mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.designStateLayers >= state.animatedLayers + state.dataBoundLayers + state.assetBoundLayers + state.interactiveLayers, `Editor composition design-state layer aggregate drifted during ${label}: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const testEditorAgentHandoffClipboard = async (client, label) => {
+  const state = await evaluate(client, `(async () => {
+    window.__backyLastAgentHandoffClipboard = '';
+    const captureWrite = async (value) => {
+      window.__backyLastAgentHandoffClipboard = String(value || '');
+    };
+
+    try {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: captureWrite,
+        },
+      });
+    } catch (error) {
+      try {
+        navigator.clipboard.writeText = captureWrite;
+      } catch (innerError) {
+        return {
+          ok: false,
+          reason: 'clipboard-unpatchable',
+          message: String(error?.message || error),
+          innerMessage: String(innerError?.message || innerError),
+        };
+      }
+    }
+
+    const button = document.querySelector('[data-testid="editor-copy-agent-handoff"]');
+    if (!(button instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-button' };
+    }
+    if (button.disabled) {
+      return { ok: false, reason: 'disabled-button' };
+    }
+
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    const raw = window.__backyLastAgentHandoffClipboard || '';
+    let parsed = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      return {
+        ok: false,
+        reason: 'invalid-json',
+        message: String(error?.message || error),
+        rawStart: raw.slice(0, 240),
+        rawLength: raw.length,
+      };
+    }
+
+    return {
+      ok: true,
+      label: ${JSON.stringify(label)},
+      rawLength: raw.length,
+      schemaVersion: parsed?.schemaVersion || '',
+      source: parsed?.source || '',
+      docs: Array.isArray(parsed?.docs) ? parsed.docs.map((doc) => doc?.path).filter(Boolean) : [],
+      directEndpoint: parsed?.endpoints?.agentHandoff || '',
+      readStartEndpoint: parsed?.apiAlignment?.readStart?.endpoint || '',
+      manifestMirror: parsed?.apiAlignment?.readStart?.manifestMirror || '',
+      openApiMirror: parsed?.apiAlignment?.readStart?.openApiMirror || '',
+      preserveFields: Array.isArray(parsed?.apiAlignment?.preserveFields) ? parsed.apiAlignment.preserveFields : [],
+      noFrontendLocalJsonForks: parsed?.apiAlignment?.writeBoundary?.noFrontendLocalJsonForks === true,
+      editorSurfaceSchema: parsed?.editorSurface?.schemaVersion || '',
+      editorSurfaceSource: parsed?.editorSurface?.source || '',
+      copyablePayload: parsed?.editorSurface?.copyablePayload || '',
+      readOrder: Array.isArray(parsed?.readOrder) ? parsed.readOrder.map((step) => step?.step).filter(Boolean).join(',') : '',
+      pageCanvasEntry: parsed?.contentCreation?.adminEntryPoints?.pageBackyCanvas || '',
+      pageCustomEntry: parsed?.contentCreation?.adminEntryPoints?.pageCustomFrontend || '',
+      blogCanvasEntry: parsed?.contentCreation?.adminEntryPoints?.blogBackyCanvas || '',
+      blogCustomEntry: parsed?.contentCreation?.adminEntryPoints?.blogCustomFrontend || '',
+    };
+  })()`);
+
+  assert(state.ok, `Editor agent handoff copy did not produce parseable clipboard JSON during ${label}: ${JSON.stringify(state)}`);
+  assert(state.schemaVersion === 'backy.custom-frontend-agent-handoff.v1', `Copied editor agent handoff schema mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.source === 'public-manifest-openapi-contract', `Copied editor agent handoff source drifted during ${label}: ${JSON.stringify(state)}`);
+  assert(state.docs.includes('specs/custom-frontend-agent-handoff.md'), `Copied editor agent handoff docs pointer missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.directEndpoint.includes('/api/sites/') && state.directEndpoint.endsWith('/agent-handoff'), `Copied editor agent handoff direct endpoint missing during ${label}: ${JSON.stringify(state)}`);
+  assert(state.readStartEndpoint === state.directEndpoint, `Copied editor agent handoff API read-start endpoint mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.manifestMirror === 'data.contract.customFrontendAgentHandoff' && state.openApiMirror === 'x-backy-custom-frontend-agent-handoff', `Copied editor agent handoff mirrors mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.preserveFields.includes('content.elements') && state.preserveFields.includes('content.editableMap') && state.preserveFields.includes('meta.frontendDesign*'), `Copied editor agent handoff preserve fields incomplete during ${label}: ${JSON.stringify(state)}`);
+  assert(state.noFrontendLocalJsonForks === true, `Copied editor agent handoff must block frontend-local JSON forks during ${label}: ${JSON.stringify(state)}`);
+  assert(state.editorSurfaceSchema === 'backy.editor-canvas-agent-surface.v1', `Copied editor handoff surface schema mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.copyablePayload === 'editorCompositionReadiness.agentHandoff', `Copied editor handoff payload pointer mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.readOrder === 'agent-handoff,manifest,openapi,frontend-design,templates,render', `Copied editor agent handoff read order mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.pageCanvasEntry.includes('templateSource=backy-canvas') &&
+      state.pageCanvasEntry.includes('focus=canvas') &&
+      state.pageCustomEntry.includes('templateSource=custom-frontend') &&
+      state.pageCustomEntry.includes('frontendDesignTemplateId=:templateId') &&
+      state.pageCustomEntry.includes('focus=canvas') &&
+      state.blogCanvasEntry.includes('templateSource=backy-canvas') &&
+      state.blogCanvasEntry.includes('focus=canvas') &&
+      state.blogCustomEntry.includes('templateSource=custom-frontend') &&
+      state.blogCustomEntry.includes('frontendDesignTemplateId=:templateId') &&
+      state.blogCustomEntry.includes('focus=canvas'),
+    `Copied editor agent handoff canvas-first entries mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
 
   return state;
 };
@@ -17120,6 +17270,7 @@ const testLayerGrouping = async (client, elementIds) => {
     `Grouping selection drifted before grouping: ${JSON.stringify(ready)}`,
   );
   const compositionBefore = await readEditorCompositionReadiness(client, 'before grouping');
+  const agentHandoffClipboard = await testEditorAgentHandoffClipboard(client, 'before grouping');
   assert(
     compositionBefore.totalLayers >= 2 && compositionBefore.selectedLayers >= 2,
     `Composition readiness did not reflect multi-layer grouping setup: ${JSON.stringify(compositionBefore)}`,
@@ -17430,6 +17581,7 @@ const testLayerGrouping = async (client, elementIds) => {
     metaGrouped,
     metaUngroupedSelection,
     compositionBefore,
+    agentHandoffClipboard,
     compositionGrouped,
     compositionAfter,
     before,

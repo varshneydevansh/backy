@@ -45,6 +45,8 @@ The same contract is visible inside the site detail workspace under **Frontend h
 
 This is the human-facing place to copy into another AI/frontend agent before it builds or edits a website on top of Backy.
 
+The canvas editor also exposes the same contract from the inspector's **Composition handoff** panel. Use **Copy handoff** there when the agent is already working inside a page, post, or reusable-section canvas and needs the direct `/agent-handoff` endpoint, `apiAlignment`, canvas-first creation routes, and design-state preservation fields without copying the larger editor composition plan.
+
 ## Editable design state rule
 
 When an agent creates or updates pages, blog posts, products, forms, collections, or reusable sections, it must preserve the full Backy design envelope. In practice that means keeping these fields when present:
