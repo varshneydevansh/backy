@@ -5094,34 +5094,40 @@ function PageDeliveryHealthSummary({
           Refresh
         </button>
       </div>
-      <div className="mt-1 break-words text-muted-foreground [overflow-wrap:anywhere]">{effectiveHealth.message}</div>
-      {(effectiveHealth.publicStatus || effectiveHealth.renderStatus || effectiveHealth.resolveStatus) && (
-        <div className="mt-1 whitespace-normal break-words font-mono text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
-          public {effectiveHealth.publicStatus ?? 'n/a'} · render {effectiveHealth.renderStatus ?? 'n/a'} · resolve {effectiveHealth.resolveStatus ?? 'n/a'}
-        </div>
-      )}
-      {history.length > 0 && (
-        <details
-          className="mt-2 border-t border-border pt-2"
-          data-testid={`pages-delivery-history-${pageId}`}
-          data-default-collapsed="true"
-        >
-          <summary className="cursor-pointer list-none font-medium text-foreground transition-colors hover:text-primary [&::-webkit-details-marker]:hidden">
-            Recent probes
-          </summary>
-          <div className="mt-1 space-y-1">
-            {history.slice(0, 3).map((entry, index) => (
-              <div key={`${entry.checkedAt || 'pending'}-${index}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 break-words text-muted-foreground [overflow-wrap:anywhere]">
-                <span className="min-w-0">{entry.checkedAt ? formatDate(entry.checkedAt) : 'Unknown time'}</span>
-                <span className="font-medium capitalize text-foreground">{entry.status}</span>
-                <span className="min-w-0 break-words font-mono text-[11px] [overflow-wrap:anywhere]">
-                  public {entry.publicStatus ?? 'n/a'} · render {entry.renderStatus ?? 'n/a'} · resolve {entry.resolveStatus ?? 'n/a'}
-                </span>
-              </div>
-            ))}
+      <details
+        className="mt-2 border-t border-border pt-2"
+        data-testid={`pages-delivery-health-details-${pageId}`}
+        data-default-collapsed="true"
+      >
+        <summary className="cursor-pointer list-none font-medium text-foreground transition-colors hover:text-primary [&::-webkit-details-marker]:hidden">
+          Health details
+        </summary>
+        <div className="mt-1 break-words text-muted-foreground [overflow-wrap:anywhere]">{effectiveHealth.message}</div>
+        {(effectiveHealth.publicStatus || effectiveHealth.renderStatus || effectiveHealth.resolveStatus) && (
+          <div className="mt-1 whitespace-normal break-words font-mono text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+            public {effectiveHealth.publicStatus ?? 'n/a'} · render {effectiveHealth.renderStatus ?? 'n/a'} · resolve {effectiveHealth.resolveStatus ?? 'n/a'}
           </div>
-        </details>
-      )}
+        )}
+        {history.length > 0 && (
+          <div
+            className="mt-2 border-t border-border pt-2"
+            data-testid={`pages-delivery-history-${pageId}`}
+          >
+            <div className="font-medium text-foreground">Recent probes</div>
+            <div className="mt-1 space-y-1">
+              {history.slice(0, 3).map((entry, index) => (
+                <div key={`${entry.checkedAt || 'pending'}-${index}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 break-words text-muted-foreground [overflow-wrap:anywhere]">
+                  <span className="min-w-0">{entry.checkedAt ? formatDate(entry.checkedAt) : 'Unknown time'}</span>
+                  <span className="font-medium capitalize text-foreground">{entry.status}</span>
+                  <span className="min-w-0 break-words font-mono text-[11px] [overflow-wrap:anywhere]">
+                    public {entry.publicStatus ?? 'n/a'} · render {entry.renderStatus ?? 'n/a'} · resolve {entry.resolveStatus ?? 'n/a'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </details>
     </div>
   );
 }

@@ -244,10 +244,12 @@ const assertPagesListSourceContract = () => {
       source.includes("width: '420px'") &&
       source.includes("width: '168px'") &&
       source.includes('className="flex max-w-full items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground"') &&
+      source.includes('data-testid={`pages-delivery-health-details-${pageId}`}') &&
       source.includes('data-testid={`pages-delivery-history-${pageId}`}') &&
       source.includes('data-default-collapsed="true"') &&
+      source.includes('Health details') &&
       source.includes('Recent probes'),
-    'Pages table must reserve enough width for delivery/status columns and collapse delivery probe history to prevent row overlap.',
+    'Pages table must reserve enough width for delivery/status columns and collapse delivery health diagnostics plus probe history to prevent row overlap.',
   );
   assert(
     source.includes('const createPageLinkDisabled = !canEditPages') &&
