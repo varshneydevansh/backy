@@ -2,6 +2,8 @@
 
 This is the short entry point for AI agents or external teams building a custom frontend on top of Backy. Treat Backy as the source of truth for content, media, routes, forms, commerce data, and editable design state. Do not fork the content model into a separate frontend-only schema.
 
+Repository-level quickstart for coding agents: `AGENTS.md`.
+
 ## Read these contracts first
 
 1. `GET /api/sites`
