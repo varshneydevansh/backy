@@ -264,6 +264,8 @@ assert(
     customFrontendAgentHandoffLib.includes('buildBackyContentDesignPayload') &&
     customFrontendAgentHandoffLib.includes('frontendDesignTemplateId') &&
     customFrontendAgentHandoffLib.includes('adminEntryPoints') &&
+    customFrontendAgentHandoffLib.includes('blogBackyCanvas: `/blog/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`') &&
+    customFrontendAgentHandoffLib.includes('blogCustomFrontend: `/blog/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`') &&
     customFrontendAgentHandoffLib.includes('apiAlignment') &&
     customFrontendAgentHandoffLib.includes("schemaVersion: 'backy.custom-frontend-api-alignment.v1'") &&
     customFrontendAgentHandoffLib.includes('noFrontendLocalJsonForks') &&

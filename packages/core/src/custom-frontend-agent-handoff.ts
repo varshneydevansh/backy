@@ -22,8 +22,8 @@ export const CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS = [
 export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
   pageBackyCanvas: `/pages/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`,
   pageCustomFrontend: `/pages/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`,
-  blogBackyCanvas: `/blog/new?siteId=${siteId}&templateSource=backy-canvas`,
-  blogCustomFrontend: `/blog/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`,
+  blogBackyCanvas: `/blog/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`,
+  blogCustomFrontend: `/blog/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`,
   productBackyCanvas: `/products?siteId=${siteId}&quickCreate=product`,
   productCustomFrontend: `/products?siteId=${siteId}&frontendTemplate=:templateId`,
   formBackyCanvas: `/forms?siteId=${siteId}&quickCreate=blank`,

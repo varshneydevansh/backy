@@ -7813,8 +7813,8 @@ const customFrontendAgentHandoff = {
     adminEntryPoints: {
       pageBackyCanvas: "/pages/new?siteId=site_demo&templateSource=backy-canvas&focus=canvas",
       pageCustomFrontend: "/pages/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas",
-      blogBackyCanvas: "/blog/new?siteId=site_demo&templateSource=backy-canvas",
-      blogCustomFrontend: "/blog/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId",
+      blogBackyCanvas: "/blog/new?siteId=site_demo&templateSource=backy-canvas&focus=canvas",
+      blogCustomFrontend: "/blog/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas",
       productBackyCanvas: "/products?siteId=site_demo&quickCreate=product",
       productCustomFrontend: "/products?siteId=site_demo&frontendTemplate=:templateId",
       formBackyCanvas: "/forms?siteId=site_demo&quickCreate=blank",
@@ -7871,8 +7871,8 @@ const customFrontendAgentHandoff = {
     creationRoutes: {
       pageBackyCanvas: "/pages/new?siteId=site_demo&templateSource=backy-canvas&focus=canvas",
       pageCustomFrontend: "/pages/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas",
-      blogBackyCanvas: "/blog/new?siteId=site_demo&templateSource=backy-canvas",
-      blogCustomFrontend: "/blog/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId",
+      blogBackyCanvas: "/blog/new?siteId=site_demo&templateSource=backy-canvas&focus=canvas",
+      blogCustomFrontend: "/blog/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas",
       productBackyCanvas: "/products?siteId=site_demo&quickCreate=product",
       productCustomFrontend: "/products?siteId=site_demo&frontendTemplate=:templateId",
       formBackyCanvas: "/forms?siteId=site_demo&quickCreate=blank",

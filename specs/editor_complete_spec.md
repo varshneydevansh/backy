@@ -61,7 +61,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ## Canvas-to-Backend/Frontend Contract
 
-- Page creation entry points now preserve focused canvas intent with `focus=canvas`. Sidebar quick-create, dashboard create actions, Pages list create buttons, dashboard copied handoff routes, and Pages list launch/binding handoff routes all route Backy-canvas page creation through `/pages/new?...&templateSource=backy-canvas&focus=canvas`, and `pages.new` keeps that query state while authors adjust creation-form fields before saving into the focused page editor.
+- Page and blog creation entry points now preserve focused canvas intent with `focus=canvas`. Sidebar quick-create, dashboard create actions, Pages list create buttons, dashboard copied handoff routes, Pages list launch/binding handoff routes, and custom frontend agent handoff routes all route Backy-canvas page/post creation through `/pages/new?...&templateSource=backy-canvas&focus=canvas` or `/blog/new?...&templateSource=backy-canvas&focus=canvas`, and the create routes keep that query state while authors adjust creation-form fields before saving into the focused visual editor.
 - `media` now uses the site-scoped admin media API contract for both:
   - media library modal (`components/editor/MediaLibraryModal.tsx`), through `listMediaLibrary`, `uploadMedia`, `replaceMedia`, and scoped `pageId`/`postId` filters.
   - media management route (`routes/media.tsx`), through `/api/admin/sites/:siteId/media`, folders, versions, transforms, signed URLs, provider analytics, and storage/runtime settings.
@@ -82,7 +82,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 - Organized by categories (favorites, basic, media, layout, form, saved, advanced)
 - Search/filter components work across categories
 - Search from neutral primary tabs (`All`, `Essentials`, `Recent`, and `Favorites`) searches the full catalog while explicit secondary categories remain scoped; the panel exposes `data-component-library-search-scope="global-catalog|selected-category"` for custom shells and smoke guards.
-- The Add Elements shell supports persisted Compact/Wide browsing through `backy.editor.componentLibrary.shellMode`; compact remains the default rail, while wide mode expands the panel and renders visual tile categories as a three-column `wide-tile-grid`.
+- The Add Elements shell supports persisted Compact/Wide browsing through `backy.editor.componentLibrary.shellMode`; compact remains the default rail with secondary categories collapsed, while wide mode expands the panel, reveals the full secondary category shelf without the More Categories gate, and renders visual tile categories as a three-column `wide-tile-grid`.
 - Favorites section persists locally and supports favorites-only filtering
 - Filtered no-match states show the active search/category and expose Reset plus Show all components recovery back to the full catalog
 - Hover/focus preview shows component metadata and preview artwork

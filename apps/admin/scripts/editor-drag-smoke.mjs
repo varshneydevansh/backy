@@ -1506,8 +1506,12 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-testid={`editor-component-category-${cat.id}`}') &&
       source.includes('data-testid="editor-component-primary-categories"') &&
       source.includes('data-testid="editor-component-secondary-categories"') &&
+      source.includes('data-testid="editor-component-expanded-categories"') &&
+      source.includes('data-testid="editor-component-expanded-category-grid"') &&
       source.includes('data-testid="editor-component-category-more"') &&
       source.includes('data-default-collapsed="true"') &&
+      source.includes('data-default-collapsed="false"') &&
+      source.includes('data-component-expanded-category-count={secondaryComponentCategories.length}') &&
       source.includes('data-component-library-essentials-count') &&
       source.includes('data-component-library-recent-count') &&
       source.includes('data-component-library-shown={filteredItems.length}') &&
@@ -1534,7 +1538,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-testid="editor-component-view-mode-tiles"') &&
       source.includes('data-testid="editor-component-view-mode-list"') &&
       source.includes('data-component-library-filter-active={isComponentFilterActive ?') &&
-      source.includes('data-category-layout="primary-plus-collapsed-secondary"') &&
+      source.includes("data-category-layout={shellMode === 'expanded' ? 'expanded-all-categories' : 'primary-plus-collapsed-secondary'}") &&
       source.includes('data-testid="editor-component-list"') &&
       source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
       source.includes("data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}") &&
@@ -6334,7 +6338,14 @@ const readEditorCompositionReadiness = async (client, label) => {
       state.agentHandoffPageCustomEntry.includes('focus=canvas'),
     `Editor page creation entry handoff mismatch during ${label}: ${JSON.stringify(state)}`,
   );
-  assert(state.agentHandoffBlogCanvasEntry.includes('templateSource=backy-canvas') && state.agentHandoffBlogCustomEntry.includes('templateSource=custom-frontend'), `Editor blog creation entry handoff mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.agentHandoffBlogCanvasEntry.includes('templateSource=backy-canvas') &&
+      state.agentHandoffBlogCanvasEntry.includes('focus=canvas') &&
+      state.agentHandoffBlogCustomEntry.includes('templateSource=custom-frontend') &&
+      state.agentHandoffBlogCustomEntry.includes('frontendDesignTemplateId=:templateId') &&
+      state.agentHandoffBlogCustomEntry.includes('focus=canvas'),
+    `Editor blog creation entry handoff mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
   assert(
     state.handoffBriefReadStart === state.agentHandoffReadStart &&
       state.handoffBriefManifestReadStart === state.agentHandoffManifestReadStart &&
@@ -14808,6 +14819,8 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
     const primaryCategories = document.querySelector('[data-testid="editor-component-primary-categories"]');
     const secondaryCategories = document.querySelector('[data-testid="editor-component-secondary-categories"]');
     const secondaryCategoryGrid = document.querySelector('[data-testid="editor-component-secondary-category-grid"]');
+    const expandedCategories = document.querySelector('[data-testid="editor-component-expanded-categories"]');
+    const expandedCategoryGrid = document.querySelector('[data-testid="editor-component-expanded-category-grid"]');
     const moreCategories = document.querySelector('[data-testid="editor-component-category-more"]');
     const emptyState = document.querySelector('[data-testid="editor-component-filter-empty"]');
     const emptyReset = document.querySelector('[data-testid="editor-component-empty-reset-filters"]');
@@ -15000,6 +15013,16 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
           secondaryCategoryIds: Array.from(secondaryCategoryGrid?.querySelectorAll('[data-testid^="editor-component-category-"]') || []).map((node) => (
             node.getAttribute('data-testid') || ''
           )),
+          expandedExists: expandedCategories instanceof HTMLElement,
+          expandedDefaultCollapsed: expandedCategories?.getAttribute('data-default-collapsed') || '',
+          expandedSelected: expandedCategories?.getAttribute('data-selected-secondary') || '',
+          expandedDisplay: expandedCategories instanceof HTMLElement ? getComputedStyle(expandedCategories).display : '',
+          expandedCategoryCount: expandedCategories?.getAttribute('data-component-expanded-category-count') || '',
+          expandedGridExists: expandedCategoryGrid instanceof HTMLElement,
+          expandedGridDisplay: expandedCategoryGrid instanceof HTMLElement ? getComputedStyle(expandedCategoryGrid).display : '',
+          expandedCategoryIds: Array.from(expandedCategoryGrid?.querySelectorAll('[data-testid^="editor-component-category-"]') || []).map((node) => (
+            node.getAttribute('data-testid') || ''
+          )),
           moreExists: moreCategories instanceof HTMLElement,
           moreText: moreCategories?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         }
@@ -15021,6 +15044,14 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
           secondaryGridExists: false,
           secondaryGridDisplay: '',
           secondaryCategoryIds: [],
+          expandedExists: false,
+          expandedDefaultCollapsed: '',
+          expandedSelected: '',
+          expandedDisplay: '',
+          expandedCategoryCount: '',
+          expandedGridExists: false,
+          expandedGridDisplay: '',
+          expandedCategoryIds: [],
           moreExists: false,
           moreText: '',
         },
@@ -15554,6 +15585,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       initial.categoryRail.secondaryOpen === false &&
       initial.categoryRail.secondaryDefaultCollapsed === 'true' &&
       initial.categoryRail.secondarySelected === 'false' &&
+      initial.categoryRail.expandedExists === false &&
       initial.categoryRail.moreExists &&
       /More categories/.test(initial.categoryRail.moreText) &&
       initial.categoryRail.secondaryCategoryIds.includes('editor-component-category-layout') &&
@@ -15637,6 +15669,16 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       expandedCatalogMode.shellModeToggle.text === 'Compact' &&
       expandedCatalogMode.shellModeToggle.storedMode === 'expanded' &&
       /Expanded Add Elements browse mode selected/.test(expandedCatalogMode.shellModeToggle.actionStatus) &&
+      expandedCatalogMode.categoryRail.layout === 'expanded-all-categories' &&
+      expandedCatalogMode.categoryRail.expandedExists === true &&
+      expandedCatalogMode.categoryRail.expandedDefaultCollapsed === 'false' &&
+      Number(expandedCatalogMode.categoryRail.expandedCategoryCount) > 0 &&
+      expandedCatalogMode.categoryRail.expandedGridExists === true &&
+      expandedCatalogMode.categoryRail.expandedGridDisplay === 'grid' &&
+      expandedCatalogMode.categoryRail.expandedCategoryIds.includes('editor-component-category-layout') &&
+      expandedCatalogMode.categoryRail.expandedCategoryIds.includes('editor-component-category-content') &&
+      expandedCatalogMode.categoryRail.secondaryExists === false &&
+      expandedCatalogMode.categoryRail.moreExists === false &&
       expandedCatalogMode.categoryLayouts.length > 0 &&
       expandedCatalogMode.categoryLayouts.every((category) => category.layout === 'wide-tile-grid'),
     `Component library expanded Add Elements browser mode did not activate: ${JSON.stringify(expandedCatalogMode)}`,
@@ -15652,6 +15694,10 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       restoredCompactCatalogMode.shellModeToggle.pressed === 'false' &&
       restoredCompactCatalogMode.shellModeToggle.text === 'Wide' &&
       restoredCompactCatalogMode.shellModeToggle.storedMode === 'compact' &&
+      restoredCompactCatalogMode.categoryRail.layout === 'primary-plus-collapsed-secondary' &&
+      restoredCompactCatalogMode.categoryRail.secondaryExists === true &&
+      restoredCompactCatalogMode.categoryRail.secondaryOpen === false &&
+      restoredCompactCatalogMode.categoryRail.expandedExists === false &&
       restoredCompactCatalogMode.categoryLayouts.every((category) => category.layout === 'tile-grid'),
     `Component library compact Add Elements rail mode did not restore: ${JSON.stringify(restoredCompactCatalogMode)}`,
   );

@@ -1855,6 +1855,8 @@ assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.pageCustomF
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.pageBackyCanvas?.includes('focus=canvas'), 'manifest() custom frontend agent handoff missing focused page canvas entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.pageCustomFrontend?.includes('focus=canvas'), 'manifest() custom frontend agent handoff missing focused custom frontend page entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.blogCustomFrontend?.includes('frontendDesignTemplateId=:templateId'), 'manifest() custom frontend agent handoff missing blog custom frontend entry point');
+assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.blogBackyCanvas?.includes('focus=canvas'), 'manifest() custom frontend agent handoff missing focused blog canvas entry point');
+assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.blogCustomFrontend?.includes('focus=canvas'), 'manifest() custom frontend agent handoff missing focused custom frontend blog entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.productCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing product custom frontend entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.formCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing form custom frontend entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.collectionCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing collection custom frontend entry point');
@@ -1867,6 +1869,8 @@ assert(customFrontendAgentHandoff.apiAlignment?.publicDiscovery?.styleSource ===
 assert(customFrontendAgentHandoff.apiAlignment?.typedClients?.preferredHelpers?.includes('buildBackyContentDesignPayload'), 'manifest() custom frontend agent handoff API alignment missing design payload helper');
 assert(customFrontendAgentHandoff.apiAlignment?.writeBoundary?.noFrontendLocalJsonForks === true, 'manifest() custom frontend agent handoff API alignment must block frontend-local JSON forks');
 assert(customFrontendAgentHandoff.apiAlignment?.creationRoutes?.pageBackyCanvas === customFrontendAgentHandoff.contentCreation.adminEntryPoints.pageBackyCanvas, 'manifest() custom frontend agent handoff API alignment page canvas route drifted');
+assert(customFrontendAgentHandoff.apiAlignment?.creationRoutes?.blogBackyCanvas === customFrontendAgentHandoff.contentCreation.adminEntryPoints.blogBackyCanvas, 'manifest() custom frontend agent handoff API alignment blog canvas route drifted');
+assert(customFrontendAgentHandoff.apiAlignment?.creationRoutes?.blogCustomFrontend === customFrontendAgentHandoff.contentCreation.adminEntryPoints.blogCustomFrontend, 'manifest() custom frontend agent handoff API alignment blog custom frontend route drifted');
 assert(customFrontendAgentHandoff.apiAlignment?.preserveFields?.includes('content.elements'), 'manifest() custom frontend agent handoff API alignment missing content.elements preserve field');
 assert(customFrontendAgentHandoff.apiAlignment?.verification?.renderEndpoint === customFrontendAgentHandoff.endpoints.render, 'manifest() custom frontend agent handoff API alignment render endpoint drifted');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
@@ -1883,6 +1887,10 @@ assert(agentHandoff.data.readStart?.openApiPointer === 'x-backy-custom-frontend-
 assert(agentHandoff.data.handoff?.endpoints?.agentHandoff === manifest.data.endpoints.agentHandoff, 'customFrontendAgentHandoff() direct handoff endpoint drifted');
 assert(agentHandoff.data.apiAlignment?.schemaVersion === 'backy.custom-frontend-api-alignment.v1', 'customFrontendAgentHandoff() missing top-level API alignment payload');
 assert(agentHandoff.data.apiAlignment?.writeBoundary?.noFrontendLocalJsonForks === true, 'customFrontendAgentHandoff() API alignment must block frontend-local JSON forks');
+assert(agentHandoff.data.contentCreation?.adminEntryPoints?.blogBackyCanvas?.includes('focus=canvas'), 'customFrontendAgentHandoff() missing focused blog canvas entry point');
+assert(agentHandoff.data.contentCreation?.adminEntryPoints?.blogCustomFrontend?.includes('focus=canvas'), 'customFrontendAgentHandoff() missing focused custom frontend blog entry point');
+assert(agentHandoff.data.apiAlignment?.creationRoutes?.blogBackyCanvas === agentHandoff.data.contentCreation?.adminEntryPoints?.blogBackyCanvas, 'customFrontendAgentHandoff() API alignment blog canvas route drifted');
+assert(agentHandoff.data.apiAlignment?.creationRoutes?.blogCustomFrontend === agentHandoff.data.contentCreation?.adminEntryPoints?.blogCustomFrontend, 'customFrontendAgentHandoff() API alignment blog custom frontend route drifted');
 assert(agentHandoff.data.canvasFirst?.editor === 'Backy canvas editor', 'customFrontendAgentHandoff() missing canvas-first editor rule');
 assert(agentHandoff.data.designState?.roundTripFields?.includes('content.elements'), 'customFrontendAgentHandoff() missing design-state round-trip fields');
 const cachedAgentHandoff = await client.customFrontendAgentHandoffCached();

@@ -717,7 +717,7 @@ export function ComponentLibrary({
         <div
           className="space-y-1.5"
           data-testid="editor-component-category-rail"
-          data-category-layout="primary-plus-collapsed-secondary"
+          data-category-layout={shellMode === 'expanded' ? 'expanded-all-categories' : 'primary-plus-collapsed-secondary'}
         >
           <div className="grid grid-cols-2 gap-1" data-testid="editor-component-primary-categories">
             <button
@@ -764,24 +764,42 @@ export function ComponentLibrary({
             {primaryComponentCategories.map((cat) => renderCategoryButton(cat))}
           </div>
 
-          <details
-            className="group rounded-lg border border-slate-200 bg-slate-50/70"
-            data-testid="editor-component-secondary-categories"
-            data-default-collapsed="true"
-            data-selected-secondary={secondaryComponentCategories.some((cat) => selectedCategory === cat.id) ? 'true' : 'false'}
-          >
-            <summary
-              className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 [&::-webkit-details-marker]:hidden"
-              data-testid="editor-component-category-more"
-              aria-label={`Show more component categories, ${secondaryComponentCategoryCount} components available`}
+          {shellMode === 'expanded' ? (
+            <div
+              className="rounded-lg border border-slate-200 bg-slate-50/70 p-1.5"
+              data-testid="editor-component-expanded-categories"
+              data-default-collapsed="false"
+              data-selected-secondary={secondaryComponentCategories.some((cat) => selectedCategory === cat.id) ? 'true' : 'false'}
+              data-component-expanded-category-count={secondaryComponentCategories.length}
             >
-              <span className="truncate">More categories</span>
-              <span className="shrink-0 tabular-nums text-slate-500">{secondaryComponentCategoryCount}</span>
-            </summary>
-            <div className="grid grid-cols-2 gap-1 border-t border-slate-200 p-1.5" data-testid="editor-component-secondary-category-grid">
-              {secondaryComponentCategories.map((cat) => renderCategoryButton(cat))}
+              <div className="mb-1 flex min-h-7 items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-600">
+                <span className="truncate">Browse categories</span>
+                <span className="shrink-0 tabular-nums text-slate-500">{secondaryComponentCategoryCount}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1" data-testid="editor-component-expanded-category-grid">
+                {secondaryComponentCategories.map((cat) => renderCategoryButton(cat))}
+              </div>
             </div>
-          </details>
+          ) : (
+            <details
+              className="group rounded-lg border border-slate-200 bg-slate-50/70"
+              data-testid="editor-component-secondary-categories"
+              data-default-collapsed="true"
+              data-selected-secondary={secondaryComponentCategories.some((cat) => selectedCategory === cat.id) ? 'true' : 'false'}
+            >
+              <summary
+                className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 [&::-webkit-details-marker]:hidden"
+                data-testid="editor-component-category-more"
+                aria-label={`Show more component categories, ${secondaryComponentCategoryCount} components available`}
+              >
+                <span className="truncate">More categories</span>
+                <span className="shrink-0 tabular-nums text-slate-500">{secondaryComponentCategoryCount}</span>
+              </summary>
+              <div className="grid grid-cols-2 gap-1 border-t border-slate-200 p-1.5" data-testid="editor-component-secondary-category-grid">
+                {secondaryComponentCategories.map((cat) => renderCategoryButton(cat))}
+              </div>
+            </details>
+          )}
         </div>
 
         <div className="mt-2 grid grid-cols-[1fr_auto] gap-1">
