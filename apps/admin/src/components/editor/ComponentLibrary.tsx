@@ -58,6 +58,7 @@ const FAVORITES_CATEGORY_ID = 'favorites';
 const RECENT_STORAGE_KEY = 'backy.editor.componentLibrary.recent';
 const FAVORITES_STORAGE_KEY = 'backy.editor.componentLibrary.favorites';
 const VIEW_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.viewMode';
+const SHELL_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.shellMode';
 const RECENT_ITEM_LIMIT = 6;
 const ESSENTIAL_ITEM_KEYS = new Set([
   'heading',
@@ -87,6 +88,7 @@ const COMPONENT_LIBRARY_CATEGORIES = [
 ];
 type ComponentLibraryCategory = (typeof COMPONENT_LIBRARY_CATEGORIES)[number];
 type ComponentLibraryViewMode = 'tiles' | 'list';
+type ComponentLibraryShellMode = 'compact' | 'expanded';
 const PRIMARY_COMPONENT_CATEGORY_IDS = new Set<string>([
   RECENT_CATEGORY_ID,
   FAVORITES_CATEGORY_ID,
@@ -202,6 +204,17 @@ export function ComponentLibrary({
       return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'tiles';
     } catch {
       return 'tiles';
+    }
+  });
+  const [shellMode, setShellMode] = useState<ComponentLibraryShellMode>(() => {
+    if (typeof window === 'undefined') {
+      return 'compact';
+    }
+
+    try {
+      return window.localStorage.getItem(SHELL_MODE_STORAGE_KEY) === 'expanded' ? 'expanded' : 'compact';
+    } catch {
+      return 'compact';
     }
   });
   const [recentItemKeys, setRecentItemKeys] = useState<string[]>(() => {
@@ -321,6 +334,18 @@ export function ComponentLibrary({
       // Keep browsing usable if storage is unavailable.
     }
   }, [viewMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(SHELL_MODE_STORAGE_KEY, shellMode);
+    } catch {
+      // Keep browsing usable if storage is unavailable.
+    }
+  }, [shellMode]);
 
   const libraryItemByKey = useMemo(() => (
     new Map(libraryItems.map((item) => [getLibraryItemKey(item), item]))
@@ -469,6 +494,7 @@ export function ComponentLibrary({
   const componentLibraryActionStatus = [
     `${activeCategoryName} shows ${filteredItems.length} of ${totalSearchResultCount} components${componentLibrarySearchLabel}.`,
     'Search components available.',
+    shellMode === 'expanded' ? 'Expanded Add Elements browse mode selected.' : 'Compact Add Elements rail selected.',
     viewMode === 'tiles' ? 'Tile browse mode selected.' : 'List browse mode selected.',
     isComponentFilterActive ? 'Reset filters available.' : 'Filter reset hidden until filters are active.',
     saveSelectionDisabledReason ? `Save selection unavailable: ${saveSelectionDisabledReason}` : 'Save selection available.',
@@ -539,9 +565,16 @@ export function ComponentLibrary({
 
   return (
     <div
-      className="flex h-full w-[clamp(15rem,16vw,18rem)] min-w-[15rem] max-w-[18rem] flex-col border-r border-slate-200 bg-white"
+      className={cn(
+        'flex h-full flex-col border-r border-slate-200 bg-white transition-[width,min-width,max-width] duration-200 ease-out',
+        shellMode === 'expanded'
+          ? 'w-[clamp(22rem,28vw,32rem)] min-w-[22rem] max-w-[32rem]'
+          : 'w-[clamp(15rem,16vw,18rem)] min-w-[15rem] max-w-[18rem]',
+      )}
       data-testid="editor-component-library"
-      data-component-library-density="compact"
+      data-component-library-density={shellMode}
+      data-component-library-shell-mode={shellMode}
+      data-component-library-shell-mode-storage={SHELL_MODE_STORAGE_KEY}
       data-component-library-view-mode={viewMode}
       data-component-library-view-mode-storage={VIEW_MODE_STORAGE_KEY}
       data-component-library-search-scope={isGlobalSearch ? 'global-catalog' : 'selected-category'}
@@ -554,7 +587,24 @@ export function ComponentLibrary({
 
       {/* Header */}
       <div className="border-b border-slate-200 p-3">
-        <h2 className="mb-2 font-semibold">Components</h2>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="font-semibold">Components</h2>
+          <button
+            type="button"
+            onClick={() => setShellMode((current) => (current === 'expanded' ? 'compact' : 'expanded'))}
+            data-testid="editor-component-shell-mode-toggle"
+            aria-label={shellMode === 'expanded' ? 'Use compact Add Elements rail' : 'Use expanded Add Elements browser'}
+            aria-pressed={shellMode === 'expanded'}
+            aria-describedby={componentLibraryActionStatusId}
+            data-action-state="ready"
+            data-action-status={componentLibraryActionStatus}
+            className="inline-flex min-h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            title={shellMode === 'expanded' ? 'Switch to compact Add Elements rail' : 'Switch to expanded Add Elements browser'}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+            <span>{shellMode === 'expanded' ? 'Compact' : 'Wide'}</span>
+          </button>
+        </div>
 
         {/* Search */}
         <div className="relative">
@@ -587,6 +637,7 @@ export function ComponentLibrary({
           data-component-library-recent-count={recentItems.length}
           data-component-library-recent-limit={RECENT_ITEM_LIMIT}
           data-component-library-recent-keys={recentItemKeys.join(',')}
+          data-component-library-shell-mode={shellMode}
           data-component-library-saved-count={reusableItems.length}
           data-component-library-saved-total={reusableLibraryState.totalActiveCount}
           data-component-library-saved-hidden={reusableLibraryState.hiddenDuplicateCount}
@@ -791,10 +842,12 @@ export function ComponentLibrary({
               <div
                 className={cn(
                   viewMode === 'tiles'
-                    ? 'grid grid-cols-2 gap-2'
+                    ? shellMode === 'expanded'
+                      ? 'grid grid-cols-3 gap-2'
+                      : 'grid grid-cols-2 gap-2'
                     : 'space-y-1',
                 )}
-                data-component-category-layout={viewMode === 'tiles' ? 'tile-grid' : 'row-list'}
+                data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}
               >
                 {items.map((item) => (
                   <LibraryItem

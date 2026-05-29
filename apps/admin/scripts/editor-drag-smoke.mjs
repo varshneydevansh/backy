@@ -1517,7 +1517,15 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('return isGlobalSearch ? true : favoriteKeySet.has(getLibraryItemKey(item));') &&
       source.includes('const groupedItems = useMemo(() => filteredItems.reduce') &&
       source.includes('const categoryItemCounts = useMemo(() => categories.reduce<Record<string, number>>') &&
-      source.includes('data-component-library-density="compact"') &&
+      source.includes("const SHELL_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.shellMode';") &&
+      source.includes("type ComponentLibraryShellMode = 'compact' | 'expanded';") &&
+      source.includes('const [shellMode, setShellMode]') &&
+      source.includes('window.localStorage.setItem(SHELL_MODE_STORAGE_KEY, shellMode)') &&
+      source.includes('data-component-library-density={shellMode}') &&
+      source.includes('data-component-library-shell-mode={shellMode}') &&
+      source.includes('data-component-library-shell-mode-storage={SHELL_MODE_STORAGE_KEY}') &&
+      source.includes('data-testid="editor-component-shell-mode-toggle"') &&
+      source.includes("shellMode === 'expanded' ? 'Expanded Add Elements browse mode selected.' : 'Compact Add Elements rail selected.'") &&
       source.includes("const VIEW_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.viewMode';") &&
       source.includes("type ComponentLibraryViewMode = 'tiles' | 'list';") &&
       source.includes('data-component-library-view-mode={viewMode}') &&
@@ -1529,7 +1537,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-category-layout="primary-plus-collapsed-secondary"') &&
       source.includes('data-testid="editor-component-list"') &&
       source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
-      source.includes("data-component-category-layout={viewMode === 'tiles' ? 'tile-grid' : 'row-list'}") &&
+      source.includes("data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}") &&
       source.includes('data-testid={`editor-component-preview-tile-${itemDomKey}`}') &&
       source.includes('data-component-library-item-actions="visible"') &&
       source.includes("const componentLibraryActionStatusId = 'editor-component-library-action-status';") &&
@@ -1545,6 +1553,9 @@ const assertComponentLibraryEmptyStateSource = () => {
       smokeSource.includes('savedReusableAction') &&
       smokeSource.includes('testComponentLibraryControls(client, tempReusableSectionId)') &&
       smokeSource.includes('testComponentLibraryListReachability') &&
+      smokeSource.includes('shellModeToggle') &&
+      smokeSource.includes('expandedCatalogMode') &&
+      smokeSource.includes('restoredCompactCatalogMode') &&
       smokeSource.includes('viewModeControls') &&
       smokeSource.includes('lastAddHitTarget') &&
       smokeSource.includes('needsReusableSectionFixture') &&
@@ -14782,6 +14793,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
     const list = document.querySelector('[data-testid="editor-component-list"]');
     const summary = document.querySelector('[data-testid="editor-component-library-summary"]');
     const actionStatus = document.querySelector('[data-testid="editor-component-library-action-status"]');
+    const shellModeToggle = document.querySelector('[data-testid="editor-component-shell-mode-toggle"]');
     const viewModeGroup = document.querySelector('[data-testid="editor-component-view-mode"]');
     const viewModeTiles = document.querySelector('[data-testid="editor-component-view-mode-tiles"]');
     const viewModeList = document.querySelector('[data-testid="editor-component-view-mode-list"]');
@@ -14820,6 +14832,8 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
       label: ${JSON.stringify(label)},
       hasLibrary: Boolean(library),
       libraryDensity: library?.getAttribute('data-component-library-density') || '',
+      shellMode: library?.getAttribute('data-component-library-shell-mode') || '',
+      shellModeStorageKey: library?.getAttribute('data-component-library-shell-mode-storage') || '',
       viewMode: library?.getAttribute('data-component-library-view-mode') || '',
       viewModeStorageKey: library?.getAttribute('data-component-library-view-mode-storage') || '',
       librarySearchScope: library?.getAttribute('data-component-library-search-scope') || '',
@@ -14854,6 +14868,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
         recent: summary?.getAttribute('data-component-library-recent-count') || '',
         recentLimit: summary?.getAttribute('data-component-library-recent-limit') || '',
         recentKeys: summary?.getAttribute('data-component-library-recent-keys') || '',
+        shellMode: summary?.getAttribute('data-component-library-shell-mode') || '',
         saved: summary?.getAttribute('data-component-library-saved-count') || '',
         savedTotal: summary?.getAttribute('data-component-library-saved-total') || '',
         savedHidden: summary?.getAttribute('data-component-library-saved-hidden') || '',
@@ -14886,6 +14901,16 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
         allState: categoryAll?.getAttribute('data-action-state') || '',
         allPressed: categoryAll?.getAttribute('aria-pressed') || '',
         allStatus: categoryAll?.getAttribute('data-action-status') || '',
+      },
+      shellModeToggle: {
+        exists: shellModeToggle instanceof HTMLButtonElement,
+        pressed: shellModeToggle?.getAttribute('aria-pressed') || '',
+        label: shellModeToggle?.getAttribute('aria-label') || '',
+        text: shellModeToggle?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        describedBy: shellModeToggle?.getAttribute('aria-describedby') || '',
+        actionState: shellModeToggle?.getAttribute('data-action-state') || '',
+        actionStatus: shellModeToggle?.getAttribute('data-action-status') || '',
+        storedMode: window.localStorage.getItem('backy.editor.componentLibrary.shellMode') || '',
       },
       viewModeControls: {
         exists: Boolean(viewModeGroup),
@@ -15491,10 +15516,13 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   assert(
     initial.summary.exists &&
       initial.libraryDensity === 'compact' &&
+      initial.shellMode === 'compact' &&
+      initial.shellModeStorageKey === 'backy.editor.componentLibrary.shellMode' &&
       initial.viewMode === 'tiles' &&
       initial.viewModeStorageKey === 'backy.editor.componentLibrary.viewMode' &&
       initial.listDensity === 'visual-tiles' &&
       initial.summary.category === 'essentials' &&
+      initial.summary.shellMode === 'compact' &&
       initial.summary.viewMode === 'tiles' &&
       initial.summary.searchScope === 'selected-category' &&
       initial.librarySearchScope === 'selected-category' &&
@@ -15525,6 +15553,17 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       initial.categoryRail.secondaryCategoryIds.includes('editor-component-category-content') &&
       initial.categoryRail.secondaryCategoryIds.includes('editor-component-category-advanced'),
     `Component library essentials summary or compact primary/collapsed category rail missing: ${JSON.stringify(initial)}`,
+  );
+  assert(
+    initial.shellModeToggle.exists &&
+      initial.shellModeToggle.pressed === 'false' &&
+      initial.shellModeToggle.text === 'Wide' &&
+      initial.shellModeToggle.describedBy.includes('editor-component-library-action-status') &&
+      initial.shellModeToggle.actionState === 'ready' &&
+      initial.shellModeToggle.storedMode === 'compact' &&
+      /Compact Add Elements rail selected/.test(initial.shellModeToggle.actionStatus) &&
+      /Compact Add Elements rail selected/.test(initial.actionStatus.text),
+    `Component library compact/expanded shell toggle contract missing: ${JSON.stringify(initial)}`,
   );
   assert(
     initial.viewModeControls.exists &&
@@ -15578,6 +15617,36 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   assert(
     !initial.itemIds.some((itemId) => itemId.startsWith('reusable-section:')),
     `Essentials view should stay compact and leave saved reusable sections in Saved/All/search: ${JSON.stringify(initial)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-component-shell-mode-toggle');
+  await sleep(100);
+  const expandedCatalogMode = await readComponentLibraryState(client, 'expanded catalog mode', targetReusableSectionId);
+  assert(
+    expandedCatalogMode.libraryDensity === 'expanded' &&
+      expandedCatalogMode.shellMode === 'expanded' &&
+      expandedCatalogMode.summary.shellMode === 'expanded' &&
+      expandedCatalogMode.shellModeToggle.pressed === 'true' &&
+      expandedCatalogMode.shellModeToggle.text === 'Compact' &&
+      expandedCatalogMode.shellModeToggle.storedMode === 'expanded' &&
+      /Expanded Add Elements browse mode selected/.test(expandedCatalogMode.shellModeToggle.actionStatus) &&
+      expandedCatalogMode.categoryLayouts.length > 0 &&
+      expandedCatalogMode.categoryLayouts.every((category) => category.layout === 'wide-tile-grid'),
+    `Component library expanded Add Elements browser mode did not activate: ${JSON.stringify(expandedCatalogMode)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-component-shell-mode-toggle');
+  await sleep(100);
+  const restoredCompactCatalogMode = await readComponentLibraryState(client, 'restored compact catalog mode', targetReusableSectionId);
+  assert(
+    restoredCompactCatalogMode.libraryDensity === 'compact' &&
+      restoredCompactCatalogMode.shellMode === 'compact' &&
+      restoredCompactCatalogMode.summary.shellMode === 'compact' &&
+      restoredCompactCatalogMode.shellModeToggle.pressed === 'false' &&
+      restoredCompactCatalogMode.shellModeToggle.text === 'Wide' &&
+      restoredCompactCatalogMode.shellModeToggle.storedMode === 'compact' &&
+      restoredCompactCatalogMode.categoryLayouts.every((category) => category.layout === 'tile-grid'),
+    `Component library compact Add Elements rail mode did not restore: ${JSON.stringify(restoredCompactCatalogMode)}`,
   );
 
   await clickControlByTestId(client, 'editor-component-view-mode-list');
@@ -15866,6 +15935,8 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
 
   return {
     initial,
+    expandedCatalogMode,
+    restoredCompactCatalogMode,
     listMode,
     restoredTileMode,
     searchFiltered,
