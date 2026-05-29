@@ -3793,6 +3793,13 @@ export interface ContactInput {
   postId?: string | null;
   requestId?: string | null;
   sourceValues?: Record<string, unknown>;
+  newsletterSubscriptionStatus?: AdminContact['newsletterSubscriptionStatus'];
+  newsletterSubscribedAt?: string | null;
+  newsletterUnsubscribedAt?: string | null;
+  newsletterTopics?: string | null;
+  newsletterSource?: string | null;
+  newsletterConsent?: boolean | null;
+  newsletterConsentText?: string | null;
   upsertByEmail?: boolean;
 }
 

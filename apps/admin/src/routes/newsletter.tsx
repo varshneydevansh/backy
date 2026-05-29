@@ -291,11 +291,16 @@ function NewsletterRoute() {
     if (!canManageNewsletter || actionBusy) return;
 
     const mutationId = `${subscriber.contact.id}:${status}`;
+    const now = new Date().toISOString();
+    const newsletterLifecycle = buildNewsletterLifecycleUpdate(subscriber.contact, status, now);
     setIsMutating(mutationId);
     setError(null);
     setNotice(null);
     try {
-      const updated = await updateContact(activeSiteId, subscriber.form.id, subscriber.contact.id, { status });
+      const updated = await updateContact(activeSiteId, subscriber.form.id, subscriber.contact.id, {
+        status,
+        ...newsletterLifecycle,
+      });
       setContactsByForm((current) => ({
         ...current,
         [subscriber.form.id]: (current[subscriber.form.id] || []).map((contact) => (
@@ -754,6 +759,7 @@ function SubscriberRow({
   const { contact, form } = subscriber;
   const topic = readSourceValue(contact, 'topics') || 'No topic';
   const source = readSourceValue(contact, 'signup_source') || readSourceValue(contact, 'source') || form.title || form.name;
+  const subscriptionStatus = isSubscriberSubscribed(contact) ? 'Subscribed' : 'Unsubscribed';
   return (
     <div className="grid min-w-[900px] grid-cols-[minmax(220px,1.1fr)_minmax(150px,0.6fr)_minmax(140px,0.5fr)_minmax(160px,0.6fr)_auto] items-start gap-0 px-4 py-3 text-sm">
       <div className="min-w-0 pr-3">
@@ -766,6 +772,13 @@ function SubscriberRow({
       </div>
       <div className="pr-3">
         <StatusBadge status={contact.status} />
+        <div className={cn(
+          'mt-1 text-xs font-medium',
+          isSubscriberSubscribed(contact) ? 'text-emerald-700' : 'text-muted-foreground',
+        )}
+        >
+          {subscriptionStatus}
+        </div>
       </div>
       <div className="pr-3 text-xs text-muted-foreground">
         {formatDate(contact.createdAt)}
@@ -795,7 +808,7 @@ function SubscriberRow({
         <Button
           size="sm"
           variant="outline"
-          disabled={disabled || contact.status === 'qualified'}
+          disabled={disabled || contact.status === 'qualified' || !isSubscriberSubscribed(contact)}
           title={disabledReason}
           onClick={() => onStatusChange('qualified')}
           iconStart={<Send className="size-3.5" />}
@@ -831,10 +844,11 @@ function isNewsletterForm(form: FormDefinition): boolean {
 
 function buildNewsletterMetrics(subscribers: NewsletterSubscriber[]) {
   return subscribers.reduce((metrics, { contact }) => {
+    const isSubscribed = isSubscriberSubscribed(contact);
     metrics.total += 1;
-    if (contact.status === 'archived') metrics.archived += 1;
+    if (!isSubscribed) metrics.archived += 1;
     else metrics.active += 1;
-    if (contact.status === 'qualified') metrics.ready += 1;
+    if (contact.status === 'qualified' && isSubscribed) metrics.ready += 1;
     return metrics;
   }, { total: 0, active: 0, archived: 0, ready: 0 });
 }
@@ -875,7 +889,7 @@ function buildNewsletterHandoff({
     counts: {
       forms: forms.length,
       subscribers: subscribers.length,
-      activeSubscribers: subscribers.filter(({ contact }) => contact.status !== 'archived').length,
+      activeSubscribers: subscribers.filter(({ contact }) => isSubscriberSubscribed(contact)).length,
     },
     publicCapture: {
       formsList: `${publicBaseUrl}/api/sites/${activeSiteId}/forms`,
@@ -925,6 +939,70 @@ function buildNewsletterHandoff({
       nativeBackyScope: ['subscriber records', 'consent evidence', 'topic/source metadata', 'CSV export', 'private sync API', 'custom frontend capture'],
       deliveryProviderScope: ['mailbox delivery', 'unsubscribe enforcement', 'bounce handling', 'SPF/DKIM/DMARC', 'abuse monitoring', 'IP/domain reputation'],
       secretPolicy: 'Provider API keys stay in Settings/server-side environment only; do not expose them through page props, public manifests, or custom frontend handoff.',
+    },
+  };
+}
+
+function isSubscriberSubscribed(contact: AdminContact): boolean {
+  if (contact.newsletterSubscriptionStatus === 'subscribed') return contact.status !== 'archived';
+  if (
+    contact.newsletterSubscriptionStatus === 'unsubscribed' ||
+    contact.newsletterSubscriptionStatus === 'bounced' ||
+    contact.newsletterSubscriptionStatus === 'complained'
+  ) {
+    return false;
+  }
+  return contact.status !== 'archived';
+}
+
+function buildNewsletterLifecycleUpdate(contact: AdminContact, status: ContactStatus, now: string): Partial<AdminContact> {
+  if (status === 'archived') {
+    return {
+      newsletterSubscriptionStatus: 'unsubscribed',
+      newsletterUnsubscribedAt: now,
+      newsletterSource: contact.newsletterSource || 'newsletter-workspace',
+      sourceValues: buildNewsletterLifecycleSourceValues(contact, 'unsubscribed', now),
+    };
+  }
+
+  if (status === 'new' || status === 'qualified') {
+    return {
+      newsletterSubscriptionStatus: 'subscribed',
+      newsletterSubscribedAt: contact.newsletterSubscribedAt || now,
+      newsletterUnsubscribedAt: null,
+      newsletterSource: contact.newsletterSource || 'newsletter-workspace',
+      sourceValues: buildNewsletterLifecycleSourceValues(contact, 'subscribed', now),
+    };
+  }
+
+  return {};
+}
+
+function buildNewsletterLifecycleSourceValues(
+  contact: AdminContact,
+  status: 'subscribed' | 'unsubscribed',
+  now: string,
+): Record<string, unknown> {
+  const existing = isRecord(contact.sourceValues) ? contact.sourceValues : {};
+  const existingNewsletter = isRecord(existing.newsletter) ? existing.newsletter : {};
+  return {
+    ...existing,
+    backyIntent: 'newsletter',
+    schemaVersion: 'backy.newsletter-form.v1',
+    subscriptionStatus: status,
+    newsletterStatus: status,
+    newsletter: {
+      ...existingNewsletter,
+      schemaVersion: 'backy.newsletter-subscribe.v1',
+      status,
+      source: contact.newsletterSource || readSourceValue(contact, 'signup_source') || 'newsletter-workspace',
+      updatedAt: now,
+      ...(status === 'subscribed'
+        ? {
+            subscribedAt: contact.newsletterSubscribedAt || now,
+            unsubscribedAt: null,
+          }
+        : { unsubscribedAt: now }),
     },
   };
 }
