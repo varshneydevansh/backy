@@ -186,6 +186,7 @@ const HELP_TOPICS: HelpTopic[] = [
     details: [
       'The Newsletter workspace creates active signup forms with email, name, topic preference, consent, and source fields, then links you to a canvas newsletter page or blog composer.',
       'Subscriber records are still stored through Backy Contacts so status, notes, source values, consent evidence, saved lists, segments, CSV export, and private management APIs stay site-scoped.',
+      'The issue handoff combines recent published Blog reports, subscriber counts, and private sync route templates so a delivery worker can draft a provider campaign without reading secrets from the frontend.',
       'Backy should own the subscriber database and API handoff. Bulk outbound delivery, inbox hosting, bounce handling, and domain reputation should stay behind a real email provider until Backy has a dedicated mail service.',
     ],
     route: '/newsletter',

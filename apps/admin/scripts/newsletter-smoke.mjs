@@ -21,8 +21,10 @@ const routeTreeSource = read('../src/routeTree.gen.ts');
 assert(routeSource.includes("createFileRoute('/newsletter')"), 'Newsletter route must be registered at /newsletter.');
 assert(routeSource.includes("const NEWSLETTER_SCHEMA_VERSION = 'backy.newsletter-management-handoff.v1';"), 'Newsletter route must expose a versioned handoff schema.');
 assert(routeSource.includes("const NEWSLETTER_SYNC_POLICY_VERSION = 'backy.newsletter-sync-boundary.v1';"), 'Newsletter route must document the email-provider boundary.');
+assert(routeSource.includes("const NEWSLETTER_ISSUE_SCHEMA_VERSION = 'backy.newsletter-issue-handoff.v1';"), 'Newsletter route must expose a versioned issue handoff schema.');
 assert(routeSource.includes('createForm('), 'Newsletter route must create a native Backy signup form.');
 assert(routeSource.includes('listFormContacts('), 'Newsletter route must read subscriber records from Contacts APIs.');
+assert(routeSource.includes('listBlogPosts(activeSiteId, { status: \'published\' })'), 'Newsletter route must read published posts for issue handoff drafts.');
 assert(routeSource.includes('updateContact('), 'Newsletter route must manage subscriber lifecycle status.');
 assert(routeSource.includes('buildNewsletterLifecycleUpdate('), 'Newsletter route must map admin lifecycle actions to explicit newsletter subscription fields.');
 assert(routeSource.includes("newsletterSubscriptionStatus: 'unsubscribed'"), 'Newsletter archive action must mark the subscriber as unsubscribed.');
@@ -42,10 +44,13 @@ assert(routeSource.includes('mailbox delivery') && routeSource.includes('SPF/DKI
 assert(routeSource.includes('data-testid="newsletter-command-center"'), 'Newsletter page must expose a command-center test hook.');
 assert(routeSource.includes('data-testid="newsletter-subscriber-list"'), 'Newsletter page must expose a subscriber-list test hook.');
 assert(routeSource.includes('data-testid="newsletter-api-handoff"'), 'Newsletter page must expose an API-handoff test hook.');
+assert(routeSource.includes('data-testid="newsletter-issue-handoff"'), 'Newsletter page must expose a newsletter issue handoff section.');
+assert(routeSource.includes('data-testid="newsletter-copy-issue-handoff"'), 'Newsletter page must expose a copyable issue handoff action.');
 assert(routeSource.includes('data-testid="newsletter-copy-handoff"'), 'Newsletter page must expose a copy-handoff action.');
 assert(routeSource.includes('data-testid="newsletter-export-csv"'), 'Newsletter page must expose a subscriber CSV export action.');
 assert(routeSource.includes("navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'newsletter', templateSource: 'backy-canvas', focus: 'canvas' } })"), 'Newsletter page creation must land in focused Backy canvas mode.');
 assert(routeSource.includes("navigate({ to: '/blog/new', search: { siteId: activeSiteId, templateSource: 'backy-canvas', focus: 'canvas' } })"), 'Newsletter writing workflow must open focused blog canvas mode.');
+assert(routeSource.includes('provider API keys') && routeSource.includes('SMTP credentials') && routeSource.includes('bounce webhook secrets'), 'Newsletter issue handoff must keep provider secrets outside Backy/content payloads.');
 assert(routeSource.includes('overflow-x-auto') && routeSource.includes('min-w-[900px]'), 'Newsletter subscriber table must avoid admin-table text overlap on narrow screens.');
 
 assert(sidebarSource.includes("{ id: 'newsletter', label: 'Newsletter', to: '/newsletter'"), 'Sidebar must expose Newsletter in the Audience section.');

@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import {
   createForm,
   getAdminApiBase,
+  listBlogPosts,
   listContactSegments,
   listFormContacts,
   listForms,
@@ -34,7 +35,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAuthStore, type User } from '@/stores/authStore';
-import { useStore } from '@/stores/mockStore';
+import { useStore, type BlogPost } from '@/stores/mockStore';
 import { cn, formatDate } from '@/lib/utils';
 
 interface NewsletterSearch {
@@ -51,6 +52,7 @@ interface NewsletterSubscriber {
 
 const NEWSLETTER_SCHEMA_VERSION = 'backy.newsletter-management-handoff.v1';
 const NEWSLETTER_SYNC_POLICY_VERSION = 'backy.newsletter-sync-boundary.v1';
+const NEWSLETTER_ISSUE_SCHEMA_VERSION = 'backy.newsletter-issue-handoff.v1';
 
 const NEWSLETTER_PERMISSION_ROLE_DEFAULTS: Record<NewsletterPermissionKey, Array<User['role']>> = {
   'forms.view': ['owner', 'admin', 'editor', 'viewer'],
@@ -131,6 +133,7 @@ function NewsletterRoute() {
   const [forms, setForms] = useState<FormDefinition[]>([]);
   const [contactsByForm, setContactsByForm] = useState<Record<string, AdminContact[]>>({});
   const [contactSegments, setContactSegments] = useState<ContactSegmentAnalytics | null>(null);
+  const [recentPosts, setRecentPosts] = useState<BlogPost[]>([]);
   const [selectedFormId, setSelectedFormId] = useState(routeSearch.formId || 'all');
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState<string | null>(null);
@@ -188,6 +191,14 @@ function NewsletterRoute() {
     contactSegments,
   }), [activeSiteId, adminBaseUrl, contactSegments, newsletterForms, publicBaseUrl, subscribers]);
   const newsletterHandoffText = useMemo(() => JSON.stringify(newsletterHandoff, null, 2), [newsletterHandoff]);
+  const newsletterIssueHandoff = useMemo(() => buildNewsletterIssueHandoff({
+    activeSiteId,
+    publicBaseUrl,
+    recentPosts,
+    metrics,
+    newsletterForms,
+  }), [activeSiteId, metrics, newsletterForms, publicBaseUrl, recentPosts]);
+  const newsletterIssueHandoffText = useMemo(() => JSON.stringify(newsletterIssueHandoff, null, 2), [newsletterIssueHandoff]);
   const actionBusy = isLoading || Boolean(isMutating);
   const viewActionStatusId = 'newsletter-view-action-status';
   const manageActionStatusId = 'newsletter-manage-action-status';
@@ -207,6 +218,7 @@ function NewsletterRoute() {
       setForms([]);
       setContactsByForm({});
       setContactSegments(null);
+      setRecentPosts([]);
       return;
     }
 
@@ -215,8 +227,11 @@ function NewsletterRoute() {
     try {
       const loadedForms = await listForms(activeSiteId);
       const loadedNewsletterForms = loadedForms.filter(isNewsletterForm);
-      const [segments, contactResults] = await Promise.all([
+      const [segments, publishedPosts, contactResults] = await Promise.all([
         listContactSegments(activeSiteId).catch(() => null),
+        listBlogPosts(activeSiteId, { status: 'published' })
+          .then((posts) => posts.sort(sortPostsByPublishedDate).slice(0, 6))
+          .catch(() => []),
         Promise.all(loadedNewsletterForms.map(async (form) => ({
           formId: form.id,
           contacts: await listFormContacts(activeSiteId, form.id, { limit: 500 })
@@ -226,6 +241,7 @@ function NewsletterRoute() {
       ]);
       setForms(loadedForms);
       setContactSegments(segments);
+      setRecentPosts(publishedPosts);
       setContactsByForm(Object.fromEntries(contactResults.map((result) => [result.formId, result.contacts])));
       if (selectedFormId !== 'all' && !loadedNewsletterForms.some((form) => form.id === selectedFormId)) {
         setSelectedFormId('all');
@@ -696,6 +712,61 @@ function NewsletterRoute() {
           <WorkflowCard title="Subscriber proof" detail="Every public signup lands as a contact with source form, request id, consent values, topic preference, and lifecycle state." />
           <WorkflowCard title="Provider handoff" detail="Use CSV or private Contacts APIs to sync subscribers to Buttondown, Mailchimp, Resend, SES, or another delivery system without exposing secrets." />
         </div>
+        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.45fr)]" data-testid="newsletter-issue-handoff">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Issue handoff</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  A copyable campaign draft for a provider or frontend agent, built from recent published reports and current subscriber counts.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void copyNewsletterText(newsletterIssueHandoffText, 'Newsletter issue handoff')}
+                disabled={actionBusy || !canViewNewsletter}
+                iconStart={<Copy className="size-3.5" />}
+                data-testid="newsletter-copy-issue-handoff"
+              >
+                Copy issue kit
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {recentPosts.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-sm text-muted-foreground">
+                  Publish a report in Blog to seed the first newsletter issue kit.
+                </p>
+              ) : recentPosts.slice(0, 3).map((post) => (
+                <div key={post.id} className="rounded-lg border border-border bg-card px-3 py-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="truncate text-sm font-semibold text-foreground">{post.title}</h4>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                        {post.excerpt || 'No excerpt yet.'}
+                      </p>
+                    </div>
+                    <StatusBadge status={post.status} />
+                  </div>
+                  <code className="mt-2 block break-all font-mono text-xs text-muted-foreground">
+                    {buildPublicPostUrl(publicBaseUrl, activeSiteId, post)}
+                  </code>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold text-foreground">What Backy owns</h3>
+            <ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
+              <li>Subscriber identity, topic, consent, and lifecycle state.</li>
+              <li>Published post URLs, excerpts, and canvas-backed content metadata.</li>
+              <li>CSV/private API sync contracts for delivery workers.</li>
+            </ul>
+            <div className="mt-3 rounded-lg border border-border bg-card px-3 py-2 text-xs leading-5 text-muted-foreground">
+              Use a delivery provider for SMTP/API sending, unsubscribe links in delivered email, bounces, complaints, and SPF/DKIM/DMARC.
+            </div>
+          </div>
+        </div>
       </section>
     </PageShell>
   );
@@ -941,6 +1012,77 @@ function buildNewsletterHandoff({
       secretPolicy: 'Provider API keys stay in Settings/server-side environment only; do not expose them through page props, public manifests, or custom frontend handoff.',
     },
   };
+}
+
+function buildNewsletterIssueHandoff({
+  activeSiteId,
+  publicBaseUrl,
+  recentPosts,
+  metrics,
+  newsletterForms,
+}: {
+  activeSiteId: string;
+  publicBaseUrl: string;
+  recentPosts: BlogPost[];
+  metrics: ReturnType<typeof buildNewsletterMetrics>;
+  newsletterForms: FormDefinition[];
+}) {
+  const issuePosts = recentPosts.slice(0, 3).map((post) => ({
+    id: post.id,
+    title: post.title,
+    slug: post.slug,
+    excerpt: post.excerpt || '',
+    status: post.status,
+    publishedAt: post.publishedAt || post.updatedAt || null,
+    publicUrl: buildPublicPostUrl(publicBaseUrl, activeSiteId, post),
+    renderUrl: `${publicBaseUrl}/api/sites/${activeSiteId}/render?path=${encodeURIComponent(`/blog/${post.slug}`)}`,
+    resolveUrl: `${publicBaseUrl}/api/sites/${activeSiteId}/resolve?path=${encodeURIComponent(`/blog/${post.slug}`)}`,
+  }));
+
+  return {
+    schemaVersion: NEWSLETTER_ISSUE_SCHEMA_VERSION,
+    siteId: activeSiteId,
+    status: issuePosts.length > 0 && metrics.active > 0 ? 'ready-for-provider-draft' : 'needs-posts-or-subscribers',
+    audience: {
+      totalSubscribers: metrics.total,
+      activeSubscribers: metrics.active,
+      unsubscribedOrArchived: metrics.archived,
+      signupForms: newsletterForms.length,
+    },
+    issueDraft: {
+      subject: issuePosts[0] ? issuePosts[0].title : 'Latest report from Backy',
+      preheader: issuePosts[0]?.excerpt || 'A new report is ready to send to subscribers.',
+      sourcePosts: issuePosts,
+      suggestedSections: [
+        'Lead report summary',
+        'Why it matters',
+        'Source links and evidence',
+        'Correction/contact note',
+        'Unsubscribe footer handled by provider',
+      ],
+    },
+    syncContract: {
+      subscriberListUrl: `/api/admin/sites/${activeSiteId}/newsletter/subscribers?status=subscribed&limit=100`,
+      subscribeUrl: `/api/sites/${activeSiteId}/newsletter/subscribers`,
+      unsubscribeUrl: `/api/sites/${activeSiteId}/newsletter/subscribers`,
+      requiredAdminPermission: 'forms.export',
+      sdkHelpers: ['newsletterSubscribers', 'subscribeNewsletter', 'unsubscribeNewsletter'],
+    },
+    providerBoundary: {
+      status: 'external-delivery-required',
+      reason: 'Backy is the content, subscriber, consent, and API source of truth; inbox delivery needs provider reputation, bounce processing, complaint handling, unsubscribe enforcement, and DNS authentication.',
+      keepSecretServerSide: ['provider API keys', 'SMTP credentials', 'unsubscribe signing secrets', 'bounce webhook secrets'],
+    },
+  };
+}
+
+function buildPublicPostUrl(publicBaseUrl: string, siteId: string, post: BlogPost): string {
+  return `${publicBaseUrl}/api/sites/${siteId}/render?path=${encodeURIComponent(`/blog/${post.slug}`)}`;
+}
+
+function sortPostsByPublishedDate(left: BlogPost, right: BlogPost): number {
+  return (Date.parse(right.publishedAt || right.updatedAt || '') || 0)
+    - (Date.parse(left.publishedAt || left.updatedAt || '') || 0);
 }
 
 function isSubscriberSubscribed(contact: AdminContact): boolean {

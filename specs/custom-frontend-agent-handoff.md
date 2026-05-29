@@ -134,6 +134,7 @@ Newsletter signup is a Backy-native audience workflow, but outbound mailbox deli
 - The Newsletter workspace creates normal Backy Forms with `settings.backyIntent: "newsletter"` plus email, name, topic, consent, and signup-source fields. Public frontends submit through `POST /api/sites/:siteId/forms/:formId/submissions` using the same form contract as any other Backy form.
 - Subscribers are stored as private Contacts records. Admin/custom tools read and update them through `/api/admin/sites/:siteId/forms/:formId/contacts`, contact segments, contact lists, sync, and consent-retention APIs.
 - Copy the workspace handoff (`backy.newsletter-management-handoff.v1`) when an AI/frontend agent or email-sync worker needs the form definition URLs, submit URLs, private management endpoints, canvas routes, and no-secret delivery boundary.
+- Copy the issue handoff (`backy.newsletter-issue-handoff.v1`) when a delivery worker needs recent published blog report URLs, subject/preheader draft fields, subscriber counts, and private subscriber-sync route templates for a provider campaign.
 - Do not put delivery-provider API keys, SMTP credentials, bounce webhooks, or unsubscribe signing secrets in page props, public manifests, canvas JSON, or custom frontend repositories. Delivery systems such as Buttondown, Mailchimp, Resend, SES, or similar providers belong behind Settings/server-side environment wiring.
 
 ## Release readiness note
