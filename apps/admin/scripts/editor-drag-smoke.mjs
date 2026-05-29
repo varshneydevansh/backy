@@ -18504,11 +18504,179 @@ const testMarqueeSelectionOrigin = async (client) => {
   assert(Math.abs(overlay.rectLeft - overlay.expectedVisualLeft) <= 4 && Math.abs(overlay.rectTop - overlay.expectedVisualTop) <= 4, `Marquee visual rect should render from its canvas-space origin: ${JSON.stringify({ start, end, overlay })}`);
   assert(overlay.boundsWidth > 20 && overlay.boundsHeight > 20, `Marquee overlay did not grow during drag: ${JSON.stringify({ start, end, overlay })}`);
 
+  const reverseStart = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    if (!(canvas instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-canvas' };
+    }
+
+    canvas.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+    const rect = canvas.getBoundingClientRect();
+    const style = window.getComputedStyle(canvas);
+    const cssWidth = Number.parseFloat(style.width || '0');
+    const cssHeight = Number.parseFloat(style.height || '0');
+    const scaleX = cssWidth > 0 ? rect.width / cssWidth : 1;
+    const scaleY = cssHeight > 0 ? rect.height / cssHeight : 1;
+    const left = Math.max(rect.left + 24, 24);
+    const right = Math.min(rect.right - 24, window.innerWidth - 24);
+    const top = Math.max(rect.top + 60, 220);
+    const bottom = Math.min(rect.bottom - 80, window.innerHeight - 180);
+
+    for (let y = bottom; y >= top; y -= 24) {
+      for (let x = right; x >= left; x -= 24) {
+        const target = document.elementFromPoint(x, y);
+        if (!(target instanceof Element)) {
+          continue;
+        }
+
+        const insideCanvas = target === canvas || canvas.contains(target);
+        const hitLayer = target.closest('[data-element-id]');
+        const hitToolbar = target.closest('[data-testid="editor-canvas-context-bar"], [data-testid="editor-zoom-controls"]');
+        if (insideCanvas && !hitLayer && !hitToolbar) {
+          return {
+            ok: true,
+            x: Math.round(x),
+            y: Math.round(y),
+            expectedCanvasX: Math.round((x - rect.left) / scaleX),
+            expectedCanvasY: Math.round((y - rect.top) / scaleY),
+            scaleX: Number(scaleX.toFixed(3)),
+            scaleY: Number(scaleY.toFixed(3)),
+            canvasRect: {
+              left: Math.round(rect.left),
+              top: Math.round(rect.top),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            },
+            hitTag: target.tagName,
+          };
+        }
+      }
+    }
+
+    return {
+      ok: false,
+      reason: 'no-visible-reverse-background-point',
+      canvasRect: {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+      },
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      },
+    };
+  })()`);
+  assert(reverseStart?.ok, `Unable to find a canvas background point for reverse marquee smoke: ${JSON.stringify(reverseStart)}`);
+  assert(reverseStart.expectedCanvasX > 40 && reverseStart.expectedCanvasY > 40, `Reverse marquee start point should have room above/left: ${JSON.stringify(reverseStart)}`);
+
+  const reverseEnd = {
+    x: Math.max(reverseStart.x - 170, reverseStart.canvasRect.left + 18),
+    y: Math.max(reverseStart.y - 120, reverseStart.canvasRect.top + 18),
+  };
+  assert(reverseEnd.x < reverseStart.x - 20 && reverseEnd.y < reverseStart.y - 20, `Reverse marquee smoke did not have room to drag up-left: ${JSON.stringify({ reverseStart, reverseEnd })}`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: reverseStart.x,
+    y: reverseStart.y,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: reverseStart.x,
+    y: reverseStart.y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+  await sleep(80);
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: reverseEnd.x,
+    y: reverseEnd.y,
+    button: 'left',
+    buttons: 1,
+  });
+  await sleep(140);
+
+  const reverseOverlay = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const marquee = document.querySelector('[data-testid="editor-marquee-selection"]');
+    if (!(canvas instanceof HTMLElement) || !(marquee instanceof HTMLElement)) {
+      return { ok: false, hasCanvas: Boolean(canvas), hasMarquee: Boolean(marquee) };
+    }
+
+    const rect = marquee.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const canvasStyle = window.getComputedStyle(canvas);
+    const cssCanvasWidth = Number.parseFloat(canvasStyle.width || '0');
+    const cssCanvasHeight = Number.parseFloat(canvasStyle.height || '0');
+    const scaleX = cssCanvasWidth > 0 ? canvasRect.width / cssCanvasWidth : 1;
+    const scaleY = cssCanvasHeight > 0 ? canvasRect.height / cssCanvasHeight : 1;
+    const style = window.getComputedStyle(marquee);
+    const cssLeft = Number.parseFloat(style.left || '0');
+    const cssTop = Number.parseFloat(style.top || '0');
+    return {
+      ok: true,
+      coordinateSpace: marquee.getAttribute('data-marquee-coordinate-space') || '',
+      selectionMode: marquee.getAttribute('data-selection-mode') || '',
+      startX: Number(marquee.getAttribute('data-marquee-start-x') || 0),
+      startY: Number(marquee.getAttribute('data-marquee-start-y') || 0),
+      currentX: Number(marquee.getAttribute('data-marquee-current-x') || 0),
+      currentY: Number(marquee.getAttribute('data-marquee-current-y') || 0),
+      boundsX: Number(marquee.getAttribute('data-marquee-bounds-x') || 0),
+      boundsY: Number(marquee.getAttribute('data-marquee-bounds-y') || 0),
+      boundsWidth: Number(marquee.getAttribute('data-marquee-bounds-width') || 0),
+      boundsHeight: Number(marquee.getAttribute('data-marquee-bounds-height') || 0),
+      cssLeft,
+      cssTop,
+      rectLeft: Math.round(rect.left),
+      rectTop: Math.round(rect.top),
+      rectWidth: Math.round(rect.width),
+      rectHeight: Math.round(rect.height),
+      expectedVisualLeft: Math.round(canvasRect.left + (cssLeft * scaleX)),
+      expectedVisualTop: Math.round(canvasRect.top + (cssTop * scaleY)),
+      canvasRect: {
+        left: Math.round(canvasRect.left),
+        top: Math.round(canvasRect.top),
+        width: Math.round(canvasRect.width),
+        height: Math.round(canvasRect.height),
+      },
+    };
+  })()`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: reverseEnd.x,
+    y: reverseEnd.y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(80);
+
+  assert(reverseOverlay.ok, `Reverse marquee overlay did not render while dragging: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assert(reverseOverlay.coordinateSpace === 'canvas', `Reverse marquee overlay missing canvas coordinate metadata: ${JSON.stringify(reverseOverlay)}`);
+  assert(reverseOverlay.selectionMode === 'replace', `Reverse marquee overlay should default to replace mode: ${JSON.stringify(reverseOverlay)}`);
+  assert(Math.abs(reverseOverlay.startX - reverseStart.expectedCanvasX) <= 2, `Reverse marquee start X drifted from pointer-down origin: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assert(Math.abs(reverseOverlay.startY - reverseStart.expectedCanvasY) <= 2, `Reverse marquee start Y drifted from pointer-down origin: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assert(reverseOverlay.currentX < reverseOverlay.startX && reverseOverlay.currentY < reverseOverlay.startY, `Reverse marquee current point should move up-left from the start point: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assert(reverseOverlay.boundsX < reverseOverlay.startX && reverseOverlay.boundsY < reverseOverlay.startY, `Reverse marquee bounds should use the drag minimum, not the original canvas origin: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assert(Math.abs(reverseOverlay.boundsX - reverseOverlay.currentX) <= 2 && Math.abs(reverseOverlay.boundsY - reverseOverlay.currentY) <= 2, `Reverse marquee bounds should anchor at the current up-left point: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assert(reverseOverlay.cssLeft > 0 && reverseOverlay.cssTop > 0, `Reverse marquee overlay CSS left/top should stay in canvas space instead of collapsing to origin: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assert(Math.abs(reverseOverlay.rectLeft - reverseOverlay.expectedVisualLeft) <= 4 && Math.abs(reverseOverlay.rectTop - reverseOverlay.expectedVisualTop) <= 4, `Reverse marquee visual rect should render from its canvas-space bounds: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assert(reverseOverlay.boundsWidth > 20 && reverseOverlay.boundsHeight > 20, `Reverse marquee overlay did not grow during drag: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+
   return {
     zoom,
     start,
     end,
     overlay,
+    reverseStart,
+    reverseEnd,
+    reverseOverlay,
   };
 };
 
@@ -22891,7 +23059,142 @@ const testNavBehaviorControls = async (client) => {
   assert(state.previewNavigationSource === 'site-primary' && state.previewNavigationBinding === 'site.navigation.primary', `Nav preview binding metadata mismatch: ${JSON.stringify(state)}`);
   assert(state.links.length === 3 && state.links[0].label === 'Docs' && state.links[1].label === 'Pricing', `Nav links mismatch: ${JSON.stringify(state)}`);
 
-  return state;
+  const navChildLayerSelection = await evaluate(client, `(async () => {
+    const raf = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
+    if (!(layersButton instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-layers-tab' };
+    }
+    layersButton.click();
+    await raf();
+
+    const navRow = document.querySelector('[data-layer-id="smoke-nav"]');
+    if (!(navRow instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-nav-layer-row',
+        layerIds: Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => node.getAttribute('data-layer-id')),
+      };
+    }
+
+    const expandButton = document.querySelector('[data-layer-action="toggle-expand"][data-layer-action-id="smoke-nav"]');
+    if (navRow.getAttribute('aria-expanded') === 'false' && expandButton instanceof HTMLButtonElement) {
+      expandButton.click();
+      await raf();
+    }
+
+    const rows = Array.from(document.querySelectorAll('[role="treeitem"][data-layer-id]'));
+    const navIndex = rows.indexOf(navRow);
+    const navDepth = Number(navRow.getAttribute('data-layer-depth') || 0);
+    const childRows = [];
+    for (let index = navIndex + 1; index < rows.length; index += 1) {
+      const row = rows[index];
+      const depth = Number(row.getAttribute('data-layer-depth') || 0);
+      if (depth <= navDepth) {
+        break;
+      }
+      childRows.push({
+        id: row.getAttribute('data-layer-id') || '',
+        depth,
+        text: row.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      });
+    }
+
+    const target = childRows.find((row) => row.text.includes('Docs')) || childRows[0];
+    if (!target?.id) {
+      return {
+        ok: false,
+        reason: 'missing-nav-child-layer-row',
+        navExpanded: navRow.getAttribute('aria-expanded') || '',
+        navDepth,
+        childRows,
+        rows: rows.map((row) => ({
+          id: row.getAttribute('data-layer-id') || '',
+          depth: Number(row.getAttribute('data-layer-depth') || 0),
+          text: row.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        })),
+      };
+    }
+
+    const targetRow = document.querySelector('[data-layer-id="' + CSS.escape(target.id) + '"]');
+    if (!(targetRow instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-target-child-row', target, childRows };
+    }
+
+    targetRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await raf();
+    await raf();
+
+    const selectedRows = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
+      .map((node) => node.getAttribute('data-layer-id'))
+      .filter(Boolean);
+    const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+    const canvasChild = document.querySelector('[data-element-id="' + CSS.escape(target.id) + '"]');
+
+    return {
+      ok: true,
+      navExpanded: navRow.getAttribute('aria-expanded') || '',
+      navDepth,
+      childRows,
+      selectedChildId: target.id,
+      selectedRows,
+      layoutSelectedId: layout?.getAttribute('data-selected-id') || '',
+      canvasChildExists: canvasChild instanceof HTMLElement,
+      canvasChildText: canvasChild?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      canvasChildType: canvasChild?.querySelector('a') ? 'link-anchor' : '',
+    };
+  })()`);
+
+  assert(
+    navChildLayerSelection?.ok &&
+      navChildLayerSelection.navExpanded === 'true' &&
+      navChildLayerSelection.childRows.length === 3 &&
+      navChildLayerSelection.childRows.every((row) => row.depth > navChildLayerSelection.navDepth) &&
+      ['Docs', 'Pricing', 'Contact'].every((label) => navChildLayerSelection.childRows.some((row) => row.text.includes(label))) &&
+      navChildLayerSelection.selectedRows.length === 1 &&
+      navChildLayerSelection.selectedRows.includes(navChildLayerSelection.selectedChildId) &&
+      navChildLayerSelection.layoutSelectedId === navChildLayerSelection.selectedChildId &&
+      navChildLayerSelection.canvasChildExists === true &&
+      navChildLayerSelection.canvasChildText.includes('Docs') &&
+      navChildLayerSelection.canvasChildType === 'link-anchor',
+    `Nav generated child links were not exposed and selectable as layer rows: ${JSON.stringify(navChildLayerSelection)}`,
+  );
+
+  await switchToPropertiesPanel(client);
+  const navChildInspector = await evaluate(client, `(() => {
+    const selectedChildId = ${JSON.stringify(navChildLayerSelection.selectedChildId)};
+    const selection = document.querySelector('[data-testid="editor-inspector-selection"]');
+    const label = document.querySelector('[data-testid="editor-inspector-selection-label"]');
+    const detail = document.querySelector('[data-testid="editor-inspector-selection-detail"]');
+    const textInput = document.querySelector('[data-testid="editor-link-text"]');
+    const hrefInput = document.querySelector('[data-testid="editor-link-href"]');
+    const layout = document.querySelector('[data-testid="editor-shell-layout"]');
+    return {
+      ok: true,
+      selectedId: layout?.getAttribute('data-selected-id') || '',
+      hasSelection: Boolean(selection),
+      label: label?.textContent || '',
+      detail: detail?.textContent || '',
+      linkText: textInput instanceof HTMLInputElement ? textInput.value : '',
+      href: hrefInput instanceof HTMLInputElement ? hrefInput.value : '',
+    };
+  })()`);
+  assert(
+    navChildInspector?.ok &&
+      navChildInspector.selectedId === navChildLayerSelection.selectedChildId &&
+      navChildInspector.hasSelection === true &&
+      /link/i.test(navChildInspector.detail) &&
+      navChildInspector.detail.includes(navChildLayerSelection.selectedChildId) &&
+      navChildInspector.linkText === 'Docs' &&
+      navChildInspector.href === '/docs',
+    `Nav generated child layer did not open as an editable link in the inspector: ${JSON.stringify({ navChildLayerSelection, navChildInspector })}`,
+  );
+
+  return {
+    ...state,
+    navChildLayerSelection,
+    navChildInspector,
+  };
 };
 
 const assertPersistedNavBehavior = async (pageId) => {
