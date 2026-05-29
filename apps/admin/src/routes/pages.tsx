@@ -1892,6 +1892,7 @@ function PagesListView() {
     {
       key: 'id',
       label: 'Select',
+      width: '76px',
       render: (page) => (
         <input
           type="checkbox"
@@ -1909,18 +1910,19 @@ function PagesListView() {
       key: 'title',
       label: 'Page Title',
       sortable: true,
+      width: '220px',
       render: (page) => (
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
             {page.isHomepage || page.slug === 'index' || page.slug === 'home' || page.slug === '' ? (
               <Home className="w-5 h-5 text-primary" />
             ) : (
               <Layout className="w-5 h-5 text-primary" />
             )}
           </div>
-          <div>
-            <div className="font-medium text-foreground">{page.title}</div>
-            <div className="text-xs text-muted-foreground">{pagePublicPath(page)}</div>
+          <div className="min-w-0">
+            <div className="truncate font-medium text-foreground" title={page.title}>{page.title}</div>
+            <div className="truncate text-xs text-muted-foreground" title={pagePublicPath(page)}>{pagePublicPath(page)}</div>
           </div>
         </div>
       )
@@ -1928,6 +1930,7 @@ function PagesListView() {
     {
       key: 'slug',
       label: 'Route',
+      width: '150px',
       render: (page) => (
         <PageRouteCell
           page={page}
@@ -1938,12 +1941,14 @@ function PagesListView() {
     {
       key: 'template',
       label: 'Template',
+      width: '150px',
       render: (page) => <PageTemplateCell page={page} />,
     },
     {
       key: 'status',
       label: 'Status',
       sortable: true,
+      width: '125px',
       render: (page) => (
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={page.status} />
@@ -1958,6 +1963,7 @@ function PagesListView() {
     {
       key: 'parentId',
       label: 'Hierarchy',
+      width: '150px',
       render: (page) => (
         <PageHierarchyCell
           page={page}
@@ -1969,6 +1975,7 @@ function PagesListView() {
     {
       key: 'meta',
       label: 'Health',
+      width: '130px',
       render: (page) => {
         const readiness = readinessMap[page.id];
         const firstIssue = readiness?.checks.find((check) => check.status !== 'pass');
@@ -1995,6 +2002,7 @@ function PagesListView() {
     {
       key: 'content',
       label: 'Revisions',
+      width: '160px',
       render: (page) => (
         <PageRevisionCell
           page={page}
@@ -2007,6 +2015,7 @@ function PagesListView() {
     {
       key: 'siteId',
       label: 'Delivery',
+      width: '300px',
       render: (page) => {
         const pageSiteId = page.siteId || activeSiteId;
         const pagePath = pagePublicPath(page);
@@ -2035,11 +2044,13 @@ function PagesListView() {
       key: 'lastUpdated',
       label: 'Last Updated',
       sortable: true,
+      width: '120px',
       render: (page) => <span className="text-muted-foreground">{formatDate(page.lastUpdated)}</span>
     },
     {
       key: 'actions',
       label: '',
+      width: '148px',
       render: (page) => {
         const readiness = readinessMap[page.id];
         const publishBlocker = readiness ? getPublishBlocker(readiness) : null;
@@ -4107,6 +4118,7 @@ function PagesListView() {
         <DataGrid
           columns={columns}
           data={data}
+          tableMinWidth="1729px"
           loading={isBlockingInitialPageLoad}
           interactionDisabled={isPageLibraryBusy}
           sortConfig={sortConfig}
@@ -5089,8 +5101,14 @@ function PageDeliveryHealthSummary({
         </div>
       )}
       {history.length > 0 && (
-        <div className="mt-2 border-t border-border pt-2" data-testid={`pages-delivery-history-${pageId}`}>
-          <div className="font-medium text-foreground">Recent probes</div>
+        <details
+          className="mt-2 border-t border-border pt-2"
+          data-testid={`pages-delivery-history-${pageId}`}
+          data-default-collapsed="true"
+        >
+          <summary className="cursor-pointer list-none font-medium text-foreground transition-colors hover:text-primary [&::-webkit-details-marker]:hidden">
+            Recent probes
+          </summary>
           <div className="mt-1 space-y-1">
             {history.slice(0, 3).map((entry, index) => (
               <div key={`${entry.checkedAt || 'pending'}-${index}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground">
@@ -5102,7 +5120,7 @@ function PageDeliveryHealthSummary({
               </div>
             ))}
           </div>
-        </div>
+        </details>
       )}
     </div>
   );

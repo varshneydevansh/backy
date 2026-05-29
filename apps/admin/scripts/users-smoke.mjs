@@ -133,6 +133,15 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
     'Users command center secondary actions must expose ready/blocked action metadata for every overflow action.',
   );
   assert(
+    source.includes('tableMinWidth="1068px"') &&
+      source.includes("width: '300px'") &&
+      source.includes('className="group flex min-w-0 items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"') &&
+      source.includes('title={user.fullName}') &&
+      source.includes('title={user.email}') &&
+      source.includes('title={user.lastActive}'),
+    'Users directory table must reserve enough width and truncate long person/activity values instead of overlapping role and status controls.',
+  );
+  assert(
     source.includes("const canViewUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', USER_PERMISSION_ROLE_DEFAULTS);") &&
       source.includes("const canCreateUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.create', USER_PERMISSION_ROLE_DEFAULTS);") &&
       source.includes("const canManageUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.manage', USER_PERMISSION_ROLE_DEFAULTS);") &&

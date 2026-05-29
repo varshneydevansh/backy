@@ -982,6 +982,7 @@ function UsersListView() {
     {
       key: 'id',
       label: 'Select',
+      width: '76px',
       render: (user) => {
         const locked = isCurrentUser(user);
 
@@ -1002,6 +1003,7 @@ function UsersListView() {
       key: 'fullName',
       label: 'Person',
       sortable: true,
+      width: '300px',
       render: (user) => (
         <button
           type="button"
@@ -1014,7 +1016,7 @@ function UsersListView() {
           aria-label={`Open ${user.fullName}`}
           data-testid={`users-open-detail-${user.id}`}
           data-user-full-name={user.fullName}
-          className="group flex min-w-[240px] items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
+          className="group flex min-w-0 items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-semibold text-white shadow-sm">
             {getInitials(user.fullName)}
@@ -1023,18 +1025,18 @@ function UsersListView() {
               user.status === 'active' ? 'bg-emerald-500' : user.status === 'invited' ? 'bg-amber-400' : 'bg-slate-300',
             )} />
           </span>
-          <span>
-            <span className="flex flex-wrap items-center gap-2 font-semibold text-foreground group-hover:text-primary">
-              {user.fullName}
+          <span className="min-w-0">
+            <span className="flex min-w-0 flex-wrap items-center gap-2 font-semibold text-foreground group-hover:text-primary">
+              <span className="truncate" title={user.fullName}>{user.fullName}</span>
               {isCurrentUser(user) && (
                 <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                   You
                 </span>
               )}
             </span>
-            <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Mail className="h-3 w-3" />
-              {user.email}
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <Mail className="h-3 w-3 shrink-0" />
+              <span className="truncate" title={user.email}>{user.email}</span>
             </span>
           </span>
         </button>
@@ -1044,6 +1046,7 @@ function UsersListView() {
       key: 'role',
       label: 'Role',
       sortable: true,
+      width: '190px',
       render: (user) => (
         <div className="space-y-2">
           {isCurrentUser(user) && (
@@ -1071,6 +1074,7 @@ function UsersListView() {
       key: 'status',
       label: 'Status',
       sortable: true,
+      width: '190px',
       render: (user) => (
         <div className="space-y-2">
           {isCurrentUser(user) && (
@@ -1096,13 +1100,15 @@ function UsersListView() {
       key: 'lastActive',
       label: 'Activity',
       sortable: true,
+      width: '200px',
       render: (user) => (
-        <span className="text-sm text-muted-foreground">{user.lastActive}</span>
+        <span className="block truncate text-sm text-muted-foreground" title={user.lastActive}>{user.lastActive}</span>
       ),
     },
     {
       key: 'actions',
       label: '',
+      width: '112px',
       render: (user) => {
         const userActionStatusId = `users-actions-status-${user.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
         const rowBusyReason = isUsersBusy
@@ -2346,6 +2352,7 @@ function UsersListView() {
             <DataGrid
               columns={columns}
               data={data}
+              tableMinWidth="1068px"
               loading={isLoading}
               interactionDisabled={isUsersBusy}
               sortConfig={sortConfig}

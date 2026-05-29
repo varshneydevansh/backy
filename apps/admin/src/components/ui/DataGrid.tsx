@@ -16,6 +16,7 @@ interface DataGridProps<T> {
     loading?: boolean;
     emptyState?: React.ReactNode;
     interactionDisabled?: boolean;
+    tableMinWidth?: string;
 
     // Sorting
     sortConfig?: { key: keyof T; direction: 'asc' | 'desc' };
@@ -35,6 +36,7 @@ export function DataGrid<T extends { id: string }>({
     loading,
     emptyState,
     interactionDisabled = false,
+    tableMinWidth,
     sortConfig,
     onSort,
     currentPage = 1,
@@ -176,8 +178,22 @@ export function DataGrid<T extends { id: string }>({
                 >
                     <table
                         className="w-full table-fixed text-left text-sm"
+                        style={tableMinWidth ? { minInlineSize: tableMinWidth } : undefined}
+                        data-table-min-width={tableMinWidth || undefined}
                         data-layout-policy="viewport-contained-wrapped-table"
                     >
+                        {columns.some((column) => Boolean(column.width)) && (
+                            <colgroup data-testid="admin-data-grid-column-widths">
+                                {columns.map((column) => (
+                                    <col
+                                        key={getColumnKey(column)}
+                                        style={column.width ? { width: column.width } : undefined}
+                                        data-column-key={getColumnKey(column)}
+                                        data-column-width={column.width || undefined}
+                                    />
+                                ))}
+                            </colgroup>
+                        )}
                         <caption className="sr-only">{gridSummary}</caption>
                         <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border" data-testid="admin-data-grid-head">
                             <tr>

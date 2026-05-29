@@ -15,6 +15,7 @@ export interface Column<T> {
     label: string;
     render?: (item: T) => React.ReactNode;
     sortable?: boolean;
+    width?: string;
     className?: string;
     headerClassName?: string;
     cellClassName?: string;

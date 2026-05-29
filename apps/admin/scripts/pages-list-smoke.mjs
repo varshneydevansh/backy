@@ -240,6 +240,14 @@ const assertPagesListSourceContract = () => {
     'Pages delivery health row refresh controls must name the page they refresh.',
   );
   assert(
+    source.includes('tableMinWidth="1729px"') &&
+      source.includes("width: '300px'") &&
+      source.includes('data-testid={`pages-delivery-history-${pageId}`}') &&
+      source.includes('data-default-collapsed="true"') &&
+      source.includes('Recent probes'),
+    'Pages table must reserve enough width for delivery/status columns and collapse delivery probe history to prevent row overlap.',
+  );
+  assert(
     source.includes('const createPageLinkDisabled = !canEditPages') &&
       source.includes("templateSource: 'backy-canvas' as const") &&
       source.includes("focus: 'canvas' as const") &&
@@ -565,6 +573,7 @@ const assertPagesListSourceContract = () => {
 
 const assertSharedDataGridSourceContract = () => {
   const source = fs.readFileSync(new URL('../src/components/ui/DataGrid.tsx', import.meta.url), 'utf8');
+  const hookSource = fs.readFileSync(new URL('../src/hooks/useDataTable.ts', import.meta.url), 'utf8');
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   assert(
     source.includes("import { useId } from 'react';") &&
@@ -585,6 +594,15 @@ const assertSharedDataGridSourceContract = () => {
       source.includes('data-testid="admin-data-grid-row"') &&
       source.includes('data-row-id={item.id}'),
     'Shared admin DataGrid must expose stable loading/empty/body/row state for list QA and custom admin clients.',
+  );
+  assert(
+    hookSource.includes('width?: string;') &&
+      source.includes('tableMinWidth?: string;') &&
+      source.includes('style={tableMinWidth ? { minInlineSize: tableMinWidth } : undefined}') &&
+      source.includes('data-table-min-width={tableMinWidth || undefined}') &&
+      source.includes('data-testid="admin-data-grid-column-widths"') &&
+      source.includes('data-column-width={column.width || undefined}'),
+    'Shared admin DataGrid must support explicit table and column widths so dense admin lists scroll instead of overlapping content.',
   );
   assert(
     source.includes('const getColumnKey = (column: Column<T>) => String(column.key);') &&
@@ -3235,9 +3253,15 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     state = await evaluate(client, `(() => {
       const grid = document.querySelector('[data-testid="admin-data-grid"]');
+      const scroll = document.querySelector('[data-testid="admin-data-grid-scroll"]');
+      const table = scroll?.querySelector('table');
       const headerCells = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-head"] th'));
       const firstRow = document.querySelector('[data-testid="admin-data-grid-row"]');
       const bodyCells = firstRow ? Array.from(firstRow.children).filter((cell) => cell instanceof HTMLTableCellElement) : [];
+      const columnWidths = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-column-widths"] col')).map((column) => ({
+        key: column.getAttribute('data-column-key') || '',
+        width: column.getAttribute('data-column-width') || '',
+      }));
       const headers = headerCells.map((header) => ({
         key: header.getAttribute('data-column-key') || '',
         id: header.id || '',
@@ -3267,6 +3291,12 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         grid: Boolean(grid),
         rowCount: Number(grid?.getAttribute('data-row-count') || 0),
         totalItems: Number(grid?.getAttribute('data-total-items') || 0),
+        tableMinWidth: table?.getAttribute('data-table-min-width') || '',
+        tableClientWidth: Math.round(table?.getBoundingClientRect().width || 0),
+        scrollClientWidth: Math.round(scroll?.clientWidth || 0),
+        scrollWidth: Math.round(scroll?.scrollWidth || 0),
+        hasHorizontalScroll: Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 2),
+        columnWidths,
         headerCount: headers.length,
         cellCount: cells.length,
         headers,
@@ -3297,6 +3327,13 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
   assert(state.headerCount === state.cellCount, `DataGrid first row cells must match column headers: ${JSON.stringify(state)}`);
   assert(state.headers.every((header) => header.id && header.scope === 'col' && header.ariaLabel && header.dataLabel), `Every DataGrid header must have id, scope, aria label, and data label: ${JSON.stringify(state.headers)}`);
   assert(state.cells.every((cell) => cell.headers && cell.headerExists && cell.key === cell.headerKey && cell.dataLabel === cell.headerLabel && cell.dataLabel === cell.headerAriaLabel), `Every DataGrid body cell must reference its matching named column header: ${JSON.stringify(state.cells)}`);
+  assert(state.tableMinWidth === '1729px' && state.hasHorizontalScroll, `Pages DataGrid must render as a horizontally scrollable dense table instead of compressing columns: ${JSON.stringify(state)}`);
+  assert(
+    state.columnWidths.some((column) => column.key === 'siteId' && column.width === '300px') &&
+      state.columnWidths.some((column) => column.key === 'title' && column.width === '220px') &&
+      state.columnWidths.some((column) => column.key === 'actions' && column.width === '148px'),
+    `Pages DataGrid must render explicit column widths for dense delivery and action cells: ${JSON.stringify(state.columnWidths)}`,
+  );
 
   const selectHeader = state.headers.find((header) => header.key === 'id');
   assert(selectHeader?.ariaLabel === 'Select' && selectHeader?.dataLabel === 'Select', `Select column header must stay named: ${JSON.stringify(selectHeader)}`);
