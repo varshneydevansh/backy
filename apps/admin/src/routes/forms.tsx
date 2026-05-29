@@ -76,6 +76,22 @@ type FormDestinationFilter = 'all' | 'contacts' | 'collections' | 'inbox-only';
 type FormReadinessFilter = 'all' | 'ready' | 'needs-work';
 type FormsPermissionKey = 'forms.view' | 'forms.create' | 'forms.edit' | 'forms.manage' | 'forms.export' | 'forms.delete' | 'collections.view' | 'activity.export';
 type FormLaunchReadinessStatus = 'ready' | 'attention' | 'blocked';
+type FormPageTemplateSearch = {
+  siteId: string;
+  template: PageTemplateHandoff;
+  templateSource: 'backy-canvas';
+  focus: 'canvas';
+};
+
+interface FormCanvasNoticeAction {
+  message: string;
+  label: string;
+  route: string;
+  search: FormPageTemplateSearch;
+  action: string;
+  target: string;
+  status: 'ready' | 'blocked';
+}
 
 interface FormReadinessSummary {
   score: number;
@@ -924,6 +940,7 @@ function FormsRoute() {
   const [pendingDeleteForm, setPendingDeleteForm] = useState<FormDefinition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeCanvasAction, setNoticeCanvasAction] = useState<FormCanvasNoticeAction | null>(null);
   const [preparedQuickCreate, setPreparedQuickCreate] = useState<FormsQuickCreateIntent | null>(null);
   const handledQuickCreateRef = useRef('');
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
@@ -965,6 +982,28 @@ function FormsRoute() {
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
+  const formPageTemplateSearch = (template: PageTemplateHandoff): FormPageTemplateSearch => ({
+    siteId: activeSiteId,
+    template,
+    templateSource: 'backy-canvas',
+    focus: 'canvas',
+  });
+  const formPageTemplateRoute = (template: PageTemplateHandoff): string => (
+    `/pages/new?${new URLSearchParams(formPageTemplateSearch(template)).toString()}`
+  );
+  const buildFormCanvasNoticeAction = (
+    message: string,
+    template: PageTemplateHandoff,
+    target: string,
+  ): FormCanvasNoticeAction => ({
+    message,
+    label: 'Open editable canvas',
+    route: formPageTemplateRoute(template),
+    search: formPageTemplateSearch(template),
+    action: 'forms.open.createdFormCanvas',
+    target,
+    status: 'ready',
+  });
   const formsCreateActionStatusId = 'forms-create-action-status';
   const formsCreatePermissionDisabledReason = !canCreateForms
     ? createPermissionTitle || 'Your account cannot create forms.'
@@ -2196,7 +2235,9 @@ function FormsRoute() {
       setDeliveryEventsByForm((current) => ({ ...current, [created.id]: [] }));
       setSelectedFormId(created.id);
       updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
-      setNotice(`${template.title} form created. It is active and ready for public submissions.`);
+      const message = `${template.title} form created. It is active and ready for public submissions.`;
+      setNotice(message);
+      setNoticeCanvasAction(buildFormCanvasNoticeAction(message, template.pageTemplate, created.id));
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create form from template');
     } finally {
@@ -2250,7 +2291,9 @@ function FormsRoute() {
       setDeliveryEventsByForm((current) => ({ ...current, [created.id]: [] }));
       setSelectedFormId(created.id);
       updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
-      setNotice(`${template.name} form created from the frontend design contract.`);
+      const message = `${template.name} form created from the frontend design contract.`;
+      setNotice(message);
+      setNoticeCanvasAction(buildFormCanvasNoticeAction(message, blueprint.pageTemplate, created.id));
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create form from frontend design template');
     } finally {
@@ -3614,7 +3657,31 @@ function FormsRoute() {
       )}
       {notice && (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          {notice}
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <span>{notice}</span>
+            {noticeCanvasAction?.message === notice ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigate({ to: '/pages/new', search: noticeCanvasAction.search })}
+                disabled={isFormsBusy}
+                title={isFormsBusy ? formsViewDisabledReason : undefined}
+                aria-describedby={formsViewActionStatusId}
+                iconStart={<Sparkles className="size-4" />}
+                data-action={noticeCanvasAction.action}
+                data-action-target={noticeCanvasAction.target}
+                data-action-route={noticeCanvasAction.route}
+                data-action-state={isFormsBusy ? 'blocked' : noticeCanvasAction.status}
+                data-state={isFormsBusy ? 'blocked' : noticeCanvasAction.status}
+                data-action-status={formsViewActionStatus}
+                data-disabled-reason={isFormsBusy ? formsViewDisabledReason : undefined}
+                data-target-site-id={activeSiteId}
+                data-testid="forms-created-canvas-action"
+              >
+                {noticeCanvasAction.label}
+              </Button>
+            ) : null}
+          </div>
         </div>
       )}
 

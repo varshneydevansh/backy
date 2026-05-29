@@ -1318,6 +1318,9 @@ const assertProductsApiContractsSource = () => {
       source.includes("focus: 'canvas'") &&
       source.includes('templateSource=backy-canvas&focus=canvas') &&
       source.includes("navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront', templateSource: 'backy-canvas', focus: 'canvas' } })") &&
+      source.includes('data-testid="products-created-canvas-action"') &&
+      source.includes("action: 'products.open.createdProductCanvas'") &&
+      source.includes('data-action={noticeCanvasAction.action}') &&
       source.includes("Show templates") &&
       source.includes('data-testid="products-frontend-template-design-readiness"') &&
       source.includes("const designValues = buildFrontendProductTemplateValues(template, frontendDesign);") &&
@@ -4637,6 +4640,51 @@ const waitForFrontendTemplateProduct = async (productCollection) => {
             }))
             .slice(0, 8),
         )}`,
+      );
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertCreatedProductCanvasAction = async (client, productId) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(
+      client,
+      `(() => {
+      const button = document.querySelector('[data-testid="products-created-canvas-action"]');
+      return {
+        ready: button instanceof HTMLButtonElement && !button.disabled,
+        text: button?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        action: button?.getAttribute('data-action') || '',
+        target: button?.getAttribute('data-action-target') || '',
+        route: button?.getAttribute('data-action-route') || '',
+        state: button?.getAttribute('data-action-state') || '',
+      };
+    })()`,
+    );
+
+    if (
+      state.ready &&
+      state.text.includes("Open editable canvas") &&
+      state.action === "products.open.createdProductCanvas" &&
+      state.target === productId &&
+      state.route.includes("/pages/new") &&
+      state.route.includes("templateSource=backy-canvas") &&
+      state.route.includes("focus=canvas") &&
+      state.route.includes("datasetMode=item")
+    ) {
+      return state;
+    }
+
+    if (attempt === 79) {
+      throw new Error(
+        `Created product canvas action missing or miswired: ${JSON.stringify({
+          productId,
+          state,
+        })}`,
       );
     }
 
@@ -9470,6 +9518,7 @@ const main = async () => {
       finalProductCollection,
     );
     frontendProductRecordId = frontendTemplateProduct.id;
+    await assertCreatedProductCanvasAction(client, frontendProductRecordId);
     frontendCatalogProduct = await assertFrontendTemplateProduct({
       productCollection: finalProductCollection,
       record: frontendTemplateProduct,

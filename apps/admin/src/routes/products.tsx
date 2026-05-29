@@ -818,6 +818,29 @@ type ProductStatusFilter = ContentStatus | 'all';
 type ProductTypeFilter = ProductFormState['productType'] | 'all';
 type ProductStockFilter = 'all' | 'in-stock' | 'low-stock' | 'out-of-stock' | 'featured' | 'checkout-missing';
 type ProductPageTemplateMode = 'list' | 'item';
+type ProductPageTemplateSearch = {
+  siteId: string;
+  template: 'storefront';
+  templateSource: 'backy-canvas';
+  focus: 'canvas';
+  collectionId: string;
+  datasetMode: ProductPageTemplateMode;
+  title: string;
+  slug: string;
+  description: string;
+  nav: 'primary' | 'none';
+  navLabel: string;
+};
+
+interface ProductCanvasNoticeAction {
+  message: string;
+  label: string;
+  route: string;
+  search: ProductPageTemplateSearch;
+  action: string;
+  target: string;
+  status: 'ready' | 'blocked';
+}
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 type ProductPermissionKey =
@@ -1758,6 +1781,7 @@ function ProductsRoute() {
   });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeCanvasAction, setNoticeCanvasAction] = useState<ProductCanvasNoticeAction | null>(null);
   const [productFormSubmitted, setProductFormSubmitted] = useState(false);
   const [variantDraftSubmitted, setVariantDraftSubmitted] = useState(false);
   const [variantMatrixSubmitted, setVariantMatrixSubmitted] = useState(false);
@@ -1904,7 +1928,7 @@ function ProductsRoute() {
       routePattern: string;
       sections: string[];
     }) => {
-      const search = {
+      const search: ProductPageTemplateSearch = {
         siteId: activeSiteId,
         template: 'storefront',
         templateSource: 'backy-canvas',
@@ -1916,7 +1940,7 @@ function ProductsRoute() {
         description,
         nav,
         navLabel,
-      } as const;
+      };
       const createRoute = `/pages/new?${new URLSearchParams(search).toString()}`;
 
       return {
@@ -2027,6 +2051,23 @@ function ProductsRoute() {
       }),
     ];
   }, [activeSiteId, commerceCatalogUrl, commerceOrderContractUrl, commerceProductDetailUrl, productCollection]);
+  const buildProductCanvasNoticeAction = (
+    message: string,
+    target: string,
+  ): ProductCanvasNoticeAction | null => {
+    const brief = productPageTemplateBriefs.find((candidate) => candidate.mode === 'item') || productPageTemplateBriefs[0];
+    if (!brief) return null;
+
+    return {
+      message,
+      label: 'Open editable canvas',
+      route: brief.createRoute,
+      search: brief.search,
+      action: 'products.open.createdProductCanvas',
+      target,
+      status: 'ready',
+    };
+  };
   const missingProductFields = useMemo(() => (
     productCollection ? getMissingProductFieldKeys(productCollection) : []
   ), [productCollection]);
@@ -4547,7 +4588,9 @@ function ProductsRoute() {
       setSelectedProductId(saved.id);
       setFormState(productToForm(saved));
       updateProductsRouteSearch({ productId: saved.id });
-      setNotice(`${template.name} product created from the frontend design contract.`);
+      const message = `${template.name} product created from the frontend design contract.`;
+      setNotice(message);
+      setNoticeCanvasAction(buildProductCanvasNoticeAction(message, saved.id));
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create product from frontend design template');
     } finally {
@@ -4650,7 +4693,9 @@ function ProductsRoute() {
       setSelectedProductId(saved.id);
       updateProductsRouteSearch({ productId: saved.id });
       setProductFormSubmitted(false);
-      setNotice(selectedProduct ? 'Product updated.' : 'Product created.');
+      const message = selectedProduct ? 'Product updated.' : 'Product created.';
+      setNotice(message);
+      setNoticeCanvasAction(!selectedProduct ? buildProductCanvasNoticeAction(message, saved.id) : null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save product');
     } finally {
@@ -5269,7 +5314,30 @@ function ProductsRoute() {
       )}
       {notice && (
         <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          {notice}
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <span>{notice}</span>
+            {noticeCanvasAction?.message === notice ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigate({ to: '/pages/new', search: noticeCanvasAction.search })}
+                disabled={isProductsBusy || !canEditPages}
+                title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                iconStart={<Sparkles className="size-4" />}
+                data-action={noticeCanvasAction.action}
+                data-action-target={noticeCanvasAction.target}
+                data-action-route={noticeCanvasAction.route}
+                data-action-state={isProductsBusy || !canEditPages ? 'blocked' : noticeCanvasAction.status}
+                data-state={isProductsBusy || !canEditPages ? 'blocked' : noticeCanvasAction.status}
+                data-action-status={!canEditPages ? pagesEditPermissionTitle || 'Your account cannot create storefront pages.' : 'Open editable product canvas available.'}
+                data-disabled-reason={!canEditPages ? pagesEditPermissionTitle : undefined}
+                data-target-site-id={activeSiteId}
+                data-testid="products-created-canvas-action"
+              >
+                {noticeCanvasAction.label}
+              </Button>
+            ) : null}
+          </div>
         </div>
       )}
       <input

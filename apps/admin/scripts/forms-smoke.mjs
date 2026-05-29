@@ -110,6 +110,9 @@ const assertFormsPersistenceCertificationSource = () => {
     ['&templateSource=backy-canvas&focus=canvas', 'Forms page-template handoff routes must advertise focused Backy canvas creation'],
     ["templateSource: 'backy-canvas',", 'Forms page-template handoff must name the Backy canvas template source'],
     ["focus: 'canvas',", 'Forms page-template handoff must preserve focused canvas intent'],
+    ['data-testid="forms-created-canvas-action"', 'Created forms must expose an immediate canvas-opening action'],
+    ['data-action={noticeCanvasAction.action}', 'Created-form canvas notice action must expose a stable data-action'],
+    ["action: 'forms.open.createdFormCanvas'", 'Created-form canvas notice action must identify the Forms canvas handoff'],
   ]) {
     assert(source.includes(snippet), message);
   }
@@ -1734,6 +1737,43 @@ const waitForFrontendTemplateForm = async (beforeIds) => {
         title: form.title,
         settings: form.settings,
       })).slice(0, 10))}`);
+    }
+
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const assertCreatedFormCanvasAction = async (client, formId, expectedTemplate) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="forms-created-canvas-action"]');
+      return {
+        ready: button instanceof HTMLButtonElement && !button.disabled,
+        text: button?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        action: button?.getAttribute('data-action') || '',
+        target: button?.getAttribute('data-action-target') || '',
+        route: button?.getAttribute('data-action-route') || '',
+        state: button?.getAttribute('data-action-state') || '',
+      };
+    })()`);
+
+    if (
+      state.ready &&
+      state.text.includes('Open editable canvas') &&
+      state.action === 'forms.open.createdFormCanvas' &&
+      state.target === formId &&
+      state.route.includes('/pages/new') &&
+      state.route.includes('template=' + expectedTemplate) &&
+      state.route.includes('templateSource=backy-canvas') &&
+      state.route.includes('focus=canvas')
+    ) {
+      return state;
+    }
+
+    if (attempt === 79) {
+      throw new Error(`Created form canvas action missing or miswired: ${JSON.stringify({ formId, expectedTemplate, state })}`);
     }
 
     await sleep(250);
@@ -3795,6 +3835,7 @@ const main = async () => {
     await clickFrontendTemplateCreateForm(client);
     frontendTemplateForm = await waitForFrontendTemplateForm(beforeIds);
     frontendCreatedFormId = frontendTemplateForm.id;
+    await assertCreatedFormCanvasAction(client, frontendCreatedFormId, 'contact');
     frontendTemplateForm = await assertFrontendTemplateForm(frontendCreatedFormId);
     await deleteForm(frontendCreatedFormId);
     frontendCleaned = true;
@@ -3802,6 +3843,7 @@ const main = async () => {
     await clickRegistrationCreateForm(client);
     const created = await waitForCreatedForm(client, beforeIds);
     createdFormId = created.form.id;
+    await assertCreatedFormCanvasAction(client, createdFormId, 'registration');
     await assertFormActionsWired(client);
     await editFormBuilderInUi(client, createdFormId, smokeCollection.id, webhookReceiver.url);
     const embedSection = await createEmbedBlockInUi(client, createdFormId);
