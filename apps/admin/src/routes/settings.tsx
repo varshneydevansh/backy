@@ -4140,7 +4140,7 @@ function SettingsPage() {
             </Button>
           )}
           <details
-            className="group relative"
+            className="group relative z-40"
             aria-describedby={settingsHeaderSecondaryActionStatusId}
             data-action-state={settingsHeaderSecondaryActionState}
             data-action-status={settingsHeaderSecondaryActionStatus}
@@ -4158,7 +4158,7 @@ function SettingsPage() {
               More actions
               <span className="sr-only">Copy handoff and Download JSON</span>
             </summary>
-            <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-20 sm:min-w-52" data-testid="settings-header-secondary-action-menu">
+            <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-50 sm:min-w-52" data-testid="settings-header-secondary-action-menu">
               <button
                 type="button"
                 disabled={Boolean(settingsConfigureDisabledReason)}

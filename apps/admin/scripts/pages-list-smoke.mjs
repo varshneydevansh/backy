@@ -568,10 +568,15 @@ const assertSharedDataGridSourceContract = () => {
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   assert(
     source.includes("import { useId } from 'react';") &&
-      source.includes('className="min-w-0 max-w-full space-y-3"') &&
+      source.includes('className="min-w-0 max-w-full space-y-3 overflow-x-clip"') &&
+      source.includes("data-overflow-containment=\"inline-size\"") &&
+      source.includes("contain: 'inline-size'") &&
+      source.includes("maxInlineSize: 'min(100%, calc(100vw - 8rem))'") &&
+      source.includes("maxInlineSize: '100%'") &&
       source.includes('data-testid="admin-data-grid-scroll"') &&
       source.includes('className="w-full table-fixed text-left text-sm"') &&
-      source.includes('className="max-w-0 break-words px-6 py-4 align-top"') &&
+      source.includes('data-layout-policy="viewport-contained-wrapped-table"') &&
+      source.includes("'min-w-0 whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]'") &&
       source.includes('data-testid="admin-data-grid"') &&
       source.includes('data-testid="admin-data-grid-loading"') &&
       source.includes('data-testid="admin-data-grid-empty"') &&
@@ -1180,12 +1185,31 @@ const assertPagesVisualState = async (client, label, screenshotPath, options = {
       ...deliveryPanels.map((panel) => panel.textContent || ''),
       bindingContract?.textContent || '',
     ].join('\\n');
+    const overflowingElements = Array.from(document.querySelectorAll('body *'))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          tag: element.tagName.toLowerCase(),
+          testId: element.getAttribute('data-testid') || '',
+          className: typeof element.className === 'string' ? element.className : '',
+          text: (element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 120),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+        };
+      })
+      .filter((element) => element.right > window.innerWidth + 4 || element.left < -4)
+      .sort((a, b) => b.right - a.right)
+      .slice(0, 10);
     return {
       label: ${JSON.stringify(label)},
       ready: Boolean(commandCenter),
       viewport: { width: window.innerWidth, height: window.innerHeight },
       documentWidth: document.documentElement.scrollWidth,
       horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      overflowingElements,
       commandCenterVisible: Boolean(commandRect && commandRect.width > 300 && commandRect.height > 120),
       tableRowCount: tableRows.length,
       emptyCreateVisible: Boolean(

@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
@@ -93,6 +93,7 @@ export function Sidebar({
   onNavigate,
 }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.user);
   const sites = useStore((state) => state.sites);
   const {
@@ -310,6 +311,79 @@ export function Sidebar({
     });
   };
   const hideRailTooltip = () => setRailTooltip(null);
+  const switchActiveSite = (nextSiteId: string) => {
+    const nextSite = sites.find((site) => siteMatchesIdentifier(site, nextSiteId));
+    const resolvedSiteId = nextSite?.publicSiteId || nextSite?.id || nextSiteId;
+
+    onNavigate?.();
+
+    if (location.pathname.startsWith('/sites/') && nextSite?.id) {
+      navigate({ to: '/sites/$siteId', params: { siteId: nextSite.id } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/pages/new')) {
+      navigate({ to: '/pages/new', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/pages')) {
+      navigate({ to: '/pages', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/blog/new')) {
+      navigate({ to: '/blog/new', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/blog')) {
+      navigate({ to: '/blog', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/media')) {
+      navigate({ to: '/media', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/collections')) {
+      navigate({ to: '/collections', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/reusable-sections')) {
+      navigate({ to: '/reusable-sections', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/products')) {
+      navigate({ to: '/products', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/orders')) {
+      navigate({ to: '/orders', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/forms')) {
+      navigate({ to: '/forms', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/contacts')) {
+      navigate({ to: '/contacts', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/comments')) {
+      navigate({ to: '/comments', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    navigate({ to: '/', search: { siteId: resolvedSiteId } });
+  };
 
   useEffect(() => {
     if (collapsed || !activeSectionId) return;
@@ -380,25 +454,41 @@ export function Sidebar({
         'flex h-16 shrink-0 items-center border-b border-border px-3',
         collapsed ? 'justify-center' : 'justify-start',
       )}>
-        <Link
-          to="/"
-          search={getNavSearch('/')}
+        <div
           className={cn(
-            'flex min-w-0 items-center gap-3 rounded-md focus-ring',
+            'flex min-w-0 items-center gap-3 rounded-md',
             collapsed ? 'justify-center' : 'w-full',
           )}
           title={collapsed ? `Backy - ${activeSiteName}` : undefined}
+          data-testid={`${testIdPrefix}-site-switcher-shell`}
+          data-active-site-id={activeSiteId}
+          data-active-site-name={activeSiteName}
+          data-active-site-meta={activeSiteMeta}
+          data-site-switcher-mode={collapsed ? 'brand-link-only' : 'inline-select'}
         >
           {/* Logo Icon */}
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary">
+          <Link
+            to="/"
+            search={getNavSearch('/')}
+            onClick={onNavigate}
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary focus-ring"
+            aria-label={`Open ${activeSiteName} dashboard`}
+          >
             <span className="text-white font-bold text-sm">B</span>
-          </div>
+          </Link>
 
           {/* Logo Text (hidden when collapsed) */}
           {!collapsed && (
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] font-semibold leading-5 text-foreground">Backy</span>
-              <span
+            <div className="min-w-0 flex-1">
+              <Link
+                to="/"
+                search={getNavSearch('/')}
+                onClick={onNavigate}
+                className="block truncate text-[15px] font-semibold leading-5 text-foreground focus-ring"
+              >
+                Backy
+              </Link>
+              <label
                 className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground"
                 data-testid={`${testIdPrefix}-active-site`}
               >
@@ -409,13 +499,30 @@ export function Sidebar({
                   )}
                   aria-hidden="true"
                 />
-                <span className="truncate">{activeSiteName}</span>
-                <span className="shrink-0 text-muted-foreground/60">/</span>
-                <span className="truncate">{activeSiteMeta}</span>
-              </span>
-            </span>
+                <span className="sr-only">Switch active site</span>
+                <select
+                  value={activeSiteId}
+                  onChange={(event) => switchActiveSite(event.target.value)}
+                  className="min-w-0 flex-1 appearance-none bg-transparent text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus:text-foreground"
+                  data-testid={`${testIdPrefix}-site-switcher`}
+                  aria-label="Switch active site"
+                >
+                  {sites.map((site) => {
+                    const optionSiteId = site.publicSiteId || site.id;
+                    const optionMeta = site.customDomain || site.slug || optionSiteId;
+
+                    return (
+                      <option key={site.id} value={optionSiteId}>
+                        {site.name} / {optionMeta}
+                      </option>
+                    );
+                  })}
+                </select>
+                <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+              </label>
+            </div>
           )}
-        </Link>
+        </div>
       </div>
 
       {quickCreateActions.length > 0 && (

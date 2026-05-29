@@ -15,6 +15,7 @@ import {
   Contact,
   Layers3,
   Building2,
+  LifeBuoy,
 } from 'lucide-react';
 import type { AdminNavigationArea } from '@/lib/adminNavigationAccess';
 import type { User } from '@/stores/authStore';
@@ -108,6 +109,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'teams', label: 'Teams', to: '/teams', icon: Building2, area: 'teams' },
       { id: 'users', label: 'Users', to: '/users', icon: Users, area: 'users' },
+      { id: 'help', label: 'Help', to: '/help', icon: LifeBuoy, area: 'help' },
       { id: 'settings', label: 'Settings', to: '/settings', icon: Settings, area: 'settings' },
     ],
   },
@@ -153,6 +155,7 @@ export const SITE_SCOPED_NAV_ROUTES = new Set([
   '/comments',
   '/teams',
   '/users',
+  '/help',
 ]);
 
 export const isNavRouteActive = (pathname: string, route: string) => (

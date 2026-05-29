@@ -1773,6 +1773,17 @@ const assertUserDetailActionStatusContracts = async (client) => {
       continue;
     }
 
+    const isDetailStillBusy =
+      state.command.statusText.includes('User detail is busy while Backy loads or saves this account.') ||
+      state.commandCenterActionNames.some((action) => /Loading user|Saving/i.test(action.text));
+    if (isDetailStillBusy) {
+      if (attempt === 99) {
+        throw new Error(`User detail action status groups stayed busy: ${JSON.stringify(state).slice(0, 2200)}`);
+      }
+      await sleep(250);
+      continue;
+    }
+
     const groupContracts = [state.command, state.api, state.activity, state.sessions, state.recovery, state.mfa, state.ownership, state.danger].every((group) => (
       group.role === 'group' &&
       group.describedBy === group.statusId &&

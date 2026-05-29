@@ -29,6 +29,7 @@ export type StaticToolRoute =
   | '/reusable-sections'
   | '/teams'
   | '/users'
+  | '/help'
   | '/settings';
 
 export type SearchResult =
@@ -89,6 +90,7 @@ export const STATIC_ROUTE_AREA: Record<StaticToolRoute, AdminNavigationArea> = {
   '/reusable-sections': 'sections',
   '/teams': 'teams',
   '/users': 'users',
+  '/help': 'help',
   '/settings': 'settings',
 };
 
@@ -142,6 +144,7 @@ export const getHeaderPageTitle = (path: string) => {
   if (path.startsWith('/contacts')) return 'Contacts';
   if (path.startsWith('/teams')) return 'Teams';
   if (path.startsWith('/users')) return 'Users';
+  if (path.startsWith('/help')) return 'Help';
   if (path.startsWith('/settings')) return 'Settings';
   return 'Dashboard';
 };

@@ -23,6 +23,7 @@ export type AdminNavigationArea =
   | 'comments'
   | 'teams'
   | 'users'
+  | 'help'
   | 'settings';
 
 const NAVIGATION_AREA_PERMISSIONS: Record<Exclude<AdminNavigationArea, 'dashboard'>, string> = {
@@ -38,6 +39,7 @@ const NAVIGATION_AREA_PERMISSIONS: Record<Exclude<AdminNavigationArea, 'dashboar
   comments: 'comments.view',
   teams: 'users.view',
   users: 'users.view',
+  help: 'pages.view',
   settings: 'settings.view',
 };
 

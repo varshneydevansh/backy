@@ -142,9 +142,14 @@ export function DataGrid<T extends { id: string }>({
 
     return (
         <div
-            className="min-w-0 max-w-full space-y-3"
+            className="min-w-0 max-w-full space-y-3 overflow-x-clip"
+            style={{
+                contain: 'inline-size',
+                maxInlineSize: 'min(100%, calc(100vw - 8rem))',
+            }}
             aria-describedby={descriptionId}
             data-testid="admin-data-grid"
+            data-overflow-containment="inline-size"
             data-row-count={data.length}
             data-total-items={itemCount}
             data-current-page={safeCurrentPage}
@@ -154,9 +159,25 @@ export function DataGrid<T extends { id: string }>({
             <span id={descriptionId} className="sr-only" data-testid="admin-data-grid-summary">
                 {gridSummary}
             </span>
-            <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                <div className="w-full min-w-0 overflow-x-auto" data-testid="admin-data-grid-scroll">
-                    <table className="w-full table-fixed text-left text-sm">
+            <div
+                className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+                style={{
+                    contain: 'inline-size',
+                    maxInlineSize: '100%',
+                }}
+            >
+                <div
+                    className="w-full min-w-0 overflow-x-auto"
+                    style={{
+                        contain: 'inline-size',
+                        maxInlineSize: '100%',
+                    }}
+                    data-testid="admin-data-grid-scroll"
+                >
+                    <table
+                        className="w-full table-fixed text-left text-sm"
+                        data-layout-policy="viewport-contained-wrapped-table"
+                    >
                         <caption className="sr-only">{gridSummary}</caption>
                         <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border" data-testid="admin-data-grid-head">
                             <tr>
@@ -199,7 +220,11 @@ export function DataGrid<T extends { id: string }>({
                                         scope="col"
                                         aria-sort={ariaSort}
                                         aria-label={columnLabel}
-                                        className="px-6 py-3 align-top"
+                                        className={cn(
+                                            'min-w-0 break-words px-4 py-3 align-top [overflow-wrap:anywhere]',
+                                            col.className,
+                                            col.headerClassName,
+                                        )}
                                         data-column-key={columnKey}
                                         data-column-label={columnLabel}
                                     >
@@ -223,13 +248,13 @@ export function DataGrid<T extends { id: string }>({
                                                 data-sort-icon-direction={activeDirection ?? 'unsorted'}
                                                 data-sort-disabled-reason={sortDisabledReason}
                                                 className={cn(
-                                                    'inline-flex min-h-8 items-center gap-2 rounded-md px-1.5 text-left transition-colors',
+                                                    'inline-flex min-h-8 min-w-0 items-center gap-2 rounded-md px-1.5 text-left transition-colors',
                                                     'hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
                                                     'disabled:cursor-not-allowed disabled:opacity-50',
                                                     isSorted ? 'text-foreground' : 'text-muted-foreground'
                                                 )}
                                             >
-                                                <span>{columnLabel}</span>
+                                                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{columnLabel}</span>
                                                 <SortIcon
                                                     className={cn(
                                                         "w-3 h-3",
@@ -246,7 +271,7 @@ export function DataGrid<T extends { id: string }>({
                                                 </span>
                                             </button>
                                         ) : (
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex min-w-0 items-center gap-2">
                                                 {col.label.trim() ? col.label : <span className="sr-only">{columnLabel}</span>}
                                             </div>
                                         )}
@@ -270,7 +295,11 @@ export function DataGrid<T extends { id: string }>({
                                             <td
                                                 key={columnKey}
                                                 headers={getColumnHeaderId(col)}
-                                                className="max-w-0 break-words px-6 py-4 align-top"
+                                                className={cn(
+                                                    'min-w-0 whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]',
+                                                    col.className,
+                                                    col.cellClassName,
+                                                )}
                                                 data-column-key={columnKey}
                                                 data-column-label={columnLabel}
                                             >

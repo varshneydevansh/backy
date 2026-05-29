@@ -3078,7 +3078,10 @@ function EditSitePage() {
   const loadFrontendDesignEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
-      if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError)) {
+      if (!currentAdmin || isPermissionMatrixPending) {
+        return;
+      }
+      if (!permissionMatrix && !permissionError) {
         return;
       }
       setFrontendDesignState((prev) => ({

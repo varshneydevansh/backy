@@ -465,6 +465,33 @@ export const applyResponsiveOverrides = (
   breakpoint: RenderBreakpoint,
 ): CanvasElement[] => elements.map((element) => applyResponsiveOverride(element, breakpoint));
 
+const collectPublicRenderedContentBounds = (
+  elements: CanvasElement[],
+  offsetX = 0,
+  offsetY = 0,
+): { maxX: number; maxY: number } => (
+  elements.reduce((bounds, element) => {
+    if (!getBooleanWithFallback(element.visible, true) || getBooleanWithFallback(element.props?.hidden, false)) {
+      return bounds;
+    }
+
+    const x = Number.isFinite(element.x) ? element.x : 0;
+    const y = Number.isFinite(element.y) ? element.y : 0;
+    const width = Number.isFinite(element.width) ? element.width : 0;
+    const height = Number.isFinite(element.height) ? element.height : 0;
+    const elementOffsetX = offsetX + x;
+    const elementOffsetY = offsetY + y;
+    const childBounds = element.children?.length
+      ? collectPublicRenderedContentBounds(element.children, elementOffsetX, elementOffsetY)
+      : { maxX: 0, maxY: 0 };
+
+    return {
+      maxX: Math.max(bounds.maxX, elementOffsetX + width, childBounds.maxX),
+      maxY: Math.max(bounds.maxY, elementOffsetY + height, childBounds.maxY),
+    };
+  }, { maxX: 0, maxY: 0 })
+);
+
 const applyThemeTokenRefsToElement = (
   element: CanvasElement,
   tokenReferences: Record<string, string>,
@@ -5195,6 +5222,17 @@ export function PageRenderer({
   const activeCanvasSize = activeBreakpoint === 'desktop'
     ? canvasSize
     : RENDER_BREAKPOINT_CANVAS_SIZE[activeBreakpoint];
+  const contentBounds = useMemo(
+    () => collectPublicRenderedContentBounds(elements),
+    [elements],
+  );
+  const renderCanvasSize = useMemo(
+    () => ({
+      width: activeCanvasSize.width,
+      height: Math.max(activeCanvasSize.height, Math.ceil(contentBounds.maxY + 48)),
+    }),
+    [activeCanvasSize.height, activeCanvasSize.width, contentBounds.maxY],
+  );
 
   useEffect(() => {
     const container = viewportRef.current;
@@ -5232,7 +5270,7 @@ export function PageRenderer({
     };
   }, [canvasSize.width]);
 
-  const styleHeight = Math.round(activeCanvasSize.height * scale);
+  const styleHeight = Math.round(renderCanvasSize.height * scale);
 
   const viewportStyle: React.CSSProperties = {
     width: '100%',
@@ -5246,15 +5284,17 @@ export function PageRenderer({
 
   const canvasFrameStyle: React.CSSProperties = {
     position: 'relative',
-    width: Math.round(activeCanvasSize.width * scale),
-    minHeight: Math.round(activeCanvasSize.height * scale),
+    width: Math.round(renderCanvasSize.width * scale),
+    height: Math.round(renderCanvasSize.height * scale),
+    minHeight: Math.round(renderCanvasSize.height * scale),
     flex: '0 0 auto',
   };
 
   const canvasStyle: React.CSSProperties = {
     position: 'relative',
-    width: activeCanvasSize.width,
-    minHeight: activeCanvasSize.height,
+    width: renderCanvasSize.width,
+    height: renderCanvasSize.height,
+    minHeight: renderCanvasSize.height,
     transform: `scale(${scale})`,
     transformOrigin: 'top left',
     transition: 'transform 140ms ease',
@@ -5391,8 +5431,15 @@ export function PageRenderer({
         style={{ ...viewportStyle, ...themeVars }}
         data-backy-render-breakpoint={activeBreakpoint}
         data-backy-render-scale={scale.toFixed(3)}
+        data-backy-render-content-bounds="expanded"
       >
-        <div className="backy-canvas-frame" style={canvasFrameStyle} data-backy-canvas-scale={scale.toFixed(3)}>
+        <div
+          className="backy-canvas-frame"
+          style={canvasFrameStyle}
+          data-backy-canvas-scale={scale.toFixed(3)}
+          data-backy-render-width={renderCanvasSize.width}
+          data-backy-render-height={renderCanvasSize.height}
+        >
           <div className="backy-canvas" style={canvasStyle} data-backy-active-breakpoint={activeBreakpoint}>
             {themedElements.map((element) => (
               !getBooleanWithFallback(element.visible, true) ? null : (

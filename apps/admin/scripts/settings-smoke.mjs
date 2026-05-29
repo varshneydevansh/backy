@@ -497,6 +497,11 @@ const assertSettingsSourceContracts = () => {
     'Settings workbar must keep tab navigation and save controls reachable while the page scrolls',
   );
   assert(
+    settingsRoute.includes('className="group relative z-40"') &&
+      settingsRoute.includes('sm:z-50 sm:min-w-52'),
+    'Settings header More actions menu must stack above the sticky workbar instead of hiding behind the active-section banner.',
+  );
+  assert(
     settingsRoute.includes("const settingsWorkbarActionStatusId = 'settings-workbar-action-status';") &&
       settingsRoute.includes("const settingsHeaderSecondaryActionStatusId = 'settings-header-secondary-action-status';") &&
       settingsRoute.includes('const settingsWorkbarActionStatus = [') &&

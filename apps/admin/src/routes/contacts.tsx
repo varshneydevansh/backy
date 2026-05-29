@@ -207,6 +207,12 @@ const CONTACT_WORKFLOW_SURFACES = [
     route: '/forms',
   },
   {
+    key: 'newsletterSignup',
+    title: 'Newsletter signup',
+    detail: 'Capture subscribers through Backy Forms, then manage consent, segments, exports, and API handoff in Contacts.',
+    route: '/forms',
+  },
+  {
     key: 'contactPage',
     title: 'Contact page',
     detail: 'Seed an editable page with a connected contact form block for public inquiries and service requests.',

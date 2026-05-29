@@ -28,7 +28,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, generateId } from '@/lib/utils';
 import { PORTAL_TOOLBAR_CONTAINER_ID } from '@backy-cms/editor';
 import {
   buildBackyThemeTokenReferences,
@@ -480,6 +480,96 @@ const parseNavigationItems = (value: string): Array<string | { label: string; hr
       return entry;
     })
 );
+
+const normalizeNavigationItemRecords = (
+  value: unknown,
+): Array<{ label: string; href: string }> => {
+  const rawItems = Array.isArray(value) ? value : [];
+
+  return rawItems
+    .map((item, index) => {
+      if (typeof item === 'string') {
+        const label = item.trim();
+        if (!label) {
+          return null;
+        }
+
+        return {
+          label,
+          href: label.toLowerCase() === 'home'
+            ? '/'
+            : `/${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || index}`,
+        };
+      }
+
+      if (item && typeof item === 'object') {
+        const record = item as Record<string, unknown>;
+        const label = String(record.label || record.title || record.name || `Item ${index + 1}`).trim();
+        const href = String(record.href || record.url || '#').trim() || '#';
+        return label ? { label, href } : null;
+      }
+
+      return null;
+    })
+    .filter(Boolean) as Array<{ label: string; href: string }>;
+};
+
+const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] => {
+  const navItems = normalizeNavigationItemRecords(element.props.navItems);
+  const records = navItems.length > 0
+    ? navItems
+    : [
+        { label: 'Home', href: '/' },
+        { label: 'About', href: '/about' },
+        { label: 'Contact', href: '/contact' },
+      ];
+  const isVertical = element.props.navDirection === 'vertical';
+  const gap = toNumber(element.props.gap, 18);
+  const fontSize = toNumber(element.props.fontSize, 14);
+  const color = typeof element.props.color === 'string' ? element.props.color : '#111827';
+  const fontWeight = typeof element.props.fontWeight === 'string' ? element.props.fontWeight : '600';
+  const itemWidths = records.map((item) => Math.max(64, Math.min(180, item.label.length * 9 + 32)));
+  const totalWidth = itemWidths.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, records.length - 1);
+  const totalHeight = records.length * 28 + gap * Math.max(0, records.length - 1);
+  let cursorX = isVertical ? 0 : Math.max(0, Math.round((element.width - totalWidth) / 2));
+  let cursorY = isVertical ? Math.max(0, Math.round((element.height - totalHeight) / 2)) : Math.max(0, Math.round((element.height - 28) / 2));
+
+  return records.map((item, index) => {
+    const width = isVertical ? Math.max(64, element.width) : itemWidths[index];
+    const child: CanvasElement = {
+      id: generateId('nav-link'),
+      type: 'link',
+      name: `${item.label} link`,
+      x: cursorX,
+      y: cursorY,
+      width,
+      height: 28,
+      zIndex: index + 1,
+      props: {
+        content: item.label,
+        href: item.href,
+        fontSize,
+        fontWeight,
+        color,
+        underline: false,
+      },
+      styles: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: isVertical ? 'flex-start' : 'center',
+        whiteSpace: 'nowrap',
+      },
+    };
+
+    if (isVertical) {
+      cursorY += 28 + gap;
+    } else {
+      cursorX += width + gap;
+    }
+
+    return child;
+  });
+};
 
 const withQueryParam = (url: string, key: string, value: string): string => {
   const separator = url.includes('?') ? '&' : '?';
@@ -2961,6 +3051,33 @@ function ContentProperties({
         <div className="space-y-3">
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
             Each line becomes a menu item. Use <span className="font-mono">Label: /path</span> when a frontend route is known.
+          </div>
+          <div
+            className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2"
+            data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}
+            data-nav-link-layer-count={element.children?.length || 0}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 text-xs leading-5 text-sky-900">
+                <p className="font-semibold">
+                  {element.children?.length ? 'Editable link layers are active.' : 'Turn menu items into editable link layers.'}
+                </p>
+                <p className="text-sky-700">
+                  {element.children?.length
+                    ? 'Each nav link can be selected, positioned, styled, and assigned its own URL from the layer map.'
+                    : 'Create selectable child links so navigation works like canvas elements instead of one opaque text block.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onChange({ children: buildNavigationLinkChildren(element) })}
+                disabled={disabled}
+                data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}
+                className="inline-flex min-h-8 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-800 transition-colors hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {element.children?.length ? 'Rebuild' : 'Create links'}
+              </button>
+            </div>
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">

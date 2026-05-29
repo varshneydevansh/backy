@@ -1052,6 +1052,88 @@ const applyResponsiveOverridesToElements = (
   breakpoint: EditorBreakpoint,
 ): CanvasElement[] => elements.map((element) => applyResponsiveOverrideToElement(element, breakpoint));
 
+const collectCanvasContentBounds = (
+  elements: CanvasElement[],
+  offsetX = 0,
+  offsetY = 0,
+): { maxX: number; maxY: number } => (
+  elements.reduce(
+    (bounds, element) => {
+      const left = offsetX + element.x;
+      const top = offsetY + element.y;
+      const right = left + element.width;
+      const bottom = top + element.height;
+      const childBounds = element.children?.length
+        ? collectCanvasContentBounds(element.children, left, top)
+        : { maxX: 0, maxY: 0 };
+
+      return {
+        maxX: Math.max(bounds.maxX, right, childBounds.maxX),
+        maxY: Math.max(bounds.maxY, bottom, childBounds.maxY),
+      };
+    },
+    { maxX: 0, maxY: 0 },
+  )
+);
+
+const SECTION_FLOW_ELEMENT_TYPES = new Set<CanvasElement['type']>(['section', 'header', 'footer', 'nav']);
+
+const isRootSectionFlowElement = (element: CanvasElement): boolean => (
+  SECTION_FLOW_ELEMENT_TYPES.has(element.type)
+);
+
+const elementBottom = (element: CanvasElement): number => element.y + element.height;
+
+const applyRootSectionFlow = (
+  previousRootElements: CanvasElement[],
+  nextRootElements: CanvasElement[],
+): CanvasElement[] => {
+  const previousById = new Map(previousRootElements.map((element) => [element.id, element]));
+  const changedFlowElements = nextRootElements.filter((nextElement) => {
+    if (!isRootSectionFlowElement(nextElement)) {
+      return false;
+    }
+
+    const previousElement = previousById.get(nextElement.id);
+    if (!previousElement) {
+      return true;
+    }
+
+    return (
+      Math.round(previousElement.y) !== Math.round(nextElement.y) ||
+      Math.round(previousElement.height) !== Math.round(nextElement.height) ||
+      Math.round(elementBottom(previousElement)) !== Math.round(elementBottom(nextElement))
+    );
+  });
+
+  if (changedFlowElements.length !== 1) {
+    return nextRootElements;
+  }
+
+  const changedElement = changedFlowElements[0];
+  const previousElement = previousById.get(changedElement.id);
+  const previousBottom = previousElement ? elementBottom(previousElement) : changedElement.y;
+  const nextBottom = elementBottom(changedElement);
+  const deltaY = Math.round(nextBottom - previousBottom);
+
+  if (deltaY === 0) {
+    return nextRootElements;
+  }
+
+  const flowBoundary = previousElement ? previousBottom - 1 : changedElement.y;
+
+  return nextRootElements.map((element) => {
+    if (element.id === changedElement.id || element.y < flowBoundary) {
+      return element;
+    }
+
+    return {
+      ...element,
+      y: Math.max(0, Math.round(element.y + deltaY)),
+    };
+  });
+};
+
 const mapElementsById = (elements: CanvasElement[], map = new Map<string, CanvasElement>()) => {
   elements.forEach((element) => {
     map.set(element.id, element);
@@ -1941,20 +2023,33 @@ export function CanvasEditor({
   const lastEditorShellPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const activeCanvasScale = isPreview ? canvasScale : canvasZoom;
   const isCanvasPanActive = !isPreview && (isCanvasPanMode || isCanvasSpacePanning);
-  const scaledCanvasWidth = Math.max(1, Math.round(size.width * activeCanvasScale));
-  const scaledCanvasHeight = Math.max(1, Math.round(size.height * activeCanvasScale));
-  const zoomPercent = Math.round(activeCanvasScale * 100);
-  const horizontalRulerTicks = useMemo(
-    () => buildRulerTicks(size.width, activeCanvasScale),
-    [activeCanvasScale, size.width],
-  );
-  const verticalRulerTicks = useMemo(
-    () => buildRulerTicks(size.height, activeCanvasScale),
-    [activeCanvasScale, size.height],
-  );
   const displayedElements = useMemo(
     () => applyResponsiveOverridesToElements(elements, breakpoint),
     [breakpoint, elements],
+  );
+  const displayedContentBounds = useMemo(
+    () => collectCanvasContentBounds(displayedElements),
+    [displayedElements],
+  );
+  const renderedCanvasSize = useMemo<CanvasSize>(() => (
+    isPreview
+      ? {
+          ...size,
+          width: Math.max(size.width, Math.ceil(displayedContentBounds.maxX)),
+          height: Math.max(size.height, Math.ceil(displayedContentBounds.maxY + 48)),
+        }
+      : size
+  ), [displayedContentBounds.maxX, displayedContentBounds.maxY, isPreview, size]);
+  const scaledCanvasWidth = Math.max(1, Math.round(renderedCanvasSize.width * activeCanvasScale));
+  const scaledCanvasHeight = Math.max(1, Math.round(renderedCanvasSize.height * activeCanvasScale));
+  const zoomPercent = Math.round(activeCanvasScale * 100);
+  const horizontalRulerTicks = useMemo(
+    () => buildRulerTicks(renderedCanvasSize.width, activeCanvasScale),
+    [activeCanvasScale, renderedCanvasSize.width],
+  );
+  const verticalRulerTicks = useMemo(
+    () => buildRulerTicks(renderedCanvasSize.height, activeCanvasScale),
+    [activeCanvasScale, renderedCanvasSize.height],
   );
 
   useEffect(() => {
@@ -5488,7 +5583,9 @@ export function CanvasEditor({
       return;
     }
 
-    const nextBaseElements = mergeDisplayedElementsIntoBreakpoint(elementsRef.current, newElements, breakpoint);
+    const previousDisplayedElements = applyResponsiveOverridesToElements(elementsRef.current, breakpoint);
+    const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);
+    const nextBaseElements = mergeDisplayedElementsIntoBreakpoint(elementsRef.current, flowedElements, breakpoint);
 
     if (options?.transient) {
       pendingTransformRef.current = {
@@ -9041,15 +9138,16 @@ export function CanvasEditor({
                 {isPreview ? (
                   <div
                     ref={canvasScaleSurfaceRef}
-                    className="overflow-hidden shadow-[0_28px_70px_rgba(15,23,42,0.18)]"
+                    className="overflow-auto shadow-[0_28px_70px_rgba(15,23,42,0.18)]"
                     data-testid="editor-canvas-scale-surface"
                     data-canvas-scale={activeCanvasScale}
                     data-canvas-zoom-surface="true"
                     data-canvas-zoom-surface-listener="native-capture"
+                    data-preview-content-bounds="expanded"
                     style={{
                       ...editorThemeCssVariables,
-                      width: size.width,
-                      height: size.height,
+                      width: renderedCanvasSize.width,
+                      height: renderedCanvasSize.height,
                       transform: `scale(${activeCanvasScale})`,
                       transformOrigin: 'top left',
                       touchAction: 'pan-x pan-y',
@@ -9063,7 +9161,7 @@ export function CanvasEditor({
                       onSelect={handleSelect}
                       onSelectMany={handleCanvasSelectMany}
                       onToggleSelect={handleCanvasToggleSelect}
-                      size={size}
+                      size={renderedCanvasSize}
                       onSizeChange={(newSize) => {
                         if (isCanvasMutationDisabled) {
                           return;
@@ -9272,8 +9370,9 @@ export function CanvasEditor({
 
             {!isPreview && (
               <div
-                className="absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
+                className="pointer-events-none absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
                 data-testid="editor-zoom-controls"
+                data-overlay-hit-through="true"
                 aria-describedby={editorZoomActionStatusId}
                 data-auto-fit={isCanvasAutoFit ? 'true' : 'false'}
                 data-canvas-scale={activeCanvasScale}
@@ -9293,7 +9392,7 @@ export function CanvasEditor({
                   type="button"
                   onClick={handleToggleCanvasPanMode}
                   className={cn(
-                    'rounded-md p-1.5 transition-colors',
+                    'pointer-events-auto rounded-md p-1.5 transition-colors',
                     isCanvasPanMode
                       ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
@@ -9315,7 +9414,7 @@ export function CanvasEditor({
                 <button
                   type="button"
                   onClick={handleZoomOut}
-                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                  className="pointer-events-auto rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
                   title="Zoom out (Cmd/Ctrl+-)"
                   aria-label="Zoom out"
                   aria-keyshortcuts="Control+- Meta+-"
@@ -9337,7 +9436,7 @@ export function CanvasEditor({
                     Auto
                   </span>
                 )}
-                <label className="hidden h-7 items-center sm:flex" title="Canvas zoom">
+                <label className="pointer-events-auto hidden h-7 items-center sm:flex" title="Canvas zoom">
                   <span className="sr-only">Canvas zoom</span>
                   <input
                     type="range"
@@ -9360,7 +9459,7 @@ export function CanvasEditor({
                 <button
                   type="button"
                   onClick={handleZoomIn}
-                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                  className="pointer-events-auto rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
                   title="Zoom in (Cmd/Ctrl+=)"
                   aria-label="Zoom in"
                   aria-keyshortcuts="Control+= Meta+="
@@ -9377,7 +9476,7 @@ export function CanvasEditor({
                 <button
                   type="button"
                   onClick={handleFitCanvas}
-                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                  className="pointer-events-auto rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-950"
                   title="Fit canvas (Cmd/Ctrl+0)"
                   aria-label="Fit canvas"
                   aria-keyshortcuts="Control+0 Meta+0"

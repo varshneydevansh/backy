@@ -66,6 +66,7 @@ const ESSENTIAL_ITEM_KEYS = new Set([
   'button',
   'image',
   'box',
+  'section',
   'columns',
   'form',
   'input',
@@ -566,7 +567,7 @@ export function ComponentLibrary({
   return (
     <div
       className={cn(
-        'flex h-full flex-col border-r border-slate-200 bg-white transition-[width,min-width,max-width] duration-200 ease-out',
+        'relative flex h-full flex-col overflow-hidden border-r border-slate-200 bg-white transition-[width,min-width,max-width] duration-200 ease-out',
         shellMode === 'expanded'
           ? 'w-[clamp(22rem,28vw,32rem)] min-w-[22rem] max-w-[32rem]'
           : 'w-[clamp(15rem,16vw,18rem)] min-w-[15rem] max-w-[18rem]',
@@ -847,9 +848,10 @@ export function ComponentLibrary({
 
       {/* Components List */}
       <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-40"
         data-testid="editor-component-list"
         data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}
+        data-component-preview-reserved-space="floating-bottom"
       >
         {Object.entries(groupedItemsWithFavorites).map(([category, items]) => (
           items.length > 0 && (
@@ -981,9 +983,10 @@ function ComponentPreviewPane({ item }: { item: ComponentLibraryItem }) {
 
   return (
     <div
-      className="border-t border-slate-200 bg-slate-50 p-3"
+      className="pointer-events-none absolute inset-x-2 bottom-2 z-20 max-h-[min(16rem,45vh)] overflow-hidden rounded-xl border border-slate-200 bg-slate-50/95 p-3 shadow-2xl backdrop-blur"
       data-testid="editor-component-preview"
       data-component-preview={itemKey}
+      data-component-preview-placement="floating-bottom"
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">

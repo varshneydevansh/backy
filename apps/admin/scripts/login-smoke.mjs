@@ -453,6 +453,10 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes("const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo'") &&
       sidebarSource.includes('const activeSiteName = activeSite?.name || activeSiteId') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site`}') &&
+      sidebarSource.includes('const switchActiveSite = (nextSiteId: string) =>') &&
+      sidebarSource.includes('data-testid={`${testIdPrefix}-site-switcher`}') &&
+      sidebarSource.includes('data-site-switcher-mode={collapsed ?') &&
+      sidebarSource.includes('aria-label="Switch active site"') &&
       sidebarSource.includes("navigationId = 'admin-sidebar-navigation'") &&
       sidebarSource.includes("testIdPrefix = 'admin-sidebar'") &&
       sidebarModelSource.includes("const SIDEBAR_SECTION_STORAGE_KEY = 'backy:admin-sidebar-section-state';") &&
@@ -501,6 +505,10 @@ const assertAuthRecoverySource = () => {
       sidebarModelSource.includes("quickCreate: 'product'") &&
       sidebarModelSource.includes("to: '/forms'") &&
       sidebarModelSource.includes("quickCreate: 'blank'") &&
+      sidebarModelSource.includes("{ id: 'help', label: 'Help', to: '/help'") &&
+      navigationAccessSource.includes("help: 'pages.view'") &&
+      headerModelSource.includes("'/help': 'help'") &&
+      headerModelSource.includes("if (path.startsWith('/help')) return 'Help';") &&
       sidebarSource.includes('const quickCreateActions = useMemo(() => (') &&
       sidebarSource.includes('const getQuickCreateSearch = useMemo(() => (') &&
       sidebarSource.includes('const quickCreateStatusId = `${navigationId}-quick-create-status`;') &&

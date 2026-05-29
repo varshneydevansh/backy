@@ -573,6 +573,38 @@ const resizeBoundsFromHandle = (
   }
 
   if (options.resizeFromCenter) {
+    const maxCenteredWidth = affectsWidth
+      ? Math.max(minWidth, Math.min(
+          bounds.boundsWidth,
+          centerX * 2,
+          (bounds.boundsWidth - centerX) * 2,
+        ))
+      : nextWidth;
+    const maxCenteredHeight = affectsHeight
+      ? Math.max(minHeight, Math.min(
+          bounds.boundsHeight,
+          centerY * 2,
+          (bounds.boundsHeight - centerY) * 2,
+        ))
+      : nextHeight;
+
+    if (options.preserveAspectRatio && affectsWidth && affectsHeight) {
+      const centeredScale = Math.min(
+        1,
+        maxCenteredWidth / Math.max(minWidth, nextWidth),
+        maxCenteredHeight / Math.max(minHeight, nextHeight),
+      );
+      nextWidth = Math.max(minWidth, nextWidth * centeredScale);
+      nextHeight = Math.max(minHeight, nextHeight * centeredScale);
+    } else {
+      if (affectsWidth) {
+        nextWidth = Math.min(nextWidth, maxCenteredWidth);
+      }
+      if (affectsHeight) {
+        nextHeight = Math.min(nextHeight, maxCenteredHeight);
+      }
+    }
+
     nextX = centerX - nextWidth / 2;
     nextY = centerY - nextHeight / 2;
   } else {
@@ -593,6 +625,28 @@ const resizeBoundsFromHandle = (
   nextHeight = Math.min(nextHeight, bounds.boundsHeight);
   nextX = clampToCanvas(nextX, nextWidth, bounds.boundsWidth);
   nextY = clampToCanvas(nextY, nextHeight, bounds.boundsHeight);
+
+  if (options.resizeFromCenter) {
+    const snappedWidth = Math.max(minWidth, snapToGrid(nextWidth, gridSize, snapEnabled));
+    const snappedHeight = Math.max(minHeight, snapToGrid(nextHeight, gridSize, snapEnabled));
+    const maxCenteredWidth = affectsWidth
+      ? Math.max(minWidth, Math.min(bounds.boundsWidth, centerX * 2, (bounds.boundsWidth - centerX) * 2))
+      : snappedWidth;
+    const maxCenteredHeight = affectsHeight
+      ? Math.max(minHeight, Math.min(bounds.boundsHeight, centerY * 2, (bounds.boundsHeight - centerY) * 2))
+      : snappedHeight;
+    const centeredWidth = affectsWidth ? Math.min(snappedWidth, maxCenteredWidth) : snappedWidth;
+    const centeredHeight = affectsHeight ? Math.min(snappedHeight, maxCenteredHeight) : snappedHeight;
+
+    return {
+      x: clampToCanvas(centerX - centeredWidth / 2, centeredWidth, bounds.boundsWidth),
+      y: clampToCanvas(centerY - centeredHeight / 2, centeredHeight, bounds.boundsHeight),
+      width: centeredWidth,
+      height: centeredHeight,
+      boundsWidth: bounds.boundsWidth,
+      boundsHeight: bounds.boundsHeight,
+    };
+  }
 
   return {
     x: snapToGrid(nextX, gridSize, snapEnabled),
@@ -762,6 +816,17 @@ const getMarqueeBounds = (selection: MarqueeSelection) => {
     y: minY,
     width: maxX - minX,
     height: maxY - minY,
+  };
+};
+
+const getMarqueeStyle = (selection: MarqueeSelection): CSSProperties => {
+  const bounds = getMarqueeBounds(selection);
+
+  return {
+    left: bounds.x,
+    top: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
   };
 };
 
@@ -2664,7 +2729,7 @@ export function Canvas({
       ref={canvasRef}
       className={cn(
         'relative bg-white shadow-[0_18px_55px_rgba(15,23,42,0.16)] transition-shadow',
-        isPreview ? 'overflow-hidden' : 'overflow-visible',
+        isPreview ? 'overflow-auto' : 'overflow-visible',
         !isPreview && (disabled ? 'cursor-not-allowed ring-1 ring-slate-200' : 'cursor-default ring-1 ring-slate-200'),
         isDropActive && !isPreview && !disabled && 'ring-2 ring-sky-500 shadow-[0_22px_70px_rgba(14,165,233,0.24)]'
       )}
@@ -2674,6 +2739,7 @@ export function Canvas({
         minWidth: size.width,
         minHeight: size.height,
       }}
+      data-preview-scroll-policy={isPreview ? 'canvas-overflow-auto' : undefined}
       data-canvas-move-listener-scope="window-rAF"
       data-canvas-transform-frame-policy="latest-event-per-animation-frame"
       onMouseUp={handleMouseUp}
@@ -2755,7 +2821,7 @@ export function Canvas({
           className="pointer-events-none absolute z-[75] rounded-sm border border-sky-600 bg-sky-500/10 shadow-[0_0_0_1px_rgba(14,165,233,0.12)]"
           data-testid="editor-marquee-selection"
           data-selection-mode={marqueeSelection.mode}
-          style={getMarqueeBounds(marqueeSelection)}
+          style={getMarqueeStyle(marqueeSelection)}
         />
       )}
 

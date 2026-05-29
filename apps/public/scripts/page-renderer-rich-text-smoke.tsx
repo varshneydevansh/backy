@@ -1186,8 +1186,10 @@ assert(pageRendererSource.includes("tablet: { width: 768, height: 1024 }"), 'Pag
 assert(pageRendererSource.includes("mobile: { width: 375, height: 812 }"), 'PageRenderer mobile canvas size must match editor mobile canvas');
 assert(pageRendererSource.includes('const activeCanvasSize = activeBreakpoint ==='), 'PageRenderer must derive active canvas size from the active breakpoint');
 assert(pageRendererSource.includes('const nextCanvasSize = nextBreakpoint ==='), 'PageRenderer scale calculation must use the next breakpoint canvas size');
-assert(pageRendererSource.includes('width: activeCanvasSize.width'), 'PageRenderer canvas width must use the active breakpoint canvas size');
-assert(pageRendererSource.includes('minHeight: activeCanvasSize.height'), 'PageRenderer canvas height must use the active breakpoint canvas size');
+assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = ('), 'PageRenderer must measure rendered content bounds for scrollable public previews');
+assert(pageRendererSource.includes('width: activeCanvasSize.width'), 'PageRenderer canvas width must stay locked to the active breakpoint canvas size');
+assert(pageRendererSource.includes('height: Math.max(activeCanvasSize.height, Math.ceil(contentBounds.maxY + 48))'), 'PageRenderer canvas height must expand to authored content bounds');
+assert(pageRendererSource.includes('data-backy-render-content-bounds="expanded"'), 'PageRenderer must expose expanded content-bound metadata for responsive smoke coverage');
 const responsiveElements = applyResponsiveOverrides([
   {
     id: 'responsive-root',

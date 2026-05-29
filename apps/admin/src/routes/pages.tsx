@@ -2102,7 +2102,7 @@ function PagesListView() {
 
         return (
           <div
-            className="flex items-center justify-end gap-2"
+            className="flex min-w-0 flex-wrap items-center justify-end gap-1.5"
             role="group"
             aria-label={`Actions for ${page.title}`}
             aria-describedby={rowActionStatusId}
@@ -4787,7 +4787,7 @@ function PageHierarchyCell({ page, parentPage, childCount }: { page: Page; paren
   const navigationLabel = pageMetaString(page, 'navigationLabel');
 
   return (
-    <div className="min-w-48 space-y-1" data-testid={`pages-hierarchy-${page.id}`}>
+    <div className="min-w-0 max-w-full space-y-1" data-testid={`pages-hierarchy-${page.id}`}>
       {parentPage ? (
         <div>
           <div className="text-sm font-medium text-foreground">Nested under {parentPage.title}</div>
@@ -4836,7 +4836,7 @@ function PageTemplateCell({ page }: { page: Page }) {
         : 'bg-muted text-muted-foreground';
 
   return (
-    <div className="min-w-48 space-y-1" data-testid={`pages-template-${page.id}`}>
+    <div className="min-w-0 max-w-full space-y-1" data-testid={`pages-template-${page.id}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', badgeClass)}>
           {template.badge}
@@ -4860,7 +4860,7 @@ function PageRouteCell({ page, diagnostic }: { page: Page; diagnostic: PageRoute
   const statusType = route.status === 'conflict' ? 'error' : route.status === 'warning' ? 'warning' : 'success';
 
   return (
-    <div className="min-w-52 space-y-1" data-testid={`pages-route-${page.id}`}>
+    <div className="min-w-0 max-w-full space-y-1" data-testid={`pages-route-${page.id}`}>
       <div className="flex flex-wrap items-center gap-2">
         <code className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
           {route.path}
@@ -4894,7 +4894,7 @@ function PageRevisionCell({
 }) {
   if (isLoading && !summary) {
     return (
-      <div className="min-w-48 space-y-1 text-xs text-muted-foreground" data-testid={`pages-revisions-${page.id}`}>
+      <div className="min-w-0 max-w-full space-y-1 text-xs text-muted-foreground" data-testid={`pages-revisions-${page.id}`}>
         Checking revisions...
       </div>
     );
@@ -4904,7 +4904,7 @@ function PageRevisionCell({
   const latest = summary?.latest ?? null;
 
   return (
-    <div className="min-w-48 space-y-1" data-testid={`pages-revisions-${page.id}`}>
+    <div className="min-w-0 max-w-full space-y-1" data-testid={`pages-revisions-${page.id}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className={cn(
           'rounded-full px-2 py-0.5 text-xs font-semibold',
@@ -4993,7 +4993,7 @@ function PageDeliveryCell({
         : 'warning';
 
   return (
-    <div className="min-w-60 space-y-2" data-testid={`pages-delivery-${page.id}`}>
+    <div className="min-w-0 max-w-full space-y-2" data-testid={`pages-delivery-${page.id}`}>
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge status={labelByStatus[status]} type={badgeType} />
       </div>

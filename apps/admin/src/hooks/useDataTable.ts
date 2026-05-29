@@ -15,6 +15,9 @@ export interface Column<T> {
     label: string;
     render?: (item: T) => React.ReactNode;
     sortable?: boolean;
+    className?: string;
+    headerClassName?: string;
+    cellClassName?: string;
 }
 
 interface UseDataTableProps<T> {

@@ -20,6 +20,7 @@ import { Route as PagesRouteImport } from './routes/pages'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as MediaRouteImport } from './routes/media'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as HelpRouteImport } from './routes/help'
 import { Route as FormsRouteImport } from './routes/forms'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ContactsRouteImport } from './routes/contacts'
@@ -90,6 +91,11 @@ const MediaRoute = MediaRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FormsRoute = FormsRouteImport.update({
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/contacts': typeof ContactsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/forms': typeof FormsRoute
+  '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/orders': typeof OrdersRoute
@@ -211,6 +218,7 @@ export interface FileRoutesByTo {
   '/contacts': typeof ContactsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/forms': typeof FormsRoute
+  '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/orders': typeof OrdersRoute
@@ -241,6 +249,7 @@ export interface FileRoutesById {
   '/contacts': typeof ContactsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/forms': typeof FormsRoute
+  '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
   '/orders': typeof OrdersRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/forgot-password'
     | '/forms'
+    | '/help'
     | '/login'
     | '/media'
     | '/orders'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/forgot-password'
     | '/forms'
+    | '/help'
     | '/login'
     | '/media'
     | '/orders'
@@ -330,6 +341,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/forgot-password'
     | '/forms'
+    | '/help'
     | '/login'
     | '/media'
     | '/orders'
@@ -360,6 +372,7 @@ export interface RootRouteChildren {
   ContactsRoute: typeof ContactsRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   FormsRoute: typeof FormsRoute
+  HelpRoute: typeof HelpRoute
   LoginRoute: typeof LoginRoute
   MediaRoute: typeof MediaRoute
   OrdersRoute: typeof OrdersRoute
@@ -450,6 +463,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forms': {
@@ -624,6 +644,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactsRoute: ContactsRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   FormsRoute: FormsRoute,
+  HelpRoute: HelpRoute,
   LoginRoute: LoginRoute,
   MediaRoute: MediaRoute,
   OrdersRoute: OrdersRoute,

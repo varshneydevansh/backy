@@ -275,6 +275,11 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
       return;
     }
 
+    if (to === '/help') {
+      navigate({ to: '/help', search: activeSiteSearch });
+      return;
+    }
+
     navigate({ to });
   };
 
@@ -737,6 +742,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
           { id: 'tool:sections', type: 'Tool' as const, title: 'Sections', detail: 'Reusable page sections', action: { route: 'static' as const, to: '/reusable-sections' as const } },
           { id: 'tool:teams', type: 'Tool' as const, title: 'Teams', detail: 'Workspace teams and member roles', action: { route: 'static' as const, to: '/teams' as const } },
           { id: 'tool:users', type: 'Tool' as const, title: 'Users', detail: 'Admins, roles, invites, membership handoff', action: { route: 'static' as const, to: '/users' as const } },
+          { id: 'tool:help', type: 'Tool' as const, title: 'Help', detail: 'Searchable guide for sites, domains, editor, APIs, and roles', action: { route: 'static' as const, to: '/help' as const } },
           { id: 'tool:settings', type: 'Tool' as const, title: 'Settings', detail: 'API keys, infrastructure, delivery mode', action: { route: 'static' as const, to: '/settings' as const } },
         ].filter((tool) => canAccessArea(STATIC_ROUTE_AREA[tool.action.to]))),
       ];

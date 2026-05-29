@@ -627,7 +627,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('handleFitCanvas();'),
     'Editor keyboard handler must support capture-phase Cmd/Ctrl zoom in, zoom out, and fit canvas shortcuts before browser page zoom',
   );
-  assert(source.includes('data-testid="editor-zoom-controls"') && source.includes('data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"'), 'Editor zoom controls must expose shortcut metadata for custom admin clients');
+  assert(source.includes('data-testid="editor-zoom-controls"') && source.includes('data-overlay-hit-through="true"') && source.includes('data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"'), 'Editor zoom controls must expose shortcut metadata and keep the floating shell hit-through for canvas selection');
   assert(source.includes('data-testid="editor-zoom-out"') && source.includes('aria-keyshortcuts="Control+- Meta+-"') && source.includes('data-testid="editor-zoom-in"') && source.includes('aria-keyshortcuts="Control+= Meta+="') && source.includes('data-testid="editor-zoom-fit"') && source.includes('aria-keyshortcuts="Control+0 Meta+0"'), 'Editor zoom buttons must expose keyboard shortcut metadata');
   assert(source.includes('const CANVAS_ZOOM_PERCENT_STEP = 5') && source.includes('handleCanvasZoomPercentChange') && source.includes('data-testid="editor-zoom-slider"') && source.includes('data-zoom-min={CANVAS_ZOOM_MIN * 100}') && source.includes('data-zoom-max={CANVAS_ZOOM_MAX * 100}') && smokeSource.includes('setCanvasZoomSlider'), 'Editor zoom controls must expose a direct canvas zoom slider with rendered smoke coverage');
   assert(source.includes("key === 'h' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleCanvasPanMode();'), 'Editor keyboard handler must support H as a persistent pan-mode shortcut');
@@ -1396,6 +1396,7 @@ const assertCanvasNestedDropTargetSource = () => {
 const assertCanvasSelectionInfoSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
   const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
+  const pageRendererSource = fs.readFileSync(new URL('../../../apps/public/src/components/PageRenderer.tsx', import.meta.url), 'utf8');
   assert(source.includes('<SelectionInfo elements={elements} selectedId={selectedId} selectedIds={selectedIds} />'), 'Editor canvas selection HUD must receive the full selected id set');
   assert(source.includes('collectSelectionInfoMetrics') && source.includes('const selectionSet = new Set(selectedIds.length ? selectedIds : [selectedId]);'), 'Editor canvas selection HUD must collect metrics for every selected layer');
   assert(source.includes('data-testid="editor-selection-info"') && source.includes("data-selection-mode={selectedMetrics.length > 1 ? 'multi' : 'single'}") && source.includes('data-selection-count={selectedMetrics.length}'), 'Editor canvas selection HUD must expose testable single/multi selection metadata');
@@ -1403,9 +1404,14 @@ const assertCanvasSelectionInfoSource = () => {
   assert(source.includes('const multiSelectionBounds = useMemo(() =>') && source.includes('data-testid="editor-multi-selection-bounds"') && source.includes('data-testid="editor-multi-selection-bounds-label"'), 'Editor canvas must render a visible multi-selection bounding frame');
   assert(source.includes('data-selection-count={multiSelectionBounds.count}') && source.includes('left: multiSelectionBounds.x') && source.includes('width: multiSelectionBounds.width'), 'Editor multi-selection bounding frame must expose count and use absolute selection geometry');
   assert(source.includes('type MarqueeSelection = {') && source.includes('const [marqueeSelection, setMarqueeSelection]') && source.includes('data-testid="editor-marquee-selection"'), 'Editor canvas must expose drag-marquee selection state and overlay');
+  assert(source.includes('const getMarqueeStyle = (selection: MarqueeSelection): CSSProperties =>') && source.includes('left: bounds.x') && source.includes('top: bounds.y') && source.includes('style={getMarqueeStyle(marqueeSelection)}'), 'Editor canvas marquee overlay must render from the pointer-down origin using CSS left/top rather than invalid div x/y coordinates.');
   assert(source.includes('collectRootMarqueeCandidates') && source.includes('elementIntersectsRect(candidate, bounds)') && source.includes('onSelectMany?.(resolvedSelectedIds)'), 'Editor canvas marquee selection must select intersecting unlocked root elements in bulk');
   assert(source.includes("mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace'") && source.includes("activeMarqueeSelection.mode === 'add'") && source.includes('data-selection-mode={marqueeSelection.mode}'), 'Editor canvas marquee selection must support additive Shift/Cmd/Ctrl marquee selection');
   assert(editorSource.includes('const handleCanvasSelectMany') && editorSource.includes('onSelectMany={handleCanvasSelectMany}'), 'Editor shell must wire canvas marquee bulk selection into selectedIds state');
+  assert(source.includes("isPreview ? 'overflow-auto' : 'overflow-visible'") && source.includes('data-preview-scroll-policy={isPreview ?'), 'Editor preview canvas must remain scrollable when authored content extends beyond the selected viewport.');
+  assert(editorSource.includes('const collectCanvasContentBounds = (') && editorSource.includes('data-preview-content-bounds="expanded"') && editorSource.includes('size={renderedCanvasSize}'), 'Editor preview surface must expand to authored content bounds without rewriting the saved canvas size.');
+  assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = (') && pageRendererSource.includes('data-backy-render-content-bounds="expanded"') && pageRendererSource.includes('data-backy-render-height={renderCanvasSize.height}'), 'Public renderer must expand the rendered canvas frame to responsive content bounds so mobile previews can scroll to lower authored elements.');
+  assert(editorSource.includes('const applyRootSectionFlow = (') && editorSource.includes('const SECTION_FLOW_ELEMENT_TYPES = new Set') && editorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);'), 'Editor root sections, headers, footers, and nav bars must push following root layers when their height changes.');
 };
 
 const assertInteractiveRegistryVersionPinningSource = () => {
@@ -1549,6 +1555,8 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes("data-category-layout={shellMode === 'expanded' ? 'expanded-all-categories' : 'primary-plus-collapsed-secondary'}") &&
       source.includes('data-testid="editor-component-list"') &&
       source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
+      source.includes('data-component-preview-reserved-space="floating-bottom"') &&
+      source.includes('data-component-preview-placement="floating-bottom"') &&
       source.includes("data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}") &&
       source.includes('data-testid={`editor-component-preview-tile-${itemDomKey}`}') &&
       source.includes('data-component-library-item-actions="visible"') &&
@@ -1601,6 +1609,8 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(propertyPanelSource.includes('function PresetBindingSlotsPanel') && propertyPanelSource.includes('data-testid="editor-data-binding-slots"') && propertyPanelSource.includes('applyBindingSlot') && propertyPanelSource.includes('bindingSlotFieldCandidates'), 'Editor Data panel must render preset binding slots and apply matching fields as real data bindings');
   assert(propertyPanelSource.includes('applyChildBindingSlots') && propertyPanelSource.includes('data-testid="editor-data-apply-child-binding-slots"') && propertyPanelSource.includes('VIRTUAL_COLLECTION_FIELD_PATHS'), 'Editor Data panel must apply descendant preset binding slots and support record URL/slug fields for composed sections');
   assert(propertyPanelSource.includes('const applyAllBindingSlots = () =>') && propertyPanelSource.includes('bindableSlotsForElement(nextElement, activeSlotCollection, collections)') && propertyPanelSource.includes('data-testid="editor-data-apply-all-binding-slots"'), 'Editor Data panel must bulk-apply matching root, descendant, and child binding slots from composed presets');
+  assert(catalogSource.includes("type: 'nav'") && catalogSource.includes("name: 'Home link'") && catalogSource.includes("name: 'Contact link'"), 'Editor navigation catalog preset must create selectable link child layers by default.');
+  assert(propertyPanelSource.includes('const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>') && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}") && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}"), 'Editor navigation inspector must convert/rebuild nav menu text into selectable link child layers.');
   assert(propertyPanelSource.includes('const clearCollectionBindingsFromElement = (') && propertyPanelSource.includes('REPEATER_COLLECTION_BINDING_PROP_KEYS') && propertyPanelSource.includes('data-testid="editor-data-clear-all-binding-slots"'), 'Editor Data panel must clear collection bindings across composed preset trees and repeater dataset props');
   assert(propertyPanelSource.includes('const bindingSlotCoverageForElement = (') && propertyPanelSource.includes('missingRequired') && propertyPanelSource.includes('data-testid="editor-data-binding-slot-coverage"'), 'Editor Data panel must summarize composed preset binding coverage before publish or custom frontend handoff');
   assert(propertyPanelSource.includes("schema: 'backy.editor.binding-slot-coverage.v1'") && propertyPanelSource.includes('navigator.clipboard.writeText(JSON.stringify(coverageBrief, null, 2))') && propertyPanelSource.includes('data-testid="editor-data-copy-binding-slot-coverage"'), 'Editor Data panel must expose a copyable binding-slot coverage brief for custom frontend and AI handoff');
@@ -5630,6 +5640,11 @@ const assertResponsiveBreakpointVisualGeometry = async (client, elementId, expec
       centerY,
       hitElementId: owner?.getAttribute('data-element-id') || null,
       hitInsideElement: Boolean(hit && node.contains(hit)),
+      hitTag: hit?.tagName || null,
+      hitTestId: hit instanceof HTMLElement ? hit.dataset.testid || null : null,
+      hitClassName: hit instanceof HTMLElement ? hit.className || null : null,
+      hitPointerEvents: hit instanceof Element ? window.getComputedStyle(hit).pointerEvents : null,
+      nodePointerEvents: window.getComputedStyle(node).pointerEvents,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
       visible: rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < window.innerWidth && rect.top < window.innerHeight,
