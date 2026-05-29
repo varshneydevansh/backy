@@ -89,6 +89,7 @@ type DashboardRouteTarget =
   | '/pages/new'
   | '/blog/new';
 type DashboardWorkflowSearch = { quickCreate: 'product' } | { quickCreate: 'blank' };
+type DashboardPageCreateTemplate = 'registration' | 'contact' | 'storefront' | 'blog-index';
 
 interface DashboardData {
   sites: Site[];
@@ -1440,7 +1441,18 @@ function Index() {
       ? { siteId: activeSiteId }
       : undefined;
   };
-  const getDashboardPageCreateSearch = (template?: 'registration' | 'contact' | 'storefront' | 'blog-index') => ({
+  const buildDashboardPageCreateRoute = useCallback((template?: DashboardPageCreateTemplate) => {
+    const params = new URLSearchParams({
+      siteId: activeSiteId,
+      templateSource: 'backy-canvas',
+      focus: 'canvas',
+    });
+    if (template) {
+      params.set('template', template);
+    }
+    return `/pages/new?${params.toString()}`;
+  }, [activeSiteId]);
+  const getDashboardPageCreateSearch = (template?: DashboardPageCreateTemplate) => ({
     siteId: activeSiteId,
     templateSource: 'backy-canvas' as const,
     focus: 'canvas' as const,
@@ -1600,11 +1612,11 @@ function Index() {
     controlRoutes: {
       sites: '/sites',
       pages: `/pages?siteId=${encodeURIComponent(activeSiteId)}`,
-      pageBuilder: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}`,
-      contactPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=contact`,
-      registrationPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
-      storefrontPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
-      blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
+      pageBuilder: buildDashboardPageCreateRoute(),
+      contactPageTemplate: buildDashboardPageCreateRoute('contact'),
+      registrationPageTemplate: buildDashboardPageCreateRoute('registration'),
+      storefrontPageTemplate: buildDashboardPageCreateRoute('storefront'),
+      blogIndexPageTemplate: buildDashboardPageCreateRoute('blog-index'),
       blog: `/blog?siteId=${encodeURIComponent(activeSiteId)}`,
       media: `/media?siteId=${encodeURIComponent(activeSiteId)}`,
       collections: `/collections?siteId=${encodeURIComponent(activeSiteId)}`,
@@ -1684,6 +1696,7 @@ function Index() {
     adminContractUrlEntries,
     apiConsumerReadiness,
     backendHealthy,
+    buildDashboardPageCreateRoute,
     dashboard.collections.length,
     dashboard.comments,
     dashboard.contacts,

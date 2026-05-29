@@ -61,7 +61,7 @@ Complete feature inventory, current status, and implementation plan for a Wix/Ca
 
 ## Canvas-to-Backend/Frontend Contract
 
-- Page creation entry points now preserve focused canvas intent with `focus=canvas`. Sidebar quick-create, dashboard create actions, and the Pages list create buttons route Backy-canvas page creation through `/pages/new?...&templateSource=backy-canvas&focus=canvas`, and `pages.new` keeps that query state while authors adjust creation-form fields before saving into the focused page editor.
+- Page creation entry points now preserve focused canvas intent with `focus=canvas`. Sidebar quick-create, dashboard create actions, Pages list create buttons, dashboard copied handoff routes, and Pages list launch/binding handoff routes all route Backy-canvas page creation through `/pages/new?...&templateSource=backy-canvas&focus=canvas`, and `pages.new` keeps that query state while authors adjust creation-form fields before saving into the focused page editor.
 - `media` now uses the site-scoped admin media API contract for both:
   - media library modal (`components/editor/MediaLibraryModal.tsx`), through `listMediaLibrary`, `uploadMedia`, `replaceMedia`, and scoped `pageId`/`postId` filters.
   - media management route (`routes/media.tsx`), through `/api/admin/sites/:siteId/media`, folders, versions, transforms, signed URLs, provider analytics, and storage/runtime settings.

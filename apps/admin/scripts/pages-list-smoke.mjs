@@ -242,6 +242,9 @@ const assertPagesListSourceContract = () => {
   assert(
     source.includes('const createPageLinkDisabled = !canEditPages') &&
       source.includes("templateSource: 'backy-canvas' as const") &&
+      source.includes("focus: 'canvas' as const") &&
+      source.includes('const buildBackyCanvasPageCreateRoute = useCallback') &&
+      source.includes("params.set('template', template);") &&
       source.includes("const createPageActionStatusId = 'pages-create-action-status';") &&
       source.includes('const createPageActionDisabledReason = createPageLinkDisabled') &&
       source.includes('const createPageActionStatus = createPageActionDisabledReason') &&
@@ -479,8 +482,9 @@ const assertPagesListSourceContract = () => {
       source.includes('adminReadinessUrl') &&
       source.includes('renderApi: renderUrl') &&
       source.includes('resolveApi: resolveUrl') &&
+      source.includes('createRoute: buildBackyCanvasPageCreateRoute()') &&
       source.includes('selectedPageLaunchReadiness: selectedPageLaunchHandoff'),
-    'Pages list must expose a selected page launch/readiness handoff with template provenance, revision, delivery health, and frontend API endpoints.',
+    'Pages list must expose a selected page launch/readiness handoff with template provenance, revision, delivery health, focused creation route, and frontend API endpoints.',
   );
   assert(
       source.includes("key: 'member-login'") &&
@@ -545,8 +549,17 @@ const assertPagesListSourceContract = () => {
       source.includes("key: 'careers'") &&
       source.includes('careersPageTemplate') &&
       source.includes("key: 'about'") &&
-      source.includes('aboutPageTemplate'),
-    'Pages list must expose the landing, contact, member, newsletter, survey, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, careers, and about starters and handoff routes',
+      source.includes('aboutPageTemplate') &&
+      source.includes("blankPageTemplate: buildBackyCanvasPageCreateRoute()") &&
+      source.includes("landingPageTemplate: buildBackyCanvasPageCreateRoute('landing')") &&
+      source.includes("contactPageTemplate: buildBackyCanvasPageCreateRoute('contact')") &&
+      source.includes("blogIndexPageTemplate: buildBackyCanvasPageCreateRoute('blog-index')") &&
+      source.includes("blank: buildBackyCanvasPageCreateRoute()") &&
+      source.includes("landing: buildBackyCanvasPageCreateRoute('landing')") &&
+      source.includes("contact: buildBackyCanvasPageCreateRoute('contact')") &&
+      source.includes("blogIndex: buildBackyCanvasPageCreateRoute('blog-index')") &&
+      source.includes('templateSource=backy-canvas, and focus=canvas'),
+    'Pages list must expose the landing, contact, member, newsletter, survey, commerce, pricing, services, booking, portfolio, gallery, events, privacy, terms, cookie policy, accessibility statement, refund policy, shipping policy, help-center, FAQ, testimonials, blog, team, careers, and about starters with focused Backy-canvas handoff routes',
   );
 };
 
