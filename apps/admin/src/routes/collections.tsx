@@ -2099,6 +2099,28 @@ function CollectionsPage() {
       : frontendCollectionTemplates.length > 0
         ? `${frontendCollectionTemplates.length} frontend collection template${frontendCollectionTemplates.length === 1 ? '' : 's'} available for ${activeSiteId}.${activeFrontendCollectionTemplate ? ` ${activeFrontendCollectionTemplate.name} is selected.` : ''}`
         : `No frontend collection templates are available for ${activeSiteId}.`;
+
+  useEffect(() => {
+    if (!activeFrontendTemplateId || frontendDesignLoading) {
+      return undefined;
+    }
+
+    const revealActiveTemplate = () => {
+      const card = Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="collections-frontend-template-card-"]'))
+        .find((element) => element.dataset.targetTemplateId === activeFrontendTemplateId);
+      const createButton = card?.querySelector<HTMLButtonElement>('[data-action="collections.create.frontendTemplate"]');
+      card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      createButton?.focus({ preventScroll: true });
+    };
+
+    const frame = window.requestAnimationFrame(revealActiveTemplate);
+    const timer = window.setTimeout(revealActiveTemplate, 250);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [activeFrontendTemplateId, frontendDesignLoading, frontendCollectionTemplateBlueprints.length]);
+
   const getCollectionFrontendTemplateCreateDisabledReason = (template: SiteFrontendDesignTemplate): string => {
     if (frontendDesignLoading) return 'Frontend design templates are loading.';
     if (frontendDesignError) return frontendDesignError;
@@ -5224,6 +5246,7 @@ function CollectionsPage() {
             data-action-status={collectionsFrontendTemplateActionStatus}
             data-template-count={frontendCollectionTemplates.length}
             data-active-template-id={activeFrontendTemplateId || undefined}
+            data-route-revealed-template={activeFrontendTemplateId || undefined}
             aria-describedby={collectionsFrontendTemplateActionStatusId}
           >
             <span
@@ -5335,6 +5358,8 @@ function CollectionsPage() {
                           title={createFrontendTemplateDisabledReason || undefined}
                           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                           data-testid={`collections-frontend-template-${template.id}`}
+                          data-action="collections.create.frontendTemplate"
+                          data-action-route={`/collections?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}
                           aria-describedby={collectionsFrontendTemplateActionStatusId}
                           data-action-state={isCreatingFrontendTemplateId === template.id ? 'busy' : actionState(createFrontendTemplateDisabledReason)}
                           data-action-status={createFrontendTemplateActionStatus}
@@ -5356,6 +5381,8 @@ function CollectionsPage() {
                           title={copyFrontendTemplateDisabledReason || undefined}
                           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                           data-testid={`collections-frontend-template-copy-${template.id}`}
+                          data-action="collections.copy.frontendTemplateSchema"
+                          data-action-route={`/collections?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}
                           aria-describedby={collectionsFrontendTemplateActionStatusId}
                           data-action-state={actionState(copyFrontendTemplateDisabledReason)}
                           data-action-status={copyFrontendTemplateActionStatus}

@@ -240,7 +240,16 @@ const assertCollectionsRouteSourceContract = () => {
       source.includes('data-action-status={copyFrontendTemplateActionStatus}') &&
       source.includes('data-target-template-id={template.id}') &&
       source.includes('data-target-template-name={template.name}') &&
-      source.includes('data-target-site-id={activeSiteId}'),
+      source.includes('data-target-site-id={activeSiteId}') &&
+      source.includes("const revealActiveTemplate = () =>") &&
+      source.includes("'[data-testid^=\"collections-frontend-template-card-\"]'") &&
+      source.includes("'[data-action=\"collections.create.frontendTemplate\"]'") &&
+      source.includes("card?.scrollIntoView({ block: 'center', behavior: 'smooth' });") &&
+      source.includes("createButton?.focus({ preventScroll: true });") &&
+      source.includes('data-route-revealed-template={activeFrontendTemplateId || undefined}') &&
+      source.includes('data-action="collections.create.frontendTemplate"') &&
+      source.includes('data-action="collections.copy.frontendTemplateSchema"') &&
+      source.includes('data-action-route={`/collections?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}'),
     'Collections frontend collection templates must expose shared action status plus per-card create/copy metadata.',
   );
 };
@@ -1127,6 +1136,7 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         sectionStatus: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-action-status') || '' : '',
         sectionDescribedBy: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('aria-describedby') || '' : '',
         sectionTemplateCount: Number(frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-template-count') || 0 : 0),
+        sectionRouteRevealed: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-route-revealed-template') || '' : '',
         statusId: frontendTemplateStatus?.id || '',
         statusText: (frontendTemplateStatus?.textContent || '').replace(/\\s+/g, ' ').trim(),
         cardExists: frontendTemplateCard instanceof HTMLElement,
@@ -1139,6 +1149,8 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         createExists: frontendTemplateCreate instanceof HTMLButtonElement,
         createDisabled: frontendTemplateCreate instanceof HTMLButtonElement ? frontendTemplateCreate.disabled : null,
         createDescribedBy: frontendTemplateCreate instanceof HTMLElement ? frontendTemplateCreate.getAttribute('aria-describedby') || '' : '',
+        createAction: frontendTemplateCreate instanceof HTMLElement ? frontendTemplateCreate.getAttribute('data-action') || '' : '',
+        createActionRoute: frontendTemplateCreate instanceof HTMLElement ? frontendTemplateCreate.getAttribute('data-action-route') || '' : '',
         createState: frontendTemplateCreate instanceof HTMLElement ? frontendTemplateCreate.getAttribute('data-action-state') || '' : '',
         createStatus: frontendTemplateCreate instanceof HTMLElement ? frontendTemplateCreate.getAttribute('data-action-status') || '' : '',
         createDisabledReason: frontendTemplateCreate instanceof HTMLElement ? frontendTemplateCreate.getAttribute('data-disabled-reason') || '' : '',
@@ -1148,6 +1160,8 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
         copyExists: frontendTemplateCopy instanceof HTMLButtonElement,
         copyDisabled: frontendTemplateCopy instanceof HTMLButtonElement ? frontendTemplateCopy.disabled : null,
         copyDescribedBy: frontendTemplateCopy instanceof HTMLElement ? frontendTemplateCopy.getAttribute('aria-describedby') || '' : '',
+        copyAction: frontendTemplateCopy instanceof HTMLElement ? frontendTemplateCopy.getAttribute('data-action') || '' : '',
+        copyActionRoute: frontendTemplateCopy instanceof HTMLElement ? frontendTemplateCopy.getAttribute('data-action-route') || '' : '',
         copyState: frontendTemplateCopy instanceof HTMLElement ? frontendTemplateCopy.getAttribute('data-action-state') || '' : '',
         copyStatus: frontendTemplateCopy instanceof HTMLElement ? frontendTemplateCopy.getAttribute('data-action-status') || '' : '',
         copyDisabledReason: frontendTemplateCopy instanceof HTMLElement ? frontendTemplateCopy.getAttribute('data-disabled-reason') || '' : '',
@@ -1305,6 +1319,8 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       layout.frontendTemplateActionStatus.createExists &&
       layout.frontendTemplateActionStatus.createDisabled === false &&
       layout.frontendTemplateActionStatus.createDescribedBy === layout.frontendTemplateActionStatus.statusId &&
+      layout.frontendTemplateActionStatus.createAction === 'collections.create.frontendTemplate' &&
+      layout.frontendTemplateActionStatus.createActionRoute === `/collections?siteId=${encodeURIComponent(SITE_ID)}&frontendTemplate=${encodeURIComponent(FRONTEND_COLLECTION_TEMPLATE_ID)}` &&
       layout.frontendTemplateActionStatus.createState === 'ready' &&
       layout.frontendTemplateActionStatus.createStatus === layout.frontendTemplateActionStatus.cardStatus &&
       layout.frontendTemplateActionStatus.createDisabledReason === '' &&
@@ -1314,6 +1330,8 @@ const assertCollectionsLayout = async (client, { collectionId, collectionName, c
       layout.frontendTemplateActionStatus.copyExists &&
       layout.frontendTemplateActionStatus.copyDisabled === false &&
       layout.frontendTemplateActionStatus.copyDescribedBy === layout.frontendTemplateActionStatus.statusId &&
+      layout.frontendTemplateActionStatus.copyAction === 'collections.copy.frontendTemplateSchema' &&
+      layout.frontendTemplateActionStatus.copyActionRoute === `/collections?siteId=${encodeURIComponent(SITE_ID)}&frontendTemplate=${encodeURIComponent(FRONTEND_COLLECTION_TEMPLATE_ID)}` &&
       layout.frontendTemplateActionStatus.copyState === 'ready' &&
       layout.frontendTemplateActionStatus.copyStatus.includes('Copy') &&
       layout.frontendTemplateActionStatus.copyStatus.includes('frontend collection template schema') &&

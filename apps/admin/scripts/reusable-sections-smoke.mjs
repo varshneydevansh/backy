@@ -122,6 +122,25 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes('frontendDesignEditableMap'), 'Reusable sections frontend metadata must retain editable-map provenance');
   assert(source.includes('frontendDesignSeo'), 'Reusable sections frontend metadata must retain SEO provenance');
   assert(source.includes('frontendDesignMetadata'), 'Reusable sections frontend metadata must retain template metadata provenance');
+  assert(
+    source.includes("const reusableSectionsFrontendTemplateActionStatusId = 'reusable-sections-frontend-template-action-status';") &&
+      source.includes('data-testid="reusable-sections-frontend-template-action-status"') &&
+      source.includes('aria-describedby={reusableSectionsFrontendTemplateActionStatusId}') &&
+      source.includes('data-route-revealed-template={activeFrontendTemplateId || undefined}') &&
+      source.includes("const revealActiveTemplate = () =>") &&
+      source.includes("'[data-testid^=\"reusable-sections-frontend-template-card-\"]'") &&
+      source.includes("'[data-action=\"reusableSections.create.frontendTemplate\"]'") &&
+      source.includes("card?.scrollIntoView({ block: 'center', behavior: 'smooth' });") &&
+      source.includes("createButton?.focus({ preventScroll: true });") &&
+      source.includes('data-testid={`reusable-sections-frontend-template-card-${template.id}`}') &&
+      source.includes('data-action="reusableSections.create.frontendTemplate"') &&
+      source.includes('data-action="reusableSections.copy.frontendTemplateSchema"') &&
+      source.includes('data-action-route={`/reusable-sections?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}') &&
+      source.includes('data-target-template-id={template.id}') &&
+      source.includes('data-target-template-name={template.name}') &&
+      source.includes('data-target-site-id={activeSiteId}'),
+    'Reusable sections frontend templates must expose direct-route reveal plus ready/blocked action metadata for create and schema-copy agent handoffs.',
+  );
   assert(source.includes('const [sectionFormSubmitted, setSectionFormSubmitted] = useState(false);'), 'Reusable sections route must track submitted state for inline validation');
   assert(source.includes('const reusableSectionContentValidationError = (rawJson: string): string | null =>'), 'Reusable sections route must expose reusable content validation for inline errors');
   assert(source.includes('<form onSubmit={handleFormSubmit} className="space-y-4" noValidate>'), 'Reusable sections form must opt out of browser validation for custom inline errors');
@@ -782,10 +801,14 @@ const assertReusableSectionsLayout = async (client) => {
         testId,
         exists: element instanceof HTMLElement,
         describedBy: element?.getAttribute('aria-describedby') || '',
+        action: element?.getAttribute('data-action') || '',
+        route: element?.getAttribute('data-action-route') || '',
         state: element?.getAttribute('data-action-state') || '',
         status: element?.getAttribute('data-action-status') || '',
         reason: element?.getAttribute('data-disabled-reason') || '',
         targetSite: element?.getAttribute('data-target-site-id') || '',
+        targetTemplate: element?.getAttribute('data-target-template-id') || '',
+        targetTemplateName: element?.getAttribute('data-target-template-name') || '',
         disabled: element instanceof HTMLButtonElement ? element.disabled : null,
       };
     };
@@ -818,6 +841,11 @@ const assertReusableSectionsLayout = async (client) => {
       'reusable-section-workflow-dry-run',
       'reusable-section-workflow-refresh-instances',
     ].map(readAction);
+    const frontendTemplateOptions = document.querySelector('[data-testid="reusable-sections-frontend-template-options"]');
+    const frontendTemplateStatus = document.querySelector('[data-testid="reusable-sections-frontend-template-action-status"]');
+    const frontendTemplateCard = document.querySelector(${JSON.stringify(`[data-testid="reusable-sections-frontend-template-card-${FRONTEND_SECTION_TEMPLATE_ID}"]`)});
+    const frontendTemplateCreate = readAction(${JSON.stringify(`reusable-sections-frontend-template-${FRONTEND_SECTION_TEMPLATE_ID}`)});
+    const frontendTemplateCopy = readAction(${JSON.stringify(`reusable-sections-frontend-template-copy-${FRONTEND_SECTION_TEMPLATE_ID}`)});
     return {
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -853,6 +881,25 @@ const assertReusableSectionsLayout = async (client) => {
         Boolean(document.querySelector(${JSON.stringify(`[data-testid="reusable-sections-frontend-template-${FRONTEND_SECTION_TEMPLATE_ID}"]`)})) &&
         body.includes('Frontend design sections') &&
         body.includes(${JSON.stringify(FRONTEND_SECTION_TEMPLATE_NAME)}),
+      frontendTemplateActionStatus: {
+        sectionExists: frontendTemplateOptions instanceof HTMLElement,
+        sectionState: frontendTemplateOptions?.getAttribute('data-action-state') || '',
+        sectionStatus: frontendTemplateOptions?.getAttribute('data-action-status') || '',
+        sectionDescribedBy: frontendTemplateOptions?.getAttribute('aria-describedby') || '',
+        sectionTemplateCount: Number(frontendTemplateOptions?.getAttribute('data-template-count') || 0),
+        sectionRouteRevealed: frontendTemplateOptions?.getAttribute('data-route-revealed-template') || '',
+        statusId: frontendTemplateStatus?.id || '',
+        statusText: (frontendTemplateStatus?.textContent || '').replace(/\\s+/g, ' ').trim(),
+        cardExists: frontendTemplateCard instanceof HTMLElement,
+        cardState: frontendTemplateCard?.getAttribute('data-action-state') || '',
+        cardStatus: frontendTemplateCard?.getAttribute('data-action-status') || '',
+        cardDisabledReason: frontendTemplateCard?.getAttribute('data-disabled-reason') || '',
+        cardTargetTemplateId: frontendTemplateCard?.getAttribute('data-target-template-id') || '',
+        cardTargetTemplateName: frontendTemplateCard?.getAttribute('data-target-template-name') || '',
+        cardTargetSiteId: frontendTemplateCard?.getAttribute('data-target-site-id') || '',
+        create: frontendTemplateCreate,
+        copy: frontendTemplateCopy,
+      },
       hasLibrary: Boolean(document.querySelector('[data-testid="reusable-sections-library"]')) &&
         body.includes('Section library'),
       hasEditor: body.includes('Create section') && body.includes('Content JSON'),
@@ -885,8 +932,35 @@ const assertReusableSectionsLayout = async (client) => {
     action.status.length > 0 &&
     (action.disabled ? action.reason.length > 0 || action.state === 'busy' : action.state === 'ready')
   );
+  const frontendTemplateActionReady = layout.frontendTemplateActionStatus.sectionExists &&
+    layout.frontendTemplateActionStatus.statusId === 'reusable-sections-frontend-template-action-status' &&
+    layout.frontendTemplateActionStatus.sectionDescribedBy === layout.frontendTemplateActionStatus.statusId &&
+    layout.frontendTemplateActionStatus.sectionState === 'ready' &&
+    layout.frontendTemplateActionStatus.sectionStatus === layout.frontendTemplateActionStatus.statusText &&
+    layout.frontendTemplateActionStatus.sectionTemplateCount >= 1 &&
+    layout.frontendTemplateActionStatus.statusText.includes('frontend section template') &&
+    layout.frontendTemplateActionStatus.statusText.includes(SITE_ID) &&
+    layout.frontendTemplateActionStatus.cardExists &&
+    layout.frontendTemplateActionStatus.cardState === 'ready' &&
+    layout.frontendTemplateActionStatus.cardStatus.includes(FRONTEND_SECTION_TEMPLATE_NAME) &&
+    layout.frontendTemplateActionStatus.cardDisabledReason === '' &&
+    layout.frontendTemplateActionStatus.cardTargetTemplateId === FRONTEND_SECTION_TEMPLATE_ID &&
+    layout.frontendTemplateActionStatus.cardTargetTemplateName === FRONTEND_SECTION_TEMPLATE_NAME &&
+    layout.frontendTemplateActionStatus.cardTargetSiteId === SITE_ID &&
+    actionContractOk(layout.frontendTemplateActionStatus.statusId, layout.frontendTemplateActionStatus.create) &&
+    layout.frontendTemplateActionStatus.create.action === 'reusableSections.create.frontendTemplate' &&
+    layout.frontendTemplateActionStatus.create.route === `/reusable-sections?siteId=${encodeURIComponent(SITE_ID)}&frontendTemplate=${encodeURIComponent(FRONTEND_SECTION_TEMPLATE_ID)}` &&
+    layout.frontendTemplateActionStatus.create.targetTemplate === FRONTEND_SECTION_TEMPLATE_ID &&
+    layout.frontendTemplateActionStatus.create.targetTemplateName === FRONTEND_SECTION_TEMPLATE_NAME &&
+    layout.frontendTemplateActionStatus.create.targetSite === SITE_ID &&
+    actionContractOk(layout.frontendTemplateActionStatus.statusId, layout.frontendTemplateActionStatus.copy) &&
+    layout.frontendTemplateActionStatus.copy.action === 'reusableSections.copy.frontendTemplateSchema' &&
+    layout.frontendTemplateActionStatus.copy.route === `/reusable-sections?siteId=${encodeURIComponent(SITE_ID)}&frontendTemplate=${encodeURIComponent(FRONTEND_SECTION_TEMPLATE_ID)}` &&
+    layout.frontendTemplateActionStatus.copy.targetTemplate === FRONTEND_SECTION_TEMPLATE_ID &&
+    layout.frontendTemplateActionStatus.copy.targetTemplateName === FRONTEND_SECTION_TEMPLATE_NAME &&
+    layout.frontendTemplateActionStatus.copy.targetSite === SITE_ID;
   assert(
-    layout.hasCommandCenter && layout.portabilityReadinessCollapsed && layout.hasPortabilityReadiness && layout.hasFrontendTemplates && layout.hasLibrary && layout.hasEditor && layout.hasVisualEditor && layout.workflowCollapsed && layout.hasWorkflowPanel,
+    layout.hasCommandCenter && layout.portabilityReadinessCollapsed && layout.hasPortabilityReadiness && layout.hasFrontendTemplates && frontendTemplateActionReady && layout.hasLibrary && layout.hasEditor && layout.hasVisualEditor && layout.workflowCollapsed && layout.hasWorkflowPanel,
     `Reusable sections page missing expected regions: ${JSON.stringify(layout)}`,
   );
   assert(

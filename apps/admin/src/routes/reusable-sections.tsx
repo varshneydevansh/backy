@@ -547,6 +547,74 @@ function ReusableSectionsRoute() {
   const deletePermissionTitle = canDeleteSections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.delete', REUSABLE_SECTION_PERMISSION_ROLE_DEFAULTS);
   const isBusy = isLoading || isSaving || Boolean(isCreatingTemplateId);
   const isWorkflowBusy = isBusy || isWorkflowLoading;
+  const activeFrontendSectionTemplate = frontendSectionTemplates.find((template) => template.id === activeFrontendTemplateId) || null;
+  const reusableSectionsFrontendTemplateActionStatusId = 'reusable-sections-frontend-template-action-status';
+  const reusableSectionsFrontendTemplateActionState = frontendDesignLoading || Boolean(isCreatingTemplateId)
+    ? 'busy'
+    : frontendDesignError || frontendSectionTemplates.length === 0
+      ? 'blocked'
+      : 'ready';
+  const reusableSectionsFrontendTemplateActionStatus = frontendDesignLoading
+    ? `Loading frontend section templates for ${activeSiteId}.`
+    : frontendDesignError
+      ? `Frontend section templates unavailable: ${frontendDesignError}`
+      : frontendSectionTemplates.length > 0
+        ? `${frontendSectionTemplates.length} frontend section template${frontendSectionTemplates.length === 1 ? '' : 's'} available for ${activeSiteId}.${activeFrontendSectionTemplate ? ` ${activeFrontendSectionTemplate.name} is selected.` : ''}`
+        : `No frontend section templates are available for ${activeSiteId}.`;
+  const getSectionFrontendTemplateCreateDisabledReason = (template: SiteFrontendDesignTemplate): string => {
+    if (frontendDesignLoading) return 'Frontend design templates are loading.';
+    if (frontendDesignError) return frontendDesignError;
+    if (isBusy && isCreatingTemplateId !== template.id) return 'Section workflow is busy.';
+    if (isCreatingTemplateId === template.id) return 'This frontend section template is being created.';
+    if (!canEditSections) return editPermissionTitle || 'Your account cannot create reusable sections.';
+    return '';
+  };
+  const getSectionFrontendTemplateCopyDisabledReason = (): string => {
+    if (frontendDesignLoading) return 'Frontend design templates are loading.';
+    if (frontendDesignError) return frontendDesignError;
+    if (isBusy) return 'Section handoff actions are temporarily unavailable while Backy updates sections.';
+    if (!canViewSections) return viewPermissionTitle || 'Your account cannot view reusable section templates.';
+    return '';
+  };
+  const getSectionFrontendTemplateActionState = (template: SiteFrontendDesignTemplate) => {
+    const disabledReason = getSectionFrontendTemplateCreateDisabledReason(template);
+    if (frontendDesignLoading || isCreatingTemplateId === template.id) return 'busy';
+    if (disabledReason) return 'blocked';
+    if (activeFrontendTemplateId === template.id) return 'selected';
+    return 'ready';
+  };
+  const getSectionFrontendTemplateCreateActionStatus = (template: SiteFrontendDesignTemplate) => {
+    const disabledReason = getSectionFrontendTemplateCreateDisabledReason(template);
+    if (disabledReason) return `Create ${template.name} reusable section unavailable: ${disabledReason}`;
+    return `Create reusable editor section from ${template.name} for ${activeSiteId}.`;
+  };
+  const getSectionFrontendTemplateCopyActionStatus = (template: SiteFrontendDesignTemplate) => {
+    const disabledReason = getSectionFrontendTemplateCopyDisabledReason();
+    if (disabledReason) return `Copy ${template.name} frontend section template schema unavailable: ${disabledReason}`;
+    return `Copy ${template.name} frontend section template schema for ${activeSiteId}.`;
+  };
+
+  useEffect(() => {
+    if (!activeFrontendTemplateId || frontendDesignLoading) {
+      return undefined;
+    }
+
+    const revealActiveTemplate = () => {
+      const card = Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="reusable-sections-frontend-template-card-"]'))
+        .find((element) => element.dataset.targetTemplateId === activeFrontendTemplateId);
+      const createButton = card?.querySelector<HTMLButtonElement>('[data-action="reusableSections.create.frontendTemplate"]');
+      card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      createButton?.focus({ preventScroll: true });
+    };
+
+    const frame = window.requestAnimationFrame(revealActiveTemplate);
+    const timer = window.setTimeout(revealActiveTemplate, 250);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [activeFrontendTemplateId, frontendDesignLoading, frontendSectionBlueprints.length]);
+
   const sectionNameInlineError = sectionFormSubmitted && !formState.name.trim()
     ? 'Section name is required before saving.'
     : null;
@@ -2341,7 +2409,16 @@ function ReusableSectionsRoute() {
       </Panel>
 
       {(frontendSectionTemplates.length > 0 || frontendDesignLoading || frontendDesignError) && (
-        <Panel className="mb-5" data-testid="reusable-sections-frontend-template-options">
+        <Panel
+          className="mb-5"
+          data-testid="reusable-sections-frontend-template-options"
+          data-action-state={reusableSectionsFrontendTemplateActionState}
+          data-action-status={reusableSectionsFrontendTemplateActionStatus}
+          data-template-count={frontendSectionTemplates.length}
+          data-active-template-id={activeFrontendTemplateId || undefined}
+          data-route-revealed-template={activeFrontendTemplateId || undefined}
+          aria-describedby={reusableSectionsFrontendTemplateActionStatusId}
+        >
           <PanelHeader
             title="Frontend design sections"
             description="Create reusable editor blocks from the connected frontend contract while preserving source, tokens, chrome, CSS, and binding hints."
@@ -2353,6 +2430,14 @@ function ReusableSectionsRoute() {
             }
           />
           <PanelContent>
+            <span
+              id={reusableSectionsFrontendTemplateActionStatusId}
+              className="sr-only"
+              data-testid="reusable-sections-frontend-template-action-status"
+              aria-live="polite"
+            >
+              {reusableSectionsFrontendTemplateActionStatus}
+            </span>
             {frontendDesignLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <RefreshCw className="size-4 animate-spin" />
@@ -2374,6 +2459,10 @@ function ReusableSectionsRoute() {
                     template,
                     section: { ...blueprint, metadata },
                   }, null, 2);
+                  const createDisabledReason = getSectionFrontendTemplateCreateDisabledReason(template);
+                  const copyDisabledReason = getSectionFrontendTemplateCopyDisabledReason();
+                  const createActionStatus = getSectionFrontendTemplateCreateActionStatus(template);
+                  const copyActionStatus = getSectionFrontendTemplateCopyActionStatus(template);
                   return (
                     <article
                       key={template.id}
@@ -2384,6 +2473,13 @@ function ReusableSectionsRoute() {
                           : 'border-teal-200',
                       )}
                       data-active={activeFrontendTemplateId === template.id ? 'true' : 'false'}
+                      data-action-state={getSectionFrontendTemplateActionState(template)}
+                      data-action-status={createActionStatus}
+                      data-disabled-reason={createDisabledReason || undefined}
+                      data-target-template-id={template.id}
+                      data-target-template-name={template.name}
+                      data-target-site-id={activeSiteId}
+                      data-testid={`reusable-sections-frontend-template-card-${template.id}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -2402,18 +2498,44 @@ function ReusableSectionsRoute() {
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Button
                           size="sm"
-                            variant="primary"
-                            onClick={() => void createFromFrontendTemplate(template, blueprint)}
-                            disabled={isBusy || !canEditSections}
-                            title={!canEditSections ? editPermissionTitle : undefined}
-                            iconStart={<Layers3 className="size-4" />}
+                          variant="primary"
+                          onClick={() => void createFromFrontendTemplate(template, blueprint)}
+                          disabled={Boolean(createDisabledReason)}
+                          title={createDisabledReason || undefined}
+                          aria-describedby={reusableSectionsFrontendTemplateActionStatusId}
+                          iconStart={<Layers3 className="size-4" />}
                           data-testid={`reusable-sections-frontend-template-${template.id}`}
+                          data-action="reusableSections.create.frontendTemplate"
+                          data-action-route={`/reusable-sections?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}
+                          data-action-state={isCreatingTemplateId === template.id ? 'busy' : actionStateFromDisabledReason(createDisabledReason)}
+                          data-action-status={createActionStatus}
+                          data-disabled-reason={createDisabledReason || undefined}
+                          data-target-template-id={template.id}
+                          data-target-template-name={template.name}
+                          data-target-site-id={activeSiteId}
                         >
                           {isCreatingTemplateId === template.id ? 'Creating...' : 'Create section'}
                         </Button>
-                          <Button size="sm" onClick={() => void copyText(manifestText, `${template.name} frontend section template`)} disabled={isBusy || !canViewSections} title={!canViewSections ? viewPermissionTitle : undefined} iconStart={<Copy className="size-4" />}>
-                            Copy schema
-                          </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyText(manifestText, `${template.name} frontend section template`)}
+                          disabled={Boolean(copyDisabledReason)}
+                          title={copyDisabledReason || undefined}
+                          aria-describedby={reusableSectionsFrontendTemplateActionStatusId}
+                          iconStart={<Copy className="size-4" />}
+                          data-testid={`reusable-sections-frontend-template-copy-${template.id}`}
+                          data-action="reusableSections.copy.frontendTemplateSchema"
+                          data-action-route={`/reusable-sections?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}
+                          data-action-state={actionStateFromDisabledReason(copyDisabledReason)}
+                          data-action-status={copyActionStatus}
+                          data-disabled-reason={copyDisabledReason || undefined}
+                          data-target-template-id={template.id}
+                          data-target-template-name={template.name}
+                          data-target-site-id={activeSiteId}
+                        >
+                          Copy schema
+                        </Button>
                       </div>
                     </article>
                   );

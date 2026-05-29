@@ -1317,6 +1317,28 @@ function FormsRoute() {
       : frontendFormTemplates.length > 0
         ? `${frontendFormTemplates.length} frontend form template${frontendFormTemplates.length === 1 ? '' : 's'} available${activeFrontendFormTemplate ? `; ${activeFrontendFormTemplate.name} selected.` : '.'}`
         : 'No frontend form templates captured for this site.';
+
+  useEffect(() => {
+    if (!activeFrontendTemplateId || frontendDesignLoading) {
+      return undefined;
+    }
+
+    const revealActiveTemplate = () => {
+      const card = Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="forms-frontend-template-card-"]'))
+        .find((element) => element.dataset.targetTemplateId === activeFrontendTemplateId);
+      const createButton = card?.querySelector<HTMLButtonElement>('[data-action="forms.create.frontendTemplate"]');
+      card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      createButton?.focus({ preventScroll: true });
+    };
+
+    const frame = window.requestAnimationFrame(revealActiveTemplate);
+    const timer = window.setTimeout(revealActiveTemplate, 250);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [activeFrontendTemplateId, frontendDesignLoading, frontendTemplateBlueprints.length]);
+
   const hasActiveFormFilters = Boolean(
     formSearchQuery.trim() ||
     formSourceFilter !== 'all' ||
@@ -4654,6 +4676,7 @@ function FormsRoute() {
               data-action-status={formsFrontendTemplateActionStatus}
               data-template-count={frontendFormTemplates.length}
               data-active-template-id={activeFrontendTemplateId || undefined}
+              data-route-revealed-template={activeFrontendTemplateId || undefined}
               data-testid="forms-frontend-template-options"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -4761,7 +4784,8 @@ function FormsRoute() {
                             iconStart={<FileInput className="size-4" />}
                             data-action="forms.create.frontendTemplate"
                             data-action-target={template.id}
-                            data-action-route={template.routePattern || `/forms?siteId=${encodeURIComponent(activeSiteId)}`}
+                            data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}
+                            data-public-route={template.routePattern || undefined}
                             data-action-state={createFrontendTemplateActionState}
                             data-state={createFrontendTemplateActionState}
                             data-action-status={createFrontendTemplateActionStatus}
@@ -4788,7 +4812,8 @@ function FormsRoute() {
                             iconStart={<Copy className="size-4" />}
                             data-action="forms.copy.frontendTemplateSchema"
                             data-action-target={template.id}
-                            data-action-route={template.routePattern || `/forms?siteId=${encodeURIComponent(activeSiteId)}`}
+                            data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}
+                            data-public-route={template.routePattern || undefined}
                             data-action-state={copyFrontendTemplateActionState}
                             data-state={copyFrontendTemplateActionState}
                             data-action-status={copyFrontendTemplateActionStatus}

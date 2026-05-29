@@ -1303,6 +1303,17 @@ const assertProductsApiContractsSource = () => {
       source.includes("data-target-template-id={template.id}") &&
       source.includes("data-target-template-name={template.name}") &&
       source.includes("data-target-site-id={activeSiteId}") &&
+      source.includes("const revealActiveTemplate = () =>") &&
+      source.includes("'[data-testid^=\"products-frontend-template-card-\"]'") &&
+      source.includes("'[data-action=\"products.create.frontendTemplate\"]'") &&
+      source.includes("card?.scrollIntoView({ block: 'center', behavior: 'smooth' });") &&
+      source.includes("createButton?.focus({ preventScroll: true });") &&
+      source.includes("open={activeFrontendTemplateId ? true : undefined}") &&
+      source.includes("data-default-collapsed={activeFrontendTemplateId ? 'false' : 'true'}") &&
+      source.includes("data-route-revealed-template={activeFrontendTemplateId || undefined}") &&
+      source.includes('data-action="products.create.frontendTemplate"') &&
+      source.includes('data-action="products.copy.frontendTemplateSchema"') &&
+      source.includes('data-action-route={`/products?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}') &&
       source.includes("Show templates") &&
       source.includes('data-testid="products-frontend-template-design-readiness"') &&
       source.includes("const designValues = buildFrontendProductTemplateValues(template, frontendDesign);") &&
@@ -8601,6 +8612,7 @@ const assertProductsLayout = async (client) => {
           frontendTemplateOptionsActionStatus: frontendTemplateOptions?.getAttribute('data-action-status') || '',
           frontendTemplateOptionsTemplateCount: frontendTemplateOptions?.getAttribute('data-template-count') || '',
           frontendTemplateOptionsActiveTemplateId: frontendTemplateOptions?.getAttribute('data-active-template-id') || '',
+          frontendTemplateOptionsRouteRevealed: frontendTemplateOptions?.getAttribute('data-route-revealed-template') || '',
           frontendTemplateActionStatusId: frontendTemplateActionStatus?.id || '',
           frontendTemplateActionStatusText,
           frontendTemplateCardActionState: frontendTemplateCard?.getAttribute('data-action-state') || '',
@@ -8611,6 +8623,8 @@ const assertProductsLayout = async (client) => {
           frontendTemplateCardTargetSiteId: frontendTemplateCard?.getAttribute('data-target-site-id') || '',
           frontendTemplateCreateActionState: frontendTemplateCreate?.getAttribute('data-action-state') || '',
           frontendTemplateCreateActionStatus: frontendTemplateCreate?.getAttribute('data-action-status') || '',
+          frontendTemplateCreateAction: frontendTemplateCreate?.getAttribute('data-action') || '',
+          frontendTemplateCreateActionRoute: frontendTemplateCreate?.getAttribute('data-action-route') || '',
           frontendTemplateCreateDescribedBy: frontendTemplateCreate?.getAttribute('aria-describedby') || '',
           frontendTemplateCreateDisabledReason: frontendTemplateCreate?.getAttribute('data-disabled-reason') || '',
           frontendTemplateCreateDisabled: frontendTemplateCreate instanceof HTMLButtonElement ? frontendTemplateCreate.disabled : null,
@@ -8619,6 +8633,8 @@ const assertProductsLayout = async (client) => {
           frontendTemplateCreateTargetSiteId: frontendTemplateCreate?.getAttribute('data-target-site-id') || '',
           frontendTemplateCopyActionState: frontendTemplateCopy?.getAttribute('data-action-state') || '',
           frontendTemplateCopyActionStatus: frontendTemplateCopy?.getAttribute('data-action-status') || '',
+          frontendTemplateCopyAction: frontendTemplateCopy?.getAttribute('data-action') || '',
+          frontendTemplateCopyActionRoute: frontendTemplateCopy?.getAttribute('data-action-route') || '',
           frontendTemplateCopyDescribedBy: frontendTemplateCopy?.getAttribute('aria-describedby') || '',
           frontendTemplateCopyDisabledReason: frontendTemplateCopy?.getAttribute('data-disabled-reason') || '',
           frontendTemplateCopyDisabled: frontendTemplateCopy instanceof HTMLButtonElement ? frontendTemplateCopy.disabled : null,
@@ -8953,6 +8969,8 @@ const assertProductsLayout = async (client) => {
       layout.frontendTemplateCardTargetTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME &&
       layout.frontendTemplateCardTargetSiteId === SITE_ID &&
       layout.frontendTemplateCreateActionState === 'ready' &&
+      layout.frontendTemplateCreateAction === 'products.create.frontendTemplate' &&
+      layout.frontendTemplateCreateActionRoute === `/products?siteId=${encodeURIComponent(SITE_ID)}&frontendTemplate=${encodeURIComponent(FRONTEND_PRODUCT_TEMPLATE_ID)}` &&
       layout.frontendTemplateCreateDescribedBy === 'products-frontend-template-action-status' &&
       layout.frontendTemplateCreateDisabledReason === '' &&
       layout.frontendTemplateCreateDisabled === false &&
@@ -8960,6 +8978,8 @@ const assertProductsLayout = async (client) => {
       layout.frontendTemplateCreateTargetTemplateName === FRONTEND_PRODUCT_TEMPLATE_NAME &&
       layout.frontendTemplateCreateTargetSiteId === SITE_ID &&
       layout.frontendTemplateCopyActionState === 'ready' &&
+      layout.frontendTemplateCopyAction === 'products.copy.frontendTemplateSchema' &&
+      layout.frontendTemplateCopyActionRoute === `/products?siteId=${encodeURIComponent(SITE_ID)}&frontendTemplate=${encodeURIComponent(FRONTEND_PRODUCT_TEMPLATE_ID)}` &&
       layout.frontendTemplateCopyDescribedBy === 'products-frontend-template-action-status' &&
       layout.frontendTemplateCopyDisabledReason === '' &&
       layout.frontendTemplateCopyDisabled === false &&

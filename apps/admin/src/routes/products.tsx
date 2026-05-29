@@ -2180,6 +2180,28 @@ function ProductsRoute() {
       : frontendProductTemplates.length > 0
         ? `${frontendProductTemplates.length} frontend product template${frontendProductTemplates.length === 1 ? '' : 's'} available${activeFrontendProductTemplate ? `; ${activeFrontendProductTemplate.name} selected.` : '.'}`
         : 'No frontend product templates captured for this site.';
+
+  useEffect(() => {
+    if (!activeFrontendTemplateId || frontendDesignLoading) {
+      return undefined;
+    }
+
+    const revealActiveTemplate = () => {
+      const card = Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="products-frontend-template-card-"]'))
+        .find((element) => element.dataset.targetTemplateId === activeFrontendTemplateId);
+      const createButton = card?.querySelector<HTMLButtonElement>('[data-action="products.create.frontendTemplate"]');
+      card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      createButton?.focus({ preventScroll: true });
+    };
+
+    const frame = window.requestAnimationFrame(revealActiveTemplate);
+    const timer = window.setTimeout(revealActiveTemplate, 250);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [activeFrontendTemplateId, frontendDesignLoading, frontendProductTemplateBlueprints.length]);
+
   const galleryImageUrls = useMemo(
     () => parseGalleryImages(formState.galleryImages),
     [formState.galleryImages],
@@ -5484,11 +5506,13 @@ function ProductsRoute() {
 
         {(frontendProductTemplates.length > 0 || frontendDesignLoading || frontendDesignError) && (
           <details
+            open={activeFrontendTemplateId ? true : undefined}
             className="group mt-4 overflow-hidden rounded-lg border border-teal-200 bg-teal-50/50"
             aria-describedby={productsFrontendTemplateActionStatusId}
             data-action-state={productsFrontendTemplateActionState}
             data-action-status={productsFrontendTemplateActionStatus}
-            data-default-collapsed="true"
+            data-default-collapsed={activeFrontendTemplateId ? 'false' : 'true'}
+            data-route-revealed-template={activeFrontendTemplateId || undefined}
             data-template-count={frontendProductTemplates.length}
             data-active-template-id={activeFrontendTemplateId || undefined}
             data-testid="products-frontend-template-options"
@@ -5631,6 +5655,8 @@ function ProductsRoute() {
                           aria-describedby={productsFrontendTemplateActionStatusId}
                           iconStart={<Package className="size-4" />}
                           data-testid={`products-frontend-template-${template.id}`}
+                          data-action="products.create.frontendTemplate"
+                          data-action-route={`/products?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}
                           data-action-state={createDisabledReason ? isCreatingTemplateId === `frontend:${template.id}` ? 'busy' : 'blocked' : 'ready'}
                           data-action-status={createActionStatus}
                           data-disabled-reason={createDisabledReason || undefined}
@@ -5649,6 +5675,8 @@ function ProductsRoute() {
                           aria-describedby={productsFrontendTemplateActionStatusId}
                           iconStart={<Copy className="size-4" />}
                           data-testid={`products-frontend-template-copy-${template.id}`}
+                          data-action="products.copy.frontendTemplateSchema"
+                          data-action-route={`/products?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}
                           data-action-state={copyDisabledReason ? 'blocked' : 'ready'}
                           data-action-status={copyActionStatus}
                           data-disabled-reason={copyDisabledReason || undefined}

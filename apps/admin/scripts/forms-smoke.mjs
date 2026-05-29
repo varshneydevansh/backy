@@ -575,6 +575,16 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("data-action-state={cardActionState}") &&
       source.includes("data-action-status={createFrontendTemplateActionStatus}") &&
       source.includes("data-action-state={copyFrontendTemplateActionState}") &&
+      source.includes("const revealActiveTemplate = () =>") &&
+      source.includes("'[data-testid^=\"forms-frontend-template-card-\"]'") &&
+      source.includes("'[data-action=\"forms.create.frontendTemplate\"]'") &&
+      source.includes("card?.scrollIntoView({ block: 'center', behavior: 'smooth' });") &&
+      source.includes("createButton?.focus({ preventScroll: true });") &&
+      source.includes("data-route-revealed-template={activeFrontendTemplateId || undefined}") &&
+      source.includes('data-action="forms.create.frontendTemplate"') &&
+      source.includes('data-action="forms.copy.frontendTemplateSchema"') &&
+      source.includes('data-action-route={`/forms?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}') &&
+      source.includes("data-public-route={template.routePattern || undefined}") &&
       source.includes("data-target-template-id={template.id}") &&
       source.includes("data-target-template-name={template.name}") &&
       source.includes('const contactShare = normalizeFormContactShare(') &&
@@ -3389,6 +3399,7 @@ const assertLayout = async (client) => {
       sectionState: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-action-state') || '' : '',
       sectionStatus: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-action-status') || '' : '',
       sectionTemplateCount: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-template-count') || '' : '',
+      sectionRouteRevealed: frontendTemplateOptions instanceof HTMLElement ? frontendTemplateOptions.getAttribute('data-route-revealed-template') || '' : '',
       statusId: frontendTemplateStatus?.id || '',
       statusText: frontendTemplateStatusText,
       cardState: frontendTemplateCard instanceof HTMLElement ? frontendTemplateCard.getAttribute('data-action-state') || '' : '',
@@ -3400,6 +3411,9 @@ const assertLayout = async (client) => {
       createExists: frontendCreate instanceof HTMLButtonElement,
       createDisabled: frontendCreate instanceof HTMLButtonElement ? frontendCreate.disabled : null,
       createDescribedBy: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('aria-describedby') || '' : '',
+      createAction: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-action') || '' : '',
+      createActionRoute: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-action-route') || '' : '',
+      createPublicRoute: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-public-route') || '' : '',
       createState: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-action-state') || '' : '',
       createStatus: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-action-status') || '' : '',
       createDisabledReason: frontendCreate instanceof HTMLElement ? frontendCreate.getAttribute('data-disabled-reason') || '' : '',
@@ -3409,6 +3423,9 @@ const assertLayout = async (client) => {
       copyExists: frontendCopy instanceof HTMLButtonElement,
       copyDisabled: frontendCopy instanceof HTMLButtonElement ? frontendCopy.disabled : null,
       copyDescribedBy: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('aria-describedby') || '' : '',
+      copyAction: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-action') || '' : '',
+      copyActionRoute: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-action-route') || '' : '',
+      copyPublicRoute: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-public-route') || '' : '',
       copyState: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-action-state') || '' : '',
       copyStatus: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-action-status') || '' : '',
       copyDisabledReason: frontendCopy instanceof HTMLElement ? frontendCopy.getAttribute('data-disabled-reason') || '' : '',
@@ -3516,6 +3533,8 @@ const assertLayout = async (client) => {
         frontendTemplateContract.cardTargetSiteId === '${SITE_ID}' &&
         frontendTemplateContract.createExists &&
         frontendTemplateContract.createDescribedBy === 'forms-frontend-template-action-status' &&
+        frontendTemplateContract.createAction === 'forms.create.frontendTemplate' &&
+        frontendTemplateContract.createActionRoute === ${JSON.stringify(`/forms?siteId=${encodeURIComponent(SITE_ID)}&frontendTemplate=${encodeURIComponent(FRONTEND_FORM_TEMPLATE_ID)}`)} &&
         ['ready', 'blocked'].includes(frontendTemplateContract.createState) &&
         frontendTemplateContract.createDisabled === (frontendTemplateContract.createState === 'blocked') &&
         frontendTemplateContract.createStatus.includes('${FRONTEND_FORM_TEMPLATE_NAME}') &&
@@ -3529,6 +3548,8 @@ const assertLayout = async (client) => {
         frontendTemplateContract.createTargetSiteId === '${SITE_ID}' &&
         frontendTemplateContract.copyExists &&
         frontendTemplateContract.copyDescribedBy === 'forms-frontend-template-action-status' &&
+        frontendTemplateContract.copyAction === 'forms.copy.frontendTemplateSchema' &&
+        frontendTemplateContract.copyActionRoute === ${JSON.stringify(`/forms?siteId=${encodeURIComponent(SITE_ID)}&frontendTemplate=${encodeURIComponent(FRONTEND_FORM_TEMPLATE_ID)}`)} &&
         ['ready', 'blocked'].includes(frontendTemplateContract.copyState) &&
         frontendTemplateContract.copyDisabled === (frontendTemplateContract.copyState === 'blocked') &&
         frontendTemplateContract.copyStatus.includes('${FRONTEND_FORM_TEMPLATE_NAME}') &&
