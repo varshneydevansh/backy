@@ -38,8 +38,13 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-custom-frontend-agent-handoff"') &&
       source.includes('data-testid="site-copy-custom-frontend-agent-handoff"') &&
       source.includes('data-testid="site-agent-content-entry-points"') &&
+      source.includes('data-testid="site-agent-canvas-first-rule"') &&
       source.includes('const adminEntryPoints = buildCustomFrontendAgentAdminEntryPoints(siteIdParam);') &&
       source.includes('adminEntryPoints,') &&
+      source.includes('siteCustomFrontendAgentHandoff.readOrder.map') &&
+      source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.editorOutcome') &&
+      source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.routeRevealGuarantee') &&
+      source.includes('siteCustomFrontendAgentHandoff.designState.siteStyleSources.join') &&
       source.includes('CUSTOM_FRONTEND_AGENT_HANDOFF_DOC'),
     'Site detail must expose the custom frontend agent handoff with docs, endpoint metadata, and all content creation entry points.',
   );
@@ -1372,6 +1377,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
         visible: Boolean(document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')),
         copyAction: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-agent-handoff"]')),
         contentEntryPoints: Boolean(document.querySelector('[data-testid="site-agent-content-entry-points"]')),
+        canvasFirstRule: Boolean(document.querySelector('[data-testid="site-agent-canvas-first-rule"]')),
         schema: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-schema') || '',
         doc: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-doc') || '',
         manifest: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-manifest') || '',
@@ -1449,11 +1455,18 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.visible &&
       layout.customFrontendAgentHandoff.copyAction &&
       layout.customFrontendAgentHandoff.contentEntryPoints &&
+      layout.customFrontendAgentHandoff.canvasFirstRule &&
       layout.customFrontendAgentHandoff.schema === 'backy.custom-frontend-agent-handoff.v1' &&
       layout.customFrontendAgentHandoff.doc === 'specs/custom-frontend-agent-handoff.md' &&
       layout.customFrontendAgentHandoff.manifest.includes('/api/sites/') &&
       layout.customFrontendAgentHandoff.openapi.includes('/openapi') &&
       layout.customFrontendAgentHandoff.text.includes('Agent handoff') &&
+      layout.customFrontendAgentHandoff.text.includes('Agent read order') &&
+      layout.customFrontendAgentHandoff.text.includes('frontendDesignManagement') &&
+      layout.customFrontendAgentHandoff.text.includes('Canvas-first API alignment') &&
+      layout.customFrontendAgentHandoff.text.includes('site fonts, colors, chrome') &&
+      layout.customFrontendAgentHandoff.text.includes('manifest.data.site.frontendDesign') &&
+      layout.customFrontendAgentHandoff.text.includes('frontendDesign.tokens.fonts') &&
       layout.customFrontendAgentHandoff.text.includes('frontendDesignTemplateId=:templateId') &&
       layout.customFrontendAgentHandoff.text.includes('templateSource=backy-canvas') &&
       layout.customFrontendAgentHandoff.text.includes('/products?') &&

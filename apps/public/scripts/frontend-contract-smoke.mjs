@@ -247,6 +247,10 @@ assert(
     customFrontendAgentHandoffLib.includes('buildBackyContentDesignPayload') &&
     customFrontendAgentHandoffLib.includes('frontendDesignTemplateId') &&
     customFrontendAgentHandoffLib.includes('adminEntryPoints') &&
+    customFrontendAgentHandoffLib.includes('readOrder') &&
+    customFrontendAgentHandoffLib.includes('canvasFirst') &&
+    customFrontendAgentHandoffLib.includes('siteStyleSources') &&
+    customFrontendAgentHandoffLib.includes('routeRevealGuarantee') &&
     customFrontendAgentHandoffLib.includes('productCustomFrontend') &&
     customFrontendAgentHandoffLib.includes('formCustomFrontend') &&
     customFrontendAgentHandoffLib.includes('collectionCustomFrontend') &&
@@ -256,6 +260,10 @@ assert(
     frontendManifestSchema.includes('"backy.custom-frontend-agent-handoff.v1"') &&
     frontendManifestSchema.includes('"frontendDesignManagement"') &&
     frontendManifestSchema.includes('"adminEntryPoints"') &&
+    frontendManifestSchema.includes('"readOrder"') &&
+    frontendManifestSchema.includes('"canvasFirst"') &&
+    frontendManifestSchema.includes('"siteStyleSources"') &&
+    frontendManifestSchema.includes('"routeRevealGuarantee"') &&
     frontendManifestSchema.includes('"productCustomFrontend"') &&
     frontendManifestSchema.includes('"formCustomFrontend"') &&
     frontendManifestSchema.includes('"collectionCustomFrontend"') &&

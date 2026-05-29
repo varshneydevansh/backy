@@ -1839,9 +1839,12 @@ assert(customFrontendAgentHandoff.endpoints?.frontendDesign === manifest.data.en
 assert(customFrontendAgentHandoff.endpoints?.frontendDesignManagement === `/api/admin/sites/${client.getSiteId()}/frontend-design`, 'manifest() custom frontend agent handoff missing admin frontend-design endpoint');
 assert(customFrontendAgentHandoff.endpoints?.templates === `/api/admin/sites/${client.getSiteId()}/templates`, 'manifest() custom frontend agent handoff missing templates endpoint');
 assert(customFrontendAgentHandoff.endpoints?.products?.includes('/collections/products/records'), 'manifest() custom frontend agent handoff missing product design endpoint');
+assert(customFrontendAgentHandoff.readOrder?.some?.((entry) => entry.endpointKey === 'frontendDesignManagement'), 'manifest() custom frontend agent handoff missing frontend-design read-order step');
 assert(customFrontendAgentHandoff.sdk?.package === 'packages/sdk-js', 'manifest() custom frontend agent handoff SDK package drifted');
 assert(customFrontendAgentHandoff.sdk?.helpers?.includes('buildBackyContentDesignPayload'), 'manifest() custom frontend agent handoff missing design payload helper');
 assert(customFrontendAgentHandoff.contentCreation?.templateCloneFields?.includes('frontendDesignTemplateId'), 'manifest() custom frontend agent handoff missing frontendDesignTemplateId creation field');
+assert(customFrontendAgentHandoff.contentCreation?.canvasFirst?.editor === 'Backy canvas editor', 'manifest() custom frontend agent handoff missing canvas-first editor contract');
+assert(customFrontendAgentHandoff.contentCreation?.canvasFirst?.routeRevealGuarantee?.includes('reveal the selected captured template'), 'manifest() custom frontend agent handoff missing route reveal guarantee');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.pageCustomFrontend?.includes('frontendDesignTemplateId=:templateId'), 'manifest() custom frontend agent handoff missing page custom frontend entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.blogCustomFrontend?.includes('frontendDesignTemplateId=:templateId'), 'manifest() custom frontend agent handoff missing blog custom frontend entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.productCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing product custom frontend entry point');
@@ -1850,6 +1853,8 @@ assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.collectionC
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.reusableSectionCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing reusable section custom frontend entry point');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('meta.frontendDesign*'), 'manifest() custom frontend agent handoff missing frontend design provenance round-trip field');
+assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('manifest.data.site.frontendDesign'), 'manifest() custom frontend agent handoff missing site frontendDesign style source');
+assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('frontendDesign.tokens.fonts'), 'manifest() custom frontend agent handoff missing font token style source');
 assert(customFrontendAgentHandoff.privacy?.includesSecretValues === false, 'manifest() custom frontend agent handoff must not include secret values');
 assert(customFrontendAgentHandoff.privacy?.adminWritesRequireAuth === true, 'manifest() custom frontend agent handoff missing admin auth boundary');
 assert(manifest.data.contract?.frontendLaunchReadiness?.schemaVersion === 'backy.frontend-launch-readiness.v1', 'manifest() missing frontend launch readiness schema');

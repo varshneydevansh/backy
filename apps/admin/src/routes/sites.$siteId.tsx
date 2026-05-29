@@ -6400,6 +6400,26 @@ function EditSitePage() {
                   label="Canvas clone field"
                   value={siteCustomFrontendAgentHandoff.contentCreation.customFrontendTemplateField}
                 />
+                <SiteHandoffEndpoint
+                  label="Agent read order"
+                  value={siteCustomFrontendAgentHandoff.readOrder.map((entry) => entry.endpointKey).join(" -> ")}
+                />
+                <SiteHandoffEndpoint
+                  label="Canvas-first outcome"
+                  value={siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.editorOutcome}
+                />
+              </div>
+              <div
+                className="mt-3 rounded-lg border border-teal-200 bg-background/70 p-3 text-xs leading-5 text-teal-950"
+                data-testid="site-agent-canvas-first-rule"
+              >
+                <div className="font-semibold">Canvas-first API alignment</div>
+                <p className="mt-1">
+                  {siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.routeRevealGuarantee}
+                </p>
+                <p className="mt-1">
+                  Style sources: {siteCustomFrontendAgentHandoff.designState.siteStyleSources.join(", ")}
+                </p>
               </div>
               <div
                 className="mt-3 grid gap-2 text-xs md:grid-cols-2"

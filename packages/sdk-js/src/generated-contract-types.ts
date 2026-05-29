@@ -5280,6 +5280,12 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
     reusableSections: string;
     [key: string]: unknown;
   };
+  readOrder: Array<{
+    step: string;
+    endpointKey: string;
+    purpose: string;
+    [key: string]: unknown;
+  }>;
   sdk: {
     package: "packages/sdk-js";
     generatedTypes: "packages/sdk-js/src/generated-contract-types.ts";
@@ -5305,11 +5311,22 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       reusableSectionCustomFrontend: string;
       [key: string]: unknown;
     };
+    canvasFirst: {
+      editor: "Backy canvas editor";
+      pageAndBlogModeField: "templateSource";
+      backyCanvasValue: "backy-canvas";
+      customFrontendValue: "custom-frontend";
+      customFrontendRouteFieldAliases: Array<string>;
+      routeRevealGuarantee: string;
+      editorOutcome: string;
+      [key: string]: unknown;
+    };
     rule: string;
     [key: string]: unknown;
   };
   designState: {
     roundTripFields: Array<string>;
+    siteStyleSources: Array<string>;
     preserves: Array<string>;
     [key: string]: unknown;
   };

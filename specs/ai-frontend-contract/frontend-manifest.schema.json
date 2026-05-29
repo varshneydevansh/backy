@@ -43,6 +43,26 @@
           },
           "required": ["manifest", "openapi", "resolve", "render", "frontendDesign", "frontendDesignManagement", "templates", "pages", "blog", "forms", "collections", "products", "reusableSections"]
         },
+        "readOrder": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "step": { "type": "string", "minLength": 1 },
+              "endpointKey": { "type": "string", "minLength": 1 },
+              "purpose": { "type": "string", "minLength": 1 }
+            },
+            "required": ["step", "endpointKey", "purpose"]
+          },
+          "contains": {
+            "type": "object",
+            "properties": {
+              "endpointKey": { "const": "frontendDesignManagement" }
+            },
+            "required": ["endpointKey"]
+          }
+        },
         "sdk": {
           "type": "object",
           "additionalProperties": true,
@@ -100,9 +120,27 @@
                 "reusableSectionCustomFrontend"
               ]
             },
+            "canvasFirst": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "editor": { "const": "Backy canvas editor" },
+                "pageAndBlogModeField": { "const": "templateSource" },
+                "backyCanvasValue": { "const": "backy-canvas" },
+                "customFrontendValue": { "const": "custom-frontend" },
+                "customFrontendRouteFieldAliases": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "frontendDesignTemplateId" }
+                },
+                "routeRevealGuarantee": { "type": "string", "minLength": 1 },
+                "editorOutcome": { "type": "string", "minLength": 1 }
+              },
+              "required": ["editor", "pageAndBlogModeField", "backyCanvasValue", "customFrontendValue", "customFrontendRouteFieldAliases", "routeRevealGuarantee", "editorOutcome"]
+            },
             "rule": { "type": "string", "minLength": 1 }
           },
-          "required": ["templateCloneFields", "backyCanvasTemplateField", "customFrontendTemplateField", "adminEntryPoints", "rule"]
+          "required": ["templateCloneFields", "backyCanvasTemplateField", "customFrontendTemplateField", "adminEntryPoints", "canvasFirst", "rule"]
         },
         "designState": {
           "type": "object",
@@ -113,12 +151,17 @@
               "items": { "type": "string", "minLength": 1 },
               "contains": { "const": "content.elements" }
             },
+            "siteStyleSources": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "contains": { "const": "manifest.data.site.frontendDesign" }
+            },
             "preserves": {
               "type": "array",
               "items": { "type": "string", "minLength": 1 }
             }
           },
-          "required": ["roundTripFields", "preserves"]
+          "required": ["roundTripFields", "siteStyleSources", "preserves"]
         },
         "rules": {
           "type": "array",
@@ -136,7 +179,7 @@
           "required": ["includesSecretValues", "publicDiscoveryOnly", "adminWritesRequireAuth", "secretHandling"]
         }
       },
-      "required": ["schemaVersion", "source", "docs", "endpoints", "sdk", "contentCreation", "designState", "rules", "privacy"]
+      "required": ["schemaVersion", "source", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "designState", "rules", "privacy"]
     },
     "databaseCertification": {
       "type": "object",

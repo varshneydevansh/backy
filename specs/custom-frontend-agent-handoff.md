@@ -11,6 +11,7 @@ This is the short entry point for AI agents or external teams building a custom 
    - Bootstrap the custom frontend. This is the primary machine-readable contract for routes, modules, media/font policy, site frontend design, template registry, live-management capability, launch readiness, and completion status.
    - Schema source: `specs/ai-frontend-contract/frontend-manifest.schema.json`.
    - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
+   - Read-order shortcut: `data.contract.customFrontendAgentHandoff.readOrder` tells agents the sequence to follow: manifest, OpenAPI, authenticated frontend-design management, template registry, then render verification.
 
 3. `GET /api/sites/:siteId/openapi`
    - Generate typed clients from the site-scoped OpenAPI document. This mirrors the manifest and exposes the endpoint/component names custom agents should use instead of guessing URL shapes.
@@ -32,6 +33,7 @@ The same contract is visible inside the site detail workspace under **Frontend h
 - `specs/custom-frontend-agent-handoff.md`
 - site-specific manifest, OpenAPI, render, frontend-design, and admin template endpoints
 - copyable admin entry points for page, blog, product, form, collection, and reusable-section creation from either Backy-canvas starters or captured custom-frontend templates
+- a canvas-first creation rule: every new page, post, product, form, collection, and reusable section must be created through Backy routes/APIs so it reopens in the canvas editor with the site's fonts, colors, chrome, element geometry, bindings, and editable metadata intact
 
 This is the human-facing place to copy into another AI/frontend agent before it builds or edits a website on top of Backy.
 
@@ -73,6 +75,7 @@ The site-level frontend design contract is the shared bridge between custom fron
 - Public read: `manifest.data.site.frontendDesign`
 - Authenticated management: `/api/admin/sites/:siteId/frontend-design`
 - Template registry: exposed through the frontend design contract and manifest/OpenAPI
+- Agent-read style sources: `customFrontendAgentHandoff.designState.siteStyleSources` names the required design inputs, including frontend design tokens for colors, fonts, spacing, motion, custom CSS, chrome, templates, and editable maps.
 
 Use it for chrome, navigation, footer, fonts, colors, spacing, motion tokens, template provenance, editable maps, and reusable page/blog/form/product/collection templates.
 

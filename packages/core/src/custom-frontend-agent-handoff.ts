@@ -66,6 +66,33 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
     products: `/api/admin/sites/${siteId}/collections/products/records`,
     reusableSections: `/api/admin/sites/${siteId}/reusable-sections`,
   },
+  readOrder: [
+    {
+      step: 'manifest',
+      endpointKey: 'manifest',
+      purpose: 'Bootstrap site identity, routes, modules, media/font delivery, frontendDesign, template registry, launch readiness, and this agent handoff.',
+    },
+    {
+      step: 'openapi',
+      endpointKey: 'openapi',
+      purpose: 'Generate typed API clients and use operation/component names instead of guessing URL or payload shapes.',
+    },
+    {
+      step: 'frontend-design',
+      endpointKey: 'frontendDesignManagement',
+      purpose: 'Read or update the authenticated site design contract: tokens, fonts, colors, chrome, templates, editable maps, and binding hints.',
+    },
+    {
+      step: 'templates',
+      endpointKey: 'templates',
+      purpose: 'List clone-ready page, blog, form, product, collection, and reusable-section templates before creating new content.',
+    },
+    {
+      step: 'render',
+      endpointKey: 'render',
+      purpose: 'Verify the public renderer payload for live website routes after content/design changes.',
+    },
+  ],
   sdk: {
     package: 'packages/sdk-js',
     generatedTypes: 'packages/sdk-js/src/generated-contract-types.ts',
@@ -92,10 +119,30 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
     backyCanvasTemplateField: 'templateId',
     customFrontendTemplateField: 'frontendDesignTemplateId',
     adminEntryPoints: buildCustomFrontendAgentAdminEntryPoints(siteId),
+    canvasFirst: {
+      editor: 'Backy canvas editor',
+      pageAndBlogModeField: 'templateSource',
+      backyCanvasValue: 'backy-canvas',
+      customFrontendValue: 'custom-frontend',
+      customFrontendRouteFieldAliases: ['frontendDesignTemplateId', 'frontendTemplate'],
+      routeRevealGuarantee: 'Admin entry points with frontendDesignTemplateId or frontendTemplate reveal the selected captured template and focus the create action.',
+      editorOutcome: 'Every created page, post, product, form, collection, or reusable section must reopen in the Backy canvas editor with site fonts, colors, chrome, element geometry, bindings, and editable metadata intact.',
+    },
     rule: 'Create page, blog, product, form, collection, and section content through Backy APIs so every result can reopen in the canvas editor.',
   },
   designState: {
     roundTripFields: CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS,
+    siteStyleSources: [
+      'manifest.data.site.frontendDesign',
+      'frontendDesign.tokens.colors',
+      'frontendDesign.tokens.fonts',
+      'frontendDesign.tokens.spacing',
+      'frontendDesign.tokens.motion',
+      'frontendDesign.tokens.customCss',
+      'frontendDesign.chrome',
+      'frontendDesign.templates',
+      'frontendDesign.editableMap',
+    ],
     preserves: [
       'layer geometry',
       'responsive overrides',

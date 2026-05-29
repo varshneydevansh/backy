@@ -7776,6 +7776,18 @@ const customFrontendAgentHandoff = {
     products: "/api/admin/sites/site_demo/collections/products/records",
     reusableSections: "/api/admin/sites/site_demo/reusable-sections",
   },
+  readOrder: [
+    {
+      step: "manifest",
+      endpointKey: "manifest",
+      purpose: "Bootstrap site identity, routes, modules, media/font delivery, frontendDesign, template registry, launch readiness, and this agent handoff.",
+    },
+    {
+      step: "frontend-design",
+      endpointKey: "frontendDesignManagement",
+      purpose: "Read or update the authenticated site design contract.",
+    },
+  ],
   sdk: {
     package: "packages/sdk-js",
     generatedTypes: "packages/sdk-js/src/generated-contract-types.ts",
@@ -7799,10 +7811,20 @@ const customFrontendAgentHandoff = {
       reusableSectionBackyCanvas: "/reusable-sections?siteId=site_demo",
       reusableSectionCustomFrontend: "/reusable-sections?siteId=site_demo&frontendTemplate=:templateId",
     },
+    canvasFirst: {
+      editor: "Backy canvas editor",
+      pageAndBlogModeField: "templateSource",
+      backyCanvasValue: "backy-canvas",
+      customFrontendValue: "custom-frontend",
+      customFrontendRouteFieldAliases: ["frontendDesignTemplateId", "frontendTemplate"],
+      routeRevealGuarantee: "Admin entry points reveal the selected captured template and focus the create action.",
+      editorOutcome: "Every created page, post, product, form, collection, or reusable section must reopen in the Backy canvas editor.",
+    },
     rule: "Create content through Backy APIs so every result can reopen in the canvas editor.",
   },
   designState: {
     roundTripFields: ["content.contentDocument", "content.elements", "content.canvas", "content.editableMap", "meta.frontendDesign*"],
+    siteStyleSources: ["manifest.data.site.frontendDesign", "frontendDesign.tokens.fonts", "frontendDesign.tokens.colors"],
     preserves: ["layer geometry", "responsive overrides", "theme token references", "media and font asset identities"],
   },
   rules: [
