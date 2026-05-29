@@ -106,6 +106,10 @@ const assertFormsPersistenceCertificationSource = () => {
     ['data-disabled-reason={formsCatalogExportDisabledReason || undefined}', 'Forms catalog export must expose disabled reasons'],
     ['data-action="forms.copy.accountRegistrationHandoff"', 'Forms account handoff copy must expose a stable data-action'],
     ['data-action="forms.open.registrationPageTemplate"', 'Forms registration page action must expose a stable route action'],
+    ["navigate({ to: '/pages/new', search: { siteId: activeSiteId, template, templateSource: 'backy-canvas', focus: 'canvas' } })", 'Forms page-template actions must open focused Backy canvas creation'],
+    ['&templateSource=backy-canvas&focus=canvas', 'Forms page-template handoff routes must advertise focused Backy canvas creation'],
+    ["templateSource: 'backy-canvas',", 'Forms page-template handoff must name the Backy canvas template source'],
+    ["focus: 'canvas',", 'Forms page-template handoff must preserve focused canvas intent'],
   ]) {
     assert(source.includes(snippet), message);
   }

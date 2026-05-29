@@ -659,7 +659,7 @@ const FORM_ACCOUNT_REGISTRATION_BINDINGS = [
 
 const FORM_ACCOUNT_REGISTRATION_ACTIONS = [
   { key: 'create-registration-form', route: '/forms', templateId: 'registration' },
-  { key: 'create-registration-page', route: '/pages/new', template: 'registration' },
+  { key: 'create-registration-page', route: '/pages/new', template: 'registration', templateSource: 'backy-canvas', focus: 'canvas' },
   { key: 'review-submissions', route: '/forms', endpoint: 'selectedAdminInbox' },
   { key: 'review-contacts', route: '/contacts' },
   { key: 'promote-member-profile', route: '/contacts', endpoint: 'promoteCustomer' },
@@ -1766,9 +1766,9 @@ function FormsRoute() {
       contactShare: REGISTRATION_FORM_TEMPLATE.contactShare,
     },
     pageTemplates: {
-      registration: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration`,
-      memberLogin: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login`,
-      memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account`,
+      registration: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=registration&templateSource=backy-canvas&focus=canvas`,
+      memberLogin: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-login&templateSource=backy-canvas&focus=canvas`,
+      memberAccount: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=member-account&templateSource=backy-canvas&focus=canvas`,
     },
     publicApis: {
       formsCatalog: formsListUrl,
@@ -2149,7 +2149,7 @@ function FormsRoute() {
   const openFormPageTemplate = (template: PageTemplateHandoff) => {
     if (isFormsBusy) return;
 
-    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template, templateSource: 'backy-canvas' } });
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template, templateSource: 'backy-canvas', focus: 'canvas' } });
   };
 
   const createFormFromTemplate = async (template: FormTemplateBlueprint) => {
@@ -3917,7 +3917,7 @@ function FormsRoute() {
                 iconStart={<Sparkles className="size-4" />}
                 data-action="forms.open.registrationPageTemplate"
                 data-action-target={REGISTRATION_FORM_TEMPLATE.pageTemplate}
-                data-action-route={`/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=${encodeURIComponent(REGISTRATION_FORM_TEMPLATE.pageTemplate)}`}
+                data-action-route={`/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=${encodeURIComponent(REGISTRATION_FORM_TEMPLATE.pageTemplate)}&templateSource=backy-canvas&focus=canvas`}
                 data-action-state={isFormsBusy ? 'blocked' : 'ready'}
                 data-state={isFormsBusy ? 'blocked' : 'ready'}
                 data-action-status={formsViewActionStatus}
@@ -4917,7 +4917,7 @@ function FormsRoute() {
                       iconStart={<Sparkles className="size-4" />}
                       data-action="forms.open.pageTemplate"
                       data-action-target={template.pageTemplate}
-                      data-action-route={`/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=${encodeURIComponent(template.pageTemplate)}`}
+                      data-action-route={`/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=${encodeURIComponent(template.pageTemplate)}&templateSource=backy-canvas&focus=canvas`}
                       data-action-state={isFormsBusy ? 'blocked' : 'ready'}
                       data-state={isFormsBusy ? 'blocked' : 'ready'}
                       data-action-status={formsViewActionStatus}
@@ -9260,6 +9260,8 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
     pageTemplateHandoff: {
       route: '/pages/new',
       template: template.pageTemplate,
+      templateSource: 'backy-canvas',
+      focus: 'canvas',
     },
     samplePayload,
   };

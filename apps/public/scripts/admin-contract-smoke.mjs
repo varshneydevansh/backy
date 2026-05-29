@@ -7962,18 +7962,23 @@ try {
       `${url} artifact-backed completion audit should explain the 45 Ready / 0 Partial closure view`,
     );
     assert(
-      completionStatus?.partialClosureReadiness?.artifactAdmissionCommand === 'npm run ci:provider-artifact-admission' &&
-      completionStatus?.partialClosureReadiness?.artifactBackedDoctorCommand?.includes?.('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
-        completionStatus.partialClosureReadiness.artifactBackedDoctorCommand.includes('artifacts/backy-settings-provider-certification.json') &&
-        completionStatus.partialClosureReadiness.artifactBackedDoctorCommand.includes('artifacts/backy-commerce-provider-certification.json'),
-      `${url} missing artifact admission and artifact-backed release doctor commands`,
-    );
+	      completionStatus?.partialClosureReadiness?.artifactAdmissionCommand === 'npm run ci:provider-artifact-admission' &&
+	      completionStatus?.partialClosureReadiness?.artifactAdmissionModes?.settings?.command === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission' &&
+	      completionStatus?.partialClosureReadiness?.artifactAdmissionModes?.commerce?.command === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission' &&
+	      completionStatus?.partialClosureReadiness?.artifactAdmissionModes?.settings?.requiredEnv === 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1' &&
+	      completionStatus?.partialClosureReadiness?.artifactAdmissionModes?.commerce?.requiredEnv === 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1' &&
+	      completionStatus?.partialClosureReadiness?.artifactBackedDoctorCommand?.includes?.('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+	        completionStatus.partialClosureReadiness.artifactBackedDoctorCommand.includes('artifacts/backy-settings-provider-certification.json') &&
+	        completionStatus.partialClosureReadiness.artifactBackedDoctorCommand.includes('artifacts/backy-commerce-provider-certification.json'),
+	      `${url} missing artifact admission modes and artifact-backed release doctor commands`,
+	    );
     assert(
       completionStatus?.partialClosureReadiness?.rows?.some?.(
         (row) =>
-          row.key === 'settings-admin-apis' &&
-          row.artifactKey === 'settings' &&
-          row.artifactAcceptedStatus === 'ready' &&
+	          row.key === 'settings-admin-apis' &&
+	          row.artifactKey === 'settings' &&
+	          row.artifactAdmissionCommand === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission' &&
+	          row.artifactAcceptedStatus === 'ready' &&
           row.status === 'partial',
       ),
       `${url} missing Settings admin API partial-closure row`,
@@ -8369,7 +8374,7 @@ try {
           ...integrations,
           commerce: {
             ...commerce,
-            providerWebhookSecretId: 'whsec_contract_raw_secret_should_not_persist',
+            providerWebhookSecretId: 'raw_contract_webhook_secret_should_not_persist',
           },
         },
       }),

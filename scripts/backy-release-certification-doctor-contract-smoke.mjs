@@ -490,10 +490,14 @@ assert(
     normalJson.partialClosureReadiness?.prototypeCount === 0 &&
     normalJson.partialClosureReadiness?.missingCount === 0 &&
     normalJson.partialClosureReadiness?.total === 4 &&
-    normalJson.partialClosureReadiness?.aggregatePreflight === 'npm run test:partial-gate-preflights' &&
-    normalJson.partialClosureReadiness?.doctorCommand === 'npm run doctor:release-certification' &&
-    normalJson.partialClosureReadiness?.artifactAdmissionCommand === 'npm run ci:provider-artifact-admission' &&
-    normalJson.partialClosureReadiness?.artifactRequiredEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1' &&
+	    normalJson.partialClosureReadiness?.aggregatePreflight === 'npm run test:partial-gate-preflights' &&
+	    normalJson.partialClosureReadiness?.doctorCommand === 'npm run doctor:release-certification' &&
+	    normalJson.partialClosureReadiness?.artifactAdmissionCommand === 'npm run ci:provider-artifact-admission' &&
+	    normalJson.partialClosureReadiness?.artifactAdmissionModes?.settings?.command === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission' &&
+	    normalJson.partialClosureReadiness?.artifactAdmissionModes?.commerce?.command === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission' &&
+	    normalJson.partialClosureReadiness?.artifactAdmissionModes?.settings?.requiredEnv === 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1' &&
+	    normalJson.partialClosureReadiness?.artifactAdmissionModes?.commerce?.requiredEnv === 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1' &&
+	    normalJson.partialClosureReadiness?.artifactRequiredEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1' &&
     Array.isArray(normalJson.partialClosureReadiness?.rows) &&
     normalJson.partialClosureReadiness.rows.length === 4,
   'Doctor default mode should expose explicit Partial closure readiness separate from diagnostic ok=true.',
@@ -523,10 +527,11 @@ for (const row of ['/settings', 'Settings admin APIs', '/products', '/orders']) 
     assert(
       closure.artifactKey === 'settings' &&
         closure.requiredArtifact === 'Settings certification artifact' &&
-        closure.artifactPathEnv === 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT' &&
-        closure.artifactRequiredEnv.includes('BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1') &&
-        closure.artifactSchemaVersion === 'backy.settings-provider-certification-artifact.v1' &&
-        closure.gate === 'npm run ci:settings-provider-certification' &&
+	        closure.artifactPathEnv === 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT' &&
+	        closure.artifactRequiredEnv.includes('BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1') &&
+	        closure.artifactSchemaVersion === 'backy.settings-provider-certification-artifact.v1' &&
+	        closure.artifactAdmissionCommand === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission' &&
+	        closure.gate === 'npm run ci:settings-provider-certification' &&
         closure.preflight === 'npm run test:settings-provider-certification-preflight-contract' &&
         closure.sourceOnlyGuard === 'npm run test:settings-source-only' &&
         closure.mockGate === null &&
@@ -538,10 +543,11 @@ for (const row of ['/settings', 'Settings admin APIs', '/products', '/orders']) 
     assert(
       closure.artifactKey === 'commerce' &&
         closure.requiredArtifact === 'Commerce certification artifact' &&
-        closure.artifactPathEnv === 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT' &&
-        closure.artifactRequiredEnv.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1') &&
-        closure.artifactSchemaVersion === 'backy.commerce-provider-certification-artifact.v1' &&
-        closure.gate === 'npm run ci:commerce-provider-certification' &&
+	        closure.artifactPathEnv === 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT' &&
+	        closure.artifactRequiredEnv.includes('BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1') &&
+	        closure.artifactSchemaVersion === 'backy.commerce-provider-certification-artifact.v1' &&
+	        closure.artifactAdmissionCommand === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission' &&
+	        closure.gate === 'npm run ci:commerce-provider-certification' &&
         closure.preflight === 'npm run test:commerce-provider-certification-preflight-contract' &&
         closure.mockGate === 'npm run ci:commerce-provider-smoke' &&
         closure.workflow === '.github/workflows/commerce-provider-certification.yml' &&
@@ -763,6 +769,52 @@ assert(
     validCertificationArtifactsJson.certificationArtifacts.commerce.commerceApiHandoffSiteSelectorEnv === 'BACKY_COMMERCE_CERTIFY_SITE_ID',
   'Doctor valid artifact mode should expose schema, no-secret, selected-site target, and API-handoff readiness for both artifacts.',
 );
+
+const validSettingsOnlyArtifact = await runDoctor({
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED: '1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH: settingsArtifactPath,
+});
+assert(
+  validSettingsOnlyArtifact.code === 0,
+  `Doctor Settings-only artifact-required mode should accept a valid Settings artifact without requiring Commerce, got ${validSettingsOnlyArtifact.code}.`,
+);
+const validSettingsOnlyArtifactJson = parseJson(validSettingsOnlyArtifact, 'valid settings-only artifact doctor');
+assert(
+  validSettingsOnlyArtifactJson.ok === true &&
+    validSettingsOnlyArtifactJson.certificationArtifacts.settings.ready === true &&
+    validSettingsOnlyArtifactJson.certificationArtifacts.commerce.required === false &&
+    validSettingsOnlyArtifactJson.partialClosureReadiness?.ready === false &&
+    validSettingsOnlyArtifactJson.partialClosureReadiness?.readyCount === 2 &&
+    validSettingsOnlyArtifactJson.partialClosureReadiness?.partialCount === 2 &&
+    validSettingsOnlyArtifactJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'settings').every((row) => row.ready === true && row.status === 'ready') &&
+    validSettingsOnlyArtifactJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'commerce').every((row) => row.ready === false && row.status === 'partial'),
+  `Doctor Settings-only artifact mode should advance only the Settings closure rows: ${JSON.stringify(validSettingsOnlyArtifactJson.partialClosureReadiness)}`,
+);
+assertDoctorAuditModes(validSettingsOnlyArtifactJson, false, 'Doctor Settings-only artifact mode');
+
+const validCommerceOnlyArtifact = await runDoctor({
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED: '1',
+  BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',
+  BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH: commerceArtifactPath,
+});
+assert(
+  validCommerceOnlyArtifact.code === 0,
+  `Doctor Commerce-only artifact-required mode should accept a valid Commerce artifact without requiring Settings, got ${validCommerceOnlyArtifact.code}.`,
+);
+const validCommerceOnlyArtifactJson = parseJson(validCommerceOnlyArtifact, 'valid commerce-only artifact doctor');
+assert(
+  validCommerceOnlyArtifactJson.ok === true &&
+    validCommerceOnlyArtifactJson.certificationArtifacts.commerce.ready === true &&
+    validCommerceOnlyArtifactJson.certificationArtifacts.settings.required === false &&
+    validCommerceOnlyArtifactJson.partialClosureReadiness?.ready === false &&
+    validCommerceOnlyArtifactJson.partialClosureReadiness?.readyCount === 2 &&
+    validCommerceOnlyArtifactJson.partialClosureReadiness?.partialCount === 2 &&
+    validCommerceOnlyArtifactJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'commerce').every((row) => row.ready === true && row.status === 'ready') &&
+    validCommerceOnlyArtifactJson.partialClosureReadiness?.rows.filter((row) => row.artifactKey === 'settings').every((row) => row.ready === false && row.status === 'partial'),
+  `Doctor Commerce-only artifact mode should advance only the Commerce closure rows: ${JSON.stringify(validCommerceOnlyArtifactJson.partialClosureReadiness)}`,
+);
+assertDoctorAuditModes(validCommerceOnlyArtifactJson, false, 'Doctor Commerce-only artifact mode');
 
 const expiredSettingsArtifact = await runDoctor({
   BACKY_RELEASE_CERTIFICATION_DOCTOR_REQUIRED: '1',

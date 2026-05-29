@@ -721,6 +721,9 @@ const aggregatePreflight = 'npm run test:partial-gate-preflights';
 const adminSourceGuard = 'npm run test:admin-contract-source';
 const doctorCommand = 'npm run doctor:release-certification';
 const artifactAdmissionCommand = 'npm run ci:provider-artifact-admission';
+const artifactAdmissionModeEnv = 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE';
+const settingsArtifactAdmissionCommand = `${artifactAdmissionModeEnv}=settings ${artifactAdmissionCommand}`;
+const commerceArtifactAdmissionCommand = `${artifactAdmissionModeEnv}=commerce ${artifactAdmissionCommand}`;
 const artifactPathEnv = (artifact) => artifact.pathEnvNames.join(' or ');
 const defaultAuditCounts = {
   ready: 41,
@@ -738,6 +741,37 @@ const artifactAcceptedAuditCounts = {
   total: 45,
   readyPercent: 100,
 };
+
+const artifactAdmissionModes = {
+  all: {
+    key: 'all',
+    label: 'Settings and Commerce provider artifacts',
+    command: artifactAdmissionCommand,
+    requiredArtifactKeys: ['settings', 'commerce'],
+    requiredEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
+    closesRows: ['/settings', 'Settings admin APIs', '/products', '/orders'],
+  },
+  settings: {
+    key: 'settings',
+    label: 'Settings provider artifact',
+    command: settingsArtifactAdmissionCommand,
+    requiredArtifactKeys: ['settings'],
+    requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1',
+    closesRows: ['/settings', 'Settings admin APIs'],
+  },
+  commerce: {
+    key: 'commerce',
+    label: 'Commerce provider artifact',
+    command: commerceArtifactAdmissionCommand,
+    requiredArtifactKeys: ['commerce'],
+    requiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1',
+    closesRows: ['/products', '/orders'],
+  },
+};
+
+const artifactAdmissionCommandForKey = (artifactKey) => (
+  artifactKey === 'settings' ? settingsArtifactAdmissionCommand : commerceArtifactAdmissionCommand
+);
 
 const partialGateMap = [
   {
@@ -851,6 +885,7 @@ function partialClosureRow(gate) {
     artifactPathEnv: gate.artifactPathEnv,
     artifactRequiredEnv: gate.artifactRequiredEnv,
     artifactSchemaVersion: gate.artifactSchemaVersion,
+    artifactAdmissionCommand: artifactAdmissionCommandForKey(details.artifactKey),
     evidenceMode: 'live-provider-certification-artifact',
     nextAction: artifact.ready
       ? `Archive ${artifact.label} and keep ${gate.preflight} in the release regression path.`
@@ -906,6 +941,7 @@ const partialClosureReadiness = {
   aggregatePreflight,
   doctorCommand,
   artifactAdmissionCommand,
+  artifactAdmissionModes,
   artifactRequiredEnv: 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
   currentAuditMode: partialClosureReady ? 'artifactAcceptedMode' : 'defaultNoArtifactMode',
   currentAudit: partialClosureReady ? artifactAcceptedAuditCounts : defaultAuditCounts,

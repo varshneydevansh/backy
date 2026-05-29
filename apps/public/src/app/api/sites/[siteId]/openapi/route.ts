@@ -7053,6 +7053,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     "aggregatePreflight",
                     "doctorCommand",
                     "artifactAdmissionCommand",
+                    "artifactAdmissionModes",
                     "artifactRequiredEnv",
                     "artifactBackedDoctorCommand",
                     "defaultNoArtifactMode",
@@ -7074,6 +7075,58 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     aggregatePreflight: { const: "npm run test:partial-gate-preflights" },
                     doctorCommand: { const: "npm run doctor:release-certification" },
                     artifactAdmissionCommand: { const: "npm run ci:provider-artifact-admission" },
+                    artifactAdmissionModes: {
+                      type: "object",
+                      required: ["all", "settings", "commerce"],
+                      additionalProperties: true,
+                      properties: {
+                        all: {
+                          type: "object",
+                          required: ["key", "command", "requiredArtifactKeys", "requiredEnv"],
+                          additionalProperties: true,
+                          properties: {
+                            key: { const: "all" },
+                            command: { const: "npm run ci:provider-artifact-admission" },
+                            requiredArtifactKeys: {
+                              type: "array",
+                              items: { enum: ["settings", "commerce"] },
+                              contains: { const: "settings" },
+                            },
+                            requiredEnv: { const: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
+                          },
+                        },
+                        settings: {
+                          type: "object",
+                          required: ["key", "command", "requiredArtifactKeys", "requiredEnv"],
+                          additionalProperties: true,
+                          properties: {
+                            key: { const: "settings" },
+                            command: { const: "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission" },
+                            requiredArtifactKeys: {
+                              type: "array",
+                              items: { const: "settings" },
+                              contains: { const: "settings" },
+                            },
+                            requiredEnv: { const: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1" },
+                          },
+                        },
+                        commerce: {
+                          type: "object",
+                          required: ["key", "command", "requiredArtifactKeys", "requiredEnv"],
+                          additionalProperties: true,
+                          properties: {
+                            key: { const: "commerce" },
+                            command: { const: "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission" },
+                            requiredArtifactKeys: {
+                              type: "array",
+                              items: { const: "commerce" },
+                              contains: { const: "commerce" },
+                            },
+                            requiredEnv: { const: "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1" },
+                          },
+                        },
+                      },
+                    },
                     artifactRequiredEnv: { const: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
                     artifactBackedDoctorCommand: { type: "string" },
                     auditImpact: {
@@ -7170,6 +7223,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                           "artifactSchemaVersion",
                           "requiredEnv",
                           "sourceOnlyGuard",
+                          "artifactAdmissionCommand",
                           "status",
                           "ready",
                           "artifactAcceptedStatus",
@@ -7201,6 +7255,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                           },
                           requiredEnv: { type: "string" },
                           sourceOnlyGuard: { type: "string" },
+                          artifactAdmissionCommand: {
+                            enum: [
+                              "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission",
+                              "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission",
+                            ],
+                          },
                           status: { const: "partial" },
                           ready: { const: false },
                           artifactAcceptedStatus: { const: "ready" },

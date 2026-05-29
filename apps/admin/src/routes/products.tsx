@@ -1908,6 +1908,7 @@ function ProductsRoute() {
         siteId: activeSiteId,
         template: 'storefront',
         templateSource: 'backy-canvas',
+        focus: 'canvas',
         collectionId: productCollection.id,
         datasetMode: mode,
         title,
@@ -3500,7 +3501,7 @@ function ProductsRoute() {
     pageBuilderContract: {
       model: 'Products are sellable CMS records that page and blog canvases can bind into storefront grids, detail sections, variant controls, checkout calls to action, and merchandising filters.',
       targets: PRODUCT_PAGE_BINDING_TARGETS,
-      starterRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront`,
+      starterRoute: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=storefront&templateSource=backy-canvas&focus=canvas`,
       productListTemplateRoute: productPageTemplateBriefs.find((brief) => brief.mode === 'list')?.createRoute || null,
       productDetailTemplateRoute: productPageTemplateBriefs.find((brief) => brief.mode === 'item')?.createRoute || null,
       productPageTemplates: productPageTemplateBriefs.map((brief) => brief.manifest),
@@ -5136,7 +5137,7 @@ function ProductsRoute() {
       return;
     }
 
-    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront', templateSource: 'backy-canvas' } });
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront', templateSource: 'backy-canvas', focus: 'canvas' } });
   };
   const openProductPageTemplate = (brief: (typeof productPageTemplateBriefs)[number]) => {
     if (isPermissionMatrixPending || !productCollection) return;

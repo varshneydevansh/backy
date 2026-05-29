@@ -701,9 +701,61 @@
 	              "missingCount": { "const": 0 },
 	              "total": { "const": 4 },
 	              "aggregatePreflight": { "const": "npm run test:partial-gate-preflights" },
-	              "doctorCommand": { "const": "npm run doctor:release-certification" },
-	              "artifactAdmissionCommand": { "const": "npm run ci:provider-artifact-admission" },
-	              "artifactRequiredEnv": { "const": "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
+		              "doctorCommand": { "const": "npm run doctor:release-certification" },
+		              "artifactAdmissionCommand": { "const": "npm run ci:provider-artifact-admission" },
+		              "artifactAdmissionModes": {
+		                "type": "object",
+		                "additionalProperties": true,
+		                "properties": {
+		                  "all": {
+		                    "type": "object",
+		                    "additionalProperties": true,
+		                    "properties": {
+		                      "key": { "const": "all" },
+		                      "command": { "const": "npm run ci:provider-artifact-admission" },
+		                      "requiredArtifactKeys": {
+		                        "type": "array",
+		                        "items": { "enum": ["settings", "commerce"] },
+		                        "contains": { "const": "settings" }
+		                      },
+		                      "requiredEnv": { "const": "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" }
+		                    },
+		                    "required": ["key", "command", "requiredArtifactKeys", "requiredEnv"]
+		                  },
+		                  "settings": {
+		                    "type": "object",
+		                    "additionalProperties": true,
+		                    "properties": {
+		                      "key": { "const": "settings" },
+		                      "command": { "const": "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission" },
+		                      "requiredArtifactKeys": {
+		                        "type": "array",
+		                        "items": { "const": "settings" },
+		                        "contains": { "const": "settings" }
+		                      },
+		                      "requiredEnv": { "const": "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1" }
+		                    },
+		                    "required": ["key", "command", "requiredArtifactKeys", "requiredEnv"]
+		                  },
+		                  "commerce": {
+		                    "type": "object",
+		                    "additionalProperties": true,
+		                    "properties": {
+		                      "key": { "const": "commerce" },
+		                      "command": { "const": "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission" },
+		                      "requiredArtifactKeys": {
+		                        "type": "array",
+		                        "items": { "const": "commerce" },
+		                        "contains": { "const": "commerce" }
+		                      },
+		                      "requiredEnv": { "const": "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1" }
+		                    },
+		                    "required": ["key", "command", "requiredArtifactKeys", "requiredEnv"]
+		                  }
+		                },
+		                "required": ["all", "settings", "commerce"]
+		              },
+		              "artifactRequiredEnv": { "const": "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" },
 	              "artifactBackedDoctorCommand": { "type": "string", "minLength": 1 },
 	              "auditImpact": {
 	                "type": "object",
@@ -813,16 +865,22 @@
 	                        "backy.commerce-provider-certification-artifact.v1"
 	                      ]
 	                    },
-	                    "requiredEnv": { "type": "string", "minLength": 1 },
-	                    "sourceOnlyGuard": { "type": "string", "minLength": 1 },
-	                    "status": { "const": "partial" },
+		                    "requiredEnv": { "type": "string", "minLength": 1 },
+		                    "sourceOnlyGuard": { "type": "string", "minLength": 1 },
+		                    "artifactAdmissionCommand": {
+		                      "enum": [
+		                        "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission",
+		                        "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission"
+		                      ]
+		                    },
+		                    "status": { "const": "partial" },
 	                    "ready": { "const": false },
 	                    "artifactAcceptedStatus": { "const": "ready" },
 	                    "nextAction": { "type": "string", "minLength": 1 }
 	                  },
-	                  "required": ["key", "row", "gate", "artifactKey", "artifactPath", "artifactPathEnv", "artifactSchemaVersion", "requiredEnv", "sourceOnlyGuard", "status", "ready", "artifactAcceptedStatus", "nextAction"]
-	                }
-	              },
+		                  "required": ["key", "row", "gate", "artifactKey", "artifactPath", "artifactPathEnv", "artifactSchemaVersion", "requiredEnv", "sourceOnlyGuard", "artifactAdmissionCommand", "status", "ready", "artifactAcceptedStatus", "nextAction"]
+		                }
+		              },
 	              "privacy": {
 	                "type": "object",
 	                "additionalProperties": true,
@@ -834,8 +892,8 @@
 	                "required": ["includesSecretValues", "exposesOnlyArtifactPathsAndBooleans", "secretHandling"]
 	              }
 	            },
-	            "required": ["schemaVersion", "source", "status", "ready", "readyCount", "partialCount", "prototypeCount", "missingCount", "total", "aggregatePreflight", "doctorCommand", "artifactAdmissionCommand", "artifactRequiredEnv", "artifactBackedDoctorCommand", "defaultNoArtifactMode", "artifactAcceptedMode", "rows", "privacy"]
-	          },
+		            "required": ["schemaVersion", "source", "status", "ready", "readyCount", "partialCount", "prototypeCount", "missingCount", "total", "aggregatePreflight", "doctorCommand", "artifactAdmissionCommand", "artifactAdmissionModes", "artifactRequiredEnv", "artifactBackedDoctorCommand", "defaultNoArtifactMode", "artifactAcceptedMode", "rows", "privacy"]
+		          },
 	          "surfaceRunbooks": {
 	            "type": "array",
 	            "items": {

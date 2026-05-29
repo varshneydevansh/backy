@@ -7,6 +7,8 @@ This folder is the canonical place an AI or external developer should read befor
 
 The rule is simple: a custom frontend can look completely different from the Backy admin UI, but every rendered page, post, asset, form, comment, token, and interaction must map back to Backy public contracts.
 
+AI/frontend agents should start with `GET /api/sites/:siteId/agent-handoff` and then follow its `readOrder`: agent handoff, manifest, OpenAPI, authenticated frontend-design management, template registry, then render verification. The response mirrors the canonical `backy.custom-frontend-agent-handoff.v1` block from the manifest/OpenAPI and names the canvas-first creation routes plus design-state fields that must survive page, blog, product, form, collection, and reusable-section edits.
+
 ## Allowed assumptions
 
 - Do not import from `apps/admin`.

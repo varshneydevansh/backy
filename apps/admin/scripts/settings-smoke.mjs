@@ -759,6 +759,14 @@ const summarizeCompletionStatus = (completionStatus, label) => {
   assert(closure.ready === false && closure.readyCount === 0 && closure.partialCount === 4, `${label} closure counts mismatch: ${JSON.stringify(closure).slice(0, 500)}`);
   assert(closure.aggregatePreflight === 'npm run test:partial-gate-preflights', `${label} aggregate preflight mismatch: ${JSON.stringify(closure).slice(0, 500)}`);
   assert(closure.artifactRequiredEnv === 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1', `${label} artifact required env mismatch: ${JSON.stringify(closure).slice(0, 500)}`);
+  assert(
+    closure.artifactAdmissionCommand === 'npm run ci:provider-artifact-admission' &&
+      closure.artifactAdmissionModes?.settings?.command === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission' &&
+      closure.artifactAdmissionModes?.commerce?.command === 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission' &&
+      closure.artifactAdmissionModes?.settings?.requiredEnv === 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1' &&
+      closure.artifactAdmissionModes?.commerce?.requiredEnv === 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1',
+    `${label} artifact admission modes mismatch: ${JSON.stringify(closure).slice(0, 800)}`,
+  );
   assertCompletionAudit(closure.auditImpact?.defaultNoArtifactAudit, EXPECTED_COMPLETION_AUDIT, `${label} default no-artifact`);
   assertCompletionAudit(closure.auditImpact?.artifactAcceptedAudit, EXPECTED_ARTIFACT_ACCEPTED_AUDIT, `${label} artifact accepted`);
 
@@ -767,10 +775,16 @@ const summarizeCompletionStatus = (completionStatus, label) => {
   assert(JSON.stringify(rowNames) === JSON.stringify(EXPECTED_COMPLETION_PARTIAL_ROWS), `${label} partial rows mismatch: ${JSON.stringify(rowNames)}`);
   for (const row of rows) {
     assert(row.ready === false && row.status === 'partial' && row.artifactAcceptedStatus === 'ready', `${label} partial row readiness mismatch: ${JSON.stringify(row)}`);
-    assert(typeof row.artifactPathEnv === 'string' && row.artifactPathEnv.includes('ARTIFACT'), `${label} partial row missing artifact path env: ${JSON.stringify(row)}`);
-    assert(typeof row.artifactSchemaVersion === 'string' && row.artifactSchemaVersion.startsWith('backy.'), `${label} partial row missing artifact schema: ${JSON.stringify(row)}`);
-    assert(typeof row.sourceOnlyGuard === 'string' && row.sourceOnlyGuard.includes('SOURCE_ONLY'), `${label} partial row missing source-only guard: ${JSON.stringify(row)}`);
-  }
+	    assert(typeof row.artifactPathEnv === 'string' && row.artifactPathEnv.includes('ARTIFACT'), `${label} partial row missing artifact path env: ${JSON.stringify(row)}`);
+	    assert(typeof row.artifactSchemaVersion === 'string' && row.artifactSchemaVersion.startsWith('backy.'), `${label} partial row missing artifact schema: ${JSON.stringify(row)}`);
+	    assert(typeof row.sourceOnlyGuard === 'string' && row.sourceOnlyGuard.includes('SOURCE_ONLY'), `${label} partial row missing source-only guard: ${JSON.stringify(row)}`);
+	    assert(
+	      typeof row.artifactAdmissionCommand === 'string' &&
+	        row.artifactAdmissionCommand.includes('BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=') &&
+	        row.artifactAdmissionCommand.includes('npm run ci:provider-artifact-admission'),
+	      `${label} partial row missing one-artifact admission command: ${JSON.stringify(row)}`,
+	    );
+	  }
 
   return {
     label,
@@ -780,9 +794,11 @@ const summarizeCompletionStatus = (completionStatus, label) => {
     defaultAuditSignature: completionAuditSignature(closure.auditImpact.defaultNoArtifactAudit),
     artifactAuditSignature: completionAuditSignature(closure.auditImpact.artifactAcceptedAudit),
     partialRows: rowNames,
-    aggregatePreflight: closure.aggregatePreflight,
-    artifactRequiredEnv: closure.artifactRequiredEnv,
-  };
+	    aggregatePreflight: closure.aggregatePreflight,
+	    artifactRequiredEnv: closure.artifactRequiredEnv,
+	    settingsAdmissionCommand: closure.artifactAdmissionModes.settings.command,
+	    commerceAdmissionCommand: closure.artifactAdmissionModes.commerce.command,
+	  };
 };
 
 const assertCompletionStatusSurfaceConsistency = async (settings = undefined) => {
@@ -1255,7 +1271,7 @@ localStorage.setItem('backy-db', ${JSON.stringify(JSON.stringify({
     settings: {
       deliveryMode: 'managed-hosting',
       apiKeys: {
-        publicApiKey: 'pk_live_stale_settings_smoke_public_key',
+        publicApiKey: 'backy_stale_settings_smoke_public_key',
         adminApiKey: STALE_ADMIN_API_KEY,
       },
     },
@@ -3434,7 +3450,7 @@ const assertDirectSettingsApiRejectsRawSecrets = async (settings) => {
         ...(settings.integrations || {}),
         commerce: {
           ...(settings.integrations?.commerce || {}),
-          providerWebhookSecretId: 'whsec_settings_smoke_raw_secret_should_not_persist',
+          providerWebhookSecretId: 'raw_settings_smoke_webhook_secret_should_not_persist',
         },
       },
     }),

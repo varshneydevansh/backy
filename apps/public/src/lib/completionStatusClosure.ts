@@ -5,6 +5,8 @@ const COMMERCE_ARTIFACT_PATH_ENV = 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH o
 const PROVIDER_ARTIFACT_REQUIRED_ENV = 'BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1';
 const DOCTOR_COMMAND = 'npm run doctor:release-certification';
 const ARTIFACT_ADMISSION_COMMAND = 'npm run ci:provider-artifact-admission';
+const SETTINGS_ARTIFACT_ADMISSION_COMMAND = 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission';
+const COMMERCE_ARTIFACT_ADMISSION_COMMAND = 'BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission';
 const AGGREGATE_PREFLIGHT = 'npm run test:partial-gate-preflights';
 const DEFAULT_AUDIT_COUNTS = {
   ready: 41,
@@ -30,6 +32,33 @@ const artifactBackedDoctorCommand = [
   DOCTOR_COMMAND,
 ].join(' ');
 
+const artifactAdmissionModes = {
+  all: {
+    key: 'all',
+    label: 'Settings and Commerce provider artifacts',
+    command: ARTIFACT_ADMISSION_COMMAND,
+    requiredArtifactKeys: ['settings', 'commerce'],
+    requiredEnv: PROVIDER_ARTIFACT_REQUIRED_ENV,
+    closesRows: ['/settings', 'Settings admin APIs', '/products', '/orders'],
+  },
+  settings: {
+    key: 'settings',
+    label: 'Settings provider artifact',
+    command: SETTINGS_ARTIFACT_ADMISSION_COMMAND,
+    requiredArtifactKeys: ['settings'],
+    requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1',
+    closesRows: ['/settings', 'Settings admin APIs'],
+  },
+  commerce: {
+    key: 'commerce',
+    label: 'Commerce provider artifact',
+    command: COMMERCE_ARTIFACT_ADMISSION_COMMAND,
+    requiredArtifactKeys: ['commerce'],
+    requiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1',
+    closesRows: ['/products', '/orders'],
+  },
+} as const;
+
 const closureRows = [
   {
     key: 'settings',
@@ -41,6 +70,7 @@ const closureRows = [
     artifactSchemaVersion: 'backy.settings-provider-certification-artifact.v1',
     requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     sourceOnlyGuard: 'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+    artifactAdmissionCommand: SETTINGS_ARTIFACT_ADMISSION_COMMAND,
     nextAction: 'Run Settings provider certification, then verify the saved redacted Settings artifact with the release doctor.',
   },
   {
@@ -53,6 +83,7 @@ const closureRows = [
     artifactSchemaVersion: 'backy.settings-provider-certification-artifact.v1',
     requiredEnv: 'BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     sourceOnlyGuard: 'BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin',
+    artifactAdmissionCommand: SETTINGS_ARTIFACT_ADMISSION_COMMAND,
     nextAction: 'Archive the typed Settings admin API completion/evidence packet after the Settings artifact passes the release doctor.',
   },
   {
@@ -65,6 +96,7 @@ const closureRows = [
     artifactSchemaVersion: 'backy.commerce-provider-certification-artifact.v1',
     requiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     sourceOnlyGuard: 'BACKY_COMMERCE_SOURCE_ONLY=1 npm run test:commerce --workspace @backy-cms/admin',
+    artifactAdmissionCommand: COMMERCE_ARTIFACT_ADMISSION_COMMAND,
     nextAction: 'Run Commerce provider certification, then verify the saved redacted Commerce artifact with the release doctor.',
   },
   {
@@ -77,6 +109,7 @@ const closureRows = [
     artifactSchemaVersion: 'backy.commerce-provider-certification-artifact.v1',
     requiredEnv: 'BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1',
     sourceOnlyGuard: 'BACKY_ORDERS_SOURCE_ONLY=1 npm run test:orders --workspace @backy-cms/admin',
+    artifactAdmissionCommand: COMMERCE_ARTIFACT_ADMISSION_COMMAND,
     nextAction: 'Archive the Orders analytics provider evidence packet after the Commerce artifact passes the release doctor.',
   },
 ] as const;
@@ -94,6 +127,7 @@ export const buildBackyPartialClosureReadiness = () => ({
   aggregatePreflight: AGGREGATE_PREFLIGHT,
   doctorCommand: DOCTOR_COMMAND,
   artifactAdmissionCommand: ARTIFACT_ADMISSION_COMMAND,
+  artifactAdmissionModes,
   artifactRequiredEnv: PROVIDER_ARTIFACT_REQUIRED_ENV,
   artifactBackedDoctorCommand,
   auditImpact: {

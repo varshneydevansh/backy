@@ -21,6 +21,7 @@ import {
 const backy = createBackyClient({ baseUrl: 'https://your-backy-host.com' });
 
 await backy.discoverSite('demo');
+const agentHandoff = await backy.customFrontendAgentHandoff();
 const manifest = await backy.manifest();
 const localeRoutes = manifest.data.modules.routing.localizedRoutePatterns || [];
 const page = await backy.render('/');
@@ -114,6 +115,7 @@ console.log(downloadPatch?.changes?.['props.downloadMediaId']);
 console.log(catalog.data.products.map((product) => product.title));
 console.log(productRoute.data.route.resource?.designReadiness?.status);
 console.log(productRender.data.route.resource?.designReadiness?.counts?.animations);
+console.log(agentHandoff.data.readStart.endpoint, agentHandoff.data.readStart.manifestPointer);
 console.log(customDesignContent.editableMap?.['hero-cta.props.fileMediaIds']?.valueType);
 console.log(draftPageInput.content?.animations?.length);
 console.log(productCreateInput.values.design?.animations?.length);

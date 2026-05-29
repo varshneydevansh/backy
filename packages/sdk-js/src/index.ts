@@ -13465,6 +13465,33 @@ export interface BackyPartialClosureReadiness {
   aggregatePreflight: "npm run test:partial-gate-preflights";
   doctorCommand: "npm run doctor:release-certification";
   artifactAdmissionCommand: "npm run ci:provider-artifact-admission";
+  artifactAdmissionModes: {
+    all: {
+      key: "all";
+      command: "npm run ci:provider-artifact-admission";
+      requiredArtifactKeys: Array<"settings" | "commerce">;
+      requiredEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1";
+      closesRows?: string[];
+      [key: string]: unknown;
+    };
+    settings: {
+      key: "settings";
+      command: "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission";
+      requiredArtifactKeys: Array<"settings">;
+      requiredEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1";
+      closesRows?: string[];
+      [key: string]: unknown;
+    };
+    commerce: {
+      key: "commerce";
+      command: "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission";
+      requiredArtifactKeys: Array<"commerce">;
+      requiredEnv: "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1";
+      closesRows?: string[];
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   artifactRequiredEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1";
   artifactBackedDoctorCommand: string;
   auditImpact?: {
@@ -13539,6 +13566,9 @@ export interface BackyPartialClosureReadiness {
       | "backy.commerce-provider-certification-artifact.v1";
     requiredEnv: string;
     sourceOnlyGuard: string;
+    artifactAdmissionCommand:
+      | "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission"
+      | "BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission";
     status: "partial";
     ready: false;
     artifactAcceptedStatus: "ready";

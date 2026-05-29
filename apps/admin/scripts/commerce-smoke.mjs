@@ -1314,6 +1314,10 @@ const assertProductsApiContractsSource = () => {
       source.includes('data-action="products.create.frontendTemplate"') &&
       source.includes('data-action="products.copy.frontendTemplateSchema"') &&
       source.includes('data-action-route={`/products?siteId=${encodeURIComponent(activeSiteId)}&frontendTemplate=${encodeURIComponent(template.id)}`}') &&
+      source.includes("templateSource: 'backy-canvas'") &&
+      source.includes("focus: 'canvas'") &&
+      source.includes('templateSource=backy-canvas&focus=canvas') &&
+      source.includes("navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront', templateSource: 'backy-canvas', focus: 'canvas' } })") &&
       source.includes("Show templates") &&
       source.includes('data-testid="products-frontend-template-design-readiness"') &&
       source.includes("const designValues = buildFrontendProductTemplateValues(template, frontendDesign);") &&

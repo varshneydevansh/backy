@@ -6,6 +6,8 @@ Repository-level quickstart for coding agents: `AGENTS.md`.
 
 ## Read these contracts first
 
+AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as the start point. The endpoint is the machine-readable version of this document; use it before generating UI, routes, API clients, templates, or editable content.
+
 1. `GET /api/sites`
    - Discover available public sites and the canonical `siteId`.
 
@@ -102,10 +104,17 @@ Important principle: public discovery can describe capabilities, but admin-only 
 
 ## Release readiness note
 
-The current local product audit remains `41 Ready / 4 Partial / 0 Prototype / 0 Missing` until fresh redacted Settings and Commerce live-provider certification artifacts pass:
+The current local product audit remains `41 Ready / 4 Partial / 0 Prototype / 0 Missing` until fresh redacted Settings and Commerce live-provider certification artifacts pass the default combined admission command:
 
 ```sh
 npm run ci:provider-artifact-admission
 ```
 
-Those four partial rows are external provider evidence gates, not canvas/editor data-model gaps.
+The same verifier can admit one artifact family at a time when the release evidence is produced separately:
+
+```sh
+BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission
+BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission
+```
+
+Settings admission maps to `/settings` and Settings admin APIs; Commerce admission maps to `/products` and `/orders`. The full audit only becomes the artifact-backed `45 Ready / 0 Partial / 0 Prototype / 0 Missing` view after both families pass. Those four partial rows are external provider evidence gates, not canvas/editor data-model gaps.

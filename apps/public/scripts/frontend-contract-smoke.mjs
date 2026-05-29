@@ -317,8 +317,10 @@ assert(
     frontendManifestSchema.includes('"surfaceRunbooks"') &&
     frontendManifestSchema.includes('"evidenceArtifacts"') &&
 	    frontendManifestSchema.includes('"artifactVerifier"') &&
-	    frontendManifestSchema.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
-	    frontendManifestSchema.includes('"no raw secret-like values"') &&
+		    frontendManifestSchema.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&
+		    frontendManifestSchema.includes('BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission') &&
+		    frontendManifestSchema.includes('BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission') &&
+		    frontendManifestSchema.includes('"no raw secret-like values"') &&
 	    frontendManifestSchema.includes('"certifiedAtReady"') &&
 	    frontendManifestSchema.includes('"artifactFreshReady"') &&
 	    frontendManifestSchema.includes('"freshnessWindow"') &&
@@ -347,8 +349,11 @@ assert(
 	    completionSpec.includes('surfaceRunbooks[].artifactVerifier') &&
 	    completionSpec.includes('partialClosureReadiness') &&
 	    sdkSource.includes('BackyCompletionStatus') &&
-    sdkSource.includes('BackyPartialClosureReadiness') &&
-    sdkSource.includes('artifactAcceptedAudit') &&
+	    sdkSource.includes('BackyPartialClosureReadiness') &&
+	    sdkSource.includes('artifactAdmissionModes') &&
+	    sdkSource.includes('BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=settings npm run ci:provider-artifact-admission') &&
+	    sdkSource.includes('BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-admission') &&
+	    sdkSource.includes('artifactAcceptedAudit') &&
     sdkSource.includes('readyRowsAdded: 4') &&
     sdkSource.includes('BackyCompletionArtifactVerifier') &&
     sdkSource.includes('BackyCompletionEvidenceArtifact') &&
@@ -368,8 +373,10 @@ assert(
     sdkSmoke.includes('productApiHandoffSiteTargetReady') &&
     sdkSmoke.includes('orderApiHandoffSiteTargetReady') &&
     sdkSmoke.includes('manifest() completion status missing Settings runbook') &&
-    sdkSmoke.includes('manifest() completion status missing partial closure readiness handoff') &&
-    sdkSmoke.includes('manifest() completion status artifact-backed audit should close all partial rows') &&
+	    sdkSmoke.includes('manifest() completion status missing partial closure readiness handoff') &&
+	    sdkSmoke.includes('settings-only provider artifact admission command') &&
+	    sdkSmoke.includes('commerce-only provider artifact admission command') &&
+	    sdkSmoke.includes('manifest() completion status artifact-backed audit should close all partial rows') &&
     sdkSmoke.includes('completionStatus.audit?.ready === 41') &&
     sdkSmoke.includes('completionStatus.audit?.partial === 4') &&
     sdkSmoke.includes('completionStatus.audit?.readyPercent === 91') &&
@@ -378,8 +385,9 @@ assert(
     sdkSmoke.includes('completion status should not recommend certified SDK Postgres as remaining work') &&
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestCompletionStatus') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiBackyCompletionStatus') &&
-    generatedSdkTypes.includes('partialClosureReadiness?') &&
-    generatedSdkTypes.includes('auditImpact?:') &&
+	    generatedSdkTypes.includes('partialClosureReadiness?') &&
+	    generatedSdkTypes.includes('artifactAdmissionModes: {') &&
+	    generatedSdkTypes.includes('auditImpact?:') &&
     generatedSdkTypes.includes('artifactAcceptedAudit?:') &&
     generatedSdkTypes.includes('surfaceRunbooks: Array<') &&
     generatedSdkTypes.includes('evidenceArtifacts: Array<') &&
@@ -397,8 +405,11 @@ assert(
 assert(
   completionStatusClosureLib.includes("schemaVersion: 'backy.partial-closure-readiness.v1'") &&
     completionStatusClosureLib.includes("schemaVersion: 'backy.partial-closure-audit-impact.v1'") &&
-    completionStatusClosureLib.includes('artifactBackedDoctorCommand') &&
-    completionStatusClosureLib.includes('artifactAcceptedAudit: ARTIFACT_ACCEPTED_AUDIT_COUNTS') &&
+	    completionStatusClosureLib.includes('artifactBackedDoctorCommand') &&
+	    completionStatusClosureLib.includes('artifactAdmissionModes') &&
+	    completionStatusClosureLib.includes('SETTINGS_ARTIFACT_ADMISSION_COMMAND') &&
+	    completionStatusClosureLib.includes('COMMERCE_ARTIFACT_ADMISSION_COMMAND') &&
+	    completionStatusClosureLib.includes('artifactAcceptedAudit: ARTIFACT_ACCEPTED_AUDIT_COUNTS') &&
     completionStatusClosureLib.includes('artifactAcceptedMode') &&
     completionStatusClosureLib.includes("artifactAcceptedStatus: 'ready'") &&
     completionStatusClosureLib.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1') &&

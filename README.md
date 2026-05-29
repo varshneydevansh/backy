@@ -96,7 +96,7 @@ Backy is designed to run as two deployable apps:
    - Form/comment submission endpoints
 
 For external/custom frontends, use the public endpoints from `apps/public` directly and treat `backy-public` as your headless CMS host.
-AI agents and external frontend teams should start with `specs/custom-frontend-agent-handoff.md`; it lists the canonical manifest/OpenAPI/render/SDK contracts and the design-state round-trip rules required for Backy canvas compatibility.
+AI agents and external frontend teams should start with `GET /api/sites/:siteId/agent-handoff`; it returns the canonical read order, manifest/OpenAPI/render/SDK pointers, canvas-first creation routes, and design-state round-trip rules required for Backy canvas compatibility. Use `specs/custom-frontend-agent-handoff.md` as the human-readable companion.
 
 ## Vercel release runbook
 
