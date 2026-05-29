@@ -1352,7 +1352,7 @@ function UsersListView() {
     if (isUsersBusy) return;
 
     if (step.to === '/pages/new') {
-      navigate({ to: '/pages/new', search: { siteId: membershipSiteId, template: 'template' in step ? step.template : 'registration' } });
+      navigate({ to: '/pages/new', search: { siteId: membershipSiteId, template: 'template' in step ? step.template : 'registration', templateSource: 'backy-canvas' } });
       return;
     }
 

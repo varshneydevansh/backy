@@ -2149,7 +2149,7 @@ function FormsRoute() {
   const openFormPageTemplate = (template: PageTemplateHandoff) => {
     if (isFormsBusy) return;
 
-    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template } });
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template, templateSource: 'backy-canvas' } });
   };
 
   const createFormFromTemplate = async (template: FormTemplateBlueprint) => {

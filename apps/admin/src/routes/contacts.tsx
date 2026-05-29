@@ -2148,7 +2148,7 @@ function ContactsRoute() {
       return;
     }
 
-    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template } });
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template, templateSource: 'backy-canvas' } });
   };
   const openContactWorkflowSurface = (surface: typeof CONTACT_WORKFLOW_SURFACES[number]) => {
     if (surface.route === '/pages/new') {

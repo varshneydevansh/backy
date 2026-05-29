@@ -241,6 +241,7 @@ const assertPagesListSourceContract = () => {
   );
   assert(
     source.includes('const createPageLinkDisabled = !canEditPages') &&
+      source.includes("templateSource: 'backy-canvas' as const") &&
       source.includes("const createPageActionStatusId = 'pages-create-action-status';") &&
       source.includes('const createPageActionDisabledReason = createPageLinkDisabled') &&
       source.includes('const createPageActionStatus = createPageActionDisabledReason') &&
@@ -5052,14 +5053,14 @@ const main = async () => {
     const commandCreate = await clickEmptyCreate(
       client,
       'pages-command-create',
-      [],
+      ['templateSource=backy-canvas'],
       { template: 'blank', homepage: false, allowDisabled: true },
     );
     await waitForPagesEmptyState(client);
     const emptyCreate = await clickEmptyCreate(
       client,
       'pages-empty-create',
-      [],
+      ['templateSource=backy-canvas'],
       { template: 'blank', homepage: false, allowDisabled: true },
     );
     await waitForPagesEmptyState(client);

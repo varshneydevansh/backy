@@ -823,7 +823,10 @@ function PagesListView() {
   const adminPageDetailUrl = `${adminPagesUrl}/${apiPageSegment}`;
   const adminPageReadinessUrl = `${adminPageDetailUrl}/readiness`;
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
-  const createPageSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
+  const createPageSearch = useMemo(() => ({
+    siteId: activeSiteId,
+    templateSource: 'backy-canvas' as const,
+  }), [activeSiteId]);
   const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
     template === 'blank' ? createPageSearch : { ...createPageSearch, template }
   );

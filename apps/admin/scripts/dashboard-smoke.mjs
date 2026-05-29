@@ -63,6 +63,7 @@ const assertDashboardSourceContracts = () => {
     'data-testid="dashboard-secondary-action-menu"',
     "label: 'New product'",
     "label: 'New form'",
+    "templateSource: 'backy-canvas'",
     "quickCreate: 'product'",
     "quickCreate: 'blank'",
     "'commerce.edit'",
@@ -847,6 +848,8 @@ const assertDashboardCommandActionStatus = async (client) => {
     `Dashboard handoff actions should not be duplicated in primary actions: ${JSON.stringify(state)}`,
   );
   assert(state.secondaryCollapsed && state.hasMoreActions, `Dashboard handoff actions must be behind collapsed More actions: ${JSON.stringify(state)}`);
+  assert(state.newPage.href.includes('/pages/new') && state.newPage.href.includes('templateSource=backy-canvas'), `Dashboard New page must route into Backy canvas creation: ${JSON.stringify(state)}`);
+  assert(state.newPost.href.includes('/blog/new') && state.newPost.href.includes('templateSource=backy-canvas'), `Dashboard New post must route into Backy canvas creation: ${JSON.stringify(state)}`);
   assert(state.newProduct.href.includes('/products') && state.newProduct.href.includes('quickCreate=product'), `Dashboard New product must route into quick product creation: ${JSON.stringify(state)}`);
   assert(state.newForm.href.includes('/forms') && state.newForm.href.includes('quickCreate=blank'), `Dashboard New form must route into quick form creation: ${JSON.stringify(state)}`);
   for (const [key, action] of Object.entries({ newSite: state.newSite, newPage: state.newPage, newPost: state.newPost, newProduct: state.newProduct, newForm: state.newForm, refresh: state.refresh, copy: state.copy, download: state.download })) {
@@ -1160,15 +1163,21 @@ const assertDashboardLinks = async (client) => {
       ['Manage frontend datasets', '/collections'],
     ];
     const missing = required.filter(([text, href]) => !hrefs.some((item) => item.text.includes(text) && item.href.includes(href)));
+    const newPage = hrefs.find((item) => item.text.includes('New page') && item.href.includes('/pages/new')) || null;
+    const newPost = hrefs.find((item) => item.text.includes('New post') && item.href.includes('/blog/new')) || null;
     const newProduct = hrefs.find((item) => item.text.includes('New product') && item.href.includes('/products')) || null;
     const newForm = hrefs.find((item) => item.text.includes('New form') && item.href.includes('/forms')) || null;
     const quickCreateOk = Boolean(
-      newProduct?.href.includes('siteId=') &&
+      newPage?.href.includes('siteId=') &&
+        newPage.href.includes('templateSource=backy-canvas') &&
+        newPost?.href.includes('siteId=') &&
+        newPost.href.includes('templateSource=backy-canvas') &&
+        newProduct?.href.includes('siteId=') &&
         newProduct.href.includes('quickCreate=product') &&
         newForm?.href.includes('siteId=') &&
         newForm.href.includes('quickCreate=blank'),
     );
-    return { ok: missing.length === 0 && quickCreateOk, missing, quickCreateOk, newProduct, newForm, hrefs: hrefs.slice(0, 120) };
+    return { ok: missing.length === 0 && quickCreateOk, missing, quickCreateOk, newPage, newPost, newProduct, newForm, hrefs: hrefs.slice(0, 120) };
   })()`);
   assert(links.ok, `Dashboard missing expected navigation links: ${JSON.stringify(links)}`);
   return links;

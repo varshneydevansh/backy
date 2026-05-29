@@ -4487,7 +4487,7 @@ function OrdersRoute() {
       return;
     }
 
-    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront' } });
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront', templateSource: 'backy-canvas' } });
   };
   const selectOrdersSite = (nextSiteId: string) => {
     if (isOrdersBusy) return;

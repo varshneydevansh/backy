@@ -494,6 +494,7 @@ const assertAuthRecoverySource = () => {
       sidebarModelSource.includes("type SidebarQuickCreatePermission = 'pages.edit' | 'commerce.edit' | 'forms.create';") &&
       sidebarModelSource.includes('const SIDEBAR_QUICK_CREATE_ACTIONS') &&
       sidebarModelSource.includes("to: '/pages/new'") &&
+      sidebarModelSource.includes("search: { templateSource: 'backy-canvas' }") &&
       sidebarModelSource.includes("to: '/blog/new'") &&
       sidebarModelSource.includes("to: '/products'") &&
       sidebarModelSource.includes("quickCreate: 'product'") &&
@@ -2130,13 +2131,14 @@ const assertMobileQuickCreateInteraction = async (client) => {
             page instanceof HTMLAnchorElement &&
             page.href.includes('/pages/new') &&
             page.href.includes('siteId=') &&
+            page.href.includes('templateSource=backy-canvas') &&
             page.getAttribute('data-target-route') === '/pages/new' &&
-            page.getAttribute('data-target-search') === 'siteId=' + siteId &&
+            page.getAttribute('data-target-search') === 'siteId=' + siteId + '&templateSource=backy-canvas' &&
             page.getAttribute('data-create-intent') === 'new-page' &&
             page.getAttribute('data-target-site-status') === siteStatus &&
             post instanceof HTMLAnchorElement &&
             post.getAttribute('data-target-route') === '/blog/new' &&
-            post.getAttribute('data-target-search') === 'siteId=' + siteId &&
+            post.getAttribute('data-target-search') === 'siteId=' + siteId + '&templateSource=backy-canvas' &&
             post.getAttribute('data-create-intent') === 'new-post' &&
             product instanceof HTMLAnchorElement &&
             product.getAttribute('data-target-route') === '/products' &&
@@ -2184,6 +2186,7 @@ const assertMobileQuickCreateInteraction = async (client) => {
         return {
           ready: window.location.pathname === '/pages/new' &&
             window.location.search.includes('siteId=site-demo') &&
+            window.location.search.includes('templateSource=backy-canvas') &&
             !(dialog instanceof HTMLElement) &&
             document.body.style.overflow !== 'hidden' &&
             toggle instanceof HTMLButtonElement &&
@@ -2226,6 +2229,7 @@ const assertMobileQuickCreateInteraction = async (client) => {
             post instanceof HTMLAnchorElement &&
             post.getAttribute('data-target-route') === '/blog/new' &&
             post.getAttribute('data-target-search')?.includes('siteId=') &&
+            post.getAttribute('data-target-search')?.includes('templateSource=backy-canvas') &&
             document.body.style.overflow === 'hidden',
           hasDialog: dialog instanceof HTMLElement,
           postHref: post instanceof HTMLAnchorElement ? post.href : '',
@@ -2260,6 +2264,7 @@ const assertMobileQuickCreateInteraction = async (client) => {
         return {
           ready: window.location.pathname === '/blog/new' &&
             window.location.search.includes('siteId=site-demo') &&
+            window.location.search.includes('templateSource=backy-canvas') &&
             !(dialog instanceof HTMLElement) &&
             document.body.style.overflow !== 'hidden' &&
             toggle instanceof HTMLButtonElement &&
@@ -2806,12 +2811,16 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       state.quickCreatePageState === 'ready' &&
       state.quickCreatePageHref.includes('/pages/new') &&
       state.quickCreatePageHref.includes('siteId=') &&
+      state.quickCreatePageHref.includes('templateSource=backy-canvas') &&
+      state.quickCreatePageTargetSearch.includes('templateSource=backy-canvas') &&
       state.quickCreatePageSiteId === state.quickCreateSiteId &&
       state.quickCreatePagePermission === 'pages.edit' &&
       state.quickCreatePageStatus.includes('New page available for') &&
       state.quickCreatePostState === 'ready' &&
       state.quickCreatePostHref.includes('/blog/new') &&
       state.quickCreatePostHref.includes('siteId=') &&
+      state.quickCreatePostHref.includes('templateSource=backy-canvas') &&
+      state.quickCreatePostTargetSearch.includes('templateSource=backy-canvas') &&
       state.quickCreatePostSiteId === state.quickCreateSiteId &&
       state.quickCreatePostPermission === 'pages.edit' &&
       state.quickCreatePostStatus.includes('New post available for') &&
@@ -3347,21 +3356,23 @@ const assertSidebarQuickCreateInteraction = async (client) => {
           page instanceof HTMLAnchorElement &&
           page.href.includes('/pages/new') &&
           page.href.includes('siteId=') &&
+          page.href.includes('templateSource=backy-canvas') &&
           page.getAttribute('data-action-state') === 'ready' &&
           page.getAttribute('data-target-site-id') === siteId &&
           page.getAttribute('data-target-site-status') === siteStatus &&
           page.getAttribute('data-target-route') === '/pages/new' &&
-          page.getAttribute('data-target-search') === 'siteId=' + siteId &&
+          page.getAttribute('data-target-search') === 'siteId=' + siteId + '&templateSource=backy-canvas' &&
           page.getAttribute('data-create-intent') === 'new-page' &&
           page.getAttribute('data-required-permission') === 'pages.edit' &&
           post instanceof HTMLAnchorElement &&
           post.href.includes('/blog/new') &&
           post.href.includes('siteId=') &&
+          post.href.includes('templateSource=backy-canvas') &&
           post.getAttribute('data-action-state') === 'ready' &&
           post.getAttribute('data-target-site-id') === siteId &&
           post.getAttribute('data-target-site-status') === siteStatus &&
           post.getAttribute('data-target-route') === '/blog/new' &&
-          post.getAttribute('data-target-search') === 'siteId=' + siteId &&
+          post.getAttribute('data-target-search') === 'siteId=' + siteId + '&templateSource=backy-canvas' &&
           post.getAttribute('data-create-intent') === 'new-post' &&
           post.getAttribute('data-required-permission') === 'pages.edit' &&
           product instanceof HTMLAnchorElement &&
@@ -3458,6 +3469,7 @@ const assertSidebarQuickCreateInteraction = async (client) => {
       return {
         ready: window.location.pathname === '/pages/new' &&
           window.location.search.includes('siteId=site-demo') &&
+          window.location.search.includes('templateSource=backy-canvas') &&
           Boolean(document.querySelector('[data-testid="page-create-primary-submit"]')) &&
           Boolean(document.querySelector('[data-testid="page-create-title-input"]')) &&
           pageCommandActionsReady &&
@@ -3537,6 +3549,7 @@ const assertSidebarQuickCreateInteraction = async (client) => {
       return {
         ready: window.location.pathname === '/blog/new' &&
           window.location.search.includes('siteId=site-demo') &&
+          window.location.search.includes('templateSource=backy-canvas') &&
           Boolean(document.querySelector('[data-testid="blog-create-command-center"]')) &&
           Boolean(document.querySelector('[data-testid="blog-create-title-input"]')) &&
           blogCommandActionsReady &&

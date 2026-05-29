@@ -1907,6 +1907,7 @@ function ProductsRoute() {
       const search = {
         siteId: activeSiteId,
         template: 'storefront',
+        templateSource: 'backy-canvas',
         collectionId: productCollection.id,
         datasetMode: mode,
         title,
@@ -5135,7 +5136,7 @@ function ProductsRoute() {
       return;
     }
 
-    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront' } });
+    navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront', templateSource: 'backy-canvas' } });
   };
   const openProductPageTemplate = (brief: (typeof productPageTemplateBriefs)[number]) => {
     if (isPermissionMatrixPending || !productCollection) return;

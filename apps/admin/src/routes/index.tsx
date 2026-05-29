@@ -1429,11 +1429,17 @@ function Index() {
   ));
   const getDashboardRouteSearch = (
     to: DashboardRouteTarget,
-  ) => (
-    ['/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/users', '/pages/new', '/blog/new'].includes(to)
+  ) => {
+    if (to === '/pages/new') {
+      return { siteId: activeSiteId, templateSource: 'backy-canvas' as const };
+    }
+    if (to === '/blog/new') {
+      return { siteId: activeSiteId, templateSource: 'backy-canvas' as const };
+    }
+    return ['/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/users'].includes(to)
       ? { siteId: activeSiteId }
-      : undefined
-  );
+      : undefined;
+  };
   const getDashboardWorkflowActionSearch = (action: DashboardWorkflowAction) => {
     if (action.search?.quickCreate === 'product') {
       return { siteId: activeSiteId, quickCreate: 'product' as const };

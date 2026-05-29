@@ -335,7 +335,10 @@ function BlogListView() {
   const siteSlug = activeSite?.slug || activeSiteId;
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
-  const createPostSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
+  const createPostSearch = useMemo(() => ({
+    siteId: activeSiteId,
+    templateSource: 'backy-canvas' as const,
+  }), [activeSiteId]);
   const siteScopedPosts = useMemo(() => {
     const siteIdentifiers = new Set(
       [activeSiteId, activeSite?.id, activeSite?.publicSiteId].filter(Boolean),
