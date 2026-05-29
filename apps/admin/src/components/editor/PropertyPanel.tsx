@@ -27,6 +27,8 @@ import {
   Upload,
   Search,
   X,
+  ArrowDown,
+  ArrowUp,
 } from 'lucide-react';
 import { cn, generateId } from '@/lib/utils';
 import { PORTAL_TOOLBAR_CONTAINER_ID } from '@backy-cms/editor';
@@ -514,15 +516,23 @@ const normalizeNavigationItemRecords = (
     .filter(Boolean) as Array<{ label: string; href: string }>;
 };
 
+const DEFAULT_NAVIGATION_ITEM_RECORDS = [
+  { label: 'Home', href: '/' },
+  { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
+] as const;
+
+const normalizeNavigationItemRecordForStorage = (item: { label: string; href: string }, index: number) => {
+  const label = item.label.trim() || `Item ${index + 1}`;
+  const href = item.href.trim() || '#';
+  return { label, href };
+};
+
 const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] => {
   const navItems = normalizeNavigationItemRecords(element.props.navItems);
   const records = navItems.length > 0
     ? navItems
-    : [
-        { label: 'Home', href: '/' },
-        { label: 'About', href: '/about' },
-        { label: 'Contact', href: '/contact' },
-      ];
+    : [...DEFAULT_NAVIGATION_ITEM_RECORDS];
   const isVertical = element.props.navDirection === 'vertical';
   const gap = toNumber(element.props.gap, 18);
   const fontSize = toNumber(element.props.fontSize, 14);
@@ -2303,6 +2313,46 @@ function ContentProperties({
 
     onChange(propsUpdates);
   };
+  const navigationItemRecords = hasNavContent
+    ? normalizeNavigationItemRecords(element.props.navItems)
+    : [];
+  const editableNavigationItemRecords = navigationItemRecords.length > 0
+    ? navigationItemRecords
+    : [...DEFAULT_NAVIGATION_ITEM_RECORDS];
+  const updateNavigationRecords = (records: Array<{ label: string; href: string }>) => {
+    updateNavigationWithSyncedLinks({
+      navItems: records.map(normalizeNavigationItemRecordForStorage),
+    });
+  };
+  const updateNavigationRecordAt = (
+    index: number,
+    updates: Partial<{ label: string; href: string }>,
+  ) => {
+    updateNavigationRecords(editableNavigationItemRecords.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...updates } : item
+    )));
+  };
+  const moveNavigationRecord = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= editableNavigationItemRecords.length) {
+      return;
+    }
+
+    const nextRecords = [...editableNavigationItemRecords];
+    const [moved] = nextRecords.splice(index, 1);
+    nextRecords.splice(targetIndex, 0, moved);
+    updateNavigationRecords(nextRecords);
+  };
+  const removeNavigationRecord = (index: number) => {
+    const nextRecords = editableNavigationItemRecords.filter((_, itemIndex) => itemIndex !== index);
+    updateNavigationRecords(nextRecords.length > 0 ? nextRecords : [{ label: 'Home', href: '/' }]);
+  };
+  const addNavigationRecord = () => {
+    updateNavigationRecords([
+      ...editableNavigationItemRecords,
+      { label: `Item ${editableNavigationItemRecords.length + 1}`, href: '#' },
+    ]);
+  };
   const renderMediaPickerButton = ({
     field,
     mode = 'library',
@@ -3186,9 +3236,6 @@ function ContentProperties({
               <div>{currentNavigationSourceOption.description}</div>
             </div>
           </div>
-          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
-            Each line becomes a menu item. Use <span className="font-mono">Label: /path</span> when a frontend route is known.
-          </div>
           <div
             className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2"
             data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}
@@ -3218,9 +3265,119 @@ function ContentProperties({
               </button>
             </div>
           </div>
+          <div
+            className="rounded-md border border-border bg-background"
+            data-testid="editor-nav-structured-items"
+            data-nav-item-count={editableNavigationItemRecords.length}
+            data-nav-item-editor-policy="label-href-reorder-syncs-link-layers"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-foreground">Menu links</div>
+                <div className="text-[11px] leading-4 text-muted-foreground">Each row becomes a selectable link layer.</div>
+              </div>
+              <button
+                type="button"
+                onClick={addNavigationRecord}
+                disabled={disabled}
+                data-testid="editor-nav-add-item"
+                aria-label="Add navigation item"
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="size-3.5" />
+                Add
+              </button>
+            </div>
+            <div className="divide-y divide-border">
+              {editableNavigationItemRecords.map((item, index) => {
+                const itemLabel = item.label || `Item ${index + 1}`;
+                const itemId = `${elementId}-nav-item-${index}`;
+
+                return (
+                  <div
+                    key={`${index}-${item.label}-${item.href}`}
+                    className="grid gap-2 px-3 py-3"
+                    data-testid={`editor-nav-item-row-${index}`}
+                    data-nav-item-label={item.label}
+                    data-nav-item-href={item.href}
+                  >
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                      <label className="grid gap-1 text-[11px] font-medium text-muted-foreground" htmlFor={`${itemId}-label`}>
+                        Label
+                        <input
+                          id={`${itemId}-label`}
+                          type="text"
+                          value={item.label}
+                          onChange={(event) => updateNavigationRecordAt(index, { label: event.target.value })}
+                          disabled={disabled}
+                          data-testid={`editor-nav-item-label-${index}`}
+                          className={cn(
+                            'min-h-8 w-full rounded-md border bg-background px-2 text-sm text-foreground',
+                            'focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                          )}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-[11px] font-medium text-muted-foreground" htmlFor={`${itemId}-href`}>
+                        Route
+                        <input
+                          id={`${itemId}-href`}
+                          type="text"
+                          value={item.href}
+                          onChange={(event) => updateNavigationRecordAt(index, { href: event.target.value })}
+                          disabled={disabled}
+                          data-testid={`editor-nav-item-href-${index}`}
+                          className={cn(
+                            'min-h-8 w-full rounded-md border bg-background px-2 font-mono text-xs text-foreground',
+                            'focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                          )}
+                        />
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-[11px] text-muted-foreground" title={`${itemLabel} -> ${item.href || '#'}`}>
+                        {itemLabel} {'->'} {item.href || '#'}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-1" role="group" aria-label={`Actions for ${itemLabel}`}>
+                        <button
+                          type="button"
+                          onClick={() => moveNavigationRecord(index, -1)}
+                          disabled={disabled || index === 0}
+                          data-testid={`editor-nav-item-move-up-${index}`}
+                          aria-label={`Move ${itemLabel} up`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <ArrowUp className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveNavigationRecord(index, 1)}
+                          disabled={disabled || index === editableNavigationItemRecords.length - 1}
+                          data-testid={`editor-nav-item-move-down-${index}`}
+                          aria-label={`Move ${itemLabel} down`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <ArrowDown className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeNavigationRecord(index)}
+                          disabled={disabled || editableNavigationItemRecords.length <= 1}
+                          data-testid={`editor-nav-item-remove-${index}`}
+                          aria-label={`Remove ${itemLabel}`}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
-              Navigation items
+              Raw navigation items
             </label>
             <textarea
               value={formatNavigationItems(element.props.navItems)}

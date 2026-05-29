@@ -1618,7 +1618,7 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(propertyPanelSource.includes('applyChildBindingSlots') && propertyPanelSource.includes('data-testid="editor-data-apply-child-binding-slots"') && propertyPanelSource.includes('VIRTUAL_COLLECTION_FIELD_PATHS'), 'Editor Data panel must apply descendant preset binding slots and support record URL/slug fields for composed sections');
   assert(propertyPanelSource.includes('const applyAllBindingSlots = () =>') && propertyPanelSource.includes('bindableSlotsForElement(nextElement, activeSlotCollection, collections)') && propertyPanelSource.includes('data-testid="editor-data-apply-all-binding-slots"'), 'Editor Data panel must bulk-apply matching root, descendant, and child binding slots from composed presets');
   assert(catalogSource.includes("type: 'nav'") && catalogSource.includes("name: 'Home link'") && catalogSource.includes("name: 'Contact link'") && catalogSource.includes("navigationBinding: 'site.navigation.primary'"), 'Editor navigation catalog preset must create selectable link child layers and default to the site primary navigation contract.');
-  assert(propertyPanelSource.includes('const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>') && propertyPanelSource.includes('const buildNavigationElementSync = (') && propertyPanelSource.includes('updateNavigationWithSyncedLinks({ navItems: parseNavigationItems') && propertyPanelSource.includes('data-nav-link-layer-sync="items-direction-gap-auto-sync"') && propertyPanelSource.includes('data-nav-link-layer-id-policy="preserve-existing-link-child-ids"') && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}") && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}") && propertyPanelSource.includes('data-testid="editor-nav-source"') && propertyPanelSource.includes('data-navigation-binding={currentNavigationSourceOption.binding}'), 'Editor navigation inspector must convert/rebuild nav menu text into selectable link child layers, keep them synced with nav item edits, preserve child layer ids, and expose site/manual navigation binding metadata.');
+  assert(propertyPanelSource.includes('const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>') && propertyPanelSource.includes('const buildNavigationElementSync = (') && propertyPanelSource.includes('updateNavigationWithSyncedLinks({ navItems: parseNavigationItems') && propertyPanelSource.includes('const updateNavigationRecordAt = (') && propertyPanelSource.includes('const moveNavigationRecord = (') && propertyPanelSource.includes('const addNavigationRecord = () =>') && propertyPanelSource.includes('data-testid="editor-nav-structured-items"') && propertyPanelSource.includes('data-nav-item-editor-policy="label-href-reorder-syncs-link-layers"') && propertyPanelSource.includes('data-testid={`editor-nav-item-label-${index}`}') && propertyPanelSource.includes('data-testid={`editor-nav-item-href-${index}`}') && propertyPanelSource.includes('data-testid={`editor-nav-item-move-up-${index}`}') && propertyPanelSource.includes('data-testid={`editor-nav-item-move-down-${index}`}') && propertyPanelSource.includes('data-testid={`editor-nav-item-remove-${index}`}') && propertyPanelSource.includes('data-nav-link-layer-sync="items-direction-gap-auto-sync"') && propertyPanelSource.includes('data-nav-link-layer-id-policy="preserve-existing-link-child-ids"') && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}") && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}") && propertyPanelSource.includes('data-testid="editor-nav-source"') && propertyPanelSource.includes('data-navigation-binding={currentNavigationSourceOption.binding}'), 'Editor navigation inspector must provide structured per-link label/route/reorder controls, convert/rebuild nav menu text into selectable link child layers, keep them synced with nav item edits, preserve child layer ids, and expose site/manual navigation binding metadata.');
   assert(canvasSource.includes('const resolveNavigationBindingMetadata = (') && pageRendererSource.includes('const resolveNavigationBindingMetadata = (') && canvasSource.includes("rawBinding === 'site.navigation.primary'") && pageRendererSource.includes("rawBinding === 'site.navigation.primary'"), 'Editor and public nav renderers must infer the navigation source from persisted site navigation bindings for imported or legacy content.');
   assert(templateChromeSource.includes('const createNavigationLinkChildren = (') && templateChromeSource.includes("navigationBinding: 'site.navigation.footer'") && templateChromeSource.includes('children: createNavigationLinkChildren'), 'Generated page/post chrome must seed selectable site navigation child links for header and footer nav.');
   assert(propertyPanelSource.includes('const clearCollectionBindingsFromElement = (') && propertyPanelSource.includes('REPEATER_COLLECTION_BINDING_PROP_KEYS') && propertyPanelSource.includes('data-testid="editor-data-clear-all-binding-slots"'), 'Editor Data panel must clear collection bindings across composed preset trees and repeater dataset props');
@@ -22827,7 +22827,18 @@ const testNavBehaviorControls = async (client) => {
   await selectLayerById(client, 'smoke-nav');
   await switchToPropertiesPanel(client);
 
-  await setFormControlByTestId(client, 'editor-nav-items', 'Docs: /docs\nPricing: /pricing\nContact: /contact');
+  await setFormControlByTestId(client, 'editor-nav-item-label-0', 'Docs');
+  await setFormControlByTestId(client, 'editor-nav-item-href-0', '/docs');
+  await setFormControlByTestId(client, 'editor-nav-item-label-1', 'Pricing');
+  await setFormControlByTestId(client, 'editor-nav-item-href-1', '/pricing');
+  await setFormControlByTestId(client, 'editor-nav-item-label-2', 'Contact');
+  await setFormControlByTestId(client, 'editor-nav-item-href-2', '/contact');
+  await clickControlByTestId(client, 'editor-nav-item-move-down-0');
+  await clickControlByTestId(client, 'editor-nav-item-move-up-1');
+  await clickControlByTestId(client, 'editor-nav-add-item');
+  await setFormControlByTestId(client, 'editor-nav-item-label-3', 'Blog');
+  await setFormControlByTestId(client, 'editor-nav-item-href-3', '/blog');
+  await clickControlByTestId(client, 'editor-nav-item-remove-3');
   await setFormControlByTestId(client, 'editor-nav-direction', 'vertical');
   await setFormControlByTestId(client, 'editor-nav-gap', '22');
   await setFormControlByTestId(client, 'editor-nav-aria-label', 'Smoke primary navigation');
@@ -22838,6 +22849,14 @@ const testNavBehaviorControls = async (client) => {
     const nav = document.querySelector('[data-element-id="smoke-nav"] nav');
     const style = nav ? getComputedStyle(nav) : null;
     const bindingStatus = document.querySelector('[data-testid="editor-nav-binding-status"]');
+    const structuredItems = document.querySelector('[data-testid="editor-nav-structured-items"]');
+    const rows = Array.from(document.querySelectorAll('[data-testid^="editor-nav-item-row-"]')).map((row, index) => ({
+      index,
+      label: row.getAttribute('data-nav-item-label') || '',
+      href: row.getAttribute('data-nav-item-href') || '',
+      labelInput: document.querySelector('[data-testid="editor-nav-item-label-' + index + '"]')?.value || '',
+      hrefInput: document.querySelector('[data-testid="editor-nav-item-href-' + index + '"]')?.value || '',
+    }));
     const links = Array.from(nav?.querySelectorAll('a') || []).map((link) => ({
       label: link.textContent?.trim() || '',
       href: link.getAttribute('href') || '',
@@ -22850,6 +22869,9 @@ const testNavBehaviorControls = async (client) => {
       source: value('editor-nav-source'),
       bindingStatusSource: bindingStatus?.getAttribute('data-navigation-source') || '',
       bindingStatusBinding: bindingStatus?.getAttribute('data-navigation-binding') || '',
+      structuredItemCount: structuredItems?.getAttribute('data-nav-item-count') || '',
+      structuredPolicy: structuredItems?.getAttribute('data-nav-item-editor-policy') || '',
+      rows,
       previewNavigationSource: nav?.getAttribute('data-backy-navigation-source') || '',
       previewNavigationBinding: nav?.getAttribute('data-backy-navigation-binding') || '',
       previewAriaLabel: nav?.getAttribute('aria-label') || '',
@@ -22860,6 +22882,8 @@ const testNavBehaviorControls = async (client) => {
   })()`);
 
   assert(state.items.includes('Docs: /docs') && state.items.includes('Pricing: /pricing'), `Nav items control mismatch: ${JSON.stringify(state)}`);
+  assert(state.structuredItemCount === '3' && state.structuredPolicy === 'label-href-reorder-syncs-link-layers', `Nav structured item editor metadata mismatch: ${JSON.stringify(state)}`);
+  assert(state.rows.length === 3 && state.rows[0].labelInput === 'Docs' && state.rows[0].hrefInput === '/docs' && state.rows[1].labelInput === 'Pricing' && state.rows[1].hrefInput === '/pricing', `Nav structured item controls mismatch: ${JSON.stringify(state)}`);
   assert(state.direction === 'vertical' && state.previewFlexDirection === 'column', `Nav direction mismatch: ${JSON.stringify(state)}`);
   assert(state.gap === '22' && state.previewGap === '22px', `Nav gap mismatch: ${JSON.stringify(state)}`);
   assert(state.ariaLabel === 'Smoke primary navigation' && state.previewAriaLabel === 'Smoke primary navigation', `Nav aria label mismatch: ${JSON.stringify(state)}`);
