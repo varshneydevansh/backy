@@ -526,6 +526,8 @@ export interface BackyContactListInput extends BackyPaginationInput {
   siteId: string;
   formId?: string;
   status?: Contact['status'] | 'all';
+  newsletterSubscriptionStatus?: NonNullable<Contact['newsletterSubscriptionStatus']> | 'all';
+  newsletterOnly?: boolean;
   search?: string;
   requestId?: string;
 }

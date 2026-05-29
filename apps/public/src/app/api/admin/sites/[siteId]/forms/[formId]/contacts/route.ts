@@ -13,6 +13,7 @@ interface RouteParams {
 }
 
 const CONTACT_STATUSES = ['new', 'contacted', 'qualified', 'archived'] as const;
+const NEWSLETTER_STATUSES = ['subscribed', 'unsubscribed', 'pending', 'bounced', 'complained'] as const;
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -49,9 +50,30 @@ const parseStatus = (value: string | null): { value?: (typeof CONTACT_STATUSES)[
     : { invalid: value };
 };
 
+const parseNewsletterStatus = (value: string | null): { value?: (typeof NEWSLETTER_STATUSES)[number] | 'all'; invalid?: string } => {
+  if (value === null || value.trim() === '' || value === 'all') {
+    return value === 'all' ? { value: 'all' } : {};
+  }
+  return NEWSLETTER_STATUSES.includes(value as (typeof NEWSLETTER_STATUSES)[number])
+    ? { value: value as (typeof NEWSLETTER_STATUSES)[number] }
+    : { invalid: value };
+};
+
 const parseOptionalString = (value: unknown): string | null | undefined => {
   if (value === undefined) return undefined;
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+};
+
+const parseOptionalBoolean = (value: unknown): boolean | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', 'yes', '1', 'on'].includes(normalized)) return true;
+    if (['false', 'no', '0', 'off'].includes(normalized)) return false;
+  }
+  return null;
 };
 
 const parseContactStatus = (value: unknown): Contact['status'] => (
@@ -92,6 +114,9 @@ const parseContactBody = (value: unknown) => {
   const statusProvided = Object.prototype.hasOwnProperty.call(record, 'status');
   const status = parseContactStatus(record.status);
   const statusInvalid = statusProvided && !isValidContactStatus(record.status);
+  const newsletterSubscriptionStatus = parseNewsletterStatus(
+    typeof record.newsletterSubscriptionStatus === 'string' ? record.newsletterSubscriptionStatus : null,
+  );
 
   if (!name && !email && !phone && !statusProvided) {
     return null;
@@ -99,6 +124,7 @@ const parseContactBody = (value: unknown) => {
 
   return {
     statusInvalid,
+    newsletterStatusInvalid: Boolean(newsletterSubscriptionStatus.invalid),
     name: name ?? null,
     email: email ?? null,
     phone: phone ?? null,
@@ -108,6 +134,13 @@ const parseContactBody = (value: unknown) => {
     requestId: parseOptionalString(record.requestId) ?? null,
     status,
     sourceValues: parseSourceValues(record.sourceValues),
+    newsletterSubscriptionStatus: newsletterSubscriptionStatus.value === 'all' ? undefined : newsletterSubscriptionStatus.value,
+    newsletterSubscribedAt: parseOptionalString(record.newsletterSubscribedAt),
+    newsletterUnsubscribedAt: parseOptionalString(record.newsletterUnsubscribedAt),
+    newsletterTopics: parseOptionalString(record.newsletterTopics),
+    newsletterSource: parseOptionalString(record.newsletterSource),
+    newsletterConsent: parseOptionalBoolean(record.newsletterConsent),
+    newsletterConsentText: parseOptionalString(record.newsletterConsentText),
     upsertByEmail: record.upsertByEmail === true,
   };
 };
@@ -126,7 +159,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (statusFilter.invalid) {
       return errorResponse(400, 'INVALID_ADMIN_FORM_CONTACT_STATUS', 'Invalid admin form contact status filter. Use new, contacted, qualified, archived, or all.', requestId);
     }
+    const newsletterStatusFilter = parseNewsletterStatus(searchParams.get('newsletterSubscriptionStatus'));
+    if (newsletterStatusFilter.invalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_CONTACT_NEWSLETTER_STATUS', 'Invalid newsletter subscription status filter.', requestId);
+    }
     const filterRequestId = searchParams.get('requestId')?.trim() || undefined;
+    const newsletterOnly = searchParams.get('newsletterOnly') === 'true';
     const limitFilter = parseLimit(searchParams.get('limit'));
     if (limitFilter.invalid) {
       return errorResponse(400, 'INVALID_ADMIN_FORM_CONTACT_LIMIT', 'Invalid admin form contact limit filter. Use an integer from 1 to 100.', requestId);
@@ -155,6 +193,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         formId: form.id,
         status,
+        newsletterSubscriptionStatus: newsletterStatusFilter.value,
+        newsletterOnly,
         requestId: filterRequestId,
         limit,
         offset,
@@ -188,6 +228,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const result = listFormContacts(form.id, {
       status,
+      newsletterSubscriptionStatus: newsletterStatusFilter.value,
+      newsletterOnly,
       requestId: filterRequestId,
       limit,
       offset,
@@ -229,6 +271,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (body.statusInvalid) {
       return invalidContactStatusResponse(requestId);
     }
+    if (body.newsletterStatusInvalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_CONTACT_NEWSLETTER_STATUS', 'Invalid newsletter subscription status.', requestId);
+    }
     if (!body.name && !body.email && !body.phone) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Contact requires a name, email, or phone.', requestId);
     }
@@ -268,6 +313,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             notes: contactInput.notes,
             status: contactInput.status,
             sourceValues: contactInput.sourceValues,
+            newsletterSubscriptionStatus: contactInput.newsletterSubscriptionStatus,
+            newsletterSubscribedAt: contactInput.newsletterSubscribedAt,
+            newsletterUnsubscribedAt: contactInput.newsletterUnsubscribedAt,
+            newsletterTopics: contactInput.newsletterTopics,
+            newsletterSource: contactInput.newsletterSource,
+            newsletterConsent: contactInput.newsletterConsent,
+            newsletterConsentText: contactInput.newsletterConsentText,
             requestId: contactInput.requestId,
           })).item
         : (await repositories.forms.createContact({
@@ -281,6 +333,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             notes: contactInput.notes,
             status: contactInput.status,
             sourceValues: contactInput.sourceValues,
+            newsletterSubscriptionStatus: contactInput.newsletterSubscriptionStatus,
+            newsletterSubscribedAt: contactInput.newsletterSubscribedAt,
+            newsletterUnsubscribedAt: contactInput.newsletterUnsubscribedAt,
+            newsletterTopics: contactInput.newsletterTopics,
+            newsletterSource: contactInput.newsletterSource,
+            newsletterConsent: contactInput.newsletterConsent,
+            newsletterConsentText: contactInput.newsletterConsentText,
             sourceSubmissionId: undefined,
             requestId: contactInput.requestId,
             sourceIpHash: null,
@@ -321,6 +380,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       notes: contactInput.notes,
       status: contactInput.status,
       sourceValues: contactInput.sourceValues,
+      newsletterSubscriptionStatus: contactInput.newsletterSubscriptionStatus,
+      newsletterSubscribedAt: contactInput.newsletterSubscribedAt,
+      newsletterUnsubscribedAt: contactInput.newsletterUnsubscribedAt,
+      newsletterTopics: contactInput.newsletterTopics,
+      newsletterSource: contactInput.newsletterSource,
+      newsletterConsent: contactInput.newsletterConsent,
+      newsletterConsentText: contactInput.newsletterConsentText,
       sourceSubmissionId: undefined,
       requestId: contactInput.requestId,
       sourceIpHash: null,

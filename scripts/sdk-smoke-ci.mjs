@@ -119,7 +119,7 @@ const requiredDatabaseSchema = {
   reusable_sections: ['id', 'site_id', 'name', 'slug', 'description', 'category', 'status', 'tags', 'content', 'metadata', 'source_element_id', 'created_by', 'updated_by', 'created_at', 'updated_at'],
   form_definitions: ['id', 'site_id', 'page_id', 'post_id', 'name', 'title', 'description', 'audience', 'is_active', 'fields', 'notification_email', 'notification_webhook', 'success_redirect_url', 'success_message', 'enable_honeypot', 'enable_captcha', 'moderation_mode', 'contact_share', 'collection_target', 'settings', 'created_at', 'updated_at'],
   form_submissions: ['id', 'site_id', 'form_id', 'page_id', 'post_id', 'values', 'ip_hash', 'user_agent', 'request_id', 'status', 'reviewed_by', 'reviewed_at', 'admin_notes', 'collection_record', 'collection_record_errors', 'submitted_at', 'updated_at'],
-  form_contacts: ['id', 'site_id', 'form_id', 'page_id', 'post_id', 'name', 'email', 'phone', 'notes', 'source_values', 'status', 'source_submission_id', 'request_id', 'source_ip_hash', 'created_at', 'updated_at'],
+  form_contacts: ['id', 'site_id', 'form_id', 'page_id', 'post_id', 'name', 'email', 'phone', 'notes', 'source_values', 'newsletter_subscription_status', 'newsletter_subscribed_at', 'newsletter_unsubscribed_at', 'newsletter_topics', 'newsletter_source', 'newsletter_consent', 'newsletter_consent_text', 'status', 'source_submission_id', 'request_id', 'source_ip_hash', 'created_at', 'updated_at'],
   comments: ['id', 'site_id', 'target_type', 'target_id', 'comment_thread_id', 'author_name', 'author_email', 'content', 'status', 'parent_id', 'report_count', 'report_reasons', 'request_id', 'ip_hash', 'created_at', 'updated_at'],
   activity_logs: ['id', 'user_id', 'action', 'entity_type', 'entity_id', 'details', 'ip_address', 'created_at'],
   platform_settings: ['id', 'delivery_mode', 'api_keys', 'storage', 'auth', 'integrations', 'updated_at'],
@@ -249,6 +249,7 @@ const requiredDatabaseIndexes = {
     'idx_form_contacts_site_form',
     'form_contacts_site_form_updated_idx',
     'form_contacts_site_form_status_updated_idx',
+    'form_contacts_site_newsletter_status_updated_idx',
     'form_contacts_site_request_idx',
     'form_contacts_site_email_idx',
     'idx_form_contacts_source_submission_id',
@@ -301,6 +302,7 @@ const requiredDatabaseConstraints = {
   ],
   form_contacts: [
     'form_contacts_status_check',
+    'form_contacts_newsletter_subscription_status_check',
     'form_contacts_source_submission_id_fkey',
   ],
   comments: [

@@ -554,6 +554,13 @@ export const formContacts = pgTable('form_contacts', {
     phone: text('phone'),
     notes: text('notes'),
     sourceValues: jsonb('source_values').default({}),
+    newsletterSubscriptionStatus: text('newsletter_subscription_status'),
+    newsletterSubscribedAt: timestamp('newsletter_subscribed_at'),
+    newsletterUnsubscribedAt: timestamp('newsletter_unsubscribed_at'),
+    newsletterTopics: text('newsletter_topics'),
+    newsletterSource: text('newsletter_source'),
+    newsletterConsent: boolean('newsletter_consent'),
+    newsletterConsentText: text('newsletter_consent_text'),
     status: text('status').default('new').notNull(),
     sourceSubmissionId: uuid('source_submission_id').references(() => formSubmissions.id, { onDelete: 'set null' }),
     requestId: text('request_id'),
@@ -563,6 +570,7 @@ export const formContacts = pgTable('form_contacts', {
 }, (table) => ({
     siteFormUpdatedIdx: index('form_contacts_site_form_updated_idx').on(table.siteId, table.formId, table.updatedAt),
     siteFormStatusUpdatedIdx: index('form_contacts_site_form_status_updated_idx').on(table.siteId, table.formId, table.status, table.updatedAt),
+    siteNewsletterStatusUpdatedIdx: index('form_contacts_site_newsletter_status_updated_idx').on(table.siteId, table.newsletterSubscriptionStatus, table.updatedAt),
     siteRequestIdx: index('form_contacts_site_request_idx').on(table.siteId, table.requestId),
     siteEmailIdx: index('form_contacts_site_email_idx').on(table.siteId, table.email),
 }));

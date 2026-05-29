@@ -45,6 +45,7 @@ import {
   frontendFormFieldKeyMapFromMetadata,
 } from '@/lib/frontendDesignContract';
 import { buildSiteNavigation } from '@/lib/navigation';
+import { NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION, isNewsletterForm } from '@/lib/newsletterSubscribers';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
 import { buildUserPermissionMatrix, isOwnerOnlyAdminPermission, type AdminUserPermissionMatrix } from '@/lib/adminPermissions';
@@ -3147,6 +3148,64 @@ const buildManifestFormsDiscovery = (
   };
 };
 
+const buildManifestNewsletterDiscovery = (
+  siteId: string,
+  forms: FormDefinition[],
+) => {
+  const newsletterForms = forms.filter(isNewsletterForm);
+
+  return {
+    schemaVersion: NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION,
+    count: newsletterForms.length,
+    activeCount: newsletterForms.filter((form) => form.isActive).length,
+    endpoints: {
+      publicSubscribers: `/api/sites/${siteId}/newsletter/subscribers`,
+      adminSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`,
+      forms: `/api/sites/${siteId}/forms`,
+      contactSegments: `/api/admin/sites/${siteId}/forms/contact-segments`,
+      contactLists: `/api/admin/sites/${siteId}/forms/contact-lists`,
+    },
+    methods: {
+      subscribe: 'POST',
+      unsubscribe: 'DELETE',
+      adminList: 'GET',
+      adminUpsert: 'POST',
+    },
+    sdkHelpers: {
+      subscribe: 'subscribeNewsletter',
+      unsubscribe: 'unsubscribeNewsletter',
+      adminList: 'newsletterSubscribers',
+      adminUpsert: 'upsertNewsletterSubscriber',
+    },
+    forms: newsletterForms.map((form) => ({
+      id: form.id,
+      name: form.name,
+      title: form.title || null,
+      active: form.isActive,
+      fields: form.fields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        required: Boolean(field.required),
+      })),
+      definitionUrl: `/api/sites/${siteId}/forms/${form.id}/definition`,
+      submitUrl: `/api/sites/${siteId}/forms/${form.id}/submissions`,
+    })),
+    sampleSubscribePayload: {
+      email: 'reader@example.com',
+      name: 'Reader',
+      topics: 'Investigations',
+      consent: true,
+      source: 'custom frontend newsletter form',
+    },
+    providerBoundary: {
+      nativeBackyScope: ['subscriber records', 'consent evidence', 'topic/source metadata', 'CSV export', 'private subscriber API', 'public signup API'],
+      deliveryProviderScope: ['mailbox delivery', 'unsubscribe links in delivered email', 'bounce handling', 'SPF/DKIM/DMARC', 'abuse monitoring', 'IP/domain reputation'],
+      secretPolicy: 'Provider API keys stay server-side in Settings/environment variables; public manifests expose only subscriber API contracts and route templates.',
+    },
+  };
+};
+
 const buildManifestCollectionsDiscovery = (
   siteId: string,
   collections: ManifestCollectionDiscoverySource[],
@@ -3556,6 +3615,7 @@ const buildRepositoryManifest = (
           frontendFieldKeyMap: frontendFormFieldKeyMapFromMetadata(form.settings),
         })),
         formsRuntime: buildManifestFormsDiscovery(input.site.id, input.forms),
+        newsletterRuntime: buildManifestNewsletterDiscovery(input.site.id, input.forms),
         comments: buildManifestCommentDiscovery(input.site.id, input.site.settings),
         media: buildManifestMediaDiscovery(input.site.id, input.media, input.media.length, input.media.length),
         commerce,
@@ -3927,6 +3987,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             frontendDesign: frontendDesignProvenanceFromMetadata(form.settings),
           })),
           formsRuntime: buildManifestFormsDiscovery(site.id, forms),
+          newsletterRuntime: buildManifestNewsletterDiscovery(site.id, forms),
           comments: buildManifestCommentDiscovery(site.id, site.settings),
           media: buildManifestMediaDiscovery(site.id, media.media, media.pagination.total, media.pagination.total),
           commerce,

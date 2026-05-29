@@ -1342,6 +1342,7 @@ const formsManagementDiscovery = (siteId: string) => ({
     clone: `/api/admin/sites/${siteId}/forms/{formId}/clone`,
     embedBlock: `/api/admin/sites/${siteId}/forms/{formId}/embed-block`,
     analytics: `/api/admin/sites/${siteId}/forms/analytics`,
+    newsletterSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`,
     contactSegments: `/api/admin/sites/${siteId}/forms/contact-segments`,
     contactLists: `/api/admin/sites/${siteId}/forms/contact-lists`,
     consentRetention: `/api/admin/sites/${siteId}/forms/consent-retention`,
@@ -1367,6 +1368,8 @@ const formsManagementDiscovery = (siteId: string) => ({
     clone: "POST",
     embedBlock: "POST",
     analytics: "GET",
+    newsletterSubscribers: "GET",
+    upsertNewsletterSubscriber: "POST",
     contactSegments: "GET",
     contactLists: "GET",
     saveContactList: "POST",
@@ -1417,6 +1420,10 @@ const formsManagementDiscovery = (siteId: string) => ({
     clone: "cloneAdminForm",
     embedBlock: "createAdminFormEmbedBlock",
     analytics: "formsAnalytics",
+    subscribeNewsletter: "subscribeNewsletter",
+    unsubscribeNewsletter: "unsubscribeNewsletter",
+    newsletterSubscribers: "newsletterSubscribers",
+    upsertNewsletterSubscriber: "upsertNewsletterSubscriber",
     contactSegments: "formContactSegments",
     contactLists: "formContactLists",
     saveContactList: "saveFormContactList",
@@ -1451,6 +1458,7 @@ const formsManagementDiscovery = (siteId: string) => ({
     contact: "backy.form-contact.v1",
     contactSegments: "backy.form-contact-segments.v1",
     contactLists: "backy.form-contact-lists.v1",
+    newsletterSubscribers: "backy.newsletter-subscribers.v1",
     consentRetention: "backy.form-consent-retention.v1",
   },
   privacy: {
@@ -4661,6 +4669,143 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   content: {
                     "application/json": {
                       schema: { $ref: "#/components/schemas/FormListEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          [`/api/sites/${site.id}/newsletter/subscribers`]: {
+            post: {
+              tags: ["Interactions"],
+              summary: "Subscribe a reader to the site newsletter",
+              operationId: "subscribeBackyNewsletter",
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      $ref: "#/components/schemas/NewsletterSubscribeRequest",
+                    },
+                  },
+                },
+              },
+              responses: {
+                "201": {
+                  description: "Newsletter subscriber captured",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/NewsletterSubscriberEnvelope",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            delete: {
+              tags: ["Interactions"],
+              summary: "Unsubscribe a reader from the site newsletter",
+              operationId: "unsubscribeBackyNewsletter",
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      required: ["email"],
+                      properties: {
+                        email: { type: "string", format: "email" },
+                        formId: { type: "string" },
+                        source: { type: "string" },
+                      },
+                    },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Newsletter subscriber archived",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/NewsletterSubscriberEnvelope",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          [`/api/admin/sites/${site.id}/newsletter/subscribers`]: {
+            get: {
+              tags: ["Interactions"],
+              summary: "List private newsletter subscribers for admin workflows",
+              operationId: "listBackyNewsletterSubscribers",
+              parameters: [
+                queryParameter("status", {
+                  type: "string",
+                  enum: ["all", "subscribed", "unsubscribed"],
+                }),
+                queryParameter("formId"),
+                queryParameter("q"),
+                queryParameter("limit", {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 100,
+                }),
+                queryParameter("offset", { type: "integer", minimum: 0 }),
+              ],
+              responses: {
+                "200": {
+                  description: "Newsletter subscriber list",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/NewsletterSubscribersEnvelope",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            post: {
+              tags: ["Interactions"],
+              summary: "Create or update a private newsletter subscriber",
+              operationId: "upsertBackyNewsletterSubscriber",
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      allOf: [
+                        { $ref: "#/components/schemas/NewsletterSubscribeRequest" },
+                        {
+                          type: "object",
+                          properties: {
+                            status: {
+                              type: "string",
+                              enum: ["subscribed", "unsubscribed"],
+                            },
+                            contactStatus: {
+                              type: "string",
+                              enum: ["new", "contacted", "qualified", "archived"],
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Newsletter subscriber updated",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/NewsletterSubscriberEnvelope",
+                      },
                     },
                   },
                 },
@@ -11765,6 +11910,71 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 message: { type: "string" },
               },
             },
+            NewsletterSubscribeRequest: {
+              type: "object",
+              required: ["email", "consent"],
+              properties: {
+                email: { type: "string", format: "email" },
+                name: { type: "string" },
+                topics: { type: "string" },
+                source: { type: "string" },
+                consent: { type: "boolean" },
+                consentText: { type: "string" },
+                formId: { type: "string" },
+              },
+            },
+            NewsletterSubscriberEnvelope: envelopeSchema({
+              type: "object",
+              required: ["schemaVersion", "subscriber"],
+              properties: {
+                schemaVersion: { const: "backy.newsletter-subscribe.v1" },
+                subscriber: { $ref: "#/components/schemas/NewsletterSubscriber" },
+                existing: { type: "boolean" },
+                deliveryBoundary: { type: "string" },
+              },
+            }),
+            NewsletterSubscribersEnvelope: envelopeSchema({
+              type: "object",
+              required: ["schemaVersion", "subscribers", "pagination", "summary"],
+              properties: {
+                schemaVersion: { const: "backy.newsletter-subscribers.v1" },
+                subscribers: {
+                  type: "array",
+                  items: { $ref: "#/components/schemas/NewsletterSubscriber" },
+                },
+                pagination: { type: "object", additionalProperties: true },
+                summary: { type: "object", additionalProperties: true },
+                handoff: { type: "object", additionalProperties: true },
+              },
+            }),
+            NewsletterSubscriber: {
+              type: "object",
+              required: ["id", "formId", "contactStatus", "subscriptionStatus", "createdAt", "updatedAt"],
+              properties: {
+                id: { type: "string" },
+                email: { type: ["string", "null"], format: "email" },
+                name: { type: ["string", "null"] },
+                formId: { type: "string" },
+                formTitle: { type: "string" },
+                contactStatus: {
+                  type: "string",
+                  enum: ["new", "contacted", "qualified", "archived"],
+                },
+                subscriptionStatus: {
+                  type: "string",
+                  enum: ["subscribed", "unsubscribed"],
+                },
+                topics: { type: ["string", "null"] },
+                source: { type: ["string", "null"] },
+                consent: { type: ["boolean", "null"] },
+                consentText: { type: ["string", "null"] },
+                subscribedAt: { type: "string" },
+                unsubscribedAt: { type: ["string", "null"] },
+                createdAt: { type: "string", format: "date-time" },
+                updatedAt: { type: "string", format: "date-time" },
+                sourceValues: { type: "object", additionalProperties: true },
+              },
+            },
             FormContactsEnvelope: envelopeSchema({
               type: "object",
               required: ["form", "contacts", "pagination"],
@@ -11806,6 +12016,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 phone: { type: ["string", "null"] },
                 notes: { type: ["string", "null"] },
                 sourceValues: { type: "object", additionalProperties: true },
+                newsletterSubscriptionStatus: {
+                  type: ["string", "null"],
+                  enum: ["subscribed", "unsubscribed", "pending", "bounced", "complained", null],
+                },
+                newsletterSubscribedAt: { type: ["string", "null"], format: "date-time" },
+                newsletterUnsubscribedAt: { type: ["string", "null"], format: "date-time" },
+                newsletterTopics: { type: ["string", "null"] },
+                newsletterSource: { type: ["string", "null"] },
+                newsletterConsent: { type: ["boolean", "null"] },
+                newsletterConsentText: { type: ["string", "null"] },
                 status: {
                   type: "string",
                   enum: ["new", "contacted", "qualified", "archived"],

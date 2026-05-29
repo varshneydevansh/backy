@@ -186,6 +186,13 @@ const requiredSchema = {
     'phone',
     'notes',
     'source_values',
+    'newsletter_subscription_status',
+    'newsletter_subscribed_at',
+    'newsletter_unsubscribed_at',
+    'newsletter_topics',
+    'newsletter_source',
+    'newsletter_consent',
+    'newsletter_consent_text',
     'status',
     'source_submission_id',
     'request_id',
@@ -235,6 +242,7 @@ const requiredIndexes = {
   form_contacts: [
     'form_contacts_site_form_updated_idx',
     'form_contacts_site_form_status_updated_idx',
+    'form_contacts_site_newsletter_status_updated_idx',
     'form_contacts_site_request_idx',
     'form_contacts_site_email_idx',
     'idx_form_contacts_source_submission_id',
@@ -251,6 +259,7 @@ const requiredConstraints = {
   ],
   form_contacts: [
     'form_contacts_status_check',
+    'form_contacts_newsletter_subscription_status_check',
     'form_contacts_source_submission_id_fkey',
   ],
 };
@@ -544,6 +553,12 @@ const run = async () => {
     phone: '+15555550123',
     notes: 'Lead promoted from database smoke',
     sourceValues: approvedSubmission.values,
+    newsletterSubscriptionStatus: 'subscribed',
+    newsletterSubscribedAt: '2030-01-02T03:04:05.000Z',
+    newsletterTopics: 'Database smoke',
+    newsletterSource: 'forms-postgres-smoke',
+    newsletterConsent: true,
+    newsletterConsentText: 'Database smoke newsletter consent.',
     status: 'new',
     sourceSubmissionId: approvedSubmission.id,
     requestId: `${suffix}-contact`,
@@ -551,7 +566,9 @@ const run = async () => {
   })).item;
 
   assert(contact.id, 'Expected created contact id.');
+  assert(contact.newsletterSubscriptionStatus === 'subscribed' && contact.newsletterConsent === true, 'Expected newsletter subscription fields to persist on contact create.');
   assert((await repositories.forms.listContacts({ siteId: site.id, formId: form.id, requestId: `${suffix}-contact` })).items.length === 1, 'Expected contact request-id filter to find the created contact.');
+  assert((await repositories.forms.listContacts({ siteId: site.id, formId: form.id, newsletterOnly: true, newsletterSubscriptionStatus: 'subscribed' })).items.some((item) => item.id === contact.id), 'Expected newsletter subscription filter to find the created contact.');
   assert((await repositories.forms.listContacts({ siteId: site.id, formId: form.id, status: 'new', search: 'reader-db-smoke' })).items.length === 1, 'Expected contact status/search filters to find the created contact.');
 
   const qualifiedContact = (await repositories.forms.updateContact(site.id, contact.id, {
@@ -661,6 +678,7 @@ const run = async () => {
       'spam and consent settings merge',
       'submission create/list/search/update/get',
       'contact create/list/search/update/get/delete',
+      'newsletter subscription filter',
       'duplicate contact merge and promotion metadata',
     ],
   }, null, 2));

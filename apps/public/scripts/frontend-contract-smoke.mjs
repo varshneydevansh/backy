@@ -23,6 +23,7 @@ const publicBlogRoute = read('../src/app/api/sites/[siteId]/blog/route.ts');
 const publicFormsRoute = read('../src/app/api/sites/[siteId]/forms/route.ts');
 const publicFormDetailRoute = read('../src/app/api/sites/[siteId]/forms/[formId]/route.ts');
 const publicFormDefinitionRoute = read('../src/app/api/sites/[siteId]/forms/[formId]/definition/route.ts');
+const publicNewsletterSubscribersRoute = read('../src/app/api/sites/[siteId]/newsletter/subscribers/route.ts');
 const publicCommerceCatalogRoute = read('../src/app/api/sites/[siteId]/commerce/catalog/route.ts');
 const publicCommerceOrdersRoute = read('../src/app/api/sites/[siteId]/commerce/orders/route.ts');
 const publicCollectionsRoute = read('../src/app/api/sites/[siteId]/collections/route.ts');
@@ -50,11 +51,13 @@ const adminCollectionRecordsRoute = read('../src/app/api/admin/sites/[siteId]/co
 const adminCollectionRecordDetailRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts');
 const adminReusableSectionsRoute = read('../src/app/api/admin/sites/[siteId]/reusable-sections/route.ts');
 const adminReusableSectionDetailRoute = read('../src/app/api/admin/sites/[siteId]/reusable-sections/[sectionId]/route.ts');
+const adminNewsletterSubscribersRoute = read('../src/app/api/admin/sites/[siteId]/newsletter/subscribers/route.ts');
 const publicReusableSectionsRoute = read('../src/app/api/sites/[siteId]/reusable-sections/route.ts');
 const publicReusableSectionDetailRoute = read('../src/app/api/sites/[siteId]/reusable-sections/[sectionId]/route.ts');
 const adminTemplateRegistryRoute = read('../src/app/api/admin/sites/[siteId]/templates/route.ts');
 const templateRegistryLib = read('../src/lib/templateRegistry.ts');
 const frontendDesignContractLib = read('../src/lib/frontendDesignContract.ts');
+const newsletterSubscribersLib = read('../src/lib/newsletterSubscribers.ts');
 const liveManagementEditorCommandRegistryLib = read('../src/lib/liveManagementEditorCommandRegistry.ts');
 const backyStoreLib = read('../src/lib/backyStore.ts');
 const pageRenderer = read('../src/components/PageRenderer.tsx');
@@ -80,6 +83,7 @@ const adminSiteDetailPage = read('../../../apps/admin/src/routes/sites.$siteId.t
 const adminPagesNewPage = read('../../../apps/admin/src/routes/pages.new.tsx');
 const adminBlogNewPage = read('../../../apps/admin/src/routes/blog.new.tsx');
 const adminFormsPage = read('../../../apps/admin/src/routes/forms.tsx');
+const adminNewsletterPage = read('../../../apps/admin/src/routes/newsletter.tsx');
 const adminProductsPage = read('../../../apps/admin/src/routes/products.tsx');
 const adminCollectionsPage = read('../../../apps/admin/src/routes/collections.tsx');
 const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-sections.tsx');
@@ -1395,15 +1399,37 @@ assert(
     manifestRoute.includes("publicDefinitionExcludesSubmissions: true") &&
     manifestRoute.includes('formsRuntime: buildManifestFormsDiscovery(input.site.id, input.forms)') &&
     manifestRoute.includes('formsRuntime: buildManifestFormsDiscovery(site.id, forms)') &&
+    manifestRoute.includes('newsletterRuntime: buildManifestNewsletterDiscovery(input.site.id, input.forms)') &&
+    manifestRoute.includes('newsletterRuntime: buildManifestNewsletterDiscovery(site.id, forms)') &&
+    manifestRoute.includes("publicSubscribers: `/api/sites/${siteId}/newsletter/subscribers`") &&
+    manifestRoute.includes("adminSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`") &&
+    manifestRoute.includes("subscribe: 'subscribeNewsletter'") &&
+    newsletterSubscribersLib.includes("NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION = 'backy.newsletter-subscribers.v1'") &&
+    newsletterSubscribersLib.includes('export const buildNewsletterContactFields = ({') &&
+    newsletterSubscribersLib.includes('export const isNewsletterForm = (form: FormDefinition): boolean => {') &&
+    publicNewsletterSubscribersRoute.includes('NEWSLETTER_CONSENT_REQUIRED') &&
+    publicNewsletterSubscribersRoute.includes('buildNewsletterSourceValues({') &&
+    adminNewsletterSubscribersRoute.includes('buildNewsletterSubscriberPayload(contact, form, { includeSourceValues: true })') &&
+    adminNewsletterPage.includes('Public subscribe') &&
+    adminNewsletterPage.includes('newsletterSubscribersUrl') &&
     openApiRoute.includes('formsManagementDiscovery') &&
+    openApiRoute.includes('subscribeBackyNewsletter') &&
+    openApiRoute.includes('listBackyNewsletterSubscribers') &&
     openApiRoute.includes('"x-backy-forms-management"') &&
     openApiRoute.includes('FormsManagementPolicy') &&
     openApiRoute.includes('"backy.forms-management.v1"') &&
     frontendManifestSchema.includes('"backy.forms-discovery.v1"') &&
     frontendManifestSchema.includes('"backy.forms-management.v1"') &&
+    frontendManifestSchema.includes('"backy.newsletter-subscribers.v1"') &&
     frontendManifestSchema.includes('"cacheableDefinitions"') &&
     frontendManifestSchema.includes('"authenticatedManagement"') &&
     frontendManifestSchema.includes('"FORM_VALIDATION_ERROR"') &&
+    sdkSource.includes('BackyManifestNewsletterRuntimeModule') &&
+    sdkSource.includes('newsletterRuntime?: BackyManifestNewsletterRuntimeModule') &&
+    sdkSource.includes('subscribeNewsletter(') &&
+    sdkSource.includes('newsletterSubscribers(') &&
+    sdkSource.includes('upsertNewsletterSubscriber(') &&
+    generatedSdkTypes.includes('newsletterRuntime?: {') &&
     sdkSource.includes('BackyManifestFormsManagementPolicy') &&
     sdkSource.includes('BackyManifestFormsRuntimeModule') &&
     sdkSmoke.includes('manifest() missing forms runtime discovery module') &&

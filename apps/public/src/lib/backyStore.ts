@@ -3160,6 +3160,89 @@ const FORM_LIBRARY: FormDefinition[] = [
     createdAt: nowIso,
     updatedAt: nowIso,
   },
+  {
+    id: "form-newsletter",
+    siteId: "site-demo",
+    pageId: null,
+    postId: null,
+    name: "newsletter-signup",
+    title: "Newsletter signup",
+    description: "Public newsletter subscriber capture with topic preference and consent evidence.",
+    audience: "public",
+    isActive: true,
+    fields: [
+      {
+        key: "email",
+        label: "Email",
+        type: "email",
+        required: true,
+        placeholder: "you@example.com",
+      },
+      {
+        key: "name",
+        label: "Name",
+        type: "text",
+        required: false,
+        placeholder: "Optional",
+      },
+      {
+        key: "topics",
+        label: "Topics",
+        type: "select",
+        required: false,
+        options: ["Investigations", "Local reports", "Policy updates", "Corrections"],
+        defaultValue: "Investigations",
+      },
+      {
+        key: "consent",
+        label: "I agree to receive email updates and can unsubscribe anytime.",
+        type: "checkbox",
+        required: true,
+      },
+      {
+        key: "signup_source",
+        label: "Signup source",
+        type: "text",
+        required: false,
+        placeholder: "Website newsletter page",
+      },
+    ],
+    notificationEmail: null,
+    successMessage: "Subscription confirmed. Watch your inbox for the next report.",
+    successRedirectUrl: null,
+    enableHoneypot: true,
+    enableCaptcha: false,
+    moderationMode: "auto-approve",
+    contactShare: {
+      enabled: true,
+      nameField: "name",
+      emailField: "email",
+      notesField: "topics",
+      dedupeByEmail: true,
+    },
+    consentSettings: {
+      policyLabel: "Newsletter consent",
+      retentionDays: 365,
+      deleteAfterDays: 1095,
+      exportIncludesIp: false,
+    },
+    settings: {
+      backyIntent: "newsletter",
+      schemaVersion: "backy.newsletter-form.v1",
+      source: "demo-newsletter",
+      subscriptionManagement: {
+        statusField: "status",
+        emailField: "email",
+        topicField: "topics",
+        consentField: "consent",
+        sourceField: "signup_source",
+      },
+    },
+    createdBy: "admin",
+    updatedBy: "admin",
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  },
 ];
 
 const COMMENT_LIST: Comment[] = [
@@ -12121,6 +12204,8 @@ export function listFormContacts(
   formId: string,
   params: {
     status?: Contact["status"];
+    newsletterSubscriptionStatus?: NonNullable<Contact["newsletterSubscriptionStatus"]> | "all";
+    newsletterOnly?: boolean;
     requestId?: string;
     limit?: number;
     offset?: number;
@@ -12128,10 +12213,23 @@ export function listFormContacts(
 ): { contacts: Contact[]; count: number; pagination: Pagination } {
   refreshPersistedInteractionStore();
 
-  const { status, requestId, limit = 20, offset = 0 } = params;
+  const {
+    status,
+    newsletterSubscriptionStatus,
+    newsletterOnly,
+    requestId,
+    limit = 20,
+    offset = 0,
+  } = params;
   const records = contactStore
     .filter((contact) => contact.formId === formId)
     .filter((contact) => (status ? contact.status === status : true))
+    .filter((contact) => (newsletterOnly ? Boolean(contact.newsletterSubscriptionStatus) : true))
+    .filter((contact) => (
+      newsletterSubscriptionStatus && newsletterSubscriptionStatus !== "all"
+        ? contact.newsletterSubscriptionStatus === newsletterSubscriptionStatus
+        : true
+    ))
     .filter((contact) => (requestId ? contact.requestId === requestId : true));
 
   const paginated = records.slice(offset, offset + limit);
@@ -12177,6 +12275,17 @@ export function createContactRecord(
       phone: input.phone ?? existing.phone ?? null,
       notes: input.notes ?? existing.notes ?? null,
       sourceValues: input.sourceValues || existing.sourceValues || {},
+      newsletterSubscriptionStatus:
+        input.newsletterSubscriptionStatus ?? existing.newsletterSubscriptionStatus ?? null,
+      newsletterSubscribedAt:
+        input.newsletterSubscribedAt ?? existing.newsletterSubscribedAt ?? null,
+      newsletterUnsubscribedAt:
+        input.newsletterUnsubscribedAt ?? existing.newsletterUnsubscribedAt ?? null,
+      newsletterTopics: input.newsletterTopics ?? existing.newsletterTopics ?? null,
+      newsletterSource: input.newsletterSource ?? existing.newsletterSource ?? null,
+      newsletterConsent: input.newsletterConsent ?? existing.newsletterConsent ?? null,
+      newsletterConsentText:
+        input.newsletterConsentText ?? existing.newsletterConsentText ?? null,
       status: input.status || existing.status,
       sourceSubmissionId:
         input.sourceSubmissionId || existing.sourceSubmissionId,
@@ -12300,6 +12409,13 @@ export function updateContactStatus(
     pageId?: string | null;
     postId?: string | null;
     sourceValues?: Record<string, unknown>;
+    newsletterSubscriptionStatus?: Contact["newsletterSubscriptionStatus"];
+    newsletterSubscribedAt?: string | null;
+    newsletterUnsubscribedAt?: string | null;
+    newsletterTopics?: string | null;
+    newsletterSource?: string | null;
+    newsletterConsent?: boolean | null;
+    newsletterConsentText?: string | null;
     sourceSubmissionId?: string;
     requestId?: string | null;
     sourceIpHash?: string | null;
@@ -12333,6 +12449,27 @@ export function updateContactStatus(
   }
   if (updates.sourceValues !== undefined) {
     contact.sourceValues = updates.sourceValues;
+  }
+  if (updates.newsletterSubscriptionStatus !== undefined) {
+    contact.newsletterSubscriptionStatus = updates.newsletterSubscriptionStatus;
+  }
+  if (updates.newsletterSubscribedAt !== undefined) {
+    contact.newsletterSubscribedAt = updates.newsletterSubscribedAt;
+  }
+  if (updates.newsletterUnsubscribedAt !== undefined) {
+    contact.newsletterUnsubscribedAt = updates.newsletterUnsubscribedAt;
+  }
+  if (updates.newsletterTopics !== undefined) {
+    contact.newsletterTopics = updates.newsletterTopics;
+  }
+  if (updates.newsletterSource !== undefined) {
+    contact.newsletterSource = updates.newsletterSource;
+  }
+  if (updates.newsletterConsent !== undefined) {
+    contact.newsletterConsent = updates.newsletterConsent;
+  }
+  if (updates.newsletterConsentText !== undefined) {
+    contact.newsletterConsentText = updates.newsletterConsentText;
   }
   if (updates.sourceSubmissionId !== undefined) {
     contact.sourceSubmissionId = updates.sourceSubmissionId;

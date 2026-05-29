@@ -21,6 +21,8 @@ interface RouteParams {
 }
 
 type ContactStatus = 'new' | 'contacted' | 'qualified' | 'archived';
+type NewsletterStatus = NonNullable<Contact['newsletterSubscriptionStatus']>;
+const NEWSLETTER_STATUSES: NewsletterStatus[] = ['subscribed', 'unsubscribed', 'pending', 'bounced', 'complained'];
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -41,6 +43,26 @@ const parseStatus = (value: unknown): ContactStatus | null => (
 const parseNullableString = (value: unknown): string | null | undefined => {
   if (value === undefined) return undefined;
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+};
+
+const parseNullableBoolean = (value: unknown): boolean | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', 'yes', '1', 'on'].includes(normalized)) return true;
+    if (['false', 'no', '0', 'off'].includes(normalized)) return false;
+  }
+  return null;
+};
+
+const parseNewsletterStatus = (value: unknown): { value?: NewsletterStatus | null; invalid?: string } => {
+  if (value === undefined) return {};
+  if (value === null || value === '') return { value: null };
+  return NEWSLETTER_STATUSES.includes(value as NewsletterStatus)
+    ? { value: value as NewsletterStatus }
+    : { invalid: String(value) };
 };
 
 const parseSourceValues = (value: unknown): Record<string, unknown> | undefined => {
@@ -67,6 +89,14 @@ const parseBody = (value: unknown) => {
   const sourceIpHash = parseNullableString(record.sourceIpHash);
   const sourceSubmissionId = parseNullableString(record.sourceSubmissionId);
   const sourceValues = parseSourceValues(record.sourceValues);
+  const newsletterSubscriptionStatus = parseNewsletterStatus(record.newsletterSubscriptionStatus);
+  const newsletterSubscriptionStatusProvided = Object.prototype.hasOwnProperty.call(record, 'newsletterSubscriptionStatus');
+  const newsletterSubscribedAt = parseNullableString(record.newsletterSubscribedAt);
+  const newsletterUnsubscribedAt = parseNullableString(record.newsletterUnsubscribedAt);
+  const newsletterTopics = parseNullableString(record.newsletterTopics);
+  const newsletterSource = parseNullableString(record.newsletterSource);
+  const newsletterConsent = parseNullableBoolean(record.newsletterConsent);
+  const newsletterConsentText = parseNullableString(record.newsletterConsentText);
 
   if (
     !status
@@ -81,6 +111,13 @@ const parseBody = (value: unknown) => {
     && sourceIpHash === undefined
     && sourceSubmissionId === undefined
     && sourceValues === undefined
+    && !newsletterSubscriptionStatusProvided
+    && newsletterSubscribedAt === undefined
+    && newsletterUnsubscribedAt === undefined
+    && newsletterTopics === undefined
+    && newsletterSource === undefined
+    && newsletterConsent === undefined
+    && newsletterConsentText === undefined
   ) {
     return null;
   }
@@ -98,6 +135,14 @@ const parseBody = (value: unknown) => {
     ...(sourceIpHash !== undefined ? { sourceIpHash } : {}),
     ...(sourceSubmissionId !== undefined ? { sourceSubmissionId } : {}),
     ...(sourceValues !== undefined ? { sourceValues } : {}),
+    newsletterSubscriptionStatusInvalid: Boolean(newsletterSubscriptionStatus.invalid),
+    ...(newsletterSubscriptionStatusProvided ? { newsletterSubscriptionStatus: newsletterSubscriptionStatus.value ?? null } : {}),
+    ...(newsletterSubscribedAt !== undefined ? { newsletterSubscribedAt } : {}),
+    ...(newsletterUnsubscribedAt !== undefined ? { newsletterUnsubscribedAt } : {}),
+    ...(newsletterTopics !== undefined ? { newsletterTopics } : {}),
+    ...(newsletterSource !== undefined ? { newsletterSource } : {}),
+    ...(newsletterConsent !== undefined ? { newsletterConsent } : {}),
+    ...(newsletterConsentText !== undefined ? { newsletterConsentText } : {}),
   };
 };
 
@@ -121,6 +166,13 @@ const toContactUpdate = (body: NonNullable<ReturnType<typeof parseBody>>) => {
   if (body.sourceIpHash !== undefined) update.sourceIpHash = body.sourceIpHash;
   if (body.sourceSubmissionId !== undefined) update.sourceSubmissionId = body.sourceSubmissionId || undefined;
   if (body.sourceValues !== undefined) update.sourceValues = body.sourceValues;
+  if (body.newsletterSubscriptionStatus !== undefined) update.newsletterSubscriptionStatus = body.newsletterSubscriptionStatus;
+  if (body.newsletterSubscribedAt !== undefined) update.newsletterSubscribedAt = body.newsletterSubscribedAt;
+  if (body.newsletterUnsubscribedAt !== undefined) update.newsletterUnsubscribedAt = body.newsletterUnsubscribedAt;
+  if (body.newsletterTopics !== undefined) update.newsletterTopics = body.newsletterTopics;
+  if (body.newsletterSource !== undefined) update.newsletterSource = body.newsletterSource;
+  if (body.newsletterConsent !== undefined) update.newsletterConsent = body.newsletterConsent;
+  if (body.newsletterConsentText !== undefined) update.newsletterConsentText = body.newsletterConsentText;
   return update;
 };
 
@@ -145,6 +197,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
     if (body.statusProvided && !body.status) {
       return invalidStatusResponse(requestId);
+    }
+    if (body.newsletterSubscriptionStatusInvalid) {
+      return errorResponse(400, 'INVALID_ADMIN_FORM_CONTACT_NEWSLETTER_STATUS', 'Invalid newsletter subscription status.', requestId);
     }
     const emailPolicy = body.email === undefined
       ? { ok: true as const, email: undefined }

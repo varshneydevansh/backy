@@ -174,7 +174,9 @@ function NewsletterRoute() {
     ))
   ), [subscribers]);
   const contactSegmentsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-segments`;
+  const newsletterSubscribersUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers`;
   const newsletterApiUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-lists`;
+  const publicNewsletterSubscribersUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/newsletter/subscribers`;
   const newsletterPageRoute = `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=newsletter&templateSource=backy-canvas&focus=canvas`;
   const blogRoute = `/blog/new?siteId=${encodeURIComponent(activeSiteId)}&templateSource=backy-canvas&focus=canvas`;
   const newsletterHandoff = useMemo(() => buildNewsletterHandoff({
@@ -628,6 +630,8 @@ function NewsletterRoute() {
             </div>
             <div className="mt-3 space-y-2">
               <ApiSnippet label="Newsletter route" value={`/newsletter?siteId=${activeSiteId}`} />
+              <ApiSnippet label="Public subscribe" value={publicNewsletterSubscribersUrl} />
+              <ApiSnippet label="Admin subscribers" value={newsletterSubscribersUrl} />
               <ApiSnippet label="Segments" value={contactSegmentsUrl} />
               <ApiSnippet label="Contact lists" value={newsletterApiUrl} />
               <ApiSnippet label="Canvas page" value={newsletterPageRoute} />
@@ -875,6 +879,11 @@ function buildNewsletterHandoff({
     },
     publicCapture: {
       formsList: `${publicBaseUrl}/api/sites/${activeSiteId}/forms`,
+      subscribersUrl: `${publicBaseUrl}/api/sites/${activeSiteId}/newsletter/subscribers`,
+      subscriberMethods: {
+        subscribe: 'POST',
+        unsubscribe: 'DELETE',
+      },
       forms: forms.map((form) => ({
         id: form.id,
         name: form.name,
@@ -900,6 +909,7 @@ function buildNewsletterHandoff({
     },
     privateManagement: {
       contactsByFormUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/{formId}/contacts?limit=100`,
+      newsletterSubscribersUrl: `${adminBaseUrl}/sites/${activeSiteId}/newsletter/subscribers`,
       contactSegmentsUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/contact-segments`,
       contactListsUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/contact-lists`,
       syncUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/{formId}/contacts/sync`,

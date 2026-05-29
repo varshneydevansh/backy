@@ -2948,6 +2948,53 @@
               },
               "required": ["schemaVersion", "count", "activeCount", "collectionTargetCount", "moderationModes", "endpoints", "methods", "capabilities", "cache", "privacy", "managementPolicy", "schemas"]
             },
+            "newsletterRuntime": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.newsletter-subscribers.v1" },
+                "count": { "type": "number", "minimum": 0 },
+                "activeCount": { "type": "number", "minimum": 0 },
+                "endpoints": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicSubscribers": { "type": "string", "minLength": 1 },
+                    "adminSubscribers": { "type": "string", "minLength": 1 },
+                    "forms": { "type": "string", "minLength": 1 },
+                    "contactSegments": { "type": "string", "minLength": 1 },
+                    "contactLists": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["publicSubscribers", "adminSubscribers", "forms", "contactSegments", "contactLists"]
+                },
+                "methods": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "subscribe": { "const": "POST" },
+                    "unsubscribe": { "const": "DELETE" },
+                    "adminList": { "const": "GET" },
+                    "adminUpsert": { "const": "POST" }
+                  },
+                  "required": ["subscribe", "unsubscribe", "adminList", "adminUpsert"]
+                },
+                "sdkHelpers": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "subscribe": { "const": "subscribeNewsletter" },
+                    "unsubscribe": { "const": "unsubscribeNewsletter" },
+                    "adminList": { "const": "newsletterSubscribers" },
+                    "adminUpsert": { "const": "upsertNewsletterSubscriber" }
+                  },
+                  "required": ["subscribe", "unsubscribe", "adminList", "adminUpsert"]
+                },
+                "forms": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+                "sampleSubscribePayload": { "type": "object", "additionalProperties": true },
+                "providerBoundary": { "type": "object", "additionalProperties": true }
+              },
+              "required": ["schemaVersion", "count", "activeCount", "endpoints", "methods", "sdkHelpers", "forms", "sampleSubscribePayload", "providerBoundary"]
+            },
             "comments": {
               "type": "object",
               "additionalProperties": true,

@@ -1808,6 +1808,8 @@ export interface CommentBlocklistEntry {
   createdAt: string;
 }
 
+export type NewsletterSubscriptionStatus = "subscribed" | "unsubscribed" | "pending" | "bounced" | "complained";
+
 /** Contact/lead capture entry for form -> CRM handoff flows. */
 export interface Contact {
   /** Unique identifier */
@@ -1831,6 +1833,15 @@ export interface Contact {
 
   /** Optional raw payload */
   sourceValues?: Record<string, unknown>;
+
+  /** Newsletter subscription state, when this contact is used as a subscriber. */
+  newsletterSubscriptionStatus?: NewsletterSubscriptionStatus | null;
+  newsletterSubscribedAt?: string | null;
+  newsletterUnsubscribedAt?: string | null;
+  newsletterTopics?: string | null;
+  newsletterSource?: string | null;
+  newsletterConsent?: boolean | null;
+  newsletterConsentText?: string | null;
 
   /** Lead lifecycle */
   status: "new" | "contacted" | "qualified" | "archived";

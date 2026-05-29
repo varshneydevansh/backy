@@ -539,9 +539,10 @@ assert(
 );
 
 assert(
-  sdkSmokeCi.includes('content_collection_records_public_updated_idx') &&
+    sdkSmokeCi.includes('content_collection_records_public_updated_idx') &&
     sdkSmokeCi.includes('form_submissions_site_form_status_submitted_idx') &&
     sdkSmokeCi.includes('form_contacts_site_email_idx') &&
+    sdkSmokeCi.includes('form_contacts_site_newsletter_status_updated_idx') &&
     sdkSmokeCi.includes('idx_comments_site_target') &&
     sdkSmokeCi.includes('idx_media_versions_media_id') &&
     sdkSmokeCi.includes('idx_cache_invalidations_site_scope') &&
@@ -555,6 +556,7 @@ assert(
     sdkSmokeCi.includes('reusable_sections_status_check') &&
     sdkSmokeCi.includes('form_definitions_audience_check') &&
     sdkSmokeCi.includes('form_submissions_status_check') &&
+    sdkSmokeCi.includes('form_contacts_newsletter_subscription_status_check') &&
     sdkSmokeCi.includes('form_contacts_source_submission_id_fkey') &&
     sdkSmokeCi.includes('comments_status_check') &&
     sdkSmokeCi.includes('interactive_components_render_mode_check'),

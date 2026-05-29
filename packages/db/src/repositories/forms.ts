@@ -119,6 +119,12 @@ const normalizedContactStatus = (value: unknown): Contact['status'] => (
     value === 'contacted' || value === 'qualified' || value === 'archived' ? value : 'new'
 );
 
+const normalizedNewsletterSubscriptionStatus = (value: unknown): Contact['newsletterSubscriptionStatus'] => (
+    value === 'subscribed' || value === 'unsubscribed' || value === 'pending' || value === 'bounced' || value === 'complained'
+        ? value
+        : null
+);
+
 const toForm = (row: FormRow): FormDefinition => {
     const settings = isRecord(row.settings) ? row.settings : {};
 
@@ -200,6 +206,13 @@ const toContact = (row: ContactRow): Contact => ({
     phone: row.phone,
     notes: row.notes,
     sourceValues: isRecord(row.sourceValues) ? row.sourceValues : {},
+    newsletterSubscriptionStatus: normalizedNewsletterSubscriptionStatus(row.newsletterSubscriptionStatus),
+    newsletterSubscribedAt: toNullableIso(row.newsletterSubscribedAt),
+    newsletterUnsubscribedAt: toNullableIso(row.newsletterUnsubscribedAt),
+    newsletterTopics: row.newsletterTopics,
+    newsletterSource: row.newsletterSource,
+    newsletterConsent: row.newsletterConsent,
+    newsletterConsentText: row.newsletterConsentText,
     status: normalizedContactStatus(row.status),
     sourceSubmissionId: row.sourceSubmissionId || undefined,
     requestId: row.requestId,
@@ -369,8 +382,10 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
                 .map(toContact)
                 .filter((contact) => input.formId ? contact.formId === input.formId : true)
                 .filter((contact) => input.status && input.status !== 'all' ? contact.status === input.status : true)
+                .filter((contact) => input.newsletterOnly ? Boolean(contact.newsletterSubscriptionStatus) : true)
+                .filter((contact) => input.newsletterSubscriptionStatus && input.newsletterSubscriptionStatus !== 'all' ? contact.newsletterSubscriptionStatus === input.newsletterSubscriptionStatus : true)
                 .filter((contact) => input.requestId ? contact.requestId === input.requestId : true)
-                .filter((contact) => input.search ? searchText(`${contact.name || ''} ${contact.email || ''} ${contact.phone || ''} ${contact.notes || ''}`, input.search) : true);
+                .filter((contact) => input.search ? searchText(`${contact.name || ''} ${contact.email || ''} ${contact.phone || ''} ${contact.notes || ''} ${contact.newsletterTopics || ''} ${contact.newsletterSource || ''}`, input.search) : true);
             return paginate(filtered, input.limit, input.offset);
         },
 
@@ -396,6 +411,13 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
                 phone: input.phone || null,
                 notes: input.notes || null,
                 sourceValues: input.sourceValues || {},
+                newsletterSubscriptionStatus: input.newsletterSubscriptionStatus || null,
+                newsletterSubscribedAt: input.newsletterSubscribedAt ? new Date(input.newsletterSubscribedAt) : null,
+                newsletterUnsubscribedAt: input.newsletterUnsubscribedAt ? new Date(input.newsletterUnsubscribedAt) : null,
+                newsletterTopics: input.newsletterTopics || null,
+                newsletterSource: input.newsletterSource || null,
+                newsletterConsent: input.newsletterConsent ?? null,
+                newsletterConsentText: input.newsletterConsentText || null,
                 status: input.status || 'new',
                 sourceSubmissionId: input.sourceSubmissionId || null,
                 requestId: input.requestId || null,
@@ -415,6 +437,13 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             if (input.pageId !== undefined) updates.pageId = input.pageId;
             if (input.postId !== undefined) updates.postId = input.postId;
             if (input.sourceValues !== undefined) updates.sourceValues = input.sourceValues;
+            if (input.newsletterSubscriptionStatus !== undefined) updates.newsletterSubscriptionStatus = input.newsletterSubscriptionStatus;
+            if (input.newsletterSubscribedAt !== undefined) updates.newsletterSubscribedAt = input.newsletterSubscribedAt ? new Date(input.newsletterSubscribedAt) : null;
+            if (input.newsletterUnsubscribedAt !== undefined) updates.newsletterUnsubscribedAt = input.newsletterUnsubscribedAt ? new Date(input.newsletterUnsubscribedAt) : null;
+            if (input.newsletterTopics !== undefined) updates.newsletterTopics = input.newsletterTopics;
+            if (input.newsletterSource !== undefined) updates.newsletterSource = input.newsletterSource;
+            if (input.newsletterConsent !== undefined) updates.newsletterConsent = input.newsletterConsent;
+            if (input.newsletterConsentText !== undefined) updates.newsletterConsentText = input.newsletterConsentText;
             if (input.sourceSubmissionId !== undefined) updates.sourceSubmissionId = input.sourceSubmissionId;
             if (input.requestId !== undefined) updates.requestId = input.requestId;
             if (input.sourceIpHash !== undefined) updates.sourceIpHash = input.sourceIpHash;

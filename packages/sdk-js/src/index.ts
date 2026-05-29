@@ -8821,8 +8821,100 @@ export interface BackyContact {
   name?: string;
   email?: string;
   notes?: string;
+  newsletterSubscriptionStatus?: BackyNewsletterSubscriptionStatus | "pending" | "bounced" | "complained" | null;
+  newsletterSubscribedAt?: string | null;
+  newsletterUnsubscribedAt?: string | null;
+  newsletterTopics?: string | null;
+  newsletterSource?: string | null;
+  newsletterConsent?: boolean | null;
+  newsletterConsentText?: string | null;
   [key: string]: unknown;
 }
+
+export type BackyNewsletterSubscriptionStatus = "subscribed" | "unsubscribed";
+
+export interface BackyNewsletterSubscriber {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  formId: string;
+  formTitle?: string;
+  contactStatus: "new" | "contacted" | "qualified" | "archived" | string;
+  subscriptionStatus: BackyNewsletterSubscriptionStatus;
+  topics?: string | null;
+  source?: string | null;
+  consent?: boolean | null;
+  consentText?: string | null;
+  subscribedAt?: string;
+  unsubscribedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sourceValues?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface BackyNewsletterSubscribeInput {
+  email: string;
+  consent: boolean;
+  name?: string | null;
+  topics?: string | null;
+  source?: string | null;
+  consentText?: string | null;
+  formId?: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyNewsletterUnsubscribeInput {
+  email: string;
+  formId?: string;
+  source?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyNewsletterRequestOptions {
+  requestId?: string;
+  siteId?: string;
+  credentials?: RequestCredentials;
+}
+
+export interface BackyAdminNewsletterSubscriberListOptions
+  extends BackyListOptions,
+    BackyLiveManagementRequestOptions {
+  status?: BackyNewsletterSubscriptionStatus | "all" | string;
+  formId?: string;
+  q?: string;
+}
+
+export interface BackyAdminNewsletterSubscriberInput
+  extends Omit<BackyNewsletterSubscribeInput, "consent"> {
+  consent?: boolean;
+  status?: BackyNewsletterSubscriptionStatus;
+  contactStatus?: "new" | "contacted" | "qualified" | "archived" | string;
+}
+
+export type BackyNewsletterSubscriberResponse = BackyEnvelope<
+  {
+    schemaVersion?: "backy.newsletter-subscribe.v1" | "backy.newsletter-subscribers.v1";
+    subscriber: BackyNewsletterSubscriber;
+    existing?: boolean;
+    deliveryBoundary?: string;
+  } & Record<string, unknown>
+>;
+
+export type BackyNewsletterSubscribersResponse = BackyEnvelope<
+  {
+    schemaVersion?: "backy.newsletter-subscribers.v1";
+    site?: Record<string, unknown>;
+    forms?: BackyFormDefinition[];
+    subscribers: BackyNewsletterSubscriber[];
+    count?: number;
+    pagination?: BackyPagination;
+    summary?: Record<string, unknown>;
+    handoff?: Record<string, unknown>;
+  } & Record<string, unknown>
+>;
 
 export interface BackyAdminFormListOptions
   extends BackyListOptions,
@@ -8842,6 +8934,8 @@ export interface BackyAdminFormContactListOptions
   extends BackyListOptions,
     BackyLiveManagementRequestOptions {
   status?: "new" | "contacted" | "qualified" | "archived" | "all" | string;
+  newsletterSubscriptionStatus?: BackyNewsletterSubscriptionStatus | "pending" | "bounced" | "complained" | "all" | string;
+  newsletterOnly?: boolean;
   contactRequestId?: string;
 }
 
@@ -9055,6 +9149,13 @@ export interface BackyAdminFormContactInput {
   postId?: string | null;
   requestId?: string | null;
   sourceValues?: Record<string, unknown>;
+  newsletterSubscriptionStatus?: BackyNewsletterSubscriptionStatus | "pending" | "bounced" | "complained" | null;
+  newsletterSubscribedAt?: string | null;
+  newsletterUnsubscribedAt?: string | null;
+  newsletterTopics?: string | null;
+  newsletterSource?: string | null;
+  newsletterConsent?: boolean | null;
+  newsletterConsentText?: string | null;
   upsertByEmail?: boolean;
   sourceSubmissionId?: string | null;
   sourceIpHash?: string | null;
@@ -13671,6 +13772,52 @@ export interface BackyCompletionStatus {
   [key: string]: unknown;
 }
 
+export interface BackyManifestNewsletterRuntimeModule {
+  schemaVersion: "backy.newsletter-subscribers.v1";
+  count: number;
+  activeCount: number;
+  endpoints: {
+    publicSubscribers: string;
+    adminSubscribers: string;
+    forms: string;
+    contactSegments: string;
+    contactLists: string;
+    [key: string]: unknown;
+  };
+  methods: {
+    subscribe: "POST";
+    unsubscribe: "DELETE";
+    adminList: "GET";
+    adminUpsert: "POST";
+    [key: string]: unknown;
+  };
+  sdkHelpers: {
+    subscribe: "subscribeNewsletter";
+    unsubscribe: "unsubscribeNewsletter";
+    adminList: "newsletterSubscribers";
+    adminUpsert: "upsertNewsletterSubscriber";
+    [key: string]: unknown;
+  };
+  forms: Array<{
+    id: string;
+    name: string;
+    title?: string | null;
+    active: boolean;
+    fields: Array<Record<string, unknown>>;
+    definitionUrl: string;
+    submitUrl: string;
+    [key: string]: unknown;
+  }>;
+  sampleSubscribePayload: Record<string, unknown>;
+  providerBoundary: {
+    nativeBackyScope: string[];
+    deliveryProviderScope: string[];
+    secretPolicy: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BackyFrontendManifestContract {
   version?: string;
   schemas?: Record<string, string>;
@@ -13700,6 +13847,7 @@ export interface BackyFrontendManifest {
     reusableSectionsRuntime?: BackyManifestReusableSectionsRuntimeModule;
     forms?: BackyManifestFormDefinition[];
     formsRuntime?: BackyManifestFormsRuntimeModule;
+    newsletterRuntime?: BackyManifestNewsletterRuntimeModule;
     comments?: BackyManifestCommentsModule;
     theme?: BackyManifestThemeModule;
     liveManagement?: BackyManifestLiveManagementModule;
@@ -13892,7 +14040,9 @@ export class BackyClient {
       {
         method: "POST",
         body,
-        requestId: options.requestId ?? requestId,
+        requestId:
+          options.requestId ??
+          (typeof requestId === "string" ? requestId : undefined),
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
       },
@@ -18246,6 +18396,78 @@ export class BackyClient {
         method: "POST",
         body: input,
         requestId: input.requestId,
+      },
+    );
+  }
+
+  subscribeNewsletter(
+    input: BackyNewsletterSubscribeInput,
+    options: BackyNewsletterRequestOptions = {},
+  ): Promise<BackyNewsletterSubscriberResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/subscribers`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  unsubscribeNewsletter(
+    input: BackyNewsletterUnsubscribeInput,
+    options: BackyNewsletterRequestOptions = {},
+  ): Promise<BackyNewsletterSubscriberResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/subscribers`,
+      {
+        method: "DELETE",
+        body,
+        requestId: options.requestId ?? requestId,
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  newsletterSubscribers(
+    options: BackyAdminNewsletterSubscriberListOptions = {},
+  ): Promise<BackyNewsletterSubscribersResponse> {
+    const { requestId, siteId, headers, credentials, rest } =
+      splitLiveManagementRequestOptions(options);
+    const query = normalizeListQuery(rest as BackyListOptions & {
+      status?: string;
+      formId?: string;
+      q?: string;
+    });
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(siteId ?? this.requireSiteId())}/newsletter/subscribers`,
+      {
+        query,
+        requestId,
+        headers,
+        credentials,
+      },
+    );
+  }
+
+  upsertNewsletterSubscriber(
+    input: BackyAdminNewsletterSubscriberInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyNewsletterSubscriberResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/subscribers`,
+      {
+        method: "POST",
+        body,
+        requestId:
+          options.requestId ??
+          (typeof requestId === "string" ? requestId : undefined),
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }

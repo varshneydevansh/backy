@@ -210,13 +210,24 @@ CREATE TABLE IF NOT EXISTS public.form_contacts (
   phone TEXT,
   notes TEXT,
   source_values JSONB DEFAULT '{}'::JSONB,
+  newsletter_subscription_status TEXT,
+  newsletter_subscribed_at TIMESTAMPTZ,
+  newsletter_unsubscribed_at TIMESTAMPTZ,
+  newsletter_topics TEXT,
+  newsletter_source TEXT,
+  newsletter_consent BOOLEAN,
+  newsletter_consent_text TEXT,
   status TEXT NOT NULL DEFAULT 'new',
   source_submission_id UUID REFERENCES public.form_submissions(id) ON DELETE SET NULL,
   request_id TEXT,
   source_ip_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT form_contacts_status_check CHECK (status IN ('new', 'contacted', 'qualified', 'archived'))
+  CONSTRAINT form_contacts_status_check CHECK (status IN ('new', 'contacted', 'qualified', 'archived')),
+  CONSTRAINT form_contacts_newsletter_subscription_status_check CHECK (
+    newsletter_subscription_status IS NULL
+    OR newsletter_subscription_status IN ('subscribed', 'unsubscribed', 'pending', 'bounced', 'complained')
+  )
 );
 
 ALTER TABLE public.form_contacts ENABLE ROW LEVEL SECURITY;
@@ -310,5 +321,6 @@ CREATE INDEX IF NOT EXISTS idx_form_contacts_email ON public.form_contacts(email
 CREATE INDEX IF NOT EXISTS idx_form_contacts_source_submission_id ON public.form_contacts(source_submission_id);
 CREATE INDEX IF NOT EXISTS form_contacts_site_form_updated_idx ON public.form_contacts(site_id, form_id, updated_at);
 CREATE INDEX IF NOT EXISTS form_contacts_site_form_status_updated_idx ON public.form_contacts(site_id, form_id, status, updated_at);
+CREATE INDEX IF NOT EXISTS form_contacts_site_newsletter_status_updated_idx ON public.form_contacts(site_id, newsletter_subscription_status, updated_at);
 CREATE INDEX IF NOT EXISTS form_contacts_site_request_idx ON public.form_contacts(site_id, request_id);
 CREATE INDEX IF NOT EXISTS form_contacts_site_email_idx ON public.form_contacts(site_id, email);
