@@ -61,6 +61,10 @@ const assert = (condition, message) => {
   }
 };
 
+const sleep = (ms) => new Promise((resolve) => {
+  setTimeout(resolve, ms);
+});
+
 const assertRevisionBranchMetadata = (revision, expectedTargetType, expectedSource, label) => {
   const branchMetadata = revision?.branchMetadata;
   assert(branchMetadata?.schemaVersion === 'backy.content-revision-branch-metadata.v1', `${label} missing revision branch metadata schema`);
@@ -679,6 +683,26 @@ async function request(path, init) {
   return { response, json, text, url: `${baseUrl}${path}` };
 }
 
+async function requestWithNetworkRetry(path, init, options = {}) {
+  const attempts = options.attempts || 3;
+  const delayMs = options.delayMs || 250;
+  const label = options.label || path;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await request(path, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await sleep(delayMs * attempt);
+      }
+    }
+  }
+
+  throw new Error(`${label} failed after ${attempts} attempts: ${lastError?.message || lastError}`);
+}
+
 function parseAllowedEmailDomains(value) {
   if (Array.isArray(value)) {
     return value
@@ -1226,8 +1250,16 @@ async function deleteFixture(siteId) {
     });
     assert(deleted.response.status === 200, `${deleted.url} expected fixture site delete 200, got ${deleted.response.status}: ${JSON.stringify(deleted.json || deleted.text).slice(0, 500)}`);
   } finally {
-    const deletedOwner = await request(`/api/admin/users/${owner.userId}`, { method: 'DELETE' }).catch((error) => ({ error }));
+    const deletedOwner = await requestWithNetworkRetry(
+      `/api/admin/users/${owner.userId}`,
+      { method: 'DELETE' },
+      { label: 'cleanup owner delete' },
+    ).catch((error) => ({ error }));
     assert(!deletedOwner?.error, `cleanup owner delete failed: ${deletedOwner?.error?.message || deletedOwner?.error}`);
+    assert(
+      deletedOwner.response.status === 200 || deletedOwner.response.status === 404,
+      `${deletedOwner.url} expected cleanup owner delete 200 or already-clean 404, got ${deletedOwner.response.status}: ${JSON.stringify(deletedOwner.json || deletedOwner.text).slice(0, 500)}`,
+    );
     cleanupOwnerSession = null;
   }
 }
