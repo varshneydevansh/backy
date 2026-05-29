@@ -605,11 +605,17 @@ const assertSharedDataGridSourceContract = () => {
   assert(
     hookSource.includes('width?: string;') &&
       source.includes('tableMinWidth?: string;') &&
-      source.includes('style={tableMinWidth ? { minInlineSize: tableMinWidth } : undefined}') &&
-      source.includes('data-table-min-width={tableMinWidth || undefined}') &&
+      source.includes('const parsePixelSize = (value: string | undefined): number => {') &&
+      source.includes('const columnWidthTotal = Math.ceil(') &&
+      source.includes('const requestedTableMinWidth = parsePixelSize(tableMinWidth);') &&
+      source.includes('const effectiveTableMinWidth = Math.max(requestedTableMinWidth, columnWidthTotal);') &&
+      source.includes('style={effectiveTableMinWidthStyle ? { minInlineSize: effectiveTableMinWidthStyle } : undefined}') &&
+      source.includes('data-table-min-width={effectiveTableMinWidthStyle || undefined}') &&
+      source.includes('data-requested-table-min-width={tableMinWidth || undefined}') &&
+      source.includes('data-column-width-total={columnWidthTotal || undefined}') &&
       source.includes('data-testid="admin-data-grid-column-widths"') &&
       source.includes('data-column-width={column.width || undefined}'),
-    'Shared admin DataGrid must support explicit table and column widths so dense admin lists scroll instead of overlapping content.',
+    'Shared admin DataGrid must support explicit table and column widths and never render a table min width smaller than its own column contract.',
   );
   assert(
     source.includes('const getColumnKey = (column: Column<T>) => String(column.key);') &&
@@ -3264,6 +3270,7 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
       const table = scroll?.querySelector('table');
       const headerCells = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-head"] th'));
       const firstRow = document.querySelector('[data-testid="admin-data-grid-row"]');
+      const rows = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-row"]'));
       const bodyCells = firstRow ? Array.from(firstRow.children).filter((cell) => cell instanceof HTMLTableCellElement) : [];
       const columnWidths = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-column-widths"] col')).map((column) => ({
         key: column.getAttribute('data-column-key') || '',
@@ -3297,6 +3304,20 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
           headerAriaLabel: header?.getAttribute('aria-label') || '',
         };
       });
+      const allRowCells = rows.flatMap((row, rowIndex) => (
+        Array.from(row.children)
+          .filter((cell) => cell instanceof HTMLTableCellElement)
+          .map((cell) => {
+            const content = cell.querySelector('[data-testid="admin-data-grid-cell-content"]');
+            const cellRect = cell.getBoundingClientRect();
+            const contentRect = content?.getBoundingClientRect();
+            return {
+              rowIndex,
+              key: cell.getAttribute('data-column-key') || '',
+              fits: Boolean(contentRect && contentRect.left >= cellRect.left - 1 && contentRect.right <= cellRect.right + 1),
+            };
+          })
+      ));
       return {
         ready: Boolean(document.querySelector('[data-testid="pages-command-center"]')),
         path: window.location.pathname,
@@ -3305,6 +3326,8 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         rowCount: Number(grid?.getAttribute('data-row-count') || 0),
         totalItems: Number(grid?.getAttribute('data-total-items') || 0),
         tableMinWidth: table?.getAttribute('data-table-min-width') || '',
+        requestedTableMinWidth: table?.getAttribute('data-requested-table-min-width') || '',
+        columnWidthTotal: Number(table?.getAttribute('data-column-width-total') || 0),
         tableClientWidth: Math.round(table?.getBoundingClientRect().width || 0),
         scrollClientWidth: Math.round(scroll?.clientWidth || 0),
         scrollWidth: Math.round(scroll?.scrollWidth || 0),
@@ -3312,6 +3335,8 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         columnWidths,
         headerCount: headers.length,
         cellCount: cells.length,
+        allVisibleCellsFit: allRowCells.every((cell) => cell.fits),
+        overflowingVisibleCells: allRowCells.filter((cell) => !cell.fits).slice(0, 8),
         headers,
         cells,
         body: document.body?.innerText?.slice(0, 1200) || '',
@@ -3343,7 +3368,14 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
   assert(state.cells.every((cell) => cell.overflowPolicy === 'clip-and-wrap'), `Every dense DataGrid body cell must clip and wrap content instead of painting into neighboring columns: ${JSON.stringify(state.cells)}`);
   assert(state.cells.every((cell) => cell.contentPolicy === 'constrained-wrapped-content'), `Every dense DataGrid body cell must constrain rendered children inside the cell: ${JSON.stringify(state.cells)}`);
   assert(state.cells.every((cell) => cell.contentFitsCell), `Every dense DataGrid body cell wrapper must stay within its owning cell: ${JSON.stringify(state.cells)}`);
-  assert(state.tableMinWidth === '2100px' && state.hasHorizontalScroll, `Pages DataGrid must render as a horizontally scrollable dense table instead of compressing columns: ${JSON.stringify(state)}`);
+  assert(state.allVisibleCellsFit, `Every visible Pages DataGrid row must keep cell content inside its owning column: ${JSON.stringify(state.overflowingVisibleCells)}`);
+  assert(
+    state.requestedTableMinWidth === '2100px' &&
+      state.columnWidthTotal >= 2069 &&
+      state.tableClientWidth >= state.columnWidthTotal &&
+      state.hasHorizontalScroll,
+    `Pages DataGrid must render as a horizontally scrollable dense table using at least its summed column width instead of compressing columns: ${JSON.stringify(state)}`,
+  );
   assert(
     state.columnWidths.some((column) => column.key === 'siteId' && column.width === '420px') &&
       state.columnWidths.some((column) => column.key === 'title' && column.width === '240px') &&

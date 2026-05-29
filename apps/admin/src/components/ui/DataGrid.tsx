@@ -30,6 +30,11 @@ interface DataGridProps<T> {
     pageSize?: number;
 }
 
+const parsePixelSize = (value: string | undefined): number => {
+    const match = value?.trim().match(/^(\d+(?:\.\d+)?)px$/);
+    return match ? Number(match[1]) : 0;
+};
+
 export function DataGrid<T extends { id: string }>({
     columns,
     data,
@@ -72,6 +77,14 @@ export function DataGrid<T extends { id: string }>({
         return getColumnKey(column) === 'actions' ? 'Actions' : 'Column';
     };
     const getColumnHeaderId = (column: Column<T>) => `${descriptionId}-header-${getSafeColumnKey(getColumnKey(column))}`;
+    const columnWidthTotal = Math.ceil(
+        columns.reduce((total, column) => total + parsePixelSize(column.width), 0),
+    );
+    const requestedTableMinWidth = parsePixelSize(tableMinWidth);
+    const effectiveTableMinWidth = Math.max(requestedTableMinWidth, columnWidthTotal);
+    const effectiveTableMinWidthStyle = effectiveTableMinWidth > 0
+        ? `${effectiveTableMinWidth}px`
+        : tableMinWidth;
 
     if (loading) {
         return (
@@ -178,8 +191,10 @@ export function DataGrid<T extends { id: string }>({
                 >
                     <table
                         className="w-full table-fixed text-left text-sm"
-                        style={tableMinWidth ? { minInlineSize: tableMinWidth } : undefined}
-                        data-table-min-width={tableMinWidth || undefined}
+                        style={effectiveTableMinWidthStyle ? { minInlineSize: effectiveTableMinWidthStyle } : undefined}
+                        data-table-min-width={effectiveTableMinWidthStyle || undefined}
+                        data-requested-table-min-width={tableMinWidth || undefined}
+                        data-column-width-total={columnWidthTotal || undefined}
                         data-layout-policy="viewport-contained-wrapped-table"
                     >
                         {columns.some((column) => Boolean(column.width)) && (

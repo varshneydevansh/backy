@@ -4983,8 +4983,8 @@ function PageDeliveryCell({
   previewEndpoint: string;
 }) {
   const labelByStatus: Record<PageDeliveryStatus, string> = {
-    published: 'Published URL live',
-    'preview-only': 'Preview only',
+    published: 'Published',
+    'preview-only': 'Preview',
     scheduled: 'Scheduled',
     archived: 'Archived',
     blocked: 'Blocked',
@@ -5077,7 +5077,7 @@ function PageDeliveryHealthSummary({
     <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-background px-2.5 py-2 text-xs leading-5 [overflow-wrap:anywhere]" data-testid="pages-delivery-health">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <StatusBadge status={`health ${effectiveHealth.status}`} type={healthType} />
+          <StatusBadge status={effectiveHealth.status} type={healthType} />
           {effectiveHealth.checkedAt && (
             <span className="min-w-0 break-words text-muted-foreground [overflow-wrap:anywhere]">{formatDate(effectiveHealth.checkedAt)}</span>
           )}
