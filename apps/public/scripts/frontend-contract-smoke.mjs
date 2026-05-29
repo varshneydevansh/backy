@@ -72,6 +72,7 @@ const generatedSdkSmoke = read('../../../packages/sdk-js/scripts/generated-contr
 const generatedSdkTypes = read('../../../packages/sdk-js/src/generated-contract-types.ts');
 const frontendManifestSchema = read('../../../specs/ai-frontend-contract/frontend-manifest.schema.json');
 const contentPayloadSchema = read('../../../specs/ai-frontend-contract/content-payload.schema.json');
+const customFrontendAgentHandoffDocs = read('../../../specs/custom-frontend-agent-handoff.md');
 const rootPackage = read('../../../package.json');
 const publicPackage = read('../package.json');
 const templateRegistrySmoke = read('template-registry-smoke.ts');
@@ -88,6 +89,72 @@ const adminProductsPage = read('../../../apps/admin/src/routes/products.tsx');
 const adminCollectionsPage = read('../../../apps/admin/src/routes/collections.tsx');
 const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-sections.tsx');
 const adminReusableSectionsSmoke = read('../../../apps/admin/scripts/reusable-sections-smoke.mjs');
+
+const requiredComponentApiFieldPaths = [
+  'element.id',
+  'element.type',
+  'element.name',
+  'element.x',
+  'element.y',
+  'element.width',
+  'element.height',
+  'element.rotation',
+  'element.zIndex',
+  'element.visible',
+  'element.locked',
+  'element.props',
+  'element.styles',
+  'element.responsive',
+  'element.tokenRefs',
+  'element.assetIds',
+  'element.animation',
+  'element.dataBindings',
+  'element.bindingSlots',
+  'element.accessibility',
+  'element.metadata',
+  'element.children[]',
+  'content.contentDocument.nodes',
+  'content.editableMap',
+  'meta.frontendDesignEditableMap',
+];
+const requiredComponentApiFamilies = [
+  'layout',
+  'typography',
+  'media',
+  'forms',
+  'commerce',
+  'collections',
+  'navigation',
+  'comments',
+  'embeds',
+  'interactive-components',
+  'custom-code',
+];
+const missingComponentApiCorePaths = requiredComponentApiFieldPaths.filter((path) => !customFrontendAgentHandoffLib.includes(path));
+const missingComponentApiSchemaPaths = requiredComponentApiFieldPaths.filter((path) => !frontendManifestSchema.includes(`"const": "${path}"`));
+const missingComponentApiDocsPaths = requiredComponentApiFieldPaths.filter((path) => {
+  const docPath = path.startsWith('element.') ? path.replace(/^element\./, '') : path;
+  return !customFrontendAgentHandoffDocs.includes(`\`${docPath}\``);
+});
+const missingComponentApiCoreFamilies = requiredComponentApiFamilies.filter((family) => !customFrontendAgentHandoffLib.includes(`'${family}'`));
+const missingComponentApiSchemaFamilies = requiredComponentApiFamilies.filter((family) => !frontendManifestSchema.includes(`"const": "${family}"`));
+assert(
+  missingComponentApiCorePaths.length === 0 &&
+    missingComponentApiSchemaPaths.length === 0 &&
+    missingComponentApiDocsPaths.length === 0 &&
+    missingComponentApiCoreFamilies.length === 0 &&
+    missingComponentApiSchemaFamilies.length === 0 &&
+    sdkSmoke.includes('const requiredComponentApiFieldPaths = [') &&
+    sdkSmoke.includes('assertComponentApiContractCoverage(customFrontendAgentHandoff.componentApiContract') &&
+    sdkSmoke.includes('assertComponentApiContractCoverage(agentHandoff.data.componentApiContract'),
+  `Custom frontend component API coverage drifted: ${JSON.stringify({
+    missingComponentApiCorePaths,
+    missingComponentApiSchemaPaths,
+    missingComponentApiDocsPaths,
+    missingComponentApiCoreFamilies,
+    missingComponentApiSchemaFamilies,
+  })}`,
+);
 const adminPropertyPanel = read('../../../apps/admin/src/components/editor/PropertyPanel.tsx');
 const adminLinkBehaviorProperties = read('../../../apps/admin/src/components/editor/LinkBehaviorProperties.tsx');
 const adminCanvas = read('../../../apps/admin/src/components/editor/Canvas.tsx');

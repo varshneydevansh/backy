@@ -1906,6 +1906,56 @@ assert(customFrontendAgentHandoff.componentApiContract?.elementAddressing?.props
 assert(customFrontendAgentHandoff.componentApiContract?.readableFieldPaths?.includes('element.props'), 'manifest() component API contract missing readable props path');
 assert(customFrontendAgentHandoff.componentApiContract?.writableFieldPaths?.includes('element.responsive'), 'manifest() component API contract missing writable responsive path');
 assert(customFrontendAgentHandoff.componentApiContract?.componentFamilies?.includes('interactive-components'), 'manifest() component API contract missing interactive component family');
+const requiredComponentApiFieldPaths = [
+  'element.id',
+  'element.type',
+  'element.name',
+  'element.x',
+  'element.y',
+  'element.width',
+  'element.height',
+  'element.rotation',
+  'element.zIndex',
+  'element.visible',
+  'element.locked',
+  'element.props',
+  'element.styles',
+  'element.responsive',
+  'element.tokenRefs',
+  'element.assetIds',
+  'element.animation',
+  'element.dataBindings',
+  'element.bindingSlots',
+  'element.accessibility',
+  'element.metadata',
+  'element.children[]',
+  'content.contentDocument.nodes',
+  'content.editableMap',
+  'meta.frontendDesignEditableMap',
+];
+const requiredComponentApiFamilies = [
+  'layout',
+  'typography',
+  'media',
+  'forms',
+  'commerce',
+  'collections',
+  'navigation',
+  'comments',
+  'embeds',
+  'interactive-components',
+  'custom-code',
+];
+const assertComponentApiContractCoverage = (contract, label) => {
+  for (const path of requiredComponentApiFieldPaths) {
+    assert(contract?.readableFieldPaths?.includes(path), `${label} component API contract missing readable path ${path}`);
+    assert(contract?.writableFieldPaths?.includes(path), `${label} component API contract missing writable path ${path}`);
+  }
+  for (const family of requiredComponentApiFamilies) {
+    assert(contract?.componentFamilies?.includes(family), `${label} component API contract missing component family ${family}`);
+  }
+};
+assertComponentApiContractCoverage(customFrontendAgentHandoff.componentApiContract, 'manifest()');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('meta.frontendDesign*'), 'manifest() custom frontend agent handoff missing frontend design provenance round-trip field');
 assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('manifest.data.site.frontendDesign'), 'manifest() custom frontend agent handoff missing site frontendDesign style source');
@@ -1927,6 +1977,7 @@ assert(agentHandoff.data.apiAlignment?.creationRoutes?.blogCustomFrontend === ag
 assert(agentHandoff.data.componentApiContract?.schemaVersion === 'backy.canvas-component-api-contract.v1', 'customFrontendAgentHandoff() missing component API contract');
 assert(agentHandoff.data.componentApiContract?.readableFieldPaths?.includes('element.props'), 'customFrontendAgentHandoff() component API contract missing readable props path');
 assert(agentHandoff.data.componentApiContract?.elementAddressing?.nestedChildrenField === 'children', 'customFrontendAgentHandoff() component API contract missing child addressing');
+assertComponentApiContractCoverage(agentHandoff.data.componentApiContract, 'customFrontendAgentHandoff()');
 assert(agentHandoff.data.canvasFirst?.editor === 'Backy canvas editor', 'customFrontendAgentHandoff() missing canvas-first editor rule');
 assert(agentHandoff.data.designState?.roundTripFields?.includes('content.elements'), 'customFrontendAgentHandoff() missing design-state round-trip fields');
 const cachedAgentHandoff = await client.customFrontendAgentHandoffCached();

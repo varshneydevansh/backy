@@ -254,6 +254,10 @@ function schemaToType(schema, currentFile, indent = 0) {
   if (Object.prototype.hasOwnProperty.call(schema, 'const')) return literal(schema.const);
   if (Array.isArray(schema.oneOf)) return union(schema.oneOf.map((item) => schemaToType(item, currentFile, indent)));
   if (Array.isArray(schema.anyOf)) return union(schema.anyOf.map((item) => schemaToType(item, currentFile, indent)));
+  if (Array.isArray(schema.allOf) && schema.type) {
+    const { allOf: _allOf, ...baseSchema } = schema;
+    return schemaToType(baseSchema, currentFile, indent);
+  }
   if (Array.isArray(schema.allOf)) return schema.allOf.map((item) => schemaToType(item, currentFile, indent)).join(' & ');
   if (Array.isArray(schema.type)) return union(schema.type.map((type) => schemaToType({ ...schema, type }, currentFile, indent)));
 

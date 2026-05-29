@@ -325,17 +325,81 @@
             "readableFieldPaths": {
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
-              "contains": { "const": "element.props" }
+              "allOf": [
+                { "contains": { "const": "element.id" } },
+                { "contains": { "const": "element.type" } },
+                { "contains": { "const": "element.name" } },
+                { "contains": { "const": "element.x" } },
+                { "contains": { "const": "element.y" } },
+                { "contains": { "const": "element.width" } },
+                { "contains": { "const": "element.height" } },
+                { "contains": { "const": "element.rotation" } },
+                { "contains": { "const": "element.zIndex" } },
+                { "contains": { "const": "element.visible" } },
+                { "contains": { "const": "element.locked" } },
+                { "contains": { "const": "element.props" } },
+                { "contains": { "const": "element.styles" } },
+                { "contains": { "const": "element.responsive" } },
+                { "contains": { "const": "element.tokenRefs" } },
+                { "contains": { "const": "element.assetIds" } },
+                { "contains": { "const": "element.animation" } },
+                { "contains": { "const": "element.dataBindings" } },
+                { "contains": { "const": "element.bindingSlots" } },
+                { "contains": { "const": "element.accessibility" } },
+                { "contains": { "const": "element.metadata" } },
+                { "contains": { "const": "element.children[]" } },
+                { "contains": { "const": "content.contentDocument.nodes" } },
+                { "contains": { "const": "content.editableMap" } },
+                { "contains": { "const": "meta.frontendDesignEditableMap" } }
+              ]
             },
             "writableFieldPaths": {
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
-              "contains": { "const": "element.responsive" }
+              "allOf": [
+                { "contains": { "const": "element.id" } },
+                { "contains": { "const": "element.type" } },
+                { "contains": { "const": "element.name" } },
+                { "contains": { "const": "element.x" } },
+                { "contains": { "const": "element.y" } },
+                { "contains": { "const": "element.width" } },
+                { "contains": { "const": "element.height" } },
+                { "contains": { "const": "element.rotation" } },
+                { "contains": { "const": "element.zIndex" } },
+                { "contains": { "const": "element.visible" } },
+                { "contains": { "const": "element.locked" } },
+                { "contains": { "const": "element.props" } },
+                { "contains": { "const": "element.styles" } },
+                { "contains": { "const": "element.responsive" } },
+                { "contains": { "const": "element.tokenRefs" } },
+                { "contains": { "const": "element.assetIds" } },
+                { "contains": { "const": "element.animation" } },
+                { "contains": { "const": "element.dataBindings" } },
+                { "contains": { "const": "element.bindingSlots" } },
+                { "contains": { "const": "element.accessibility" } },
+                { "contains": { "const": "element.metadata" } },
+                { "contains": { "const": "element.children[]" } },
+                { "contains": { "const": "content.contentDocument.nodes" } },
+                { "contains": { "const": "content.editableMap" } },
+                { "contains": { "const": "meta.frontendDesignEditableMap" } }
+              ]
             },
             "componentFamilies": {
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
-              "contains": { "const": "interactive-components" }
+              "allOf": [
+                { "contains": { "const": "layout" } },
+                { "contains": { "const": "typography" } },
+                { "contains": { "const": "media" } },
+                { "contains": { "const": "forms" } },
+                { "contains": { "const": "commerce" } },
+                { "contains": { "const": "collections" } },
+                { "contains": { "const": "navigation" } },
+                { "contains": { "const": "comments" } },
+                { "contains": { "const": "embeds" } },
+                { "contains": { "const": "interactive-components" } },
+                { "contains": { "const": "custom-code" } }
+              ]
             },
             "requiredAgentBehavior": {
               "type": "array",

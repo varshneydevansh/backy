@@ -58,6 +58,14 @@ The stable addressing fields are:
 - `id`
 - `type`
 - `name`
+- `x`
+- `y`
+- `width`
+- `height`
+- `rotation`
+- `zIndex`
+- `visible`
+- `locked`
 - `props`
 - `styles` / `style`
 - `responsive`
@@ -66,12 +74,14 @@ The stable addressing fields are:
 - `animation`
 - `dataBindings`
 - `bindingSlots`
-- `children`
+- `accessibility`
+- `metadata`
+- `children[]`
 - `content.contentDocument.nodes`
 - `content.editableMap`
 - `meta.frontendDesignEditableMap`
 
-Use the contract's render pointers for public reads, admin write pointers for authenticated mutations, and editable-map sources when matching an external selector/component to a Backy field. Preserve unknown props, style keys, responsive overrides, binding slots, asset ids, and metadata when patching content.
+Use the contract's render pointers for public reads, admin write pointers for authenticated mutations, and editable-map sources when matching an external selector/component to a Backy field. Preserve unknown props, style keys, responsive overrides, token references, binding slots, asset ids, animation/action metadata, accessibility metadata, and custom metadata when patching content.
 
 ## Editable design state rule
 

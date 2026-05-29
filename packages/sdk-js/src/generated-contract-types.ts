@@ -1921,7 +1921,7 @@ export type GeneratedBackyOpenApiLiveManagementDiscovery = {
     editorGrouping: boolean;
     [key: string]: unknown;
   };
-  editableTargets: unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown;
+  editableTargets: Array<string>;
   lifecycle: {
     schemaVersion: "backy.content-lifecycle-commands.v1";
     cloneField: "frontendDesignTemplateId";
@@ -6115,7 +6115,7 @@ export type GeneratedBackyFrontendManifestCompletionStatus = {
       requiredEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1" | "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_REQUIRED=1 or BACKY_PROVIDER_CERTIFICATION_ARTIFACTS_REQUIRED=1";
       pathEnv: "BACKY_SETTINGS_CERTIFICATION_ARTIFACT_PATH or BACKY_SETTINGS_CERTIFICATION_ARTIFACT" | "BACKY_COMMERCE_CERTIFICATION_ARTIFACT_PATH or BACKY_COMMERCE_CERTIFICATION_ARTIFACT";
       schemaVersion: "backy.settings-provider-certification-artifact.v1" | "backy.commerce-provider-certification-artifact.v1";
-      validates: unknown & unknown & unknown & unknown;
+      validates: Array<string>;
       freshnessWindow: {
         maxAgeHoursEnv: "BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS";
         defaultMaxAgeHours: 168;
@@ -6554,7 +6554,7 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           editorGrouping: boolean;
           [key: string]: unknown;
         };
-        editableTargets: unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown;
+        editableTargets: Array<string>;
         lifecycle: {
           schemaVersion: "backy.content-lifecycle-commands.v1";
           cloneField: "frontendDesignTemplateId";
