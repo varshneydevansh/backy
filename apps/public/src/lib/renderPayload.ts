@@ -23,7 +23,10 @@ import {
 } from './backyStore';
 import { buildCollectionItemPath, buildCollectionListPath } from './collectionRoutes';
 import { PRODUCT_COLLECTION_SLUG, productDesignReadinessFromValues } from './commerceCatalog';
-import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
+import {
+  buildFrontendDesignEditableMapRecord,
+  frontendDesignProvenanceFromMetadata,
+} from './frontendDesignContract';
 import { buildPublicFontManifest } from './fontManifest';
 import { publicMediaFilePath } from './mediaResponsive';
 
@@ -454,6 +457,9 @@ const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
   const customJS = typeof metadata.customJS === 'string' && metadata.customJS.trim().length > 0
     ? metadata.customJS
     : undefined;
+  const contentEditableMap = input.editableMap && Object.keys(input.editableMap).length > 0
+    ? input.editableMap
+    : document.editableMap;
 
   return {
     schemaVersion: document.schemaVersion,
@@ -471,7 +477,7 @@ const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
     ...(input.includeContentDocument && document.interactions ? { interactions: document.interactions } : {}),
     ...(input.includeContentDocument && document.seo ? { seo: document.seo } : {}),
     ...(input.includeContentDocument && document.dataBindings ? { dataBindings: document.dataBindings } : {}),
-    ...(input.includeContentDocument ? { editableMap: document.editableMap } : {}),
+    editableMap: contentEditableMap,
     ...(input.includeContentDocument && document.metadata ? { metadata: document.metadata } : {}),
     ...(input.includeContentDocument ? { contentDocument: document } : {}),
   };
@@ -1477,12 +1483,27 @@ const collectDataBindingManifest = (
 
 const pageDefaultWidth = 1200;
 
-const buildEditableMap = (elements: RenderElement[]): Record<string, JsonObject> => {
-  const editableMap: Record<string, JsonObject> = {};
+const normalizeEditableMapRecord = (value: unknown): Record<string, JsonObject> => {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, JsonObject] => isRecord(entry[1])),
+  );
+};
+
+const buildEditableMap = (
+  elements: RenderElement[],
+  explicitEditableMap?: unknown,
+): Record<string, JsonObject> => {
+  const editableMap: Record<string, JsonObject> = normalizeEditableMapRecord(
+    buildFrontendDesignEditableMapRecord(elements, explicitEditableMap),
+  );
 
   walkElements(elements, (element) => {
     const props = element.props;
-    if ('content' in props) {
+    if ('content' in props && !editableMap[`element.${element.id}.content`]) {
       editableMap[`element.${element.id}.content`] = {
         elementId: element.id,
         field: 'props.content',
@@ -1493,7 +1514,10 @@ const buildEditableMap = (elements: RenderElement[]): Record<string, JsonObject>
       };
     }
 
-    if ('src' in props || 'mediaId' in props || 'assetId' in props) {
+    if (
+      ('src' in props || 'mediaId' in props || 'assetId' in props)
+      && !editableMap[`element.${element.id}.asset`]
+    ) {
       editableMap[`element.${element.id}.asset`] = {
         elementId: element.id,
         field: 'props.assetId',
@@ -1513,7 +1537,8 @@ const buildEditableMap = (elements: RenderElement[]): Record<string, JsonObject>
         return;
       }
 
-      editableMap[`collection.${source.collectionId}.${element.id}.${field}`] = {
+      const collectionBindingKey = `collection.${source.collectionId}.${element.id}.${field}`;
+      editableMap[collectionBindingKey] = {
         elementId: element.id,
         field: normalizedBinding.targetPath,
         editable: true,
@@ -2475,6 +2500,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
   const dataBindings = collectDataBindingManifest(site.id, elements, context);
   const navigation = sourceData.getSiteNavigation(site.id);
   const collectionDataset = isRecord(page.meta.collectionDataset) ? page.meta.collectionDataset : null;
+  const editableMap = buildEditableMap(elements, page.content.editableMap);
 
   return {
     success: true,
@@ -2507,6 +2533,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         locale,
         version: page.updatedAt,
         elements: payloadElements,
+        editableMap,
       }),
       assets: {
         media: mediaPayload.media,
@@ -2554,7 +2581,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         ...dataBindings,
         collectionDataset,
       },
-      editableMap: buildEditableMap(elements),
+      editableMap,
     },
   };
 }
@@ -2582,6 +2609,7 @@ export function buildPublicCollectionListRenderPayload(
   const navigation = sourceData.getSiteNavigation(site.id);
   const dataset = buildCollectionListDataset(collection, records);
   const description = collection.description || `${collection.name} collection records.`;
+  const editableMap = buildEditableMap(elements, content.editableMap);
 
   return {
     success: true,
@@ -2640,7 +2668,7 @@ export function buildPublicCollectionListRenderPayload(
         interactions: content.interactions,
         seo: content.seo,
         dataBindings: content.dataBindings,
-        editableMap: content.editableMap,
+        editableMap,
         metadata: content.metadata,
         contentDocument: content.contentDocument,
       }),
@@ -2687,7 +2715,7 @@ export function buildPublicCollectionListRenderPayload(
           ...dataBindings.datasets.filter((item) => item.id !== dataset.id),
         ],
       },
-      editableMap: buildEditableMap(elements),
+      editableMap,
     },
   };
 }
@@ -2723,6 +2751,7 @@ export function buildPublicCollectionItemRenderPayload(
   const designReadiness = collection.slug === PRODUCT_COLLECTION_SLUG
     ? productDesignReadinessFromValues(record.values)
     : undefined;
+  const editableMap = buildEditableMap(elements, content.editableMap);
 
   return {
     success: true,
@@ -2783,7 +2812,7 @@ export function buildPublicCollectionItemRenderPayload(
         interactions: content.interactions,
         seo: content.seo,
         dataBindings: content.dataBindings,
-        editableMap: content.editableMap,
+        editableMap,
         metadata: content.metadata,
         contentDocument: content.contentDocument,
       }),
@@ -2830,7 +2859,7 @@ export function buildPublicCollectionItemRenderPayload(
           ...dataBindings.datasets.filter((item) => item.id !== dataset.id),
         ],
       },
-      editableMap: buildEditableMap(elements),
+      editableMap,
     },
   };
 }
@@ -2856,6 +2885,8 @@ export function buildPublicBlogPostRenderPayload(
   const actions = collectElementActions(resolvedElements);
   const dataBindings = collectDataBindingManifest(site.id, resolvedElements, context);
   const navigation = sourceData.getSiteNavigation(site.id);
+  const postEditableMap = isRecord(post.content.editableMap) ? post.content.editableMap : undefined;
+  const editableMap = buildEditableMap(resolvedElements, postEditableMap);
 
   return {
     success: true,
@@ -2890,6 +2921,7 @@ export function buildPublicBlogPostRenderPayload(
         locale,
         version: post.updatedAt,
         elements: payloadElements,
+        editableMap,
       }),
       assets: {
         media: mediaPayload.media,
@@ -2936,7 +2968,7 @@ export function buildPublicBlogPostRenderPayload(
       dataBindings: {
         ...dataBindings,
       },
-      editableMap: buildEditableMap(resolvedElements),
+      editableMap,
     },
   };
 }

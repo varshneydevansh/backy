@@ -1143,6 +1143,7 @@ assert(
     frontendDesignContractLib.includes('const editableMapEntriesFromRecord = (') &&
     frontendDesignContractLib.includes('const editableMapRecordFromEntries = (') &&
     frontendDesignContractLib.includes('const editableMapRecordFromContentElements = (') &&
+    frontendDesignContractLib.includes('export const buildFrontendDesignEditableMapRecord = (') &&
     frontendDesignContractLib.includes('const editableMap = editableMapRecordFromContentElements(elements, designState.editableMap);') &&
     frontendDesignContractLib.includes('const directDesignEditableMapRecord = (') &&
     frontendDesignContractLib.includes('const directDesignTemplateId = (') &&
@@ -1246,21 +1247,25 @@ assert(
     publicPagesRoute.includes('editableMap: content.editableMap') &&
     publicBlogRoute.includes('editableMap: content.editableMap') &&
     frontendDesignContractLib.includes('customJs: stringValue(metadata.frontendDesignCustomJs)') &&
-	    frontendDesignContractLib.includes('const cloneArrayOrRecord = (value: unknown): unknown[] | Record<string, unknown> | undefined => (') &&
-	    frontendDesignContractLib.includes('animations: arrayOrRecordValue(metadata.frontendDesignAnimations)') &&
-	    frontendDesignContractLib.includes('const animations = cloneArrayOrRecord(current.frontendDesignAnimations)') &&
-	    publicPagesRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
-	    publicBlogRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
-	    renderPayloadLib.includes('const jsonArrayOrRecordValue = (...values: unknown[]): JsonArrayOrObject | undefined => {') &&
-	    renderPayloadLib.includes('jsonArrayOrRecordValue(content.animations, contentDocument?.animations, metadata?.animations)') &&
+    frontendDesignContractLib.includes('const cloneArrayOrRecord = (value: unknown): unknown[] | Record<string, unknown> | undefined => (') &&
+    frontendDesignContractLib.includes('animations: arrayOrRecordValue(metadata.frontendDesignAnimations)') &&
+    frontendDesignContractLib.includes('const animations = cloneArrayOrRecord(current.frontendDesignAnimations)') &&
+    publicPagesRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
+    publicBlogRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
+    renderPayloadLib.includes('const jsonArrayOrRecordValue = (...values: unknown[]): JsonArrayOrObject | undefined => {') &&
+    renderPayloadLib.includes('jsonArrayOrRecordValue(content.animations, contentDocument?.animations, metadata?.animations)') &&
+    renderPayloadLib.includes('buildFrontendDesignEditableMapRecord(elements, explicitEditableMap)') &&
+    renderPayloadLib.includes('const editableMap = buildEditableMap(elements, page.content.editableMap);') &&
+    renderPayloadLib.includes('const contentEditableMap = input.editableMap && Object.keys(input.editableMap).length > 0') &&
+    renderPayloadLib.includes('editableMap: contentEditableMap') &&
     frontendDesignContractLib.includes('editableMap: cloneRecord(metadata.frontendDesignEditableMap)') &&
-	    publicReusableSectionsRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
-	    publicReusableSectionDetailRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
-	    frontendDesignContractLib.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
-	    adminReusableSectionsRoute.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
-	    adminReusableSectionDetailRoute.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
-	    adminReusableSectionsPage.includes('reusableSectionDesignStateFromRecord(content)') &&
-	    adminReusableSectionsPage.includes('contentDocument: cloneDesignStateValue(record.contentDocument)') &&
+    publicReusableSectionsRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
+    publicReusableSectionDetailRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
+    frontendDesignContractLib.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
+    adminReusableSectionsRoute.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
+    adminReusableSectionDetailRoute.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
+    adminReusableSectionsPage.includes('reusableSectionDesignStateFromRecord(content)') &&
+    adminReusableSectionsPage.includes('contentDocument: cloneDesignStateValue(record.contentDocument)') &&
     publicFormsRoute.includes('frontendDesignProvenanceFromMetadata(form.settings)') &&
     publicFormDetailRoute.includes('frontendDesignProvenanceFromMetadata(form.settings)') &&
     publicFormDefinitionRoute.includes('frontendDesignProvenanceFromMetadata(form.settings)') &&
@@ -1854,20 +1859,21 @@ assert(
   adminCollectionsPage.includes('customJS?: string;') &&
     adminCollectionsPage.includes('themeTokenRefs?: Record<string, string>;') &&
     adminCollectionsPage.includes('animations?: unknown[] | Record<string, unknown>;') &&
-	adminCollectionsPage.includes('contentDocument?: Record<string, unknown>;') &&
-	adminCollectionsPage.includes('authoredDynamicTemplateDesignStateSummary') &&
-	renderPayloadLib.includes('includeContentDocument: true') &&
-	renderPayloadLib.includes('customJS: content.customJS') &&
-	renderPayloadLib.includes('themeTokenRefs: content.themeTokenRefs') &&
-	renderPayloadLib.includes('animations: content.animations') &&
-	renderPayloadLib.includes('editableMap: content.editableMap') &&
-	renderPayloadLib.includes('contentDocument: content.contentDocument') &&
-	contentPayloadSchema.includes('"customJS": { "type": "string" }') &&
-	contentPayloadSchema.includes('"contentDocument": {\n              "$ref": "#/$defs/contentDocument"') &&
-	contentPayloadSchema.includes('"contentAssetRef"') &&
-	generatedSdkTypes.includes('GeneratedBackyPublicRenderPayloadContentDocument') &&
-	generatedSdkTypes.includes('contentDocument?: GeneratedBackyPublicRenderPayloadContentDocument;') &&
-	sdkSource.includes('export type BackyRenderContent = BackyContentDocument &'),
+    adminCollectionsPage.includes('contentDocument?: Record<string, unknown>;') &&
+    adminCollectionsPage.includes('authoredDynamicTemplateDesignStateSummary') &&
+    renderPayloadLib.includes('includeContentDocument: true') &&
+    renderPayloadLib.includes('customJS: content.customJS') &&
+    renderPayloadLib.includes('themeTokenRefs: content.themeTokenRefs') &&
+    renderPayloadLib.includes('animations: content.animations') &&
+    renderPayloadLib.includes('const editableMap = buildEditableMap(elements, content.editableMap);') &&
+    renderPayloadLib.includes('editableMap,') &&
+    renderPayloadLib.includes('contentDocument: content.contentDocument') &&
+    contentPayloadSchema.includes('"customJS": { "type": "string" }') &&
+    contentPayloadSchema.includes('"contentDocument": {\n              "$ref": "#/$defs/contentDocument"') &&
+    contentPayloadSchema.includes('"contentAssetRef"') &&
+    generatedSdkTypes.includes('GeneratedBackyPublicRenderPayloadContentDocument') &&
+    generatedSdkTypes.includes('contentDocument?: GeneratedBackyPublicRenderPayloadContentDocument;') &&
+    sdkSource.includes('export type BackyRenderContent = BackyContentDocument &'),
 	'Collection list/detail authored templates must preserve custom frontend design state through admin capture, public render payloads, JSON schema, and SDK render types.',
 );
 

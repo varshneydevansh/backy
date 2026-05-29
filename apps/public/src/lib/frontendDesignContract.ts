@@ -1699,6 +1699,11 @@ const editableMapRecordFromContentElements = (
   );
 };
 
+export const buildFrontendDesignEditableMapRecord = (
+  elements: unknown[],
+  editableMap?: unknown,
+): Record<string, unknown> | undefined => editableMapRecordFromContentElements(elements, editableMap);
+
 export const buildFrontendDesignContractFromContentTemplate = (input: {
   frontendDesign?: SiteSettings['frontendDesign'];
   resource: {
