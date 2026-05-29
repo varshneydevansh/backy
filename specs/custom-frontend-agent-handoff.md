@@ -13,13 +13,13 @@ AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as 
 
 2. `GET /api/sites/:siteId/agent-handoff`
    - Start here when another AI/frontend agent needs a compact machine-readable brief before generating a website.
-   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `handoff`, `readStart`, `apiAlignment`, `canvasFirst`, `contentCreation`, and `designState` blocks.
+   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `handoff`, `readStart`, `apiAlignment`, `componentApiContract`, `canvasFirst`, `contentCreation`, and `designState` blocks.
    - The same handoff remains mirrored inside manifest/OpenAPI so generated clients can use the same contract.
 
 3. `GET /api/sites/:siteId/manifest`
    - Bootstrap the custom frontend. This is the primary machine-readable contract for routes, modules, media/font policy, site frontend design, template registry, live-management capability, launch readiness, and completion status.
    - Schema source: `specs/ai-frontend-contract/frontend-manifest.schema.json`.
-   - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, API alignment rules, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
+   - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, API alignment rules, component API contract, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
    - Read-order shortcut: `data.contract.customFrontendAgentHandoff.readOrder` tells agents the sequence to follow: direct agent handoff, manifest, OpenAPI, authenticated frontend-design management, template registry, then render verification.
 
 4. `GET /api/sites/:siteId/openapi`
@@ -48,6 +48,30 @@ The same contract is visible inside the site detail workspace under **Frontend h
 This is the human-facing place to copy into another AI/frontend agent before it builds or edits a website on top of Backy.
 
 The canvas editor also exposes the same contract from the inspector's **Composition handoff** panel. Use **Copy handoff** there when the agent is already working inside a page, post, or reusable-section canvas and needs the direct `/agent-handoff` endpoint, `apiAlignment`, canvas-first creation routes, and design-state preservation fields without copying the larger editor composition plan.
+
+## Component API contract
+
+Every Backy canvas element is API-addressable. Agents should read `customFrontendAgentHandoff.componentApiContract` before mapping custom frontend components to Backy content. The contract has schema `backy.canvas-component-api-contract.v1` and sets `everyComponentApiAddressable` / `everyElementApiAddressable` to `true`.
+
+The stable addressing fields are:
+
+- `id`
+- `type`
+- `name`
+- `props`
+- `styles` / `style`
+- `responsive`
+- `tokenRefs`
+- `assetIds`
+- `animation`
+- `dataBindings`
+- `bindingSlots`
+- `children`
+- `content.contentDocument.nodes`
+- `content.editableMap`
+- `meta.frontendDesignEditableMap`
+
+Use the contract's render pointers for public reads, admin write pointers for authenticated mutations, and editable-map sources when matching an external selector/component to a Backy field. Preserve unknown props, style keys, responsive overrides, binding slots, asset ids, and metadata when patching content.
 
 ## Editable design state rule
 

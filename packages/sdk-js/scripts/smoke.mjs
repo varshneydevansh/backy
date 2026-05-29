@@ -1873,6 +1873,17 @@ assert(customFrontendAgentHandoff.apiAlignment?.creationRoutes?.blogBackyCanvas 
 assert(customFrontendAgentHandoff.apiAlignment?.creationRoutes?.blogCustomFrontend === customFrontendAgentHandoff.contentCreation.adminEntryPoints.blogCustomFrontend, 'manifest() custom frontend agent handoff API alignment blog custom frontend route drifted');
 assert(customFrontendAgentHandoff.apiAlignment?.preserveFields?.includes('content.elements'), 'manifest() custom frontend agent handoff API alignment missing content.elements preserve field');
 assert(customFrontendAgentHandoff.apiAlignment?.verification?.renderEndpoint === customFrontendAgentHandoff.endpoints.render, 'manifest() custom frontend agent handoff API alignment render endpoint drifted');
+assert(customFrontendAgentHandoff.componentApiContract?.schemaVersion === 'backy.canvas-component-api-contract.v1', 'manifest() custom frontend agent handoff missing component API contract schema');
+assert(customFrontendAgentHandoff.componentApiContract?.everyComponentApiAddressable === true, 'manifest() custom frontend agent handoff must mark every component API-addressable');
+assert(customFrontendAgentHandoff.componentApiContract?.everyElementApiAddressable === true, 'manifest() custom frontend agent handoff must mark every element API-addressable');
+assert(customFrontendAgentHandoff.componentApiContract?.readPointers?.renderElements?.includes('/render?path=/'), 'manifest() component API contract missing render element pointer');
+assert(customFrontendAgentHandoff.componentApiContract?.writePointers?.adminPages === `/api/admin/sites/${client.getSiteId()}/pages`, 'manifest() component API contract admin pages pointer drifted');
+assert(customFrontendAgentHandoff.componentApiContract?.elementAddressing?.stableIdField === 'id', 'manifest() component API contract missing stable id field');
+assert(customFrontendAgentHandoff.componentApiContract?.elementAddressing?.typeField === 'type', 'manifest() component API contract missing type field');
+assert(customFrontendAgentHandoff.componentApiContract?.elementAddressing?.propsField === 'props', 'manifest() component API contract missing props field');
+assert(customFrontendAgentHandoff.componentApiContract?.readableFieldPaths?.includes('element.props'), 'manifest() component API contract missing readable props path');
+assert(customFrontendAgentHandoff.componentApiContract?.writableFieldPaths?.includes('element.responsive'), 'manifest() component API contract missing writable responsive path');
+assert(customFrontendAgentHandoff.componentApiContract?.componentFamilies?.includes('interactive-components'), 'manifest() component API contract missing interactive component family');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('meta.frontendDesign*'), 'manifest() custom frontend agent handoff missing frontend design provenance round-trip field');
 assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('manifest.data.site.frontendDesign'), 'manifest() custom frontend agent handoff missing site frontendDesign style source');
@@ -1891,6 +1902,9 @@ assert(agentHandoff.data.contentCreation?.adminEntryPoints?.blogBackyCanvas?.inc
 assert(agentHandoff.data.contentCreation?.adminEntryPoints?.blogCustomFrontend?.includes('focus=canvas'), 'customFrontendAgentHandoff() missing focused custom frontend blog entry point');
 assert(agentHandoff.data.apiAlignment?.creationRoutes?.blogBackyCanvas === agentHandoff.data.contentCreation?.adminEntryPoints?.blogBackyCanvas, 'customFrontendAgentHandoff() API alignment blog canvas route drifted');
 assert(agentHandoff.data.apiAlignment?.creationRoutes?.blogCustomFrontend === agentHandoff.data.contentCreation?.adminEntryPoints?.blogCustomFrontend, 'customFrontendAgentHandoff() API alignment blog custom frontend route drifted');
+assert(agentHandoff.data.componentApiContract?.schemaVersion === 'backy.canvas-component-api-contract.v1', 'customFrontendAgentHandoff() missing component API contract');
+assert(agentHandoff.data.componentApiContract?.readableFieldPaths?.includes('element.props'), 'customFrontendAgentHandoff() component API contract missing readable props path');
+assert(agentHandoff.data.componentApiContract?.elementAddressing?.nestedChildrenField === 'children', 'customFrontendAgentHandoff() component API contract missing child addressing');
 assert(agentHandoff.data.canvasFirst?.editor === 'Backy canvas editor', 'customFrontendAgentHandoff() missing canvas-first editor rule');
 assert(agentHandoff.data.designState?.roundTripFields?.includes('content.elements'), 'customFrontendAgentHandoff() missing design-state round-trip fields');
 const cachedAgentHandoff = await client.customFrontendAgentHandoffCached();

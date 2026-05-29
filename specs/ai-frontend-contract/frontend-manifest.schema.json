@@ -247,6 +247,93 @@
           },
           "required": ["schemaVersion", "readStart", "publicDiscovery", "typedClients", "writeBoundary", "creationRoutes", "preserveFields", "verification"]
         },
+        "componentApiContract": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.canvas-component-api-contract.v1" },
+            "everyComponentApiAddressable": { "const": true },
+            "everyElementApiAddressable": { "const": true },
+            "source": { "type": "string", "minLength": 1 },
+            "scope": { "type": "string", "minLength": 1 },
+            "readPointers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "properties": {
+                "renderElements": { "type": "string", "minLength": 1 },
+                "renderContentDocument": { "type": "string", "minLength": 1 },
+                "manifestElementActions": { "type": "string", "minLength": 1 },
+                "manifestEditableMap": { "type": "string", "minLength": 1 },
+                "openApiCanvasElement": { "type": "string", "minLength": 1 },
+                "openApiContentPayload": { "type": "string", "minLength": 1 },
+                "editorCompositionHandoff": { "type": "string", "minLength": 1 }
+              },
+              "required": ["renderElements", "renderContentDocument", "manifestElementActions", "manifestEditableMap", "openApiCanvasElement", "openApiContentPayload", "editorCompositionHandoff"]
+            },
+            "writePointers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "properties": {
+                "adminPages": { "type": "string", "minLength": 1 },
+                "adminBlog": { "type": "string", "minLength": 1 },
+                "adminForms": { "type": "string", "minLength": 1 },
+                "adminCollections": { "type": "string", "minLength": 1 },
+                "adminProducts": { "type": "string", "minLength": 1 },
+                "adminReusableSections": { "type": "string", "minLength": 1 },
+                "adminFrontendDesign": { "type": "string", "minLength": 1 }
+              },
+              "required": ["adminPages", "adminBlog", "adminForms", "adminCollections", "adminProducts", "adminReusableSections", "adminFrontendDesign"]
+            },
+            "elementAddressing": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "stableIdField": { "const": "id" },
+                "typeField": { "const": "type" },
+                "propsField": { "const": "props" },
+                "styleFieldAliases": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "styles" }
+                },
+                "responsiveField": { "const": "responsive" },
+                "nestedChildrenField": { "const": "children" },
+                "contentDocumentNodeMap": { "const": "content.contentDocument.nodes" },
+                "editableMapSources": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "content.editableMap" }
+                }
+              },
+              "required": ["stableIdField", "typeField", "propsField", "styleFieldAliases", "responsiveField", "nestedChildrenField", "contentDocumentNodeMap", "editableMapSources"]
+            },
+            "readableFieldPaths": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "contains": { "const": "element.props" }
+            },
+            "writableFieldPaths": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "contains": { "const": "element.responsive" }
+            },
+            "componentFamilies": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "contains": { "const": "interactive-components" }
+            },
+            "requiredAgentBehavior": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "guarantees": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["schemaVersion", "everyComponentApiAddressable", "everyElementApiAddressable", "readPointers", "writePointers", "elementAddressing", "readableFieldPaths", "writableFieldPaths", "componentFamilies", "requiredAgentBehavior", "guarantees", "secretHandling"]
+        },
         "designState": {
           "type": "object",
           "additionalProperties": true,
@@ -284,7 +371,7 @@
           "required": ["includesSecretValues", "publicDiscoveryOnly", "adminWritesRequireAuth", "secretHandling"]
         }
       },
-      "required": ["schemaVersion", "source", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "designState", "rules", "privacy"]
+      "required": ["schemaVersion", "source", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "componentApiContract", "designState", "rules", "privacy"]
     },
     "databaseCertification": {
       "type": "object",

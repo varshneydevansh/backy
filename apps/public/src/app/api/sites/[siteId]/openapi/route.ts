@@ -5944,6 +5944,91 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
               },
             },
+            CustomFrontendComponentApiContract: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "everyComponentApiAddressable",
+                "everyElementApiAddressable",
+                "readPointers",
+                "writePointers",
+                "elementAddressing",
+                "readableFieldPaths",
+                "writableFieldPaths",
+                "componentFamilies",
+                "requiredAgentBehavior",
+                "guarantees",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.canvas-component-api-contract.v1",
+                },
+                everyComponentApiAddressable: { const: true },
+                everyElementApiAddressable: { const: true },
+                source: { type: "string" },
+                scope: { type: "string" },
+                readPointers: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                  properties: {
+                    renderElements: { type: "string" },
+                    renderContentDocument: { type: "string" },
+                    manifestElementActions: { type: "string" },
+                    manifestEditableMap: { type: "string" },
+                    openApiCanvasElement: { type: "string" },
+                    openApiContentPayload: { type: "string" },
+                    editorCompositionHandoff: { type: "string" },
+                  },
+                },
+                writePointers: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                elementAddressing: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    stableIdField: { const: "id" },
+                    typeField: { const: "type" },
+                    propsField: { const: "props" },
+                    responsiveField: { const: "responsive" },
+                    nestedChildrenField: { const: "children" },
+                    contentDocumentNodeMap: { const: "content.contentDocument.nodes" },
+                    styleFieldAliases: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    editableMapSources: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                readableFieldPaths: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                writableFieldPaths: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                componentFamilies: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                requiredAgentBehavior: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                guarantees: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
             CustomFrontendAgentHandoff: {
               type: "object",
               required: [
@@ -5954,6 +6039,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "readOrder",
                 "contentCreation",
                 "apiAlignment",
+                "componentApiContract",
                 "designState",
                 "rules",
                 "privacy",
@@ -5983,6 +6069,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 apiAlignment: {
                   $ref: "#/components/schemas/CustomFrontendApiAlignment",
                 },
+                componentApiContract: {
+                  $ref: "#/components/schemas/CustomFrontendComponentApiContract",
+                },
                 designState: {
                   type: "object",
                   additionalProperties: true,
@@ -6005,6 +6094,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "readStart",
                 "handoff",
                 "apiAlignment",
+                "componentApiContract",
                 "canvasFirst",
                 "designState",
                 "contentCreation",
@@ -6043,6 +6133,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 apiAlignment: {
                   $ref: "#/components/schemas/CustomFrontendApiAlignment",
+                },
+                componentApiContract: {
+                  $ref: "#/components/schemas/CustomFrontendComponentApiContract",
                 },
                 canvasFirst: {
                   type: "object",

@@ -71,6 +71,7 @@ const agentHandoffResponse = (
       },
       handoff,
       apiAlignment: handoff.apiAlignment,
+      componentApiContract: handoff.componentApiContract,
       canvasFirst: handoff.contentCreation.canvasFirst,
       designState: handoff.designState,
       contentCreation: handoff.contentCreation,

@@ -1,5 +1,7 @@
 export const CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent-handoff.v1';
 
+export const CUSTOM_FRONTEND_COMPONENT_API_CONTRACT_SCHEMA = 'backy.canvas-component-api-contract.v1';
+
 export const CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md';
 
 export const CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS = [
@@ -19,6 +21,48 @@ export const CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS = [
   'meta.frontendDesign*',
 ] as const;
 
+export const CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS = [
+  'element.id',
+  'element.type',
+  'element.name',
+  'element.x',
+  'element.y',
+  'element.width',
+  'element.height',
+  'element.rotation',
+  'element.zIndex',
+  'element.visible',
+  'element.locked',
+  'element.props',
+  'element.styles',
+  'element.responsive',
+  'element.tokenRefs',
+  'element.assetIds',
+  'element.animation',
+  'element.dataBindings',
+  'element.bindingSlots',
+  'element.accessibility',
+  'element.metadata',
+  'element.children[]',
+  'content.contentDocument.nodes',
+  'content.editableMap',
+  'meta.frontendDesignEditableMap',
+] as const;
+
+export const CUSTOM_FRONTEND_COMPONENT_API_FAMILIES = [
+  'layout',
+  'typography',
+  'media',
+  'forms',
+  'commerce',
+  'collections',
+  'navigation',
+  'comments',
+  'embeds',
+  'interactive-components',
+  'custom-code',
+] as const;
+
 export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
   pageBackyCanvas: `/pages/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`,
   pageCustomFrontend: `/pages/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`,
@@ -32,6 +76,58 @@ export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
   collectionCustomFrontend: `/collections?siteId=${siteId}&frontendTemplate=:templateId`,
   reusableSectionBackyCanvas: `/reusable-sections?siteId=${siteId}`,
   reusableSectionCustomFrontend: `/reusable-sections?siteId=${siteId}&frontendTemplate=:templateId`,
+});
+
+export const buildCustomFrontendComponentApiContract = (siteId: string) => ({
+  schemaVersion: CUSTOM_FRONTEND_COMPONENT_API_CONTRACT_SCHEMA,
+  everyComponentApiAddressable: true,
+  everyElementApiAddressable: true,
+  source: 'Backy canvas render payload and content document',
+  scope: 'Every root, child, reusable-section, blog, page, product, form, collection, and custom-code canvas element keeps a stable API shape.',
+  readPointers: {
+    renderElements: `/api/sites/${siteId}/render?path=/...#data.content.elements`,
+    renderContentDocument: `/api/sites/${siteId}/render?path=/...#data.content.contentDocument`,
+    manifestElementActions: `/api/sites/${siteId}/manifest#data.contract.schemas.elementActions`,
+    manifestEditableMap: `/api/sites/${siteId}/manifest#data.site.frontendDesign.editableMap`,
+    openApiCanvasElement: `/api/sites/${siteId}/openapi#/components/schemas/BackyContentElement`,
+    openApiContentPayload: `/api/sites/${siteId}/openapi#/components/schemas/PageResource`,
+    editorCompositionHandoff: 'editorCompositionReadiness.agentHandoff',
+  },
+  writePointers: {
+    adminPages: `/api/admin/sites/${siteId}/pages`,
+    adminBlog: `/api/admin/sites/${siteId}/blog`,
+    adminForms: `/api/admin/sites/${siteId}/forms`,
+    adminCollections: `/api/admin/sites/${siteId}/collections`,
+    adminProducts: `/api/admin/sites/${siteId}/collections/products/records`,
+    adminReusableSections: `/api/admin/sites/${siteId}/reusable-sections`,
+    adminFrontendDesign: `/api/admin/sites/${siteId}/frontend-design`,
+  },
+  elementAddressing: {
+    stableIdField: 'id',
+    typeField: 'type',
+    propsField: 'props',
+    styleFieldAliases: ['styles', 'style'],
+    responsiveField: 'responsive',
+    nestedChildrenField: 'children',
+    contentDocumentNodeMap: 'content.contentDocument.nodes',
+    editableMapSources: ['content.editableMap', 'meta.frontendDesignEditableMap', 'manifest.data.site.frontendDesign.editableMap'],
+  },
+  readableFieldPaths: CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS,
+  writableFieldPaths: CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS,
+  componentFamilies: CUSTOM_FRONTEND_COMPONENT_API_FAMILIES,
+  requiredAgentBehavior: [
+    'Treat every canvas element as structured data keyed by id and type, not as a static screenshot.',
+    'Preserve unknown props, styles, responsive overrides, data bindings, asset ids, and metadata during edits.',
+    'Use editableMap and bindingSlots to connect custom frontend selectors or generated components back to Backy fields.',
+    'Create or update content through authenticated admin APIs when a user expects Backy to reopen the result in the canvas editor.',
+  ],
+  guarantees: [
+    'Element props and styles are API-readable from render/content payloads.',
+    'Nested children and reusable section composition are preserved as structured JSON.',
+    'Responsive overrides and frontend design tokens survive page, post, product, form, collection, and reusable-section creation.',
+    'Custom frontends can inspect the handoff before generating UI and can keep Backy as the source of truth.',
+  ],
+  secretHandling: 'No provider keys, admin sessions, database URLs, private submission values, or private file tokens are exposed in public component API handoff fields.',
 });
 
 export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
@@ -179,6 +275,7 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
       expectation: 'After creating or editing custom frontend content, verify the public route through Backy resolve/render payloads and keep the same design envelope writable through admin/live-management APIs.',
     },
   },
+  componentApiContract: buildCustomFrontendComponentApiContract(siteId),
   designState: {
     roundTripFields: CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS,
     siteStyleSources: [
