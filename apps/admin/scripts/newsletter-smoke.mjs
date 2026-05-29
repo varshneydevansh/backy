@@ -25,6 +25,7 @@ assert(routeSource.includes("const NEWSLETTER_ISSUE_SCHEMA_VERSION = 'backy.news
 assert(routeSource.includes('createForm('), 'Newsletter route must create a native Backy signup form.');
 assert(routeSource.includes('listFormContacts('), 'Newsletter route must read subscriber records from Contacts APIs.');
 assert(routeSource.includes('listBlogPosts(activeSiteId, { status: \'published\' })'), 'Newsletter route must read published posts for issue handoff drafts.');
+assert(routeSource.includes('saveNewsletterSubscriber('), 'Newsletter route must support manual subscriber add/update through the private newsletter API.');
 assert(routeSource.includes('updateContact('), 'Newsletter route must manage subscriber lifecycle status.');
 assert(routeSource.includes('buildNewsletterLifecycleUpdate('), 'Newsletter route must map admin lifecycle actions to explicit newsletter subscription fields.');
 assert(routeSource.includes("newsletterSubscriptionStatus: 'unsubscribed'"), 'Newsletter archive action must mark the subscriber as unsubscribed.');
@@ -43,6 +44,8 @@ assert(routeSource.includes('providerBoundary') && routeSource.includes('externa
 assert(routeSource.includes('mailbox delivery') && routeSource.includes('SPF/DKIM/DMARC'), 'Newsletter delivery boundary must name deliverability responsibilities.');
 assert(routeSource.includes('data-testid="newsletter-command-center"'), 'Newsletter page must expose a command-center test hook.');
 assert(routeSource.includes('data-testid="newsletter-subscriber-list"'), 'Newsletter page must expose a subscriber-list test hook.');
+assert(routeSource.includes('data-testid="newsletter-manual-subscriber"'), 'Newsletter page must expose a manual subscriber management form.');
+assert(routeSource.includes('data-testid="newsletter-manual-consent"'), 'Newsletter manual subscriber form must require explicit consent evidence.');
 assert(routeSource.includes('data-testid="newsletter-api-handoff"'), 'Newsletter page must expose an API-handoff test hook.');
 assert(routeSource.includes('data-testid="newsletter-issue-handoff"'), 'Newsletter page must expose a newsletter issue handoff section.');
 assert(routeSource.includes('data-testid="newsletter-copy-issue-handoff"'), 'Newsletter page must expose a copyable issue handoff action.');
@@ -50,6 +53,7 @@ assert(routeSource.includes('data-testid="newsletter-copy-handoff"'), 'Newslette
 assert(routeSource.includes('data-testid="newsletter-export-csv"'), 'Newsletter page must expose a subscriber CSV export action.');
 assert(routeSource.includes("navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'newsletter', templateSource: 'backy-canvas', focus: 'canvas' } })"), 'Newsletter page creation must land in focused Backy canvas mode.');
 assert(routeSource.includes("navigate({ to: '/blog/new', search: { siteId: activeSiteId, templateSource: 'backy-canvas', focus: 'canvas' } })"), 'Newsletter writing workflow must open focused blog canvas mode.');
+assert(routeSource.includes('Manually added in Backy Newsletter workspace after explicit reader consent.'), 'Manual subscriber adds must persist an explicit consent note.');
 assert(routeSource.includes('provider API keys') && routeSource.includes('SMTP credentials') && routeSource.includes('bounce webhook secrets'), 'Newsletter issue handoff must keep provider secrets outside Backy/content payloads.');
 assert(routeSource.includes('overflow-x-auto') && routeSource.includes('min-w-[900px]'), 'Newsletter subscriber table must avoid admin-table text overlap on narrow screens.');
 
@@ -64,5 +68,6 @@ assert(helpSource.includes("route: '/newsletter'") && helpSource.includes('Open 
 assert(helpSource.includes("id: 'publish-reports-newsletter'") && helpSource.includes('provider-safe draft metadata') && helpSource.includes('SPF/DKIM/DMARC'), 'Help must explain the report-to-newsletter issue workflow and delivery-provider boundary.');
 assert(routeTreeSource.includes("Route as NewsletterRouteImport") && routeTreeSource.includes("'/newsletter': typeof NewsletterRoute"), 'Generated route tree must include /newsletter.');
 assert(adminContentApiSource.includes('newsletterSubscriptionStatus?: AdminContact') && adminContentApiSource.includes('newsletterUnsubscribedAt?: string | null'), 'Admin content API contact updates must accept newsletter subscription lifecycle fields.');
+assert(adminContentApiSource.includes('export async function saveNewsletterSubscriber') && adminContentApiSource.includes('/newsletter/subscribers'), 'Admin content API must expose a private newsletter subscriber save helper.');
 
 console.log('Newsletter source smoke passed.');

@@ -1301,6 +1301,20 @@ interface ApiContactResponse {
   };
 }
 
+interface ApiNewsletterSubscriberResponse {
+  success: boolean;
+  data?: {
+    subscriber: NewsletterSubscriberRecord;
+    existing?: boolean;
+  };
+  subscriber?: NewsletterSubscriberRecord;
+  existing?: boolean;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiContactPromotionResponse {
   success: boolean;
   data?: {
@@ -3723,6 +3737,37 @@ export interface FormsAnalytics {
 
 export type ContactStatus = Contact['status'];
 export type AdminContact = Contact;
+
+export interface NewsletterSubscriberRecord {
+  id: string;
+  email?: string | null;
+  name?: string | null;
+  formId: string;
+  formTitle?: string | null;
+  contactStatus: ContactStatus;
+  subscriptionStatus: 'subscribed' | 'unsubscribed';
+  topics?: string | null;
+  source?: string | null;
+  consent?: boolean | null;
+  consentText?: string | null;
+  subscribedAt?: string | null;
+  unsubscribedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sourceValues?: Record<string, unknown>;
+}
+
+export interface NewsletterSubscriberInput {
+  email: string;
+  name?: string | null;
+  topics?: string | null;
+  source?: string | null;
+  consent?: boolean;
+  consentText?: string | null;
+  status?: 'subscribed' | 'unsubscribed';
+  contactStatus?: ContactStatus;
+  formId?: string;
+}
 
 export interface ContactListFilters {
   status?: ContactStatus | 'all';
@@ -7223,6 +7268,30 @@ export async function deleteContact(siteId: string, formId: string, contactId: s
   if (!response.ok || !payload.success) {
     throw new Error(payload.error?.message || 'Unable to delete contact');
   }
+}
+
+export async function saveNewsletterSubscriber(
+  siteId: string,
+  input: NewsletterSubscriberInput,
+): Promise<{ subscriber: NewsletterSubscriberRecord; existing: boolean }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/newsletter/subscribers`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiNewsletterSubscriberResponse>(response);
+  const subscriber = payload.data?.subscriber || payload.subscriber;
+
+  if (!response.ok || !payload.success || !subscriber) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to save newsletter subscriber', payload.error?.details);
+  }
+
+  return {
+    subscriber,
+    existing: Boolean(payload.data?.existing ?? payload.existing),
+  };
 }
 
 export async function promoteContactToUser(

@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   UserPlus,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   createForm,
   getAdminApiBase,
@@ -21,6 +21,7 @@ import {
   listContactSegments,
   listFormContacts,
   listForms,
+  saveNewsletterSubscriber,
   updateContact,
   type AdminContact,
   type ContactSegmentAnalytics,
@@ -110,6 +111,14 @@ const NEWSLETTER_FORM_INPUT: Omit<FormDefinitionInput, 'name'> = {
   },
 };
 
+const DEFAULT_MANUAL_SUBSCRIBER = {
+  email: '',
+  name: '',
+  topics: 'Investigations',
+  source: 'manual-reporter-entry',
+  consentConfirmed: false,
+};
+
 const normalizeSearchString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -139,6 +148,7 @@ function NewsletterRoute() {
   const [isMutating, setIsMutating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [manualSubscriber, setManualSubscriber] = useState(DEFAULT_MANUAL_SUBSCRIBER);
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -212,6 +222,18 @@ function NewsletterRoute() {
   const exportActionStatus = exportDisabledReason
     ? `Newsletter export unavailable: ${exportDisabledReason}`
     : `Newsletter export available for ${subscribers.length} subscriber${subscribers.length === 1 ? '' : 's'}.`;
+  const manualSubscriberCanSave = Boolean(
+    manualSubscriber.email.trim() &&
+    manualSubscriber.consentConfirmed &&
+    newsletterForms.length > 0 &&
+    canManageNewsletter &&
+    !actionBusy,
+  );
+  const manualSubscriberDisabledReason = newsletterForms.length === 0
+    ? 'Create a newsletter signup form before adding subscribers manually.'
+    : !manualSubscriber.consentConfirmed
+      ? 'Confirm explicit consent before adding this subscriber.'
+      : manageDisabledReason || undefined;
 
   const loadNewsletter = useCallback(async () => {
     if (!canViewNewsletter) {
@@ -326,6 +348,47 @@ function NewsletterRoute() {
       setNotice(`${subscriber.contact.email || subscriber.contact.name || 'Subscriber'} moved to ${status}.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update subscriber.');
+    } finally {
+      setIsMutating(null);
+    }
+  };
+
+  const addManualSubscriber = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canManageNewsletter || actionBusy) return;
+    if (newsletterForms.length === 0) {
+      setError('Create a newsletter signup form before adding subscribers manually.');
+      return;
+    }
+    if (!manualSubscriber.email.trim()) {
+      setError('Subscriber email is required.');
+      return;
+    }
+    if (!manualSubscriber.consentConfirmed) {
+      setError('Confirm explicit newsletter consent before adding this subscriber.');
+      return;
+    }
+
+    setIsMutating('manual-subscriber');
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await saveNewsletterSubscriber(activeSiteId, {
+        email: manualSubscriber.email.trim(),
+        name: manualSubscriber.name.trim() || null,
+        topics: manualSubscriber.topics.trim() || null,
+        source: manualSubscriber.source.trim() || 'manual-reporter-entry',
+        consent: true,
+        consentText: 'Manually added in Backy Newsletter workspace after explicit reader consent.',
+        status: 'subscribed',
+        contactStatus: 'new',
+        formId: selectedFormId === 'all' ? newsletterForms[0]?.id : selectedFormId,
+      });
+      setNotice(`${result.existing ? 'Updated' : 'Added'} ${result.subscriber.email || manualSubscriber.email} as a newsletter subscriber.`);
+      setManualSubscriber(DEFAULT_MANUAL_SUBSCRIBER);
+      await loadNewsletter();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save newsletter subscriber.');
     } finally {
       setIsMutating(null);
     }
@@ -521,6 +584,85 @@ function NewsletterRoute() {
               <FlowStep index={2} title="Manage" detail="Contacts preserve subscriber identity, lifecycle status, and source values per site." />
               <FlowStep index={3} title="Deliver" detail="Export or sync to an email provider after SPF, DKIM, DMARC, bounces, and unsubscribe are configured." />
             </div>
+            <form
+              className="mt-4 rounded-lg border border-border bg-card p-3"
+              onSubmit={(event) => void addManualSubscriber(event)}
+              data-testid="newsletter-manual-subscriber"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Add subscriber</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    For readers who explicitly opted in outside the website, while keeping consent and topic metadata in Backy.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  type="submit"
+                  disabled={!manualSubscriberCanSave}
+                  title={manualSubscriberDisabledReason}
+                  data-testid="newsletter-save-manual-subscriber"
+                >
+                  {isMutating === 'manual-subscriber' ? 'Saving...' : 'Add'}
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                  Email
+                  <input
+                    type="email"
+                    value={manualSubscriber.email}
+                    onChange={(event) => setManualSubscriber((current) => ({ ...current, email: event.target.value }))}
+                    placeholder="reader@example.com"
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                    data-testid="newsletter-manual-email"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                  Name
+                  <input
+                    value={manualSubscriber.name}
+                    onChange={(event) => setManualSubscriber((current) => ({ ...current, name: event.target.value }))}
+                    placeholder="Optional"
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                    data-testid="newsletter-manual-name"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                  Topic
+                  <select
+                    value={manualSubscriber.topics}
+                    onChange={(event) => setManualSubscriber((current) => ({ ...current, topics: event.target.value }))}
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                    data-testid="newsletter-manual-topic"
+                  >
+                    {NEWSLETTER_FORM_INPUT.fields
+                      .find((field) => field.key === 'topics')
+                      ?.options?.map((topic) => <option key={topic} value={topic}>{topic}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                  Source
+                  <input
+                    value={manualSubscriber.source}
+                    onChange={(event) => setManualSubscriber((current) => ({ ...current, source: event.target.value }))}
+                    placeholder="manual-reporter-entry"
+                    className="min-h-10 rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                    data-testid="newsletter-manual-source"
+                  />
+                </label>
+              </div>
+              <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={manualSubscriber.consentConfirmed}
+                  onChange={(event) => setManualSubscriber((current) => ({ ...current, consentConfirmed: event.target.checked }))}
+                  className="mt-1 size-4 rounded border"
+                  data-testid="newsletter-manual-consent"
+                />
+                <span>I have explicit consent to subscribe this reader, and Backy should store that consent note with the subscriber record.</span>
+              </label>
+            </form>
           </div>
 
           <div className="rounded-lg border border-border bg-background p-4">
