@@ -61,6 +61,12 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Published manifest responses include `Cache-Control: public, max-age=60, stale-while-revalidate=300`, `ETag`/`If-None-Match` 304 support, `x-backy-cache-scope: discovery`, `x-backy-contract-version`, `x-backy-schema-version`, `x-backy-request-id`, and `x-backy-site-id`.
   - Draft/unpublished sites are hidden from the public manifest.
 
+- `GET /api/sites/:siteId/agent-handoff`
+  - Compact public start URL for AI/custom frontend builders before they generate or edit a site.
+  - Returns `backy.custom-frontend-agent-handoff-response.v1` with `data.handoff`, `data.readStart`, `data.canvasFirst`, `data.contentCreation`, and `data.designState`.
+  - The canonical handoff is the same `backy.custom-frontend-agent-handoff.v1` payload mirrored at `manifest.data.contract.customFrontendAgentHandoff` and OpenAPI `x-backy-custom-frontend-agent-handoff`, including the agent-read order, canvas-first creation routes, site-style source fields, round-trip design-state fields, SDK helpers, admin template/page/blog/form/collection/product/reusable-section endpoints, and no-secret privacy boundary.
+  - Published responses use public discovery cache/request/schema/site headers and hide draft/unpublished sites like the manifest.
+
 - `GET /api/sites/:siteId/interactive-components`
   - Site-scoped public registry discovery for rich blog/page figures, calculators, simulations, and custom code components.
   - Returns `backy.interactive-component-registry.v1` with the shared manifest contract, available component keys, versions, control schemas, allowed data-binding scopes, fallback requirements, sandbox mode, runtime sandbox URLs, and security/integrity flags.

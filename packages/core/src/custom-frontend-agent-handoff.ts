@@ -52,6 +52,7 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
     },
   ],
   endpoints: {
+    agentHandoff: `/api/sites/${siteId}/agent-handoff`,
     manifest: `/api/sites/${siteId}/manifest`,
     openapi: `/api/sites/${siteId}/openapi`,
     resolve: `/api/sites/${siteId}/resolve?path=/`,
@@ -67,6 +68,11 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
     reusableSections: `/api/admin/sites/${siteId}/reusable-sections`,
   },
   readOrder: [
+    {
+      step: 'agent-handoff',
+      endpointKey: 'agentHandoff',
+      purpose: 'Start here when another AI/frontend agent needs the complete Backy API, canvas-first creation, and design-state preservation rules in one small response.',
+    },
     {
       step: 'manifest',
       endpointKey: 'manifest',
@@ -97,6 +103,8 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
     package: 'packages/sdk-js',
     generatedTypes: 'packages/sdk-js/src/generated-contract-types.ts',
     helpers: [
+      'customFrontendAgentHandoff',
+      'customFrontendAgentHandoffCached',
       'manifest',
       'openapi',
       'render',

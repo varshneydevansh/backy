@@ -2603,6 +2603,35 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             },
           },
+          [`/api/sites/${site.id}/agent-handoff`]: {
+            get: {
+              tags: ["Discovery"],
+              summary: "Fetch the compact AI/custom frontend builder handoff",
+              operationId: "getBackyCustomFrontendAgentHandoff",
+              description:
+                "Public no-secret start URL for AI agents and external frontend builders. Mirrors the canonical custom frontend handoff from the manifest/OpenAPI and points agents at canvas-first content creation plus design-state preservation rules.",
+              responses: {
+                "200": {
+                  description: "Custom frontend agent handoff",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/CustomFrontendAgentHandoffEnvelope",
+                      },
+                    },
+                  },
+                },
+                "404": {
+                  description: "Site not found or unpublished",
+                  content: {
+                    "application/json": {
+                      schema: { $ref: "#/components/schemas/ErrorEnvelope" },
+                    },
+                  },
+                },
+              },
+            },
+          },
           "/api/admin/settings": {
             get: {
               tags: ["Admin Settings"],
@@ -5628,6 +5657,112 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               required: ["site"],
               properties: {
                 site: { $ref: "#/components/schemas/SiteSummary" },
+              },
+            }),
+            CustomFrontendAgentHandoff: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "source",
+                "docs",
+                "endpoints",
+                "readOrder",
+                "contentCreation",
+                "designState",
+                "rules",
+                "privacy",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.custom-frontend-agent-handoff.v1",
+                },
+                source: { const: "public-manifest-openapi-contract" },
+                docs: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                endpoints: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                readOrder: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+                contentCreation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                designState: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                rules: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                privacy: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+            CustomFrontendAgentHandoffEnvelope: envelopeSchema({
+              type: "object",
+              required: [
+                "schemaVersion",
+                "site",
+                "readStart",
+                "handoff",
+                "canvasFirst",
+                "designState",
+                "contentCreation",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.custom-frontend-agent-handoff-response.v1",
+                },
+                site: { $ref: "#/components/schemas/SiteSummary" },
+                readStart: {
+                  type: "object",
+                  required: [
+                    "endpoint",
+                    "manifestPointer",
+                    "openApiPointer",
+                    "docs",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    endpoint: { type: "string" },
+                    manifestPointer: {
+                      const: "data.contract.customFrontendAgentHandoff",
+                    },
+                    openApiPointer: {
+                      const: "x-backy-custom-frontend-agent-handoff",
+                    },
+                    docs: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                handoff: {
+                  $ref: "#/components/schemas/CustomFrontendAgentHandoff",
+                },
+                canvasFirst: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                designState: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                contentCreation: {
+                  type: "object",
+                  additionalProperties: true,
+                },
               },
             }),
             AdminSettingsProviderCertificationEvidence: {

@@ -7762,6 +7762,7 @@ const customFrontendAgentHandoff = {
     { label: "Editor contract", path: "specs/editor_complete_spec.md" },
   ],
   endpoints: {
+    agentHandoff: "/api/sites/site_demo/agent-handoff",
     manifest: "/api/sites/site_demo/manifest",
     openapi: "/api/sites/site_demo/openapi",
     resolve: "/api/sites/site_demo/resolve?path=/",
@@ -7778,6 +7779,11 @@ const customFrontendAgentHandoff = {
   },
   readOrder: [
     {
+      step: "agent-handoff",
+      endpointKey: "agentHandoff",
+      purpose: "Start here before reading the full manifest.",
+    },
+    {
       step: "manifest",
       endpointKey: "manifest",
       purpose: "Bootstrap site identity, routes, modules, media/font delivery, frontendDesign, template registry, launch readiness, and this agent handoff.",
@@ -7791,7 +7797,14 @@ const customFrontendAgentHandoff = {
   sdk: {
     package: "packages/sdk-js",
     generatedTypes: "packages/sdk-js/src/generated-contract-types.ts",
-    helpers: ["manifest", "openapi", "render", "buildBackyContentDesignPayload"],
+    helpers: [
+      "customFrontendAgentHandoff",
+      "customFrontendAgentHandoffCached",
+      "manifest",
+      "openapi",
+      "render",
+      "buildBackyContentDesignPayload",
+    ],
   },
   contentCreation: {
     templateCloneFields: ["frontendDesignTemplateId", "designTemplateId"],
@@ -7913,6 +7926,7 @@ const manifest = {
   },
   endpoints: {
     site: "/api/sites?identifier=demo",
+    agentHandoff: "/api/sites/site_demo/agent-handoff",
     manifest: "/api/sites/site_demo/manifest",
     openapi: "/api/sites/site_demo/openapi",
     resolve: "/api/sites/site_demo/resolve?path=/",
@@ -7924,6 +7938,8 @@ const manifest = {
     frontendDesign: "/api/sites/site_demo/frontend-design",
     frontendDesignInManifest:
       "/api/sites/site_demo/manifest#data.site.frontendDesign",
+    customFrontendAgentHandoff:
+      "/api/sites/site_demo/manifest#data.contract.customFrontendAgentHandoff",
     interactiveComponents: "/api/sites/site_demo/interactive-components",
     interactiveRuntimeEvents:
       "/api/sites/site_demo/interactive-components/runtime-events",
@@ -10722,6 +10738,12 @@ const openApi = {
         responses: {},
       },
     },
+    "/api/sites/site_demo/agent-handoff": {
+      get: {
+        operationId: "getBackyCustomFrontendAgentHandoff",
+        responses: {},
+      },
+    },
   },
   components: {
     schemas: {
@@ -10769,8 +10791,12 @@ const openApi = {
 
 const openApiOperationId =
   "getBackyFrontendManifest" satisfies GeneratedBackyOpenApiOperationId;
+const openApiAgentHandoffOperationId =
+  "getBackyCustomFrontendAgentHandoff" satisfies GeneratedBackyOpenApiOperationId;
 const openApiComponentName =
   "ErrorEnvelope" satisfies GeneratedBackyOpenApiComponentName;
+const openApiAgentHandoffComponentName =
+  "CustomFrontendAgentHandoffEnvelope" satisfies GeneratedBackyOpenApiComponentName;
 const openApiComponents = {
   BackyCompletionStatus: completionStatus,
   MediaFileCategoryDiscovery: openApiMediaFileCategories,

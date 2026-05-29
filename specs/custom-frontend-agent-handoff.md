@@ -7,20 +7,25 @@ This is the short entry point for AI agents or external teams building a custom 
 1. `GET /api/sites`
    - Discover available public sites and the canonical `siteId`.
 
-2. `GET /api/sites/:siteId/manifest`
+2. `GET /api/sites/:siteId/agent-handoff`
+   - Start here when another AI/frontend agent needs a compact machine-readable brief before generating a website.
+   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `handoff`, `readStart`, `canvasFirst`, `contentCreation`, and `designState` blocks.
+   - The same handoff remains mirrored inside manifest/OpenAPI so generated clients can use the same contract.
+
+3. `GET /api/sites/:siteId/manifest`
    - Bootstrap the custom frontend. This is the primary machine-readable contract for routes, modules, media/font policy, site frontend design, template registry, live-management capability, launch readiness, and completion status.
    - Schema source: `specs/ai-frontend-contract/frontend-manifest.schema.json`.
    - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
-   - Read-order shortcut: `data.contract.customFrontendAgentHandoff.readOrder` tells agents the sequence to follow: manifest, OpenAPI, authenticated frontend-design management, template registry, then render verification.
+   - Read-order shortcut: `data.contract.customFrontendAgentHandoff.readOrder` tells agents the sequence to follow: direct agent handoff, manifest, OpenAPI, authenticated frontend-design management, template registry, then render verification.
 
-3. `GET /api/sites/:siteId/openapi`
+4. `GET /api/sites/:siteId/openapi`
    - Generate typed clients from the site-scoped OpenAPI document. This mirrors the manifest and exposes the endpoint/component names custom agents should use instead of guessing URL shapes.
    - The same handoff is mirrored as `x-backy-custom-frontend-agent-handoff`.
 
-4. `GET /api/sites/:siteId/render?path=/...`
+5. `GET /api/sites/:siteId/render?path=/...`
    - Render a page/blog/product/collection route using Backy's normalized payload. Use this when building the live website renderer.
 
-5. `packages/sdk-js`
+6. `packages/sdk-js`
    - Prefer SDK helpers when writing agents. The generated types in `packages/sdk-js/src/generated-contract-types.ts` are produced from the public schemas/OpenAPI and should stay aligned with the manifest.
 
 Long-form details live in `specs/backy-api-contracts.md` and `specs/editor_complete_spec.md`.
@@ -31,6 +36,7 @@ The same contract is visible inside the site detail workspace under **Frontend h
 
 - `backy.custom-frontend-agent-handoff.v1`
 - `specs/custom-frontend-agent-handoff.md`
+- the direct `GET /api/sites/:siteId/agent-handoff` start URL
 - site-specific manifest, OpenAPI, render, frontend-design, and admin template endpoints
 - copyable admin entry points for page, blog, product, form, collection, and reusable-section creation from either Backy-canvas starters or captured custom-frontend templates
 - a canvas-first creation rule: every new page, post, product, form, collection, and reusable section must be created through Backy routes/APIs so it reopens in the canvas editor with the site's fonts, colors, chrome, element geometry, bindings, and editable metadata intact

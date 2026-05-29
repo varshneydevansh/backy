@@ -1,12 +1,12 @@
 /**
- * Public frontend design contract for custom/generated frontends.
+ * Public AI/custom frontend builder handoff.
  *
- * GET /api/sites/[siteId]/frontend-design
+ * GET /api/sites/[siteId]/agent-handoff
  */
 
 import { NextRequest } from 'next/server';
+import { buildCustomFrontendAgentHandoff } from '@/lib/customFrontendAgentHandoff';
 import { getSiteByIdOrSlug } from '@/lib/backyStore';
-import { emptyFrontendDesignContract } from '@/lib/frontendDesignContract';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -15,6 +15,17 @@ interface RouteParams {
     siteId: string;
   }>;
 }
+
+type HandoffSite = {
+  id: string;
+  slug: string;
+  name: string;
+  customDomain?: string | null;
+  status?: string;
+  isPublished?: boolean;
+};
+
+const RESPONSE_SCHEMA = 'backy.custom-frontend-agent-handoff-response.v1';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -33,29 +44,18 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
-const frontendDesignResponse = (
+const agentHandoffResponse = (
   request: NextRequest,
   requestId: string,
-  site: {
-    id: string;
-    slug: string;
-    name: string;
-    customDomain?: string | null;
-    status?: string;
-    isPublished?: boolean;
-    settings?: {
-      frontendDesign?: ReturnType<typeof emptyFrontendDesignContract> | null;
-    };
-  },
+  site: HandoffSite,
   cacheRevision?: string,
 ) => {
-  const frontendDesign = site.settings?.frontendDesign || emptyFrontendDesignContract();
-  const hasContract = frontendDesign.status !== 'unconfigured';
+  const handoff = buildCustomFrontendAgentHandoff(site.id);
   const body = {
     success: true,
     requestId,
     data: {
-      schemaVersion: 'backy.frontend-design-response.v1',
+      schemaVersion: RESPONSE_SCHEMA,
       site: {
         id: site.id,
         slug: site.slug,
@@ -63,36 +63,26 @@ const frontendDesignResponse = (
         customDomain: site.customDomain || null,
         status: site.status || (site.isPublished ? 'published' : 'draft'),
       },
-      frontendDesign,
-      capabilities: {
-        hasContract,
-        templateCount: frontendDesign.templates.length,
-        editableBindingCount: frontendDesign.editableMap.length,
-        chrome: Boolean(frontendDesign.chrome?.header || frontendDesign.chrome?.navigation || frontendDesign.chrome?.footer),
-        tokens: Boolean(
-          frontendDesign.tokens?.colors ||
-          frontendDesign.tokens?.fonts ||
-          frontendDesign.tokens?.spacing ||
-          frontendDesign.tokens?.customCss,
-        ),
+      readStart: {
+        endpoint: handoff.endpoints.agentHandoff,
+        manifestPointer: 'data.contract.customFrontendAgentHandoff',
+        openApiPointer: 'x-backy-custom-frontend-agent-handoff',
+        docs: handoff.docs.map((doc) => doc.path),
       },
-      endpoints: {
-        agentHandoff: `/api/sites/${site.id}/agent-handoff`,
-        manifest: `/api/sites/${site.id}/manifest`,
-        frontendDesign: `/api/sites/${site.id}/frontend-design`,
-        render: `/api/sites/${site.id}/render?path=/`,
-        navigation: `/api/sites/${site.id}/navigation`,
-      },
+      handoff,
+      canvasFirst: handoff.contentCreation.canvasFirst,
+      designState: handoff.designState,
+      contentCreation: handoff.contentCreation,
     },
     siteId: site.id,
-    frontendDesign,
+    customFrontendAgentHandoff: handoff,
   };
 
   return publicContractJson(body, {
     requestId,
     request,
     cache: 'discovery',
-    schemaVersion: 'backy.frontend-design-response.v1',
+    schemaVersion: RESPONSE_SCHEMA,
     siteId: site.id,
     cacheRevision,
   });
@@ -116,18 +106,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
       }) || undefined;
 
-      return frontendDesignResponse(request, requestId, site, cacheRevision);
+      return agentHandoffResponse(request, requestId, site, cacheRevision);
     }
 
     const site = getSiteByIdOrSlug(siteId);
 
-    if (!site) {
+    if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    return frontendDesignResponse(request, requestId, site);
+    return agentHandoffResponse(request, requestId, site);
   } catch (error) {
-    console.error('Frontend design API error:', error);
+    console.error('Custom frontend agent handoff API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }

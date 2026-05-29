@@ -3390,6 +3390,7 @@ const buildRepositoryManifest = (
       },
       endpoints: {
         site: `/api/sites?identifier=${encodeURIComponent(input.site.slug)}`,
+        agentHandoff: `/api/sites/${input.site.id}/agent-handoff`,
         manifest: `/api/sites/${input.site.id}/manifest`,
         openapi: `/api/sites/${input.site.id}/openapi`,
         resolve: `/api/sites/${input.site.id}/resolve?path=/`,
@@ -3400,6 +3401,7 @@ const buildRepositoryManifest = (
         navigation: `/api/sites/${input.site.id}/navigation`,
         frontendDesign: `/api/sites/${input.site.id}/frontend-design`,
         frontendDesignInManifest: `/api/sites/${input.site.id}/manifest#data.site.frontendDesign`,
+        customFrontendAgentHandoff: `/api/sites/${input.site.id}/manifest#data.contract.customFrontendAgentHandoff`,
         interactiveComponents: `/api/sites/${input.site.id}/interactive-components`,
         interactiveRuntimeEvents: `/api/sites/${input.site.id}/interactive-components/runtime-events`,
         interactiveComponentsInManifest: `/api/sites/${input.site.id}/manifest#data.modules.interactiveComponents`,
@@ -3754,6 +3756,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         endpoints: {
           site: `/api/sites?identifier=${encodeURIComponent(site.slug)}`,
+          agentHandoff: `/api/sites/${site.id}/agent-handoff`,
           manifest: `/api/sites/${site.id}/manifest`,
           openapi: `/api/sites/${site.id}/openapi`,
           resolve: `/api/sites/${site.id}/resolve?path=/`,
@@ -3764,6 +3767,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           navigation: `/api/sites/${site.id}/navigation`,
           frontendDesign: `/api/sites/${site.id}/frontend-design`,
           frontendDesignInManifest: `/api/sites/${site.id}/manifest#data.site.frontendDesign`,
+          customFrontendAgentHandoff: `/api/sites/${site.id}/manifest#data.contract.customFrontendAgentHandoff`,
           interactiveComponents: `/api/sites/${site.id}/interactive-components`,
           interactiveRuntimeEvents: `/api/sites/${site.id}/interactive-components/runtime-events`,
           interactiveComponentsInManifest: `/api/sites/${site.id}/manifest#data.modules.interactiveComponents`,

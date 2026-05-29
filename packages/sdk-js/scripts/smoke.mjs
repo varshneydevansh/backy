@@ -1832,6 +1832,9 @@ const customFrontendAgentHandoff = manifest.data.contract?.customFrontendAgentHa
 assert(customFrontendAgentHandoff?.schemaVersion === 'backy.custom-frontend-agent-handoff.v1', 'manifest() missing custom frontend agent handoff schema');
 assert(customFrontendAgentHandoff?.source === 'public-manifest-openapi-contract', 'manifest() custom frontend agent handoff source drifted');
 assert(customFrontendAgentHandoff.docs?.some?.((doc) => doc.path === 'specs/custom-frontend-agent-handoff.md'), 'manifest() custom frontend agent handoff missing docs pointer');
+assert(manifest.data.endpoints?.agentHandoff === `/api/sites/${client.getSiteId()}/agent-handoff`, 'manifest() missing direct custom frontend agent handoff endpoint');
+assert(manifest.data.endpoints?.customFrontendAgentHandoff === `/api/sites/${client.getSiteId()}/manifest#data.contract.customFrontendAgentHandoff`, 'manifest() missing nested custom frontend agent handoff pointer');
+assert(customFrontendAgentHandoff.endpoints?.agentHandoff === manifest.data.endpoints.agentHandoff, 'manifest() custom frontend agent handoff direct endpoint drifted');
 assert(customFrontendAgentHandoff.endpoints?.manifest === manifest.data.endpoints.manifest, 'manifest() custom frontend agent handoff manifest endpoint drifted');
 assert(customFrontendAgentHandoff.endpoints?.openapi === manifest.data.endpoints.openapi, 'manifest() custom frontend agent handoff OpenAPI endpoint drifted');
 assert(customFrontendAgentHandoff.endpoints?.render?.includes('/render?path=/'), 'manifest() custom frontend agent handoff missing render endpoint');
@@ -1839,8 +1842,11 @@ assert(customFrontendAgentHandoff.endpoints?.frontendDesign === manifest.data.en
 assert(customFrontendAgentHandoff.endpoints?.frontendDesignManagement === `/api/admin/sites/${client.getSiteId()}/frontend-design`, 'manifest() custom frontend agent handoff missing admin frontend-design endpoint');
 assert(customFrontendAgentHandoff.endpoints?.templates === `/api/admin/sites/${client.getSiteId()}/templates`, 'manifest() custom frontend agent handoff missing templates endpoint');
 assert(customFrontendAgentHandoff.endpoints?.products?.includes('/collections/products/records'), 'manifest() custom frontend agent handoff missing product design endpoint');
+assert(customFrontendAgentHandoff.readOrder?.[0]?.endpointKey === 'agentHandoff', 'manifest() custom frontend agent handoff must start with the direct agent-handoff endpoint');
 assert(customFrontendAgentHandoff.readOrder?.some?.((entry) => entry.endpointKey === 'frontendDesignManagement'), 'manifest() custom frontend agent handoff missing frontend-design read-order step');
 assert(customFrontendAgentHandoff.sdk?.package === 'packages/sdk-js', 'manifest() custom frontend agent handoff SDK package drifted');
+assert(customFrontendAgentHandoff.sdk?.helpers?.includes('customFrontendAgentHandoff'), 'manifest() custom frontend agent handoff missing direct SDK helper');
+assert(customFrontendAgentHandoff.sdk?.helpers?.includes('customFrontendAgentHandoffCached'), 'manifest() custom frontend agent handoff missing cached SDK helper');
 assert(customFrontendAgentHandoff.sdk?.helpers?.includes('buildBackyContentDesignPayload'), 'manifest() custom frontend agent handoff missing design payload helper');
 assert(customFrontendAgentHandoff.contentCreation?.templateCloneFields?.includes('frontendDesignTemplateId'), 'manifest() custom frontend agent handoff missing frontendDesignTemplateId creation field');
 assert(customFrontendAgentHandoff.contentCreation?.canvasFirst?.editor === 'Backy canvas editor', 'manifest() custom frontend agent handoff missing canvas-first editor contract');
@@ -1857,6 +1863,16 @@ assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('manif
 assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('frontendDesign.tokens.fonts'), 'manifest() custom frontend agent handoff missing font token style source');
 assert(customFrontendAgentHandoff.privacy?.includesSecretValues === false, 'manifest() custom frontend agent handoff must not include secret values');
 assert(customFrontendAgentHandoff.privacy?.adminWritesRequireAuth === true, 'manifest() custom frontend agent handoff missing admin auth boundary');
+const agentHandoff = await client.customFrontendAgentHandoff();
+assert(agentHandoff.data.schemaVersion === 'backy.custom-frontend-agent-handoff-response.v1', 'customFrontendAgentHandoff() response schema drifted');
+assert(agentHandoff.data.readStart?.endpoint === manifest.data.endpoints.agentHandoff, 'customFrontendAgentHandoff() read-start endpoint drifted');
+assert(agentHandoff.data.readStart?.manifestPointer === 'data.contract.customFrontendAgentHandoff', 'customFrontendAgentHandoff() missing manifest read-start pointer');
+assert(agentHandoff.data.readStart?.openApiPointer === 'x-backy-custom-frontend-agent-handoff', 'customFrontendAgentHandoff() missing OpenAPI read-start pointer');
+assert(agentHandoff.data.handoff?.endpoints?.agentHandoff === manifest.data.endpoints.agentHandoff, 'customFrontendAgentHandoff() direct handoff endpoint drifted');
+assert(agentHandoff.data.canvasFirst?.editor === 'Backy canvas editor', 'customFrontendAgentHandoff() missing canvas-first editor rule');
+assert(agentHandoff.data.designState?.roundTripFields?.includes('content.elements'), 'customFrontendAgentHandoff() missing design-state round-trip fields');
+const cachedAgentHandoff = await client.customFrontendAgentHandoffCached();
+assert(cachedAgentHandoff.notModified === false && cachedAgentHandoff.body?.data?.handoff?.schemaVersion === 'backy.custom-frontend-agent-handoff.v1', 'customFrontendAgentHandoffCached() missing handoff payload');
 assert(manifest.data.contract?.frontendLaunchReadiness?.schemaVersion === 'backy.frontend-launch-readiness.v1', 'manifest() missing frontend launch readiness schema');
 assert(['ready', 'attention', 'blocked'].includes(manifest.data.contract.frontendLaunchReadiness.status), 'manifest() frontend launch readiness status drifted');
 assert(typeof manifest.data.contract.frontendLaunchReadiness.score === 'number', 'manifest() missing frontend launch readiness score');
@@ -5629,6 +5645,8 @@ console.log(JSON.stringify({
     'sites',
     'manifest',
     'manifestCached',
+    'customFrontendAgentHandoff',
+    'customFrontendAgentHandoffCached',
     'frontendDesign',
     'frontendDesignCached',
     'openapi',

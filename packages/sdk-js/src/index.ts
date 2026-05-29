@@ -160,6 +160,8 @@ export type {
   GeneratedBackyOpenApiCommerceProductSubscriptionLifecycle,
   GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope,
   GeneratedBackyOpenApiCollectionFieldOption,
+  GeneratedBackyOpenApiCustomFrontendAgentHandoff,
+  GeneratedBackyOpenApiCustomFrontendAgentHandoffEnvelope,
   GeneratedBackyOpenApiCollectionFieldSchema,
   GeneratedBackyOpenApiCollectionFieldValidation,
   GeneratedBackyOpenApiCollectionPermissions,
@@ -680,6 +682,23 @@ export interface BackyFrontendDesignResponse {
     [key: string]: unknown;
   };
   endpoints?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+export interface BackyCustomFrontendAgentHandoffResponse {
+  schemaVersion: "backy.custom-frontend-agent-handoff-response.v1" | string;
+  site: BackySiteSummary;
+  readStart: {
+    endpoint: string;
+    manifestPointer: "data.contract.customFrontendAgentHandoff" | string;
+    openApiPointer: "x-backy-custom-frontend-agent-handoff" | string;
+    docs: string[];
+    [key: string]: unknown;
+  };
+  handoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff;
+  canvasFirst: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["contentCreation"]["canvasFirst"];
+  designState: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["designState"];
+  contentCreation: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["contentCreation"];
   [key: string]: unknown;
 }
 
@@ -14933,6 +14952,28 @@ export class BackyClient {
     siteId = this.requireSiteId(),
   ): Promise<BackyEnvelope<BackyFrontendManifest>> {
     return this.request(`/api/sites/${encodeURIComponent(siteId)}/manifest`);
+  }
+
+  customFrontendAgentHandoff(
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackyCustomFrontendAgentHandoffResponse>> {
+    return this.request(
+      `/api/sites/${encodeURIComponent(siteId)}/agent-handoff`,
+    );
+  }
+
+  customFrontendAgentHandoffCached(
+    options: BackyConditionalOptions = {},
+  ): Promise<
+    BackyConditionalResult<BackyEnvelope<BackyCustomFrontendAgentHandoffResponse>>
+  > {
+    return this.requestConditionalJson(
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/agent-handoff`,
+      {
+        ifNoneMatch: options.etag,
+        requestId: options.requestId,
+      },
+    );
   }
 
   interactiveComponents(

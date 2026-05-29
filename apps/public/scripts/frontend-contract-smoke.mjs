@@ -16,6 +16,7 @@ const assert = (condition, message) => {
 
 const manifestRoute = read('../src/app/api/sites/[siteId]/manifest/route.ts');
 const openApiRoute = read('../src/app/api/sites/[siteId]/openapi/route.ts');
+const publicAgentHandoffRoute = read('../src/app/api/sites/[siteId]/agent-handoff/route.ts');
 const publicSiteDiscoveryRoute = read('../src/app/api/sites/route.ts');
 const publicPagesRoute = read('../src/app/api/sites/[siteId]/pages/route.ts');
 const publicBlogRoute = read('../src/app/api/sites/[siteId]/blog/route.ts');
@@ -238,11 +239,24 @@ assert(
     openApiRoute.includes('"orderApiHandoffTargetSiteId"') &&
     openApiRoute.includes('"orderApiHandoffReady"') &&
     openApiRoute.includes('"commerceApiHandoffSiteSelectorEnv"') &&
+    publicAgentHandoffRoute.includes('backy.custom-frontend-agent-handoff-response.v1') &&
+    publicAgentHandoffRoute.includes('buildCustomFrontendAgentHandoff(site.id)') &&
+    publicAgentHandoffRoute.includes("manifestPointer: 'data.contract.customFrontendAgentHandoff'") &&
+    publicAgentHandoffRoute.includes("openApiPointer: 'x-backy-custom-frontend-agent-handoff'") &&
+    publicAgentHandoffRoute.includes('handoff.contentCreation.canvasFirst') &&
+    publicAgentHandoffRoute.includes('handoff.designState') &&
+    publicAgentHandoffRoute.includes('!site || !site.isPublished') &&
     manifestRoute.includes('buildCustomFrontendAgentHandoff') &&
     manifestRoute.includes('customFrontendAgentHandoff: buildCustomFrontendAgentHandoff') &&
+    manifestRoute.includes('agentHandoff: `/api/sites/${input.site.id}/agent-handoff`') &&
+    manifestRoute.includes('customFrontendAgentHandoff: `/api/sites/${input.site.id}/manifest#data.contract.customFrontendAgentHandoff`') &&
     openApiRoute.includes('"x-backy-custom-frontend-agent-handoff": customFrontendAgentHandoff') &&
+    openApiRoute.includes('operationId: "getBackyCustomFrontendAgentHandoff"') &&
+    openApiRoute.includes('CustomFrontendAgentHandoffEnvelope') &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent-handoff.v1'") &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md'") &&
+    customFrontendAgentHandoffLib.includes('agentHandoff') &&
+    customFrontendAgentHandoffLib.includes('customFrontendAgentHandoffCached') &&
     customFrontendAgentHandoffLib.includes('frontendDesignManagement') &&
     customFrontendAgentHandoffLib.includes('buildBackyContentDesignPayload') &&
     customFrontendAgentHandoffLib.includes('frontendDesignTemplateId') &&
@@ -258,6 +272,7 @@ assert(
     frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
     frontendManifestSchema.includes('"customFrontendAgentHandoff": { "$ref": "#/$defs/customFrontendAgentHandoff" }') &&
     frontendManifestSchema.includes('"backy.custom-frontend-agent-handoff.v1"') &&
+    frontendManifestSchema.includes('"agentHandoff"') &&
     frontendManifestSchema.includes('"frontendDesignManagement"') &&
     frontendManifestSchema.includes('"adminEntryPoints"') &&
     frontendManifestSchema.includes('"readOrder"') &&
@@ -273,7 +288,9 @@ assert(
     generatedSdkTypes.includes('"x-backy-custom-frontend-agent-handoff"?: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     sdkSource.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     sdkSource.includes('customFrontendAgentHandoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
+    sdkSource.includes('customFrontendAgentHandoffCached') &&
     sdkSmoke.includes('customFrontendAgentHandoff') &&
+    generatedSdkSmoke.includes('agentHandoff') &&
     generatedSdkSmoke.includes('customFrontendAgentHandoff') &&
     frontendManifestSchema.includes('"backy.completion-status.v1"') &&
     frontendManifestSchema.includes('"backy.partial-closure-readiness.v1"') &&
@@ -291,6 +308,7 @@ assert(
 	    frontendManifestSchema.includes('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS') &&
 	    frontendManifestSchema.includes('"producerEnv"') &&
 	    apiContracts.includes('surfaceRunbooks[].artifactVerifier') &&
+	    apiContracts.includes('GET /api/sites/:siteId/agent-handoff') &&
 	    apiContracts.includes('customFrontendAgentHandoff') &&
 	    apiContracts.includes('partialClosureReadiness') &&
 	    apiContracts.includes('noRawSecretValuesReady') &&

@@ -27,6 +27,7 @@
           "type": "object",
           "additionalProperties": { "type": "string" },
           "properties": {
+            "agentHandoff": { "type": "string", "minLength": 1 },
             "manifest": { "type": "string", "minLength": 1 },
             "openapi": { "type": "string", "minLength": 1 },
             "resolve": { "type": "string", "minLength": 1 },
@@ -41,7 +42,7 @@
             "products": { "type": "string", "minLength": 1 },
             "reusableSections": { "type": "string", "minLength": 1 }
           },
-          "required": ["manifest", "openapi", "resolve", "render", "frontendDesign", "frontendDesignManagement", "templates", "pages", "blog", "forms", "collections", "products", "reusableSections"]
+          "required": ["agentHandoff", "manifest", "openapi", "resolve", "render", "frontendDesign", "frontendDesignManagement", "templates", "pages", "blog", "forms", "collections", "products", "reusableSections"]
         },
         "readOrder": {
           "type": "array",
@@ -1172,6 +1173,7 @@
           "additionalProperties": { "type": "string" },
           "properties": {
             "site": { "type": "string", "minLength": 1 },
+            "agentHandoff": { "type": "string", "minLength": 1 },
             "manifest": { "type": "string", "minLength": 1 },
             "openapi": { "type": "string", "minLength": 1 },
             "resolve": { "type": "string", "minLength": 1 },
@@ -1182,6 +1184,7 @@
             "navigation": { "type": "string", "minLength": 1 },
             "frontendDesign": { "type": "string", "minLength": 1 },
             "frontendDesignInManifest": { "type": "string", "minLength": 1 },
+            "customFrontendAgentHandoff": { "type": "string", "minLength": 1 },
             "interactiveComponents": { "type": "string", "minLength": 1 },
             "interactiveRuntimeEvents": { "type": "string", "minLength": 1 },
             "interactiveComponentsInManifest": { "type": "string", "minLength": 1 },
@@ -1217,7 +1220,7 @@
             "commentReport": { "type": "string", "minLength": 1 },
             "events": { "type": "string", "minLength": 1 }
           },
-          "required": ["site", "manifest", "openapi", "resolve", "render", "navigation", "frontendDesign", "media", "pages", "blog", "collections", "reusableSections", "forms"]
+          "required": ["site", "agentHandoff", "manifest", "openapi", "resolve", "render", "navigation", "frontendDesign", "customFrontendAgentHandoff", "media", "pages", "blog", "collections", "reusableSections", "forms"]
         },
         "routePatterns": {
           "type": "array",
