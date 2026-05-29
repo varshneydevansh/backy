@@ -1910,7 +1910,7 @@ function PagesListView() {
       key: 'title',
       label: 'Page Title',
       sortable: true,
-      width: '220px',
+      width: '240px',
       render: (page) => (
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -1930,7 +1930,7 @@ function PagesListView() {
     {
       key: 'slug',
       label: 'Route',
-      width: '150px',
+      width: '170px',
       render: (page) => (
         <PageRouteCell
           page={page}
@@ -1941,14 +1941,14 @@ function PagesListView() {
     {
       key: 'template',
       label: 'Template',
-      width: '150px',
+      width: '170px',
       render: (page) => <PageTemplateCell page={page} />,
     },
     {
       key: 'status',
       label: 'Status',
       sortable: true,
-      width: '125px',
+      width: '135px',
       render: (page) => (
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={page.status} />
@@ -1963,7 +1963,7 @@ function PagesListView() {
     {
       key: 'parentId',
       label: 'Hierarchy',
-      width: '150px',
+      width: '170px',
       render: (page) => (
         <PageHierarchyCell
           page={page}
@@ -1975,7 +1975,7 @@ function PagesListView() {
     {
       key: 'meta',
       label: 'Health',
-      width: '130px',
+      width: '150px',
       render: (page) => {
         const readiness = readinessMap[page.id];
         const firstIssue = readiness?.checks.find((check) => check.status !== 'pass');
@@ -2002,7 +2002,7 @@ function PagesListView() {
     {
       key: 'content',
       label: 'Revisions',
-      width: '160px',
+      width: '220px',
       render: (page) => (
         <PageRevisionCell
           page={page}
@@ -2015,7 +2015,7 @@ function PagesListView() {
     {
       key: 'siteId',
       label: 'Delivery',
-      width: '300px',
+      width: '360px',
       render: (page) => {
         const pageSiteId = page.siteId || activeSiteId;
         const pagePath = pagePublicPath(page);
@@ -2044,13 +2044,13 @@ function PagesListView() {
       key: 'lastUpdated',
       label: 'Last Updated',
       sortable: true,
-      width: '120px',
+      width: '132px',
       render: (page) => <span className="text-muted-foreground">{formatDate(page.lastUpdated)}</span>
     },
     {
       key: 'actions',
       label: '',
-      width: '148px',
+      width: '150px',
       render: (page) => {
         const readiness = readinessMap[page.id];
         const publishBlocker = readiness ? getPublishBlocker(readiness) : null;
@@ -4118,7 +4118,7 @@ function PagesListView() {
         <DataGrid
           columns={columns}
           data={data}
-          tableMinWidth="1729px"
+          tableMinWidth="1968px"
           loading={isBlockingInitialPageLoad}
           interactionDisabled={isPageLibraryBusy}
           sortConfig={sortConfig}
@@ -4802,7 +4802,7 @@ function PageHierarchyCell({ page, parentPage, childCount }: { page: Page; paren
     <div className="min-w-0 max-w-full space-y-1" data-testid={`pages-hierarchy-${page.id}`}>
       {parentPage ? (
         <div>
-          <div className="text-sm font-medium text-foreground">Nested under {parentPage.title}</div>
+          <div className="break-words text-sm font-medium text-foreground [overflow-wrap:anywhere]">Nested under {parentPage.title}</div>
           <div className="text-xs text-muted-foreground">{pagePublicPath(parentPage)} parent route</div>
         </div>
       ) : page.parentId ? (
@@ -4853,7 +4853,7 @@ function PageTemplateCell({ page }: { page: Page }) {
         <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', badgeClass)}>
           {template.badge}
         </span>
-        <span className="text-sm font-medium text-foreground">{template.label}</span>
+        <span className="min-w-0 break-words text-sm font-medium text-foreground [overflow-wrap:anywhere]">{template.label}</span>
       </div>
       <p className="max-w-56 truncate text-xs text-muted-foreground" title={template.detail}>
         {template.detail}
@@ -4874,7 +4874,7 @@ function PageRouteCell({ page, diagnostic }: { page: Page; diagnostic: PageRoute
   return (
     <div className="min-w-0 max-w-full space-y-1" data-testid={`pages-route-${page.id}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <code className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
+        <code className="max-w-full truncate rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
           {route.path}
         </code>
         <StatusBadge
@@ -4940,14 +4940,14 @@ function PageRevisionCell({
           <span className="block max-w-56 truncate" title={latest.note || 'Revision snapshot'}>
             {latest.note || 'Revision snapshot'}
           </span>
-          <span>{formatDate(latest.createdAt)} · {latest.snapshotStatus}</span>
+          <span className="block break-words [overflow-wrap:anywhere]">{formatDate(latest.createdAt)} · {latest.snapshotStatus}</span>
         </div>
       ) : (
-        <div className="flex max-w-64 items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
+        <div className="flex max-w-full items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
           <History className="mt-0.5 size-3.5 shrink-0 text-primary" />
           <div className="min-w-0">
             <div className="font-medium text-foreground">No saved snapshots yet</div>
-            <div className="mt-0.5 leading-4">
+            <div className="mt-0.5 break-words leading-4 [overflow-wrap:anywhere]">
               Save this page in the editor to capture a rollback-ready revision.
             </div>
           </div>
@@ -5010,7 +5010,7 @@ function PageDeliveryCell({
         <StatusBadge status={labelByStatus[status]} type={badgeType} />
       </div>
       <div className={cn(
-        'text-xs leading-5',
+        'break-words text-xs leading-5 [overflow-wrap:anywhere]',
         status === 'blocked' ? 'text-destructive' : 'text-muted-foreground',
       )}
       >
@@ -5074,12 +5074,12 @@ function PageDeliveryHealthSummary({
         : 'info';
 
   return (
-    <div className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs leading-5" data-testid="pages-delivery-health">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-background px-2.5 py-2 text-xs leading-5 [overflow-wrap:anywhere]" data-testid="pages-delivery-health">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <StatusBadge status={`health ${effectiveHealth.status}`} type={healthType} />
           {effectiveHealth.checkedAt && (
-            <span className="text-muted-foreground">{formatDate(effectiveHealth.checkedAt)}</span>
+            <span className="min-w-0 break-words text-muted-foreground [overflow-wrap:anywhere]">{formatDate(effectiveHealth.checkedAt)}</span>
           )}
         </div>
         <button
@@ -5094,9 +5094,9 @@ function PageDeliveryHealthSummary({
           Refresh
         </button>
       </div>
-      <div className="mt-1 text-muted-foreground">{effectiveHealth.message}</div>
+      <div className="mt-1 break-words text-muted-foreground [overflow-wrap:anywhere]">{effectiveHealth.message}</div>
       {(effectiveHealth.publicStatus || effectiveHealth.renderStatus || effectiveHealth.resolveStatus) && (
-        <div className="mt-1 font-mono text-[11px] text-muted-foreground">
+        <div className="mt-1 whitespace-normal break-words font-mono text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
           public {effectiveHealth.publicStatus ?? 'n/a'} · render {effectiveHealth.renderStatus ?? 'n/a'} · resolve {effectiveHealth.resolveStatus ?? 'n/a'}
         </div>
       )}
@@ -5111,10 +5111,10 @@ function PageDeliveryHealthSummary({
           </summary>
           <div className="mt-1 space-y-1">
             {history.slice(0, 3).map((entry, index) => (
-              <div key={`${entry.checkedAt || 'pending'}-${index}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground">
-                <span>{entry.checkedAt ? formatDate(entry.checkedAt) : 'Unknown time'}</span>
+              <div key={`${entry.checkedAt || 'pending'}-${index}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 break-words text-muted-foreground [overflow-wrap:anywhere]">
+                <span className="min-w-0">{entry.checkedAt ? formatDate(entry.checkedAt) : 'Unknown time'}</span>
                 <span className="font-medium capitalize text-foreground">{entry.status}</span>
-                <span className="font-mono text-[11px]">
+                <span className="min-w-0 break-words font-mono text-[11px] [overflow-wrap:anywhere]">
                   public {entry.publicStatus ?? 'n/a'} · render {entry.renderStatus ?? 'n/a'} · resolve {entry.resolveStatus ?? 'n/a'}
                 </span>
               </div>

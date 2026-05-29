@@ -146,7 +146,7 @@ export function DataGrid<T extends { id: string }>({
         <div
             className="min-w-0 max-w-full space-y-3 overflow-x-clip"
             style={{
-                contain: 'inline-size',
+                contain: 'layout paint inline-size',
                 maxInlineSize: 'min(100%, calc(100vw - 8rem))',
             }}
             aria-describedby={descriptionId}
@@ -164,14 +164,14 @@ export function DataGrid<T extends { id: string }>({
             <div
                 className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm"
                 style={{
-                    contain: 'inline-size',
+                    contain: 'layout paint inline-size',
                     maxInlineSize: '100%',
                 }}
             >
                 <div
                     className="w-full min-w-0 overflow-x-auto"
                     style={{
-                        contain: 'inline-size',
+                        contain: 'layout paint inline-size',
                         maxInlineSize: '100%',
                     }}
                     data-testid="admin-data-grid-scroll"
@@ -312,12 +312,13 @@ export function DataGrid<T extends { id: string }>({
                                                 key={columnKey}
                                                 headers={getColumnHeaderId(col)}
                                                 className={cn(
-                                                    'min-w-0 whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]',
+                                                    'min-w-0 overflow-hidden whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]',
                                                     col.className,
                                                     col.cellClassName,
                                                 )}
                                                 data-column-key={columnKey}
                                                 data-column-label={columnLabel}
+                                                data-cell-overflow-policy="clip-and-wrap"
                                             >
                                                 {col.render ? col.render(item) : String(item[col.key as keyof T])}
                                             </td>

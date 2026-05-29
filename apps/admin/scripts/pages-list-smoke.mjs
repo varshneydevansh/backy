@@ -240,8 +240,9 @@ const assertPagesListSourceContract = () => {
     'Pages delivery health row refresh controls must name the page they refresh.',
   );
   assert(
-    source.includes('tableMinWidth="1729px"') &&
-      source.includes("width: '300px'") &&
+    source.includes('tableMinWidth="1968px"') &&
+      source.includes("width: '360px'") &&
+      source.includes('className="flex max-w-full items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground"') &&
       source.includes('data-testid={`pages-delivery-history-${pageId}`}') &&
       source.includes('data-default-collapsed="true"') &&
       source.includes('Recent probes'),
@@ -579,13 +580,14 @@ const assertSharedDataGridSourceContract = () => {
     source.includes("import { useId } from 'react';") &&
       source.includes('className="min-w-0 max-w-full space-y-3 overflow-x-clip"') &&
       source.includes("data-overflow-containment=\"inline-size\"") &&
-      source.includes("contain: 'inline-size'") &&
+      source.includes("contain: 'layout paint inline-size'") &&
       source.includes("maxInlineSize: 'min(100%, calc(100vw - 8rem))'") &&
       source.includes("maxInlineSize: '100%'") &&
       source.includes('data-testid="admin-data-grid-scroll"') &&
       source.includes('className="w-full table-fixed text-left text-sm"') &&
       source.includes('data-layout-policy="viewport-contained-wrapped-table"') &&
-      source.includes("'min-w-0 whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]'") &&
+      source.includes("'min-w-0 overflow-hidden whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]'") &&
+      source.includes('data-cell-overflow-policy="clip-and-wrap"') &&
       source.includes('data-testid="admin-data-grid"') &&
       source.includes('data-testid="admin-data-grid-loading"') &&
       source.includes('data-testid="admin-data-grid-empty"') &&
@@ -3277,6 +3279,7 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         return {
           key: cell.getAttribute('data-column-key') || '',
           dataLabel: cell.getAttribute('data-column-label') || '',
+          overflowPolicy: cell.getAttribute('data-cell-overflow-policy') || '',
           headers: headerId,
           headerExists: Boolean(header),
           headerKey: header?.getAttribute('data-column-key') || '',
@@ -3327,11 +3330,12 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
   assert(state.headerCount === state.cellCount, `DataGrid first row cells must match column headers: ${JSON.stringify(state)}`);
   assert(state.headers.every((header) => header.id && header.scope === 'col' && header.ariaLabel && header.dataLabel), `Every DataGrid header must have id, scope, aria label, and data label: ${JSON.stringify(state.headers)}`);
   assert(state.cells.every((cell) => cell.headers && cell.headerExists && cell.key === cell.headerKey && cell.dataLabel === cell.headerLabel && cell.dataLabel === cell.headerAriaLabel), `Every DataGrid body cell must reference its matching named column header: ${JSON.stringify(state.cells)}`);
-  assert(state.tableMinWidth === '1729px' && state.hasHorizontalScroll, `Pages DataGrid must render as a horizontally scrollable dense table instead of compressing columns: ${JSON.stringify(state)}`);
+  assert(state.cells.every((cell) => cell.overflowPolicy === 'clip-and-wrap'), `Every dense DataGrid body cell must clip and wrap content instead of painting into neighboring columns: ${JSON.stringify(state.cells)}`);
+  assert(state.tableMinWidth === '1968px' && state.hasHorizontalScroll, `Pages DataGrid must render as a horizontally scrollable dense table instead of compressing columns: ${JSON.stringify(state)}`);
   assert(
-    state.columnWidths.some((column) => column.key === 'siteId' && column.width === '300px') &&
-      state.columnWidths.some((column) => column.key === 'title' && column.width === '220px') &&
-      state.columnWidths.some((column) => column.key === 'actions' && column.width === '148px'),
+    state.columnWidths.some((column) => column.key === 'siteId' && column.width === '360px') &&
+      state.columnWidths.some((column) => column.key === 'title' && column.width === '240px') &&
+      state.columnWidths.some((column) => column.key === 'actions' && column.width === '150px'),
     `Pages DataGrid must render explicit column widths for dense delivery and action cells: ${JSON.stringify(state.columnWidths)}`,
   );
 

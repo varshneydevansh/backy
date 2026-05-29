@@ -4102,7 +4102,7 @@ function SettingsPage() {
         </div>
 
         <div
-          className="flex flex-wrap items-center gap-2"
+          className="relative z-30 flex flex-wrap items-center gap-2"
           role="group"
           aria-label="Settings header actions"
           aria-describedby={settingsWorkbarActionStatusId}
@@ -4140,7 +4140,7 @@ function SettingsPage() {
             </Button>
           )}
           <details
-            className="group relative z-40"
+            className="group relative z-50"
             aria-describedby={settingsHeaderSecondaryActionStatusId}
             data-action-state={settingsHeaderSecondaryActionState}
             data-action-status={settingsHeaderSecondaryActionStatus}
@@ -4259,12 +4259,13 @@ function SettingsPage() {
       )}
 
       <div
-        className="sticky top-2 z-20 -mx-4 rounded-none border-y border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border"
+        className="sticky top-2 z-10 -mx-4 rounded-none border-y border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border"
         aria-describedby={settingsWorkbarActionStatusId}
         aria-label="Settings sticky workbar"
         data-action-state={settingsSaveDisabledReason ? 'blocked' : 'ready'}
         data-action-status={settingsWorkbarActionStatus}
         data-testid="settings-sticky-workbar"
+        data-stack-layer="settings-workbar-under-header-actions"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
