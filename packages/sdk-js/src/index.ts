@@ -692,9 +692,11 @@ export interface BackyCustomFrontendAgentHandoffResponse {
     endpoint: string;
     manifestPointer: "data.contract.customFrontendAgentHandoff" | string;
     openApiPointer: "x-backy-custom-frontend-agent-handoff" | string;
+    agentBriefPointer?: "data.agentBrief" | string;
     docs: string[];
     [key: string]: unknown;
   };
+  agentBrief: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["agentBrief"];
   handoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff;
   apiAlignment: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["apiAlignment"];
   componentApiContract: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["componentApiContract"];

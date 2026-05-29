@@ -7780,6 +7780,51 @@ const sdkManifestBlogManagementPolicy = {
 const customFrontendAgentHandoff = {
   schemaVersion: "backy.custom-frontend-agent-handoff.v1",
   source: "public-manifest-openapi-contract",
+  agentBrief: {
+    schemaVersion: "backy.custom-frontend-agent-brief.v1",
+    title: "Copy this brief into any AI or custom frontend builder before it writes UI.",
+    copyPrompt: [
+      "You are building a frontend for Backy site site_demo. Start by fetching GET /api/sites/site_demo/agent-handoff.",
+      "Read manifest, OpenAPI, render, and frontend-design before writing UI.",
+      "Every Backy canvas element is API-addressable with props, styles, responsive overrides, bindings, assets, animation, metadata, and children[].",
+      "Use componentApiContract.componentTypeContracts as the per-element property map and preserve the full Backy design envelope.",
+    ].join("\n"),
+    requiredReads: [
+      "/api/sites/site_demo/agent-handoff",
+      "/api/sites/site_demo/manifest",
+      "/api/sites/site_demo/openapi",
+      "/api/sites/site_demo/render?path=/...",
+      "/api/sites/site_demo/frontend-design",
+    ],
+    adminWriteBoundary: {
+      requiresAuth: true,
+      endpointFamily: "/api/admin/sites/site_demo/*",
+      frontendDesign: "/api/admin/sites/site_demo/frontend-design",
+      contentEntryPoints: {
+        pageBackyCanvas: "/pages/new?siteId=site_demo&templateSource=backy-canvas&focus=canvas",
+        blogBackyCanvas: "/blog/new?siteId=site_demo&templateSource=backy-canvas&focus=canvas",
+      },
+    },
+    componentGuarantee: {
+      everyComponentApiAddressable: true,
+      everyElementApiAddressable: true,
+      sourcePointer: "componentApiContract",
+      typeContractPointer: "componentApiContract.componentTypeContracts",
+      readableWritableFields: ["element.props", "element.styles", "element.responsive", "element.children[]"],
+      families: ["layout", "typography", "media", "forms", "interactive-components", "custom-code"],
+    },
+    designStateGuarantee: {
+      sourcePointer: "designState",
+      preserveFields: ["content.contentDocument", "content.elements", "content.canvas", "content.editableMap", "meta.frontendDesign*"],
+      styleSources: ["manifest.data.site.frontendDesign", "frontendDesign.tokens.*"],
+    },
+    verification: {
+      resolve: "/api/sites/site_demo/resolve?path=/",
+      render: "/api/sites/site_demo/render?path=/...",
+      expectation: "Verify Backy resolve/render payloads expose the same element ids, props, styles, responsive overrides, bindings, and design envelope.",
+    },
+    noSecretBoundary: "Public handoff fields contain endpoint templates and field names only.",
+  },
   docs: [
     { label: "Custom frontend agent handoff", path: "specs/custom-frontend-agent-handoff.md" },
     { label: "API contracts", path: "specs/backy-api-contracts.md" },

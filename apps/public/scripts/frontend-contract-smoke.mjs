@@ -94,6 +94,7 @@ const requiredComponentApiFieldPaths = [
   'element.id',
   'element.type',
   'element.name',
+  'element.parentId',
   'element.x',
   'element.y',
   'element.width',
@@ -103,14 +104,21 @@ const requiredComponentApiFieldPaths = [
   'element.visible',
   'element.locked',
   'element.props',
+  'element.componentKey',
+  'element.version',
+  'element.controls',
+  'element.fallback',
+  'element.renderCapabilities',
   'element.styles',
   'element.responsive',
   'element.tokenRefs',
   'element.assetIds',
   'element.animation',
+  'element.actions',
   'element.dataBindings',
   'element.bindingSlots',
   'element.accessibility',
+  'element.permissions',
   'element.metadata',
   'element.children[]',
   'content.contentDocument.nodes',
@@ -133,12 +141,35 @@ const requiredComponentApiFamilies = [
 const requiredComponentApiTypes = [
   'heading',
   'text',
-  'image',
+  'paragraph',
+  'quote',
+  'list',
   'button',
+  'link',
+  'image',
+  'video',
+  'icon',
+  'map',
+  'container',
+  'section',
+  'header',
+  'footer',
+  'box',
+  'columns',
+  'spacer',
+  'divider',
   'nav',
   'form',
+  'input',
+  'textarea',
+  'select',
+  'checkbox',
+  'radio',
   'repeater',
   'comment',
+  'embed',
+  'html',
+  'table',
   'interactiveFigure',
   'codeComponent',
 ];
@@ -339,6 +370,8 @@ assert(
     publicAgentHandoffRoute.includes('domainVerificationDomain: site.settings?.domainVerification?.domain') &&
     publicAgentHandoffRoute.includes("manifestPointer: 'data.contract.customFrontendAgentHandoff'") &&
     publicAgentHandoffRoute.includes("openApiPointer: 'x-backy-custom-frontend-agent-handoff'") &&
+    publicAgentHandoffRoute.includes("agentBriefPointer: 'data.agentBrief'") &&
+    publicAgentHandoffRoute.includes('agentBrief: handoff.agentBrief') &&
     publicAgentHandoffRoute.includes('apiAlignment: handoff.apiAlignment') &&
     publicAgentHandoffRoute.includes('routing: handoff.routing') &&
     publicAgentHandoffRoute.includes('handoff.contentCreation.canvasFirst') &&
@@ -360,7 +393,12 @@ assert(
     openApiRoute.includes('$ref: "#/components/schemas/CustomFrontendComponentApiContract"') &&
     openApiRoute.includes('CustomFrontendAgentHandoffEnvelope') &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent-handoff.v1'") &&
+    customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_BRIEF_SCHEMA = 'backy.custom-frontend-agent-brief.v1'") &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md'") &&
+    customFrontendAgentHandoffLib.includes('buildCustomFrontendAgentBrief') &&
+    customFrontendAgentHandoffLib.includes('agentBrief: buildCustomFrontendAgentBrief(siteId)') &&
+    customFrontendAgentHandoffLib.includes('copyPrompt') &&
+    customFrontendAgentHandoffLib.includes('typeContractPointer: \'componentApiContract.componentTypeContracts\'') &&
     customFrontendAgentHandoffLib.includes('agentHandoff') &&
     customFrontendAgentHandoffLib.includes('customFrontendAgentHandoffCached') &&
     customFrontendAgentHandoffLib.includes('frontendDesignManagement') &&
@@ -401,6 +439,11 @@ assert(
     frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
     frontendManifestSchema.includes('"customFrontendAgentHandoff": { "$ref": "#/$defs/customFrontendAgentHandoff" }') &&
     frontendManifestSchema.includes('"backy.custom-frontend-agent-handoff.v1"') &&
+    frontendManifestSchema.includes('"backy.custom-frontend-agent-brief.v1"') &&
+    frontendManifestSchema.includes('"agentBrief"') &&
+    frontendManifestSchema.includes('"copyPrompt"') &&
+    frontendManifestSchema.includes('"componentGuarantee"') &&
+    frontendManifestSchema.includes('"designStateGuarantee"') &&
     frontendManifestSchema.includes('"agentHandoff"') &&
     frontendManifestSchema.includes('"frontendDesignManagement"') &&
     frontendManifestSchema.includes('"adminEntryPoints"') &&
@@ -431,6 +474,8 @@ assert(
     generatedSdkTypes.includes('GeneratedBackyOpenApiCustomFrontendApiAlignment') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiCustomFrontendComponentApiContract') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiCustomFrontendRoutingHandoff') &&
+    generatedSdkTypes.includes('agentBrief: {') &&
+    generatedSdkTypes.includes('"backy.custom-frontend-agent-brief.v1"') &&
     generatedSdkTypes.includes('apiAlignment: {') &&
     generatedSdkTypes.includes('componentApiContract:') &&
     generatedSdkTypes.includes('componentTypeContracts') &&
@@ -441,12 +486,16 @@ assert(
     generatedSdkTypes.includes('"x-backy-custom-frontend-agent-handoff"?: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     sdkSource.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     sdkSource.includes('customFrontendAgentHandoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
+    sdkSource.includes('agentBrief: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["agentBrief"]') &&
     sdkSource.includes('routing: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["routing"]') &&
     sdkSource.includes('componentApiContract: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["componentApiContract"]') &&
     sdkSource.includes('customFrontendAgentHandoffCached') &&
     sdkSmoke.includes('customFrontendAgentHandoff') &&
+    sdkSmoke.includes("agentBrief?.schemaVersion === 'backy.custom-frontend-agent-brief.v1'") &&
+    sdkSmoke.includes("agentBriefPointer === 'data.agentBrief'") &&
     sdkSmoke.includes('componentApiContract') &&
     generatedSdkSmoke.includes('agentHandoff') &&
+    generatedSdkSmoke.includes('agentBrief') &&
     generatedSdkSmoke.includes('customFrontendAgentHandoff') &&
     frontendManifestSchema.includes('"backy.completion-status.v1"') &&
     frontendManifestSchema.includes('"backy.partial-closure-readiness.v1"') &&
@@ -849,6 +898,8 @@ assert(
     openApiRoute.includes('"actions"') &&
     openApiRoute.includes('"dataBindings"') &&
     openApiRoute.includes('"bindingSlots"') &&
+    openApiRoute.includes('parentId: { type: "string" }') &&
+    openApiRoute.includes('bindingSlots: {') &&
     openApiRoute.includes('"backy.content-lifecycle-commands.v1"') &&
     openApiRoute.includes('pageCreate: `/api/admin/sites/${siteId}/pages`') &&
     openApiRoute.includes('postCreate: `/api/admin/sites/${siteId}/blog`') &&

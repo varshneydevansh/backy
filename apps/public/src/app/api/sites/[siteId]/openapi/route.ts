@@ -6149,6 +6149,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               required: [
                 "schemaVersion",
                 "source",
+                "agentBrief",
                 "docs",
                 "endpoints",
                 "readOrder",
@@ -6166,6 +6167,57 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   const: "backy.custom-frontend-agent-handoff.v1",
                 },
                 source: { const: "public-manifest-openapi-contract" },
+                agentBrief: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "title",
+                    "copyPrompt",
+                    "requiredReads",
+                    "adminWriteBoundary",
+                    "componentGuarantee",
+                    "designStateGuarantee",
+                    "verification",
+                    "noSecretBoundary",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.custom-frontend-agent-brief.v1",
+                    },
+                    title: { type: "string" },
+                    copyPrompt: { type: "string" },
+                    requiredReads: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    adminWriteBoundary: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    componentGuarantee: {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: {
+                        everyComponentApiAddressable: { const: true },
+                        everyElementApiAddressable: { const: true },
+                        sourcePointer: { const: "componentApiContract" },
+                        typeContractPointer: {
+                          const: "componentApiContract.componentTypeContracts",
+                        },
+                      },
+                    },
+                    designStateGuarantee: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    verification: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                    noSecretBoundary: { type: "string" },
+                  },
+                },
                 docs: {
                   type: "array",
                   items: { type: "object", additionalProperties: true },
@@ -6211,6 +6263,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "schemaVersion",
                 "site",
                 "readStart",
+                "agentBrief",
                 "handoff",
                 "apiAlignment",
                 "componentApiContract",
@@ -6242,6 +6295,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     openApiPointer: {
                       const: "x-backy-custom-frontend-agent-handoff",
                     },
+                    agentBriefPointer: { const: "data.agentBrief" },
                     docs: {
                       type: "array",
                       items: { type: "string" },
@@ -6250,6 +6304,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 handoff: {
                   $ref: "#/components/schemas/CustomFrontendAgentHandoff",
+                },
+                agentBrief: {
+                  type: "object",
+                  additionalProperties: true,
                 },
                 apiAlignment: {
                   $ref: "#/components/schemas/CustomFrontendApiAlignment",
@@ -11076,6 +11134,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 id: { type: "string" },
                 type: { type: "string" },
                 name: { type: "string" },
+                parentId: { type: "string" },
                 children: {
                   type: "array",
                   items: { $ref: "#/components/schemas/BackyContentElement" },
@@ -11120,6 +11179,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 dataBindings: {
                   type: "array",
                   items: { $ref: "#/components/schemas/BackyDataBinding" },
+                },
+                bindingSlots: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
                 },
                 accessibility: {
                   $ref: "#/components/schemas/BackyContentElementAccessibility",

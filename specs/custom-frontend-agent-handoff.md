@@ -13,7 +13,7 @@ AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as 
 
 2. `GET /api/sites/:siteId/agent-handoff`
    - Start here when another AI/frontend agent needs a compact machine-readable brief before generating a website.
-   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `handoff`, `readStart`, `apiAlignment`, `componentApiContract`, `routing`, `canvasFirst`, `contentCreation`, and `designState` blocks.
+   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `agentBrief`, `handoff`, `readStart`, `apiAlignment`, `componentApiContract`, `routing`, `canvasFirst`, `contentCreation`, and `designState` blocks.
    - The same handoff remains mirrored inside manifest/OpenAPI so generated clients can use the same contract.
 
 3. `GET /api/sites/:siteId/manifest`
@@ -49,6 +49,21 @@ This is the human-facing place to copy into another AI/frontend agent before it 
 
 The canvas editor also exposes the same contract from the inspector's **Composition handoff** panel. Use **Copy handoff** there when the agent is already working inside a page, post, or reusable-section canvas and needs the direct `/agent-handoff` endpoint, `apiAlignment`, canvas-first creation routes, and design-state preservation fields without copying the larger editor composition plan.
 
+## Copyable agent brief
+
+`customFrontendAgentHandoff.agentBrief` has schema `backy.custom-frontend-agent-brief.v1`. It is the short payload to paste into another AI/frontend builder before it writes code.
+
+The brief includes:
+
+- `copyPrompt`: a direct instruction block that tells the agent to read `/api/sites/:siteId/agent-handoff`, manifest, OpenAPI, render, and frontend-design before generating UI.
+- `componentGuarantee`: the explicit `everyComponentApiAddressable` and `everyElementApiAddressable` guarantee, plus the pointer to `componentApiContract.componentTypeContracts`.
+- `designStateGuarantee`: the fields and style sources that must survive custom frontend creation, page creation, and later Backy canvas edits.
+- `adminWriteBoundary`: the authenticated `/api/admin/sites/:siteId/*` write boundary and site-specific canvas entry points.
+- `verification`: the resolve/render URLs that the agent should call after creating or editing a frontend.
+- `noSecretBoundary`: the reminder that provider keys, database URLs, admin sessions, private submissions/orders, and mail delivery secrets do not belong in public payloads or frontend repositories.
+
+Use `data.agentBrief` from the direct `/agent-handoff` response when you want the smallest copy/paste surface. Use `data.handoff` when the agent needs the full endpoint map and component contracts.
+
 ## Component API contract
 
 Every Backy canvas element is API-addressable. Agents should read `customFrontendAgentHandoff.componentApiContract` before mapping custom frontend components to Backy content. The contract has schema `backy.canvas-component-api-contract.v1` and sets `everyComponentApiAddressable` / `everyElementApiAddressable` to `true`.
@@ -58,6 +73,7 @@ The stable addressing fields are:
 - `id`
 - `type`
 - `name`
+- `parentId`
 - `x`
 - `y`
 - `width`
@@ -67,14 +83,21 @@ The stable addressing fields are:
 - `visible`
 - `locked`
 - `props`
+- `componentKey`
+- `version`
+- `controls`
+- `fallback`
+- `renderCapabilities`
 - `styles` / `style`
 - `responsive`
 - `tokenRefs`
 - `assetIds`
 - `animation`
+- `actions`
 - `dataBindings`
 - `bindingSlots`
 - `accessibility`
+- `permissions`
 - `metadata`
 - `children[]`
 - `content.contentDocument.nodes`

@@ -1876,6 +1876,11 @@ assert(
 const customFrontendAgentHandoff = manifest.data.contract?.customFrontendAgentHandoff;
 assert(customFrontendAgentHandoff?.schemaVersion === 'backy.custom-frontend-agent-handoff.v1', 'manifest() missing custom frontend agent handoff schema');
 assert(customFrontendAgentHandoff?.source === 'public-manifest-openapi-contract', 'manifest() custom frontend agent handoff source drifted');
+assert(customFrontendAgentHandoff.agentBrief?.schemaVersion === 'backy.custom-frontend-agent-brief.v1', 'manifest() custom frontend agent handoff missing copyable agent brief schema');
+assert(customFrontendAgentHandoff.agentBrief?.copyPrompt?.includes('/agent-handoff'), 'manifest() custom frontend agent brief must tell agents to start with /agent-handoff');
+assert(customFrontendAgentHandoff.agentBrief?.componentGuarantee?.everyComponentApiAddressable === true, 'manifest() agent brief must mark every component API-addressable');
+assert(customFrontendAgentHandoff.agentBrief?.componentGuarantee?.typeContractPointer === 'componentApiContract.componentTypeContracts', 'manifest() agent brief missing component type contract pointer');
+assert(customFrontendAgentHandoff.agentBrief?.designStateGuarantee?.preserveFields?.includes('content.elements'), 'manifest() agent brief missing content.elements preservation rule');
 assert(customFrontendAgentHandoff.docs?.some?.((doc) => doc.path === 'specs/custom-frontend-agent-handoff.md'), 'manifest() custom frontend agent handoff missing docs pointer');
 assert(manifest.data.endpoints?.agentHandoff === `/api/sites/${client.getSiteId()}/agent-handoff`, 'manifest() missing direct custom frontend agent handoff endpoint');
 assert(manifest.data.endpoints?.customFrontendAgentHandoff === `/api/sites/${client.getSiteId()}/manifest#data.contract.customFrontendAgentHandoff`, 'manifest() missing nested custom frontend agent handoff pointer');
@@ -1942,6 +1947,7 @@ const requiredComponentApiFieldPaths = [
   'element.id',
   'element.type',
   'element.name',
+  'element.parentId',
   'element.x',
   'element.y',
   'element.width',
@@ -1951,14 +1957,21 @@ const requiredComponentApiFieldPaths = [
   'element.visible',
   'element.locked',
   'element.props',
+  'element.componentKey',
+  'element.version',
+  'element.controls',
+  'element.fallback',
+  'element.renderCapabilities',
   'element.styles',
   'element.responsive',
   'element.tokenRefs',
   'element.assetIds',
   'element.animation',
+  'element.actions',
   'element.dataBindings',
   'element.bindingSlots',
   'element.accessibility',
+  'element.permissions',
   'element.metadata',
   'element.children[]',
   'content.contentDocument.nodes',
@@ -1981,12 +1994,35 @@ const requiredComponentApiFamilies = [
 const requiredComponentApiTypes = [
   'heading',
   'text',
-  'image',
+  'paragraph',
+  'quote',
+  'list',
   'button',
+  'link',
+  'image',
+  'video',
+  'icon',
+  'map',
+  'container',
+  'section',
+  'header',
+  'footer',
+  'box',
+  'columns',
+  'spacer',
+  'divider',
   'nav',
   'form',
+  'input',
+  'textarea',
+  'select',
+  'checkbox',
+  'radio',
   'repeater',
   'comment',
+  'embed',
+  'html',
+  'table',
   'interactiveFigure',
   'codeComponent',
 ];
@@ -2018,6 +2054,8 @@ assert(agentHandoff.data.schemaVersion === 'backy.custom-frontend-agent-handoff-
 assert(agentHandoff.data.readStart?.endpoint === manifest.data.endpoints.agentHandoff, 'customFrontendAgentHandoff() read-start endpoint drifted');
 assert(agentHandoff.data.readStart?.manifestPointer === 'data.contract.customFrontendAgentHandoff', 'customFrontendAgentHandoff() missing manifest read-start pointer');
 assert(agentHandoff.data.readStart?.openApiPointer === 'x-backy-custom-frontend-agent-handoff', 'customFrontendAgentHandoff() missing OpenAPI read-start pointer');
+assert(agentHandoff.data.readStart?.agentBriefPointer === 'data.agentBrief', 'customFrontendAgentHandoff() missing agent brief read-start pointer');
+assert(agentHandoff.data.agentBrief?.copyPrompt === agentHandoff.data.handoff?.agentBrief?.copyPrompt, 'customFrontendAgentHandoff() top-level agent brief must mirror handoff agent brief');
 assert(agentHandoff.data.handoff?.endpoints?.agentHandoff === manifest.data.endpoints.agentHandoff, 'customFrontendAgentHandoff() direct handoff endpoint drifted');
 assert(agentHandoff.data.apiAlignment?.schemaVersion === 'backy.custom-frontend-api-alignment.v1', 'customFrontendAgentHandoff() missing top-level API alignment payload');
 assert(agentHandoff.data.apiAlignment?.writeBoundary?.noFrontendLocalJsonForks === true, 'customFrontendAgentHandoff() API alignment must block frontend-local JSON forks');
@@ -2184,6 +2222,8 @@ assert(openapi.components?.schemas?.AdminSiteSettingsScope?.properties?.schemaVe
 assert(openapi.components?.schemas?.AdminSiteSettingsScope?.properties?.frontendDatabaseCertification?.$ref === '#/components/schemas/FrontendDatabaseCertificationHandoff', 'openapi() missing site settings database certification handoff');
 assert(openapi.components?.schemas?.AdminSiteSettingsScope?.properties?.mediaStorageHandoff?.$ref === '#/components/schemas/AdminSettingsMediaStorageHandoff', 'openapi() missing site settings media storage handoff');
 assert(openapi.components?.schemas?.AdminSiteSettingsPatchRequest?.properties?.settings?.properties?.localization, 'openapi() missing site settings patch request schema');
+assert(openapi.components?.schemas?.BackyContentElement?.properties?.parentId?.type === 'string', 'openapi() BackyContentElement missing parentId schema');
+assert(openapi.components?.schemas?.BackyContentElement?.properties?.bindingSlots?.type === 'array', 'openapi() BackyContentElement missing bindingSlots schema');
 const pageCanvasContentSchema = openapi.components?.schemas?.PageUpdateRequest?.properties?.content?.oneOf?.[1];
 const blogCanvasContentSchema = openapi.components?.schemas?.BlogPostUpdateRequest?.properties?.content?.oneOf?.[1];
 assert(pageCanvasContentSchema?.properties?.customJS?.type === 'string', 'openapi() page update canvas payload missing customJS design state');

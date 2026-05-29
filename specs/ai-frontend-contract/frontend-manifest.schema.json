@@ -11,6 +11,85 @@
       "properties": {
         "schemaVersion": { "const": "backy.custom-frontend-agent-handoff.v1" },
         "source": { "const": "public-manifest-openapi-contract" },
+        "agentBrief": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.custom-frontend-agent-brief.v1" },
+            "title": { "type": "string", "minLength": 1 },
+            "copyPrompt": { "type": "string", "minLength": 1 },
+            "requiredReads": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 4
+            },
+            "adminWriteBoundary": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "requiresAuth": { "const": true },
+                "endpointFamily": { "type": "string", "minLength": 1 },
+                "frontendDesign": { "type": "string", "minLength": 1 },
+                "contentEntryPoints": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                }
+              },
+              "required": ["requiresAuth", "endpointFamily", "frontendDesign", "contentEntryPoints"]
+            },
+            "componentGuarantee": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "everyComponentApiAddressable": { "const": true },
+                "everyElementApiAddressable": { "const": true },
+                "sourcePointer": { "const": "componentApiContract" },
+                "typeContractPointer": { "const": "componentApiContract.componentTypeContracts" },
+                "readableWritableFields": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "element.props" }
+                },
+                "families": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "interactive-components" }
+                }
+              },
+              "required": ["everyComponentApiAddressable", "everyElementApiAddressable", "sourcePointer", "typeContractPointer", "readableWritableFields", "families"]
+            },
+            "designStateGuarantee": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "sourcePointer": { "const": "designState" },
+                "preserveFields": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "content.elements" }
+                },
+                "styleSources": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "manifest.data.site.frontendDesign" }
+                }
+              },
+              "required": ["sourcePointer", "preserveFields", "styleSources"]
+            },
+            "verification": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "resolve": { "type": "string", "minLength": 1 },
+                "render": { "type": "string", "minLength": 1 },
+                "expectation": { "type": "string", "minLength": 1 }
+              },
+              "required": ["resolve", "render", "expectation"]
+            },
+            "noSecretBoundary": { "type": "string", "minLength": 1 }
+          },
+          "required": ["schemaVersion", "title", "copyPrompt", "requiredReads", "adminWriteBoundary", "componentGuarantee", "designStateGuarantee", "verification", "noSecretBoundary"]
+        },
         "docs": {
           "type": "array",
           "items": {
@@ -329,6 +408,7 @@
                 { "contains": { "const": "element.id" } },
                 { "contains": { "const": "element.type" } },
                 { "contains": { "const": "element.name" } },
+                { "contains": { "const": "element.parentId" } },
                 { "contains": { "const": "element.x" } },
                 { "contains": { "const": "element.y" } },
                 { "contains": { "const": "element.width" } },
@@ -338,14 +418,21 @@
                 { "contains": { "const": "element.visible" } },
                 { "contains": { "const": "element.locked" } },
                 { "contains": { "const": "element.props" } },
+                { "contains": { "const": "element.componentKey" } },
+                { "contains": { "const": "element.version" } },
+                { "contains": { "const": "element.controls" } },
+                { "contains": { "const": "element.fallback" } },
+                { "contains": { "const": "element.renderCapabilities" } },
                 { "contains": { "const": "element.styles" } },
                 { "contains": { "const": "element.responsive" } },
                 { "contains": { "const": "element.tokenRefs" } },
                 { "contains": { "const": "element.assetIds" } },
                 { "contains": { "const": "element.animation" } },
+                { "contains": { "const": "element.actions" } },
                 { "contains": { "const": "element.dataBindings" } },
                 { "contains": { "const": "element.bindingSlots" } },
                 { "contains": { "const": "element.accessibility" } },
+                { "contains": { "const": "element.permissions" } },
                 { "contains": { "const": "element.metadata" } },
                 { "contains": { "const": "element.children[]" } },
                 { "contains": { "const": "content.contentDocument.nodes" } },
@@ -360,6 +447,7 @@
                 { "contains": { "const": "element.id" } },
                 { "contains": { "const": "element.type" } },
                 { "contains": { "const": "element.name" } },
+                { "contains": { "const": "element.parentId" } },
                 { "contains": { "const": "element.x" } },
                 { "contains": { "const": "element.y" } },
                 { "contains": { "const": "element.width" } },
@@ -369,14 +457,21 @@
                 { "contains": { "const": "element.visible" } },
                 { "contains": { "const": "element.locked" } },
                 { "contains": { "const": "element.props" } },
+                { "contains": { "const": "element.componentKey" } },
+                { "contains": { "const": "element.version" } },
+                { "contains": { "const": "element.controls" } },
+                { "contains": { "const": "element.fallback" } },
+                { "contains": { "const": "element.renderCapabilities" } },
                 { "contains": { "const": "element.styles" } },
                 { "contains": { "const": "element.responsive" } },
                 { "contains": { "const": "element.tokenRefs" } },
                 { "contains": { "const": "element.assetIds" } },
                 { "contains": { "const": "element.animation" } },
+                { "contains": { "const": "element.actions" } },
                 { "contains": { "const": "element.dataBindings" } },
                 { "contains": { "const": "element.bindingSlots" } },
                 { "contains": { "const": "element.accessibility" } },
+                { "contains": { "const": "element.permissions" } },
                 { "contains": { "const": "element.metadata" } },
                 { "contains": { "const": "element.children[]" } },
                 { "contains": { "const": "content.contentDocument.nodes" } },
@@ -439,12 +534,35 @@
               "allOf": [
                 { "contains": { "properties": { "type": { "const": "heading" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "text" } }, "required": ["type"] } },
-                { "contains": { "properties": { "type": { "const": "image" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "paragraph" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "quote" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "list" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "button" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "link" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "image" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "video" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "icon" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "map" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "container" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "section" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "header" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "footer" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "box" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "columns" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "spacer" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "divider" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "nav" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "form" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "input" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "textarea" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "select" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "checkbox" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "radio" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "repeater" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "comment" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "embed" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "html" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "table" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "interactiveFigure" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "codeComponent" } }, "required": ["type"] } }
               ]
@@ -578,7 +696,7 @@
           "required": ["includesSecretValues", "publicDiscoveryOnly", "adminWritesRequireAuth", "secretHandling"]
         }
       },
-      "required": ["schemaVersion", "source", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "componentApiContract", "routing", "designState", "rules", "privacy"]
+      "required": ["schemaVersion", "source", "agentBrief", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "componentApiContract", "routing", "designState", "rules", "privacy"]
     },
     "databaseCertification": {
       "type": "object",

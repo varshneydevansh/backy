@@ -218,6 +218,24 @@ export type GeneratedBackyOpenApiCustomFrontendRoutingHandoff = {
 export type GeneratedBackyOpenApiCustomFrontendAgentHandoff = {
   schemaVersion: "backy.custom-frontend-agent-handoff.v1";
   source: "public-manifest-openapi-contract";
+  agentBrief: {
+    schemaVersion: "backy.custom-frontend-agent-brief.v1";
+    title: string;
+    copyPrompt: string;
+    requiredReads: Array<string>;
+    adminWriteBoundary: Record<string, unknown>;
+    componentGuarantee: {
+      everyComponentApiAddressable?: true;
+      everyElementApiAddressable?: true;
+      sourcePointer?: "componentApiContract";
+      typeContractPointer?: "componentApiContract.componentTypeContracts";
+      [key: string]: unknown;
+    };
+    designStateGuarantee: Record<string, unknown>;
+    verification: Record<string, unknown>;
+    noSecretBoundary: string;
+    [key: string]: unknown;
+  };
   docs: Array<Record<string, unknown>>;
   endpoints: Record<string, string>;
   readOrder: Array<Record<string, unknown>>;
@@ -241,10 +259,12 @@ export type GeneratedBackyOpenApiCustomFrontendAgentHandoffEnvelope = {
       endpoint: string;
       manifestPointer: "data.contract.customFrontendAgentHandoff";
       openApiPointer: "x-backy-custom-frontend-agent-handoff";
+      agentBriefPointer?: "data.agentBrief";
       docs: Array<string>;
       [key: string]: unknown;
     };
     handoff: GeneratedBackyOpenApiCustomFrontendAgentHandoff;
+    agentBrief: Record<string, unknown>;
     apiAlignment: GeneratedBackyOpenApiCustomFrontendApiAlignment;
     componentApiContract: GeneratedBackyOpenApiCustomFrontendComponentApiContract;
     routing: GeneratedBackyOpenApiCustomFrontendRoutingHandoff;
@@ -2440,6 +2460,7 @@ export type GeneratedBackyOpenApiBackyContentElement = {
   id: string;
   type: string;
   name?: string;
+  parentId?: string;
   children: Array<GeneratedBackyOpenApiBackyContentElement>;
   props: Record<string, unknown>;
   x?: number;
@@ -2461,6 +2482,7 @@ export type GeneratedBackyOpenApiBackyContentElement = {
   animation?: GeneratedBackyOpenApiBackyElementAnimation;
   actions?: Array<GeneratedBackyOpenApiBackyElementAction>;
   dataBindings?: Array<GeneratedBackyOpenApiBackyDataBinding>;
+  bindingSlots?: Array<Record<string, unknown>>;
   accessibility?: GeneratedBackyOpenApiBackyContentElementAccessibility;
   assetIds?: Array<string>;
   permissions?: Record<string, boolean>;
@@ -5560,6 +5582,42 @@ export type GeneratedBackyPublicRenderPayloadEnvelope = {
 export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
   schemaVersion: "backy.custom-frontend-agent-handoff.v1";
   source: "public-manifest-openapi-contract";
+  agentBrief: {
+    schemaVersion: "backy.custom-frontend-agent-brief.v1";
+    title: string;
+    copyPrompt: string;
+    requiredReads: Array<string>;
+    adminWriteBoundary: {
+      requiresAuth: true;
+      endpointFamily: string;
+      frontendDesign: string;
+      contentEntryPoints: Record<string, string>;
+      [key: string]: unknown;
+    };
+    componentGuarantee: {
+      everyComponentApiAddressable: true;
+      everyElementApiAddressable: true;
+      sourcePointer: "componentApiContract";
+      typeContractPointer: "componentApiContract.componentTypeContracts";
+      readableWritableFields: Array<string>;
+      families: Array<string>;
+      [key: string]: unknown;
+    };
+    designStateGuarantee: {
+      sourcePointer: "designState";
+      preserveFields: Array<string>;
+      styleSources: Array<string>;
+      [key: string]: unknown;
+    };
+    verification: {
+      resolve: string;
+      render: string;
+      expectation: string;
+      [key: string]: unknown;
+    };
+    noSecretBoundary: string;
+    [key: string]: unknown;
+  };
   docs: Array<{
     label: string;
     path: string;
