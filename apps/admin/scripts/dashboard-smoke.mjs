@@ -856,7 +856,7 @@ const assertDashboardCommandActionStatus = async (client) => {
   );
   assert(state.secondaryCollapsed && state.hasMoreActions, `Dashboard handoff actions must be behind collapsed More actions: ${JSON.stringify(state)}`);
   assert(state.newPage.href.includes('/pages/new') && state.newPage.href.includes('templateSource=backy-canvas') && state.newPage.href.includes('focus=canvas'), `Dashboard New page must route into focused Backy canvas creation: ${JSON.stringify(state)}`);
-  assert(state.newPost.href.includes('/blog/new') && state.newPost.href.includes('templateSource=backy-canvas'), `Dashboard New post must route into Backy canvas creation: ${JSON.stringify(state)}`);
+  assert(state.newPost.href.includes('/blog/new') && state.newPost.href.includes('templateSource=backy-canvas') && state.newPost.href.includes('focus=canvas'), `Dashboard New post must route into focused Backy canvas creation: ${JSON.stringify(state)}`);
   assert(state.newProduct.href.includes('/products') && state.newProduct.href.includes('quickCreate=product'), `Dashboard New product must route into quick product creation: ${JSON.stringify(state)}`);
   assert(state.newForm.href.includes('/forms') && state.newForm.href.includes('quickCreate=blank'), `Dashboard New form must route into quick form creation: ${JSON.stringify(state)}`);
   for (const [key, action] of Object.entries({ newSite: state.newSite, newPage: state.newPage, newPost: state.newPost, newProduct: state.newProduct, newForm: state.newForm, refresh: state.refresh, copy: state.copy, download: state.download })) {
@@ -1183,6 +1183,7 @@ const assertDashboardLinks = async (client) => {
         newPage.href.includes('focus=canvas') &&
         newPost?.href.includes('siteId=') &&
         newPost.href.includes('templateSource=backy-canvas') &&
+        newPost.href.includes('focus=canvas') &&
         newProduct?.href.includes('siteId=') &&
         newProduct.href.includes('quickCreate=product') &&
         newForm?.href.includes('siteId=') &&

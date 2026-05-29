@@ -338,6 +338,7 @@ function BlogListView() {
   const createPostSearch = useMemo(() => ({
     siteId: activeSiteId,
     templateSource: 'backy-canvas' as const,
+    focus: 'canvas' as const,
   }), [activeSiteId]);
   const siteScopedPosts = useMemo(() => {
     const siteIdentifiers = new Set(

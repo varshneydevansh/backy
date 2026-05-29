@@ -1929,7 +1929,7 @@ const assertMobileNavigationInteraction = async (client) => {
             quickCreatePage.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
             quickCreatePost instanceof HTMLAnchorElement &&
             quickCreatePost.getAttribute('data-target-route') === '/blog/new' &&
-            quickCreatePost.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId + '&templateSource=backy-canvas' &&
+            quickCreatePost.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId + '&templateSource=backy-canvas&focus=canvas' &&
             quickCreatePost.getAttribute('data-create-intent') === 'new-post' &&
             quickCreatePost.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
             quickCreateProduct instanceof HTMLAnchorElement &&
@@ -2148,7 +2148,7 @@ const assertMobileQuickCreateInteraction = async (client) => {
             page.getAttribute('data-target-site-status') === siteStatus &&
             post instanceof HTMLAnchorElement &&
             post.getAttribute('data-target-route') === '/blog/new' &&
-            post.getAttribute('data-target-search') === 'siteId=' + siteId + '&templateSource=backy-canvas' &&
+            post.getAttribute('data-target-search') === 'siteId=' + siteId + '&templateSource=backy-canvas&focus=canvas' &&
             post.getAttribute('data-create-intent') === 'new-post' &&
             product instanceof HTMLAnchorElement &&
             product.getAttribute('data-target-route') === '/products' &&
@@ -2241,6 +2241,7 @@ const assertMobileQuickCreateInteraction = async (client) => {
             post.getAttribute('data-target-route') === '/blog/new' &&
             post.getAttribute('data-target-search')?.includes('siteId=') &&
             post.getAttribute('data-target-search')?.includes('templateSource=backy-canvas') &&
+            post.getAttribute('data-target-search')?.includes('focus=canvas') &&
             document.body.style.overflow === 'hidden',
           hasDialog: dialog instanceof HTMLElement,
           postHref: post instanceof HTMLAnchorElement ? post.href : '',
@@ -2276,6 +2277,7 @@ const assertMobileQuickCreateInteraction = async (client) => {
           ready: window.location.pathname === '/blog/new' &&
             window.location.search.includes('siteId=site-demo') &&
             window.location.search.includes('templateSource=backy-canvas') &&
+            window.location.search.includes('focus=canvas') &&
             !(dialog instanceof HTMLElement) &&
             document.body.style.overflow !== 'hidden' &&
             toggle instanceof HTMLButtonElement &&
@@ -2610,7 +2612,7 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           quickCreatePost.getAttribute('data-action-state') === 'ready' &&
           quickCreatePost.getAttribute('data-nav-route') === '/blog/new' &&
           quickCreatePost.getAttribute('data-target-route') === '/blog/new' &&
-          quickCreatePost.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId + '&templateSource=backy-canvas' &&
+          quickCreatePost.getAttribute('data-target-search') === 'siteId=' + quickCreateSiteId + '&templateSource=backy-canvas&focus=canvas' &&
           quickCreatePost.getAttribute('data-target-site-id') === quickCreateSiteId &&
           quickCreatePost.getAttribute('data-target-site-status') === quickCreateSiteStatus &&
           quickCreatePost.getAttribute('data-create-intent') === 'new-post' &&
@@ -2833,7 +2835,9 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       state.quickCreatePostHref.includes('/blog/new') &&
       state.quickCreatePostHref.includes('siteId=') &&
       state.quickCreatePostHref.includes('templateSource=backy-canvas') &&
+      state.quickCreatePostHref.includes('focus=canvas') &&
       state.quickCreatePostTargetSearch.includes('templateSource=backy-canvas') &&
+      state.quickCreatePostTargetSearch.includes('focus=canvas') &&
       state.quickCreatePostSiteId === state.quickCreateSiteId &&
       state.quickCreatePostPermission === 'pages.edit' &&
       state.quickCreatePostStatus.includes('New post available for') &&
@@ -3382,11 +3386,12 @@ const assertSidebarQuickCreateInteraction = async (client) => {
           post.href.includes('/blog/new') &&
           post.href.includes('siteId=') &&
           post.href.includes('templateSource=backy-canvas') &&
+          post.href.includes('focus=canvas') &&
           post.getAttribute('data-action-state') === 'ready' &&
           post.getAttribute('data-target-site-id') === siteId &&
           post.getAttribute('data-target-site-status') === siteStatus &&
           post.getAttribute('data-target-route') === '/blog/new' &&
-          post.getAttribute('data-target-search') === 'siteId=' + siteId + '&templateSource=backy-canvas' &&
+          post.getAttribute('data-target-search') === 'siteId=' + siteId + '&templateSource=backy-canvas&focus=canvas' &&
           post.getAttribute('data-create-intent') === 'new-post' &&
           post.getAttribute('data-required-permission') === 'pages.edit' &&
           product instanceof HTMLAnchorElement &&
@@ -3534,6 +3539,9 @@ const assertSidebarQuickCreateInteraction = async (client) => {
       const moreActions = document.querySelector('[data-testid="blog-create-more-actions"]');
       const copy = document.querySelector('[data-testid="blog-create-copy-handoff"]');
       const download = document.querySelector('[data-testid="blog-create-download-handoff"]');
+      const focusBanner = document.querySelector('[data-testid="blog-create-focus-banner"]');
+      const canvasShell = document.querySelector('[data-testid="blog-create-canvas-shell"]');
+      const focusSubmit = document.querySelector('[data-testid="blog-create-focus-submit-button"]');
       const blogCommandActionsReady = commandStatus instanceof HTMLElement &&
         secondaryStatus instanceof HTMLElement &&
         back instanceof HTMLButtonElement &&
@@ -3561,13 +3569,25 @@ const assertSidebarQuickCreateInteraction = async (client) => {
         commandStatusText.includes('Download blog creation handoff available for site-demo') &&
         secondaryStatusText.includes('Copy blog creation handoff available for site-demo') &&
         secondaryStatusText.includes('Download blog creation handoff available for site-demo');
+      const focusedBlogCanvasReady = commandStatus instanceof HTMLElement &&
+        secondaryStatus instanceof HTMLElement &&
+        focusBanner instanceof HTMLElement &&
+        canvasShell instanceof HTMLElement &&
+        focusSubmit instanceof HTMLButtonElement &&
+        focusSubmit.getAttribute('data-state') === 'blocked' &&
+        focusSubmit.getAttribute('data-action-state') === 'blocked' &&
+        commandStatusText.includes('Show blog creation panels available.') &&
+        commandStatusText.includes('Copy blog creation handoff available for site-demo') &&
+        secondaryStatusText.includes('Copy blog creation handoff available for site-demo') &&
+        body.includes('Post canvas') &&
+        body.includes('Focused article design workspace') &&
+        body.includes('Show panels');
       return {
         ready: window.location.pathname === '/blog/new' &&
           window.location.search.includes('siteId=site-demo') &&
           window.location.search.includes('templateSource=backy-canvas') &&
-          Boolean(document.querySelector('[data-testid="blog-create-command-center"]')) &&
-          Boolean(document.querySelector('[data-testid="blog-create-title-input"]')) &&
-          blogCommandActionsReady &&
+          window.location.search.includes('focus=canvas') &&
+          (blogCommandActionsReady || focusedBlogCanvasReady) &&
           stored?.state?.user?.email === 'admin@backy.io' &&
           Boolean(stored?.state?.session?.expiresAt) &&
           !body.includes('Authenticated admin access'),
@@ -3586,6 +3606,10 @@ const assertSidebarQuickCreateInteraction = async (client) => {
         moreActionsDescribedBy: moreActions?.getAttribute('aria-describedby') || '',
         copyState: copy?.getAttribute('data-action-state') || '',
         downloadState: download?.getAttribute('data-action-state') || '',
+        hasFocusBanner: focusBanner instanceof HTMLElement,
+        hasCanvasShell: canvasShell instanceof HTMLElement,
+        focusSubmitState: focusSubmit?.getAttribute('data-state') || '',
+        focusSubmitActionState: focusSubmit?.getAttribute('data-action-state') || '',
         backStatus: back?.getAttribute('data-action-status') || '',
         focusStatus: focus?.getAttribute('data-action-status') || '',
         copyStatus: copy?.getAttribute('data-action-status') || '',
@@ -3596,6 +3620,22 @@ const assertSidebarQuickCreateInteraction = async (client) => {
       };
     })()`,
     'Sidebar quick create route to new post',
+  );
+
+  await navigate(
+    client,
+    `${ADMIN_BASE_URL}/?siteId=site-demo`,
+    `(() => ({
+      ready: Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create-new-product"]')) &&
+        Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]')) &&
+        !document.body?.innerText?.includes('Authenticated admin access'),
+      path: window.location.pathname,
+      search: window.location.search,
+      hasProductShortcut: Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create-new-product"]')),
+      hasFormShortcut: Boolean(document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]')),
+      body: document.body?.innerText?.slice(0, 700) || '',
+    }))()`,
+    'Dashboard shell after focused sidebar new post route',
   );
 
   const productClick = await evaluate(client, `(() => {

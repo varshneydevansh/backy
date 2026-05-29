@@ -1435,7 +1435,7 @@ function Index() {
       return { siteId: activeSiteId, templateSource: 'backy-canvas' as const, focus: 'canvas' as const };
     }
     if (to === '/blog/new') {
-      return { siteId: activeSiteId, templateSource: 'backy-canvas' as const };
+      return { siteId: activeSiteId, templateSource: 'backy-canvas' as const, focus: 'canvas' as const };
     }
     return ['/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/users'].includes(to)
       ? { siteId: activeSiteId }

@@ -37,6 +37,8 @@ Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-fronte
 
 Use `apiAlignment` before generating frontend code. It names the direct read start, manifest/OpenAPI mirrors, SDK/generated-type source, public discovery endpoints, authenticated write boundary, canvas-first creation routes, preserve-field list, and render/resolve verification endpoints.
 
+In the admin app, the same contract is visible from the selected site workspace under **Frontend handoff** -> **Agent handoff**, and from the canvas editor composition handoff. Use those copyable blocks when handing Backy context to another AI/frontend agent.
+
 ## Design State Preservation
 
 Every created or updated page, blog post, product, form, collection item, or reusable section must reopen in the Backy canvas editor with site fonts, colors, chrome, element geometry, responsive overrides, bindings, media/font identities, animations, and editable fields intact.

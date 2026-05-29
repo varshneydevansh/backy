@@ -115,7 +115,7 @@ export const NAV_SECTIONS: NavSection[] = [
 
 export const SIDEBAR_QUICK_CREATE_ACTIONS: SidebarQuickCreateAction[] = [
   { id: 'new-page', label: 'New page', to: '/pages/new', search: { templateSource: 'backy-canvas', focus: 'canvas' }, icon: FileText, area: 'pages', permissionKey: 'pages.edit' },
-  { id: 'new-post', label: 'New post', to: '/blog/new', search: { templateSource: 'backy-canvas' }, icon: Newspaper, area: 'blog', permissionKey: 'pages.edit' },
+  { id: 'new-post', label: 'New post', to: '/blog/new', search: { templateSource: 'backy-canvas', focus: 'canvas' }, icon: Newspaper, area: 'blog', permissionKey: 'pages.edit' },
   { id: 'new-product', label: 'New product', to: '/products', search: { quickCreate: 'product' }, icon: ShoppingBag, area: 'commerce', permissionKey: 'commerce.edit' },
   { id: 'new-form', label: 'New form', to: '/forms', search: { quickCreate: 'blank' }, icon: ClipboardList, area: 'forms', permissionKey: 'forms.create' },
 ];

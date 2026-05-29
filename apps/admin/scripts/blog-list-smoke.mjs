@@ -175,6 +175,7 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   );
   assert(
     source.includes('data-testid="blog-command-create"') &&
+      source.includes("focus: 'canvas' as const") &&
       source.includes('data-testid="blog-command-secondary-actions"') &&
       source.includes("const blogCommandSecondaryActionStatusId = 'blog-command-secondary-action-status';") &&
       source.includes('data-testid="blog-command-secondary-action-status"') &&
@@ -933,30 +934,58 @@ const assertBlogCommandCreateOpensWorkspace = async (client, title, postId) => {
 
   let state = null;
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    state = await evaluate(client, `(() => ({
-      path: window.location.pathname,
-      search: window.location.search,
-      ready: Boolean(document.querySelector('[data-testid="blog-create-command-center"]')),
-      targetSite: document.querySelector('#blog-create-active-site')?.value || '',
-      title: document.querySelector('#blog-create-title')?.value || '',
-      slug: document.querySelector('#blog-create-slug')?.value || '',
-      submitButton: Boolean(document.querySelector('[data-testid="blog-create-submit-button"]')),
-      submitState: document.querySelector('[data-testid="blog-create-submit-button"]')?.getAttribute('data-state') || '',
-      submitCanSubmit: document.querySelector('[data-testid="blog-create-submit-button"]')?.getAttribute('data-can-submit') || '',
-      submitBlocker: document.querySelector('[data-testid="blog-create-submit-blocker"]')?.textContent || '',
-      body: document.body?.innerText?.slice(0, 700) || '',
-    }))()`);
+    state = await evaluate(client, `(() => {
+      const body = document.body?.innerText || '';
+      const commandCenter = document.querySelector('[data-testid="blog-create-command-center"]');
+      const focusBanner = document.querySelector('[data-testid="blog-create-focus-banner"]');
+      const canvasShell = document.querySelector('[data-testid="blog-create-canvas-shell"]');
+      const focusSubmit = document.querySelector('[data-testid="blog-create-focus-submit-button"]');
+      const submitButton = document.querySelector('[data-testid="blog-create-submit-button"]');
+      const submitBlocker = document.querySelector('[data-testid="blog-create-submit-blocker"]');
+      return {
+        path: window.location.pathname,
+        search: window.location.search,
+        ready: commandCenter instanceof HTMLElement || focusBanner instanceof HTMLElement,
+        targetSite: document.querySelector('#blog-create-active-site')?.value || '',
+        title: document.querySelector('#blog-create-title')?.value || '',
+        slug: document.querySelector('#blog-create-slug')?.value || '',
+        submitButton: submitButton instanceof HTMLButtonElement,
+        submitState: submitButton?.getAttribute('data-state') || '',
+        submitCanSubmit: submitButton?.getAttribute('data-can-submit') || '',
+        submitBlocker: submitBlocker?.textContent || '',
+        hasFocusBanner: focusBanner instanceof HTMLElement,
+        hasCanvasShell: canvasShell instanceof HTMLElement,
+        focusSubmitButton: focusSubmit instanceof HTMLButtonElement,
+        focusSubmitState: focusSubmit?.getAttribute('data-state') || '',
+        focusSubmitActionState: focusSubmit?.getAttribute('data-action-state') || '',
+        body: body.slice(0, 700),
+      };
+    })()`);
 
     if (
       state.path === '/blog/new' &&
       state.search.includes(`siteId=${encodeURIComponent(SITE_ID)}`) &&
       state.search.includes('templateSource=backy-canvas') &&
+      state.search.includes('focus=canvas') &&
       state.ready &&
-      state.targetSite === SITE_ID &&
-      state.submitButton &&
-      state.submitState === 'blocked' &&
-      state.submitCanSubmit === 'false' &&
-      state.submitBlocker.includes('Save is blocked')
+      (
+        (
+          state.targetSite === SITE_ID &&
+          state.submitButton &&
+          state.submitState === 'blocked' &&
+          state.submitCanSubmit === 'false' &&
+          state.submitBlocker.includes('Save is blocked')
+        ) ||
+        (
+          state.hasFocusBanner &&
+          state.hasCanvasShell &&
+          state.focusSubmitButton &&
+          state.focusSubmitState === 'blocked' &&
+          state.focusSubmitActionState === 'blocked' &&
+          state.body.includes('Post canvas') &&
+          state.body.includes('Focused article design workspace')
+        )
+      )
     ) {
       await navigateToBlog(client, title, postId);
       return { clicked, state };

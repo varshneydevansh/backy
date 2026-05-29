@@ -1140,6 +1140,19 @@ const buildAdminSiteCustomFrontendAgentHandoff = ({
       ...baseHandoff.contentCreation,
       adminEntryPoints,
     },
+    apiAlignment: {
+      ...baseHandoff.apiAlignment,
+      readStart: {
+        ...baseHandoff.apiAlignment.readStart,
+        endpoint: `${publicSiteApiUrl}/agent-handoff`,
+      },
+      creationRoutes: adminEntryPoints,
+      verification: {
+        ...baseHandoff.apiAlignment.verification,
+        renderEndpoint: `${publicSiteApiUrl}/render?path=/...`,
+        resolveEndpoint: `${publicSiteApiUrl}/resolve?path=/`,
+      },
+    },
   };
 };
 
@@ -5878,6 +5891,7 @@ function EditSitePage() {
             siteId: targetSiteId,
             templateSource: "custom-frontend",
             frontendDesignTemplateId: template.id,
+            focus: "canvas",
           },
         });
         return;

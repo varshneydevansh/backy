@@ -44,6 +44,10 @@ const assertSiteDetailSourceContract = () => {
       source.includes('adminEntryPoints,') &&
       source.includes('siteCustomFrontendAgentHandoff.readOrder.map') &&
       source.includes('siteCustomFrontendAgentHandoff.endpoints.agentHandoff') &&
+      source.includes('...baseHandoff.apiAlignment') &&
+      source.includes('endpoint: `${publicSiteApiUrl}/agent-handoff`') &&
+      source.includes('creationRoutes: adminEntryPoints') &&
+      source.includes('renderEndpoint: `${publicSiteApiUrl}/render?path=/...`') &&
       source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.editorOutcome') &&
       source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.routeRevealGuarantee') &&
       source.includes('siteCustomFrontendAgentHandoff.designState.siteStyleSources.join') &&
