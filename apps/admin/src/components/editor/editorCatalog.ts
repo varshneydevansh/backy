@@ -1693,6 +1693,9 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       color: '#111827',
       padding: 16,
       navItems: ['Home', 'About', 'Contact'],
+      navigationSource: 'site-primary',
+      navigationBinding: 'site.navigation.primary',
+      chromeRole: 'site.header.navigation',
     },
     defaultSize: { width: 1200, height: 72 },
     defaultResponsive: {

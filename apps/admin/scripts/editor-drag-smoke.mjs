@@ -1490,6 +1490,8 @@ const assertComponentLibraryEmptyStateSource = () => {
   const propertyPanelSource = fs.readFileSync(new URL('../src/components/editor/PropertyPanel.tsx', import.meta.url), 'utf8');
   const actionStatusSource = fs.readFileSync(new URL('../src/components/editor/editorActionStatus.ts', import.meta.url), 'utf8');
   const dataBindingActionSource = fs.readFileSync(new URL('../src/components/editor/editorDataBindingActions.ts', import.meta.url), 'utf8');
+  const canvasSource = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
+  const templateChromeSource = fs.readFileSync(new URL('../src/lib/editorTemplateChrome.ts', import.meta.url), 'utf8');
   const typeSource = fs.readFileSync(new URL('../src/types/editor.ts', import.meta.url), 'utf8');
   const coreContractSource = fs.readFileSync(new URL('../../../packages/core/src/content-contract.ts', import.meta.url), 'utf8');
   const contentMigrationSource = fs.readFileSync(new URL('../../../packages/core/src/content-migrations.ts', import.meta.url), 'utf8');
@@ -1615,8 +1617,10 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(propertyPanelSource.includes('function PresetBindingSlotsPanel') && propertyPanelSource.includes('data-testid="editor-data-binding-slots"') && propertyPanelSource.includes('applyBindingSlot') && propertyPanelSource.includes('bindingSlotFieldCandidates'), 'Editor Data panel must render preset binding slots and apply matching fields as real data bindings');
   assert(propertyPanelSource.includes('applyChildBindingSlots') && propertyPanelSource.includes('data-testid="editor-data-apply-child-binding-slots"') && propertyPanelSource.includes('VIRTUAL_COLLECTION_FIELD_PATHS'), 'Editor Data panel must apply descendant preset binding slots and support record URL/slug fields for composed sections');
   assert(propertyPanelSource.includes('const applyAllBindingSlots = () =>') && propertyPanelSource.includes('bindableSlotsForElement(nextElement, activeSlotCollection, collections)') && propertyPanelSource.includes('data-testid="editor-data-apply-all-binding-slots"'), 'Editor Data panel must bulk-apply matching root, descendant, and child binding slots from composed presets');
-  assert(catalogSource.includes("type: 'nav'") && catalogSource.includes("name: 'Home link'") && catalogSource.includes("name: 'Contact link'"), 'Editor navigation catalog preset must create selectable link child layers by default.');
-  assert(propertyPanelSource.includes('const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>') && propertyPanelSource.includes('const buildNavigationElementSync = (') && propertyPanelSource.includes('updateNavigationWithSyncedLinks({ navItems: parseNavigationItems') && propertyPanelSource.includes('data-nav-link-layer-sync="items-direction-gap-auto-sync"') && propertyPanelSource.includes('data-nav-link-layer-id-policy="preserve-existing-link-child-ids"') && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}") && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}"), 'Editor navigation inspector must convert/rebuild nav menu text into selectable link child layers, keep them synced with nav item edits, and preserve child layer ids.');
+  assert(catalogSource.includes("type: 'nav'") && catalogSource.includes("name: 'Home link'") && catalogSource.includes("name: 'Contact link'") && catalogSource.includes("navigationBinding: 'site.navigation.primary'"), 'Editor navigation catalog preset must create selectable link child layers and default to the site primary navigation contract.');
+  assert(propertyPanelSource.includes('const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>') && propertyPanelSource.includes('const buildNavigationElementSync = (') && propertyPanelSource.includes('updateNavigationWithSyncedLinks({ navItems: parseNavigationItems') && propertyPanelSource.includes('data-nav-link-layer-sync="items-direction-gap-auto-sync"') && propertyPanelSource.includes('data-nav-link-layer-id-policy="preserve-existing-link-child-ids"') && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}") && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}") && propertyPanelSource.includes('data-testid="editor-nav-source"') && propertyPanelSource.includes('data-navigation-binding={currentNavigationSourceOption.binding}'), 'Editor navigation inspector must convert/rebuild nav menu text into selectable link child layers, keep them synced with nav item edits, preserve child layer ids, and expose site/manual navigation binding metadata.');
+  assert(canvasSource.includes('const resolveNavigationBindingMetadata = (') && pageRendererSource.includes('const resolveNavigationBindingMetadata = (') && canvasSource.includes("rawBinding === 'site.navigation.primary'") && pageRendererSource.includes("rawBinding === 'site.navigation.primary'"), 'Editor and public nav renderers must infer the navigation source from persisted site navigation bindings for imported or legacy content.');
+  assert(templateChromeSource.includes('const createNavigationLinkChildren = (') && templateChromeSource.includes("navigationBinding: 'site.navigation.footer'") && templateChromeSource.includes('children: createNavigationLinkChildren'), 'Generated page/post chrome must seed selectable site navigation child links for header and footer nav.');
   assert(propertyPanelSource.includes('const clearCollectionBindingsFromElement = (') && propertyPanelSource.includes('REPEATER_COLLECTION_BINDING_PROP_KEYS') && propertyPanelSource.includes('data-testid="editor-data-clear-all-binding-slots"'), 'Editor Data panel must clear collection bindings across composed preset trees and repeater dataset props');
   assert(propertyPanelSource.includes('const bindingSlotCoverageForElement = (') && propertyPanelSource.includes('missingRequired') && propertyPanelSource.includes('data-testid="editor-data-binding-slot-coverage"'), 'Editor Data panel must summarize composed preset binding coverage before publish or custom frontend handoff');
   assert(propertyPanelSource.includes("schema: 'backy.editor.binding-slot-coverage.v1'") && propertyPanelSource.includes('navigator.clipboard.writeText(JSON.stringify(coverageBrief, null, 2))') && propertyPanelSource.includes('data-testid="editor-data-copy-binding-slot-coverage"'), 'Editor Data panel must expose a copyable binding-slot coverage brief for custom frontend and AI handoff');
@@ -22827,11 +22831,13 @@ const testNavBehaviorControls = async (client) => {
   await setFormControlByTestId(client, 'editor-nav-direction', 'vertical');
   await setFormControlByTestId(client, 'editor-nav-gap', '22');
   await setFormControlByTestId(client, 'editor-nav-aria-label', 'Smoke primary navigation');
+  await setFormControlByTestId(client, 'editor-nav-source', 'site-primary');
 
   const state = await evaluate(client, `(() => {
     const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
     const nav = document.querySelector('[data-element-id="smoke-nav"] nav');
     const style = nav ? getComputedStyle(nav) : null;
+    const bindingStatus = document.querySelector('[data-testid="editor-nav-binding-status"]');
     const links = Array.from(nav?.querySelectorAll('a') || []).map((link) => ({
       label: link.textContent?.trim() || '',
       href: link.getAttribute('href') || '',
@@ -22841,6 +22847,11 @@ const testNavBehaviorControls = async (client) => {
       direction: value('editor-nav-direction'),
       gap: value('editor-nav-gap'),
       ariaLabel: value('editor-nav-aria-label'),
+      source: value('editor-nav-source'),
+      bindingStatusSource: bindingStatus?.getAttribute('data-navigation-source') || '',
+      bindingStatusBinding: bindingStatus?.getAttribute('data-navigation-binding') || '',
+      previewNavigationSource: nav?.getAttribute('data-backy-navigation-source') || '',
+      previewNavigationBinding: nav?.getAttribute('data-backy-navigation-binding') || '',
       previewAriaLabel: nav?.getAttribute('aria-label') || '',
       previewFlexDirection: style?.flexDirection || '',
       previewGap: style?.gap || '',
@@ -22852,6 +22863,8 @@ const testNavBehaviorControls = async (client) => {
   assert(state.direction === 'vertical' && state.previewFlexDirection === 'column', `Nav direction mismatch: ${JSON.stringify(state)}`);
   assert(state.gap === '22' && state.previewGap === '22px', `Nav gap mismatch: ${JSON.stringify(state)}`);
   assert(state.ariaLabel === 'Smoke primary navigation' && state.previewAriaLabel === 'Smoke primary navigation', `Nav aria label mismatch: ${JSON.stringify(state)}`);
+  assert(state.source === 'site-primary' && state.bindingStatusSource === 'site-primary' && state.bindingStatusBinding === 'site.navigation.primary', `Nav source control mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewNavigationSource === 'site-primary' && state.previewNavigationBinding === 'site.navigation.primary', `Nav preview binding metadata mismatch: ${JSON.stringify(state)}`);
   assert(state.links.length === 3 && state.links[0].label === 'Docs' && state.links[1].label === 'Pricing', `Nav links mismatch: ${JSON.stringify(state)}`);
 
   return state;
@@ -22880,6 +22893,9 @@ const assertPersistedNavBehavior = async (pageId) => {
   assert(props.navDirection === 'vertical', `Persisted nav direction mismatch: ${JSON.stringify(props)}`);
   assert(props.gap === 22, `Persisted nav gap mismatch: ${JSON.stringify(props)}`);
   assert(props.ariaLabel === 'Smoke primary navigation', `Persisted nav aria label mismatch: ${JSON.stringify(props)}`);
+  assert(props.navigationSource === 'site-primary', `Persisted nav source mismatch: ${JSON.stringify(props)}`);
+  assert(props.navigationBinding === 'site.navigation.primary', `Persisted nav binding mismatch: ${JSON.stringify(props)}`);
+  assert(props.chromeRole === 'site.header.navigation', `Persisted nav chrome role mismatch: ${JSON.stringify(props)}`);
   assert(childLinks.length === 3, `Persisted nav child link count mismatch: ${JSON.stringify(childLinks)}`);
   assert(childLinks.every((child) => child.type === 'link' && child.parentId === 'smoke-nav'), `Persisted nav child link parent/type mismatch: ${JSON.stringify(childLinks)}`);
   assert(childLinks[0].label === 'Docs' && childLinks[0].href === '/docs', `Persisted nav first child link mismatch: ${JSON.stringify(childLinks)}`);

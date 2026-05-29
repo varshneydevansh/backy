@@ -614,6 +614,54 @@ const buildNavigationElementSync = (
   };
 };
 
+type NavigationSource = 'manual' | 'site-primary' | 'site-footer';
+
+const NAVIGATION_SOURCE_OPTIONS: Array<{
+  value: NavigationSource;
+  label: string;
+  binding: string;
+  chromeRole: string;
+  description: string;
+}> = [
+  {
+    value: 'site-primary',
+    label: 'Site primary navigation',
+    binding: 'site.navigation.primary',
+    chromeRole: 'site.header.navigation',
+    description: 'Shared header menu from the site navigation API.',
+  },
+  {
+    value: 'site-footer',
+    label: 'Site footer navigation',
+    binding: 'site.navigation.footer',
+    chromeRole: 'site.footer.navigation',
+    description: 'Shared footer menu from the site navigation API.',
+  },
+  {
+    value: 'manual',
+    label: 'Manual links',
+    binding: 'manual.navItems',
+    chromeRole: 'page.local.navigation',
+    description: 'Page-local links stored on this canvas element.',
+  },
+];
+
+const navigationSourceOption = (value: unknown) => {
+  const normalized = typeof value === 'string' ? value : '';
+  return NAVIGATION_SOURCE_OPTIONS.find((option) => (
+    option.value === normalized || option.binding === normalized
+  )) || NAVIGATION_SOURCE_OPTIONS[2];
+};
+
+const navigationSourceProps = (source: NavigationSource): Partial<ElementProps> => {
+  const option = navigationSourceOption(source);
+  return {
+    navigationSource: option.value,
+    navigationBinding: option.binding,
+    chromeRole: option.chromeRole,
+  };
+};
+
 const withQueryParam = (url: string, key: string, value: string): string => {
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
@@ -2216,6 +2264,9 @@ function ContentProperties({
   const hasLinkContent = normalizedType === 'link';
   const hasButtonContent = normalizedType === 'button';
   const hasNavContent = normalizedType === 'nav';
+  const currentNavigationSourceOption = hasNavContent
+    ? navigationSourceOption(element.props.navigationSource || element.props.navigationBinding)
+    : NAVIGATION_SOURCE_OPTIONS[2];
   const hasHtmlContent = normalizedType === 'html' || normalizedType === 'table';
   const hasQuoteContent = normalizedType === 'quote';
   const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType);
@@ -3101,6 +3152,40 @@ function ContentProperties({
       {/* Navigation Properties */}
       {hasNavContent && (
         <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Menu source
+            </label>
+            <select
+              value={currentNavigationSourceOption.value}
+              onChange={(e) => updateNavigationWithSyncedLinks(
+                navigationSourceProps(e.target.value as NavigationSource),
+              )}
+              data-testid="editor-nav-source"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              {NAVIGATION_SOURCE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div
+              className="mt-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground"
+              data-testid="editor-nav-binding-status"
+              data-navigation-source={currentNavigationSourceOption.value}
+              data-navigation-binding={currentNavigationSourceOption.binding}
+              data-navigation-chrome-role={currentNavigationSourceOption.chromeRole}
+            >
+              <div className="font-mono text-[11px] text-foreground">
+                {currentNavigationSourceOption.binding}
+              </div>
+              <div>{currentNavigationSourceOption.description}</div>
+            </div>
+          </div>
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
             Each line becomes a menu item. Use <span className="font-mono">Label: /path</span> when a frontend route is known.
           </div>

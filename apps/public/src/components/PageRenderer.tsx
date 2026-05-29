@@ -1512,6 +1512,38 @@ function getNameClass(value: unknown): string {
   return '';
 }
 
+const resolveNavigationBindingMetadata = (
+  sourceValue: unknown,
+  bindingValue: unknown,
+  chromeRoleValue: unknown,
+) => {
+  const rawBinding = getNameClass(bindingValue).trim();
+  const rawSource = getNameClass(sourceValue).trim();
+  const navigationSource = rawSource === 'site-primary' || rawSource === 'site-footer' || rawSource === 'manual'
+    ? rawSource
+    : rawBinding === 'site.navigation.primary' || rawSource === 'site.navigation.primary'
+      ? 'site-primary'
+      : rawBinding === 'site.navigation.footer' || rawSource === 'site.navigation.footer'
+        ? 'site-footer'
+        : 'manual';
+  const navigationBinding = rawBinding || (
+    navigationSource === 'site-primary'
+      ? 'site.navigation.primary'
+      : navigationSource === 'site-footer'
+        ? 'site.navigation.footer'
+        : 'manual.navItems'
+  );
+  const chromeRole = getNameClass(chromeRoleValue) || (
+    navigationSource === 'site-primary'
+      ? 'site.header.navigation'
+      : navigationSource === 'site-footer'
+        ? 'site.footer.navigation'
+        : 'page.local.navigation'
+  );
+
+  return { navigationSource, navigationBinding, chromeRole };
+};
+
 function getFirstNameClassFromList(value: unknown): string {
   if (!Array.isArray(value)) {
     return '';
@@ -2349,10 +2381,18 @@ function NavElement({ element, isPreview, siteId, pageId, postId, repeaterRecord
   const { props, styles, children } = element;
   const items = parseNavigationItems(props.navItems);
   const isVertical = props.navDirection === 'vertical';
+  const { navigationSource, navigationBinding, chromeRole } = resolveNavigationBindingMetadata(
+    props.navigationSource,
+    props.navigationBinding,
+    props.chromeRole,
+  );
 
   return (
     <nav
       aria-label={getNameClass(props.ariaLabel) || 'Page navigation'}
+      data-backy-navigation-source={navigationSource}
+      data-backy-navigation-binding={navigationBinding}
+      data-backy-chrome-role={chromeRole}
       style={{
         display: 'flex',
         flexDirection: isVertical ? 'column' : 'row',

@@ -20,6 +20,102 @@ const normalizeId = (value: string) => (
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'page'
 );
 
+const normalizeNavigationItem = (value: string, index: number) => {
+  const [labelPart, ...hrefParts] = value.split(':');
+  const label = labelPart.trim() || `Item ${index + 1}`;
+  const slug = normalizeId(label);
+  const href = hrefParts.join(':').trim() || (slug === 'home' ? '/' : `/${slug}`);
+  return { label, href };
+};
+
+const navigationItemLayouts = (
+  items: Array<{ label: string; href: string }>,
+  width: number,
+  height: number,
+  gap: number,
+  fontSize: number,
+) => {
+  const itemWidths = items.map((item) => Math.max(52, Math.min(116, item.label.length * Math.max(7, fontSize * 0.52) + 28)));
+  const totalWidth = itemWidths.reduce((sum, itemWidth) => sum + itemWidth, 0) + gap * Math.max(0, items.length - 1);
+  let cursorX = Math.max(0, Math.round((width - totalWidth) / 2));
+  const y = Math.max(0, Math.round((height - 24) / 2));
+
+  return items.map((item, index) => {
+    const layout = {
+      ...item,
+      x: cursorX,
+      y,
+      width: Math.round(itemWidths[index]),
+      height: 24,
+      fontSize,
+    };
+    cursorX += itemWidths[index] + gap;
+    return layout;
+  });
+};
+
+const createNavigationLinkChildren = (
+  idPrefix: string,
+  navItems: string[],
+  options: {
+    color: string;
+    width: number;
+    height: number;
+    tabletWidth: number;
+    tabletHeight: number;
+    mobileWidth: number;
+    mobileHeight: number;
+    fontSize?: number;
+    tabletFontSize?: number;
+    mobileFontSize?: number;
+    gap?: number;
+    tabletGap?: number;
+    mobileGap?: number;
+  },
+) => {
+  const items = navItems.map(normalizeNavigationItem);
+  const desktop = navigationItemLayouts(items, options.width, options.height, options.gap ?? 18, options.fontSize ?? 16);
+  const tablet = navigationItemLayouts(items, options.tabletWidth, options.tabletHeight, options.tabletGap ?? 12, options.tabletFontSize ?? 14);
+  const mobile = navigationItemLayouts(items, options.mobileWidth, options.mobileHeight, options.mobileGap ?? 12, options.mobileFontSize ?? 13);
+
+  return desktop.map((layout, index) => createCanvasElement('link', layout.x, layout.y, {
+    id: `${idPrefix}-${index + 1}-${normalizeId(layout.label)}-link`,
+    name: `${layout.label} link`,
+    width: layout.width,
+    height: layout.height,
+    props: {
+      content: layout.label,
+      href: layout.href,
+      fontSize: layout.fontSize,
+      fontWeight: '600',
+      color: options.color,
+      underline: false,
+    },
+    styles: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      whiteSpace: 'nowrap',
+    },
+    responsive: {
+      tablet: {
+        x: tablet[index]?.x ?? layout.x,
+        y: tablet[index]?.y ?? layout.y,
+        width: tablet[index]?.width ?? layout.width,
+        height: tablet[index]?.height ?? layout.height,
+        props: { fontSize: tablet[index]?.fontSize ?? layout.fontSize },
+      },
+      mobile: {
+        x: mobile[index]?.x ?? layout.x,
+        y: mobile[index]?.y ?? layout.y,
+        width: mobile[index]?.width ?? layout.width,
+        height: mobile[index]?.height ?? layout.height,
+        props: { fontSize: mobile[index]?.fontSize ?? layout.fontSize },
+      },
+    },
+  }));
+};
+
 const cloneResponsive = (responsive: CanvasElement['responsive']): CanvasElement['responsive'] | undefined => (
   responsive
     ? Object.fromEntries(
@@ -153,6 +249,10 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
           height: 52,
           props: {
             navItems: options.navItems,
+            navigationSource: 'site-primary',
+            navigationBinding: 'site.navigation.primary',
+            chromeRole: 'site.header.navigation',
+            ariaLabel: 'Primary navigation',
             backgroundColor: 'transparent',
             color: '#111827',
             padding: 0,
@@ -161,6 +261,15 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
             tablet: { x: 260, y: 18, width: 300, height: 52, props: { gap: 12 } },
             mobile: { x: 20, y: 52, width: 335, height: 30, props: { gap: 12, fontSize: 13 } },
           },
+          children: createNavigationLinkChildren(`${idPrefix}-site-navigation`, options.navItems, {
+            color: '#111827',
+            width: 430,
+            height: 52,
+            tabletWidth: 300,
+            tabletHeight: 52,
+            mobileWidth: 335,
+            mobileHeight: 30,
+          }),
         }),
         createCanvasElement('button', 982, 20, {
           id: `${idPrefix}-site-header-action`,
@@ -226,6 +335,10 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
           height: 56,
           props: {
             navItems: options.navItems,
+            navigationSource: 'site-footer',
+            navigationBinding: 'site.navigation.footer',
+            chromeRole: 'site.footer.navigation',
+            ariaLabel: 'Footer navigation',
             backgroundColor: 'transparent',
             color: '#ffffff',
             padding: 0,
@@ -234,6 +347,15 @@ export function withPageChrome(elements: CanvasElement[], options: PageChromeOpt
             tablet: { x: 442, y: 58, width: 270, height: 50, props: { gap: 12 } },
             mobile: { x: 20, y: 122, width: 320, height: 34, props: { gap: 12, fontSize: 13 } },
           },
+          children: createNavigationLinkChildren(`${idPrefix}-footer-navigation`, options.navItems, {
+            color: '#ffffff',
+            width: 330,
+            height: 56,
+            tabletWidth: 270,
+            tabletHeight: 50,
+            mobileWidth: 320,
+            mobileHeight: 34,
+          }),
         }),
       ],
     }),

@@ -44,6 +44,38 @@ const toCssLength = (value: unknown): string | number | undefined => {
   return undefined;
 };
 
+const resolveNavigationBindingMetadata = (
+  sourceValue: unknown,
+  bindingValue: unknown,
+  chromeRoleValue: unknown,
+) => {
+  const rawBinding = typeof bindingValue === 'string' ? bindingValue.trim() : '';
+  const rawSource = typeof sourceValue === 'string' ? sourceValue.trim() : '';
+  const navigationSource = rawSource === 'site-primary' || rawSource === 'site-footer' || rawSource === 'manual'
+    ? rawSource
+    : rawBinding === 'site.navigation.primary' || rawSource === 'site.navigation.primary'
+      ? 'site-primary'
+      : rawBinding === 'site.navigation.footer' || rawSource === 'site.navigation.footer'
+        ? 'site-footer'
+        : 'manual';
+  const navigationBinding = rawBinding || (
+    navigationSource === 'site-primary'
+      ? 'site.navigation.primary'
+      : navigationSource === 'site-footer'
+        ? 'site.navigation.footer'
+        : 'manual.navItems'
+  );
+  const chromeRole = typeof chromeRoleValue === 'string' && chromeRoleValue.trim()
+    ? chromeRoleValue.trim()
+    : navigationSource === 'site-primary'
+      ? 'site.header.navigation'
+      : navigationSource === 'site-footer'
+        ? 'site.footer.navigation'
+        : 'page.local.navigation';
+
+  return { navigationSource, navigationBinding, chromeRole };
+};
+
 const toNonNegativeCssLength = (value: unknown, fallback = 0): string => {
   const parsed = typeof value === 'number'
     ? value
@@ -3460,11 +3492,19 @@ function CanvasElementComponent({
             .filter(Boolean) as Array<{ label: string; href: string }>
           : [];
         const isVertical = p.navDirection === 'vertical';
+        const { navigationSource, navigationBinding, chromeRole } = resolveNavigationBindingMetadata(
+          p.navigationSource,
+          p.navigationBinding,
+          p.chromeRole,
+        );
 
         return (
           <nav
             {...containerDropHandlers}
             aria-label={typeof p.ariaLabel === 'string' ? p.ariaLabel : 'Page navigation'}
+            data-backy-navigation-source={navigationSource}
+            data-backy-navigation-binding={navigationBinding}
+            data-backy-chrome-role={chromeRole}
             style={{
               ...sharedStyle,
               width: '100%',
