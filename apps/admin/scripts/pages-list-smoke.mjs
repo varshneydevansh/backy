@@ -5053,14 +5053,14 @@ const main = async () => {
     const commandCreate = await clickEmptyCreate(
       client,
       'pages-command-create',
-      ['templateSource=backy-canvas'],
+      ['templateSource=backy-canvas', 'focus=canvas'],
       { template: 'blank', homepage: false, allowDisabled: true },
     );
     await waitForPagesEmptyState(client);
     const emptyCreate = await clickEmptyCreate(
       client,
       'pages-empty-create',
-      ['templateSource=backy-canvas'],
+      ['templateSource=backy-canvas', 'focus=canvas'],
       { template: 'blank', homepage: false, allowDisabled: true },
     );
     await waitForPagesEmptyState(client);

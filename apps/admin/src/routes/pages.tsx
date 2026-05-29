@@ -826,6 +826,7 @@ function PagesListView() {
   const createPageSearch = useMemo(() => ({
     siteId: activeSiteId,
     templateSource: 'backy-canvas' as const,
+    focus: 'canvas' as const,
   }), [activeSiteId]);
   const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
     template === 'blank' ? createPageSearch : { ...createPageSearch, template }

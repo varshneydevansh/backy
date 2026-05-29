@@ -64,6 +64,7 @@ interface NewPageSearch {
     noIndex?: boolean;
     noFollow?: boolean;
     templateSource?: PageTemplateSourceMode;
+    focus?: 'canvas';
     designTemplate?: string;
     frontendDesignTemplateId?: string;
     frontendTemplate?: string;
@@ -1215,7 +1216,8 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.ogImage?.trim() ? { ogImage: input.ogImage.trim() } : {}),
     ...(input.noIndex ? { noIndex: true } : {}),
     ...(input.noFollow ? { noFollow: true } : {}),
-    ...(input.templateSource === 'custom-frontend' ? { templateSource: input.templateSource } : {}),
+    ...(input.templateSource ? { templateSource: input.templateSource } : {}),
+    ...(input.focus === 'canvas' ? { focus: 'canvas' } : {}),
     ...(input.designTemplate?.trim() ? { designTemplate: input.designTemplate.trim() } : {}),
     ...(input.collectionId?.trim() ? { collectionId: input.collectionId.trim() } : {}),
     ...(input.datasetMode ? { datasetMode: input.datasetMode } : {}),
@@ -1276,6 +1278,7 @@ export const Route = createFileRoute('/pages/new')({
         noIndex: normalizedSearchBoolean(search.noIndex),
         noFollow: normalizedSearchBoolean(search.noFollow),
         templateSource: isPageTemplateSourceMode(search.templateSource) ? search.templateSource : undefined,
+        focus: search.focus === 'canvas' ? 'canvas' : undefined,
         designTemplate: normalizedFrontendDesignTemplateSearch(search),
         frontendDesignTemplateId: normalizedSearchString(search.frontendDesignTemplateId),
         frontendTemplate: normalizedSearchString(search.frontendTemplate),
@@ -1400,6 +1403,7 @@ function NewPageRoute() {
         noIndex: nextFormData.noIndex,
         noFollow: nextFormData.noFollow,
         templateSource: nextFormData.templateSourceMode,
+        focus: search.focus,
         designTemplate: nextFormData.designTemplateId,
         collectionId: nextFormData.collectionId,
         datasetMode: nextFormData.datasetMode || undefined,

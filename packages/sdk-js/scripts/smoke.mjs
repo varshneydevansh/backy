@@ -1852,6 +1852,8 @@ assert(customFrontendAgentHandoff.contentCreation?.templateCloneFields?.includes
 assert(customFrontendAgentHandoff.contentCreation?.canvasFirst?.editor === 'Backy canvas editor', 'manifest() custom frontend agent handoff missing canvas-first editor contract');
 assert(customFrontendAgentHandoff.contentCreation?.canvasFirst?.routeRevealGuarantee?.includes('reveal the selected captured template'), 'manifest() custom frontend agent handoff missing route reveal guarantee');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.pageCustomFrontend?.includes('frontendDesignTemplateId=:templateId'), 'manifest() custom frontend agent handoff missing page custom frontend entry point');
+assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.pageBackyCanvas?.includes('focus=canvas'), 'manifest() custom frontend agent handoff missing focused page canvas entry point');
+assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.pageCustomFrontend?.includes('focus=canvas'), 'manifest() custom frontend agent handoff missing focused custom frontend page entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.blogCustomFrontend?.includes('frontendDesignTemplateId=:templateId'), 'manifest() custom frontend agent handoff missing blog custom frontend entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.productCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing product custom frontend entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.formCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing form custom frontend entry point');

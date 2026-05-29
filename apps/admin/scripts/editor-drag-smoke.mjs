@@ -6326,7 +6326,14 @@ const readEditorCompositionReadiness = async (client, label) => {
   assert(state.agentHandoffCanvasOutcome.includes('Every created page') && state.agentHandoffCanvasOutcome.includes('Backy canvas editor'), `Editor canvas-first outcome missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffSiteStyleSources.includes('manifest.data.site.frontendDesign') && state.agentHandoffSiteStyleSources.includes('frontendDesign.tokens.colors') && state.agentHandoffSiteStyleSources.includes('frontendDesign.chrome'), `Editor handoff style sources incomplete during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffRoundTripFields.includes('content.elements') && state.agentHandoffRoundTripFields.includes('content.editableMap') && state.agentHandoffRoundTripFields.includes('meta.frontendDesign*'), `Editor handoff round-trip fields incomplete during ${label}: ${JSON.stringify(state)}`);
-  assert(state.agentHandoffPageCanvasEntry.includes('templateSource=backy-canvas') && state.agentHandoffPageCustomEntry.includes('templateSource=custom-frontend'), `Editor page creation entry handoff mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.agentHandoffPageCanvasEntry.includes('templateSource=backy-canvas') &&
+      state.agentHandoffPageCanvasEntry.includes('focus=canvas') &&
+      state.agentHandoffPageCustomEntry.includes('templateSource=custom-frontend') &&
+      state.agentHandoffPageCustomEntry.includes('frontendDesignTemplateId=:templateId') &&
+      state.agentHandoffPageCustomEntry.includes('focus=canvas'),
+    `Editor page creation entry handoff mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
   assert(state.agentHandoffBlogCanvasEntry.includes('templateSource=backy-canvas') && state.agentHandoffBlogCustomEntry.includes('templateSource=custom-frontend'), `Editor blog creation entry handoff mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(
     state.handoffBriefReadStart === state.agentHandoffReadStart &&

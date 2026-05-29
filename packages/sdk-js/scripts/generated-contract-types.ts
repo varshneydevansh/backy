@@ -7811,8 +7811,8 @@ const customFrontendAgentHandoff = {
     backyCanvasTemplateField: "templateId",
     customFrontendTemplateField: "frontendDesignTemplateId",
     adminEntryPoints: {
-      pageBackyCanvas: "/pages/new?siteId=site_demo&templateSource=backy-canvas",
-      pageCustomFrontend: "/pages/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId",
+      pageBackyCanvas: "/pages/new?siteId=site_demo&templateSource=backy-canvas&focus=canvas",
+      pageCustomFrontend: "/pages/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas",
       blogBackyCanvas: "/blog/new?siteId=site_demo&templateSource=backy-canvas",
       blogCustomFrontend: "/blog/new?siteId=site_demo&templateSource=custom-frontend&frontendDesignTemplateId=:templateId",
       productBackyCanvas: "/products?siteId=site_demo&quickCreate=product",

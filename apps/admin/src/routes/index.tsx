@@ -1431,7 +1431,7 @@ function Index() {
     to: DashboardRouteTarget,
   ) => {
     if (to === '/pages/new') {
-      return { siteId: activeSiteId, templateSource: 'backy-canvas' as const };
+      return { siteId: activeSiteId, templateSource: 'backy-canvas' as const, focus: 'canvas' as const };
     }
     if (to === '/blog/new') {
       return { siteId: activeSiteId, templateSource: 'backy-canvas' as const };
@@ -1440,6 +1440,12 @@ function Index() {
       ? { siteId: activeSiteId }
       : undefined;
   };
+  const getDashboardPageCreateSearch = (template?: 'registration' | 'contact' | 'storefront' | 'blog-index') => ({
+    siteId: activeSiteId,
+    templateSource: 'backy-canvas' as const,
+    focus: 'canvas' as const,
+    ...(template ? { template } : {}),
+  });
   const getDashboardWorkflowActionSearch = (action: DashboardWorkflowAction) => {
     if (action.search?.quickCreate === 'product') {
       return { siteId: activeSiteId, quickCreate: 'product' as const };
@@ -3771,7 +3777,7 @@ function Index() {
                     <>
                       <Link
                         to="/pages/new"
-                        search={{ siteId: activeSiteId, template: 'registration' }}
+                        search={getDashboardPageCreateSearch('registration')}
                         className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                       >
                         <div className="text-sm font-semibold text-foreground">Registration page</div>
@@ -3779,7 +3785,7 @@ function Index() {
                       </Link>
                       <Link
                         to="/pages/new"
-                        search={{ siteId: activeSiteId, template: 'contact' }}
+                        search={getDashboardPageCreateSearch('contact')}
                         className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                       >
                         <div className="text-sm font-semibold text-foreground">Contact page</div>
@@ -3787,7 +3793,7 @@ function Index() {
                       </Link>
                       <Link
                         to="/pages/new"
-                        search={{ siteId: activeSiteId, template: 'storefront' }}
+                        search={getDashboardPageCreateSearch('storefront')}
                         className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                       >
                         <div className="text-sm font-semibold text-foreground">Storefront page</div>
@@ -3795,7 +3801,7 @@ function Index() {
                       </Link>
                       <Link
                         to="/pages/new"
-                        search={{ siteId: activeSiteId, template: 'blog-index' }}
+                        search={getDashboardPageCreateSearch('blog-index')}
                         className="rounded-lg border border-border bg-card px-3 py-3 transition hover:border-primary/40 hover:bg-primary/5"
                       >
                         <div className="text-sm font-semibold text-foreground">Blog index page</div>

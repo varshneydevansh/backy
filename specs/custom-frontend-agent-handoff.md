@@ -71,6 +71,7 @@ Do not flatten a Backy canvas page into plain HTML/text unless the target is a t
 Backy supports both Backy-canvas templates and captured custom-frontend templates. New content should use the same template source contract instead of inventing a parallel creation path.
 
 - Pages/blog posts: use the admin create APIs with `frontendDesignTemplateId`, `designTemplateId`, or the Backy canvas starter template fields advertised by the manifest/OpenAPI. Admin routes are exposed under `contentCreation.adminEntryPoints.page*` and `contentCreation.adminEntryPoints.blog*`.
+- Page admin entry points that should open directly into the focused visual editor should include `focus=canvas` with the template source query, for example `/pages/new?siteId=:siteId&templateSource=backy-canvas&focus=canvas` or `/pages/new?siteId=:siteId&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`.
 - Forms/collections/products/sections: use the captured frontend design template registry exposed from the site frontend-design contract when available. Admin routes are exposed under `contentCreation.adminEntryPoints.product*`, `form*`, `collection*`, and `reusableSection*`.
 - After creation, persist editable content through the Backy APIs, not through a frontend-local JSON file.
 

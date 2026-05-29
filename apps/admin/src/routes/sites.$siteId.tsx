@@ -5865,7 +5865,9 @@ function EditSitePage() {
           to: "/pages/new",
           search: {
             siteId: targetSiteId,
+            templateSource: "custom-frontend",
             frontendDesignTemplateId: template.id,
+            focus: "canvas",
           },
         });
         return;
@@ -5874,6 +5876,7 @@ function EditSitePage() {
           to: "/blog/new",
           search: {
             siteId: targetSiteId,
+            templateSource: "custom-frontend",
             frontendDesignTemplateId: template.id,
           },
         });

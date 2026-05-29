@@ -53,8 +53,10 @@ const assertSiteDetailSourceContract = () => {
   assert(source.includes('Template versioning'), 'Site workspace readiness must include template versioning as a publish/handoff check');
   assert(
     source.includes('frontendDesignTemplateId: template.id') &&
+      source.includes('templateSource: "custom-frontend"') &&
+      source.includes('focus: "canvas"') &&
       !source.includes('designTemplate: template.id'),
-    'Site detail template registry page/blog actions must deep-link with frontendDesignTemplateId, matching the template registry clone field',
+    'Site detail template registry page/blog actions must deep-link with frontendDesignTemplateId and templateSource, focusing page templates into canvas mode',
   );
   assert(
     source.includes('const siteWorkspaceCommandActionStatusId = "site-workspace-command-action-status";') &&
@@ -1475,6 +1477,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.text.includes('frontendDesign.tokens.fonts') &&
       layout.customFrontendAgentHandoff.text.includes('frontendDesignTemplateId=:templateId') &&
       layout.customFrontendAgentHandoff.text.includes('templateSource=backy-canvas') &&
+      layout.customFrontendAgentHandoff.text.includes('focus=canvas') &&
       layout.customFrontendAgentHandoff.text.includes('/products?') &&
       layout.customFrontendAgentHandoff.text.includes('/forms?') &&
       layout.customFrontendAgentHandoff.text.includes('/collections?') &&

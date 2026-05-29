@@ -61,12 +61,12 @@ Do not flatten editable Backy canvas content into plain HTML/text unless the tar
 
 New content must use Backy routes/APIs so the editor can own it later.
 
-- Backy starter pages: `/pages/new?siteId=:siteId&templateSource=backy-canvas`
-- Custom frontend pages: `/pages/new?siteId=:siteId&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`
+- Backy starter pages: `/pages/new?siteId=:siteId&templateSource=backy-canvas&focus=canvas`
+- Custom frontend pages: `/pages/new?siteId=:siteId&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`
 - Backy starter blog posts: `/blog/new?siteId=:siteId&templateSource=backy-canvas`
 - Custom frontend blog posts: `/blog/new?siteId=:siteId&templateSource=custom-frontend&frontendDesignTemplateId=:templateId`
 
-Use the handoff's `contentCreation.adminEntryPoints` for products, forms, collections, and reusable sections. Preserve `templateSource`, `frontendDesignTemplateId`, `designTemplateId`, and `frontendTemplate` aliases where advertised by the manifest/OpenAPI.
+Use `focus=canvas` for page creation entry points that should land authors in the focused visual editor after creation. Blog creation keeps title, slug, taxonomy, and SEO panels visible by default, then opens the saved post in the editor. Use the handoff's `contentCreation.adminEntryPoints` for products, forms, collections, and reusable sections. Preserve `templateSource`, `frontendDesignTemplateId`, `designTemplateId`, and `frontendTemplate` aliases where advertised by the manifest/OpenAPI.
 
 ## Safety Boundary
 
