@@ -29,8 +29,16 @@ Read order:
    - Authenticated management: `/api/admin/sites/:siteId/frontend-design`
    - Use this for tokens, fonts, colors, spacing, motion, chrome, editable maps, and captured templates.
 
-5. Template registry and render verification
+5. Template registry
    - Templates: `/api/admin/sites/:siteId/templates`
+
+6. Newsletter workspace and subscriber handoff
+   - Admin workspace: `/newsletter?siteId=:siteId`
+   - Public subscribers: `/api/sites/:siteId/newsletter/subscribers`
+   - Admin subscribers: `/api/admin/sites/:siteId/newsletter/subscribers`
+   - Use this for signup forms, consent evidence, issue handoff, and provider-safe email-sync routes.
+
+7. Render verification
    - Render: `/api/sites/:siteId/render?path=/...`
 
 Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-frontend-agent-handoff.md).

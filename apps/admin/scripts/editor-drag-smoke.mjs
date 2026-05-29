@@ -6375,7 +6375,7 @@ const readEditorCompositionReadiness = async (client, label) => {
   assert(state.agentHandoffManifestReadStart === 'manifest.data.contract.customFrontendAgentHandoff', `Editor agent handoff manifest read-start mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffOpenapiReadStart === 'x-backy-custom-frontend-agent-handoff', `Editor agent handoff OpenAPI read-start mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffEditorSurfaceSchema === 'backy.editor-canvas-agent-surface.v1', `Editor canvas handoff surface schema mismatch during ${label}: ${JSON.stringify(state)}`);
-  assert(state.agentHandoffReadOrder === 'agent-handoff,manifest,openapi,frontend-design,templates,render', `Editor agent handoff read order mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.agentHandoffReadOrder === 'agent-handoff,manifest,openapi,frontend-design,templates,newsletter,render', `Editor agent handoff read order mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffRouteReveal.includes('frontendDesignTemplateId') && state.agentHandoffRouteReveal.includes('frontendTemplate'), `Editor route-reveal handoff missing template aliases during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffCanvasOutcome.includes('Every created page') && state.agentHandoffCanvasOutcome.includes('Backy canvas editor'), `Editor canvas-first outcome missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.agentHandoffSiteStyleSources.includes('manifest.data.site.frontendDesign') && state.agentHandoffSiteStyleSources.includes('frontendDesign.tokens.colors') && state.agentHandoffSiteStyleSources.includes('frontendDesign.chrome'), `Editor handoff style sources incomplete during ${label}: ${JSON.stringify(state)}`);
@@ -6403,7 +6403,7 @@ const readEditorCompositionReadiness = async (client, label) => {
     `Editor handoff brief read starts mismatch during ${label}: ${JSON.stringify(state)}`,
   );
   assert(state.handoffBriefReadOrder === state.agentHandoffReadOrder && state.handoffBriefCanvasValue === 'backy-canvas' && state.handoffBriefCustomFrontendValue === 'custom-frontend', `Editor handoff brief metadata mismatch during ${label}: ${JSON.stringify(state)}`);
-  assert(state.handoffBriefText.includes('agent-handoff -> manifest -> openapi -> frontend-design -> templates -> render') && state.handoffBriefText.includes('Backy canvas editor'), `Editor handoff brief text mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.handoffBriefText.includes('agent-handoff -> manifest -> openapi -> frontend-design -> templates -> newsletter -> render') && state.handoffBriefText.includes('Backy canvas editor'), `Editor handoff brief text mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(
     state.handoffBriefSchema === state.agentHandoffSchema &&
       state.handoffBriefSource === state.agentHandoffSource &&
@@ -6519,7 +6519,7 @@ const testEditorAgentHandoffClipboard = async (client, label) => {
   assert(state.noFrontendLocalJsonForks === true, `Copied editor agent handoff must block frontend-local JSON forks during ${label}: ${JSON.stringify(state)}`);
   assert(state.editorSurfaceSchema === 'backy.editor-canvas-agent-surface.v1', `Copied editor handoff surface schema mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.copyablePayload === 'editorCompositionReadiness.agentHandoff', `Copied editor handoff payload pointer mismatch during ${label}: ${JSON.stringify(state)}`);
-  assert(state.readOrder === 'agent-handoff,manifest,openapi,frontend-design,templates,render', `Copied editor agent handoff read order mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(state.readOrder === 'agent-handoff,manifest,openapi,frontend-design,templates,newsletter,render', `Copied editor agent handoff read order mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(
     state.pageCanvasEntry.includes('templateSource=backy-canvas') &&
       state.pageCanvasEntry.includes('focus=canvas') &&
