@@ -26,6 +26,7 @@ const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
 const VIEW_ONLY_SMOKE = process.env.BACKY_EDITOR_VIEW_ONLY_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
+const MARQUEE_ORIGIN_SMOKE = process.env.BACKY_EDITOR_MARQUEE_ORIGIN_SMOKE === '1';
 const NESTED_GROUP_SMOKE = process.env.BACKY_EDITOR_NESTED_GROUP_SMOKE === '1';
 const ANIMATION_SMOKE = process.env.BACKY_EDITOR_ANIMATION_SMOKE === '1';
 const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
@@ -1405,6 +1406,8 @@ const assertCanvasSelectionInfoSource = () => {
   assert(source.includes('data-selection-count={multiSelectionBounds.count}') && source.includes('left: multiSelectionBounds.x') && source.includes('width: multiSelectionBounds.width'), 'Editor multi-selection bounding frame must expose count and use absolute selection geometry');
   assert(source.includes('type MarqueeSelection = {') && source.includes('const [marqueeSelection, setMarqueeSelection]') && source.includes('data-testid="editor-marquee-selection"'), 'Editor canvas must expose drag-marquee selection state and overlay');
   assert(source.includes('const getMarqueeStyle = (selection: MarqueeSelection): CSSProperties =>') && source.includes('left: bounds.x') && source.includes('top: bounds.y') && source.includes('style={getMarqueeStyle(marqueeSelection)}'), 'Editor canvas marquee overlay must render from the pointer-down origin using CSS left/top rather than invalid div x/y coordinates.');
+  assert(source.includes('const getMeasuredCanvasScale = useCallback((axis: CanvasAxis) =>') && source.includes("getMeasuredCanvasScale('x')") && source.includes("getMeasuredCanvasScale('y')"), 'Editor canvas pointer math must derive coordinates from the actual transformed DOM scale so zoomed marquees start at the pointer-down point.');
+  assert(source.includes('data-marquee-start-x={Math.round(marqueeSelection.startX)}') && source.includes('data-marquee-bounds-x={activeMarqueeBounds ? Math.round(activeMarqueeBounds.x) : 0}'), 'Editor canvas marquee overlay must expose testable canvas-space start and bounds coordinates.');
   assert(source.includes('collectRootMarqueeCandidates') && source.includes('elementIntersectsRect(candidate, bounds)') && source.includes('onSelectMany?.(resolvedSelectedIds)'), 'Editor canvas marquee selection must select intersecting unlocked root elements in bulk');
   assert(source.includes("mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace'") && source.includes("activeMarqueeSelection.mode === 'add'") && source.includes('data-selection-mode={marqueeSelection.mode}'), 'Editor canvas marquee selection must support additive Shift/Cmd/Ctrl marquee selection');
   assert(editorSource.includes('const handleCanvasSelectMany') && editorSource.includes('onSelectMany={handleCanvasSelectMany}'), 'Editor shell must wire canvas marquee bulk selection into selectedIds state');
@@ -18291,6 +18294,181 @@ const testMultiSelectionControls = async (client, pageId) => {
   };
 };
 
+const testMarqueeSelectionOrigin = async (client) => {
+  const zoom = await setCanvasZoomSlider(client, 130, 'marquee origin zoom');
+  await sleep(150);
+
+  const start = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    if (!(canvas instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-canvas' };
+    }
+
+    canvas.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+    const rect = canvas.getBoundingClientRect();
+    const style = window.getComputedStyle(canvas);
+    const cssWidth = Number.parseFloat(style.width || '0');
+    const cssHeight = Number.parseFloat(style.height || '0');
+    const scaleX = cssWidth > 0 ? rect.width / cssWidth : 1;
+    const scaleY = cssHeight > 0 ? rect.height / cssHeight : 1;
+    const left = Math.max(rect.left + 24, 24);
+    const right = Math.min(rect.right - 24, window.innerWidth - 24);
+    const top = Math.max(rect.top + 60, 220);
+    const bottom = Math.min(rect.bottom - 80, window.innerHeight - 180);
+
+    for (let y = top; y <= bottom; y += 24) {
+      for (let x = left; x <= right; x += 24) {
+        const target = document.elementFromPoint(x, y);
+        if (!(target instanceof Element)) {
+          continue;
+        }
+
+        const insideCanvas = target === canvas || canvas.contains(target);
+        const hitLayer = target.closest('[data-element-id]');
+        const hitToolbar = target.closest('[data-testid="editor-canvas-context-bar"], [data-testid="editor-zoom-controls"]');
+        if (insideCanvas && !hitLayer && !hitToolbar) {
+          return {
+            ok: true,
+            x: Math.round(x),
+            y: Math.round(y),
+            expectedCanvasX: Math.round((x - rect.left) / scaleX),
+            expectedCanvasY: Math.round((y - rect.top) / scaleY),
+            scaleX: Number(scaleX.toFixed(3)),
+            scaleY: Number(scaleY.toFixed(3)),
+            canvasRect: {
+              left: Math.round(rect.left),
+              top: Math.round(rect.top),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            },
+            hitTag: target.tagName,
+          };
+        }
+      }
+    }
+
+    return {
+      ok: false,
+      reason: 'no-visible-background-point',
+      canvasRect: {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+      },
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      },
+    };
+  })()`);
+  assert(start?.ok, `Unable to find a canvas background point for marquee origin smoke: ${JSON.stringify(start)}`);
+  assert(start.expectedCanvasX > 0 && start.expectedCanvasY > 0, `Marquee origin smoke start point should not be at canvas origin: ${JSON.stringify(start)}`);
+
+  const end = {
+    x: Math.min(start.x + 170, Math.max(0, start.canvasRect.left + start.canvasRect.width - 18)),
+    y: Math.min(start.y + 120, Math.max(0, start.canvasRect.top + start.canvasRect.height - 18)),
+  };
+  assert(end.x > start.x + 20 && end.y > start.y + 20, `Marquee origin smoke did not have room to drag: ${JSON.stringify({ start, end })}`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: start.x,
+    y: start.y,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: start.x,
+    y: start.y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+  await sleep(80);
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: end.x,
+    y: end.y,
+    button: 'left',
+    buttons: 1,
+  });
+  await sleep(140);
+
+  const overlay = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const marquee = document.querySelector('[data-testid="editor-marquee-selection"]');
+    if (!(canvas instanceof HTMLElement) || !(marquee instanceof HTMLElement)) {
+      return { ok: false, hasCanvas: Boolean(canvas), hasMarquee: Boolean(marquee) };
+    }
+
+    const rect = marquee.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const canvasStyle = window.getComputedStyle(canvas);
+    const cssCanvasWidth = Number.parseFloat(canvasStyle.width || '0');
+    const cssCanvasHeight = Number.parseFloat(canvasStyle.height || '0');
+    const scaleX = cssCanvasWidth > 0 ? canvasRect.width / cssCanvasWidth : 1;
+    const scaleY = cssCanvasHeight > 0 ? canvasRect.height / cssCanvasHeight : 1;
+    const style = window.getComputedStyle(marquee);
+    const cssLeft = Number.parseFloat(style.left || '0');
+    const cssTop = Number.parseFloat(style.top || '0');
+    return {
+      ok: true,
+      coordinateSpace: marquee.getAttribute('data-marquee-coordinate-space') || '',
+      selectionMode: marquee.getAttribute('data-selection-mode') || '',
+      startX: Number(marquee.getAttribute('data-marquee-start-x') || 0),
+      startY: Number(marquee.getAttribute('data-marquee-start-y') || 0),
+      currentX: Number(marquee.getAttribute('data-marquee-current-x') || 0),
+      currentY: Number(marquee.getAttribute('data-marquee-current-y') || 0),
+      boundsX: Number(marquee.getAttribute('data-marquee-bounds-x') || 0),
+      boundsY: Number(marquee.getAttribute('data-marquee-bounds-y') || 0),
+      boundsWidth: Number(marquee.getAttribute('data-marquee-bounds-width') || 0),
+      boundsHeight: Number(marquee.getAttribute('data-marquee-bounds-height') || 0),
+      cssLeft,
+      cssTop,
+      rectLeft: Math.round(rect.left),
+      rectTop: Math.round(rect.top),
+      rectWidth: Math.round(rect.width),
+      rectHeight: Math.round(rect.height),
+      expectedVisualLeft: Math.round(canvasRect.left + (cssLeft * scaleX)),
+      expectedVisualTop: Math.round(canvasRect.top + (cssTop * scaleY)),
+      canvasRect: {
+        left: Math.round(canvasRect.left),
+        top: Math.round(canvasRect.top),
+        width: Math.round(canvasRect.width),
+        height: Math.round(canvasRect.height),
+      },
+    };
+  })()`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: end.x,
+    y: end.y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(80);
+
+  assert(overlay.ok, `Marquee overlay did not render while dragging: ${JSON.stringify({ start, end, overlay })}`);
+  assert(overlay.coordinateSpace === 'canvas', `Marquee overlay missing canvas coordinate metadata: ${JSON.stringify(overlay)}`);
+  assert(overlay.selectionMode === 'replace', `Marquee overlay should default to replace mode: ${JSON.stringify(overlay)}`);
+  assert(Math.abs(overlay.startX - start.expectedCanvasX) <= 2, `Marquee start X drifted from pointer-down origin: ${JSON.stringify({ start, end, overlay })}`);
+  assert(Math.abs(overlay.startY - start.expectedCanvasY) <= 2, `Marquee start Y drifted from pointer-down origin: ${JSON.stringify({ start, end, overlay })}`);
+  assert(Math.abs(overlay.boundsX - overlay.startX) <= 1 && Math.abs(overlay.boundsY - overlay.startY) <= 1, `Marquee bounds should anchor at the pointer-down point for down-right drags: ${JSON.stringify({ start, end, overlay })}`);
+  assert(overlay.cssLeft > 0 && overlay.cssTop > 0, `Marquee overlay CSS left/top should not collapse to canvas origin: ${JSON.stringify({ start, end, overlay })}`);
+  assert(Math.abs(overlay.rectLeft - overlay.expectedVisualLeft) <= 4 && Math.abs(overlay.rectTop - overlay.expectedVisualTop) <= 4, `Marquee visual rect should render from its canvas-space origin: ${JSON.stringify({ start, end, overlay })}`);
+  assert(overlay.boundsWidth > 20 && overlay.boundsHeight > 20, `Marquee overlay did not grow during drag: ${JSON.stringify({ start, end, overlay })}`);
+
+  return {
+    zoom,
+    start,
+    end,
+    overlay,
+  };
+};
+
 const testLayerHierarchyControls = async (client) => {
   await selectLayerIds(client, ['smoke-image']);
   const beforeImageBox = await getElementBox(client, 'smoke-image');
@@ -25093,7 +25271,7 @@ const main = async () => {
     return;
   }
 
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   let client;
   let childProcess = null;
@@ -25398,6 +25576,19 @@ const main = async () => {
         mode: 'multi-select',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         multiSelect,
+      }, null, 2));
+      return;
+    }
+
+    if (MARQUEE_ORIGIN_SMOKE) {
+      assert(!EDITOR_PATH, 'Marquee origin smoke currently requires an internally created smoke page');
+      const marqueeOrigin = await testMarqueeSelectionOrigin(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'marquee-origin',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        marqueeOrigin,
       }, null, 2));
       return;
     }

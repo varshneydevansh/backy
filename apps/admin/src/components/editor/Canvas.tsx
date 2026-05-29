@@ -1599,6 +1599,13 @@ type MarqueeSelection = {
   currentY: number;
 };
 
+type CanvasAxis = 'x' | 'y';
+
+type CanvasPoint = {
+  x: number;
+  y: number;
+};
+
 type CanvasInteractionInput = {
   clientX: number;
   clientY: number;
@@ -1739,7 +1746,22 @@ export function Canvas({
     ? viewportScale
     : 1;
   const safeGridSize = normalizeGridSize(gridSize);
-  const toCanvasDelta = useCallback((value: number) => value / safeViewportScale, [safeViewportScale]);
+  const getMeasuredCanvasScale = useCallback((axis: CanvasAxis) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const authoredSize = axis === 'x' ? size.width : size.height;
+    const transformedSize = axis === 'x' ? rect?.width : rect?.height;
+    const measuredScale = typeof transformedSize === 'number' && transformedSize > 0
+      ? transformedSize / Math.max(1, authoredSize)
+      : safeViewportScale;
+
+    return Number.isFinite(measuredScale) && measuredScale > 0
+      ? measuredScale
+      : safeViewportScale;
+  }, [safeViewportScale, size.height, size.width]);
+  const toCanvasDelta = useCallback(
+    (value: number, axis: CanvasAxis = 'x') => value / getMeasuredCanvasScale(axis),
+    [getMeasuredCanvasScale],
+  );
 
   const getTargetElement = useCallback((target: EventTarget | null) => {
     if (!target) return null;
@@ -1904,17 +1926,17 @@ export function Canvas({
     initialHeight: number;
   } | null>(null);
 
-  const getCanvasPoint = useCallback((clientX: number, clientY: number) => {
+  const getCanvasPoint = useCallback((clientX: number, clientY: number): CanvasPoint | null => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) {
       return null;
     }
 
     return {
-      x: Math.max(0, Math.min(size.width, toCanvasDelta(clientX - rect.left))),
-      y: Math.max(0, Math.min(size.height, toCanvasDelta(clientY - rect.top))),
+      x: Math.max(0, Math.min(size.width, (clientX - rect.left) / getMeasuredCanvasScale('x'))),
+      y: Math.max(0, Math.min(size.height, (clientY - rect.top) / getMeasuredCanvasScale('y'))),
     };
-  }, [size.height, size.width, toCanvasDelta]);
+  }, [getMeasuredCanvasScale, size.height, size.width]);
 
   const handleCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (isPreview || disabled || event.button !== 0) {
@@ -2153,7 +2175,7 @@ export function Canvas({
 
       setAlignmentGuides([]);
       const deltaX = toCanvasDelta(event.clientX - activeResizeState.startX);
-      const deltaY = toCanvasDelta(event.clientY - activeResizeState.startY);
+      const deltaY = toCanvasDelta(event.clientY - activeResizeState.startY, 'y');
 
       let nextElements = elementsRef.current;
       if (activeResizeState.snapshots.length > 1) {
@@ -2239,7 +2261,7 @@ export function Canvas({
     }
 
     const deltaX = toCanvasDelta(event.clientX - activeDragState.startX);
-    const deltaY = toCanvasDelta(event.clientY - activeDragState.startY);
+    const deltaY = toCanvasDelta(event.clientY - activeDragState.startY, 'y');
     const newX = activeDragState.bounds.x + deltaX;
     const newY = activeDragState.bounds.y + deltaY;
     let nextGuides: AlignmentGuide[] = [];
@@ -2441,7 +2463,7 @@ export function Canvas({
         }
 
         const parsedX = snapToGrid(toCanvasDelta(event.clientX - canvasRect.left), safeGridSize, snapEnabled);
-        const parsedY = snapToGrid(toCanvasDelta(event.clientY - canvasRect.top), safeGridSize, snapEnabled);
+        const parsedY = snapToGrid(toCanvasDelta(event.clientY - canvasRect.top, 'y'), safeGridSize, snapEnabled);
 
         if (forcedParentId) {
           const parent = findElementById(elements, forcedParentId);
@@ -2454,7 +2476,7 @@ export function Canvas({
           if (isDropTarget && dropHost) {
             const hostRect = dropHost.getBoundingClientRect();
             const childX = snapToGrid(toCanvasDelta(event.clientX - hostRect.left), safeGridSize, snapEnabled);
-            const childY = snapToGrid(toCanvasDelta(event.clientY - hostRect.top), safeGridSize, snapEnabled);
+            const childY = snapToGrid(toCanvasDelta(event.clientY - hostRect.top, 'y'), safeGridSize, snapEnabled);
 
             if (item.reusableContent?.elements?.length) {
               const reusableChildren = createCanvasElementsFromReusableContent(
@@ -2591,7 +2613,7 @@ export function Canvas({
     }
 
     if (canvasResizeState && onSizeChange) {
-      const deltaY = toCanvasDelta(e.clientY - canvasResizeState.startY);
+      const deltaY = toCanvasDelta(e.clientY - canvasResizeState.startY, 'y');
       const newHeight = Math.max(size.minHeight || 600, canvasResizeState.initialHeight + deltaY);
       // Snap to 10
       const snappedHeight = Math.round(newHeight / 10) * 10;
@@ -2723,6 +2745,7 @@ export function Canvas({
       count: selectedMetrics.length,
     };
   }, [elements, isPreview, selectedIds]);
+  const activeMarqueeBounds = marqueeSelection ? getMarqueeBounds(marqueeSelection) : null;
 
   return (
     <div
@@ -2821,6 +2844,15 @@ export function Canvas({
           className="pointer-events-none absolute z-[75] rounded-sm border border-sky-600 bg-sky-500/10 shadow-[0_0_0_1px_rgba(14,165,233,0.12)]"
           data-testid="editor-marquee-selection"
           data-selection-mode={marqueeSelection.mode}
+          data-marquee-coordinate-space="canvas"
+          data-marquee-start-x={Math.round(marqueeSelection.startX)}
+          data-marquee-start-y={Math.round(marqueeSelection.startY)}
+          data-marquee-current-x={Math.round(marqueeSelection.currentX)}
+          data-marquee-current-y={Math.round(marqueeSelection.currentY)}
+          data-marquee-bounds-x={activeMarqueeBounds ? Math.round(activeMarqueeBounds.x) : 0}
+          data-marquee-bounds-y={activeMarqueeBounds ? Math.round(activeMarqueeBounds.y) : 0}
+          data-marquee-bounds-width={activeMarqueeBounds ? Math.round(activeMarqueeBounds.width) : 0}
+          data-marquee-bounds-height={activeMarqueeBounds ? Math.round(activeMarqueeBounds.height) : 0}
           style={getMarqueeStyle(marqueeSelection)}
         />
       )}
