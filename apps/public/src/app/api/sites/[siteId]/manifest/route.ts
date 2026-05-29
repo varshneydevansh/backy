@@ -3408,7 +3408,11 @@ const buildRepositoryManifest = (
         databaseCertification: frontendDatabaseCertification,
         frontendLaunchReadiness: null as ReturnType<typeof buildFrontendLaunchReadiness> | null,
         completionStatus: buildBackyCompletionStatus(),
-        customFrontendAgentHandoff: buildCustomFrontendAgentHandoff(input.site.id),
+        customFrontendAgentHandoff: buildCustomFrontendAgentHandoff(input.site.id, {
+          slug: input.site.slug,
+          customDomain: input.site.customDomain,
+          domainVerificationDomain: input.site.settings?.domainVerification?.domain,
+        }),
         schemas: {
           manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
           renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
@@ -3775,7 +3779,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           databaseCertification: frontendDatabaseCertification,
           frontendLaunchReadiness: null as ReturnType<typeof buildFrontendLaunchReadiness> | null,
           completionStatus: buildBackyCompletionStatus(),
-          customFrontendAgentHandoff: buildCustomFrontendAgentHandoff(site.id),
+          customFrontendAgentHandoff: buildCustomFrontendAgentHandoff(site.id, {
+            slug: site.slug,
+            customDomain: site.customDomain,
+            domainVerificationDomain: site.settings?.domainVerification?.domain,
+          }),
           schemas: {
             manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
             renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',

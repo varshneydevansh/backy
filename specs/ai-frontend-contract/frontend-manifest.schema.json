@@ -334,6 +334,86 @@
           },
           "required": ["schemaVersion", "everyComponentApiAddressable", "everyElementApiAddressable", "readPointers", "writePointers", "elementAddressing", "readableFieldPaths", "writableFieldPaths", "componentFamilies", "requiredAgentBehavior", "guarantees", "secretHandling"]
         },
+        "routing": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.custom-frontend-routing-handoff.v1" },
+            "siteId": { "type": "string", "minLength": 1 },
+            "identifiers": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "siteId": { "type": "string", "minLength": 1 },
+                "slug": { "type": "string", "minLength": 1 },
+                "customDomain": { "type": ["string", "null"] },
+                "verificationDomain": { "type": ["string", "null"] },
+                "acceptedPublicIdentifiers": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "customDomain" }
+                }
+              },
+              "required": ["siteId", "slug", "customDomain", "verificationDomain", "acceptedPublicIdentifiers"]
+            },
+            "publicResolution": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "siteDiscovery": { "type": "string", "minLength": 1 },
+                "managedPath": { "type": "string", "minLength": 1 },
+                "resolveBySiteId": { "type": "string", "minLength": 1 },
+                "renderBySiteId": { "type": "string", "minLength": 1 },
+                "resolveWithHost": { "type": "string", "minLength": 1 },
+                "renderWithHost": { "type": "string", "minLength": 1 },
+                "hostHeaderSupported": { "const": true },
+                "domainQueryParamSupported": { "const": true }
+              },
+              "required": ["siteDiscovery", "managedPath", "resolveBySiteId", "renderBySiteId", "resolveWithHost", "renderWithHost", "hostHeaderSupported", "domainQueryParamSupported"]
+            },
+            "customDomainManagement": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "adminSiteRoute": { "type": "string", "minLength": 1 },
+                "adminSiteApi": { "type": "string", "minLength": 1 },
+                "adminSettingsApi": { "type": "string", "minLength": 1 },
+                "customDomainField": { "const": "site.customDomain" },
+                "verificationField": { "const": "site.settings.domainVerification.domain" }
+              }
+            },
+            "subdomainRouting": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "supported": { "const": true },
+                "model": { "type": "string", "minLength": 1 },
+                "examples": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "blog.example.com" }
+                },
+                "recommendation": { "type": "string", "minLength": 1 }
+              },
+              "required": ["supported", "model", "examples", "recommendation"]
+            },
+            "customFrontendDeployment": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "publicApiOriginEnv": { "const": "BACKY_PUBLIC_API_BASE_URL" },
+                "siteIdentifierEnv": { "const": "BACKY_SITE_ID" },
+                "hostContextEnv": { "const": "BACKY_SITE_PUBLIC_HOST" },
+                "corsSetting": { "const": "BACKY_CORS_ALLOWED_ORIGINS" }
+              }
+            },
+            "agentRules": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "required": ["schemaVersion", "siteId", "identifiers", "publicResolution", "customDomainManagement", "subdomainRouting", "customFrontendDeployment", "agentRules"]
+        },
         "designState": {
           "type": "object",
           "additionalProperties": true,
@@ -371,7 +451,7 @@
           "required": ["includesSecretValues", "publicDiscoveryOnly", "adminWritesRequireAuth", "secretHandling"]
         }
       },
-      "required": ["schemaVersion", "source", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "componentApiContract", "designState", "rules", "privacy"]
+      "required": ["schemaVersion", "source", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "componentApiContract", "routing", "designState", "rules", "privacy"]
     },
     "databaseCertification": {
       "type": "object",

@@ -2464,7 +2464,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const formsManagementDiscoveryContract = formsManagementDiscovery(site.id);
     const commerceManagementDiscoveryContract = commerceManagementDiscovery(site.id);
     const liveManagementDiscoveryContract = liveManagementDiscovery(site.id);
-    const customFrontendAgentHandoff = buildCustomFrontendAgentHandoff(site.id);
+    const customFrontendAgentHandoff = buildCustomFrontendAgentHandoff(site.id, {
+      slug: site.slug,
+      customDomain: site.customDomain,
+      domainVerificationDomain: site.settings?.domainVerification?.domain,
+    });
     const completionStatusContract = buildBackyCompletionStatus();
     const delivery = deliveryDiscovery(origin, site);
     const frontendLaunchReadiness = buildFrontendLaunchReadiness({
@@ -6029,6 +6033,77 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 secretHandling: { type: "string" },
               },
             },
+            CustomFrontendRoutingHandoff: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "siteId",
+                "identifiers",
+                "publicResolution",
+                "customDomainManagement",
+                "subdomainRouting",
+                "customFrontendDeployment",
+                "agentRules",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.custom-frontend-routing-handoff.v1",
+                },
+                siteId: { type: "string" },
+                identifiers: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    siteId: { type: "string" },
+                    slug: { type: "string" },
+                    customDomain: { type: ["string", "null"] },
+                    verificationDomain: { type: ["string", "null"] },
+                    acceptedPublicIdentifiers: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                publicResolution: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    siteDiscovery: { type: "string" },
+                    managedPath: { type: "string" },
+                    resolveBySiteId: { type: "string" },
+                    renderBySiteId: { type: "string" },
+                    resolveWithHost: { type: "string" },
+                    renderWithHost: { type: "string" },
+                    hostHeaderSupported: { const: true },
+                    domainQueryParamSupported: { const: true },
+                  },
+                },
+                customDomainManagement: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                subdomainRouting: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    supported: { const: true },
+                    examples: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                customFrontendDeployment: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+                agentRules: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+              },
+            },
             CustomFrontendAgentHandoff: {
               type: "object",
               required: [
@@ -6040,6 +6115,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "contentCreation",
                 "apiAlignment",
                 "componentApiContract",
+                "routing",
                 "designState",
                 "rules",
                 "privacy",
@@ -6072,6 +6148,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 componentApiContract: {
                   $ref: "#/components/schemas/CustomFrontendComponentApiContract",
                 },
+                routing: {
+                  $ref: "#/components/schemas/CustomFrontendRoutingHandoff",
+                },
                 designState: {
                   type: "object",
                   additionalProperties: true,
@@ -6095,6 +6174,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "handoff",
                 "apiAlignment",
                 "componentApiContract",
+                "routing",
                 "canvasFirst",
                 "designState",
                 "contentCreation",
@@ -6136,6 +6216,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 componentApiContract: {
                   $ref: "#/components/schemas/CustomFrontendComponentApiContract",
+                },
+                routing: {
+                  $ref: "#/components/schemas/CustomFrontendRoutingHandoff",
                 },
                 canvasFirst: {
                   type: "object",

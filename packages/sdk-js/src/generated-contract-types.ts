@@ -4,7 +4,7 @@
 
 export type GeneratedBackyOpenApiOperationId = "bulkUpdateBackySiteComments" | "createBackyCollectionRecord" | "createBackyCommerceOrder" | "deleteBackyCollectionRecord" | "deleteBackyCommentBlocklistEntries" | "discoverBackySite" | "getBackyAdminSettings" | "getBackyAdminSiteSettings" | "getBackyBlogComment" | "getBackyBlogRssFeed" | "getBackyCollection" | "getBackyCommentAnalytics" | "getBackyCommentReportReasons" | "getBackyCommerceCatalog" | "getBackyCommerceOrderContract" | "getBackyCustomFrontendAgentHandoff" | "getBackyFontManifest" | "getBackyForm" | "getBackyFormContact" | "getBackyFormDefinition" | "getBackyFormSubmission" | "getBackyFrontendDesignContract" | "getBackyFrontendManifest" | "getBackyInteractiveComponentRegistry" | "getBackyInteractiveComponentSandbox" | "getBackyLiveManagedBlogPost" | "getBackyLiveManagedPage" | "getBackyMedia" | "getBackyMediaFile" | "getBackyNavigation" | "getBackyOpenApiDocument" | "getBackyPageComment" | "getBackyRenderPayload" | "getBackyReusableSection" | "getBackySeoDiscovery" | "getBackySiteComment" | "listBackyAdminBlogPostRevisions" | "listBackyAdminPageRevisions" | "listBackyBlogAuthors" | "listBackyBlogCategories" | "listBackyBlogComments" | "listBackyBlogPosts" | "listBackyBlogTags" | "listBackyCollectionRecords" | "listBackyCollections" | "listBackyCommentBlocklist" | "listBackyCommentReportReasons" | "listBackyFormContacts" | "listBackyFormSubmissions" | "listBackyForms" | "listBackyInteractionEvents" | "listBackyMedia" | "listBackyMediaFolders" | "listBackyNewsletterSubscribers" | "listBackyPageComments" | "listBackyPages" | "listBackyReusableSections" | "listBackySiteComments" | "receiveBackyCommerceWebhook" | "recordBackyInteractiveRuntimeEvent" | "reportBackyComment" | "resolveBackyRoute" | "retryBackyCommentDelivery" | "reviewBackyFormSubmission" | "rollbackBackyAdminBlogPost" | "rollbackBackyAdminPage" | "runBackyAdminSettingsAction" | "submitBackyBlogComment" | "submitBackyForm" | "submitBackyPageComment" | "subscribeBackyNewsletter" | "transformBackyMediaImage" | "unsubscribeBackyNewsletter" | "updateBackyAdminSettings" | "updateBackyAdminSiteSettings" | "updateBackyBlogComment" | "updateBackyCollectionRecord" | "updateBackyFormContact" | "updateBackyLiveManagedBlogPost" | "updateBackyLiveManagedPage" | "updateBackyPageComment" | "updateBackySiteComment" | "upsertBackyNewsletterSubscriber";
 
-export type GeneratedBackyOpenApiComponentName = "AdminBlogPostRevision" | "AdminBlogPostRevisionsEnvelope" | "AdminBlogPostRollbackRequest" | "AdminPageRevision" | "AdminPageRevisionsEnvelope" | "AdminPageRollbackRequest" | "AdminSettings" | "AdminSettingsActionEnvelope" | "AdminSettingsActionRequest" | "AdminSettingsEnvelope" | "AdminSettingsMediaStorageHandoff" | "AdminSettingsProviderCertification" | "AdminSettingsProviderCertificationEvidence" | "AdminSettingsProviderCertificationEvidencePacket" | "AdminSettingsThemeDesignImpact" | "AdminSettingsUpdateRequest" | "AdminSiteSettingsEnvelope" | "AdminSiteSettingsPatchRequest" | "AdminSiteSettingsScope" | "BackyCompletionStatus" | "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyElementAnimation" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentAnalytics" | "CommentAnalyticsEnvelope" | "CommentAnalyticsStatusCounts" | "CommentAnalyticsTarget" | "CommentAnalyticsThread" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentDeliveryRetryAttempt" | "CommentDeliveryRetryEnvelope" | "CommentDeliveryRetryRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceManagementPolicy" | "CommerceOrderAnalytics" | "CommerceOrderAnalyticsEnvelope" | "CommerceOrderAnalyticsProviderCertification" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceOrderFulfillment" | "CommerceOrderFulfillmentEnvelope" | "CommerceOrderProviderCertificationEvidence" | "CommerceOrderProviderCertificationEvidencePacket" | "CommerceOrderProviderRefund" | "CommerceOrderProviderRefundEnvelope" | "CommerceOrderQuote" | "CommerceOrderQuoteEnvelope" | "CommerceOrderShippingLabel" | "CommerceOrderShippingLabelEnvelope" | "CommerceOrderStatusAccess" | "CommerceOrderStatusHandoff" | "CommerceOrderStatusHandoffEnvelope" | "CommerceOrderTracking" | "CommerceOrderTrackingEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProductDesignReadiness" | "CommerceProductProviderCertification" | "CommerceProductProviderCertificationEvidencePacket" | "CommerceProductProviderSync" | "CommerceProductProviderSyncEnvelope" | "CommerceProductStorefrontHandoff" | "CommerceProductSubscriptionAction" | "CommerceProductSubscriptionActionEnvelope" | "CommerceProductSubscriptionLifecycle" | "CommerceProductSubscriptionsEnvelope" | "CommerceProviderCertification" | "CommerceProviderCertificationOperatorNextAction" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "ContentRevisionBranchMetadata" | "CustomFrontendAgentHandoff" | "CustomFrontendAgentHandoffEnvelope" | "CustomFrontendApiAlignment" | "CustomFrontendComponentApiContract" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FormsManagementPolicy" | "FrontendDatabaseCertificationHandoff" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendDesignTemplateContent" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentControlOption" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "LiveManagementDiscovery" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaManagementPolicy" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "NewsletterSubscribeRequest" | "NewsletterSubscriber" | "NewsletterSubscriberEnvelope" | "NewsletterSubscribersEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
+export type GeneratedBackyOpenApiComponentName = "AdminBlogPostRevision" | "AdminBlogPostRevisionsEnvelope" | "AdminBlogPostRollbackRequest" | "AdminPageRevision" | "AdminPageRevisionsEnvelope" | "AdminPageRollbackRequest" | "AdminSettings" | "AdminSettingsActionEnvelope" | "AdminSettingsActionRequest" | "AdminSettingsEnvelope" | "AdminSettingsMediaStorageHandoff" | "AdminSettingsProviderCertification" | "AdminSettingsProviderCertificationEvidence" | "AdminSettingsProviderCertificationEvidencePacket" | "AdminSettingsThemeDesignImpact" | "AdminSettingsUpdateRequest" | "AdminSiteSettingsEnvelope" | "AdminSiteSettingsPatchRequest" | "AdminSiteSettingsScope" | "BackyCompletionStatus" | "BackyContentAssetRef" | "BackyContentDocument" | "BackyContentElement" | "BackyContentElementAccessibility" | "BackyDataBinding" | "BackyDataBindingSource" | "BackyEditableMapEntry" | "BackyElementAction" | "BackyElementAnimation" | "BackyReusableSectionContent" | "BlogAuthorListEnvelope" | "BlogAuthorResource" | "BlogCategoryListEnvelope" | "BlogCategoryResource" | "BlogFeedDiscovery" | "BlogPostEnvelope" | "BlogPostListEnvelope" | "BlogPostResource" | "BlogPostUpdateRequest" | "BlogTagListEnvelope" | "BlogTagResource" | "CollectionEnvelope" | "CollectionFieldOption" | "CollectionFieldSchema" | "CollectionFieldValidation" | "CollectionListEnvelope" | "CollectionPermissions" | "CollectionRecord" | "CollectionRecordEnvelope" | "CollectionRecordListEnvelope" | "CollectionSchema" | "Comment" | "CommentAnalytics" | "CommentAnalyticsEnvelope" | "CommentAnalyticsStatusCounts" | "CommentAnalyticsTarget" | "CommentAnalyticsThread" | "CommentBlocklistDeleteEnvelope" | "CommentBlocklistDeleteRequest" | "CommentBlocklistEntry" | "CommentBlocklistEnvelope" | "CommentBulkUpdateEnvelope" | "CommentBulkUpdateRequest" | "CommentDeliveryRetryAttempt" | "CommentDeliveryRetryEnvelope" | "CommentDeliveryRetryRequest" | "CommentEnvelope" | "CommentReportEnvelope" | "CommentReportReasonsEnvelope" | "CommentSubmitRequest" | "CommentUpdateRequest" | "CommentsEnvelope" | "CommerceCatalogEnvelope" | "CommerceManagementPolicy" | "CommerceOrderAnalytics" | "CommerceOrderAnalyticsEnvelope" | "CommerceOrderAnalyticsProviderCertification" | "CommerceOrderContractEnvelope" | "CommerceOrderCreateRequest" | "CommerceOrderEnvelope" | "CommerceOrderFulfillment" | "CommerceOrderFulfillmentEnvelope" | "CommerceOrderProviderCertificationEvidence" | "CommerceOrderProviderCertificationEvidencePacket" | "CommerceOrderProviderRefund" | "CommerceOrderProviderRefundEnvelope" | "CommerceOrderQuote" | "CommerceOrderQuoteEnvelope" | "CommerceOrderShippingLabel" | "CommerceOrderShippingLabelEnvelope" | "CommerceOrderStatusAccess" | "CommerceOrderStatusHandoff" | "CommerceOrderStatusHandoffEnvelope" | "CommerceOrderTracking" | "CommerceOrderTrackingEnvelope" | "CommerceProduct" | "CommerceProductDesign" | "CommerceProductDesignReadiness" | "CommerceProductProviderCertification" | "CommerceProductProviderCertificationEvidencePacket" | "CommerceProductProviderSync" | "CommerceProductProviderSyncEnvelope" | "CommerceProductStorefrontHandoff" | "CommerceProductSubscriptionAction" | "CommerceProductSubscriptionActionEnvelope" | "CommerceProductSubscriptionLifecycle" | "CommerceProductSubscriptionsEnvelope" | "CommerceProviderCertification" | "CommerceProviderCertificationOperatorNextAction" | "CommerceStorefrontContract" | "CommerceWebhookEnvelope" | "CommerceWebhookRequest" | "ContentRevisionBranchMetadata" | "CustomFrontendAgentHandoff" | "CustomFrontendAgentHandoffEnvelope" | "CustomFrontendApiAlignment" | "CustomFrontendComponentApiContract" | "CustomFrontendRoutingHandoff" | "DynamicItemRoute" | "DynamicItemRouteResource" | "DynamicListRoute" | "DynamicListRouteResource" | "ErrorEnvelope" | "EventsEnvelope" | "FontManifestEnvelope" | "FontVariant" | "FormCollectionRecordError" | "FormCollectionRecordLink" | "FormContact" | "FormContactEnvelope" | "FormContactsEnvelope" | "FormDefinition" | "FormDefinitionEnvelope" | "FormEnvelope" | "FormFieldDefinition" | "FormListEnvelope" | "FormSubmission" | "FormSubmissionEnvelope" | "FormSubmissionRequest" | "FormSubmissionValidationDetail" | "FormSubmissionValidationErrorEnvelope" | "FormSubmissionsEnvelope" | "FormValidationRule" | "FormsManagementPolicy" | "FrontendDatabaseCertificationHandoff" | "FrontendDesignContract" | "FrontendDesignEnvelope" | "FrontendDesignTemplate" | "FrontendDesignTemplateContent" | "FrontendEditableMapEntry" | "GoneRoute" | "GoneRouteResolveEnvelope" | "InteractiveComponentCompatibility" | "InteractiveComponentControl" | "InteractiveComponentControlOption" | "InteractiveComponentDataBindingPreset" | "InteractiveComponentDependencyPolicy" | "InteractiveComponentFallback" | "InteractiveComponentIntegrity" | "InteractiveComponentManifestContract" | "InteractiveComponentRegistry" | "InteractiveComponentRegistryEntry" | "InteractiveComponentRegistryEnvelope" | "InteractiveComponentRegistryPagination" | "InteractiveComponentRuntime" | "InteractiveComponentSecurity" | "InteractiveRuntimeEventRequest" | "LiveManagementDiscovery" | "MediaAsset" | "MediaDeliveryPolicy" | "MediaDetailEnvelope" | "MediaEditableMetadata" | "MediaFileCategory" | "MediaFileCategoryDiscovery" | "MediaFolder" | "MediaFolderListEnvelope" | "MediaFolderRoot" | "MediaList" | "MediaManagementPolicy" | "MediaReferenceTarget" | "MediaReferences" | "NavigationEnvelope" | "NewsletterSubscribeRequest" | "NewsletterSubscriber" | "NewsletterSubscriberEnvelope" | "NewsletterSubscribersEnvelope" | "PageEnvelope" | "PageListEnvelope" | "PageResource" | "PageRoute" | "PageRouteResource" | "PageSeoMetadata" | "PageUpdateRequest" | "PostRoute" | "PostRouteResource" | "PublicDeleteEnvelope" | "RedirectRoute" | "ResolvedRoute" | "ReusableSection" | "ReusableSectionEnvelope" | "ReusableSectionFrontendDesign" | "ReusableSectionListEnvelope" | "RouteResolveEnvelope" | "RuntimeEventRecordEnvelope" | "SeoDiscoveryEnvelope" | "SeoRoute" | "SiteEnvelope" | "SiteListEnvelope" | "SiteSummary" | "SiteWebhookPayload";
 
 export interface GeneratedBackyOpenApiOperation {
   operationId?: GeneratedBackyOpenApiOperationId;
@@ -166,6 +166,39 @@ export type GeneratedBackyOpenApiCustomFrontendComponentApiContract = {
   [key: string]: unknown;
 };
 
+export type GeneratedBackyOpenApiCustomFrontendRoutingHandoff = {
+  schemaVersion: "backy.custom-frontend-routing-handoff.v1";
+  siteId: string;
+  identifiers: {
+    siteId?: string;
+    slug?: string;
+    customDomain?: string | null;
+    verificationDomain?: string | null;
+    acceptedPublicIdentifiers?: Array<string>;
+    [key: string]: unknown;
+  };
+  publicResolution: {
+    siteDiscovery?: string;
+    managedPath?: string;
+    resolveBySiteId?: string;
+    renderBySiteId?: string;
+    resolveWithHost?: string;
+    renderWithHost?: string;
+    hostHeaderSupported?: true;
+    domainQueryParamSupported?: true;
+    [key: string]: unknown;
+  };
+  customDomainManagement: Record<string, unknown>;
+  subdomainRouting: {
+    supported?: true;
+    examples?: Array<string>;
+    [key: string]: unknown;
+  };
+  customFrontendDeployment: Record<string, unknown>;
+  agentRules: Array<string>;
+  [key: string]: unknown;
+};
+
 export type GeneratedBackyOpenApiCustomFrontendAgentHandoff = {
   schemaVersion: "backy.custom-frontend-agent-handoff.v1";
   source: "public-manifest-openapi-contract";
@@ -175,6 +208,7 @@ export type GeneratedBackyOpenApiCustomFrontendAgentHandoff = {
   contentCreation: Record<string, unknown>;
   apiAlignment: GeneratedBackyOpenApiCustomFrontendApiAlignment;
   componentApiContract: GeneratedBackyOpenApiCustomFrontendComponentApiContract;
+  routing: GeneratedBackyOpenApiCustomFrontendRoutingHandoff;
   designState: Record<string, unknown>;
   rules: Array<string>;
   privacy: Record<string, unknown>;
@@ -197,6 +231,7 @@ export type GeneratedBackyOpenApiCustomFrontendAgentHandoffEnvelope = {
     handoff: GeneratedBackyOpenApiCustomFrontendAgentHandoff;
     apiAlignment: GeneratedBackyOpenApiCustomFrontendApiAlignment;
     componentApiContract: GeneratedBackyOpenApiCustomFrontendComponentApiContract;
+    routing: GeneratedBackyOpenApiCustomFrontendRoutingHandoff;
     canvasFirst: Record<string, unknown>;
     designState: Record<string, unknown>;
     contentCreation: Record<string, unknown>;
@@ -4830,6 +4865,7 @@ export interface GeneratedBackyOpenApiComponentSchemas {
   CustomFrontendAgentHandoffEnvelope?: GeneratedBackyOpenApiCustomFrontendAgentHandoffEnvelope;
   CustomFrontendApiAlignment?: GeneratedBackyOpenApiCustomFrontendApiAlignment;
   CustomFrontendComponentApiContract?: GeneratedBackyOpenApiCustomFrontendComponentApiContract;
+  CustomFrontendRoutingHandoff?: GeneratedBackyOpenApiCustomFrontendRoutingHandoff;
   DynamicItemRoute?: GeneratedBackyOpenApiDynamicItemRoute;
   DynamicItemRouteResource?: GeneratedBackyOpenApiDynamicItemRouteResource;
   DynamicListRoute?: GeneratedBackyOpenApiDynamicListRoute;
@@ -5649,6 +5685,53 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
     requiredAgentBehavior: Array<string>;
     guarantees: Array<string>;
     secretHandling: string;
+    [key: string]: unknown;
+  };
+  routing: {
+    schemaVersion: "backy.custom-frontend-routing-handoff.v1";
+    siteId: string;
+    identifiers: {
+      siteId: string;
+      slug: string;
+      customDomain: string | null;
+      verificationDomain: string | null;
+      acceptedPublicIdentifiers: Array<string>;
+      [key: string]: unknown;
+    };
+    publicResolution: {
+      siteDiscovery: string;
+      managedPath: string;
+      resolveBySiteId: string;
+      renderBySiteId: string;
+      resolveWithHost: string;
+      renderWithHost: string;
+      hostHeaderSupported: true;
+      domainQueryParamSupported: true;
+      [key: string]: unknown;
+    };
+    customDomainManagement: {
+      adminSiteRoute?: string;
+      adminSiteApi?: string;
+      adminSettingsApi?: string;
+      customDomainField?: "site.customDomain";
+      verificationField?: "site.settings.domainVerification.domain";
+      [key: string]: unknown;
+    };
+    subdomainRouting: {
+      supported: true;
+      model: string;
+      examples: Array<string>;
+      recommendation: string;
+      [key: string]: unknown;
+    };
+    customFrontendDeployment: {
+      publicApiOriginEnv?: "BACKY_PUBLIC_API_BASE_URL";
+      siteIdentifierEnv?: "BACKY_SITE_ID";
+      hostContextEnv?: "BACKY_SITE_PUBLIC_HOST";
+      corsSetting?: "BACKY_CORS_ALLOWED_ORIGINS";
+      [key: string]: unknown;
+    };
+    agentRules: Array<string>;
     [key: string]: unknown;
   };
   designState: {

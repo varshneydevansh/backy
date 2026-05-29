@@ -2,6 +2,8 @@ export const CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent
 
 export const CUSTOM_FRONTEND_COMPONENT_API_CONTRACT_SCHEMA = 'backy.canvas-component-api-contract.v1';
 
+export const CUSTOM_FRONTEND_ROUTING_HANDOFF_SCHEMA = 'backy.custom-frontend-routing-handoff.v1';
+
 export const CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md';
 
 export const CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS = [
@@ -63,6 +65,29 @@ export const CUSTOM_FRONTEND_COMPONENT_API_FAMILIES = [
   'custom-code',
 ] as const;
 
+export interface CustomFrontendAgentSiteContext {
+  slug?: string | null;
+  customDomain?: string | null;
+  domainVerificationDomain?: string | null;
+}
+
+const normalizeHandoffDomain = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') return null;
+  const host = value
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .split('/')[0]
+    ?.replace(/\/+$/, '')
+    .toLowerCase();
+  return host || null;
+};
+
+const normalizeHandoffSlug = (value: string | null | undefined, fallback: string): string => {
+  if (typeof value !== 'string') return fallback;
+  const slug = value.trim().replace(/^\/+|\/+$/g, '');
+  return slug || fallback;
+};
+
 export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
   pageBackyCanvas: `/pages/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`,
   pageCustomFrontend: `/pages/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`,
@@ -77,6 +102,65 @@ export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
   reusableSectionBackyCanvas: `/reusable-sections?siteId=${siteId}`,
   reusableSectionCustomFrontend: `/reusable-sections?siteId=${siteId}&frontendTemplate=:templateId`,
 });
+
+export const buildCustomFrontendRoutingHandoff = (
+  siteId: string,
+  site: CustomFrontendAgentSiteContext = {},
+) => {
+  const slug = normalizeHandoffSlug(site.slug, siteId);
+  const customDomain = normalizeHandoffDomain(site.customDomain);
+  const verificationDomain = normalizeHandoffDomain(site.domainVerificationDomain);
+
+  return {
+    schemaVersion: CUSTOM_FRONTEND_ROUTING_HANDOFF_SCHEMA,
+    siteId,
+    identifiers: {
+      siteId,
+      slug,
+      customDomain,
+      verificationDomain,
+      acceptedPublicIdentifiers: ['siteId', 'slug', 'customDomain', 'domain query parameter', 'Host header'],
+    },
+    publicResolution: {
+      siteDiscovery: `/api/sites?identifier=${customDomain || slug}`,
+      managedPath: `/sites/${slug}`,
+      resolveBySiteId: `/api/sites/${siteId}/resolve?path=/`,
+      renderBySiteId: `/api/sites/${siteId}/render?path=/...`,
+      resolveWithHost: `/api/sites/${siteId}/resolve?path=/&domain={host}`,
+      renderWithHost: `/api/sites/${siteId}/render?path=/...&domain={host}`,
+      hostHeaderSupported: true,
+      domainQueryParamSupported: true,
+    },
+    customDomainManagement: {
+      adminSiteRoute: `/sites/${siteId}`,
+      adminSiteApi: `/api/admin/sites/${siteId}`,
+      adminSettingsApi: `/api/admin/sites/${siteId}/settings`,
+      customDomainField: 'site.customDomain',
+      verificationField: 'site.settings.domainVerification.domain',
+      verificationStatusField: 'site.settings.domainVerification.status',
+      dnsRecordEvidenceField: 'site.settings.domainVerification.records',
+    },
+    subdomainRouting: {
+      supported: true,
+      model: 'Treat every public host such as blog.example.com, docs.example.com, shop.example.com, or a root apex as a site custom domain/verification host, then resolve Backy content by site id plus Host/domain context.',
+      examples: ['blog.example.com', 'docs.example.com', 'shop.example.com'],
+      recommendation: 'Use one Backy site per independent public subdomain when content, navigation, SEO, or design tokens differ; reuse the same frontend design template when the subdomains should look related.',
+    },
+    customFrontendDeployment: {
+      publicApiOriginEnv: 'BACKY_PUBLIC_API_BASE_URL',
+      siteIdentifierEnv: 'BACKY_SITE_ID',
+      hostContextEnv: 'BACKY_SITE_PUBLIC_HOST',
+      frontendHostPolicy: 'A Vercel/Next/custom frontend may run on any verified host, but it must read Backy manifest/OpenAPI/render data instead of copying site JSON locally.',
+      corsSetting: 'BACKY_CORS_ALLOWED_ORIGINS',
+    },
+    agentRules: [
+      'Start with agent-handoff, manifest, and OpenAPI before choosing routes.',
+      'For custom domains or subdomains, pass the browser host as domain={host} or rely on the Host/forwarded-host header when resolving/rendering localized routes.',
+      'Keep site id/slug/custom domain as routing inputs; do not fork content or design state into the frontend repository.',
+      'Manage domain verification in Backy Sites/Settings and keep DNS/provider credentials outside public payloads.',
+    ],
+  };
+};
 
 export const buildCustomFrontendComponentApiContract = (siteId: string) => ({
   schemaVersion: CUSTOM_FRONTEND_COMPONENT_API_CONTRACT_SCHEMA,
@@ -130,7 +214,10 @@ export const buildCustomFrontendComponentApiContract = (siteId: string) => ({
   secretHandling: 'No provider keys, admin sessions, database URLs, private submission values, or private file tokens are exposed in public component API handoff fields.',
 });
 
-export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
+export const buildCustomFrontendAgentHandoff = (
+  siteId: string,
+  site: CustomFrontendAgentSiteContext = {},
+) => ({
   schemaVersion: CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA,
   source: 'public-manifest-openapi-contract',
   docs: [
@@ -276,6 +363,7 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
     },
   },
   componentApiContract: buildCustomFrontendComponentApiContract(siteId),
+  routing: buildCustomFrontendRoutingHandoff(siteId, site),
   designState: {
     roundTripFields: CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS,
     siteStyleSources: [

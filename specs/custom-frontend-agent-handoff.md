@@ -13,13 +13,13 @@ AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as 
 
 2. `GET /api/sites/:siteId/agent-handoff`
    - Start here when another AI/frontend agent needs a compact machine-readable brief before generating a website.
-   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `handoff`, `readStart`, `apiAlignment`, `componentApiContract`, `canvasFirst`, `contentCreation`, and `designState` blocks.
+   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `handoff`, `readStart`, `apiAlignment`, `componentApiContract`, `routing`, `canvasFirst`, `contentCreation`, and `designState` blocks.
    - The same handoff remains mirrored inside manifest/OpenAPI so generated clients can use the same contract.
 
 3. `GET /api/sites/:siteId/manifest`
    - Bootstrap the custom frontend. This is the primary machine-readable contract for routes, modules, media/font policy, site frontend design, template registry, live-management capability, launch readiness, and completion status.
    - Schema source: `specs/ai-frontend-contract/frontend-manifest.schema.json`.
-   - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, API alignment rules, component API contract, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
+   - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, API alignment rules, component API contract, routing/subdomain handoff, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
    - Read-order shortcut: `data.contract.customFrontendAgentHandoff.readOrder` tells agents the sequence to follow: direct agent handoff, manifest, OpenAPI, authenticated frontend-design management, template registry, then render verification.
 
 4. `GET /api/sites/:siteId/openapi`
@@ -97,6 +97,17 @@ Do not flatten a Backy canvas page into plain HTML/text unless the target is a t
 ## API alignment rule
 
 Agents should treat `customFrontendAgentHandoff.apiAlignment` as the machine-readable instruction sheet before writing frontend code. It identifies the direct read-start endpoint, the manifest/OpenAPI mirrors, SDK/generated-type sources, public discovery endpoints, authenticated admin write boundary, creation routes, fields that must be preserved, and render/resolve verification endpoints. If a generated frontend needs to create or edit Backy content, it should use those advertised contracts instead of frontend-local JSON or guessed route shapes.
+
+## Routing, Domains, And Subdomains
+
+Agents should treat `customFrontendAgentHandoff.routing` as the machine-readable routing contract before deploying a custom frontend or splitting a site across subdomains. It has schema `backy.custom-frontend-routing-handoff.v1`.
+
+- Public site discovery accepts site id, slug, and custom domain identifiers.
+- Route resolution/rendering accepts the site id plus `domain={host}` query context or the request Host/forwarded-host header.
+- Managed Backy preview uses `/sites/:slug`; custom hosts use `site.customDomain` and `site.settings.domainVerification.domain`.
+- Subdomains such as `blog.example.com`, `docs.example.com`, or `shop.example.com` are modeled as custom domain/verification hosts. Use one Backy site per independent subdomain when content, navigation, SEO, or design tokens differ.
+- Custom frontends should keep `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and optionally `BACKY_SITE_PUBLIC_HOST` as routing inputs, then read Backy manifest/OpenAPI/render payloads instead of committing copied content JSON.
+- DNS/provider credentials, Vercel tokens, and verification secrets stay in Settings/server-side deployment wiring, not in public handoff payloads.
 
 ## Creating new content
 

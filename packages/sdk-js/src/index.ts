@@ -697,6 +697,8 @@ export interface BackyCustomFrontendAgentHandoffResponse {
   };
   handoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff;
   apiAlignment: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["apiAlignment"];
+  componentApiContract: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["componentApiContract"];
+  routing: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["routing"];
   canvasFirst: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["contentCreation"]["canvasFirst"];
   designState: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["designState"];
   contentCreation: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["contentCreation"];

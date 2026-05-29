@@ -21,6 +21,11 @@ type HandoffSite = {
   slug: string;
   name: string;
   customDomain?: string | null;
+  settings?: {
+    domainVerification?: {
+      domain?: string | null;
+    } | null;
+  } | null;
   status?: string;
   isPublished?: boolean;
 };
@@ -50,7 +55,11 @@ const agentHandoffResponse = (
   site: HandoffSite,
   cacheRevision?: string,
 ) => {
-  const handoff = buildCustomFrontendAgentHandoff(site.id);
+  const handoff = buildCustomFrontendAgentHandoff(site.id, {
+    slug: site.slug,
+    customDomain: site.customDomain,
+    domainVerificationDomain: site.settings?.domainVerification?.domain,
+  });
   const body = {
     success: true,
     requestId,
@@ -72,6 +81,7 @@ const agentHandoffResponse = (
       handoff,
       apiAlignment: handoff.apiAlignment,
       componentApiContract: handoff.componentApiContract,
+      routing: handoff.routing,
       canvasFirst: handoff.contentCreation.canvasFirst,
       designState: handoff.designState,
       contentCreation: handoff.contentCreation,

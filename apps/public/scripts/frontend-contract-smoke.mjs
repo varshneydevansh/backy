@@ -244,18 +244,24 @@ assert(
     openApiRoute.includes('"orderApiHandoffReady"') &&
     openApiRoute.includes('"commerceApiHandoffSiteSelectorEnv"') &&
     publicAgentHandoffRoute.includes('backy.custom-frontend-agent-handoff-response.v1') &&
-    publicAgentHandoffRoute.includes('buildCustomFrontendAgentHandoff(site.id)') &&
+    publicAgentHandoffRoute.includes('buildCustomFrontendAgentHandoff(site.id, {') &&
+    publicAgentHandoffRoute.includes('domainVerificationDomain: site.settings?.domainVerification?.domain') &&
     publicAgentHandoffRoute.includes("manifestPointer: 'data.contract.customFrontendAgentHandoff'") &&
     publicAgentHandoffRoute.includes("openApiPointer: 'x-backy-custom-frontend-agent-handoff'") &&
     publicAgentHandoffRoute.includes('apiAlignment: handoff.apiAlignment') &&
+    publicAgentHandoffRoute.includes('routing: handoff.routing') &&
     publicAgentHandoffRoute.includes('handoff.contentCreation.canvasFirst') &&
     publicAgentHandoffRoute.includes('handoff.designState') &&
     publicAgentHandoffRoute.includes('!site || !site.isPublished') &&
     manifestRoute.includes('buildCustomFrontendAgentHandoff') &&
     manifestRoute.includes('customFrontendAgentHandoff: buildCustomFrontendAgentHandoff') &&
+    manifestRoute.includes('domainVerificationDomain: input.site.settings?.domainVerification?.domain') &&
+    manifestRoute.includes('domainVerificationDomain: site.settings?.domainVerification?.domain') &&
     manifestRoute.includes('agentHandoff: `/api/sites/${input.site.id}/agent-handoff`') &&
     manifestRoute.includes('customFrontendAgentHandoff: `/api/sites/${input.site.id}/manifest#data.contract.customFrontendAgentHandoff`') &&
     openApiRoute.includes('"x-backy-custom-frontend-agent-handoff": customFrontendAgentHandoff') &&
+    openApiRoute.includes('CustomFrontendRoutingHandoff') &&
+    openApiRoute.includes('$ref: "#/components/schemas/CustomFrontendRoutingHandoff"') &&
     openApiRoute.includes('operationId: "getBackyCustomFrontendAgentHandoff"') &&
     openApiRoute.includes('CustomFrontendApiAlignment') &&
     openApiRoute.includes('$ref: "#/components/schemas/CustomFrontendApiAlignment"') &&
@@ -274,6 +280,11 @@ assert(
     customFrontendAgentHandoffLib.includes('blogCustomFrontend: `/blog/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`') &&
     customFrontendAgentHandoffLib.includes('apiAlignment') &&
     customFrontendAgentHandoffLib.includes("schemaVersion: 'backy.custom-frontend-api-alignment.v1'") &&
+    customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_ROUTING_HANDOFF_SCHEMA = 'backy.custom-frontend-routing-handoff.v1'") &&
+    customFrontendAgentHandoffLib.includes('buildCustomFrontendRoutingHandoff') &&
+    customFrontendAgentHandoffLib.includes('subdomainRouting') &&
+    customFrontendAgentHandoffLib.includes('BACKY_SITE_PUBLIC_HOST') &&
+    customFrontendAgentHandoffLib.includes('resolveWithHost') &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_COMPONENT_API_CONTRACT_SCHEMA = 'backy.canvas-component-api-contract.v1'") &&
     customFrontendAgentHandoffLib.includes('componentApiContract') &&
     customFrontendAgentHandoffLib.includes('everyComponentApiAddressable: true') &&
@@ -298,6 +309,10 @@ assert(
     frontendManifestSchema.includes('"adminEntryPoints"') &&
     frontendManifestSchema.includes('"apiAlignment"') &&
     frontendManifestSchema.includes('"backy.custom-frontend-api-alignment.v1"') &&
+    frontendManifestSchema.includes('"routing"') &&
+    frontendManifestSchema.includes('"backy.custom-frontend-routing-handoff.v1"') &&
+    frontendManifestSchema.includes('"subdomainRouting"') &&
+    frontendManifestSchema.includes('"BACKY_SITE_PUBLIC_HOST"') &&
     frontendManifestSchema.includes('"componentApiContract"') &&
     frontendManifestSchema.includes('"backy.canvas-component-api-contract.v1"') &&
     frontendManifestSchema.includes('"everyComponentApiAddressable"') &&
@@ -317,13 +332,18 @@ assert(
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiCustomFrontendApiAlignment') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiCustomFrontendComponentApiContract') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCustomFrontendRoutingHandoff') &&
     generatedSdkTypes.includes('apiAlignment: {') &&
     generatedSdkTypes.includes('componentApiContract:') &&
+    generatedSdkTypes.includes('routing: GeneratedBackyOpenApiCustomFrontendRoutingHandoff') &&
     generatedSdkTypes.includes('"backy.custom-frontend-api-alignment.v1"') &&
+    generatedSdkTypes.includes('"backy.custom-frontend-routing-handoff.v1"') &&
     generatedSdkTypes.includes('"backy.canvas-component-api-contract.v1"') &&
     generatedSdkTypes.includes('"x-backy-custom-frontend-agent-handoff"?: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     sdkSource.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     sdkSource.includes('customFrontendAgentHandoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
+    sdkSource.includes('routing: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["routing"]') &&
+    sdkSource.includes('componentApiContract: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["componentApiContract"]') &&
     sdkSource.includes('customFrontendAgentHandoffCached') &&
     sdkSmoke.includes('customFrontendAgentHandoff') &&
     sdkSmoke.includes('componentApiContract') &&
