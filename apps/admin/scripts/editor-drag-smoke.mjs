@@ -1513,8 +1513,10 @@ const assertComponentLibraryEmptyStateSource = () => {
     source.includes('data-testid="editor-component-library-summary"') &&
       source.includes('data-testid="editor-component-category-rail"') &&
       source.includes("const ESSENTIALS_CATEGORY_ID = 'essentials'") &&
+      source.includes("const SECTIONS_CATEGORY_ID = 'sections'") &&
       source.includes("const RECENT_CATEGORY_ID = 'recent'") &&
       source.includes('const ESSENTIAL_ITEM_KEYS = new Set') &&
+      source.includes('const isSectionLibraryItem = (item: ComponentLibraryItem): boolean =>') &&
       source.includes('const PRIMARY_COMPONENT_CATEGORY_IDS = new Set') &&
       source.includes('const SEARCH_NEUTRAL_CATEGORY_IDS = new Set') &&
       source.includes('const isSearchNeutralCategory = selectedCategory === null || SEARCH_NEUTRAL_CATEGORY_IDS.has(selectedCategory);') &&
@@ -1530,6 +1532,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-default-collapsed="false"') &&
       source.includes('data-component-expanded-category-count={secondaryComponentCategories.length}') &&
       source.includes('data-component-library-essentials-count') &&
+      source.includes('data-component-library-sections-count') &&
       source.includes('data-component-library-recent-count') &&
       source.includes('data-component-library-shown={filteredItems.length}') &&
       source.includes('const itemMatchesSearch = (item: ComponentLibraryItem, normalizedSearchQuery: string): boolean') &&
@@ -1558,8 +1561,8 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes("data-category-layout={shellMode === 'expanded' ? 'expanded-all-categories' : 'primary-plus-collapsed-secondary'}") &&
       source.includes('data-testid="editor-component-list"') &&
       source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
-      source.includes('data-component-preview-reserved-space="floating-bottom"') &&
-      source.includes('data-component-preview-placement="floating-bottom"') &&
+      source.includes('data-component-preview-reserved-space="sticky-footer"') &&
+      source.includes('data-component-preview-placement="sticky-footer"') &&
       source.includes("data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}") &&
       source.includes('data-testid={`editor-component-preview-tile-${itemDomKey}`}') &&
       source.includes('data-component-library-item-actions="visible"') &&
@@ -15026,6 +15029,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
       viewModeStorageKey: library?.getAttribute('data-component-library-view-mode-storage') || '',
       librarySearchScope: library?.getAttribute('data-component-library-search-scope') || '',
       listDensity: list?.getAttribute('data-component-list-density') || '',
+      listPreviewReservedSpace: list?.getAttribute('data-component-preview-reserved-space') || '',
       categoryLayouts: Array.from(document.querySelectorAll('[data-component-category-layout]')).map((node) => ({
         layout: node.getAttribute('data-component-category-layout') || '',
         itemCount: node.querySelectorAll('[data-component-library-item]').length,
@@ -15053,6 +15057,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
         shown: summary?.getAttribute('data-component-library-shown') || '',
         total: summary?.getAttribute('data-component-library-total') || '',
         essentials: summary?.getAttribute('data-component-library-essentials-count') || '',
+        sections: summary?.getAttribute('data-component-library-sections-count') || '',
         recent: summary?.getAttribute('data-component-library-recent-count') || '',
         recentLimit: summary?.getAttribute('data-component-library-recent-limit') || '',
         recentKeys: summary?.getAttribute('data-component-library-recent-keys') || '',
@@ -15236,6 +15241,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
       },
       dividerFavoritePressed: favoriteButton?.getAttribute('aria-pressed') === 'true',
       previewKey: preview?.getAttribute('data-component-preview') || null,
+      previewPlacement: preview?.getAttribute('data-component-preview-placement') || null,
       previewText: preview?.textContent || '',
       storedFavorites: (() => {
         try {
@@ -15727,6 +15733,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       initial.viewMode === 'tiles' &&
       initial.viewModeStorageKey === 'backy.editor.componentLibrary.viewMode' &&
       initial.listDensity === 'visual-tiles' &&
+      initial.listPreviewReservedSpace === 'sticky-footer' &&
       initial.summary.category === 'essentials' &&
       initial.summary.shellMode === 'compact' &&
       initial.summary.viewMode === 'tiles' &&
@@ -15735,6 +15742,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       Number(initial.summary.shown) === initial.itemIds.length &&
       Number(initial.summary.total) > initial.itemIds.length &&
       Number(initial.summary.essentials) === initial.itemIds.length &&
+      Number(initial.summary.sections) > 0 &&
       Number(initial.summary.recent) === 0 &&
       Number(initial.summary.recentLimit) === 6 &&
       Array.isArray(initial.storedRecent) &&
@@ -15746,6 +15754,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       initial.categoryRail.primaryDisplay === 'grid' &&
       initial.categoryRail.primaryCategoryIds.includes('editor-component-category-essentials') &&
       initial.categoryRail.primaryCategoryIds.includes('editor-component-category-all') &&
+      initial.categoryRail.primaryCategoryIds.includes('editor-component-category-sections') &&
       initial.categoryRail.primaryCategoryIds.includes('editor-component-category-recent') &&
       initial.categoryRail.primaryCategoryIds.includes('editor-component-category-favorites') &&
       initial.categoryRail.primaryCategoryIds.includes('editor-component-category-saved') &&
@@ -15935,6 +15944,25 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   }
   assert(allComponents.categories.some((category) => category.id === 'content'), `Content component category missing: ${JSON.stringify(allComponents)}`);
   const allComponentsReachability = await testComponentLibraryListReachability(client);
+
+  await clickControlByTestId(client, 'editor-component-category-sections');
+  await sleep(150);
+  const sectionsFiltered = await readComponentLibraryState(client, 'sections category', targetReusableSectionId);
+  assert(
+    sectionsFiltered.summary.category === 'sections' &&
+      sectionsFiltered.categories.length === 1 &&
+      sectionsFiltered.categories[0].id === 'sections' &&
+      sectionsFiltered.itemIds.includes('section') &&
+      sectionsFiltered.itemIds.includes('hero-section') &&
+      sectionsFiltered.itemIds.includes('latest-posts-section') &&
+      !sectionsFiltered.itemIds.includes('divider') &&
+      /Sections shows/.test(sectionsFiltered.actionStatus.text),
+    `Sections category should expose section presets without generic layout clutter: ${JSON.stringify(sectionsFiltered)}`,
+  );
+
+  await clickControlByTestId(client, 'editor-component-category-all');
+  await sleep(150);
+
   if (Number(initial.summary.saved) > 0) {
     assert(
       allComponents.itemIds.some((itemId) => itemId.startsWith('reusable-section:')) &&
@@ -16015,12 +16043,22 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   await hoverControlBySelector(client, '[data-component-library-item="divider"]');
   const dividerPreview = await readComponentLibraryState(client, 'divider preview');
   assert(dividerPreview.previewKey === 'divider', `Hovering divider did not show divider preview: ${JSON.stringify(dividerPreview)}`);
-  assert(/Divider/.test(dividerPreview.previewText) && /300 x 2/.test(dividerPreview.previewText), `Divider preview content missing expected metadata: ${JSON.stringify(dividerPreview)}`);
+  assert(
+    dividerPreview.previewPlacement === 'sticky-footer' &&
+      /Divider/.test(dividerPreview.previewText) &&
+      /300 x 2/.test(dividerPreview.previewText),
+    `Divider preview content or placement missing expected metadata: ${JSON.stringify(dividerPreview)}`,
+  );
 
   await hoverControlBySelector(client, '[data-component-library-item="image"]');
   const imagePreview = await readComponentLibraryState(client, 'image preview');
   assert(imagePreview.previewKey === 'image', `Hovering image did not update component preview: ${JSON.stringify(imagePreview)}`);
-  assert(/Image/.test(imagePreview.previewText) && /300 x 200/.test(imagePreview.previewText), `Image preview content missing expected metadata: ${JSON.stringify(imagePreview)}`);
+  assert(
+    imagePreview.previewPlacement === 'sticky-footer' &&
+      /Image/.test(imagePreview.previewText) &&
+      /300 x 200/.test(imagePreview.previewText),
+    `Image preview content or placement missing expected metadata: ${JSON.stringify(imagePreview)}`,
+  );
 
   await leaveControlBySelector(client, '[data-component-library-item="image"]');
   const clearedPreview = await readComponentLibraryState(client, 'preview cleared');
@@ -16163,6 +16201,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
     searchFiltered,
     layoutFiltered,
     allComponentsReachability,
+    sectionsFiltered,
     dividerPreview,
     imagePreview,
     clearedPreview,

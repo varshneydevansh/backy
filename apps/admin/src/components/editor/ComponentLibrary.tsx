@@ -53,6 +53,7 @@ import type { ReusableSection } from '@/lib/adminContentApi';
 
 const LIBRARY_ITEMS: ComponentLibraryItem[] = CANVAS_COMPONENT_LIBRARY;
 const ESSENTIALS_CATEGORY_ID = 'essentials';
+const SECTIONS_CATEGORY_ID = 'sections';
 const RECENT_CATEGORY_ID = 'recent';
 const FAVORITES_CATEGORY_ID = 'favorites';
 const RECENT_STORAGE_KEY = 'backy.editor.componentLibrary.recent';
@@ -77,6 +78,7 @@ const ESSENTIAL_ITEM_KEYS = new Set([
 ]);
 const COMPONENT_LIBRARY_CATEGORIES = [
   { id: ESSENTIALS_CATEGORY_ID, name: 'Essentials', color: 'bg-emerald-500' },
+  { id: SECTIONS_CATEGORY_ID, name: 'Sections', color: 'bg-teal-500' },
   { id: RECENT_CATEGORY_ID, name: 'Recent', color: 'bg-cyan-500' },
   { id: FAVORITES_CATEGORY_ID, name: 'Favorites', color: 'bg-yellow-400' },
   { id: 'basic', name: 'Basic', color: 'bg-blue-500' },
@@ -91,6 +93,7 @@ type ComponentLibraryCategory = (typeof COMPONENT_LIBRARY_CATEGORIES)[number];
 type ComponentLibraryViewMode = 'tiles' | 'list';
 type ComponentLibraryShellMode = 'compact' | 'expanded';
 const PRIMARY_COMPONENT_CATEGORY_IDS = new Set<string>([
+  SECTIONS_CATEGORY_ID,
   RECENT_CATEGORY_ID,
   FAVORITES_CATEGORY_ID,
   'saved',
@@ -110,6 +113,9 @@ const getLibraryItemDomKey = (item: ComponentLibraryItem): string => (
 );
 const isReusableLibraryItem = (item: ComponentLibraryItem): boolean => (
   Boolean(item.reusableContent?.sectionId) || getLibraryCategory(item) === 'saved'
+);
+const isSectionLibraryItem = (item: ComponentLibraryItem): boolean => (
+  item.type === 'section' || Boolean(item.reusableContent?.sectionId)
 );
 const isEssentialLibraryItem = (item: ComponentLibraryItem): boolean => (
   ESSENTIAL_ITEM_KEYS.has(getLibraryItemKey(item))
@@ -418,6 +424,10 @@ export function ComponentLibrary({
         return isGlobalSearch ? true : favoriteKeySet.has(getLibraryItemKey(item));
       }
 
+      if (selectedCategory === SECTIONS_CATEGORY_ID) {
+        return isSectionLibraryItem(item);
+      }
+
       return !selectedCategory || getLibraryCategory(item) === selectedCategory;
     });
   }, [favoriteKeySet, isGlobalSearch, libraryItems, normalizedSearchQuery, recentItems, selectedCategory]);
@@ -432,6 +442,8 @@ export function ComponentLibrary({
       ? RECENT_CATEGORY_ID
       : selectedCategory === FAVORITES_CATEGORY_ID
       ? FAVORITES_CATEGORY_ID
+      : selectedCategory === SECTIONS_CATEGORY_ID
+      ? SECTIONS_CATEGORY_ID
       : getLibraryCategory(item);
     if (!acc[category]) {
       acc[category] = [];
@@ -453,6 +465,8 @@ export function ComponentLibrary({
           ? recentKeySet.has(getLibraryItemKey(item))
           : category.id === FAVORITES_CATEGORY_ID
           ? favoriteKeySet.has(getLibraryItemKey(item))
+          : category.id === SECTIONS_CATEGORY_ID
+          ? isSectionLibraryItem(item)
           : category.id === 'saved'
           ? isReusableLibraryItem(item)
           : getLibraryCategory(item) === category.id
@@ -520,6 +534,9 @@ export function ComponentLibrary({
     }
     if (selectedCategory === 'saved') {
       return 'Saved sections appear here after you save a selected layer or section. Show all components to keep building.';
+    }
+    if (selectedCategory === SECTIONS_CATEGORY_ID) {
+      return 'Section presets and saved sections appear here. Show all components to keep building.';
     }
     return 'Show all components or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.';
   }, [activeCategoryName, isGlobalSearch, searchQuery, selectedCategory]);
@@ -635,6 +652,7 @@ export function ComponentLibrary({
           data-component-library-shown={filteredItems.length}
           data-component-library-total={totalSearchResultCount}
           data-component-library-essentials-count={categoryItemCounts[ESSENTIALS_CATEGORY_ID] || 0}
+          data-component-library-sections-count={categoryItemCounts[SECTIONS_CATEGORY_ID] || 0}
           data-component-library-recent-count={recentItems.length}
           data-component-library-recent-limit={RECENT_ITEM_LIMIT}
           data-component-library-recent-keys={recentItemKeys.join(',')}
@@ -848,10 +866,10 @@ export function ComponentLibrary({
 
       {/* Components List */}
       <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-40"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-3"
         data-testid="editor-component-list"
         data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}
-        data-component-preview-reserved-space="floating-bottom"
+        data-component-preview-reserved-space="sticky-footer"
       >
         {Object.entries(groupedItemsWithFavorites).map(([category, items]) => (
           items.length > 0 && (
@@ -983,10 +1001,10 @@ function ComponentPreviewPane({ item }: { item: ComponentLibraryItem }) {
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-2 bottom-2 z-20 max-h-[min(16rem,45vh)] overflow-hidden rounded-xl border border-slate-200 bg-slate-50/95 p-3 shadow-2xl backdrop-blur"
+      className="pointer-events-none shrink-0 overflow-hidden border-t border-slate-200 bg-slate-50/95 p-3 shadow-[0_-18px_36px_rgba(15,23,42,0.08)]"
       data-testid="editor-component-preview"
       data-component-preview={itemKey}
-      data-component-preview-placement="floating-bottom"
+      data-component-preview-placement="sticky-footer"
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
