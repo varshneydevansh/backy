@@ -1125,14 +1125,43 @@ function buildNewsletterHandoff({
         })),
       })),
       samplePayload: {
-        values: {
+        flat: {
           email: 'reader@example.com',
           name: 'Reader',
           topics: 'Investigations',
           consent: true,
-          signup_source: 'newsletter page',
+          source: 'newsletter page',
+        },
+        formValues: {
+          values: {
+            email: 'reader@example.com',
+            name: 'Reader',
+            topics: 'Investigations',
+            consent: true,
+            signup_source: 'newsletter page',
+          },
         },
       },
+      supportedPayloadShapes: [
+        {
+          label: 'Flat newsletter API payload',
+          email: 'reader@example.com',
+          name: 'Reader',
+          topics: 'Investigations',
+          consent: true,
+          source: 'newsletter page',
+        },
+        {
+          label: 'Backy form values payload',
+          values: {
+            email: 'reader@example.com',
+            name: 'Reader',
+            topics: 'Investigations',
+            consent: true,
+            signup_source: 'newsletter page',
+          },
+        },
+      ],
     },
     privateManagement: {
       contactsByFormUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/{formId}/contacts?limit=100`,

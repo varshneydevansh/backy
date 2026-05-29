@@ -25,9 +25,11 @@ type NewsletterPublicBody = {
   name?: unknown;
   topics?: unknown;
   source?: unknown;
+  signup_source?: unknown;
   consent?: unknown;
   consentText?: unknown;
   formId?: unknown;
+  values?: unknown;
 };
 
 const PAGE_LIMIT = 100;
@@ -79,6 +81,13 @@ const parseBody = async (request: NextRequest): Promise<NewsletterPublicBody> =>
   } catch {
     return {};
   }
+};
+
+const readNewsletterBodyField = (body: NewsletterPublicBody, key: string): unknown => {
+  const direct = (body as Record<string, unknown>)[key];
+  if (direct !== undefined) return direct;
+  const values = isRecord(body.values) ? body.values : {};
+  return values[key];
 };
 
 const findNewsletterForm = (forms: FormDefinition[], formId?: string): FormDefinition | null => (
@@ -144,15 +153,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const body = await parseBody(request);
-    const consent = booleanValue(body.consent);
+    const consent = booleanValue(readNewsletterBodyField(body, 'consent'));
     if (consent !== true) {
       return errorResponse(400, 'NEWSLETTER_CONSENT_REQUIRED', 'Newsletter signup requires explicit consent.', request, requestId);
     }
-    const emailPolicy = validateOptionalContactEmail(textValue(body.email));
+    const emailPolicy = validateOptionalContactEmail(textValue(readNewsletterBodyField(body, 'email')));
     if (!emailPolicy.ok || !emailPolicy.email) {
       return errorResponse(400, 'INVALID_NEWSLETTER_EMAIL', emailPolicy.ok ? 'Newsletter subscriber email is required.' : emailPolicy.message, request, requestId);
     }
-    const formId = textValue(body.formId);
+    const name = textValue(readNewsletterBodyField(body, 'name'));
+    const topics = textValue(readNewsletterBodyField(body, 'topics'));
+    const source = textValue(readNewsletterBodyField(body, 'source')) || textValue(readNewsletterBodyField(body, 'signup_source')) || 'public-newsletter-api';
+    const consentText = textValue(readNewsletterBodyField(body, 'consentText'));
+    const formId = textValue(readNewsletterBodyField(body, 'formId'));
     const now = new Date().toISOString();
 
     if (!shouldUseDemoStoreFallback()) {
@@ -165,27 +178,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const sourceValues = buildNewsletterSourceValues({
         existingSourceValues: existing?.sourceValues,
         status: 'subscribed',
-        topics: textValue(body.topics),
-        source: textValue(body.source) || 'public-newsletter-api',
+        topics,
+        source,
         consent,
-        consentText: textValue(body.consentText),
+        consentText,
         requestId,
         now,
       });
       const newsletterFields = buildNewsletterContactFields({
         existing,
         status: 'subscribed',
-        topics: textValue(body.topics),
-        source: textValue(body.source) || 'public-newsletter-api',
+        topics,
+        source,
         consent,
-        consentText: textValue(body.consentText),
+        consentText,
         now,
       });
       const contact = existing
         ? (await repositories.forms.updateContact(site.id, existing.id, {
-            name: textValue(body.name) || existing.name,
+            name: name || existing.name,
             email: emailPolicy.email,
-            notes: textValue(body.topics) || existing.notes,
+            notes: topics || existing.notes,
             status: existing.status === 'archived' ? 'new' : existing.status,
             sourceValues,
             ...newsletterFields,
@@ -196,10 +209,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             formId: form.id,
             pageId: null,
             postId: null,
-            name: textValue(body.name) || null,
+            name: name || null,
             email: emailPolicy.email,
             phone: null,
-            notes: textValue(body.topics) || null,
+            notes: topics || null,
             status: 'new',
             sourceValues,
             ...newsletterFields,
@@ -217,26 +230,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       formId: form.id,
       pageId: null,
       postId: null,
-      name: textValue(body.name) || null,
+      name: name || null,
       email: emailPolicy.email,
       phone: null,
-      notes: textValue(body.topics) || null,
+      notes: topics || null,
       status: 'new',
       sourceValues: buildNewsletterSourceValues({
         status: 'subscribed',
-        topics: textValue(body.topics),
-        source: textValue(body.source) || 'public-newsletter-api',
+        topics,
+        source,
         consent,
-        consentText: textValue(body.consentText),
+        consentText,
         requestId,
         now,
       }),
       ...buildNewsletterContactFields({
         status: 'subscribed',
-        topics: textValue(body.topics),
-        source: textValue(body.source) || 'public-newsletter-api',
+        topics,
+        source,
         consent,
-        consentText: textValue(body.consentText),
+        consentText,
         now,
       }),
       requestId,
@@ -256,11 +269,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const body = await parseBody(request);
-    const emailPolicy = validateOptionalContactEmail(textValue(body.email));
+    const emailPolicy = validateOptionalContactEmail(textValue(readNewsletterBodyField(body, 'email')));
     if (!emailPolicy.ok || !emailPolicy.email) {
       return errorResponse(400, 'INVALID_NEWSLETTER_EMAIL', emailPolicy.ok ? 'Newsletter subscriber email is required.' : emailPolicy.message, request, requestId);
     }
-    const formId = textValue(body.formId);
+    const source = textValue(readNewsletterBodyField(body, 'source')) || textValue(readNewsletterBodyField(body, 'signup_source')) || 'public-newsletter-api';
+    const formId = textValue(readNewsletterBodyField(body, 'formId'));
     const now = new Date().toISOString();
 
     if (!shouldUseDemoStoreFallback()) {
@@ -276,14 +290,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         sourceValues: buildNewsletterSourceValues({
           existingSourceValues: existing.sourceValues,
           status: 'unsubscribed',
-          source: textValue(body.source) || 'public-newsletter-api',
+          source,
           requestId,
           now,
         }),
         ...buildNewsletterContactFields({
           existing,
           status: 'unsubscribed',
-          source: textValue(body.source) || 'public-newsletter-api',
+          source,
           now,
         }),
         requestId,
@@ -305,14 +319,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       sourceValues: buildNewsletterSourceValues({
         existingSourceValues: existing.sourceValues,
         status: 'unsubscribed',
-        source: textValue(body.source) || 'public-newsletter-api',
+        source,
         requestId,
         now,
       }),
       ...buildNewsletterContactFields({
         existing,
         status: 'unsubscribed',
-        source: textValue(body.source) || 'public-newsletter-api',
+        source,
         now,
       }),
       requestId,

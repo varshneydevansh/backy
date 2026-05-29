@@ -17,6 +17,8 @@ const headerModelSource = read('../src/components/layout/headerModel.ts');
 const headerSource = read('../src/components/layout/Header.tsx');
 const helpSource = read('../src/routes/help.tsx');
 const routeTreeSource = read('../src/routeTree.gen.ts');
+const publicNewsletterSubscribersRouteSource = read('../../public/src/app/api/sites/[siteId]/newsletter/subscribers/route.ts');
+const adminNewsletterSubscribersRouteSource = read('../../public/src/app/api/admin/sites/[siteId]/newsletter/subscribers/route.ts');
 
 assert(routeSource.includes("createFileRoute('/newsletter')"), 'Newsletter route must be registered at /newsletter.');
 assert(routeSource.includes("const NEWSLETTER_SCHEMA_VERSION = 'backy.newsletter-management-handoff.v1';"), 'Newsletter route must expose a versioned handoff schema.');
@@ -40,6 +42,7 @@ assert(routeSource.includes("fields: [\n    { key: 'email'"), 'Created newslette
 assert(routeSource.includes("key: 'topics'"), 'Created newsletter forms must include topic preference capture.');
 assert(routeSource.includes("key: 'consent'"), 'Created newsletter forms must include consent capture.');
 assert(routeSource.includes("key: 'signup_source'"), 'Created newsletter forms must include signup source capture.');
+assert(routeSource.includes('supportedPayloadShapes') && routeSource.includes('Backy form values payload'), 'Newsletter handoff must document flat and Backy form-values payload shapes.');
 assert(routeSource.includes('providerBoundary') && routeSource.includes('external-delivery-required'), 'Newsletter handoff must keep outbound delivery behind an external-provider boundary.');
 assert(routeSource.includes('mailbox delivery') && routeSource.includes('SPF/DKIM/DMARC'), 'Newsletter delivery boundary must name deliverability responsibilities.');
 assert(routeSource.includes('data-testid="newsletter-command-center"'), 'Newsletter page must expose a command-center test hook.');
@@ -69,5 +72,7 @@ assert(helpSource.includes("id: 'publish-reports-newsletter'") && helpSource.inc
 assert(routeTreeSource.includes("Route as NewsletterRouteImport") && routeTreeSource.includes("'/newsletter': typeof NewsletterRoute"), 'Generated route tree must include /newsletter.');
 assert(adminContentApiSource.includes('newsletterSubscriptionStatus?: AdminContact') && adminContentApiSource.includes('newsletterUnsubscribedAt?: string | null'), 'Admin content API contact updates must accept newsletter subscription lifecycle fields.');
 assert(adminContentApiSource.includes('export async function saveNewsletterSubscriber') && adminContentApiSource.includes('/newsletter/subscribers'), 'Admin content API must expose a private newsletter subscriber save helper.');
+assert(publicNewsletterSubscribersRouteSource.includes('readNewsletterBodyField') && publicNewsletterSubscribersRouteSource.includes("readNewsletterBodyField(body, 'signup_source')"), 'Public newsletter subscriber API must accept Backy form values payloads and signup_source aliases.');
+assert(adminNewsletterSubscribersRouteSource.includes('readNewsletterBodyField') && adminNewsletterSubscribersRouteSource.includes("readNewsletterBodyField(body, 'signup_source')"), 'Admin newsletter subscriber API must accept Backy form values payloads and signup_source aliases.');
 
 console.log('Newsletter source smoke passed.');

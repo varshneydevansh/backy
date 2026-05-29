@@ -1521,9 +1521,12 @@ assert(
     newsletterSubscribersLib.includes('export const isNewsletterForm = (form: FormDefinition): boolean => {') &&
     publicNewsletterSubscribersRoute.includes('NEWSLETTER_CONSENT_REQUIRED') &&
     publicNewsletterSubscribersRoute.includes('buildNewsletterSourceValues({') &&
+    publicNewsletterSubscribersRoute.includes("readNewsletterBodyField(body, 'signup_source')") &&
     adminNewsletterSubscribersRoute.includes('buildNewsletterSubscriberPayload(contact, form, { includeSourceValues: true })') &&
+    adminNewsletterSubscribersRoute.includes("readNewsletterBodyField(body, 'signup_source')") &&
     adminNewsletterPage.includes('Public subscribe') &&
     adminNewsletterPage.includes('newsletterSubscribersUrl') &&
+    adminNewsletterPage.includes('supportedPayloadShapes') &&
     openApiRoute.includes('formsManagementDiscovery') &&
     openApiRoute.includes('subscribeBackyNewsletter') &&
     openApiRoute.includes('listBackyNewsletterSubscribers') &&
