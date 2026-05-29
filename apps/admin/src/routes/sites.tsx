@@ -4,7 +4,7 @@
  * Workspace hub for website ownership, publishing state, and site operations.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   Activity,
@@ -637,6 +637,7 @@ function SitesListView() {
   const [auditError, setAuditError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Site | null>(null);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+  const sitePageCountLoadRef = useRef(0);
   const canUseSiteRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSiteRoleDefaults;
   const isSitesPermissionAllowed = (key: SitePermissionKey) => (
@@ -729,18 +730,24 @@ function SitesListView() {
 
   const loadSites = useCallback(async () => {
     if (!canViewSites) {
+      sitePageCountLoadRef.current += 1;
       setSites([]);
       setSiteLoadError(viewPermissionTitle || 'Your account cannot view sites.');
       return;
     }
 
+    const pageCountRequestId = sitePageCountLoadRef.current + 1;
+    sitePageCountLoadRef.current = pageCountRequestId;
     setIsLoading(true);
     setNotice(null);
     setSiteLoadError(null);
 
     try {
       const backendSites = await listSites();
-      const sitesWithPageCounts = await Promise.all(
+      setSites(backendSites);
+      setSiteLoadError(null);
+
+      void Promise.all(
         backendSites.map(async (site) => {
           try {
             const pages = await listPages(site.publicSiteId || site.id);
@@ -749,9 +756,11 @@ function SitesListView() {
             return site;
           }
         }),
-      );
-      setSites(sitesWithPageCounts);
-      setSiteLoadError(null);
+      ).then((sitesWithPageCounts) => {
+        if (sitePageCountLoadRef.current === pageCountRequestId) {
+          setSites(sitesWithPageCounts);
+        }
+      });
     } catch (loadError) {
       setSiteLoadError(loadError instanceof Error ? loadError.message : 'Unable to load sites');
     } finally {

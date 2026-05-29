@@ -3098,10 +3098,7 @@ function EditSitePage() {
   const loadFrontendDesignEditor = async () => {
     if (!siteApiId) return;
     if (!canViewSite) {
-      if (!currentAdmin || isPermissionMatrixPending) {
-        return;
-      }
-      if (!permissionMatrix && !permissionError) {
+      if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError)) {
         return;
       }
       setFrontendDesignState((prev) => ({
@@ -5009,6 +5006,7 @@ function EditSitePage() {
     contactLoadRequestRef.current += 1;
     commentsLoadRequestRef.current += 1;
     auditLoadRequestRef.current += 1;
+    frontendDesignLoadRequestRef.current += 1;
     setReadiness(null);
     setReadinessHydrated(false);
     setReadinessLoading(false);
@@ -5032,6 +5030,7 @@ function EditSitePage() {
       loading: false,
       errorMessage: null,
     });
+    setFrontendDesignState(() => createFrontendDesignState());
     formBuilderDraftRef.current = null;
     savedFormBuilderDraftRef.current = null;
     setFormBuilderDraft(null);

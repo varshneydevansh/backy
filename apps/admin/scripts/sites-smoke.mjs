@@ -63,6 +63,15 @@ const assertSitesRouteSourceContract = () => {
   assert(source.includes('return loadSitePermissions();'), 'Sites route must wire the permission-loading effect through the reusable callback');
   assert(source.includes('loadSitePermissions();') && source.includes('void loadSites();'), 'Sites workspace refresh must re-fetch permissions before reloading site data');
   assert(
+    source.includes('const sitePageCountLoadRef = useRef(0);') &&
+      source.includes('const pageCountRequestId = sitePageCountLoadRef.current + 1;') &&
+      source.includes('setSites(backendSites);') &&
+      source.includes('void Promise.all(') &&
+      source.includes('if (sitePageCountLoadRef.current === pageCountRequestId)') &&
+      source.indexOf('setSites(backendSites);') < source.indexOf('void Promise.all('),
+    'Sites route must render backend sites immediately and hydrate page counts in the background so large workspaces do not stay on stale seeded data.',
+  );
+  assert(
     source.includes('const canUseSiteRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
       source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSiteRoleDefaults;') &&
       source.includes('const isSitesPermissionAllowed = (key: SitePermissionKey) => (') &&
@@ -227,7 +236,7 @@ const assertSitesRouteSourceContract = () => {
   assert(
     detailSource.includes('hydrated: Boolean(response)') &&
       detailSource.includes('const frontendDesignLoadRequestRef = useRef(0);') &&
-      detailSource.includes('if (!currentAdmin || isPermissionMatrixPending)') &&
+      detailSource.includes('if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError))') &&
       detailSource.includes('!frontendDesignState.hydrated') &&
       detailSource.includes('!frontendDesignState.errorMessage') &&
       detailSource.includes('preserveDirtyDraft') &&

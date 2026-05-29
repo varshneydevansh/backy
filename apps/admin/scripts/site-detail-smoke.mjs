@@ -199,6 +199,8 @@ const assertSiteDetailSourceContract = () => {
     source.includes('hydrated: Boolean(response)') &&
       source.includes('dirty: false') &&
       source.includes('const frontendDesignLoadRequestRef = useRef(0);') &&
+      source.includes('frontendDesignLoadRequestRef.current += 1;') &&
+      source.includes('setFrontendDesignState(() => createFrontendDesignState());') &&
       source.includes('if (!currentAdmin || isPermissionMatrixPending || (!permissionMatrix && !permissionError))') &&
       source.includes('!frontendDesignState.hydrated') &&
       source.includes('!frontendDesignState.errorMessage') &&
