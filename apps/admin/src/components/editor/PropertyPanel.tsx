@@ -533,11 +533,33 @@ const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>
   const totalHeight = records.length * 28 + gap * Math.max(0, records.length - 1);
   let cursorX = isVertical ? 0 : Math.max(0, Math.round((element.width - totalWidth) / 2));
   let cursorY = isVertical ? Math.max(0, Math.round((element.height - totalHeight) / 2)) : Math.max(0, Math.round((element.height - 28) / 2));
+  const existingChildren = Array.isArray(element.children) ? element.children : [];
+  const reusedChildIds = new Set<string>();
+  const findReusableChild = (item: { label: string; href: string }, index: number): CanvasElement | undefined => {
+    const candidates = [
+      existingChildren[index],
+      ...existingChildren.filter((child) => {
+        const childLabel = typeof child.props?.content === 'string' ? child.props.content.trim() : '';
+        const childHref = typeof child.props?.href === 'string' ? child.props.href.trim() : '';
+        return child.type === 'link' && (childHref === item.href || childLabel === item.label);
+      }),
+    ];
+    return candidates.find((child): child is CanvasElement => (
+      Boolean(child && child.type === 'link' && !reusedChildIds.has(child.id))
+    ));
+  };
 
   return records.map((item, index) => {
     const width = isVertical ? Math.max(64, element.width) : itemWidths[index];
+    const reusableChild = findReusableChild(item, index);
+    if (reusableChild) {
+      reusedChildIds.add(reusableChild.id);
+    }
+    const previousProps = reusableChild?.props || {};
+    const previousStyles = reusableChild?.styles || {};
     const child: CanvasElement = {
-      id: generateId('nav-link'),
+      ...(reusableChild || {}),
+      id: reusableChild?.id || generateId('nav-link'),
       type: 'link',
       name: `${item.label} link`,
       x: cursorX,
@@ -545,15 +567,18 @@ const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>
       width,
       height: 28,
       zIndex: index + 1,
+      parentId: element.id,
       props: {
+        ...previousProps,
         content: item.label,
         href: item.href,
         fontSize,
         fontWeight,
         color,
-        underline: false,
+        underline: previousProps.underline ?? false,
       },
       styles: {
+        ...previousStyles,
         display: 'flex',
         alignItems: 'center',
         justifyContent: isVertical ? 'flex-start' : 'center',
@@ -569,6 +594,24 @@ const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>
 
     return child;
   });
+};
+
+const buildNavigationElementSync = (
+  element: CanvasElement,
+  propsUpdates: Partial<ElementProps>,
+): Pick<CanvasElement, 'props' | 'children'> => {
+  const props = {
+    ...element.props,
+    ...propsUpdates,
+  };
+  const nextElement = {
+    ...element,
+    props,
+  };
+  return {
+    props,
+    children: buildNavigationLinkChildren(nextElement),
+  };
 };
 
 const withQueryParam = (url: string, key: string, value: string): string => {
@@ -2200,6 +2243,15 @@ function ContentProperties({
 
     onOpenMedia(field, mode, openerTestId);
   };
+  const updateNavigationWithSyncedLinks = (propsUpdates: Partial<ElementProps>) => {
+    const synced = buildNavigationElementSync(element, propsUpdates);
+    if (onElementChange) {
+      onElementChange(synced);
+      return;
+    }
+
+    onChange(propsUpdates);
+  };
   const renderMediaPickerButton = ({
     field,
     mode = 'library',
@@ -3056,6 +3108,8 @@ function ContentProperties({
             className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2"
             data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}
             data-nav-link-layer-count={element.children?.length || 0}
+            data-nav-link-layer-sync="items-direction-gap-auto-sync"
+            data-nav-link-layer-id-policy="preserve-existing-link-child-ids"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 text-xs leading-5 text-sky-900">
@@ -3070,7 +3124,7 @@ function ContentProperties({
               </div>
               <button
                 type="button"
-                onClick={() => onChange({ children: buildNavigationLinkChildren(element) })}
+                onClick={() => onElementChange?.({ children: buildNavigationLinkChildren(element) })}
                 disabled={disabled}
                 data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}
                 className="inline-flex min-h-8 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-white px-2.5 text-xs font-semibold text-sky-800 transition-colors hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3085,7 +3139,7 @@ function ContentProperties({
             </label>
             <textarea
               value={formatNavigationItems(element.props.navItems)}
-              onChange={(e) => onChange({ navItems: parseNavigationItems(e.target.value) })}
+              onChange={(e) => updateNavigationWithSyncedLinks({ navItems: parseNavigationItems(e.target.value) })}
               data-testid="editor-nav-items"
               rows={5}
               className={cn(
@@ -3102,7 +3156,7 @@ function ContentProperties({
               </label>
               <select
                 value={element.props.navDirection || 'horizontal'}
-                onChange={(e) => onChange({ navDirection: e.target.value })}
+                onChange={(e) => updateNavigationWithSyncedLinks({ navDirection: e.target.value })}
                 data-testid="editor-nav-direction"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
@@ -3121,7 +3175,7 @@ function ContentProperties({
                 type="number"
                 min={0}
                 value={toNumber(element.props.gap, 18)}
-                onChange={(e) => onChange({ gap: e.target.value === '' ? 0 : Number(e.target.value) })}
+                onChange={(e) => updateNavigationWithSyncedLinks({ gap: e.target.value === '' ? 0 : Number(e.target.value) })}
                 data-testid="editor-nav-gap"
                 className={cn(
                   'w-full px-2 py-1.5 text-sm rounded-md border bg-background',

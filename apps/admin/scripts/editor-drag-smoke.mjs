@@ -1613,7 +1613,7 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(propertyPanelSource.includes('applyChildBindingSlots') && propertyPanelSource.includes('data-testid="editor-data-apply-child-binding-slots"') && propertyPanelSource.includes('VIRTUAL_COLLECTION_FIELD_PATHS'), 'Editor Data panel must apply descendant preset binding slots and support record URL/slug fields for composed sections');
   assert(propertyPanelSource.includes('const applyAllBindingSlots = () =>') && propertyPanelSource.includes('bindableSlotsForElement(nextElement, activeSlotCollection, collections)') && propertyPanelSource.includes('data-testid="editor-data-apply-all-binding-slots"'), 'Editor Data panel must bulk-apply matching root, descendant, and child binding slots from composed presets');
   assert(catalogSource.includes("type: 'nav'") && catalogSource.includes("name: 'Home link'") && catalogSource.includes("name: 'Contact link'"), 'Editor navigation catalog preset must create selectable link child layers by default.');
-  assert(propertyPanelSource.includes('const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>') && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}") && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}"), 'Editor navigation inspector must convert/rebuild nav menu text into selectable link child layers.');
+  assert(propertyPanelSource.includes('const buildNavigationLinkChildren = (element: CanvasElement): CanvasElement[] =>') && propertyPanelSource.includes('const buildNavigationElementSync = (') && propertyPanelSource.includes('updateNavigationWithSyncedLinks({ navItems: parseNavigationItems') && propertyPanelSource.includes('data-nav-link-layer-sync="items-direction-gap-auto-sync"') && propertyPanelSource.includes('data-nav-link-layer-id-policy="preserve-existing-link-child-ids"') && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-rebuild-link-layers' : 'editor-nav-convert-link-layers'}") && propertyPanelSource.includes("data-testid={element.children?.length ? 'editor-nav-editable-link-layers' : 'editor-nav-link-layer-upgrade'}"), 'Editor navigation inspector must convert/rebuild nav menu text into selectable link child layers, keep them synced with nav item edits, and preserve child layer ids.');
   assert(propertyPanelSource.includes('const clearCollectionBindingsFromElement = (') && propertyPanelSource.includes('REPEATER_COLLECTION_BINDING_PROP_KEYS') && propertyPanelSource.includes('data-testid="editor-data-clear-all-binding-slots"'), 'Editor Data panel must clear collection bindings across composed preset trees and repeater dataset props');
   assert(propertyPanelSource.includes('const bindingSlotCoverageForElement = (') && propertyPanelSource.includes('missingRequired') && propertyPanelSource.includes('data-testid="editor-data-binding-slot-coverage"'), 'Editor Data panel must summarize composed preset binding coverage before publish or custom frontend handoff');
   assert(propertyPanelSource.includes("schema: 'backy.editor.binding-slot-coverage.v1'") && propertyPanelSource.includes('navigator.clipboard.writeText(JSON.stringify(coverageBrief, null, 2))') && propertyPanelSource.includes('data-testid="editor-data-copy-binding-slot-coverage"'), 'Editor Data panel must expose a copyable binding-slot coverage brief for custom frontend and AI handoff');
@@ -22824,6 +22824,15 @@ const assertPersistedNavBehavior = async (pageId) => {
   const nav = findCanvasElement(elements, 'smoke-nav');
   const props = nav?.props || {};
   const navItems = Array.isArray(props.navItems) ? props.navItems.map(normalizeNavItem) : [];
+  const childLinks = Array.isArray(nav?.children)
+    ? nav.children.map((child) => ({
+        id: child.id,
+        type: child.type,
+        label: String(child.props?.content || child.props?.label || '').trim(),
+        href: String(child.props?.href || '').trim(),
+        parentId: child.parentId || '',
+      }))
+    : [];
 
   assert(nav?.type === 'nav', `Persisted smoke-nav missing: ${JSON.stringify(nav)}`);
   assert(navItems.length === 3, `Persisted nav items length mismatch: ${JSON.stringify(props)}`);
@@ -22832,6 +22841,10 @@ const assertPersistedNavBehavior = async (pageId) => {
   assert(props.navDirection === 'vertical', `Persisted nav direction mismatch: ${JSON.stringify(props)}`);
   assert(props.gap === 22, `Persisted nav gap mismatch: ${JSON.stringify(props)}`);
   assert(props.ariaLabel === 'Smoke primary navigation', `Persisted nav aria label mismatch: ${JSON.stringify(props)}`);
+  assert(childLinks.length === 3, `Persisted nav child link count mismatch: ${JSON.stringify(childLinks)}`);
+  assert(childLinks.every((child) => child.type === 'link' && child.parentId === 'smoke-nav'), `Persisted nav child link parent/type mismatch: ${JSON.stringify(childLinks)}`);
+  assert(childLinks[0].label === 'Docs' && childLinks[0].href === '/docs', `Persisted nav first child link mismatch: ${JSON.stringify(childLinks)}`);
+  assert(childLinks[1].label === 'Pricing' && childLinks[1].href === '/pricing', `Persisted nav second child link mismatch: ${JSON.stringify(childLinks)}`);
 
   return props;
 };
