@@ -77,6 +77,7 @@ const assert = (condition, message) => {
 const assertSettingsSourceContracts = () => {
   const settingsRoute = fs.readFileSync(new URL('../src/routes/settings.tsx', import.meta.url), 'utf8');
   const adminContentApiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
+  const settingsSmokeSource = fs.readFileSync(new URL('./settings-smoke.mjs', import.meta.url), 'utf8');
   const requiredSettingsRouteSnippets = [
     'formatSiteScopedLocaleRows',
     'parseSiteScopedLocaleRows',
@@ -497,10 +498,16 @@ const assertSettingsSourceContracts = () => {
     'Settings workbar must keep tab navigation and save controls reachable while the page scrolls',
   );
   assert(
-    settingsRoute.includes('className="relative z-30 flex flex-wrap items-center gap-2"') &&
-      settingsRoute.includes('className="group relative z-50"') &&
+    settingsRoute.includes('className="relative z-[70] flex flex-wrap items-center gap-2"') &&
+      settingsRoute.includes('data-stack-layer="settings-header-actions-above-workbar"') &&
+      settingsRoute.includes('className="group relative z-[80]"') &&
+      settingsRoute.includes('data-stack-layer="settings-header-more-actions-above-workbar"') &&
+      settingsRoute.includes('data-stack-layer="settings-header-secondary-menu-above-workbar"') &&
       settingsRoute.includes('data-stack-layer="settings-workbar-under-header-actions"') &&
-      settingsRoute.includes('sm:z-50 sm:min-w-52'),
+      settingsRoute.includes('sm:top-full sm:z-[90] sm:min-w-52') &&
+      settingsRoute.includes('data-testid="settings-header-secondary-action-menu"') &&
+      settingsSmokeSource.includes('const assertSettingsHeaderActionMenuLayer = async (client) =>') &&
+      settingsSmokeSource.includes('state.topElementWithinMenu'),
     'Settings header More actions menu must stack above the sticky workbar instead of hiding behind the active-section banner.',
   );
   assert(
@@ -1569,6 +1576,70 @@ const clickByTestId = async (client, testId) => {
   return result;
 };
 
+const assertSettingsHeaderActionMenuLayer = async (client) => {
+  await clickByTestId(client, 'settings-header-more-actions');
+  const state = await evaluate(client, `(() => {
+    const group = document.querySelector('[data-testid="settings-header-action-group"]');
+    const details = document.querySelector('[data-testid="settings-header-secondary-actions"]');
+    const menu = document.querySelector('[data-testid="settings-header-secondary-action-menu"]');
+    const workbar = document.querySelector('[data-testid="settings-sticky-workbar"]');
+    const menuRect = menu?.getBoundingClientRect();
+    const workbarRect = workbar?.getBoundingClientRect();
+    const sampleX = menuRect ? Math.min(Math.max(menuRect.left + menuRect.width / 2, 1), window.innerWidth - 1) : 0;
+    const sampleY = menuRect ? Math.min(Math.max(menuRect.top + Math.min(menuRect.height / 2, 20), 1), window.innerHeight - 1) : 0;
+    const topElement = menuRect ? document.elementFromPoint(sampleX, sampleY) : null;
+    const topTestId = topElement instanceof Element
+      ? topElement.closest('[data-testid]')?.getAttribute('data-testid') || topElement.tagName
+      : '';
+    const overlapsWorkbar = Boolean(menuRect && workbarRect && !(
+      menuRect.right < workbarRect.left ||
+      menuRect.left > workbarRect.right ||
+      menuRect.bottom < workbarRect.top ||
+      menuRect.top > workbarRect.bottom
+    ));
+    return {
+      open: details instanceof HTMLDetailsElement ? details.open : false,
+      hasGroup: Boolean(group),
+      hasMenu: Boolean(menu),
+      hasWorkbar: Boolean(workbar),
+      groupLayer: group?.getAttribute('data-stack-layer') || '',
+      detailsLayer: details?.getAttribute('data-stack-layer') || '',
+      menuLayer: menu?.getAttribute('data-stack-layer') || '',
+      workbarLayer: workbar?.getAttribute('data-stack-layer') || '',
+      menuZIndex: menu ? getComputedStyle(menu).zIndex : '',
+      workbarZIndex: workbar ? getComputedStyle(workbar).zIndex : '',
+      menuPosition: menu ? getComputedStyle(menu).position : '',
+      menuRight: menuRect?.right || 0,
+      viewportWidth: window.innerWidth,
+      topTestId,
+      topElementWithinMenu: Boolean(topElement && menu?.contains(topElement)),
+      overlapsWorkbar,
+    };
+  })()`);
+  await evaluate(client, `(() => {
+    const details = document.querySelector('[data-testid="settings-header-secondary-actions"]');
+    if (details instanceof HTMLDetailsElement) details.open = false;
+    return true;
+  })()`);
+  assert(
+    state.open &&
+      state.hasGroup &&
+      state.hasMenu &&
+      state.hasWorkbar &&
+      state.groupLayer === 'settings-header-actions-above-workbar' &&
+      state.detailsLayer === 'settings-header-more-actions-above-workbar' &&
+      state.menuLayer === 'settings-header-secondary-menu-above-workbar' &&
+      state.workbarLayer === 'settings-workbar-under-header-actions' &&
+      state.menuPosition === 'absolute' &&
+      state.menuZIndex === '90' &&
+      state.workbarZIndex === '10' &&
+      state.menuRight <= state.viewportWidth + 1 &&
+      state.topElementWithinMenu,
+    `Settings header More actions menu is not layered above the sticky workbar: ${JSON.stringify(state)}`,
+  );
+  return state;
+};
+
 const waitForText = async (client, text) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => ({
@@ -2284,6 +2355,7 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
 
 const updateSettingsThroughUi = async (client, suffix, originalSettings, notificationWebhookUrl, siteScopeSite) => {
   const initial = await navigateToSettings(client);
+  const headerActionMenuLayer = await assertSettingsHeaderActionMenuLayer(client);
   const originalGeneral = originalSettings?.integrations?.general || {};
 
   await openSettingsTab(client, 'Delivery', 'tab=delivery');
@@ -3227,6 +3299,7 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
 
   return {
     initial,
+    headerActionMenuLayer,
     delivery: finalDelivery,
     initialDelivery: delivery,
     generalSaved,

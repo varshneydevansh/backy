@@ -4093,7 +4093,7 @@ function SettingsPage() {
   return (
     <div className="flex animate-fade-in flex-col gap-6">
       {/* Page Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="relative z-40 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
           <p className="text-muted-foreground mt-1">
@@ -4102,10 +4102,11 @@ function SettingsPage() {
         </div>
 
         <div
-          className="relative z-30 flex flex-wrap items-center gap-2"
+          className="relative z-[70] flex flex-wrap items-center gap-2"
           role="group"
           aria-label="Settings header actions"
           aria-describedby={settingsWorkbarActionStatusId}
+          data-stack-layer="settings-header-actions-above-workbar"
           data-testid="settings-header-action-group"
           data-action-state={settingsSaveDisabledReason ? 'blocked' : 'ready'}
           data-action-status={settingsWorkbarActionStatus}
@@ -4140,8 +4141,9 @@ function SettingsPage() {
             </Button>
           )}
           <details
-            className="group relative z-50"
+            className="group relative z-[80]"
             aria-describedby={settingsHeaderSecondaryActionStatusId}
+            data-stack-layer="settings-header-more-actions-above-workbar"
             data-action-state={settingsHeaderSecondaryActionState}
             data-action-status={settingsHeaderSecondaryActionStatus}
             data-target-settings-tab={activeTab}
@@ -4158,7 +4160,11 @@ function SettingsPage() {
               More actions
               <span className="sr-only">Copy handoff and Download JSON</span>
             </summary>
-            <div className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-lg sm:absolute sm:right-0 sm:z-50 sm:min-w-52" data-testid="settings-header-secondary-action-menu">
+            <div
+              className="mt-2 grid gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60 sm:absolute sm:right-0 sm:top-full sm:z-[90] sm:min-w-52"
+              data-stack-layer="settings-header-secondary-menu-above-workbar"
+              data-testid="settings-header-secondary-action-menu"
+            >
               <button
                 type="button"
                 disabled={Boolean(settingsConfigureDisabledReason)}
