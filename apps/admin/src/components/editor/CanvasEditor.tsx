@@ -22,6 +22,8 @@ import type {
 import {
   buildBackyThemeCssVariables,
   buildBackyThemeTokens,
+  buildCustomFrontendAgentHandoff,
+  CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,
   type ThemeConfig,
 } from '@backy-cms/core';
 import {
@@ -204,24 +206,6 @@ const CANVAS_CONTEXT_QUICK_ADD_ITEMS: Array<{ key: string; item: ComponentLibrar
 const CANVAS_CONTEXT_QUICK_ADD_TYPES = CANVAS_CONTEXT_QUICK_ADD_ITEMS
   .map(({ key }) => key)
   .join(',');
-const CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md';
-const CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent-handoff.v1';
-const CUSTOM_FRONTEND_AGENT_HANDOFF_FIELDS = [
-  'content.contentDocument',
-  'content.elements',
-  'content.canvas',
-  'content.customCSS',
-  'content.customJS',
-  'content.themeTokenRefs',
-  'content.assets',
-  'content.animations',
-  'content.interactions',
-  'content.dataBindings',
-  'content.editableMap',
-  'content.seo',
-  'content.metadata',
-  'meta.frontendDesign*',
-] as const;
 const INSPECTOR_EMPTY_QUICK_ADD_KEYS = ['heading', 'text', 'section'] as const;
 const INSPECTOR_EMPTY_QUICK_ADD_ITEMS = CANVAS_CONTEXT_QUICK_ADD_ITEMS.filter(({ key }) => (
   (INSPECTOR_EMPTY_QUICK_ADD_KEYS as readonly string[]).includes(key)
@@ -255,33 +239,28 @@ type EditorCommandRegistry = {
 
 const buildEditorAgentHandoff = (siteId?: string) => {
   const sitePath = siteId || ':siteId';
+  const canonicalHandoff = buildCustomFrontendAgentHandoff(sitePath);
+
   return {
-    schemaVersion: CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA,
+    ...canonicalHandoff,
     source: 'canvas-editor-composition-plan',
-    docs: [
-      CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,
-      'specs/backy-api-contracts.md',
-      'specs/editor_complete_spec.md',
-    ],
     siteId: siteId || null,
-    endpoints: {
-      manifest: `/api/sites/${sitePath}/manifest`,
-      openapi: `/api/sites/${sitePath}/openapi`,
-      render: `/api/sites/${sitePath}/render?path=/...`,
-      frontendDesign: `/api/sites/${sitePath}/frontend-design`,
-      frontendDesignManagement: `/api/admin/sites/${sitePath}/frontend-design`,
+    editorSurface: {
+      schemaVersion: 'backy.editor-canvas-agent-surface.v1',
+      source: 'Backy canvas editor composition readiness panel',
+      agentReadStart: 'manifest.data.contract.customFrontendAgentHandoff',
+      openApiReadStart: 'x-backy-custom-frontend-agent-handoff',
+      copyablePayload: 'editorCompositionReadiness.actionPlan.agentHandoff',
+      canvasFirst: canonicalHandoff.contentCreation.canvasFirst,
+      adminEntryPoints: canonicalHandoff.contentCreation.adminEntryPoints,
+      designState: canonicalHandoff.designState,
+      zoom: {
+        scope: 'canvas',
+        wheelModifier: 'meta-or-control',
+        keyboardShortcuts: ['Cmd/Ctrl+=', 'Cmd/Ctrl+-', 'Cmd/Ctrl+0'],
+        browserZoomGuard: true,
+      },
     },
-    sdk: {
-      package: 'packages/sdk-js',
-      generatedTypes: 'packages/sdk-js/src/generated-contract-types.ts',
-    },
-    roundTripFields: CUSTOM_FRONTEND_AGENT_HANDOFF_FIELDS,
-    rules: [
-      'Preserve the full Backy design envelope when creating or updating content.',
-      'Use frontendDesignTemplateId or designTemplateId for captured custom-frontend templates.',
-      'Do not flatten editable canvas content to plain HTML/text when the result must reopen in Backy.',
-      'Read manifest/OpenAPI before guessing route, media, form, commerce, or live-management API shapes.',
-    ],
   };
 };
 
@@ -9460,6 +9439,18 @@ export function CanvasEditor({
                   data-agent-handoff-frontend-design={editorCompositionReadiness.agentHandoff.endpoints.frontendDesign}
                   data-agent-handoff-frontend-design-management={editorCompositionReadiness.agentHandoff.endpoints.frontendDesignManagement}
                   data-agent-handoff-sdk={editorCompositionReadiness.agentHandoff.sdk.package}
+                  data-agent-handoff-read-start={editorCompositionReadiness.agentHandoff.editorSurface.agentReadStart}
+                  data-agent-handoff-openapi-read-start={editorCompositionReadiness.agentHandoff.editorSurface.openApiReadStart}
+                  data-agent-handoff-editor-surface-schema={editorCompositionReadiness.agentHandoff.editorSurface.schemaVersion}
+                  data-agent-handoff-read-order={editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(',')}
+                  data-agent-handoff-route-reveal={editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.routeRevealGuarantee}
+                  data-agent-handoff-canvas-outcome={editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.editorOutcome}
+                  data-agent-handoff-site-style-sources={editorCompositionReadiness.agentHandoff.designState.siteStyleSources.join(',')}
+                  data-agent-handoff-round-trip-fields={editorCompositionReadiness.agentHandoff.designState.roundTripFields.join(',')}
+                  data-agent-handoff-page-canvas-entry={editorCompositionReadiness.agentHandoff.contentCreation.adminEntryPoints.pageBackyCanvas}
+                  data-agent-handoff-page-custom-entry={editorCompositionReadiness.agentHandoff.contentCreation.adminEntryPoints.pageCustomFrontend}
+                  data-agent-handoff-blog-canvas-entry={editorCompositionReadiness.agentHandoff.contentCreation.adminEntryPoints.blogBackyCanvas}
+                  data-agent-handoff-blog-custom-entry={editorCompositionReadiness.agentHandoff.contentCreation.adminEntryPoints.blogCustomFrontend}
                   data-command-registry-schema={editorCompositionReadiness.commandRegistry.schemaVersion}
                   data-command-count={editorCompositionReadiness.commandRegistry.summary.totalCommandCount}
                   data-command-ready-count={editorCompositionReadiness.commandRegistry.summary.readyCommandCount}
@@ -9548,6 +9539,23 @@ export function CanvasEditor({
                         <div className="text-[10px] uppercase tracking-wide text-slate-500">Interactive</div>
 	                    </div>
 	                  </div>
+                    <div
+                      className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2"
+                      data-testid="editor-agent-handoff-brief"
+                      data-agent-read-start={editorCompositionReadiness.agentHandoff.editorSurface.agentReadStart}
+                      data-openapi-read-start={editorCompositionReadiness.agentHandoff.editorSurface.openApiReadStart}
+                      data-read-order={editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(',')}
+                      data-canvas-first-value={editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.backyCanvasValue}
+                      data-custom-frontend-value={editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.customFrontendValue}
+                    >
+                      <div className="font-semibold text-slate-950">Agent handoff</div>
+                      <div className="mt-1 text-[11px] leading-4 text-slate-500">
+                        {editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(' -> ')}
+                      </div>
+                      <div className="mt-1 text-[11px] leading-4 text-slate-600">
+                        {editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.editorOutcome}
+                      </div>
+                    </div>
 	                  <div
 	                    className="mt-2 border-t border-slate-200 pt-2"
 	                    data-testid="editor-command-registry"
