@@ -37,11 +37,13 @@ const assertSiteDetailSourceContract = () => {
       source.includes('customFrontendAgentHandoff: siteCustomFrontendAgentHandoff') &&
       source.includes('data-testid="site-custom-frontend-agent-handoff"') &&
       source.includes('data-testid="site-copy-custom-frontend-agent-handoff"') &&
+      source.includes('data-agent-handoff-direct={siteCustomFrontendAgentHandoff.endpoints.agentHandoff}') &&
       source.includes('data-testid="site-agent-content-entry-points"') &&
       source.includes('data-testid="site-agent-canvas-first-rule"') &&
       source.includes('const adminEntryPoints = buildCustomFrontendAgentAdminEntryPoints(siteIdParam);') &&
       source.includes('adminEntryPoints,') &&
       source.includes('siteCustomFrontendAgentHandoff.readOrder.map') &&
+      source.includes('siteCustomFrontendAgentHandoff.endpoints.agentHandoff') &&
       source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.editorOutcome') &&
       source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.routeRevealGuarantee') &&
       source.includes('siteCustomFrontendAgentHandoff.designState.siteStyleSources.join') &&
@@ -1380,6 +1382,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
         canvasFirstRule: Boolean(document.querySelector('[data-testid="site-agent-canvas-first-rule"]')),
         schema: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-schema') || '',
         doc: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-doc') || '',
+        direct: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-direct') || '',
         manifest: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-manifest') || '',
         openapi: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-openapi') || '',
         text: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.textContent || '',
@@ -1458,9 +1461,12 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.canvasFirstRule &&
       layout.customFrontendAgentHandoff.schema === 'backy.custom-frontend-agent-handoff.v1' &&
       layout.customFrontendAgentHandoff.doc === 'specs/custom-frontend-agent-handoff.md' &&
+      layout.customFrontendAgentHandoff.direct.includes('/api/sites/') &&
+      layout.customFrontendAgentHandoff.direct.endsWith('/agent-handoff') &&
       layout.customFrontendAgentHandoff.manifest.includes('/api/sites/') &&
       layout.customFrontendAgentHandoff.openapi.includes('/openapi') &&
       layout.customFrontendAgentHandoff.text.includes('Agent handoff') &&
+      layout.customFrontendAgentHandoff.text.includes('/agent-handoff') &&
       layout.customFrontendAgentHandoff.text.includes('Agent read order') &&
       layout.customFrontendAgentHandoff.text.includes('frontendDesignManagement') &&
       layout.customFrontendAgentHandoff.text.includes('Canvas-first API alignment') &&

@@ -1114,6 +1114,7 @@ const buildAdminSiteCustomFrontendAgentHandoff = ({
     source: "admin-site-workspace-handoff",
     endpoints: {
       ...baseHandoff.endpoints,
+      agentHandoff: `${publicSiteApiUrl}/agent-handoff`,
       manifest: `${publicSiteApiUrl}/manifest`,
       openapi: `${publicSiteApiUrl}/openapi`,
       resolve: `${publicSiteApiUrl}/resolve?path=/`,
@@ -6347,6 +6348,7 @@ function EditSitePage() {
               data-testid="site-custom-frontend-agent-handoff"
               data-agent-handoff-schema={siteCustomFrontendAgentHandoff.schemaVersion}
               data-agent-handoff-doc={CUSTOM_FRONTEND_AGENT_HANDOFF_DOC}
+              data-agent-handoff-direct={siteCustomFrontendAgentHandoff.endpoints.agentHandoff}
               data-agent-handoff-manifest={siteCustomFrontendAgentHandoff.endpoints.manifest}
               data-agent-handoff-openapi={siteCustomFrontendAgentHandoff.endpoints.openapi}
               data-agent-handoff-render={siteCustomFrontendAgentHandoff.endpoints.render}
@@ -6386,6 +6388,10 @@ function EditSitePage() {
               <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                 <SiteHandoffEndpoint
                   label="Read first"
+                  value={siteCustomFrontendAgentHandoff.endpoints.agentHandoff}
+                />
+                <SiteHandoffEndpoint
+                  label="Docs"
                   value={CUSTOM_FRONTEND_AGENT_HANDOFF_DOC}
                 />
                 <SiteHandoffEndpoint

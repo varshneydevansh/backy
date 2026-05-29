@@ -248,7 +248,8 @@ const buildEditorAgentHandoff = (siteId?: string) => {
     editorSurface: {
       schemaVersion: 'backy.editor-canvas-agent-surface.v1',
       source: 'Backy canvas editor composition readiness panel',
-      agentReadStart: 'manifest.data.contract.customFrontendAgentHandoff',
+      agentReadStart: canonicalHandoff.endpoints.agentHandoff,
+      manifestReadStart: 'manifest.data.contract.customFrontendAgentHandoff',
       openApiReadStart: 'x-backy-custom-frontend-agent-handoff',
       copyablePayload: 'editorCompositionReadiness.actionPlan.agentHandoff',
       canvasFirst: canonicalHandoff.contentCreation.canvasFirst,
@@ -9433,6 +9434,7 @@ export function CanvasEditor({
                   data-action-plan-schema={editorCompositionReadiness.actionPlan.schemaVersion}
                   data-agent-handoff-schema={editorCompositionReadiness.agentHandoff.schemaVersion}
                   data-agent-handoff-doc={CUSTOM_FRONTEND_AGENT_HANDOFF_DOC}
+                  data-agent-handoff-direct={editorCompositionReadiness.agentHandoff.endpoints.agentHandoff}
                   data-agent-handoff-manifest={editorCompositionReadiness.agentHandoff.endpoints.manifest}
                   data-agent-handoff-openapi={editorCompositionReadiness.agentHandoff.endpoints.openapi}
                   data-agent-handoff-render={editorCompositionReadiness.agentHandoff.endpoints.render}
@@ -9440,6 +9442,7 @@ export function CanvasEditor({
                   data-agent-handoff-frontend-design-management={editorCompositionReadiness.agentHandoff.endpoints.frontendDesignManagement}
                   data-agent-handoff-sdk={editorCompositionReadiness.agentHandoff.sdk.package}
                   data-agent-handoff-read-start={editorCompositionReadiness.agentHandoff.editorSurface.agentReadStart}
+                  data-agent-handoff-manifest-read-start={editorCompositionReadiness.agentHandoff.editorSurface.manifestReadStart}
                   data-agent-handoff-openapi-read-start={editorCompositionReadiness.agentHandoff.editorSurface.openApiReadStart}
                   data-agent-handoff-editor-surface-schema={editorCompositionReadiness.agentHandoff.editorSurface.schemaVersion}
                   data-agent-handoff-read-order={editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(',')}
@@ -9543,6 +9546,7 @@ export function CanvasEditor({
                       className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2"
                       data-testid="editor-agent-handoff-brief"
                       data-agent-read-start={editorCompositionReadiness.agentHandoff.editorSurface.agentReadStart}
+                      data-manifest-read-start={editorCompositionReadiness.agentHandoff.editorSurface.manifestReadStart}
                       data-openapi-read-start={editorCompositionReadiness.agentHandoff.editorSurface.openApiReadStart}
                       data-read-order={editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(',')}
                       data-canvas-first-value={editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.backyCanvasValue}
