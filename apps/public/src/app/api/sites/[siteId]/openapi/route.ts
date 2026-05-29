@@ -5659,6 +5659,146 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 site: { $ref: "#/components/schemas/SiteSummary" },
               },
             }),
+            CustomFrontendApiAlignment: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "readStart",
+                "publicDiscovery",
+                "typedClients",
+                "writeBoundary",
+                "creationRoutes",
+                "preserveFields",
+                "verification",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.custom-frontend-api-alignment.v1",
+                },
+                readStart: {
+                  type: "object",
+                  required: [
+                    "endpointKey",
+                    "method",
+                    "endpoint",
+                    "manifestMirror",
+                    "openApiMirror",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    endpointKey: { const: "agentHandoff" },
+                    method: { const: "GET" },
+                    endpoint: { type: "string" },
+                    manifestMirror: {
+                      const: "data.contract.customFrontendAgentHandoff",
+                    },
+                    openApiMirror: {
+                      const: "x-backy-custom-frontend-agent-handoff",
+                    },
+                  },
+                },
+                publicDiscovery: {
+                  type: "object",
+                  required: [
+                    "manifestEndpointKey",
+                    "openApiEndpointKey",
+                    "routeResolveEndpointKey",
+                    "renderEndpointKey",
+                    "styleSource",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    manifestEndpointKey: { const: "manifest" },
+                    openApiEndpointKey: { const: "openapi" },
+                    routeResolveEndpointKey: { const: "resolve" },
+                    renderEndpointKey: { const: "render" },
+                    styleSource: {
+                      const: "manifest.data.site.frontendDesign",
+                    },
+                  },
+                },
+                typedClients: {
+                  type: "object",
+                  required: ["sdkPackage", "generatedTypes", "preferredHelpers"],
+                  additionalProperties: true,
+                  properties: {
+                    sdkPackage: { const: "packages/sdk-js" },
+                    generatedTypes: {
+                      const: "packages/sdk-js/src/generated-contract-types.ts",
+                    },
+                    preferredHelpers: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                writeBoundary: {
+                  type: "object",
+                  required: [
+                    "adminWritesRequireAuth",
+                    "publicDiscoveryOnly",
+                    "writeEndpointFamily",
+                    "noFrontendLocalJsonForks",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    adminWritesRequireAuth: { const: true },
+                    publicDiscoveryOnly: { const: true },
+                    writeEndpointFamily: {
+                      const: "/api/admin/sites/:siteId/*",
+                    },
+                    noFrontendLocalJsonForks: { const: true },
+                  },
+                },
+                creationRoutes: {
+                  type: "object",
+                  required: [
+                    "pageBackyCanvas",
+                    "pageCustomFrontend",
+                    "blogBackyCanvas",
+                    "blogCustomFrontend",
+                    "productBackyCanvas",
+                    "productCustomFrontend",
+                    "formBackyCanvas",
+                    "formCustomFrontend",
+                    "collectionBackyCanvas",
+                    "collectionCustomFrontend",
+                    "reusableSectionBackyCanvas",
+                    "reusableSectionCustomFrontend",
+                  ],
+                  additionalProperties: { type: "string" },
+                  properties: {
+                    pageBackyCanvas: { type: "string" },
+                    pageCustomFrontend: { type: "string" },
+                    blogBackyCanvas: { type: "string" },
+                    blogCustomFrontend: { type: "string" },
+                    productBackyCanvas: { type: "string" },
+                    productCustomFrontend: { type: "string" },
+                    formBackyCanvas: { type: "string" },
+                    formCustomFrontend: { type: "string" },
+                    collectionBackyCanvas: { type: "string" },
+                    collectionCustomFrontend: { type: "string" },
+                    reusableSectionBackyCanvas: { type: "string" },
+                    reusableSectionCustomFrontend: { type: "string" },
+                  },
+                },
+                preserveFields: {
+                  type: "array",
+                  items: { type: "string" },
+                },
+                verification: {
+                  type: "object",
+                  required: ["renderEndpoint", "resolveEndpoint", "expectation"],
+                  additionalProperties: true,
+                  properties: {
+                    renderEndpoint: { type: "string" },
+                    resolveEndpoint: { type: "string" },
+                    expectation: { type: "string" },
+                  },
+                },
+              },
+            },
             CustomFrontendAgentHandoff: {
               type: "object",
               required: [
@@ -5668,6 +5808,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "endpoints",
                 "readOrder",
                 "contentCreation",
+                "apiAlignment",
                 "designState",
                 "rules",
                 "privacy",
@@ -5694,6 +5835,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   type: "object",
                   additionalProperties: true,
                 },
+                apiAlignment: {
+                  $ref: "#/components/schemas/CustomFrontendApiAlignment",
+                },
                 designState: {
                   type: "object",
                   additionalProperties: true,
@@ -5715,6 +5859,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "site",
                 "readStart",
                 "handoff",
+                "apiAlignment",
                 "canvasFirst",
                 "designState",
                 "contentCreation",
@@ -5750,6 +5895,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 handoff: {
                   $ref: "#/components/schemas/CustomFrontendAgentHandoff",
+                },
+                apiAlignment: {
+                  $ref: "#/components/schemas/CustomFrontendApiAlignment",
                 },
                 canvasFirst: {
                   type: "object",

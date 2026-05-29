@@ -143,6 +143,110 @@
           },
           "required": ["templateCloneFields", "backyCanvasTemplateField", "customFrontendTemplateField", "adminEntryPoints", "canvasFirst", "rule"]
         },
+        "apiAlignment": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.custom-frontend-api-alignment.v1" },
+            "readStart": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "endpointKey": { "const": "agentHandoff" },
+                "method": { "const": "GET" },
+                "endpoint": { "type": "string", "minLength": 1 },
+                "manifestMirror": { "const": "data.contract.customFrontendAgentHandoff" },
+                "openApiMirror": { "const": "x-backy-custom-frontend-agent-handoff" }
+              },
+              "required": ["endpointKey", "method", "endpoint", "manifestMirror", "openApiMirror"]
+            },
+            "publicDiscovery": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "manifestEndpointKey": { "const": "manifest" },
+                "openApiEndpointKey": { "const": "openapi" },
+                "routeResolveEndpointKey": { "const": "resolve" },
+                "renderEndpointKey": { "const": "render" },
+                "styleSource": { "const": "manifest.data.site.frontendDesign" }
+              },
+              "required": ["manifestEndpointKey", "openApiEndpointKey", "routeResolveEndpointKey", "renderEndpointKey", "styleSource"]
+            },
+            "typedClients": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "sdkPackage": { "const": "packages/sdk-js" },
+                "generatedTypes": { "const": "packages/sdk-js/src/generated-contract-types.ts" },
+                "preferredHelpers": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "customFrontendAgentHandoff" }
+                }
+              },
+              "required": ["sdkPackage", "generatedTypes", "preferredHelpers"]
+            },
+            "writeBoundary": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "adminWritesRequireAuth": { "const": true },
+                "publicDiscoveryOnly": { "const": true },
+                "writeEndpointFamily": { "const": "/api/admin/sites/:siteId/*" },
+                "noFrontendLocalJsonForks": { "const": true }
+              },
+              "required": ["adminWritesRequireAuth", "publicDiscoveryOnly", "writeEndpointFamily", "noFrontendLocalJsonForks"]
+            },
+            "creationRoutes": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "properties": {
+                "pageBackyCanvas": { "type": "string", "minLength": 1 },
+                "pageCustomFrontend": { "type": "string", "minLength": 1 },
+                "blogBackyCanvas": { "type": "string", "minLength": 1 },
+                "blogCustomFrontend": { "type": "string", "minLength": 1 },
+                "productBackyCanvas": { "type": "string", "minLength": 1 },
+                "productCustomFrontend": { "type": "string", "minLength": 1 },
+                "formBackyCanvas": { "type": "string", "minLength": 1 },
+                "formCustomFrontend": { "type": "string", "minLength": 1 },
+                "collectionBackyCanvas": { "type": "string", "minLength": 1 },
+                "collectionCustomFrontend": { "type": "string", "minLength": 1 },
+                "reusableSectionBackyCanvas": { "type": "string", "minLength": 1 },
+                "reusableSectionCustomFrontend": { "type": "string", "minLength": 1 }
+              },
+              "required": [
+                "pageBackyCanvas",
+                "pageCustomFrontend",
+                "blogBackyCanvas",
+                "blogCustomFrontend",
+                "productBackyCanvas",
+                "productCustomFrontend",
+                "formBackyCanvas",
+                "formCustomFrontend",
+                "collectionBackyCanvas",
+                "collectionCustomFrontend",
+                "reusableSectionBackyCanvas",
+                "reusableSectionCustomFrontend"
+              ]
+            },
+            "preserveFields": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "contains": { "const": "content.elements" }
+            },
+            "verification": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "renderEndpoint": { "type": "string", "minLength": 1 },
+                "resolveEndpoint": { "type": "string", "minLength": 1 },
+                "expectation": { "type": "string", "minLength": 1 }
+              },
+              "required": ["renderEndpoint", "resolveEndpoint", "expectation"]
+            }
+          },
+          "required": ["schemaVersion", "readStart", "publicDiscovery", "typedClients", "writeBoundary", "creationRoutes", "preserveFields", "verification"]
+        },
         "designState": {
           "type": "object",
           "additionalProperties": true,
@@ -180,7 +284,7 @@
           "required": ["includesSecretValues", "publicDiscoveryOnly", "adminWritesRequireAuth", "secretHandling"]
         }
       },
-      "required": ["schemaVersion", "source", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "designState", "rules", "privacy"]
+      "required": ["schemaVersion", "source", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "designState", "rules", "privacy"]
     },
     "databaseCertification": {
       "type": "object",

@@ -11,13 +11,13 @@ Repository-level quickstart for coding agents: `AGENTS.md`.
 
 2. `GET /api/sites/:siteId/agent-handoff`
    - Start here when another AI/frontend agent needs a compact machine-readable brief before generating a website.
-   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `handoff`, `readStart`, `canvasFirst`, `contentCreation`, and `designState` blocks.
+   - Returns `backy.custom-frontend-agent-handoff-response.v1` with the canonical `handoff`, `readStart`, `apiAlignment`, `canvasFirst`, `contentCreation`, and `designState` blocks.
    - The same handoff remains mirrored inside manifest/OpenAPI so generated clients can use the same contract.
 
 3. `GET /api/sites/:siteId/manifest`
    - Bootstrap the custom frontend. This is the primary machine-readable contract for routes, modules, media/font policy, site frontend design, template registry, live-management capability, launch readiness, and completion status.
    - Schema source: `specs/ai-frontend-contract/frontend-manifest.schema.json`.
-   - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
+   - Agent shortcut: `data.contract.customFrontendAgentHandoff` (`backy.custom-frontend-agent-handoff.v1`) lists the canonical docs, endpoint templates, API alignment rules, SDK helpers, template clone fields, and design-state round-trip fields for AI/frontend builders.
    - Read-order shortcut: `data.contract.customFrontendAgentHandoff.readOrder` tells agents the sequence to follow: direct agent handoff, manifest, OpenAPI, authenticated frontend-design management, template registry, then render verification.
 
 4. `GET /api/sites/:siteId/openapi`
@@ -65,6 +65,10 @@ When an agent creates or updates pages, blog posts, products, forms, collections
 - `meta.frontendDesign*`
 
 Do not flatten a Backy canvas page into plain HTML/text unless the target is a throwaway static export. Backy must be able to reopen the result in the canvas editor with layer geometry, responsive overrides, media/font identity, animations, bindings, and editable fields intact.
+
+## API alignment rule
+
+Agents should treat `customFrontendAgentHandoff.apiAlignment` as the machine-readable instruction sheet before writing frontend code. It identifies the direct read-start endpoint, the manifest/OpenAPI mirrors, SDK/generated-type sources, public discovery endpoints, authenticated admin write boundary, creation routes, fields that must be preserved, and render/resolve verification endpoints. If a generated frontend needs to create or edit Backy content, it should use those advertised contracts instead of frontend-local JSON or guessed route shapes.
 
 ## Creating new content
 

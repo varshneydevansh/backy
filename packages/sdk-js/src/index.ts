@@ -696,6 +696,7 @@ export interface BackyCustomFrontendAgentHandoffResponse {
     [key: string]: unknown;
   };
   handoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff;
+  apiAlignment: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["apiAlignment"];
   canvasFirst: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["contentCreation"]["canvasFirst"];
   designState: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["designState"];
   contentCreation: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff["contentCreation"];

@@ -138,6 +138,47 @@ export const buildCustomFrontendAgentHandoff = (siteId: string) => ({
     },
     rule: 'Create page, blog, product, form, collection, and section content through Backy APIs so every result can reopen in the canvas editor.',
   },
+  apiAlignment: {
+    schemaVersion: 'backy.custom-frontend-api-alignment.v1',
+    readStart: {
+      endpointKey: 'agentHandoff',
+      method: 'GET',
+      endpoint: `/api/sites/${siteId}/agent-handoff`,
+      manifestMirror: 'data.contract.customFrontendAgentHandoff',
+      openApiMirror: 'x-backy-custom-frontend-agent-handoff',
+    },
+    publicDiscovery: {
+      manifestEndpointKey: 'manifest',
+      openApiEndpointKey: 'openapi',
+      routeResolveEndpointKey: 'resolve',
+      renderEndpointKey: 'render',
+      styleSource: 'manifest.data.site.frontendDesign',
+    },
+    typedClients: {
+      sdkPackage: 'packages/sdk-js',
+      generatedTypes: 'packages/sdk-js/src/generated-contract-types.ts',
+      preferredHelpers: [
+        'customFrontendAgentHandoff',
+        'manifest',
+        'openapi',
+        'render',
+        'buildBackyContentDesignPayload',
+      ],
+    },
+    writeBoundary: {
+      adminWritesRequireAuth: true,
+      publicDiscoveryOnly: true,
+      writeEndpointFamily: '/api/admin/sites/:siteId/*',
+      noFrontendLocalJsonForks: true,
+    },
+    creationRoutes: buildCustomFrontendAgentAdminEntryPoints(siteId),
+    preserveFields: CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS,
+    verification: {
+      renderEndpoint: `/api/sites/${siteId}/render?path=/...`,
+      resolveEndpoint: `/api/sites/${siteId}/resolve?path=/`,
+      expectation: 'After creating or editing custom frontend content, verify the public route through Backy resolve/render payloads and keep the same design envelope writable through admin/live-management APIs.',
+    },
+  },
   designState: {
     roundTripFields: CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS,
     siteStyleSources: [

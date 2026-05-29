@@ -14,6 +14,7 @@ Read order:
    - Local demo: `http://127.0.0.1:3001/api/sites/site-demo/agent-handoff`
    - Contract: `backy.custom-frontend-agent-handoff-response.v1`
    - Canonical payload: `backy.custom-frontend-agent-handoff.v1`
+   - API alignment: `data.apiAlignment` and `data.handoff.apiAlignment`
 
 2. `GET /api/sites/:siteId/manifest`
    - Site identity, routes, modules, frontend design state, template registry, media/font policy, live-management capability, launch readiness, and completion status.
@@ -33,6 +34,8 @@ Read order:
    - Render: `/api/sites/:siteId/render?path=/...`
 
 Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-frontend-agent-handoff.md).
+
+Use `apiAlignment` before generating frontend code. It names the direct read start, manifest/OpenAPI mirrors, SDK/generated-type source, public discovery endpoints, authenticated write boundary, canvas-first creation routes, preserve-field list, and render/resolve verification endpoints.
 
 ## Design State Preservation
 

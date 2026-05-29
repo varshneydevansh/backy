@@ -243,6 +243,7 @@ assert(
     publicAgentHandoffRoute.includes('buildCustomFrontendAgentHandoff(site.id)') &&
     publicAgentHandoffRoute.includes("manifestPointer: 'data.contract.customFrontendAgentHandoff'") &&
     publicAgentHandoffRoute.includes("openApiPointer: 'x-backy-custom-frontend-agent-handoff'") &&
+    publicAgentHandoffRoute.includes('apiAlignment: handoff.apiAlignment') &&
     publicAgentHandoffRoute.includes('handoff.contentCreation.canvasFirst') &&
     publicAgentHandoffRoute.includes('handoff.designState') &&
     publicAgentHandoffRoute.includes('!site || !site.isPublished') &&
@@ -252,6 +253,8 @@ assert(
     manifestRoute.includes('customFrontendAgentHandoff: `/api/sites/${input.site.id}/manifest#data.contract.customFrontendAgentHandoff`') &&
     openApiRoute.includes('"x-backy-custom-frontend-agent-handoff": customFrontendAgentHandoff') &&
     openApiRoute.includes('operationId: "getBackyCustomFrontendAgentHandoff"') &&
+    openApiRoute.includes('CustomFrontendApiAlignment') &&
+    openApiRoute.includes('$ref: "#/components/schemas/CustomFrontendApiAlignment"') &&
     openApiRoute.includes('CustomFrontendAgentHandoffEnvelope') &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent-handoff.v1'") &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md'") &&
@@ -261,6 +264,11 @@ assert(
     customFrontendAgentHandoffLib.includes('buildBackyContentDesignPayload') &&
     customFrontendAgentHandoffLib.includes('frontendDesignTemplateId') &&
     customFrontendAgentHandoffLib.includes('adminEntryPoints') &&
+    customFrontendAgentHandoffLib.includes('apiAlignment') &&
+    customFrontendAgentHandoffLib.includes("schemaVersion: 'backy.custom-frontend-api-alignment.v1'") &&
+    customFrontendAgentHandoffLib.includes('noFrontendLocalJsonForks') &&
+    customFrontendAgentHandoffLib.includes('preferredHelpers') &&
+    customFrontendAgentHandoffLib.includes('preserveFields') &&
     customFrontendAgentHandoffLib.includes('readOrder') &&
     customFrontendAgentHandoffLib.includes('canvasFirst') &&
     customFrontendAgentHandoffLib.includes('siteStyleSources') &&
@@ -275,6 +283,10 @@ assert(
     frontendManifestSchema.includes('"agentHandoff"') &&
     frontendManifestSchema.includes('"frontendDesignManagement"') &&
     frontendManifestSchema.includes('"adminEntryPoints"') &&
+    frontendManifestSchema.includes('"apiAlignment"') &&
+    frontendManifestSchema.includes('"backy.custom-frontend-api-alignment.v1"') &&
+    frontendManifestSchema.includes('"noFrontendLocalJsonForks"') &&
+    frontendManifestSchema.includes('"preserveFields"') &&
     frontendManifestSchema.includes('"readOrder"') &&
     frontendManifestSchema.includes('"canvasFirst"') &&
     frontendManifestSchema.includes('"siteStyleSources"') &&
@@ -285,6 +297,9 @@ assert(
     frontendManifestSchema.includes('"reusableSectionCustomFrontend"') &&
     frontendManifestSchema.includes('"templateCloneFields"') &&
     generatedSdkTypes.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiCustomFrontendApiAlignment') &&
+    generatedSdkTypes.includes('apiAlignment: {') &&
+    generatedSdkTypes.includes('"backy.custom-frontend-api-alignment.v1"') &&
     generatedSdkTypes.includes('"x-backy-custom-frontend-agent-handoff"?: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     sdkSource.includes('GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&
     sdkSource.includes('customFrontendAgentHandoff: GeneratedBackyFrontendManifestCustomFrontendAgentHandoff') &&

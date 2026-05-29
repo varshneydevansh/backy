@@ -70,6 +70,7 @@ const agentHandoffResponse = (
         docs: handoff.docs.map((doc) => doc.path),
       },
       handoff,
+      apiAlignment: handoff.apiAlignment,
       canvasFirst: handoff.contentCreation.canvasFirst,
       designState: handoff.designState,
       contentCreation: handoff.contentCreation,

@@ -1859,6 +1859,16 @@ assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.productCust
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.formCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing form custom frontend entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.collectionCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing collection custom frontend entry point');
 assert(customFrontendAgentHandoff.contentCreation?.adminEntryPoints?.reusableSectionCustomFrontend?.includes('frontendTemplate=:templateId'), 'manifest() custom frontend agent handoff missing reusable section custom frontend entry point');
+assert(customFrontendAgentHandoff.apiAlignment?.schemaVersion === 'backy.custom-frontend-api-alignment.v1', 'manifest() custom frontend agent handoff missing API alignment schema');
+assert(customFrontendAgentHandoff.apiAlignment?.readStart?.endpoint === customFrontendAgentHandoff.endpoints.agentHandoff, 'manifest() custom frontend agent handoff API alignment read-start drifted');
+assert(customFrontendAgentHandoff.apiAlignment?.readStart?.manifestMirror === 'data.contract.customFrontendAgentHandoff', 'manifest() custom frontend agent handoff API alignment missing manifest mirror');
+assert(customFrontendAgentHandoff.apiAlignment?.readStart?.openApiMirror === 'x-backy-custom-frontend-agent-handoff', 'manifest() custom frontend agent handoff API alignment missing OpenAPI mirror');
+assert(customFrontendAgentHandoff.apiAlignment?.publicDiscovery?.styleSource === 'manifest.data.site.frontendDesign', 'manifest() custom frontend agent handoff API alignment missing frontendDesign style source');
+assert(customFrontendAgentHandoff.apiAlignment?.typedClients?.preferredHelpers?.includes('buildBackyContentDesignPayload'), 'manifest() custom frontend agent handoff API alignment missing design payload helper');
+assert(customFrontendAgentHandoff.apiAlignment?.writeBoundary?.noFrontendLocalJsonForks === true, 'manifest() custom frontend agent handoff API alignment must block frontend-local JSON forks');
+assert(customFrontendAgentHandoff.apiAlignment?.creationRoutes?.pageBackyCanvas === customFrontendAgentHandoff.contentCreation.adminEntryPoints.pageBackyCanvas, 'manifest() custom frontend agent handoff API alignment page canvas route drifted');
+assert(customFrontendAgentHandoff.apiAlignment?.preserveFields?.includes('content.elements'), 'manifest() custom frontend agent handoff API alignment missing content.elements preserve field');
+assert(customFrontendAgentHandoff.apiAlignment?.verification?.renderEndpoint === customFrontendAgentHandoff.endpoints.render, 'manifest() custom frontend agent handoff API alignment render endpoint drifted');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('meta.frontendDesign*'), 'manifest() custom frontend agent handoff missing frontend design provenance round-trip field');
 assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('manifest.data.site.frontendDesign'), 'manifest() custom frontend agent handoff missing site frontendDesign style source');
@@ -1871,6 +1881,8 @@ assert(agentHandoff.data.readStart?.endpoint === manifest.data.endpoints.agentHa
 assert(agentHandoff.data.readStart?.manifestPointer === 'data.contract.customFrontendAgentHandoff', 'customFrontendAgentHandoff() missing manifest read-start pointer');
 assert(agentHandoff.data.readStart?.openApiPointer === 'x-backy-custom-frontend-agent-handoff', 'customFrontendAgentHandoff() missing OpenAPI read-start pointer');
 assert(agentHandoff.data.handoff?.endpoints?.agentHandoff === manifest.data.endpoints.agentHandoff, 'customFrontendAgentHandoff() direct handoff endpoint drifted');
+assert(agentHandoff.data.apiAlignment?.schemaVersion === 'backy.custom-frontend-api-alignment.v1', 'customFrontendAgentHandoff() missing top-level API alignment payload');
+assert(agentHandoff.data.apiAlignment?.writeBoundary?.noFrontendLocalJsonForks === true, 'customFrontendAgentHandoff() API alignment must block frontend-local JSON forks');
 assert(agentHandoff.data.canvasFirst?.editor === 'Backy canvas editor', 'customFrontendAgentHandoff() missing canvas-first editor rule');
 assert(agentHandoff.data.designState?.roundTripFields?.includes('content.elements'), 'customFrontendAgentHandoff() missing design-state round-trip fields');
 const cachedAgentHandoff = await client.customFrontendAgentHandoffCached();
@@ -2156,6 +2168,8 @@ assert(
 );
 assert(openapi['x-backy-custom-frontend-agent-handoff']?.schemaVersion === manifest.data.contract.customFrontendAgentHandoff.schemaVersion, 'openapi() custom frontend agent handoff schema drifted from manifest');
 assert(openapi['x-backy-custom-frontend-agent-handoff']?.endpoints?.frontendDesignManagement === manifest.data.contract.customFrontendAgentHandoff.endpoints.frontendDesignManagement, 'openapi() custom frontend agent handoff admin design endpoint drifted from manifest');
+assert(openapi['x-backy-custom-frontend-agent-handoff']?.apiAlignment?.readStart?.openApiMirror === 'x-backy-custom-frontend-agent-handoff', 'openapi() custom frontend agent handoff missing API alignment mirror');
+assert(openapi['x-backy-custom-frontend-agent-handoff']?.apiAlignment?.writeBoundary?.noFrontendLocalJsonForks === true, 'openapi() custom frontend agent handoff API alignment must block frontend-local JSON forks');
 assert(openapi['x-backy-custom-frontend-agent-handoff']?.designState?.roundTripFields?.includes?.('content.elements'), 'openapi() custom frontend agent handoff missing design round-trip fields');
 assert(openapi['x-backy-custom-frontend-agent-handoff']?.privacy?.includesSecretValues === false, 'openapi() custom frontend agent handoff leaked secret boundary');
 assert(openapi['x-backy-frontend-launch-readiness']?.schemaVersion === manifest.data.contract.frontendLaunchReadiness.schemaVersion, 'openapi() missing frontend launch readiness extension');
