@@ -1188,6 +1188,8 @@ const assertDashboardSidebarNavigation = async (client) => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     initial = await evaluate(client, `(() => {
       const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
+      const sidebarShell = document.querySelector('[data-testid="admin-sidebar-shell"]');
+      const sidebarNav = document.querySelector('[data-testid="admin-sidebar-nav"]');
       const workspace = document.querySelector('[data-nav-section="workspace"]');
       const content = document.querySelector('[data-nav-section="content"]');
       const contentToggle = document.querySelector('[data-testid="admin-sidebar-section-toggle-content"]');
@@ -1207,6 +1209,18 @@ const assertDashboardSidebarNavigation = async (client) => {
           expandAllButton instanceof HTMLButtonElement,
         collapsed: sidebar?.getAttribute('data-collapsed') || '',
         activeSection: sidebar?.getAttribute('data-active-nav-section') || '',
+        shellScrollContract: sidebarShell?.getAttribute('data-scroll-contract') || '',
+        scrollContract: sidebar?.getAttribute('data-scroll-contract') || '',
+        scrollScope: sidebar?.getAttribute('data-scroll-scope') || '',
+        scrollContainerTestId: sidebar?.getAttribute('data-scroll-container-testid') || '',
+        navScrollRole: sidebarNav?.getAttribute('data-scroll-role') || '',
+        navScrollAxis: sidebarNav?.getAttribute('data-scroll-axis') || '',
+        navScrollOwner: sidebarNav?.getAttribute('data-scroll-owned-by') || '',
+        navScrollContained: sidebarNav?.getAttribute('data-scroll-contained') || '',
+        sidebarOverflowY: sidebar instanceof HTMLElement ? getComputedStyle(sidebar).overflowY : '',
+        sidebarMaxHeight: sidebar instanceof HTMLElement ? getComputedStyle(sidebar).maxHeight : '',
+        navOverflowY: sidebarNav instanceof HTMLElement ? getComputedStyle(sidebarNav).overflowY : '',
+        navMinHeight: sidebarNav instanceof HTMLElement ? getComputedStyle(sidebarNav).minHeight : '',
         sectionCount: Number(sidebar?.getAttribute('data-nav-section-count') || 0),
         expandedCount: Number(sidebar?.getAttribute('data-expanded-section-count') || 0),
         collapsedCount: Number(sidebar?.getAttribute('data-collapsed-section-count') || 0),
@@ -1233,6 +1247,21 @@ const assertDashboardSidebarNavigation = async (client) => {
   assert(initial?.ready, `Dashboard sidebar did not become ready: ${JSON.stringify(initial)}`);
   assert(initial.collapsed === 'false', `Dashboard sidebar should be expanded on dashboard: ${JSON.stringify(initial)}`);
   assert(initial.activeSection === 'workspace', `Dashboard sidebar should keep workspace active: ${JSON.stringify(initial)}`);
+  assert(
+    initial.shellScrollContract === 'sidebar-independent-from-main' &&
+      initial.scrollContract === 'viewport-bounded-sidebar' &&
+      initial.scrollScope === 'sidebar-nav' &&
+      initial.scrollContainerTestId === 'admin-sidebar-nav' &&
+      initial.navScrollRole === 'primary-navigation' &&
+      initial.navScrollAxis === 'y' &&
+      initial.navScrollOwner === 'admin-sidebar' &&
+      initial.navScrollContained === 'true' &&
+      initial.sidebarOverflowY !== 'visible' &&
+      initial.sidebarMaxHeight !== 'none' &&
+      initial.navOverflowY === 'auto' &&
+      initial.navMinHeight === '0px',
+    `Dashboard sidebar must be viewport-bounded with an internal navigation scroller: ${JSON.stringify(initial)}`,
+  );
   assert(initial.sectionCount >= 5, `Dashboard sidebar lost primary navigation groups: ${JSON.stringify(initial)}`);
   assert(initial.expandedCount >= 1 && initial.collapsedCount >= 1, `Dashboard sidebar should start grouped, not fully expanded: ${JSON.stringify(initial)}`);
   assert(

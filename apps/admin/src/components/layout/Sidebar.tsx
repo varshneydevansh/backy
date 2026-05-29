@@ -354,10 +354,13 @@ export function Sidebar({
       data-section-state-version={SIDEBAR_SECTION_STORAGE_VERSION}
       data-section-state-source={sectionStateSource}
       data-legacy-section-state-count={legacySectionStateCount}
+      data-scroll-contract="viewport-bounded-sidebar"
+      data-scroll-scope="sidebar-nav"
+      data-scroll-container-testid={`${testIdPrefix}-nav`}
       aria-busy={(permissionsLoading && !navigationUsable) || !sectionStateHydrated}
       aria-describedby={sidebarActionStatusId}
       className={cn(
-        'flex h-full min-h-0 flex-col border-r border-border bg-card transition-[width] duration-200 ease-out',
+        'flex h-full max-h-dvh min-h-0 flex-col overflow-hidden border-r border-border bg-card transition-[width] duration-200 ease-out',
         collapsed ? 'w-16' : 'w-64'
       )}
     >
@@ -590,6 +593,10 @@ export function Sidebar({
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [scrollbar-gutter:stable]"
         aria-label="Primary admin navigation"
         data-testid={`${testIdPrefix}-nav`}
+        data-scroll-role="primary-navigation"
+        data-scroll-axis="y"
+        data-scroll-owned-by={testIdPrefix}
+        data-scroll-contained="true"
         onScroll={hideRailTooltip}
       >
         <div className="space-y-2 pb-2">

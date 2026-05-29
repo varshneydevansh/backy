@@ -436,6 +436,7 @@ const assertAuthRecoverySource = () => {
       mainLayoutSource.includes('className="flex h-dvh min-h-0 min-w-0 overflow-hidden bg-background"') &&
       mainLayoutSource.includes('className="hidden h-dvh shrink-0 lg:flex"') &&
       mainLayoutSource.includes('data-dense-surface={String(isDenseAdminSurface)}') &&
+      mainLayoutSource.includes('data-scroll-contract="sidebar-independent-from-main"') &&
       mainLayoutSource.includes("'min-h-0 flex-1 overflow-y-auto overflow-x-hidden'") &&
       mainLayoutSource.includes('Skip to content') &&
       mainLayoutSource.includes('data-testid="admin-main-content"'),
@@ -520,6 +521,10 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-permission-sync-state={permissionSyncState}') &&
       sidebarSource.includes('data-required-permission={action.permissionKey}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-nav`}') &&
+      sidebarSource.includes('data-scroll-role="primary-navigation"') &&
+      sidebarSource.includes('data-scroll-axis="y"') &&
+      sidebarSource.includes('data-scroll-owned-by={testIdPrefix}') &&
+      sidebarSource.includes('data-scroll-contained="true"') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-density-controls`}') &&
       sidebarSource.includes('const [navFilter, setNavFilter]') &&
       sidebarSource.includes('const deferredNavFilter = useDeferredValue(navFilter);') &&
@@ -534,6 +539,10 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-rendered-nav-item-count={renderedItemCount}') &&
       sidebarSource.includes('data-total-nav-item-count={totalNavItemCount}') &&
       sidebarSource.includes('data-hidden-nav-item-count={hiddenNavItemCount}') &&
+      sidebarSource.includes('data-scroll-contract="viewport-bounded-sidebar"') &&
+      sidebarSource.includes('data-scroll-scope="sidebar-nav"') &&
+      sidebarSource.includes('data-scroll-container-testid={`${testIdPrefix}-nav`}') &&
+      sidebarSource.includes("'flex h-full max-h-dvh min-h-0 flex-col overflow-hidden border-r border-border bg-card transition-[width] duration-200 ease-out'") &&
       sidebarSource.includes('data-section-state-version={SIDEBAR_SECTION_STORAGE_VERSION}') &&
       sidebarSource.includes('data-section-state-source={sectionStateSource}') &&
       sidebarSource.includes('data-legacy-section-state-count={legacySectionStateCount}') &&
@@ -588,7 +597,7 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-nav-ready={String(sidebarReady)}') &&
       sidebarSource.includes('data-section-state-hydrated={String(sectionStateHydrated)}') &&
       sidebarSource.includes('data-nav-item-count={visibleItemCount}') &&
-      sidebarSource.includes("'flex h-full min-h-0 flex-col border-r border-border bg-card transition-[width] duration-200 ease-out'") &&
+      sidebarSource.includes("'flex h-full max-h-dvh min-h-0 flex-col overflow-hidden border-r border-border bg-card transition-[width] duration-200 ease-out'") &&
       sidebarSource.includes('className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2 [scrollbar-gutter:stable]"') &&
       sidebarSource.includes('lg:min-h-9 lg:py-1.5') &&
       sidebarSource.includes('[scrollbar-gutter:stable]') &&

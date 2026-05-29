@@ -204,6 +204,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           data-testid="admin-sidebar-shell"
           data-collapsed={String(effectiveSidebarCollapsed)}
           data-dense-surface={String(isDenseAdminSurface)}
+          data-scroll-contract="sidebar-independent-from-main"
         >
           <Sidebar
             collapsed={effectiveSidebarCollapsed}
