@@ -61,6 +61,7 @@ assert(headerModelSource.includes("if (path.startsWith('/newsletter')) return 'N
 assert(headerSource.includes("if (to === '/newsletter')"), 'Header search/tool navigation must preserve site scope for Newsletter.');
 assert(headerSource.includes("title: 'Newsletter'") && headerSource.includes("to: '/newsletter'"), 'Global search must include the Newsletter tool.');
 assert(helpSource.includes("route: '/newsletter'") && helpSource.includes('Open Newsletter'), 'Help must point newsletter guidance to the dedicated Newsletter workspace.');
+assert(helpSource.includes("id: 'publish-reports-newsletter'") && helpSource.includes('provider-safe draft metadata') && helpSource.includes('SPF/DKIM/DMARC'), 'Help must explain the report-to-newsletter issue workflow and delivery-provider boundary.');
 assert(routeTreeSource.includes("Route as NewsletterRouteImport") && routeTreeSource.includes("'/newsletter': typeof NewsletterRoute"), 'Generated route tree must include /newsletter.');
 assert(adminContentApiSource.includes('newsletterSubscriptionStatus?: AdminContact') && adminContentApiSource.includes('newsletterUnsubscribedAt?: string | null'), 'Admin content API contact updates must accept newsletter subscription lifecycle fields.');
 

@@ -195,6 +195,20 @@ const HELP_TOPICS: HelpTopic[] = [
     routeLabel: 'Open Newsletter',
   },
   {
+    id: 'publish-reports-newsletter',
+    category: 'content',
+    title: 'Publish reports and prepare newsletter issues',
+    summary: 'Use Backy as the source of truth for posts, subscribers, consent, and issue handoff.',
+    details: [
+      'Write each report in Blog so slug, SEO, authoring history, categories, comments, and canvas design stay attached to the site.',
+      'Use Newsletter to create a signup form, place it on a Backy canvas page or custom frontend, and collect consent, topic, and source values into Contacts.',
+      'When a report is ready, copy the issue handoff. It includes recent published posts, public render/resolve URLs, subscriber counts, sync routes, and provider-safe draft metadata.',
+      'Use an email provider only for outbound sending, unsubscribe enforcement in delivered messages, bounces, complaints, and SPF/DKIM/DMARC.',
+    ],
+    route: '/newsletter',
+    routeLabel: 'Open Newsletter',
+  },
+  {
     id: 'roles',
     category: 'security',
     title: 'Understand workspace access',
