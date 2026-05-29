@@ -245,6 +245,11 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
       return;
     }
 
+    if (to === '/newsletter') {
+      navigate({ to: '/newsletter', search: activeSiteSearch });
+      return;
+    }
+
     if (to === '/media') {
       navigate({ to: '/media', search: activeSiteSearch });
       return;
@@ -733,6 +738,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
           { id: 'tool:pages', type: 'Tool' as const, title: 'Pages', detail: 'Page tree, drafts, publishing', action: { route: 'static' as const, to: '/pages' as const } },
           { id: 'tool:blog', type: 'Tool' as const, title: 'Blog', detail: 'Posts, categories, authors', action: { route: 'static' as const, to: '/blog' as const } },
           { id: 'tool:forms', type: 'Tool' as const, title: 'Forms', detail: 'Registration, contact, submissions', action: { route: 'static' as const, to: '/forms' as const } },
+          { id: 'tool:newsletter', type: 'Tool' as const, title: 'Newsletter', detail: 'Subscribers, signup forms, consent, exports', action: { route: 'static' as const, to: '/newsletter' as const } },
           { id: 'tool:comments', type: 'Tool' as const, title: 'Comments', detail: 'Moderation queue and public replies', action: { route: 'static' as const, to: '/comments' as const } },
           { id: 'tool:contacts', type: 'Tool' as const, title: 'Contacts', detail: 'Captured leads and audience records', action: { route: 'static' as const, to: '/contacts' as const } },
           { id: 'tool:media', type: 'Tool' as const, title: 'Media Library', detail: 'Files, folders, images, fonts', action: { route: 'static' as const, to: '/media' as const } },

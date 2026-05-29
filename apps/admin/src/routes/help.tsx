@@ -23,7 +23,7 @@ export const Route = createFileRoute('/help')({
 });
 
 type HelpCategoryId = 'start' | 'sites' | 'editor' | 'api' | 'content' | 'security';
-type HelpRoute = '/' | '/sites' | '/sites/new' | '/pages' | '/blog' | '/media' | '/collections' | '/reusable-sections' | '/forms' | '/contacts' | '/settings';
+type HelpRoute = '/' | '/sites' | '/sites/new' | '/pages' | '/blog' | '/media' | '/collections' | '/reusable-sections' | '/forms' | '/newsletter' | '/contacts' | '/settings';
 
 interface HelpTopic {
   id: string;
@@ -182,14 +182,14 @@ const HELP_TOPICS: HelpTopic[] = [
     id: 'newsletter-subscribers',
     category: 'content',
     title: 'Run newsletter signup and subscriber management',
-    summary: 'Use Backy Forms for public signup and Contacts for the private subscriber list.',
+    summary: 'Use Newsletter for subscriber capture, consent, export, and custom frontend handoff.',
     details: [
-      'Create a newsletter signup form with email, name, topic preference, consent, and source fields, then place that form on blog posts, landing pages, or reusable sections.',
-      'Contacts stores the captured subscriber records with status, notes, source values, consent evidence, saved lists, segments, CSV import/export, and private management APIs.',
+      'The Newsletter workspace creates active signup forms with email, name, topic preference, consent, and source fields, then links you to a canvas newsletter page or blog composer.',
+      'Subscriber records are still stored through Backy Contacts so status, notes, source values, consent evidence, saved lists, segments, CSV export, and private management APIs stay site-scoped.',
       'Backy should own the subscriber database and API handoff. Bulk outbound delivery, inbox hosting, bounce handling, and domain reputation should stay behind a real email provider until Backy has a dedicated mail service.',
     ],
-    route: '/contacts',
-    routeLabel: 'Open Contacts',
+    route: '/newsletter',
+    routeLabel: 'Open Newsletter',
   },
   {
     id: 'roles',

@@ -18,6 +18,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as PagesRouteImport } from './routes/pages'
 import { Route as OrdersRouteImport } from './routes/orders'
+import { Route as NewsletterRouteImport } from './routes/newsletter'
 import { Route as MediaRouteImport } from './routes/media'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as HelpRouteImport } from './routes/help'
@@ -81,6 +82,11 @@ const PagesRoute = PagesRouteImport.update({
 const OrdersRoute = OrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewsletterRoute = NewsletterRouteImport.update({
+  id: '/newsletter',
+  path: '/newsletter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MediaRoute = MediaRouteImport.update({
@@ -191,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
+  '/newsletter': typeof NewsletterRoute
   '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
@@ -221,6 +228,7 @@ export interface FileRoutesByTo {
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
+  '/newsletter': typeof NewsletterRoute
   '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
@@ -252,6 +260,7 @@ export interface FileRoutesById {
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
+  '/newsletter': typeof NewsletterRoute
   '/orders': typeof OrdersRoute
   '/pages': typeof PagesRouteWithChildren
   '/products': typeof ProductsRoute
@@ -284,6 +293,7 @@ export interface FileRouteTypes {
     | '/help'
     | '/login'
     | '/media'
+    | '/newsletter'
     | '/orders'
     | '/pages'
     | '/products'
@@ -314,6 +324,7 @@ export interface FileRouteTypes {
     | '/help'
     | '/login'
     | '/media'
+    | '/newsletter'
     | '/orders'
     | '/pages'
     | '/products'
@@ -344,6 +355,7 @@ export interface FileRouteTypes {
     | '/help'
     | '/login'
     | '/media'
+    | '/newsletter'
     | '/orders'
     | '/pages'
     | '/products'
@@ -375,6 +387,7 @@ export interface RootRouteChildren {
   HelpRoute: typeof HelpRoute
   LoginRoute: typeof LoginRoute
   MediaRoute: typeof MediaRoute
+  NewsletterRoute: typeof NewsletterRoute
   OrdersRoute: typeof OrdersRoute
   PagesRoute: typeof PagesRouteWithChildren
   ProductsRoute: typeof ProductsRoute
@@ -449,6 +462,13 @@ declare module '@tanstack/react-router' {
       path: '/orders'
       fullPath: '/orders'
       preLoaderRoute: typeof OrdersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/newsletter': {
+      id: '/newsletter'
+      path: '/newsletter'
+      fullPath: '/newsletter'
+      preLoaderRoute: typeof NewsletterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/media': {
@@ -647,6 +667,7 @@ const rootRouteChildren: RootRouteChildren = {
   HelpRoute: HelpRoute,
   LoginRoute: LoginRoute,
   MediaRoute: MediaRoute,
+  NewsletterRoute: NewsletterRoute,
   OrdersRoute: OrdersRoute,
   PagesRoute: PagesRouteWithChildren,
   ProductsRoute: ProductsRoute,

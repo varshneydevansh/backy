@@ -9,6 +9,7 @@ import {
   Newspaper,
   Database,
   ClipboardList,
+  Mail,
   ShoppingBag,
   Receipt,
   MessageSquare,
@@ -99,6 +100,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Audience',
     items: [
       { id: 'forms', label: 'Forms', to: '/forms', icon: ClipboardList, area: 'forms' },
+      { id: 'newsletter', label: 'Newsletter', to: '/newsletter', icon: Mail, area: 'contacts' },
       { id: 'contacts', label: 'Contacts', to: '/contacts', icon: Contact, area: 'contacts' },
       { id: 'comments', label: 'Comments', to: '/comments', icon: MessageSquare, area: 'comments' },
     ],
@@ -151,6 +153,7 @@ export const SITE_SCOPED_NAV_ROUTES = new Set([
   '/products',
   '/orders',
   '/forms',
+  '/newsletter',
   '/contacts',
   '/comments',
   '/teams',

@@ -1,6 +1,7 @@
 import {
   ClipboardList,
   Globe2,
+  Mail,
   MessageSquare,
   ShoppingBag,
   SlidersHorizontal,
@@ -20,6 +21,7 @@ export type StaticToolRoute =
   | '/pages'
   | '/blog'
   | '/forms'
+  | '/newsletter'
   | '/comments'
   | '/contacts'
   | '/media'
@@ -81,6 +83,7 @@ export const STATIC_ROUTE_AREA: Record<StaticToolRoute, AdminNavigationArea> = {
   '/pages': 'pages',
   '/blog': 'blog',
   '/forms': 'forms',
+  '/newsletter': 'contacts',
   '/comments': 'comments',
   '/contacts': 'contacts',
   '/media': 'media',
@@ -137,6 +140,7 @@ export const getHeaderPageTitle = (path: string) => {
   if (path.startsWith('/collections')) return 'Collections';
   if (path.startsWith('/reusable-sections')) return 'Sections';
   if (path.startsWith('/forms')) return 'Forms';
+  if (path.startsWith('/newsletter')) return 'Newsletter';
   if (path.startsWith('/media')) return 'Media';
   if (path.startsWith('/products')) return 'Products';
   if (path.startsWith('/orders')) return 'Orders';
@@ -192,6 +196,14 @@ export const buildWorkflowShortcuts = ({
       count: routeCount('contacts'),
       to: '/contacts',
       icon: Users,
+    },
+    {
+      id: 'newsletter',
+      label: 'Newsletter',
+      detail: 'Subscribers',
+      count: routeCount('contacts'),
+      to: '/newsletter',
+      icon: Mail,
     },
     {
       id: 'orders',

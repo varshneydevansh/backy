@@ -102,6 +102,16 @@ Custom frontends should read live-management discovery from the manifest/OpenAPI
 
 Important principle: public discovery can describe capabilities, but admin-only APIs perform writes.
 
+## Newsletter and subscribers
+
+Newsletter signup is a Backy-native audience workflow, but outbound mailbox delivery remains a provider boundary.
+
+- Use `/newsletter?siteId=:siteId` in the admin when a site needs subscriber capture, consent evidence, CSV export, topic segments, and an email-sync handoff.
+- The Newsletter workspace creates normal Backy Forms with `settings.backyIntent: "newsletter"` plus email, name, topic, consent, and signup-source fields. Public frontends submit through `POST /api/sites/:siteId/forms/:formId/submissions` using the same form contract as any other Backy form.
+- Subscribers are stored as private Contacts records. Admin/custom tools read and update them through `/api/admin/sites/:siteId/forms/:formId/contacts`, contact segments, contact lists, sync, and consent-retention APIs.
+- Copy the workspace handoff (`backy.newsletter-management-handoff.v1`) when an AI/frontend agent or email-sync worker needs the form definition URLs, submit URLs, private management endpoints, canvas routes, and no-secret delivery boundary.
+- Do not put delivery-provider API keys, SMTP credentials, bounce webhooks, or unsubscribe signing secrets in page props, public manifests, canvas JSON, or custom frontend repositories. Delivery systems such as Buttondown, Mailchimp, Resend, SES, or similar providers belong behind Settings/server-side environment wiring.
+
 ## Release readiness note
 
 The current local product audit remains `41 Ready / 4 Partial / 0 Prototype / 0 Missing` until fresh redacted Settings and Commerce live-provider certification artifacts pass the default combined admission command:
