@@ -1025,9 +1025,9 @@ function UsersListView() {
               user.status === 'active' ? 'bg-emerald-500' : user.status === 'invited' ? 'bg-amber-400' : 'bg-slate-300',
             )} />
           </span>
-          <span className="min-w-0">
+          <span className="min-w-0 max-w-full flex-1 overflow-hidden">
             <span className="flex min-w-0 flex-wrap items-center gap-2 font-semibold text-foreground group-hover:text-primary">
-              <span className="truncate" title={user.fullName}>{user.fullName}</span>
+              <span className="min-w-0 max-w-full truncate" title={user.fullName}>{user.fullName}</span>
               {isCurrentUser(user) && (
                 <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                   You
@@ -1036,7 +1036,7 @@ function UsersListView() {
             </span>
             <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
               <Mail className="h-3 w-3 shrink-0" />
-              <span className="truncate" title={user.email}>{user.email}</span>
+              <span className="min-w-0 max-w-full truncate" title={user.email}>{user.email}</span>
             </span>
           </span>
         </button>
@@ -1127,7 +1127,7 @@ function UsersListView() {
 
         return (
           <div
-            className="flex items-center justify-end gap-2"
+            className="flex min-w-0 flex-wrap items-center justify-end gap-2"
             role="group"
             aria-label={`Actions for ${user.fullName}`}
             aria-describedby={userActionStatusId}
@@ -2352,7 +2352,7 @@ function UsersListView() {
             <DataGrid
               columns={columns}
               data={data}
-              tableMinWidth="1128px"
+              tableMinWidth="1200px"
               loading={isLoading}
               interactionDisabled={isUsersBusy}
               sortConfig={sortConfig}

@@ -32,6 +32,7 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
   const source = fs.readFileSync(new URL('../src/routes/users.tsx', import.meta.url), 'utf8');
   const createSource = fs.readFileSync(new URL('../src/routes/users.new.tsx', import.meta.url), 'utf8');
   const detailSource = fs.readFileSync(new URL('../src/routes/users.$userId.tsx', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Users route must use the shared EmptyState component');
   assert(source.includes('title="No user audit events yet"'), 'Users audit panel must keep the empty audit title visible');
   assert(source.includes('Create, update, import, delete, or review users to populate this access timeline.'), 'Users audit empty state must explain which actions populate the timeline');
@@ -133,14 +134,20 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
     'Users command center secondary actions must expose ready/blocked action metadata for every overflow action.',
   );
   assert(
-    source.includes('tableMinWidth="1128px"') &&
+    source.includes('tableMinWidth="1200px"') &&
       source.includes("width: '340px'") &&
       source.includes('className="group flex w-full min-w-0 max-w-full items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"') &&
+      source.includes('className="min-w-0 max-w-full flex-1 overflow-hidden"') &&
+      source.includes('className="min-w-0 max-w-full truncate" title={user.fullName}') &&
+      source.includes('className="min-w-0 max-w-full truncate" title={user.email}') &&
+      source.includes('className="flex min-w-0 flex-wrap items-center justify-end gap-2"') &&
       source.includes('title={user.fullName}') &&
       source.includes('title={user.email}') &&
       source.includes('title={user.lastActive}') &&
-      source.includes('block min-w-0 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]'),
-    'Users directory table must reserve enough width and wrap long person/activity values inside cells instead of overlapping role and status controls.',
+      source.includes('block min-w-0 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]') &&
+      smokeSource.includes('BACKY_USERS_DATAGRID_LAYOUT_SMOKE') &&
+      smokeSource.includes('assertUsersDataGridLayout'),
+    'Users directory table must reserve enough width, constrain person/action cells, and expose rendered geometry coverage instead of overlapping role and status controls.',
   );
   assert(
     source.includes("const canViewUsers = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'users.view', USER_PERMISSION_ROLE_DEFAULTS);") &&
@@ -3198,6 +3205,100 @@ const rollbackLatestUsersImport = async (client, email, restoredName) => {
   return null;
 };
 
+const waitForUsersDataGridLayoutState = async (client, label) => {
+  let state = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const grid = document.querySelector('[data-testid="admin-data-grid"]');
+      const scroll = document.querySelector('[data-testid="admin-data-grid-scroll"]');
+      const table = scroll?.querySelector('table');
+      const headerCells = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-head"] th'));
+      const firstRow = document.querySelector('[data-testid="admin-data-grid-row"]');
+      const bodyCells = firstRow ? Array.from(firstRow.children).filter((cell) => cell instanceof HTMLTableCellElement) : [];
+      const columnWidths = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-column-widths"] col')).map((column) => ({
+        key: column.getAttribute('data-column-key') || '',
+        width: column.getAttribute('data-column-width') || '',
+      }));
+      const cells = bodyCells.map((cell) => {
+        const content = cell.querySelector('[data-testid="admin-data-grid-cell-content"]');
+        const cellRect = cell.getBoundingClientRect();
+        const contentRect = content?.getBoundingClientRect();
+        return {
+          key: cell.getAttribute('data-column-key') || '',
+          dataLabel: cell.getAttribute('data-column-label') || '',
+          overflowPolicy: cell.getAttribute('data-cell-overflow-policy') || '',
+          contentPolicy: content?.getAttribute('data-cell-content-policy') || '',
+          cellWidth: Math.round(cellRect.width),
+          contentWidth: Math.round(contentRect?.width || 0),
+          contentFitsCell: Boolean(contentRect && contentRect.left >= cellRect.left - 1 && contentRect.right <= cellRect.right + 1),
+          contentText: (content?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 180),
+        };
+      });
+
+      return {
+        ready: Boolean(document.querySelector('[data-testid="users-command-center"]')),
+        path: window.location.pathname,
+        search: window.location.search,
+        grid: Boolean(grid),
+        rowCount: Number(grid?.getAttribute('data-row-count') || 0),
+        tableMinWidth: table?.getAttribute('data-table-min-width') || '',
+        tableClientWidth: Math.round(table?.getBoundingClientRect().width || 0),
+        scrollClientWidth: Math.round(scroll?.clientWidth || 0),
+        scrollWidth: Math.round(scroll?.scrollWidth || 0),
+        hasHorizontalScroll: Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 2),
+        viewportWidth: window.innerWidth,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        pageContained: document.documentElement.scrollWidth <= window.innerWidth + 8,
+        headerCount: headerCells.length,
+        cellCount: cells.length,
+        columnWidths,
+        cells,
+        body: document.body?.innerText?.slice(0, 1000) || '',
+      };
+    })()`);
+
+    if (state.ready && state.grid && state.rowCount > 0 && state.headerCount > 0 && state.cellCount > 0) {
+      return state;
+    }
+
+    if (attempt === 119) {
+      throw new Error(`Users DataGrid layout state did not reach ${label}: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  return state;
+};
+
+const assertUsersDataGridLayout = async (client) => {
+  await navigateToUsers(client);
+  const state = await waitForUsersDataGridLayoutState(client, 'users directory table');
+  assert(state.tableMinWidth === '1200px', `Users DataGrid must use the expanded dense-table width: ${JSON.stringify(state)}`);
+  assert(state.hasHorizontalScroll, `Users DataGrid must scroll horizontally inside its own container instead of compressing controls: ${JSON.stringify(state)}`);
+  assert(state.pageContained, `Users DataGrid must not create whole-page horizontal overflow: ${JSON.stringify(state)}`);
+  assert(state.headerCount === state.cellCount, `Users DataGrid first row cells must match headers: ${JSON.stringify(state)}`);
+  assert(
+    state.cells.every((cell) => cell.overflowPolicy === 'clip-and-wrap' && cell.contentPolicy === 'constrained-wrapped-content' && cell.contentFitsCell),
+    `Users DataGrid cells must keep rendered content inside each owning column: ${JSON.stringify(state.cells)}`,
+  );
+  assert(
+    state.columnWidths.some((column) => column.key === 'fullName' && column.width === '340px') &&
+      state.columnWidths.some((column) => column.key === 'role' && column.width === '190px') &&
+      state.columnWidths.some((column) => column.key === 'status' && column.width === '190px') &&
+      state.columnWidths.some((column) => column.key === 'actions' && column.width === '112px'),
+    `Users DataGrid must expose explicit person, role, status, and action widths: ${JSON.stringify(state.columnWidths)}`,
+  );
+
+  const personCell = state.cells.find((cell) => cell.key === 'fullName');
+  assert(personCell?.contentFitsCell && personCell.contentWidth <= personCell.cellWidth + 1, `Users person cell must stay inside its column: ${JSON.stringify(personCell)}`);
+
+  const actionCell = state.cells.find((cell) => cell.key === 'actions');
+  assert(actionCell?.contentFitsCell && actionCell.contentWidth <= actionCell.cellWidth + 1, `Users action cell must stay inside its column: ${JSON.stringify(actionCell)}`);
+
+  return state;
+};
+
 const assertLayout = async (client, expectedName) => {
   const layout = await evaluate(client, `(() => {
     const secondaryActions = document.querySelector('[data-testid="users-secondary-actions"]');
@@ -3448,10 +3549,49 @@ const cleanup = async ({ client, childProcess, userDataDir, userId }) => {
   }
 };
 
+const runUsersDataGridLayoutSmoke = async () => {
+  const { childProcess, userDataDir } = launchChrome();
+  let client;
+
+  try {
+    const target = await waitForCdp();
+    client = connectCdp(target.webSocketDebuggerUrl);
+    await client.opened;
+    await client.send('Runtime.enable');
+    await client.send('Page.enable');
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      width: 1280,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await signInAdmin(client);
+
+    const dataGridLayout = await assertUsersDataGridLayout(client);
+    console.log(JSON.stringify({
+      ok: true,
+      guard: 'users-datagrid-layout',
+      tableMinWidth: dataGridLayout.tableMinWidth,
+      scrollClientWidth: dataGridLayout.scrollClientWidth,
+      scrollWidth: dataGridLayout.scrollWidth,
+      hasHorizontalScroll: dataGridLayout.hasHorizontalScroll,
+      pageContained: dataGridLayout.pageContained,
+      rowCount: dataGridLayout.rowCount,
+      columnWidths: dataGridLayout.columnWidths,
+    }, null, 2));
+  } finally {
+    await cleanup({ client, childProcess, userDataDir });
+  }
+};
+
 const main = async () => {
   assertUsersEmptyStatesUseSharedComponent();
   if (process.env.BACKY_USERS_SOURCE_ONLY === '1') {
     console.log(JSON.stringify({ ok: true, guard: 'users-source' }));
+    return;
+  }
+  if (process.env.BACKY_USERS_DATAGRID_LAYOUT_SMOKE === '1') {
+    await runUsersDataGridLayoutSmoke();
     return;
   }
 
