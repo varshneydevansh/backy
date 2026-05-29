@@ -1530,6 +1530,9 @@ assert(
     openApiRoute.includes('formsManagementDiscovery') &&
     openApiRoute.includes('subscribeBackyNewsletter') &&
     openApiRoute.includes('listBackyNewsletterSubscribers') &&
+    openApiRoute.includes('NewsletterSubscribeValues') &&
+    openApiRoute.includes('NewsletterUnsubscribeRequest') &&
+    openApiRoute.includes('signup_source: { type: "string" }') &&
     openApiRoute.includes('"x-backy-forms-management"') &&
     openApiRoute.includes('FormsManagementPolicy') &&
     openApiRoute.includes('"backy.forms-management.v1"') &&
@@ -1547,9 +1550,14 @@ assert(
     sdkSource.includes('syncPolicy: {') &&
     sdkSource.includes('schemaVersion: "backy.newsletter-sync-boundary.v1"') &&
     sdkSource.includes('subscribeNewsletter(') &&
+    sdkSource.includes('BackyNewsletterFormValuesSubscribeInput') &&
+    sdkSource.includes('BackyNewsletterFormValuesUnsubscribeInput') &&
     sdkSource.includes('newsletterSubscribers(') &&
     sdkSource.includes('upsertNewsletterSubscriber(') &&
     generatedSdkTypes.includes('newsletterRuntime?: {') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiNewsletterSubscribeRequest = GeneratedBackyOpenApiNewsletterSubscribeValues | {') &&
+    generatedSdkTypes.includes('GeneratedBackyOpenApiNewsletterUnsubscribeRequest = GeneratedBackyOpenApiNewsletterUnsubscribeValues | {') &&
+    generatedSdkTypes.includes('signup_source?: string') &&
     sdkSource.includes('BackyManifestFormsManagementPolicy') &&
     sdkSource.includes('BackyManifestFormsRuntimeModule') &&
     sdkSmoke.includes('manifest() missing forms runtime discovery module') &&

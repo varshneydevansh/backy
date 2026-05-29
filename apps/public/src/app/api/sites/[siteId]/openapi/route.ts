@@ -4716,13 +4716,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 content: {
                   "application/json": {
                     schema: {
-                      type: "object",
-                      required: ["email"],
-                      properties: {
-                        email: { type: "string", format: "email" },
-                        formId: { type: "string" },
-                        source: { type: "string" },
-                      },
+                      $ref: "#/components/schemas/NewsletterUnsubscribeRequest",
                     },
                   },
                 },
@@ -12087,16 +12081,55 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               },
             },
             NewsletterSubscribeRequest: {
+              oneOf: [
+                { $ref: "#/components/schemas/NewsletterSubscribeValues" },
+                {
+                  type: "object",
+                  required: ["values"],
+                  additionalProperties: true,
+                  properties: {
+                    values: { $ref: "#/components/schemas/NewsletterSubscribeValues" },
+                  },
+                },
+              ],
+            },
+            NewsletterUnsubscribeRequest: {
+              oneOf: [
+                { $ref: "#/components/schemas/NewsletterUnsubscribeValues" },
+                {
+                  type: "object",
+                  required: ["values"],
+                  additionalProperties: true,
+                  properties: {
+                    values: { $ref: "#/components/schemas/NewsletterUnsubscribeValues" },
+                  },
+                },
+              ],
+            },
+            NewsletterSubscribeValues: {
               type: "object",
               required: ["email", "consent"],
+              additionalProperties: true,
               properties: {
                 email: { type: "string", format: "email" },
                 name: { type: "string" },
                 topics: { type: "string" },
                 source: { type: "string" },
+                signup_source: { type: "string" },
                 consent: { type: "boolean" },
                 consentText: { type: "string" },
                 formId: { type: "string" },
+              },
+            },
+            NewsletterUnsubscribeValues: {
+              type: "object",
+              required: ["email"],
+              additionalProperties: true,
+              properties: {
+                email: { type: "string", format: "email" },
+                formId: { type: "string" },
+                source: { type: "string" },
+                signup_source: { type: "string" },
               },
             },
             NewsletterSubscriberEnvelope: envelopeSchema({

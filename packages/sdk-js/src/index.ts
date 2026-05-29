@@ -8855,25 +8855,55 @@ export interface BackyNewsletterSubscriber {
   [key: string]: unknown;
 }
 
-export interface BackyNewsletterSubscribeInput {
+export interface BackyNewsletterSubscribeValues {
   email: string;
   consent: boolean;
   name?: string | null;
   topics?: string | null;
   source?: string | null;
+  signup_source?: string | null;
   consentText?: string | null;
   formId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyNewsletterFlatSubscribeInput extends BackyNewsletterSubscribeValues {
   requestId?: string;
   [key: string]: unknown;
 }
 
-export interface BackyNewsletterUnsubscribeInput {
-  email: string;
-  formId?: string;
-  source?: string | null;
+export interface BackyNewsletterFormValuesSubscribeInput {
+  values: BackyNewsletterSubscribeValues;
   requestId?: string;
   [key: string]: unknown;
 }
+
+export type BackyNewsletterSubscribeInput =
+  | BackyNewsletterFlatSubscribeInput
+  | BackyNewsletterFormValuesSubscribeInput;
+
+export interface BackyNewsletterUnsubscribeValues {
+  email: string;
+  formId?: string;
+  source?: string | null;
+  signup_source?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BackyNewsletterFlatUnsubscribeInput extends BackyNewsletterUnsubscribeValues {
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyNewsletterFormValuesUnsubscribeInput {
+  values: BackyNewsletterUnsubscribeValues;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export type BackyNewsletterUnsubscribeInput =
+  | BackyNewsletterFlatUnsubscribeInput
+  | BackyNewsletterFormValuesUnsubscribeInput;
 
 export interface BackyNewsletterRequestOptions {
   requestId?: string;
@@ -8889,12 +8919,14 @@ export interface BackyAdminNewsletterSubscriberListOptions
   q?: string;
 }
 
-export interface BackyAdminNewsletterSubscriberInput
-  extends Omit<BackyNewsletterSubscribeInput, "consent"> {
+export type BackyAdminNewsletterSubscriberInput = (
+  | (Omit<BackyNewsletterFlatSubscribeInput, "consent"> & { consent?: boolean })
+  | (BackyNewsletterFormValuesSubscribeInput & { consent?: boolean })
+) & {
   consent?: boolean;
   status?: BackyNewsletterSubscriptionStatus;
   contactStatus?: "new" | "contacted" | "qualified" | "archived" | string;
-}
+};
 
 export type BackyNewsletterSubscriberResponse = BackyEnvelope<
   {
