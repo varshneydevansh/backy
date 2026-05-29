@@ -83,6 +83,8 @@ The stable addressing fields are:
 
 Use the contract's render pointers for public reads, admin write pointers for authenticated mutations, and editable-map sources when matching an external selector/component to a Backy field. Preserve unknown props, style keys, responsive overrides, token references, binding slots, asset ids, animation/action metadata, accessibility metadata, and custom metadata when patching content.
 
+`componentTypeContracts` is the per-element lookup table for generated frontends. It names the Backy element `type`, UI family, readable/writable `propPaths`, style paths, responsive override paths, and binding paths for headings, text, images, buttons, navigation, forms, repeaters, comments, embeds, interactive figures, and sandboxed code components. Treat this table as the source of truth when mapping Wix/Webflow-style components into Backy JSON: render from the advertised props, write edits back to the same paths, and preserve any unknown keys for forward compatibility.
+
 ## Editable design state rule
 
 When an agent creates or updates pages, blog posts, products, forms, collections, or reusable sections, it must preserve the full Backy design envelope. In practice that means keeping these fields when present:

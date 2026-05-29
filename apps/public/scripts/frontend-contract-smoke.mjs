@@ -130,6 +130,18 @@ const requiredComponentApiFamilies = [
   'interactive-components',
   'custom-code',
 ];
+const requiredComponentApiTypes = [
+  'heading',
+  'text',
+  'image',
+  'button',
+  'nav',
+  'form',
+  'repeater',
+  'comment',
+  'interactiveFigure',
+  'codeComponent',
+];
 const missingComponentApiCorePaths = requiredComponentApiFieldPaths.filter((path) => !customFrontendAgentHandoffLib.includes(path));
 const missingComponentApiSchemaPaths = requiredComponentApiFieldPaths.filter((path) => !frontendManifestSchema.includes(`"const": "${path}"`));
 const missingComponentApiDocsPaths = requiredComponentApiFieldPaths.filter((path) => {
@@ -138,12 +150,22 @@ const missingComponentApiDocsPaths = requiredComponentApiFieldPaths.filter((path
 });
 const missingComponentApiCoreFamilies = requiredComponentApiFamilies.filter((family) => !customFrontendAgentHandoffLib.includes(`'${family}'`));
 const missingComponentApiSchemaFamilies = requiredComponentApiFamilies.filter((family) => !frontendManifestSchema.includes(`"const": "${family}"`));
+const missingComponentApiCoreTypes = requiredComponentApiTypes.filter((type) => !customFrontendAgentHandoffLib.includes(`'${type}'`));
+const missingComponentApiSchemaTypes = requiredComponentApiTypes.filter((type) => !frontendManifestSchema.includes(`"const": "${type}"`));
 assert(
   missingComponentApiCorePaths.length === 0 &&
     missingComponentApiSchemaPaths.length === 0 &&
     missingComponentApiDocsPaths.length === 0 &&
     missingComponentApiCoreFamilies.length === 0 &&
     missingComponentApiSchemaFamilies.length === 0 &&
+    missingComponentApiCoreTypes.length === 0 &&
+    missingComponentApiSchemaTypes.length === 0 &&
+    customFrontendAgentHandoffLib.includes('CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
+    customFrontendAgentHandoffLib.includes('componentTypeContracts: CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
+    frontendManifestSchema.includes('"componentTypeContracts"') &&
+    customFrontendAgentHandoffDocs.includes('`componentTypeContracts`') &&
+    apiContracts.includes('componentTypeContracts') &&
+    sdkSmoke.includes('const requiredComponentApiTypes = [') &&
     sdkSmoke.includes('const requiredComponentApiFieldPaths = [') &&
     sdkSmoke.includes('assertComponentApiContractCoverage(customFrontendAgentHandoff.componentApiContract') &&
     sdkSmoke.includes('assertComponentApiContractCoverage(agentHandoff.data.componentApiContract'),
@@ -153,6 +175,8 @@ assert(
     missingComponentApiDocsPaths,
     missingComponentApiCoreFamilies,
     missingComponentApiSchemaFamilies,
+    missingComponentApiCoreTypes,
+    missingComponentApiSchemaTypes,
   })}`,
 );
 const adminPropertyPanel = read('../../../apps/admin/src/components/editor/PropertyPanel.tsx');
@@ -357,6 +381,8 @@ assert(
     customFrontendAgentHandoffLib.includes('everyComponentApiAddressable: true') &&
     customFrontendAgentHandoffLib.includes('readableFieldPaths: CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS') &&
     customFrontendAgentHandoffLib.includes('writableFieldPaths: CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS') &&
+    customFrontendAgentHandoffLib.includes('componentTypeContracts: CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
+    openApiRoute.includes('componentTypeContracts') &&
     customFrontendAgentHandoffLib.includes('noFrontendLocalJsonForks') &&
     customFrontendAgentHandoffLib.includes('preferredHelpers') &&
     customFrontendAgentHandoffLib.includes('preserveFields') &&
@@ -389,6 +415,7 @@ assert(
     frontendManifestSchema.includes('"everyComponentApiAddressable"') &&
     frontendManifestSchema.includes('"elementAddressing"') &&
     frontendManifestSchema.includes('"readableFieldPaths"') &&
+    frontendManifestSchema.includes('"componentTypeContracts"') &&
     frontendManifestSchema.includes('"noFrontendLocalJsonForks"') &&
     frontendManifestSchema.includes('"preserveFields"') &&
     frontendManifestSchema.includes('"readOrder"') &&
@@ -406,6 +433,7 @@ assert(
     generatedSdkTypes.includes('GeneratedBackyOpenApiCustomFrontendRoutingHandoff') &&
     generatedSdkTypes.includes('apiAlignment: {') &&
     generatedSdkTypes.includes('componentApiContract:') &&
+    generatedSdkTypes.includes('componentTypeContracts') &&
     generatedSdkTypes.includes('routing: GeneratedBackyOpenApiCustomFrontendRoutingHandoff') &&
     generatedSdkTypes.includes('"backy.custom-frontend-api-alignment.v1"') &&
     generatedSdkTypes.includes('"backy.custom-frontend-routing-handoff.v1"') &&

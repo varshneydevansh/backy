@@ -65,6 +65,96 @@ export const CUSTOM_FRONTEND_COMPONENT_API_FAMILIES = [
   'custom-code',
 ] as const;
 
+const COMMON_COMPONENT_STYLE_PATHS = [
+  'styles.*',
+  'tokenRefs.*',
+  'responsive.*.styles.*',
+  'responsive.*.tokenRefs.*',
+] as const;
+
+const COMMON_COMPONENT_RESPONSIVE_PATHS = [
+  'responsive.desktop',
+  'responsive.tablet',
+  'responsive.mobile',
+  'responsive.*.x',
+  'responsive.*.y',
+  'responsive.*.width',
+  'responsive.*.height',
+  'responsive.*.props.*',
+  'responsive.*.styles.*',
+] as const;
+
+const COMMON_COMPONENT_BINDING_PATHS = [
+  'bindingSlots[]',
+  'dataBindings[]',
+  'content.editableMap.*',
+  'meta.frontendDesignEditableMap.*',
+] as const;
+
+const componentTypeContract = (
+  type: string,
+  family: typeof CUSTOM_FRONTEND_COMPONENT_API_FAMILIES[number],
+  label: string,
+  propPaths: readonly string[],
+  options: {
+    supportsChildren?: boolean;
+    supportsMediaAssets?: boolean;
+    supportsDataBinding?: boolean;
+    supportsCustomCode?: boolean;
+    bindingPaths?: readonly string[];
+  } = {},
+) => ({
+  type,
+  family,
+  label,
+  apiReadable: true,
+  apiWritable: true,
+  propPaths,
+  stylePaths: COMMON_COMPONENT_STYLE_PATHS,
+  responsivePaths: COMMON_COMPONENT_RESPONSIVE_PATHS,
+  bindingPaths: options.bindingPaths || COMMON_COMPONENT_BINDING_PATHS,
+  supportsChildren: Boolean(options.supportsChildren),
+  supportsMediaAssets: Boolean(options.supportsMediaAssets),
+  supportsDataBinding: options.supportsDataBinding !== false,
+  supportsCustomCode: Boolean(options.supportsCustomCode),
+});
+
+export const CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS = [
+  componentTypeContract('heading', 'typography', 'Heading', ['props.content', 'props.level', 'props.fontSize', 'props.fontWeight', 'props.color', 'props.lineHeight']),
+  componentTypeContract('text', 'typography', 'Text', ['props.content', 'props.fontSize', 'props.fontWeight', 'props.color', 'props.lineHeight', 'props.textAlign']),
+  componentTypeContract('paragraph', 'typography', 'Paragraph', ['props.content', 'props.fontSize', 'props.color', 'props.lineHeight', 'props.textAlign']),
+  componentTypeContract('quote', 'typography', 'Quote', ['props.content', 'props.cite', 'props.fontSize', 'props.color', 'props.lineHeight']),
+  componentTypeContract('list', 'typography', 'List', ['props.items', 'props.content', 'props.listType', 'props.fontSize', 'props.color', 'props.gap']),
+  componentTypeContract('button', 'typography', 'Button', ['props.content', 'props.href', 'props.target', 'props.rel', 'props.variant', 'props.action', 'props.fileMediaId']),
+  componentTypeContract('link', 'typography', 'Link', ['props.content', 'props.href', 'props.target', 'props.rel', 'props.download', 'props.fileMediaId']),
+  componentTypeContract('image', 'media', 'Image', ['props.src', 'props.mediaId', 'props.alt', 'props.objectFit', 'props.focalPoint', 'props.caption'], { supportsMediaAssets: true }),
+  componentTypeContract('video', 'media', 'Video', ['props.src', 'props.mediaId', 'props.poster', 'props.posterMediaId', 'props.controls', 'props.autoplay', 'props.loop'], { supportsMediaAssets: true }),
+  componentTypeContract('icon', 'media', 'Icon', ['props.icon', 'props.name', 'props.color', 'props.size', 'props.strokeWidth']),
+  componentTypeContract('map', 'media', 'Map', ['props.address', 'props.src', 'props.zoom', 'props.markerLabel', 'props.latitude', 'props.longitude']),
+  componentTypeContract('container', 'layout', 'Container', ['props.layout', 'props.gap', 'props.padding', 'props.backgroundColor'], { supportsChildren: true }),
+  componentTypeContract('section', 'layout', 'Section', ['props.contentRole', 'props.layout', 'props.backgroundColor', 'props.padding', 'props.anchorId'], { supportsChildren: true }),
+  componentTypeContract('header', 'layout', 'Header', ['props.chromeRole', 'props.position', 'props.width', 'props.showBrand', 'props.navigationBinding'], { supportsChildren: true }),
+  componentTypeContract('footer', 'layout', 'Footer', ['props.chromeRole', 'props.width', 'props.showSocial', 'props.newsletterBinding'], { supportsChildren: true }),
+  componentTypeContract('box', 'layout', 'Box', ['props.backgroundColor', 'props.borderRadius', 'props.borderColor', 'props.shadow'], { supportsChildren: true }),
+  componentTypeContract('columns', 'layout', 'Columns', ['props.columns', 'props.gap', 'props.stackOnMobile', 'props.columnWidths'], { supportsChildren: true }),
+  componentTypeContract('spacer', 'layout', 'Spacer', ['props.size', 'props.axis']),
+  componentTypeContract('divider', 'layout', 'Divider', ['props.orientation', 'props.color', 'props.thickness', 'props.style']),
+  componentTypeContract('nav', 'navigation', 'Navigation', ['props.items', 'props.navigationSource', 'props.navigationBinding', 'props.direction', 'props.gap', 'props.ariaLabel']),
+  componentTypeContract('form', 'forms', 'Form', ['props.formId', 'props.schema', 'props.fields', 'props.submitLabel', 'props.successMessage', 'props.newsletterTopicIds'], { supportsChildren: true }),
+  componentTypeContract('input', 'forms', 'Input field', ['props.name', 'props.label', 'props.type', 'props.placeholder', 'props.required', 'props.value']),
+  componentTypeContract('textarea', 'forms', 'Textarea field', ['props.name', 'props.label', 'props.placeholder', 'props.required', 'props.rows', 'props.value']),
+  componentTypeContract('select', 'forms', 'Select field', ['props.name', 'props.label', 'props.options', 'props.placeholder', 'props.required', 'props.value']),
+  componentTypeContract('checkbox', 'forms', 'Checkbox field', ['props.name', 'props.label', 'props.options', 'props.required', 'props.value']),
+  componentTypeContract('radio', 'forms', 'Radio field', ['props.name', 'props.label', 'props.options', 'props.required', 'props.value']),
+  componentTypeContract('repeater', 'collections', 'Repeater', ['props.collectionId', 'props.datasetId', 'props.limit', 'props.columns', 'props.titleField', 'props.imageField', 'props.descriptionField'], { supportsChildren: true }),
+  componentTypeContract('comment', 'comments', 'Comment block', ['props.resourceType', 'props.resourceId', 'props.moderationMode', 'props.allowReplies', 'props.requireName', 'props.requireEmail']),
+  componentTypeContract('embed', 'embeds', 'Embed', ['props.src', 'props.html', 'props.allowedHosts', 'props.allow', 'props.sandbox', 'props.loading']),
+  componentTypeContract('html', 'custom-code', 'HTML block', ['props.html', 'props.sandbox', 'props.allowedHosts'], { supportsCustomCode: true }),
+  componentTypeContract('table', 'custom-code', 'Table', ['props.html', 'props.rows', 'props.columns', 'props.caption']),
+  componentTypeContract('interactiveFigure', 'interactive-components', 'Interactive figure', ['props.registryId', 'props.runtimeUrl', 'props.config', 'props.datasetId', 'props.sandbox'], { supportsCustomCode: true }),
+  componentTypeContract('codeComponent', 'custom-code', 'Code component', ['props.code', 'props.html', 'props.css', 'props.js', 'props.sandbox', 'props.allowedHosts', 'props.config'], { supportsCustomCode: true }),
+] as const;
+
 export interface CustomFrontendAgentSiteContext {
   slug?: string | null;
   customDomain?: string | null;
@@ -202,6 +292,7 @@ export const buildCustomFrontendComponentApiContract = (siteId: string) => ({
   readableFieldPaths: CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS,
   writableFieldPaths: CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS,
   componentFamilies: CUSTOM_FRONTEND_COMPONENT_API_FAMILIES,
+  componentTypeContracts: CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS,
   requiredAgentBehavior: [
     'Treat every canvas element as structured data keyed by id and type, not as a static screenshot.',
     'Preserve unknown props, styles, responsive overrides, data bindings, asset ids, and metadata during edits.',

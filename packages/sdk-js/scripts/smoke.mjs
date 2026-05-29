@@ -1978,6 +1978,18 @@ const requiredComponentApiFamilies = [
   'interactive-components',
   'custom-code',
 ];
+const requiredComponentApiTypes = [
+  'heading',
+  'text',
+  'image',
+  'button',
+  'nav',
+  'form',
+  'repeater',
+  'comment',
+  'interactiveFigure',
+  'codeComponent',
+];
 const assertComponentApiContractCoverage = (contract, label) => {
   for (const path of requiredComponentApiFieldPaths) {
     assert(contract?.readableFieldPaths?.includes(path), `${label} component API contract missing readable path ${path}`);
@@ -1985,6 +1997,13 @@ const assertComponentApiContractCoverage = (contract, label) => {
   }
   for (const family of requiredComponentApiFamilies) {
     assert(contract?.componentFamilies?.includes(family), `${label} component API contract missing component family ${family}`);
+  }
+  for (const type of requiredComponentApiTypes) {
+    const componentTypeContract = contract?.componentTypeContracts?.find?.((entry) => entry?.type === type);
+    assert(componentTypeContract?.apiReadable === true, `${label} component API contract missing readable ${type} type contract`);
+    assert(componentTypeContract?.apiWritable === true, `${label} component API contract missing writable ${type} type contract`);
+    assert(componentTypeContract?.propPaths?.some?.((path) => path.startsWith('props.')), `${label} component API contract missing prop paths for ${type}`);
+    assert(componentTypeContract?.responsivePaths?.includes?.('responsive.mobile'), `${label} component API contract missing responsive.mobile path for ${type}`);
   }
 };
 assertComponentApiContractCoverage(customFrontendAgentHandoff.componentApiContract, 'manifest()');

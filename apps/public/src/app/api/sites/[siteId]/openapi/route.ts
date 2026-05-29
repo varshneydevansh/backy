@@ -5954,6 +5954,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "readableFieldPaths",
                 "writableFieldPaths",
                 "componentFamilies",
+                "componentTypeContracts",
                 "requiredAgentBehavior",
                 "guarantees",
                 "secretHandling",
@@ -6015,6 +6016,51 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 componentFamilies: {
                   type: "array",
                   items: { type: "string" },
+                },
+                componentTypeContracts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "type",
+                      "family",
+                      "label",
+                      "apiReadable",
+                      "apiWritable",
+                      "propPaths",
+                      "stylePaths",
+                      "responsivePaths",
+                      "bindingPaths",
+                    ],
+                    additionalProperties: true,
+                    properties: {
+                      type: { type: "string" },
+                      family: { type: "string" },
+                      label: { type: "string" },
+                      apiReadable: { const: true },
+                      apiWritable: { const: true },
+                      propPaths: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      stylePaths: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      responsivePaths: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      bindingPaths: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      supportsChildren: { type: "boolean" },
+                      supportsMediaAssets: { type: "boolean" },
+                      supportsDataBinding: { type: "boolean" },
+                      supportsCustomCode: { type: "boolean" },
+                    },
+                  },
                 },
                 requiredAgentBehavior: {
                   type: "array",

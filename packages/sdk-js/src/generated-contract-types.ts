@@ -160,6 +160,22 @@ export type GeneratedBackyOpenApiCustomFrontendComponentApiContract = {
   readableFieldPaths: Array<string>;
   writableFieldPaths: Array<string>;
   componentFamilies: Array<string>;
+  componentTypeContracts: Array<{
+    type: string;
+    family: string;
+    label: string;
+    apiReadable: true;
+    apiWritable: true;
+    propPaths: Array<string>;
+    stylePaths: Array<string>;
+    responsivePaths: Array<string>;
+    bindingPaths: Array<string>;
+    supportsChildren?: boolean;
+    supportsMediaAssets?: boolean;
+    supportsDataBinding?: boolean;
+    supportsCustomCode?: boolean;
+    [key: string]: unknown;
+  }>;
   requiredAgentBehavior: Array<string>;
   guarantees: Array<string>;
   secretHandling: string;
@@ -5714,6 +5730,22 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
     readableFieldPaths: Array<string>;
     writableFieldPaths: Array<string>;
     componentFamilies: Array<string>;
+    componentTypeContracts: Array<{
+      type: string;
+      family: string;
+      label: string;
+      apiReadable: true;
+      apiWritable: true;
+      propPaths: Array<string>;
+      stylePaths: Array<string>;
+      responsivePaths: Array<string>;
+      bindingPaths: Array<string>;
+      supportsChildren?: boolean;
+      supportsMediaAssets?: boolean;
+      supportsDataBinding?: boolean;
+      supportsCustomCode?: boolean;
+      [key: string]: unknown;
+    }>;
     requiredAgentBehavior: Array<string>;
     guarantees: Array<string>;
     secretHandling: string;
