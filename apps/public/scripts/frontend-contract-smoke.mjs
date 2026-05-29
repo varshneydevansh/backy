@@ -299,6 +299,10 @@ assert(
     customFrontendAgentHandoffLib.includes('routeRevealGuarantee') &&
     customFrontendAgentHandoffLib.includes('productCustomFrontend') &&
     customFrontendAgentHandoffLib.includes('formCustomFrontend') &&
+    customFrontendAgentHandoffLib.includes('newsletterWorkspace') &&
+    customFrontendAgentHandoffLib.includes('newsletterSubscribers') &&
+    customFrontendAgentHandoffLib.includes('newsletterContactSync') &&
+    customFrontendAgentHandoffLib.includes("syncBoundarySchema: 'backy.newsletter-sync-boundary.v1'") &&
     customFrontendAgentHandoffLib.includes('collectionCustomFrontend') &&
     customFrontendAgentHandoffLib.includes('reusableSectionCustomFrontend') &&
     frontendManifestSchema.includes('"completionStatus": { "$ref": "#/$defs/completionStatus" }') &&
@@ -1439,7 +1443,12 @@ assert(
     manifestRoute.includes('newsletterRuntime: buildManifestNewsletterDiscovery(site.id, forms)') &&
     manifestRoute.includes("publicSubscribers: `/api/sites/${siteId}/newsletter/subscribers`") &&
     manifestRoute.includes("adminSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`") &&
+    manifestRoute.includes("syncContacts: `/api/admin/sites/${siteId}/forms/{formId}/contacts/sync`") &&
+    manifestRoute.includes("adminWorkspace: `/newsletter?siteId=${siteId}`") &&
+    manifestRoute.includes("schemaVersion: 'backy.newsletter-sync-boundary.v1'") &&
+    manifestRoute.includes("newsletterPage: `/pages/new?siteId=${siteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`") &&
     manifestRoute.includes("subscribe: 'subscribeNewsletter'") &&
+    manifestRoute.includes("syncContacts: 'syncFormContacts'") &&
     newsletterSubscribersLib.includes("NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION = 'backy.newsletter-subscribers.v1'") &&
     newsletterSubscribersLib.includes('export const buildNewsletterContactFields = ({') &&
     newsletterSubscribersLib.includes('export const isNewsletterForm = (form: FormDefinition): boolean => {') &&
@@ -1457,11 +1466,16 @@ assert(
     frontendManifestSchema.includes('"backy.forms-discovery.v1"') &&
     frontendManifestSchema.includes('"backy.forms-management.v1"') &&
     frontendManifestSchema.includes('"backy.newsletter-subscribers.v1"') &&
+    frontendManifestSchema.includes('"backy.newsletter-sync-boundary.v1"') &&
+    frontendManifestSchema.includes('"newsletterWorkspace"') &&
+    frontendManifestSchema.includes('"newsletterContactSync"') &&
     frontendManifestSchema.includes('"cacheableDefinitions"') &&
     frontendManifestSchema.includes('"authenticatedManagement"') &&
     frontendManifestSchema.includes('"FORM_VALIDATION_ERROR"') &&
     sdkSource.includes('BackyManifestNewsletterRuntimeModule') &&
     sdkSource.includes('newsletterRuntime?: BackyManifestNewsletterRuntimeModule') &&
+    sdkSource.includes('syncPolicy: {') &&
+    sdkSource.includes('schemaVersion: "backy.newsletter-sync-boundary.v1"') &&
     sdkSource.includes('subscribeNewsletter(') &&
     sdkSource.includes('newsletterSubscribers(') &&
     sdkSource.includes('upsertNewsletterSubscriber(') &&

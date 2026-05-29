@@ -38,11 +38,14 @@
             "pages": { "type": "string", "minLength": 1 },
             "blog": { "type": "string", "minLength": 1 },
             "forms": { "type": "string", "minLength": 1 },
+            "newsletterSubscribers": { "type": "string", "minLength": 1 },
+            "newsletterContactSync": { "type": "string", "minLength": 1 },
+            "newsletterManagement": { "type": "string", "minLength": 1 },
             "collections": { "type": "string", "minLength": 1 },
             "products": { "type": "string", "minLength": 1 },
             "reusableSections": { "type": "string", "minLength": 1 }
           },
-          "required": ["agentHandoff", "manifest", "openapi", "resolve", "render", "frontendDesign", "frontendDesignManagement", "templates", "pages", "blog", "forms", "collections", "products", "reusableSections"]
+          "required": ["agentHandoff", "manifest", "openapi", "resolve", "render", "frontendDesign", "frontendDesignManagement", "templates", "pages", "blog", "forms", "newsletterSubscribers", "newsletterContactSync", "newsletterManagement", "collections", "products", "reusableSections"]
         },
         "readOrder": {
           "type": "array",
@@ -101,6 +104,9 @@
                 "productCustomFrontend": { "type": "string", "minLength": 1 },
                 "formBackyCanvas": { "type": "string", "minLength": 1 },
                 "formCustomFrontend": { "type": "string", "minLength": 1 },
+                "newsletterWorkspace": { "type": "string", "minLength": 1 },
+                "newsletterPageBackyCanvas": { "type": "string", "minLength": 1 },
+                "newsletterBlogBackyCanvas": { "type": "string", "minLength": 1 },
                 "collectionBackyCanvas": { "type": "string", "minLength": 1 },
                 "collectionCustomFrontend": { "type": "string", "minLength": 1 },
                 "reusableSectionBackyCanvas": { "type": "string", "minLength": 1 },
@@ -115,6 +121,9 @@
                 "productCustomFrontend",
                 "formBackyCanvas",
                 "formCustomFrontend",
+                "newsletterWorkspace",
+                "newsletterPageBackyCanvas",
+                "newsletterBlogBackyCanvas",
                 "collectionBackyCanvas",
                 "collectionCustomFrontend",
                 "reusableSectionBackyCanvas",
@@ -209,6 +218,9 @@
                 "productCustomFrontend": { "type": "string", "minLength": 1 },
                 "formBackyCanvas": { "type": "string", "minLength": 1 },
                 "formCustomFrontend": { "type": "string", "minLength": 1 },
+                "newsletterWorkspace": { "type": "string", "minLength": 1 },
+                "newsletterPageBackyCanvas": { "type": "string", "minLength": 1 },
+                "newsletterBlogBackyCanvas": { "type": "string", "minLength": 1 },
                 "collectionBackyCanvas": { "type": "string", "minLength": 1 },
                 "collectionCustomFrontend": { "type": "string", "minLength": 1 },
                 "reusableSectionBackyCanvas": { "type": "string", "minLength": 1 },
@@ -223,6 +235,9 @@
                 "productCustomFrontend",
                 "formBackyCanvas",
                 "formCustomFrontend",
+                "newsletterWorkspace",
+                "newsletterPageBackyCanvas",
+                "newsletterBlogBackyCanvas",
                 "collectionBackyCanvas",
                 "collectionCustomFrontend",
                 "reusableSectionBackyCanvas",
@@ -3130,9 +3145,11 @@
                     "adminSubscribers": { "type": "string", "minLength": 1 },
                     "forms": { "type": "string", "minLength": 1 },
                     "contactSegments": { "type": "string", "minLength": 1 },
-                    "contactLists": { "type": "string", "minLength": 1 }
+                    "contactLists": { "type": "string", "minLength": 1 },
+                    "syncContacts": { "type": "string", "minLength": 1 },
+                    "adminWorkspace": { "type": "string", "minLength": 1 }
                   },
-                  "required": ["publicSubscribers", "adminSubscribers", "forms", "contactSegments", "contactLists"]
+                  "required": ["publicSubscribers", "adminSubscribers", "forms", "contactSegments", "contactLists", "syncContacts", "adminWorkspace"]
                 },
                 "methods": {
                   "type": "object",
@@ -3141,9 +3158,10 @@
                     "subscribe": { "const": "POST" },
                     "unsubscribe": { "const": "DELETE" },
                     "adminList": { "const": "GET" },
-                    "adminUpsert": { "const": "POST" }
+                    "adminUpsert": { "const": "POST" },
+                    "syncContacts": { "const": "POST" }
                   },
-                  "required": ["subscribe", "unsubscribe", "adminList", "adminUpsert"]
+                  "required": ["subscribe", "unsubscribe", "adminList", "adminUpsert", "syncContacts"]
                 },
                 "sdkHelpers": {
                   "type": "object",
@@ -3152,15 +3170,38 @@
                     "subscribe": { "const": "subscribeNewsletter" },
                     "unsubscribe": { "const": "unsubscribeNewsletter" },
                     "adminList": { "const": "newsletterSubscribers" },
-                    "adminUpsert": { "const": "upsertNewsletterSubscriber" }
+                    "adminUpsert": { "const": "upsertNewsletterSubscriber" },
+                    "syncContacts": { "const": "syncFormContacts" }
                   },
-                  "required": ["subscribe", "unsubscribe", "adminList", "adminUpsert"]
+                  "required": ["subscribe", "unsubscribe", "adminList", "adminUpsert", "syncContacts"]
                 },
                 "forms": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
                 "sampleSubscribePayload": { "type": "object", "additionalProperties": true },
+                "syncPolicy": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "schemaVersion": { "const": "backy.newsletter-sync-boundary.v1" },
+                    "routeTemplate": { "type": "string", "minLength": 1 },
+                    "payloadKind": { "const": "contact-sync" },
+                    "targetBody": { "type": "object", "additionalProperties": true },
+                    "adminOnly": { "const": true },
+                    "useCase": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["schemaVersion", "routeTemplate", "payloadKind", "targetBody", "adminOnly", "useCase"]
+                },
+                "canvasRoutes": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "newsletterPage": { "type": "string", "minLength": 1 },
+                    "blogPost": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["newsletterPage", "blogPost"]
+                },
                 "providerBoundary": { "type": "object", "additionalProperties": true }
               },
-              "required": ["schemaVersion", "count", "activeCount", "endpoints", "methods", "sdkHelpers", "forms", "sampleSubscribePayload", "providerBoundary"]
+              "required": ["schemaVersion", "count", "activeCount", "endpoints", "methods", "sdkHelpers", "forms", "sampleSubscribePayload", "syncPolicy", "canvasRoutes", "providerBoundary"]
             },
             "comments": {
               "type": "object",

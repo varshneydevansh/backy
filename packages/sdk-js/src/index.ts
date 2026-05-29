@@ -13784,6 +13784,8 @@ export interface BackyManifestNewsletterRuntimeModule {
     forms: string;
     contactSegments: string;
     contactLists: string;
+    syncContacts: string;
+    adminWorkspace: string;
     [key: string]: unknown;
   };
   methods: {
@@ -13791,6 +13793,7 @@ export interface BackyManifestNewsletterRuntimeModule {
     unsubscribe: "DELETE";
     adminList: "GET";
     adminUpsert: "POST";
+    syncContacts: "POST";
     [key: string]: unknown;
   };
   sdkHelpers: {
@@ -13798,6 +13801,7 @@ export interface BackyManifestNewsletterRuntimeModule {
     unsubscribe: "unsubscribeNewsletter";
     adminList: "newsletterSubscribers";
     adminUpsert: "upsertNewsletterSubscriber";
+    syncContacts: "syncFormContacts";
     [key: string]: unknown;
   };
   forms: Array<{
@@ -13811,6 +13815,20 @@ export interface BackyManifestNewsletterRuntimeModule {
     [key: string]: unknown;
   }>;
   sampleSubscribePayload: Record<string, unknown>;
+  syncPolicy: {
+    schemaVersion: "backy.newsletter-sync-boundary.v1";
+    routeTemplate: string;
+    payloadKind: "contact-sync";
+    targetBody: Record<string, unknown>;
+    adminOnly: boolean;
+    useCase: string;
+    [key: string]: unknown;
+  };
+  canvasRoutes: {
+    newsletterPage: string;
+    blogPost: string;
+    [key: string]: unknown;
+  };
   providerBoundary: {
     nativeBackyScope: string[];
     deliveryProviderScope: string[];

@@ -3164,18 +3164,22 @@ const buildManifestNewsletterDiscovery = (
       forms: `/api/sites/${siteId}/forms`,
       contactSegments: `/api/admin/sites/${siteId}/forms/contact-segments`,
       contactLists: `/api/admin/sites/${siteId}/forms/contact-lists`,
+      syncContacts: `/api/admin/sites/${siteId}/forms/{formId}/contacts/sync`,
+      adminWorkspace: `/newsletter?siteId=${siteId}`,
     },
     methods: {
       subscribe: 'POST',
       unsubscribe: 'DELETE',
       adminList: 'GET',
       adminUpsert: 'POST',
+      syncContacts: 'POST',
     },
     sdkHelpers: {
       subscribe: 'subscribeNewsletter',
       unsubscribe: 'unsubscribeNewsletter',
       adminList: 'newsletterSubscribers',
       adminUpsert: 'upsertNewsletterSubscriber',
+      syncContacts: 'syncFormContacts',
     },
     forms: newsletterForms.map((form) => ({
       id: form.id,
@@ -3197,6 +3201,22 @@ const buildManifestNewsletterDiscovery = (
       topics: 'Investigations',
       consent: true,
       source: 'custom frontend newsletter form',
+    },
+    syncPolicy: {
+      schemaVersion: 'backy.newsletter-sync-boundary.v1',
+      routeTemplate: `/api/admin/sites/${siteId}/forms/{formId}/contacts/sync`,
+      payloadKind: 'contact-sync',
+      targetBody: {
+        targetUrl: 'https://newsletter-provider-worker.example.com/sync',
+        reason: 'newsletter-provider-sync',
+        includeSourceValues: false,
+      },
+      adminOnly: true,
+      useCase: 'Send selected Backy contact/subscriber records to an external delivery provider worker without exposing provider credentials to public pages or frontend repositories.',
+    },
+    canvasRoutes: {
+      newsletterPage: `/pages/new?siteId=${siteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`,
+      blogPost: `/blog/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`,
     },
     providerBoundary: {
       nativeBackyScope: ['subscriber records', 'consent evidence', 'topic/source metadata', 'CSV export', 'private subscriber API', 'public signup API'],

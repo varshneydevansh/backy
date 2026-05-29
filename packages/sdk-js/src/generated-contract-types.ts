@@ -5538,6 +5538,9 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
     pages: string;
     blog: string;
     forms: string;
+    newsletterSubscribers: string;
+    newsletterContactSync: string;
+    newsletterManagement: string;
     collections: string;
     products: string;
     reusableSections: string;
@@ -5568,6 +5571,9 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       productCustomFrontend: string;
       formBackyCanvas: string;
       formCustomFrontend: string;
+      newsletterWorkspace: string;
+      newsletterPageBackyCanvas: string;
+      newsletterBlogBackyCanvas: string;
       collectionBackyCanvas: string;
       collectionCustomFrontend: string;
       reusableSectionBackyCanvas: string;
@@ -5627,6 +5633,9 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       productCustomFrontend: string;
       formBackyCanvas: string;
       formCustomFrontend: string;
+      newsletterWorkspace: string;
+      newsletterPageBackyCanvas: string;
+      newsletterBlogBackyCanvas: string;
       collectionBackyCanvas: string;
       collectionCustomFrontend: string;
       reusableSectionBackyCanvas: string;
@@ -7383,6 +7392,8 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           forms: string;
           contactSegments: string;
           contactLists: string;
+          syncContacts: string;
+          adminWorkspace: string;
           [key: string]: unknown;
         };
         methods: {
@@ -7390,6 +7401,7 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           unsubscribe: "DELETE";
           adminList: "GET";
           adminUpsert: "POST";
+          syncContacts: "POST";
           [key: string]: unknown;
         };
         sdkHelpers: {
@@ -7397,10 +7409,25 @@ export type GeneratedBackyFrontendManifestEnvelope = {
           unsubscribe: "unsubscribeNewsletter";
           adminList: "newsletterSubscribers";
           adminUpsert: "upsertNewsletterSubscriber";
+          syncContacts: "syncFormContacts";
           [key: string]: unknown;
         };
         forms: Array<Record<string, unknown>>;
         sampleSubscribePayload: Record<string, unknown>;
+        syncPolicy: {
+          schemaVersion: "backy.newsletter-sync-boundary.v1";
+          routeTemplate: string;
+          payloadKind: "contact-sync";
+          targetBody: Record<string, unknown>;
+          adminOnly: true;
+          useCase: string;
+          [key: string]: unknown;
+        };
+        canvasRoutes: {
+          newsletterPage: string;
+          blogPost: string;
+          [key: string]: unknown;
+        };
         providerBoundary: Record<string, unknown>;
         [key: string]: unknown;
       };

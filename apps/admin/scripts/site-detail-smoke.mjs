@@ -61,6 +61,10 @@ const assertSiteDetailSourceContract = () => {
       source.includes('renderWithHost: `${publicSiteApiUrl}/render?path=/...&domain={host}`') &&
       source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.editorOutcome') &&
       source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.routeRevealGuarantee') &&
+      source.includes('newsletterSubscribers: `${adminSiteUrl}/newsletter/subscribers`') &&
+      source.includes('newsletterContactSync: `${adminSiteUrl}/forms/{formId}/contacts/sync`') &&
+      source.includes('newsletterManagement: `/newsletter?siteId=${siteIdParam}`') &&
+      source.includes('siteCustomFrontendAgentHandoff.contentCreation.newsletter.syncBoundarySchema') &&
       source.includes('siteCustomFrontendAgentHandoff.designState.siteStyleSources.join') &&
       source.includes('CUSTOM_FRONTEND_AGENT_HANDOFF_DOC'),
     'Site detail must expose the custom frontend agent handoff with docs, endpoint metadata, and all content creation entry points.',
@@ -1515,6 +1519,8 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.text.includes('focus=canvas') &&
       layout.customFrontendAgentHandoff.text.includes('/products?') &&
       layout.customFrontendAgentHandoff.text.includes('/forms?') &&
+      layout.customFrontendAgentHandoff.text.includes('/newsletter?') &&
+      layout.customFrontendAgentHandoff.text.includes('backy.newsletter-sync-boundary.v1') &&
       layout.customFrontendAgentHandoff.text.includes('/collections?') &&
       layout.customFrontendAgentHandoff.text.includes('/reusable-sections?'),
     `Site detail custom frontend agent handoff is incomplete: ${JSON.stringify(layout.customFrontendAgentHandoff)}`,

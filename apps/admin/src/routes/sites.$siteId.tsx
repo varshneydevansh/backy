@@ -1129,6 +1129,9 @@ const buildAdminSiteCustomFrontendAgentHandoff = ({
       pages: `${adminSiteUrl}/pages`,
       blog: `${adminSiteUrl}/blog`,
       forms: `${adminSiteUrl}/forms`,
+      newsletterSubscribers: `${adminSiteUrl}/newsletter/subscribers`,
+      newsletterContactSync: `${adminSiteUrl}/forms/{formId}/contacts/sync`,
+      newsletterManagement: `/newsletter?siteId=${siteIdParam}`,
       collections: `${adminSiteUrl}/collections`,
       products: `${adminSiteUrl}/collections/products/records`,
       reusableSections: `${adminSiteUrl}/reusable-sections`,
@@ -6470,6 +6473,22 @@ function EditSitePage() {
                 <SiteHandoffEndpoint
                   label="Canvas-first outcome"
                   value={siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.editorOutcome}
+                />
+                <SiteHandoffEndpoint
+                  label="Newsletter workspace"
+                  value={siteCustomFrontendAgentHandoff.contentCreation.newsletter.workspace}
+                />
+                <SiteHandoffEndpoint
+                  label="Newsletter sync boundary"
+                  value={siteCustomFrontendAgentHandoff.contentCreation.newsletter.syncBoundarySchema}
+                />
+                <SiteHandoffEndpoint
+                  label="Subscriber API"
+                  value={siteCustomFrontendAgentHandoff.contentCreation.newsletter.adminSubscribers}
+                />
+                <SiteHandoffEndpoint
+                  label="Contact sync"
+                  value={siteCustomFrontendAgentHandoff.contentCreation.newsletter.contactSync}
                 />
               </div>
               <div
