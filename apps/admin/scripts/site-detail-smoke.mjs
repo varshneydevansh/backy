@@ -38,16 +38,27 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-custom-frontend-agent-handoff"') &&
       source.includes('data-testid="site-copy-custom-frontend-agent-handoff"') &&
       source.includes('data-agent-handoff-direct={siteCustomFrontendAgentHandoff.endpoints.agentHandoff}') &&
+      source.includes('siteContext: {') &&
+      source.includes('domainVerificationDomain: domainVerification?.domain || null') &&
       source.includes('data-testid="site-agent-content-entry-points"') &&
       source.includes('data-testid="site-agent-canvas-first-rule"') &&
+      source.includes('data-testid="site-agent-routing-handoff"') &&
+      source.includes('data-routing-schema={siteCustomFrontendAgentHandoff.routing.schemaVersion}') &&
+      source.includes('siteCustomFrontendAgentHandoff.routing.subdomainRouting.model') &&
+      source.includes('siteCustomFrontendAgentHandoff.routing.publicResolution.resolveWithHost') &&
+      source.includes('siteCustomFrontendAgentHandoff.routing.publicResolution.renderWithHost') &&
       source.includes('const adminEntryPoints = buildCustomFrontendAgentAdminEntryPoints(siteIdParam);') &&
       source.includes('adminEntryPoints,') &&
       source.includes('siteCustomFrontendAgentHandoff.readOrder.map') &&
+      source.includes('JSON.stringify(siteCustomFrontendAgentHandoff.routing, null, 2)') &&
       source.includes('siteCustomFrontendAgentHandoff.endpoints.agentHandoff') &&
       source.includes('...baseHandoff.apiAlignment') &&
+      source.includes('...baseHandoff.routing') &&
       source.includes('endpoint: `${publicSiteApiUrl}/agent-handoff`') &&
       source.includes('creationRoutes: adminEntryPoints') &&
       source.includes('renderEndpoint: `${publicSiteApiUrl}/render?path=/...`') &&
+      source.includes('resolveWithHost: `${publicSiteApiUrl}/resolve?path=/&domain={host}`') &&
+      source.includes('renderWithHost: `${publicSiteApiUrl}/render?path=/...&domain={host}`') &&
       source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.editorOutcome') &&
       source.includes('siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.routeRevealGuarantee') &&
       source.includes('siteCustomFrontendAgentHandoff.designState.siteStyleSources.join') &&
@@ -1304,6 +1315,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
         ))
       : [];
     const disabledFrontendDraftControls = frontendDraftControls.filter((control) => control.disabled);
+    const routingPanel = document.querySelector('[data-testid="site-agent-routing-handoff"]');
     const frontendDesign = {
       hasPanel: Boolean(frontendPanel),
       hydrated: frontendPanel?.getAttribute('data-hydrated') === 'true',
@@ -1391,6 +1403,13 @@ const assertSiteDetailLayout = async (client, siteName) => {
         direct: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-direct') || '',
         manifest: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-manifest') || '',
         openapi: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.getAttribute('data-agent-handoff-openapi') || '',
+        routing: {
+          visible: Boolean(routingPanel),
+          schema: routingPanel?.getAttribute('data-routing-schema') || '',
+          resolveHost: routingPanel?.getAttribute('data-routing-resolve-host') || '',
+          renderHost: routingPanel?.getAttribute('data-routing-render-host') || '',
+          text: routingPanel?.textContent || '',
+        },
         text: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.textContent || '',
       },
     };
@@ -1471,8 +1490,18 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.direct.endsWith('/agent-handoff') &&
       layout.customFrontendAgentHandoff.manifest.includes('/api/sites/') &&
       layout.customFrontendAgentHandoff.openapi.includes('/openapi') &&
+      layout.customFrontendAgentHandoff.routing.visible &&
+      layout.customFrontendAgentHandoff.routing.schema === 'backy.custom-frontend-routing-handoff.v1' &&
+      layout.customFrontendAgentHandoff.routing.resolveHost.includes('domain={host}') &&
+      layout.customFrontendAgentHandoff.routing.renderHost.includes('domain={host}') &&
+      layout.customFrontendAgentHandoff.routing.text.includes('Routing and subdomains') &&
+      layout.customFrontendAgentHandoff.routing.text.includes('blog.example.com') &&
+      layout.customFrontendAgentHandoff.routing.text.includes('Resolve with host') &&
+      layout.customFrontendAgentHandoff.routing.text.includes('Subdomain rule') &&
       layout.customFrontendAgentHandoff.text.includes('Agent handoff') &&
       layout.customFrontendAgentHandoff.text.includes('/agent-handoff') &&
+      layout.customFrontendAgentHandoff.text.includes('backy.custom-frontend-routing-handoff.v1') &&
+      layout.customFrontendAgentHandoff.text.includes('domain={host}') &&
       layout.customFrontendAgentHandoff.text.includes('Agent read order') &&
       layout.customFrontendAgentHandoff.text.includes('frontendDesignManagement') &&
       layout.customFrontendAgentHandoff.text.includes('Canvas-first API alignment') &&

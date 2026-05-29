@@ -85,6 +85,7 @@ const HELP_TOPICS: HelpTopic[] = [
       'Backy treats subdomains as normal custom domains because DNS ownership still needs TXT/CNAME verification.',
       'For managed Backy previews, use the generated Backy subdomain. For production, save the exact custom domain on the site.',
       'The site domain panel shows the TXT host, TXT value, CNAME target, and verification status needed by your DNS provider.',
+      'The site Agent handoff includes a routing block with resolve/render URLs, Host/domain rules, and examples for blog.example.com, docs.example.com, and shop.example.com.',
     ],
     route: '/sites',
     routeLabel: 'Manage domains',
@@ -146,6 +147,7 @@ const HELP_TOPICS: HelpTopic[] = [
     summary: 'Use the site command center or editor handoff panels before building a custom frontend.',
     details: [
       'Site handoff includes the admin/public endpoints, OpenAPI route, render route, resolve route, SDK pointers, and site readiness context.',
+      'The routing handoff tells a custom frontend or frontend AI agent how to resolve root domains and subdomains without copying site content into the frontend repo.',
       'Editor handoff includes the selected page or post composition, content document, editable map, assets, theme token refs, data bindings, and animation metadata.',
       'Give this handoff to the frontend AI agent so it can bind components to Backy APIs instead of inventing a parallel schema.',
     ],

@@ -1100,13 +1100,15 @@ const buildAdminSiteCustomFrontendAgentHandoff = ({
   siteIdParam,
   adminSiteUrl,
   publicSiteApiUrl,
+  siteContext,
 }: {
   siteId: string;
   siteIdParam: string;
   adminSiteUrl: string;
   publicSiteApiUrl: string;
+  siteContext?: Parameters<typeof buildCustomFrontendAgentHandoff>[1];
 }) => {
-  const baseHandoff = buildCustomFrontendAgentHandoff(siteId);
+  const baseHandoff = buildCustomFrontendAgentHandoff(siteId, siteContext);
   const adminEntryPoints = buildCustomFrontendAgentAdminEntryPoints(siteIdParam);
 
   return {
@@ -1119,6 +1121,8 @@ const buildAdminSiteCustomFrontendAgentHandoff = ({
       openapi: `${publicSiteApiUrl}/openapi`,
       resolve: `${publicSiteApiUrl}/resolve?path=/`,
       render: `${publicSiteApiUrl}/render?path=/...`,
+      resolveWithHost: `${publicSiteApiUrl}/resolve?path=/&domain={host}`,
+      renderWithHost: `${publicSiteApiUrl}/render?path=/...&domain={host}`,
       frontendDesign: `${publicSiteApiUrl}/frontend-design`,
       frontendDesignManagement: `${adminSiteUrl}/frontend-design`,
       templates: `${adminSiteUrl}/templates`,
@@ -1151,6 +1155,22 @@ const buildAdminSiteCustomFrontendAgentHandoff = ({
         ...baseHandoff.apiAlignment.verification,
         renderEndpoint: `${publicSiteApiUrl}/render?path=/...`,
         resolveEndpoint: `${publicSiteApiUrl}/resolve?path=/`,
+      },
+    },
+    routing: {
+      ...baseHandoff.routing,
+      publicResolution: {
+        ...baseHandoff.routing.publicResolution,
+        resolveBySiteId: `${publicSiteApiUrl}/resolve?path=/`,
+        renderBySiteId: `${publicSiteApiUrl}/render?path=/...`,
+        resolveWithHost: `${publicSiteApiUrl}/resolve?path=/&domain={host}`,
+        renderWithHost: `${publicSiteApiUrl}/render?path=/...&domain={host}`,
+      },
+      customDomainManagement: {
+        ...baseHandoff.routing.customDomainManagement,
+        adminSiteRoute: `/sites/${siteIdParam}`,
+        adminSiteApi: adminSiteUrl,
+        adminSettingsApi: `${adminSiteUrl}/settings`,
       },
     },
   };
@@ -5538,8 +5558,23 @@ function EditSitePage() {
         siteIdParam: siteHandoffIdParam,
         adminSiteUrl,
         publicSiteApiUrl,
+        siteContext: {
+          slug: formData.slug || site?.slug || siteHandoffId,
+          customDomain: formData.customDomain || site?.customDomain || null,
+          domainVerificationDomain: domainVerification?.domain || null,
+        },
       }),
-    [adminSiteUrl, publicSiteApiUrl, siteHandoffId, siteHandoffIdParam],
+    [
+      adminSiteUrl,
+      domainVerification?.domain,
+      formData.customDomain,
+      formData.slug,
+      publicSiteApiUrl,
+      site?.customDomain,
+      site?.slug,
+      siteHandoffId,
+      siteHandoffIdParam,
+    ],
   );
   const siteWorkspaceHandoff = useMemo(
     () => ({
@@ -5571,8 +5606,11 @@ function EditSitePage() {
         forms: `${publicSiteApiUrl}/forms`,
         comments: `${publicSiteApiUrl}/comments`,
         events: `${publicSiteApiUrl}/events`,
+        agentHandoff: `${publicSiteApiUrl}/agent-handoff`,
         publicResolve: `${publicSiteApiUrl}/resolve?path=/`,
         publicRender: `${publicSiteApiUrl}/render?path=/`,
+        publicResolveWithHost: `${publicSiteApiUrl}/resolve?path=/&domain={host}`,
+        publicRenderWithHost: `${publicSiteApiUrl}/render?path=/...&domain={host}`,
         publicOpenApi: `${publicSiteApiUrl}/openapi`,
         frontendDesign: `${adminSiteUrl}/frontend-design`,
         templateRegistry: `${adminSiteUrl}/templates`,
@@ -6434,6 +6472,81 @@ function EditSitePage() {
                   label="Canvas-first outcome"
                   value={siteCustomFrontendAgentHandoff.contentCreation.canvasFirst.editorOutcome}
                 />
+              </div>
+              <div
+                className="mt-3 rounded-lg border border-teal-200 bg-background/80 p-3"
+                data-testid="site-agent-routing-handoff"
+                data-routing-schema={siteCustomFrontendAgentHandoff.routing.schemaVersion}
+                data-routing-resolve-host={siteCustomFrontendAgentHandoff.routing.publicResolution.resolveWithHost}
+                data-routing-render-host={siteCustomFrontendAgentHandoff.routing.publicResolution.renderWithHost}
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                      Routing and subdomains
+                    </div>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-teal-950">
+                      {siteCustomFrontendAgentHandoff.routing.subdomainRouting.model}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void copySiteHandoffText(
+                        JSON.stringify(siteCustomFrontendAgentHandoff.routing, null, 2),
+                        "Custom frontend routing handoff",
+                      )
+                    }
+                    disabled={isSiteSettingsBusy}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy routing
+                  </button>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <SiteHandoffEndpoint
+                    label="Routing schema"
+                    value={siteCustomFrontendAgentHandoff.routing.schemaVersion}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Site discovery"
+                    value={siteCustomFrontendAgentHandoff.routing.publicResolution.siteDiscovery}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Managed path"
+                    value={siteCustomFrontendAgentHandoff.routing.publicResolution.managedPath}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Subdomain examples"
+                    value={siteCustomFrontendAgentHandoff.routing.subdomainRouting.examples.join(", ")}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Resolve with host"
+                    value={siteCustomFrontendAgentHandoff.routing.publicResolution.resolveWithHost}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Render with host"
+                    value={siteCustomFrontendAgentHandoff.routing.publicResolution.renderWithHost}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Host policy"
+                    value={siteCustomFrontendAgentHandoff.routing.customFrontendDeployment.frontendHostPolicy}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Subdomain rule"
+                    value={siteCustomFrontendAgentHandoff.routing.subdomainRouting.recommendation}
+                  />
+                </div>
+                <p className="mt-3 text-xs leading-5 text-teal-900/80">
+                  Custom frontends should keep Backy as source of truth, pass
+                  <code className="mx-1 rounded bg-teal-100 px-1 py-0.5 font-mono text-teal-950">
+                    domain={"{"}host{"}"}
+                  </code>
+                  or the browser Host header for subdomains, and create a separate
+                  Backy site when a subdomain needs independent content, navigation,
+                  SEO, or design tokens.
+                </p>
               </div>
               <div
                 className="mt-3 rounded-lg border border-teal-200 bg-background/70 p-3 text-xs leading-5 text-teal-950"
